@@ -49,6 +49,7 @@ import {
   boxQuad,
 } from '../geom/homography';
 import type { Homography, Vec2 } from '../geom/types';
+import { deepTile, readDeepRegion, surfaceDepth, tileSamples, writeDeepRegion, type DeepSamples } from './deep';
 
 /** Resampling of a transform (Photoshop's interpolation menu). */
 export type Interpolation = 'nearest' | 'bilinear' | 'bicubic';
@@ -173,13 +174,13 @@ function hasTilesIn(src: TiledSurface, r: RasterRect): boolean {
   return false;
 }
 
-function readWindow(src: TiledSurface, srcRect: RasterRect, rect: RasterRect): Window {
+function readWindow(src: TiledSurface, srcRect: RasterRect, rect: RasterRect, depth: Depth = null): Window {
   const n: 2 | 4 = src.channels === 4 ? 4 : 2;
   const data = new Float32Array(rect.width * rect.height * n);
   const win: Window = { x: rect.x, y: rect.y, w: rect.width, h: rect.height, n, data };
   const r = intersect(rect, srcRect);
   if (!r) return win;
-  const px = readRegion(src, r);
+  const px: ArrayLike<number> = depth ? readScaled(src, r, depth) : readRegion(src, r);
   for (let y = 0; y < r.height; y++) {
     let s = y * r.width * src.channels;
     let d = ((r.y - rect.y + y) * rect.width + (r.x - rect.x)) * n;
@@ -329,6 +330,62 @@ function store(out: Uint8ClampedArray, o: number, acc: Float64Array, ch: 1 | 4, 
 }
 
 // ---------------------------------------------------------------------------
+// High bit depth
+// ---------------------------------------------------------------------------
+
+/**
+ * The depth a layer surface is resampled at: 16 or 32 when it holds deep tiles (RGBA, transparent
+ * default, full-resolution output), else `null` (the 8-bit path). The kernels run unchanged on
+ * samples scaled to 0..255 floats, so a 16-bit layer keeps its precision and a 32-bit one is
+ * resampled in linear light with colour above 1 kept.
+ */
+type Depth = 16 | 32 | null;
+
+function resampleDepth(src: TiledSurface, step: number): Depth {
+  if (src.channels !== 4 || src.defaultValue !== 0 || step !== 1) return null;
+  const d = surfaceDepth(src);
+  return d === 8 ? null : d;
+}
+
+/** `rect` of a deep surface as 0..255-scaled floats (RGBA, straight alpha). */
+function readScaled(src: TiledSurface, rect: RasterRect, depth: 16 | 32): Float32Array {
+  const d = readDeepRegion(src, rect, depth);
+  const out = new Float32Array(d.length);
+  const k = depth === 16 ? 1 / 257 : 255;
+  for (let i = 0; i < d.length; i++) out[i] = d[i] * k;
+  return out;
+}
+
+/** 0..255-scaled floats back to deep samples (16-bit rounds and clamps; 32-bit keeps colour above 1). */
+function fromScaled(v: Float32Array, depth: 16 | 32): DeepSamples {
+  if (depth === 16) {
+    const out = new Uint16Array(v.length);
+    for (let i = 0; i < v.length; i++) {
+      const x = Math.round(v[i] * 257);
+      out[i] = x <= 0 ? 0 : x >= 65535 ? 65535 : x;
+    }
+    return out;
+  }
+  const out = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) {
+    const x = v[i] / 255;
+    out[i] = (i & 3) === 3 ? (x <= 0 ? 0 : x >= 1 ? 1 : x) : x;
+  }
+  return out;
+}
+
+/** `store` into 0..255-scaled floats, without the 8-bit clamp. */
+function storeScaled(out: Float32Array, o: number, acc: Float64Array): boolean {
+  const al = acc[3] > 1 ? 1 : acc[3];
+  if (!(al > 1e-6)) return false;
+  out[o] = acc[0] / al;
+  out[o + 1] = acc[1] / al;
+  out[o + 2] = acc[2] / al;
+  out[o + 3] = al * 255;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Pre-reduction (Bicubic shrinking)
 // ---------------------------------------------------------------------------
 
@@ -338,7 +395,7 @@ function store(out: Uint8ClampedArray, o: number, acc: Float64Array, ch: 1 | 4, 
  * Returns the reduced surface and the reduced source rectangle. Works in strips of about one tile
  * row, so memory stays bounded.
  */
-function boxReduce(src: TiledSurface, srcRect: RasterRect, kx: number, ky: number): { surface: TiledSurface; rect: RasterRect } {
+function boxReduce(src: TiledSurface, srcRect: RasterRect, kx: number, ky: number, depth: Depth = null): { surface: TiledSurface; rect: RasterRect } {
   const ch = src.channels;
   const rx0 = Math.floor(srcRect.x / kx);
   const ry0 = Math.floor(srcRect.y / ky);
@@ -352,8 +409,8 @@ function boxReduce(src: TiledSurface, srcRect: RasterRect, kx: number, ky: numbe
   for (let ry = ry0; ry < ry1; ry += rowsPer) {
     const rows = Math.min(rowsPer, ry1 - ry);
     const strip = { x: rx0 * kx, y: ry * ky, width: rw * kx, height: rows * ky };
-    const px = readRegion(src, strip);
-    const red = new Uint8ClampedArray(rw * rows * ch);
+    const px: ArrayLike<number> = depth ? readScaled(src, strip, depth) : readRegion(src, strip);
+    const red = depth ? new Float32Array(rw * rows * ch) : new Uint8ClampedArray(rw * rows * ch);
     for (let j = 0; j < rows; j++) {
       for (let i = 0; i < rw; i++) {
         if (ch === 4) {
@@ -388,7 +445,8 @@ function boxReduce(src: TiledSurface, srcRect: RasterRect, kx: number, ky: numbe
         }
       }
     }
-    out = writeRegion(out, { x: rx0, y: ry, width: rw, height: rows }, red);
+    const region = { x: rx0, y: ry, width: rw, height: rows };
+    out = depth ? writeDeepRegion(out, region, fromScaled(red as Float32Array, depth)) : writeRegion(out, region, red as Uint8ClampedArray);
   }
   return { surface: out, rect };
 }
@@ -464,12 +522,19 @@ export function transformSurface(src: TiledSurface, h: Homography, options: Resa
   const empty = emptySurface(ch, def);
   const given = options.source;
   const step = normalizeStep(options.step);
+  const depth = resampleDepth(src, step);
   if (isIdentityHomography(h, 1e-12) && !given && !options.clip) return src;
   // A whole-pixel move is exact and shares tiles when it is a multiple of the tile size.
   const dx = h[2] / h[8];
   const dy = h[5] / h[8];
   if (!given && !options.clip && isIdentityHomography([h[0], h[1], 0, h[3], h[4], 0, h[6], h[7], h[8]], 1e-12) && Math.abs(dx - Math.round(dx)) < 1e-9 && Math.abs(dy - Math.round(dy)) < 1e-9) {
-    return translateSurface(src, Math.round(dx), Math.round(dy));
+    const mx = Math.round(dx);
+    const my = Math.round(dy);
+    const b = src.bounds;
+    if (depth && b && (mx % TILE !== 0 || my % TILE !== 0)) {
+      return writeDeepRegion(emptySurface(ch, def), { ...b, x: b.x + mx, y: b.y + my }, readDeepRegion(src, b, depth));
+    }
+    return translateSurface(src, mx, my);
   }
   let srcRect = given ? intersect(given, given) : contentBounds(src);
   if (!srcRect) return empty;
@@ -485,7 +550,7 @@ export function transformSurface(src: TiledSurface, h: Homography, options: Resa
       const kx = reduction(su);
       const ky = reduction(sv);
       if (kx > 1 || ky > 1) {
-        const red = boxReduce(src, srcRect, kx, ky);
+        const red = boxReduce(src, srcRect, kx, ky, depth);
         S = red.surface;
         srcRect = red.rect;
         H = multiplyHomographies([kx, 0, 0, 0, ky, 0, 0, 0, 1], H);
@@ -575,9 +640,10 @@ export function transformSurface(src: TiledSurface, h: Homography, options: Resa
     if (!foot) continue;
     const readable = intersect(foot, sr);
     if (!readable || !hasTilesIn(S, readable)) continue;
-    const win = readWindow(S, sr, foot);
+    const win = readWindow(S, sr, foot, depth);
     const out = new Uint8ClampedArray(TILE * TILE * ch);
     if (def) out.fill(def);
+    const deepOut = depth ? new Float32Array(TILE * TILE * 4) : null;
     let any = false;
     const ox = tx * TILE;
     const oy = ty * TILE;
@@ -607,6 +673,11 @@ export function transformSurface(src: TiledSurface, h: Homography, options: Resa
           sv = widen(s[1]);
         }
         sample(win, interp, u, v, su, sv, acc);
+        if (deepOut) {
+          // Full resolution (step 1): one pixel per block, written straight into the deep tile.
+          if (storeScaled(deepOut, ((y - oy) * TILE + (x - ox)) * 4, acc)) any = true;
+          continue;
+        }
         if (!store(scratch, 0, acc, ch, def)) continue;
         rowSet[bi] = 1;
         rowVals[bi] = ch === 4 ? scratchWord[0] : scratch[0];
@@ -629,7 +700,7 @@ export function transformSurface(src: TiledSurface, h: Homography, options: Resa
       }
     }
     if (!any) continue;
-    const tile = finishTile(out, ch, def);
+    const tile = deepOut ? deepTile(fromScaled(deepOut, depth!), 4, def) : finishTile(out, ch, def);
     if (tile) tiles.set(tileKey(tx, ty), tile);
   }
   return assemble(src, tiles);
@@ -666,6 +737,7 @@ export function warpSurface(src: TiledSurface, f: (p: Vec2) => Vec2 | null, opti
   const sr = options.source ? intersect(options.source, options.source) : contentBounds(src);
   if (!sr) return empty;
   const step = normalizeStep(options.step);
+  const depth = resampleDepth(src, step);
   const nx = Math.min(MAX_CELLS, Math.max(1, Math.ceil(sr.width / CELL)));
   const ny = Math.min(MAX_CELLS, Math.max(1, Math.ceil(sr.height / CELL)));
   const w1 = nx + 1;
@@ -840,9 +912,10 @@ export function warpSurface(src: TiledSurface, f: (p: Vec2) => Vec2 | null, opti
       if (fx0 > fx1) continue;
       const foot = intersect({ x: Math.floor(fx0) - 3, y: Math.floor(fy0) - 3, width: Math.ceil(fx1) - Math.floor(fx0) + 6, height: Math.ceil(fy1) - Math.floor(fy0) + 6 }, sr);
       if (!foot || !hasTilesIn(src, foot)) continue;
-      const win = readWindow(src, sr, foot);
+      const win = readWindow(src, sr, foot, depth);
       const out = new Uint8ClampedArray(TILE * TILE * ch);
       if (def) out.fill(def);
+      const deepOut = depth ? new Float32Array(TILE * TILE * 4) : null;
       let any = false;
       const ox = ttx * TILE;
       const oy = tty * TILE;
@@ -876,7 +949,8 @@ export function warpSurface(src: TiledSurface, f: (p: Vec2) => Vec2 | null, opti
           pointAt(o, acc);
           const x = t.x + (o % tw);
           const y = t.y + Math.floor(o / tw);
-          if (store(out, ((y - oy) * TILE + (x - ox)) * ch, acc, ch, def)) any = true;
+          const o4 = ((y - oy) * TILE + (x - ox)) * ch;
+          if (deepOut ? storeScaled(deepOut, o4, acc) : store(out, o4, acc, ch, def)) any = true;
         }
       } else {
         // Preview: the sample at each block's first pixel fills the block.
@@ -896,7 +970,7 @@ export function warpSurface(src: TiledSurface, f: (p: Vec2) => Vec2 | null, opti
         }
       }
       if (!any) continue;
-      const tile = finishTile(out, ch, def);
+      const tile = deepOut ? deepTile(fromScaled(deepOut, depth!), 4, def) : finishTile(out, ch, def);
       if (tile) tiles.set(tileKey(ttx, tty), tile);
     }
   }
@@ -918,10 +992,33 @@ export function compositeSurfaceOver(base: TiledSurface, top: TiledSurface): Til
   if (!top.tiles.size) return base;
   const ch = base.channels;
   const tiles = new Map(base.tiles);
+  const bd = ch === 4 && base.defaultValue === 0 ? Math.max(surfaceDepth(base), surfaceDepth(top)) : 8;
+  const depth = bd === 8 ? null : (bd as 16 | 32);
   for (const [key, t] of top.tiles) {
     const under = base.tiles.get(key);
     if (!under && ch === 4) {
       tiles.set(key, t);
+      continue;
+    }
+    if (depth) {
+      // Over in the deep samples (straight alpha; linear light at 32 bits).
+      const k = depth === 16 ? 65535 : 1;
+      const d = tileSamples(under, 4, depth, 0).slice();
+      const sd = tileSamples(t, 4, depth, 0);
+      for (let i = 0; i < d.length; i += 4) {
+        const ta = Math.min(1, sd[i + 3] / k);
+        if (ta <= 0) continue;
+        const da = d[i + 3] / k;
+        const oa = ta + da * (1 - ta);
+        for (let c = 0; c < 3; c++) {
+          const v = (sd[i + c] * ta + d[i + c] * da * (1 - ta)) / oa;
+          d[i + c] = depth === 16 ? Math.round(v) : v;
+        }
+        d[i + 3] = depth === 16 ? Math.round(oa * k) : oa;
+      }
+      const tile = deepTile(d, 4, 0);
+      if (tile) tiles.set(key, tile);
+      else tiles.delete(key);
       continue;
     }
     const d = new Uint8ClampedArray(TILE * TILE * ch);

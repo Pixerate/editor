@@ -25,6 +25,7 @@ import {
   type Interpolation,
   type ResampleOptions,
 } from '../raster/transform';
+import { readDeepRegion, surfaceDepth, writeDeepRegion } from '../raster/deep';
 import { applyHomography, homographyFromAffine, multiplyHomographies, type Homography } from '../geom/homography';
 import { invertMatrix as invertAffine } from '../geom/affine';
 import { findLayer, insertLayer, mapLayer, newLayerId, type ImageLayer, type LayerTarget, type PixelLayer, type RasterMask, type ShapeLayer, type SmartObjectLayer } from './layers/model';
@@ -159,6 +160,29 @@ function selectionSurface(sel: SelectionMask): TiledSurface {
 function liftPixels(surface: TiledSurface, sel: SelectionMask, o: { x: number; y: number }): { lifted: TiledSurface; rest: TiledSurface } {
   const sb = sel.bounds!;
   const area = { x: sb.x - o.x, y: sb.y - o.y, width: sb.width, height: sb.height };
+  const depth = surfaceDepth(surface);
+  if (depth !== 8) {
+    // A 16- or 32-bit layer: split the deep samples the same way.
+    const px = readDeepRegion(surface, area, depth);
+    const kept = px.slice();
+    const r16 = depth === 16;
+    for (let y = 0; y < area.height; y++) {
+      for (let x = 0; x < area.width; x++) {
+        const k = sel.data[(sb.y + y) * sel.width + sb.x + x] / 255;
+        const i = (y * area.width + x) * 4;
+        if (k <= 0) {
+          px[i] = px[i + 1] = px[i + 2] = px[i + 3] = 0;
+          continue;
+        }
+        px[i + 3] = r16 ? Math.round(px[i + 3] * k) : px[i + 3] * k;
+        if (!px[i + 3]) px[i] = px[i + 1] = px[i + 2] = 0;
+        kept[i + 3] = r16 ? Math.round(kept[i + 3] * (1 - k)) : kept[i + 3] * (1 - k);
+        if (!kept[i + 3]) kept[i] = kept[i + 1] = kept[i + 2] = 0;
+      }
+    }
+    const lifted = writeDeepRegion(new TiledSurface(4, new Map(), 0), area, px);
+    return { lifted, rest: writeDeepRegion(surface, area, kept) };
+  }
   const px = readRegion(surface, area);
   const kept = new Uint8ClampedArray(px);
   for (let y = 0; y < area.height; y++) {
