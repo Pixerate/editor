@@ -14,6 +14,8 @@
     setRetouchChoice,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
+  import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
+  import PaintGradientEditor from './PaintGradientEditor.svelte';
   import ControlSlider from './ControlSlider.svelte';
 
   interface Props {
@@ -83,7 +85,19 @@
     </label>
     <button type="button" title="Swap colours (X)" class={chip(false)} onclick={() => controller.swapPaintColors()}>Swap</button>
     <button type="button" title="Default colours (D)" class={chip(false)} onclick={() => controller.resetPaintColors()}>Default</button>
+    {#if view.tool === 'brush'}
+      <button
+        type="button"
+        aria-pressed={view.paint.type === 'gradient'}
+        title="Gradient paint: the brush changes colour as the stroke goes"
+        class={chip(view.paint.type === 'gradient')}
+        onclick={() => attempt(() => controller.setPaintOptions(view.paint.type === 'gradient' ? { foreground: view.foreground } : { paint: DEFAULT_PAINT_GRADIENT }))}>Gradient</button
+      >
+    {/if}
   </div>
+  {#if view.tool === 'brush' && view.paint.type === 'gradient'}
+    <PaintGradientEditor value={view.paint} colors={{ paint: view.foreground, secondary: view.background }} onchange={(g) => attempt(() => controller.setPaintOptions({ paint: g }))} />
+  {/if}
 
   {#each BRUSH_OPTION_CONTROLS as spec (spec.id)}
     <ControlSlider {spec} value={view.brush[spec.id]} onchange={(v) => controller.setPaintOptions({ brush: { [spec.id]: v } })} />

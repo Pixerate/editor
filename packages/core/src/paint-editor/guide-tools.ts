@@ -4,6 +4,7 @@
  * editor state saved with the document (the pad is not saved), not undo steps.
  */
 
+import { PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
 import type { AgentTool } from '../tools/registry.js';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { HARMONY_KINDS } from './color';
@@ -258,7 +259,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
     {
       name: 'list_swatches',
       title: 'List swatches',
-      description: 'Lists the colour swatches (index, colour, name).',
+      description: 'Lists the swatches (index, colour, name, and paint for a gradient swatch).',
       inputSchema: EMPTY,
       annotations: { title: 'List swatches', ...READ },
       handler: () => ({ swatches: c.getState().swatches.map((s, index) => ({ index, ...s })) }),
@@ -266,15 +267,21 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
     {
       name: 'add_swatch',
       title: 'Add a swatch',
-      description: 'Adds a colour to the swatches (saved with the document). Returns the swatches.',
+      description: 'Adds a swatch (saved with the document): a colour, or with paint a gradient (set_paint picks it up again from list_swatches). Give color or paint. Returns the swatches; a gradient swatch has paint and its first colour as color.',
       inputSchema: {
         type: 'object',
-        properties: { color: COLOR, name: { type: 'string', minLength: 1, description: 'Optional name.' } },
-        required: ['color'],
+        properties: {
+          color: { ...COLOR, description: 'A colour #rrggbb.' },
+          paint: { ...PAINT_SOURCE_JSON_SCHEMA, description: 'Gradient paint (or a colour) for the swatch, instead of color.' },
+          name: { type: 'string', minLength: 1, description: 'Optional name.' },
+        },
         additionalProperties: false,
       },
       annotations: { title: 'Add a swatch', ...WRITE },
-      handler: ({ color, name }) => ({ swatches: c.addSwatch(color, name).map((s, index) => ({ index, ...s })) }),
+      handler: ({ color, paint, name }) => {
+        if ((color === undefined) === (paint === undefined)) throw new Error('Give color (#rrggbb) or paint (a colour or gradient), not both and not neither.');
+        return { swatches: c.addSwatch(paint ?? color, name).map((s, index) => ({ index, ...s })) };
+      },
     },
     {
       name: 'remove_swatch',

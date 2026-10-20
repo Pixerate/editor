@@ -6,7 +6,7 @@
     brushEngineControls,
     brushLoadColor,
     downloadBytes,
-    multiColorSliders,
+    brushTakesPaint,
     patchBrushValue,
     patchPath,
     readPath,
@@ -30,13 +30,14 @@
     type BlendMode,
     type BrushRotation,
     type WetTool,
-    type MultiColorMode,
     type PaintEditorController,
   } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
-  import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
+  import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/paint-editor';
+  import PaintGradientEditor from './PaintGradientEditor.svelte';
+  import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
   interface Props {
     controller: PaintEditorController;
@@ -62,14 +63,12 @@
     return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])));
   });
   const engine = $derived(brushEngineControls(brush));
-  const mc = $derived(brush.behavior.multicolor);
   const carried = $derived(brushLoadColor(snap.mixerLoad));
   const mixingValue = $derived(engine?.mixingPath === 'blender.mixing' ? brush.blender.mixing : engine?.mixingPath === 'smudge.mixing' ? brush.smudge.mixing : brush.behavior.mixing);
-  const setColors = (colors: string[]) => controller.setBrush({ behavior: { multicolor: { colors } } });
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 </script>
 
-<!-- The brush library with thumbnails, the active brush's settings and blend, its engine's controls (blender, smudge, pick-up / mix, mixing, dirty, multi-colour, load), save, import and export. -->
+<!-- The brush library with thumbnails, the active brush's settings and blend, its engine's controls (blender, smudge, pick-up / mix, mixing, dirty, brush gradient, load), save, import and export. -->
 <div class={`${panel} ${className}`} data-testid="brush-panel">
   <div class="grid grid-cols-2 gap-1" role="listbox" aria-label="Brushes">
     {#each snap.brushes as b (b.id)}
@@ -188,41 +187,14 @@
           <input type="checkbox" aria-label="Dirty brush" checked={brush.behavior.dirty} onchange={(e) => controller.setBrush({ behavior: { dirty: e.currentTarget.checked } })} /> Dirty brush
         </label>
       {/if}
-      {#if engine.multicolor}
-        <div class="flex flex-col gap-1.5" data-testid="multicolor">
-          <label class="flex items-center justify-between gap-2">
-            <span class="text-slate-400">Multi-colour</span>
-            <select aria-label="Multi-colour" value={mc.mode} onchange={(e) => controller.setBrush({ behavior: { multicolor: { mode: e.currentTarget.value as MultiColorMode } } })} class="rounded bg-slate-800 px-1 py-0.5">
-              <option value="off">Off</option>
-              <option value="tip">Across the tip</option>
-              <option value="dab">Per dab</option>
-            </select>
-          </label>
-          {#if mc.mode !== 'off'}
-            <div class="flex flex-wrap items-center gap-1" aria-label="Multi-colour colours">
-              {#each mc.colors as col, i (i)}
-                <span class="flex items-center">
-                  <input type="color" aria-label={`Multi-colour ${i + 1}`} value={col} onchange={(e) => setColors(mc.colors.map((x, j) => (j === i ? e.currentTarget.value : x)))} class="h-5 w-6 rounded bg-transparent" />
-                  <button type="button" aria-label={`Remove multi-colour ${i + 1}`} class="px-0.5 text-slate-500 hover:text-white" onclick={() => setColors(mc.colors.filter((_, j) => j !== i))}>×</button>
-                </span>
-              {/each}
-              {#if mc.colors.length < 8}
-                <button type="button" class={button} aria-label="Add multi-colour" onclick={() => setColors([...(mc.colors.length ? mc.colors : [snap.color, snap.secondaryColor]), snap.color].slice(0, 8))}>+</button>
-              {/if}
-              {#if mc.colors.length < 2}<span class="text-[10px] text-slate-500">Uses the paint and second colours</span>{/if}
-            </div>
-            {#if mc.mode === 'dab'}
-              <label class="flex items-center justify-between gap-2">
-                <span class="text-slate-400">Order</span>
-                <select aria-label="Colour order" value={mc.order} onchange={(e) => controller.setBrush({ behavior: { multicolor: { order: e.currentTarget.value as 'sequence' | 'random' } } })} class="rounded bg-slate-800 px-1 py-0.5">
-                  <option value="sequence">In order</option>
-                  <option value="random">Random</option>
-                </select>
-              </label>
-            {/if}
-            {#each multiColorSliders(mc.mode) as c (c.path)}
-              <PaintSlider control={c} value={readPath(brush, c.path)} onchange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
-            {/each}
+      {#if brushTakesPaint(brush)}
+        <div class="flex flex-col gap-1.5" data-testid="brush-gradient">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">Brush gradient</span>
+            <button type="button" aria-pressed={brush.paint !== null} class={chip(brush.paint !== null)} onclick={() => run(() => controller.setBrush({ paint: brush.paint ? null : DEFAULT_PAINT_GRADIENT }))}>{brush.paint ? 'On' : 'Off'}</button>
+          </div>
+          {#if brush.paint}
+            <PaintGradientEditor value={brush.paint} colors={{ paint: snap.color, secondary: snap.secondaryColor }} onchange={(g) => run(() => controller.setBrush({ paint: g }))} />
           {/if}
         </div>
       {/if}

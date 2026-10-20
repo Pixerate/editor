@@ -6,7 +6,7 @@ import {
   brushEngineControls,
   brushLoadColor,
   downloadBytes,
-  multiColorSliders,
+  brushTakesPaint,
   patchBrushValue,
   patchPath,
   readPath,
@@ -30,11 +30,12 @@ import {
   type BlendMode,
   type BrushRotation,
   type WetTool,
-  type MultiColorMode,
   type PaintEditorController,
 } from '@pixerate/editor/paint-editor';
+import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/paint-editor';
+import { PaintGradientEditor } from './PaintGradientEditor';
 import { usePaintEditorState } from './usePaintEditor';
-import { ErrorLine, PaintSlider, PixelCanvas, button, panel, useAttempt } from './shared';
+import { ErrorLine, PaintSlider, PixelCanvas, button, chip, panel, useAttempt } from './shared';
 
 export interface BrushPanelProps {
   controller: PaintEditorController;
@@ -50,7 +51,7 @@ export interface BrushPanelProps {
  * angle, paper grain, position and pressure smoothing, dynamics, rotation mode and blend mode;
  * then the engine's own controls (`brushEngineControls`): blender strength and blend distance,
  * smudge strength and length, pick-up and mix ratios, RGB / pigment mixing, dirty brush,
- * multi-colour and the brush load. Save the edited brush, import and export libraries as JSON.
+ * the brush's own gradient paint (the multi-colour brush) and the brush load. Save the edited brush, import and export libraries as JSON.
  */
 export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWidth = 112, thumbnailHeight = 32, className }) => {
   const state = usePaintEditorState(controller);
@@ -66,9 +67,7 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
     [controller, brushes, paper, thumbnailWidth, thumbnailHeight]
   );
   const engine = brushEngineControls(brush);
-  const mc = brush.behavior.multicolor;
   const carried = brushLoadColor(state.mixerLoad);
-  const setColors = (colors: string[]) => controller.setBrush({ behavior: { multicolor: { colors } } });
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 
   return (
@@ -226,48 +225,22 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
               <input type="checkbox" aria-label="Dirty brush" checked={brush.behavior.dirty} onChange={(e) => controller.setBrush({ behavior: { dirty: e.target.checked } })} /> Dirty brush
             </label>
           )}
-          {engine.multicolor && (
-            <div className="flex flex-col gap-1.5" data-testid="multicolor">
-              <label className="flex items-center justify-between gap-2">
-                <span className="text-slate-400">Multi-colour</span>
-                <select aria-label="Multi-colour" value={mc.mode} onChange={(e) => controller.setBrush({ behavior: { multicolor: { mode: e.target.value as MultiColorMode } } })} className="rounded bg-slate-800 px-1 py-0.5">
-                  <option value="off">Off</option>
-                  <option value="tip">Across the tip</option>
-                  <option value="dab">Per dab</option>
-                </select>
-              </label>
-              {mc.mode !== 'off' && (
-                <>
-                  <div className="flex flex-wrap items-center gap-1" aria-label="Multi-colour colours">
-                    {mc.colors.map((col, i) => (
-                      <span key={i} className="flex items-center">
-                        <input type="color" aria-label={`Multi-colour ${i + 1}`} value={col} onChange={(e) => setColors(mc.colors.map((x, j) => (j === i ? e.target.value : x)))} className="h-5 w-6 rounded bg-transparent" />
-                        <button type="button" aria-label={`Remove multi-colour ${i + 1}`} className="px-0.5 text-slate-500 hover:text-white" onClick={() => setColors(mc.colors.filter((_, j) => j !== i))}>
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    {mc.colors.length < 8 && (
-                      <button type="button" className={button} aria-label="Add multi-colour" onClick={() => setColors([...(mc.colors.length ? mc.colors : [state.color, state.secondaryColor]), state.color].slice(0, 8))}>
-                        +
-                      </button>
-                    )}
-                    {mc.colors.length < 2 && <span className="text-[10px] text-slate-500">Uses the paint and second colours</span>}
-                  </div>
-                  {mc.mode === 'dab' && (
-                    <label className="flex items-center justify-between gap-2">
-                      <span className="text-slate-400">Order</span>
-                      <select aria-label="Colour order" value={mc.order} onChange={(e) => controller.setBrush({ behavior: { multicolor: { order: e.target.value as 'sequence' | 'random' } } })} className="rounded bg-slate-800 px-1 py-0.5">
-                        <option value="sequence">In order</option>
-                        <option value="random">Random</option>
-                      </select>
-                    </label>
-                  )}
-                  {multiColorSliders(mc.mode).map((c) => (
-                    <PaintSlider key={c.path} control={c} value={readPath(brush, c.path)} onChange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
-                  ))}
-                </>
-              )}
+          {brushTakesPaint(brush) && (
+            <div className="flex flex-col gap-1.5" data-testid="brush-gradient">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">
+                  Brush gradient
+                </span>
+                <button
+                  type="button"
+                  aria-pressed={brush.paint !== null}
+                  className={chip(brush.paint !== null)}
+                  onClick={() => attempt(() => controller.setBrush({ paint: brush.paint ? null : DEFAULT_PAINT_GRADIENT }))}
+                >
+                  {brush.paint ? 'On' : 'Off'}
+                </button>
+              </div>
+              {brush.paint && <PaintGradientEditor value={brush.paint} colors={{ paint: state.color, secondary: state.secondaryColor }} onChange={(g) => attempt(() => controller.setBrush({ paint: g }))} />}
             </div>
           )}
           {engine.load && (

@@ -27,6 +27,7 @@ import { exchangeRates, PaintExchange, type MixerLoad, type RgbTriple } from '..
 import { pigmentOf, PIGMENT_UNIT } from '../paint/wet/film';
 import { DEFAULT_FLOW, flowField, normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { WetMedium } from '../paint/wet/medium';
+import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { DEFAULT_WET_PARAMS, FLAT, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
 import { TILE, TiledSurface, type RasterRect } from '../raster/surface';
@@ -75,6 +76,8 @@ export interface WetStrokeInit {
   copies: readonly StrokeCopy[];
   /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
   mask?: { width: number; height: number; data: ArrayLike<number> } | null;
+  /** Gradient paint (resolved): each dab's pigment comes from it. */
+  paint?: PaintGradientSource | null;
 }
 
 interface CopyState {
@@ -129,7 +132,13 @@ export class WetStrokeDriver {
     }));
     this.copies = copies;
     this.depth = init.grain && !init.grain.flat ? Math.min(1, Math.max(0, init.paperDepth * brush.grain)) : 0;
+    // Across the tip makes no sense for one wet dab: the colour follows the dab instead.
+    const g = init.paint ?? null;
+    this.sampler = g ? new PaintGradientSampler(g.map.by === 'across-tip' ? { ...g, map: { by: 'distance', length: 300, repeat: 'mirror' } } : g, init.seed) : null;
   }
+
+  private readonly sampler: PaintGradientSampler | null;
+  private readonly sample: PaintGradientSample = { rgb: [0, 0, 0], alpha: 1 };
 
   private readonly copies: readonly StrokeCopy[];
 
@@ -236,9 +245,16 @@ export class WetStrokeDriver {
     switch (wet.tool) {
       case 'paint': {
         const ex = st.exchange!;
+        let flow = 1;
+        if (this.sampler) {
+          // Gradient paint: this dab's pigment.
+          const g = this.sampler.dab(d, this.sample);
+          ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
+          flow = g.alpha;
+        }
         ex.pickUp(this.medium.sample(rect, tip));
         const total = ex.paint(this.paint);
-        if (total > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k, this.paint, null);
+        if (total > 0 && flow > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
         else world.paint(laneId, rect, cov, this.medium.options.water * k, null);
         ex.drain();
         if (wet.rewet > 0) world.rewet(laneId, rect, cov, wet.rewet * k * 0.15, this.init.paperColor);
