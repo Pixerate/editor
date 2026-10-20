@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.82.0
+
+### Minor Changes
+
+- 90caea3: Gradient paint for brushed freehand strokes on the canvas. A brushed stroke's `brush.paint` (and `FreehandStrokeStyle.paint`) takes a `PaintSource`-shaped value: one colour, or a gradient sampled dab by dab along the path by distance (in canvas units, the same at every zoom), pressure, tilt, direction, across the tip or at random. The stroke colour still gives the alpha and fills `paint` stops. `canvas.drawFreehand` takes an optional, strictly validated `paint` and returns it normalised; `velocity` and `time` mappings are refused because canvas strokes record no timing. New `validateCanvasBrushPaint` and the `CanvasBrushPaint` types, re-exported from the React and Svelte packages; `useCanvasDraw` / `createCanvasDraw` carry `style.paint`.
+
+### Patch Changes
+
+- Updated dependencies [90caea3]
+  - @pixerate/editor@0.128.0
+
 ## 0.81.0
 
 ### Minor Changes
