@@ -758,7 +758,7 @@ export class PaintStrokeSession {
     /** Composite brush / eraser strokes at this bit depth (layers only); `null` for 8 bits. */
     depth: 16 | 32 | null = null
   ) {
-    const coverage = stroke instanceof StrokeCoverage || ('kind' in stroke && stroke.kind === 'coverage' && !stroke.finalPaint);
+    const coverage = stroke instanceof StrokeCoverage || ('kind' in stroke && stroke.kind === 'coverage');
     this.deep = depth && coverage && target.surface.channels === 4 ? depth : null;
     this.dabDeep = depth && !coverage && target.surface.channels === 4 ? depth : null;
     this.before = controller._captureForStroke();
@@ -786,6 +786,24 @@ export class PaintStrokeSession {
     }
   }
 
+  /** The pre-stroke tile as a float working tile (cached; `null`: transparent). */
+  private readWork(key: TileKey): Float32Array | null {
+    if (!this.workRead.has(key)) this.workRead.set(key, workTileOf(this.base.tiles.get(key)));
+    return this.workRead.get(key)!;
+  }
+
+  /** Clone, healing and the spot-heal trail at depth: `paint` through the coverage on the float working tile. */
+  private retouchDeepTile(key: TileKey, tx: number, ty: number, paint: RetouchPaint, options: { into?: Float32Array; region?: CropBox }): DeepSamples {
+    const r = this.retouch as Extract<RetouchStrokeInit, { kind: 'coverage' }>;
+    const read = this.readWork(key);
+    const out = applyRetouchToTile(this.stroke!.coverage, read ?? new Float32Array(TILE * TILE * 4), 4, tx, ty, paint, r.apply, options);
+    this.work.set(key, out);
+    const d = deepOfWorkTile(out, this.deep!, read, this.base.tiles.get(key));
+    this.liveDeep.set(key, d);
+    this.live.set(key, { data: proxyOf(d, 4), uniform: null, deep: d });
+    return d;
+  }
+
   /** The new tile of a coverage stroke over the pre-stroke tile `src`. */
   private compositeTile(src: Uint8ClampedArray, tx: number, ty: number, options: { into?: Uint8ClampedArray; region?: CropBox } = {}, paint?: RetouchPaint): Uint8ClampedArray {
     const r = this.retouch;
@@ -798,10 +816,7 @@ export class PaintStrokeSession {
     const a = this.apply;
     const depth = this.dabDeep;
     if (depth) {
-      const read = (key: TileKey) => {
-        if (!this.workRead.has(key)) this.workRead.set(key, workTileOf(this.base.tiles.get(key)));
-        return this.workRead.get(key)!;
-      };
+      const read = (key: TileKey) => this.readWork(key);
       return {
         offset: a.offset,
         lockTransparency: a.lockTransparency,
@@ -885,12 +900,18 @@ export class PaintStrokeSession {
     for (const [key, { tx, ty, r }] of regions) {
       if (this.deep) {
         // At 16 or 32 bits: composite the deep samples and show their 8-bit rendering.
+        const rt = this.retouch;
+        const paint = rt?.kind === 'coverage' ? rt.paint() : null;
+        if (paint && paint.kind !== 'tone') {
+          const prevWork = this.touched.has(key) ? this.work.get(key) : undefined;
+          this.touched.add(key);
+          this.retouchDeepTile(key, tx, ty, paint, prevWork ? { into: prevWork, region: r } : {});
+          continue;
+        }
         const src = tileSamples(this.base.tiles.get(key), 4, this.deep, this.base.defaultValue);
         const prev = this.touched.has(key) ? this.liveDeep.get(key) : undefined;
         this.touched.add(key);
         const opts = prev ? { into: prev, region: r } : {};
-        const rt = this.retouch;
-        const paint = rt?.kind === 'coverage' ? rt.paint() : null;
         const d =
           rt?.kind === 'coverage' && paint?.kind === 'tone'
             ? applyToneToDeepTile(stroke.coverage, src, tx, ty, paint.tone, rt.apply, opts)
@@ -924,6 +945,10 @@ export class PaintStrokeSession {
       if (final) {
         for (const key of this.touched) {
           const { tx, ty } = tileCoord(key);
+          if (this.deep) {
+            this.retouchDeepTile(key, tx, ty, final, {});
+            continue;
+          }
           const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
           this.live.set(key, { data: this.compositeTile(src, tx, ty, {}, final), uniform: null });
         }
@@ -3209,9 +3234,8 @@ export class ImageEditorController {
     };
     const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply, depth);
-    // Dodge, Burn, Smudge and Sponge work on the deep samples; Clone and the healing tools work in 8 bits on what they change.
-    const deepRetouch = tool === 'dodge' || tool === 'burn' || tool === 'smudge' || tool === 'sponge';
-    if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, deepRetouch ? depth : null);
+    // The retouching tools work on the deep samples too (sources read at depth).
+    if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, depth);
     return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply, depth);
   }
 
@@ -3236,8 +3260,10 @@ export class ImageEditorController {
     }
     // Masks sample only themselves; pixels sample the layer or the composite.
     const sample = mask ? 'current' : settings.sample;
-    const own = this.surfaceSource(target.surface, target.offset);
-    const source = sample === 'current' ? own : this.compositeSource(sample === 'all' ? null : target.id);
+    // At 16 or 32 bits the source reads deep samples, on the working tiles' 0..255 encoded scale.
+    const deep = !mask && this.bitDepth !== 8 ? this.bitDepth : null;
+    const own = deep ? new TilePixelSource((tx, ty) => workTileOf(target.surface.tiles.get(tileKey(tx, ty))), 4, target.offset) : this.surfaceSource(target.surface, target.offset);
+    const source = sample === 'current' ? own : this.compositeSource(sample === 'all' ? null : target.id, deep);
     const pad = (r: CropBox, m: number): CropBox => ({ x: r.x - m, y: r.y - m, width: r.width + 2 * m, height: r.height + 2 * m });
     const covered = (cov: CoverageMap, r: CropBox) => {
       const m = new Uint8Array(r.width * r.height);
@@ -3306,11 +3332,22 @@ export class ImageEditorController {
   }
 
   /** A pixel source over the composite of the current layers (through `throughId` and below, or all of them), as it is now. */
-  private compositeSource(throughId: string | null): PixelSource {
+  private compositeSource(throughId: string | null, depth: 16 | 32 | null = null): PixelSource {
     const stack = withoutAnnotations(this.state.layers);
     const layers = throughId ? layersThrough(stack, throughId) : stack;
-    const compositor = new LayerCompositor();
     const sources = this.compositorSources();
+    if (depth) {
+      // The float composite, as a working tile (sRGB-encoded 0..255, straight alpha).
+      return new TilePixelSource((tx, ty) => {
+        const w = compositeDeep(layers, { x: tx * TILE, y: ty * TILE, width: TILE, height: TILE }, sources, depth);
+        for (let i = 0; i < w.length; i += 4) {
+          if (depth === 32) for (let c = 0; c < 3; c++) w[i + c] = srgbEncode(w[i + c]);
+          for (let c = 0; c < 4; c++) w[i + c] *= 255;
+        }
+        return w;
+      }, 4);
+    }
+    const compositor = new LayerCompositor();
     return new TilePixelSource((tx, ty) => compositor.tile(layers, tx, ty, sources), 4);
   }
 

@@ -81,4 +81,39 @@ describe('dab tools at 16 and 32 bits', () => {
     // Desaturated: red moved towards green.
     expect(out[i] - out[i + 1]).toBeLessThan(0.4);
   });
+
+  it('Clone Stamp copies 16-bit samples exactly, from the layer or the composite', () => {
+    for (const sample of ['current', 'all'] as const) {
+      const { c, id } = deepSetup(ramp16(), 16);
+      const src = ramp16();
+      c.paintStroke({ tool: 'clone', layerId: id, source: { x: 60, y: 20 }, points: [{ x: 200, y: 20 }], brush: { size: 16, hardness: 1, opacity: 1 }, retouch: { sample, aligned: false } });
+      const s = surfaceOf(c, id);
+      for (const tile of s.tiles.values()) expect(tile.deep).toBeInstanceOf(Uint16Array);
+      const d = readDeepRegion(s, ALL, 16);
+      // The centre of the dab is the source pixel 140 px to the left, sample for sample.
+      for (const [x, y] of [[200, 20], [198, 18], [203, 22]]) {
+        const i = (y * W + x) * 4;
+        const j = (y * W + x - 140) * 4;
+        expect(Array.from(d.subarray(i, i + 4))).toEqual(Array.from(src.subarray(j, j + 4)));
+      }
+    }
+  });
+
+  it('the Healing Brush and Spot Healing write 16-bit samples', () => {
+    const data = ramp16();
+    // A dark blemish to heal.
+    for (let y = 16; y < 24; y++) for (let x = 146; x < 154; x++) data.set([5000, 5000, 5000, 65535], (y * W + x) * 4);
+    for (const tool of ['heal', 'spot-heal'] as const) {
+      const { c, id } = deepSetup(data, 16);
+      c.paintStroke({ tool, layerId: id, source: tool === 'heal' ? { x: 80, y: 20 } : undefined, points: [{ x: 150, y: 20 }], brush: { size: 24, hardness: 0.8 } });
+      const s = surfaceOf(c, id);
+      for (const tile of s.tiles.values()) expect(tile.deep).toBeInstanceOf(Uint16Array);
+      const d = readDeepRegion(s, ALL, 16);
+      const i = (20 * W + 150) * 4;
+      expect(d[i]).toBeGreaterThan(15000);
+      expect(fractional(d, 18 * W + 140, 18 * W + 160)).toBeGreaterThan(5);
+      c.undo();
+      expect(readDeepRegion(surfaceOf(c, id), ALL, 16)).toEqual(data);
+    }
+  });
 });
