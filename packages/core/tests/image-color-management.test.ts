@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { ImageEditorController, createImageEditorToolProvider, displayTransform, documentProfile, readPixel, type PixelLayer } from '../src/image-editor';
+import { ImageEditorController, convertColorFields, createImageEditorToolProvider, displayTransform, documentProfile, readPixel, type PixelLayer } from '../src/image-editor';
 import { builtinProfile, encodeProfile, parseProfile } from '../src/cms';
 import { readPsd, resource } from '../src/image-editor/psd/file';
 
@@ -153,3 +153,29 @@ describe('converting deep layers', () => {
     expect(out[3]).toBe(65535);
   });
 });
+
+describe('Convert to Profile: colour settings', () => {
+  it('converts shape and effect colours with the pixels, as one undo step', () => {
+    const { c, id } = setup();
+    c.addLayerEffect(id, 'color-overlay', { color: '#e01010', opacity: 0.5 });
+    const shape = c.addShapeLayer({ shape: { kind: 'rect', x: 1, y: 1, width: 4, height: 2 }, fill: '#e01010' } as never);
+    const res = c.convertToProfile('display-p3');
+    expect(res.convertedLayerIds).toEqual(expect.arrayContaining([id, shape]));
+    expect(res.unconvertedLayerIds).toEqual([]);
+    const p3 = c.convertColors(['#e01010'], 'display-p3', { from: 'srgb' })[0].hex!;
+    const fx = c.getLayer(id)!.effects!.items[0] as unknown as { color: string };
+    expect(fx.color).toBe(p3);
+    const s = c.getLayer(shape) as unknown as { fill: { type: string; color: string } };
+    expect(s.fill.color).toBe(p3);
+    c.undo();
+    expect((c.getLayer(shape) as unknown as { fill: { color: string } }).fill.color).toBe('#e01010');
+  });
+
+  it('convertColorFields converts colour fields only and shares what it leaves alone', () => {
+    const runs = [{ length: 2, style: { color: '#e01010', font: '#notacolor', text: '#e01010' } }];
+    const out = convertColorFields(runs, () => '#123456');
+    expect(out[0].style).toEqual({ color: '#123456', font: '#notacolor', text: '#e01010' });
+    expect(convertColorFields(runs, (h) => h)).toBe(runs);
+  });
+});
+

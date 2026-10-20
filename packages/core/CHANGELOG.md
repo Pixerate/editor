@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.129.0
+
+### Minor Changes
+
+- aaa0bcd: Image editor: Convert to Profile now also converts shape fills and strokes, text colours, layer-effect colours (gradient stops included) and annotation colours, and re-renders shape and type layers. Only smart objects are reported in `unconvertedLayerIds` now. New `convertColorFields` helper.
+
 ## 0.128.0
 
 ### Minor Changes

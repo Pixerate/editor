@@ -385,7 +385,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
 | `get_color_profile` | Read-only. The document's profile (`name`, `builtin` id or null, `colorSpace`, `srgb`), the Proof Setup or null, and the built-in profiles. |
 | `assign_profile` | Make the document's numbers mean colours in `profile` (built-in id or `icc:<base64>`; RGB only). The look changes, pixels do not. One undo step. Returns the profile. |
-| `convert_to_profile` | Convert pixel layers into `profile` keeping their look (`intent`, `bpc`), then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (shape, type, effects, smart objects). |
+| `convert_to_profile` | Convert the document into `profile` keeping its look (`intent`, `bpc`): pixel layers, shape and text colours, effect and annotation colours. Then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (smart objects). |
 | `set_proof_setup` | Soft-proof the viewport through `profile` (`intent`, `bpc`, `simulatePaper`, `gamutWarning`), or `off: true`. View state. Returns the setup. |
 | `set_color_mode` | Image › Mode: `rgb`, `cmyk` (with the press `profile`, default coated-cmyk, and the separation `intent`) or `lab`. Pixels stay RGB; CMYK documents proof through their profile and `export_psd` writes CMYK / Lab channels. One undo step. Returns the profile summary with `mode`. |
 | `convert_colors` | Read-only. `colors` #rrggbb from the document's profile (or `from`) to `to`: channel `values` 0..1 (CMYK, RGB, grey), `hex` for RGB, and `lab`. |

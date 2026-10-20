@@ -256,8 +256,10 @@ describe('layer effects in the tiled compositor', () => {
   });
 
   describe('incremental effect maps while painting', () => {
-    const BIG = { x: 0, y: 0, width: 900, height: 700 };
-    const big: RasterSources = { width: 900, height: 700 };
+    // Effects are built over the layer's bounds, so the scene stays small: 900 × 700 took over
+    // 5 s per stack on CI. It still spans 3 × 2 tiles.
+    const BIG = { x: 0, y: 0, width: 600, height: 460 };
+    const big: RasterSources = { width: 600, height: 460 };
     type Pixel = Extract<RasterLayer, { type: 'pixel' }>;
 
     /** A round dab with a half-covered rim, as rows of rectangles. */
@@ -275,24 +277,41 @@ describe('layer effects in the tiled compositor', () => {
     const STROKES: Array<{ points: Array<[number, number]>; r: number; rgba: number[]; dirty: boolean }> = [
       { points: [[230, 200], [250, 205], [270, 210], [290, 215]], r: 12, rgba: [20, 40, 200, 255], dirty: true },
       { points: [[420, 300], [470, 330], [520, 360]], r: 16, rgba: [200, 200, 20, 180], dirty: true },
-      { points: [[600, 520], [640, 560], [680, 600]], r: 10, rgba: [0, 0, 0, 255], dirty: true },
-      { points: [[880, 690], [895, 698]], r: 8, rgba: [0, 120, 0, 255], dirty: true },
+      { points: [[530, 380], [550, 405], [570, 430]], r: 10, rgba: [0, 0, 0, 255], dirty: true },
+      { points: [[585, 450], [596, 456]], r: 8, rgba: [0, 120, 0, 255], dirty: true },
       { points: [[180, 180], [200, 190]], r: 14, rgba: [0, 0, 0, 0], dirty: true },
       { points: [[300, 120], [320, 125]], r: 6, rgba: [90, 10, 10, 255], dirty: false },
     ];
 
     const STACKS: Array<[string, LayerEffects]> = [
       ['a drop shadow, a stroke and a bevel', { enabled: true, items: [fx('drop-shadow', { distance: 8, size: 10, spread: 0.1 }), fx('stroke', { size: 4, fill: { type: 'color', color: '#0000ff' } }), fx('bevel-emboss', { size: 6, depth: 2 })] }],
+      // Every other local kind, in three stacks so none runs near the 5 s timeout on CI.
       [
-        'every local kind',
+        'an inner shadow, an outer and an inner glow',
         {
           enabled: true,
           items: [
             fx('inner-shadow', { distance: 5, size: 7, choke: 0.1 }),
             fx('outer-glow', { technique: 'precise', size: 9 }),
             fx('inner-glow', { size: 8, source: 'center' }),
+          ],
+        },
+      ],
+      [
+        'satin and a pillow emboss',
+        {
+          enabled: true,
+          items: [
             fx('satin', { distance: 6, size: 8 }),
             fx('bevel-emboss', { style: 'pillow-emboss', technique: 'chisel-soft', size: 8, soften: 2 }),
+          ],
+        },
+      ],
+      [
+        'outside and inside strokes',
+        {
+          enabled: true,
+          items: [
             fx('stroke', { size: 22, position: 'outside', fill: { type: 'color', color: '#00ff00' } }),
             fx('stroke', { size: 3, position: 'inside', fill: { type: 'color', color: '#ff00ff' } }),
           ],
@@ -320,7 +339,7 @@ describe('layer effects in the tiled compositor', () => {
         const fresh = new RasterCompositor().composite(layers(), BIG, big);
         expect(maxDiff(incremental, fresh)).toBe(0);
       }
-    }, 30_000);
+    });
 
     it('keeps a neighbouring tile that only reads the change through the margin', () => {
       const c = new RasterCompositor();

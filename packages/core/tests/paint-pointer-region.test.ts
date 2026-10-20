@@ -63,8 +63,9 @@ describe('WetWorld.stepRegion', () => {
       w.ensureLane('a');
       const d = disc(250, 128, 24);
       w.paint('a', d.rect, d.cov, 0.8, null);
-      if (region) w.stepRegionSync(5, { x: -10, y: -10, width: 600, height: 300 });
-      else w.stepSync(5);
+      // Each step of the TypeScript kernel costs ~50 ms per tile on CI; three show any difference.
+      if (region) w.stepRegionSync(3, { x: -10, y: -10, width: 600, height: 300 });
+      else w.stepSync(3);
       const out = [w.waterAt('a', 250, 128), w.waterAt('a', 262, 128), w.waterAt('a', 280, 140)];
       w.destroy();
       return out;

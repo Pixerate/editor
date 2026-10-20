@@ -21,6 +21,23 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [tests] Writing Tests That Pass on CI: Fix the Cost, Not the Timeout
+
+- **Issue / Symptom**: PRs failed at random with "Test timed out in 5000ms" (the brush panel tests in React and Svelte in #268, #270, #282 and #283; wet-media, image-layer and raster-effect tests before them), and passed on a re-run. Each PR raised one test's timeout, and the next slow test failed the next PR. The Release workflow re-runs the suite, so one flake can stop a publish.
+- **Root Cause**: GitHub's ubuntu-latest runners are ~3× slower than a laptop and run 3 test files at once, so a test that takes 1.5–2 s locally takes 5 s there on a bad run. The usual costs:
+  - Rendering every item of a library on mount: `BrushPanel` paints a thumbnail stroke for each of ~55 brushes on every render, and saving a brush renders them all again. Any test rendering `BrushPanel` or `PaintEditor` paid several seconds.
+  - Two tests doing the same heavy work (both core paint tests rendered every brush thumbnail).
+  - Simulations run for more steps, or over a bigger canvas, than the property needs (100 + 70 wet steps to show determinism; a 900 × 700 canvas for effect maps, whose cost follows the layer's bounds).
+  - Wall-clock assertions with little headroom: an "O(log n)" check allowed 2.5× for 4× the input, where log growth is ~1.2× and noise on a loaded runner can exceed 2×.
+- **Solution / Workaround**:
+  - Keep every test under ~1 s locally (`npx vitest run <file> --reporter=verbose` prints times). On CI, `vitest.slow-tests.ts` adds a warning annotation and a step-summary row for each test that uses 40 % of its timeout; fix those rather than waiting for them to fail.
+  - Panel tests check wiring: stub expensive rendering they don't assert on. `stubBrushThumbnails()` (`packages/react|svelte/tests/paint-thumbnails.ts`) returns blank thumbnails and lets the test check one was requested per brush; the pixels are tested once in core.
+  - Shrink fixtures to the smallest that still shows the property (one tile, few steps, a canvas just over the tile edges you need), and split a test that loops over many cases with `it.each` so each case gets its own timeout.
+  - Count work instead of timing it where the code exposes it: recalculation stats, `vi.spyOn` call counts (e.g. interval-tree nodes visited in `spreadsheet-recalc.test.ts`). Check such a count by breaking the code once and watching the test fail. Where only time will do, use `measureGrowth` (see "Timing Tests Flake in the Release Run Unless They Use `measureGrowth`").
+  - Use fake timers (`vi.useFakeTimers()`, `vi.advanceTimersByTime`) for debounces, dwell times and animations, never real `setTimeout` waits.
+  - Benchmarks go in `*.bench.test.ts` files that skip unless their environment variable is set (e.g. `WET_BENCH=1`).
+  - Raise a timeout only for work that is slow by design and can't be smaller (real ffmpeg runs, growth measurements), with a comment saying why.
+
 ### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
 
 - **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.
@@ -2560,3 +2577,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Provider effects (`setPaperEffect`, `fillLayerWithEffect`, `applyLightEffect`) return promises. If the controller committed the undo step before the render, or wrote the result onto the layer as it is after the render, a stroke painted while the effect rendered would be lost or the effect would land on paint it never saw.
 - **Root Cause**: The paint controller's history holds whole document states, and the wet simulation keeps changing wet layers between steps. Anything can change during the `await`.
 - **Solution / Workaround**: Each effect method validates first, renders, then re-checks (no stroke in progress, the layer still exists with the same surface and offset) and commits in one synchronous step; otherwise it throws "changed while the effect rendered; apply the effect again". Fills and light refuse layers that hold wet paint ("dry it first"), so no wet snapshot has to be rolled back if the render fails. Slider drags pass `commitToHistory: false` after the first change, which folds into the last step only when it has the same label.
+
+### [core/vector] Sorting Extrude Faces By Their Middles Draws Concave Shapes Wrong
+
+- **Issue / Symptom**: On concave outlines (an L, a star), some side faces of an extrusion were drawn over faces that should cover them.
+- **Root Cause**: Painter's order by each face's midpoint depth is only right when faces don't overlap unevenly. Two faces overlap only over the viewing rays (lines along the extrusion, or rays to the vanishing point) that cross both edges, and their order there can differ from the order of their middles.
+- **Solution / Workaround**: `vectorExtrudeFaces` compares each pair of faces at a ray inside their shared range: the edge further along the ray is in front. It then sorts topologically, using the midpoint order to break ties. The edges of a simple outline don't cross, so the relation has no cycles. It's O(n²) in faces, which is fine for flattened outlines.
+
+### [core/vector] A Bevel's Inset Corners Must Know Which Side Is Inside, Ring By Ring
+
+- **Issue / Symptom**: Holes (a frame, the counter of an "O") were bevelled into the hole, and thin parts had faces poking out the other side.
+- **Root Cause**: A ring's winding alone doesn't say where the inside is: holes may wind either way under `evenodd`. And a mitred inset corner `width` deep can cross the opposite outline wherever the shape is thinner than the bevel.
+- **Solution / Workaround**: `vectorBevelFaces` finds each ring's inside by testing a point just off its longest edge against all rings with the shape's fill rule. It then cuts each corner's inset to half the distance at which it would cross any outline edge.
