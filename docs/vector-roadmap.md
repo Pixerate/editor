@@ -20,6 +20,14 @@ This plan covers the work still open on `@pixerate/editor/vector` after the craf
 | #129 | Free Distort, skew, envelope warps and meshes |
 | #221 | Appearance stack: multiple fills and strokes, blend modes, filters (item 1) |
 | #230 | Masks and clipping: clip, alpha and luminance mask groups, SVG `clipPath` / `mask` (item 2) |
+| #243 | Text: point, area and path text, rich runs, Create Outlines, text under envelopes and effects (item 4) |
+| #244 | Symbols and instances, Edit Symbol in isolation (item 3) |
+| #245 | Constraint solver: geometric and dimensional constraints, DOF, Auto Constrain (item 5) |
+| #246 | Spatial index for hit-testing, marquee and snapping |
+| #247 | Squircle corner smoothing |
+| #250 | Frames / artboards and resizing constraints |
+| #251 | Connectors glued to shapes |
+| #253 | CAD tracking, polar increments and typed dimensions |
 
 ## How each item is run
 
