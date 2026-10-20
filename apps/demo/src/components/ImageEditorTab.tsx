@@ -52,7 +52,9 @@ export function ImageEditorTab() {
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, provider);
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
-  const { provider: effects } = useDemoEffects();
+  const { provider: effects, source: effectsSource } = useDemoEffects();
+  // The effects turn names effect ids, so play the one written for the selected provider.
+  const scripts = useMemo(() => IMAGE_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "image-effects" : "image-effects-flair")), [effectsSource]);
   const effectTools = useMemo(() => createImageEffectsToolProvider(editor.controller, { id: 'image-effects', namespace: 'imagefx' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, effectTools);
 
@@ -161,7 +163,7 @@ export function ImageEditorTab() {
           }}
         />
       </div>
-      <AgentScriptPanel scripts={IMAGE_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
+      <AgentScriptPanel scripts={scripts} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
 
       {/* Export Preview */}
       {exportedUrl && (

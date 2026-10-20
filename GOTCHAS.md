@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/effects] GPU Effect Providers Hold a WebGL Context per Renderer, and Browsers Allow About Sixteen
+
+- **Issue / Symptom**: With Flair as the provider, opening the effects browser printed "Too many active WebGL contexts. Oldest context will be lost." more than a hundred times. Most thumbnails showed "No preview", and effects already on clips failed with "The graphics context was lost." The engines record failures and don't retry them, so those clips stayed plain until the provider changed.
+- **Root Cause**: Each Flair renderer (a `ShaderPipeline`) owns one WebGL context. The effects browser rendered every thumbnail at once, around 300 renderers in parallel. The video and image engines also kept one renderer per effect and size for as long as the provider was set. Chrome keeps about sixteen contexts alive and loses the oldest beyond that, which breaks renders still in flight.
+- **Solution / Workaround**: `renderEffectThumbnail` renders one thumbnail at a time, disposes each renderer before making the next, and caches the results per provider. Both engines render through `EffectRendererPool`, which keeps at most four live renderers (`maxRenderers`) and disposes the least recently used one once its queued renders finish. If you write a provider host, keep few renderers alive and always `dispose()` them. When the demo seems to ignore a fix, check for a stale bundle in the browser cache: `vite preview` pages can keep the previous hashed chunks until a hard reload.
+
 ### [core/image-editor] An Effect Smart Filter Above One Still Rendering Must Not Be Requested
 
 - **Issue / Symptom**: With two provider effect smart filters stacked, the upper one sometimes showed its result as if the lower one was not there, even after both had rendered.

@@ -91,7 +91,7 @@ export function EffectsBrowser({ provider, uses, onPick, thumbnails = true, titl
         )}
       </div>
       {error && <p role="alert" className="text-[11px] text-destructive">{error}</p>}
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1.5" role="list">
+      <ul className="grid max-h-96 grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1.5 overflow-y-auto" role="list">
         {shown.map((e) => (
           <li key={e.id}>
             <button

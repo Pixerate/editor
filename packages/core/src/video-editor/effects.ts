@@ -12,8 +12,9 @@
 
 import { EffectsSlot, createEffectPixels, effectValueErrors } from '../effects/helpers.js';
 import { EffectControlError, EffectUnsupportedError } from '../effects/errors.js';
+import { EffectRendererPool } from '../effects/pool.js';
 import { validateJsonSchema, type SchemaValidationError } from '../tools/schema.js';
-import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderer, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
+import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
 import { isVideoKeyframes } from './keyframes.js';
 import type { VideoLayer, VideoLayerEffect } from './evaluate.js';
 import { allVideoTracks } from './timeline.js';
@@ -123,6 +124,8 @@ export interface VideoEffectsEngineOptions {
 	slot?: EffectsSlot;
 	/** Rendered pictures kept (default 120, a few seconds of one layer). */
 	maxEntries?: number;
+	/** Live renderers kept (default 4): GPU providers hold a graphics context each (see `EffectRendererPool`). */
+	maxRenderers?: number;
 	/**
 	 * Turns rendered pixels into something `drawImage` takes. Default: an `OffscreenCanvas` (or a
 	 * `<canvas>`) holding them; `null` where neither exists.
@@ -133,11 +136,6 @@ export interface VideoEffectsEngineOptions {
 interface Entry {
 	pixels: EffectPixels;
 	image?: CanvasImageSource | null;
-}
-
-interface RendererEntry {
-	renderer: Promise<EffectRenderer>;
-	queue: Promise<unknown>;
 }
 
 function defaultToImage(p: EffectPixels): CanvasImageSource | null {
@@ -169,7 +167,7 @@ export class VideoEffectsEngine {
 	private readonly cache = new Map<string, Entry>();
 	private readonly pending = new Map<string, Promise<void>>();
 	private readonly failures = new Map<string, Error>();
-	private readonly renderers = new Map<string, RendererEntry>();
+	private readonly pool: EffectRendererPool;
 	private readonly descriptions = new Map<string, Promise<EffectDescription>>();
 	private readonly listeners = new Set<() => void>();
 	private readonly maxEntries: number;
@@ -181,6 +179,7 @@ export class VideoEffectsEngine {
 		this.slot = options.slot ?? new EffectsSlot();
 		this.maxEntries = options.maxEntries ?? 120;
 		this.toImage = options.toImage ?? defaultToImage;
+		this.pool = new EffectRendererPool({ maxRenderers: options.maxRenderers });
 		this.detach = this.slot.subscribe(() => {
 			this.reset();
 			this.notify();
@@ -298,20 +297,9 @@ export class VideoEffectsEngine {
 		return d;
 	}
 
-	/** Renders on a renderer kept per effect and size, one render at a time per renderer. */
+	/** Renders through the pool: a few live renderers, one render at a time on each. */
 	private render(provider: EffectProvider, id: string, width: number, height: number, request: EffectRenderRequest): Promise<EffectPixels> {
-		const k = `${id}@${width}x${height}`;
-		let r = this.renderers.get(k);
-		if (!r) {
-			const renderer = Promise.resolve().then(() => provider.createRenderer(id, { width, height }));
-			renderer.catch(() => this.renderers.delete(k));
-			r = { renderer, queue: Promise.resolve() };
-			this.renderers.set(k, r);
-		}
-		const entry = r;
-		const next = entry.queue.then(() => entry.renderer).then((renderer) => renderer.render(request));
-		entry.queue = next.catch(() => undefined);
-		return next;
+		return this.pool.render(provider, id, { width, height }, request);
 	}
 
 	/** Forgets every picture and failure and disposes the renderers (e.g. after the provider changes). */
@@ -321,8 +309,7 @@ export class VideoEffectsEngine {
 		this.pending.clear();
 		this.failures.clear();
 		this.descriptions.clear();
-		for (const r of this.renderers.values()) r.renderer.then((x) => x.dispose(), () => {});
-		this.renderers.clear();
+		this.pool.clear();
 	}
 
 	subscribe(listener: () => void): () => void {
