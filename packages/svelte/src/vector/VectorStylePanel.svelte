@@ -21,6 +21,11 @@
   import VectorAppearancePanel from './VectorAppearancePanel.svelte';
   import VectorEnvelopePanel from './VectorEnvelopePanel.svelte';
   import VectorMaskPanel from './VectorMaskPanel.svelte';
+  import VectorTextPanel from './VectorTextPanel.svelte';
+  import VectorSymbolsPanel from './VectorSymbolsPanel.svelte';
+  import VectorConstraintsPanel from './VectorConstraintsPanel.svelte';
+  import VectorFramePanel from './VectorFramePanel.svelte';
+  import VectorConnectorPanel from './VectorConnectorPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -50,6 +55,7 @@
       widthProfile: widthProfilePresetId(d.strokeWidthProfile),
       cornerRadius: d.cornerRadius,
       cornerKind: d.cornerKind ?? 'round',
+      cornerSmoothing: 0,
       corners: 1,
       hasOpenPath: true
     };
@@ -209,6 +215,23 @@
       {#if style?.mixed.cornerRadius}<span class="text-[11px] text-muted-foreground">Mixed</span>{/if}
     </div>
   {/if}
+  {#if style && source.corners > 0 && source.cornerKind === 'round' && source.cornerRadius > 0}
+    <label class="flex items-center gap-2 text-xs text-foreground" data-vector-style="corner-smoothing" title="Corner smoothing: squircle corners that ease into the curve (0.6 is iOS-like)">
+      <span class="w-16">Smoothing</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        aria-label="Corner smoothing"
+        class="h-4 flex-1 accent-primary"
+        value={source.cornerSmoothing}
+        oninput={(e) => controller.setCornerSmoothing(parseFloat(e.currentTarget.value), { merge: 'corner-smoothing' })}
+        onpointerup={() => controller.endMergedEdit()}
+      />
+    </label>
+  {/if}
+  <VectorTextPanel {controller} />
   {#if style}
     <label class="flex items-center gap-2 text-xs text-foreground">
       <span class="w-16">Opacity</span>
@@ -228,4 +251,8 @@
     <VectorEnvelopePanel {controller} />
     <VectorMaskPanel {controller} />
   {/if}
+  <VectorFramePanel {controller} />
+  <VectorConnectorPanel {controller} />
+  <VectorConstraintsPanel {controller} />
+  <VectorSymbolsPanel {controller} />
 </div>

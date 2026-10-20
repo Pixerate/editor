@@ -20,6 +20,7 @@
  * tangent points by sign-change sampling and bisection) (MIT OR Apache-2.0, © ArtCraft Team
  * and contributors). See THIRD_PARTY_NOTICES.md.
  */
+import { VectorRTree, VECTOR_SPATIAL_MIN } from './spatial.js';
 import type { Point } from '../canvas/types.js';
 import { expandVectorAppearance, vectorAppearanceNodes } from './appearance.js';
 import { isVectorMaskActive } from './mask.js';
@@ -60,7 +61,7 @@ export interface VectorGuideLine {
 }
 
 /** What a point or box snapped to. */
-export type VectorSnapKind = 'anchor' | 'centre' | 'intersect' | 'perpendicular' | 'tangent' | 'path' | 'construction' | 'align' | 'spacing' | 'size';
+export type VectorSnapKind = 'anchor' | 'centre' | 'intersect' | 'perpendicular' | 'tangent' | 'path' | 'construction' | 'align' | 'spacing' | 'size' | 'tracking';
 
 /** A guide label in document units: the snap kind's name, or a distance for gaps and sizes. */
 export interface VectorGuideLabel {
@@ -113,6 +114,78 @@ export interface VectorSnapLeave {
 	angles?: readonly number[];
 	/** Snap to the perpendicular foot and tangent points from `at` on paths (default true). */
 	curves?: boolean;
+}
+
+/**
+ * A tracking path (CAD object snap tracking): a ray from `origin` along the unit `dir`. Acquired
+ * points send `alignment` paths, an acquired end of an open path its `extension`, and the point a
+ * drawn point leaves from its `polar` angles. Points snap where two paths cross, where a path
+ * crosses a path of the drawing, or onto the nearest path.
+ */
+export interface VectorTrackingPath {
+	origin: Vec2;
+	dir: Vec2;
+	kind: 'alignment' | 'extension' | 'polar';
+}
+
+/** A point acquired for tracking, and the direction of its path's extension when it ends an open path. */
+export interface VectorTrackingPoint {
+	x: number;
+	y: number;
+	extension?: Vec2 | null;
+}
+
+/** The most points kept acquired (the oldest dropped first), as AutoCAD keeps. */
+export const VECTOR_MAX_TRACKING_POINTS = 7;
+
+/** A unit direction for `deg` degrees counter-clockwise on the y-down page (exact on the axes). */
+export function vectorAngleDirection(deg: number): Vec2 {
+	const r = (deg * Math.PI) / 180;
+	const exact = (n: number) => (Math.abs(n) < 1e-12 ? 0 : n);
+	return { x: exact(Math.cos(r)), y: exact(-Math.sin(r)) };
+}
+
+/**
+ * Polar angles (degrees, counter-clockwise on the page, in [0, 360)): every multiple of
+ * `increment` round the circle plus the `additional` angles, without repeats, at most 360. After
+ * cadcraft's `polar_angles` (POLARANG / POLARADDANG).
+ */
+export function vectorPolarAngles(increment: number, additional: readonly number[] = []): number[] {
+	const out: number[] = [];
+	const push = (a: number) => {
+		const n = ((a % 360) + 360) % 360;
+		if (out.length < 360 && !out.some((b) => Math.abs(((n - b + 540) % 360) - 180) < 1e-9)) out.push(n);
+	};
+	if (Number.isFinite(increment) && increment > 1e-6) {
+		const n = Math.min(360, Math.max(1, Math.ceil(360 / increment - 1e-9)));
+		for (let k = 0; k < n; k++) push(k * increment);
+	} else push(0);
+	for (const a of additional) if (Number.isFinite(a)) push(a);
+	return out;
+}
+
+/** The increment (degrees) that `angles` are the multiples of, as lines (so 0, 45, 90, 135 is 45), or null when they are not one increment's multiples. */
+export function vectorPolarIncrementOf(angles: readonly number[]): number | null {
+	const lines = [...new Set(angles.filter(Number.isFinite).map((a) => Math.round((((a % 180) + 180) % 180) * 1e6) / 1e6))].sort((x, y) => x - y);
+	if (!lines.length || lines[0] !== 0) return null;
+	const inc = lines.length > 1 ? lines[1] : 180;
+	if (Math.abs(180 / inc - Math.round(180 / inc)) > 1e-6) return null;
+	const n = Math.round(180 / inc);
+	return lines.length === n && lines.every((v, k) => Math.abs(v - k * inc) < 1e-6) ? inc : null;
+}
+
+/** The paths acquired points send: a ray along each of `angles` (degrees) from each, plus its extension. After cadcraft's `Tracker::paths`. */
+export function vectorTrackingPaths(points: readonly VectorTrackingPoint[], angles: readonly number[] = [0, 90, 180, 270]): VectorTrackingPath[] {
+	const out: VectorTrackingPath[] = [];
+	for (const p of points) {
+		if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+		const origin = { x: p.x, y: p.y };
+		for (const a of angles) out.push({ origin, dir: vectorAngleDirection(a), kind: 'alignment' });
+		const e = p.extension;
+		const len = e ? Math.hypot(e.x, e.y) : 0;
+		if (e && len > 1e-12) out.push({ origin, dir: { x: e.x / len, y: e.y / len }, kind: 'extension' });
+	}
+	return out;
 }
 
 /** The construction guide angles new editors start with. */
@@ -210,7 +283,8 @@ const LABELS: Record<VectorSnapKind, string> = {
 	construction: 'angle',
 	align: 'align',
 	spacing: 'spacing',
-	size: 'size'
+	size: 'size',
+	tracking: 'tracking'
 };
 
 const fmtLength = (n: number) => String(Math.round(n * 100) / 100);
@@ -245,6 +319,7 @@ export class VectorSnapTargets {
 	private readonly boxes: VectorBounds[] = [];
 	/** Side lengths of the other objects (in their own frames), which a resize may match. */
 	private readonly sizes: number[] = [];
+	private segmentTree: VectorRTree | null = null;
 
 	private constructor() {}
 
@@ -311,7 +386,7 @@ export class VectorSnapTargets {
 			for (const n of list) {
 				const m = multiplyMatrices(nodeMatrix(n), parent);
 				if (n.type === 'group') visit(n.children, m);
-				else if (ids.has(n.id) && n.visible !== false) {
+				else if (n.type === 'path' && ids.has(n.id) && n.visible !== false) {
 					n.subpaths.forEach((sp, s) => {
 						sp.anchors.forEach((a, i) => {
 							if (anchors <= 0 || moving(n.id, s, i)) return;
@@ -375,6 +450,8 @@ export class VectorSnapTargets {
 
 	/** Sorts the targets for `within` (stable: of targets alike, the first gathered wins). */
 	private index(): this {
+		// Many segments: an R-tree over their control boxes (a scan is quicker for a few).
+		this.segmentTree = this.segments.length >= VECTOR_SPATIAL_MIN ? new VectorRTree(this.segments) : null;
 		this.points.sort((a, b) => a.p.x - b.p.x);
 		this.xs.sort((a, b) => a.v - b.v);
 		this.ys.sort((a, b) => a.v - b.v);
@@ -408,7 +485,7 @@ export class VectorSnapTargets {
 					visit(n.children, m);
 					continue;
 				}
-				if (anchors <= 0) continue;
+				if (anchors <= 0 || n.type !== 'path') continue;
 				for (const sp of n.subpaths) {
 					for (const a of sp.anchors) {
 						if (anchors-- <= 0) break;
@@ -459,7 +536,7 @@ export class VectorSnapTargets {
 	 * through `leave.at` (where a target's line crosses it if one does nearby), or else lines up
 	 * with targets on x and y.
 	 */
-	snapFrom(p: Vec2, leave: VectorSnapLeave | null | undefined, tol: number): VectorPointSnap {
+	snapFrom(p: Vec2, leave: VectorSnapLeave | null | undefined, tol: number, tracking: readonly VectorTrackingPath[] = []): VectorPointSnap {
 		const none = (q: Vec2): VectorPointSnap => ({ point: q, kind: null, x: false, y: false, lines: [], labels: [] });
 		const at = (q: Vec2, kind: VectorSnapKind, lines: VectorGuideLine[] = []): VectorPointSnap => ({
 			point: q,
@@ -479,12 +556,23 @@ export class VectorSnapTargets {
 		const near = this.segmentsNear(p, tol);
 		const crossing = this.crossing(near, p, tol);
 		if (crossing) return at(crossing, 'intersect');
+		// Tracking: the paths near `p` (polar ones from where the point leaves among them).
+		const paths = trackingNear([...tracking, ...polarPaths(leave)], p, tol);
+		if (paths.length) {
+			const cross = pathCrossing(paths, p, tol);
+			if (cross) return { ...at(cross.point, 'tracking', cross.paths.map((t) => line('construction', t.origin, cross.point))), labels: [this.label(cross.point, 'tracking', 'tracking')] };
+			const hit = pathOnSegment(paths, near, p, tol);
+			if (hit) return at(hit.point, 'intersect', [line('construction', hit.path.origin, hit.point)]);
+		}
 		if (leave && leave.curves !== false) {
 			const foot = this.curvePoint(near, leave.at, p, tol);
 			if (foot) return at(foot.point, foot.kind, [line('construction', leave.at, foot.point)]);
 		}
 		const on = this.onSegment(near);
 		if (on) return at(on, 'path');
+		// Along the nearest acquired point's path (polar ones are the construction guides below).
+		const slide = paths.filter((t) => t.path.kind !== 'polar').sort((a, b) => a.d - b.d)[0];
+		if (slide) return { ...at(slide.foot, 'tracking', [line('construction', slide.path.origin, slide.foot)]), labels: [this.label(slide.foot, 'tracking', slide.path.kind === 'extension' ? 'extension' : 'tracking')] };
 		if (leave?.angles?.length) {
 			const c = construction(leave, p, tol);
 			if (c) {
@@ -565,7 +653,8 @@ export class VectorSnapTargets {
 	private segmentsNear(p: Vec2, tol: number): { seg: Point[]; t: number; distance: number }[] {
 		const out: { seg: Point[]; t: number; distance: number }[] = [];
 		const pt = toPoint(p);
-		for (const s of this.segments) {
+		const candidates = this.segmentTree ? this.segmentTree.search({ minX: p.x - tol, minY: p.y - tol, maxX: p.x + tol, maxY: p.y + tol }).map((i) => this.segments[i]) : this.segments;
+		for (const s of candidates) {
 			if (p.x < s.minX - tol || p.x > s.maxX + tol || p.y < s.minY - tol || p.y > s.maxY + tol) continue;
 			const hit = segmentNearest(s.seg, pt);
 			if (hit.distance <= tol) out.push({ seg: s.seg, t: hit.t, distance: hit.distance });
@@ -916,6 +1005,79 @@ function handlePos(h: Exclude<VectorTransformHandle, 'rotate'>, r: VectorBounds)
 
 function line(kind: VectorGuideKind, a: Vec2, b: Vec2): VectorGuideLine {
 	return { kind, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+}
+
+/** The polar paths from where a point leaves: both ways along each construction angle. */
+function polarPaths(leave: VectorSnapLeave | null | undefined): VectorTrackingPath[] {
+	if (!leave?.angles?.length || leave.constrain) return [];
+	const out: VectorTrackingPath[] = [];
+	for (const a of leave.angles) {
+		const dir = vectorAngleDirection(a);
+		out.push({ origin: leave.at, dir, kind: 'polar' }, { origin: leave.at, dir: { x: -dir.x, y: -dir.y }, kind: 'polar' });
+	}
+	return out;
+}
+
+/** The tracking paths within `tol` of `p` (and `p` farther than that from where they start), with their feet. */
+function trackingNear(paths: readonly VectorTrackingPath[], p: Vec2, tol: number): { path: VectorTrackingPath; foot: Vec2; d: number }[] {
+	const out: { path: VectorTrackingPath; foot: Vec2; d: number }[] = [];
+	for (const path of paths) {
+		const t = (p.x - path.origin.x) * path.dir.x + (p.y - path.origin.y) * path.dir.y;
+		if (!(t > tol)) continue;
+		const foot = { x: path.origin.x + path.dir.x * t, y: path.origin.y + path.dir.y * t };
+		const d = distance(foot, p);
+		if (d <= tol) out.push({ path, foot, d });
+		if (out.length >= 64) break;
+	}
+	return out;
+}
+
+/** Where two tracking paths from different points cross nearest `p`, within `tol`. After cadcraft's `Tracker::find` (step 1). */
+function pathCrossing(near: readonly { path: VectorTrackingPath }[], p: Vec2, tol: number): { point: Vec2; paths: VectorTrackingPath[] } | null {
+	let best: { point: Vec2; paths: VectorTrackingPath[]; d: number } | null = null;
+	for (let i = 0; i < near.length; i++) {
+		for (let j = i + 1; j < near.length; j++) {
+			const a = near[i].path;
+			const b = near[j].path;
+			if (distance(a.origin, b.origin) <= 1e-9) continue;
+			const den = a.dir.x * b.dir.y - a.dir.y * b.dir.x;
+			if (Math.abs(den) < 1e-12) continue;
+			const wx = b.origin.x - a.origin.x;
+			const wy = b.origin.y - a.origin.y;
+			const s = (wx * b.dir.y - wy * b.dir.x) / den;
+			const u = (wx * a.dir.y - wy * a.dir.x) / den;
+			if (s <= 0 || u <= 0) continue;
+			const q = { x: a.origin.x + a.dir.x * s, y: a.origin.y + a.dir.y * s };
+			// Exactly on an axis-aligned path.
+			if (a.dir.x === 0) q.x = a.origin.x;
+			if (a.dir.y === 0) q.y = a.origin.y;
+			if (b.dir.x === 0) q.x = b.origin.x;
+			if (b.dir.y === 0) q.y = b.origin.y;
+			const d = distance(q, p);
+			if (d <= tol && (!best || d < best.d)) best = { point: q, paths: [a, b], d };
+		}
+	}
+	return best && { point: best.point, paths: best.paths };
+}
+
+/** Where a tracking path crosses a target segment near `p`, within `tol`. After cadcraft's `Tracker::find` (step 2). */
+function pathOnSegment(paths: readonly { path: VectorTrackingPath; foot: Vec2 }[], near: readonly { seg: Point[] }[], p: Vec2, tol: number): { point: Vec2; path: VectorTrackingPath } | null {
+	let best: { point: Vec2; path: VectorTrackingPath; d: number } | null = null;
+	for (const { path, foot } of paths) {
+		// The stretch of the path round the foot that can hold a crossing within `tol` of `p`.
+		const reach = 3 * tol;
+		const a: Point = [foot.x - path.dir.x * reach, foot.y - path.dir.y * reach];
+		const b: Point = [foot.x + path.dir.x * reach, foot.y + path.dir.y * reach];
+		for (const { seg } of near.slice(0, CROSSING_PAIRS)) {
+			for (const hit of segmentIntersections([a, b] as BezierSegment, seg as BezierSegment)) {
+				const q = toVec(hit.point);
+				const t = (q.x - path.origin.x) * path.dir.x + (q.y - path.origin.y) * path.dir.y;
+				const d = distance(q, p);
+				if (t > tol && d <= tol && (!best || d < best.d)) best = { point: q, path, d };
+			}
+		}
+	}
+	return best && { point: best.point, path: best.path };
 }
 
 /** The construction guide through `leave.at` nearest `p`, within `tol` (and `p` farther than that from `at`): its direction and where `p` lands. */

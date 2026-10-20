@@ -32,4 +32,36 @@ describe("image agent scripts", () => {
     expect(headline.text).toBe("Summer Sale");
     expect(headline.runs.map((r) => r.style.color)).toEqual(["#ffffff", "#f59e0b"]);
   });
+
+  it("the colour script proofs through CMYK and converts colours", async () => {
+    const fake = { width: 40, height: 20, naturalWidth: 40, naturalHeight: 20, src: "data:fake" } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setSamplePixels({ width: 40, height: 20, data: new Uint8ClampedArray(40 * 20 * 4).fill(180) });
+    const reg = new ToolRegistry();
+    reg.register(createImageEditorToolProvider(c, { id: "image", namespace: "image" }));
+    const script = IMAGE_SCRIPTS.find((s) => s.id === "image-color")!;
+    const steps = script.steps.filter((s) => s.tool !== "image__render_preview");
+    const { ok } = await runAgentScript(reg, { ...script, steps }, { wait: () => Promise.resolve() });
+    expect(ok).toBe(true);
+    expect(c.getState().proofSetup).toBeNull();
+  }, 60_000);
+  it("the retouch script heals, clones and dodges with the retouching tools", async () => {
+    const W = 200;
+    const H = 120;
+    const fake = { width: W, height: H, naturalWidth: W, naturalHeight: H, src: "data:fake" } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    const data = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) data.set([(i % W) + 30, 120, 90, 255], i * 4);
+    c.setSamplePixels({ width: W, height: H, data });
+    c.addPixelLayer({ name: "Photo", pixels: { width: W, height: H, data } });
+    const reg = new ToolRegistry();
+    reg.register(createImageEditorToolProvider(c, { id: "image", namespace: "image" }));
+    const script = IMAGE_SCRIPTS.find((s) => s.id === "image-retouch")!;
+    const steps = script.steps.filter((s) => s.tool !== "image__render_preview");
+    const { ok } = await runAgentScript(reg, { ...script, steps }, { wait: () => Promise.resolve() });
+    expect(ok).toBe(true);
+    const retouch = c.getLayers().find((l) => l.name === "Retouch")!;
+    expect(c.getLayerBounds(retouch.id)).not.toBeNull();
+    expect(c.getState().paint.cloneSource).toMatchObject({ x: 50, y: 60 });
+  });
 });

@@ -37,6 +37,9 @@ import { mirrorWidthProfile } from './width.js';
 import { hitTestVectorPaintStack } from './paintLayers.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline, vectorAppearanceShapes } from './appearance.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskContains } from './mask.js';
+import { bakeVectorTextGeometry } from './text.js';
+import { vectorNodesNear } from './spatial.js';
+import { isVectorFrame, vectorFrameChildMatrix, vectorFrameContains, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -49,7 +52,8 @@ import type {
 	VectorPathNode,
 	VectorSubpath,
 	VectorWidthPoint,
-	Vec2
+	Vec2,
+	VectorTextNode
 } from './types.js';
 
 export type { AffineMatrix };
@@ -66,7 +70,8 @@ export const cloneAnchor = (a: VectorAnchor): VectorAnchor => ({
 	...(a.in ? { in: { x: a.in.x, y: a.in.y } } : {}),
 	...(a.out ? { out: { x: a.out.x, y: a.out.y } } : {}),
 	...(a.type && a.type !== 'corner' ? { type: a.type } : {}),
-	...(a.corner ? { corner: { ...a.corner } } : {})
+	...(a.corner ? { corner: { ...a.corner } } : {}),
+	...(a.id ? { id: a.id } : {})
 });
 
 export const cloneSubpath = (s: VectorSubpath): VectorSubpath => ({ anchors: s.anchors.map(cloneAnchor), closed: s.closed });
@@ -262,9 +267,19 @@ export function locateVectorNode(nodes: VectorNode[], id: string): { list: Vecto
 	return search(nodes, null);
 }
 
+/** Every node that paints with fills and strokes in the subtree: paths and text. */
+export function collectPaintedNodes(node: VectorNode): Array<VectorPathNode | VectorTextNode> {
+	const out: Array<VectorPathNode | VectorTextNode> = [];
+	walkVectorNodes([node], (n) => {
+		if (n.type === 'path' || n.type === 'text') out.push(n);
+	});
+	return out;
+}
+
 /** Every path node in the subtree (a path node itself, or a group's descendants). */
 export function collectPathNodes(node: VectorNode): VectorPathNode[] {
 	if (node.type === 'path') return [node];
+	if (node.type === 'text' || node.type === 'instance') return [];
 	const out: VectorPathNode[] = [];
 	walkVectorNodes(node.children, (n) => {
 		if (n.type === 'path') out.push(n);
@@ -297,6 +312,13 @@ export function vectorPathWorldBezier(node: VectorPathNode, parent: AffineMatrix
  * the node has no points. A mask group is bounded by its masked result.
  */
 export function vectorNodeBounds(node: VectorNode, parent: AffineMatrix = IDENTITY_MATRIX): VectorBounds | null {
+	// A frame is bounded by its rectangle (and its children too when it does not clip them).
+	if (isVectorFrame(node)) {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		const rect = bezierPathBounds(transformBezierPath(subpathsToBezier(vectorFrameRectPath(node.frame)), m))!;
+		const box = { x: rect.minX, y: rect.minY, width: rect.maxX - rect.minX, height: rect.maxY - rect.minY };
+		return node.frame.clip === false ? unionBounds([box, ...node.children.map((c) => vectorNodeBounds(c, m))]) : box;
+	}
 	if (isVectorMaskActive(node)) {
 		const m = multiplyMatrices(nodeMatrix(node), parent);
 		const b = bezierPathBounds(vectorAppearanceShapes(node).flatMap((s) => (isIdentityMatrix(m) ? s.path : transformBezierPath(s.path, m))));
@@ -361,6 +383,12 @@ export interface VectorHitTestOptions {
  */
 export function hitTestVectorNode(node: VectorNode, p: Vec2, tolerance = 0, parent: AffineMatrix = IDENTITY_MATRIX, options: VectorHitTestOptions = {}): boolean {
 	if (node.visible === false) return false;
+	// A frame is hit anywhere in its rectangle (filled or not), and by children it lets show outside it.
+	if (isVectorFrame(node)) {
+		const m = multiplyMatrices(nodeMatrix(node), parent);
+		if (vectorFrameContains(node.frame, applyMatrix(invertMatrix(m), p), tolerance)) return true;
+		return node.frame.clip === false && node.children.some((c) => hitTestVectorNode(c, p, tolerance, m, options));
+	}
 	if (isVectorMaskGroup(node)) {
 		const m = multiplyMatrices(nodeMatrix(node), parent);
 		const entered = !!options.entered?.has(node.id);
@@ -407,8 +435,10 @@ export function vectorStrokeOutline(node: VectorPathNode, parent: AffineMatrix =
 
 /** The topmost node hit by `p` (skipping hidden and locked ones), or null. */
 export function hitTestVectorNodes(nodes: readonly VectorNode[], p: Vec2, tolerance = 0, options: VectorHitTestOptions = {}): VectorNode | null {
-	for (let i = nodes.length - 1; i >= 0; i--) {
-		const node = nodes[i];
+	// Large documents: only the nodes whose paint box reaches the point (the same tests then run).
+	const candidates = vectorNodesNear(nodes, { x: p.x, y: p.y, width: 0, height: 0 }, tolerance);
+	for (let k = candidates.length - 1; k >= 0; k--) {
+		const node = nodes[candidates[k]];
 		if (node.visible === false || node.locked) continue;
 		if (hitTestVectorNode(node, p, tolerance, IDENTITY_MATRIX, options)) return node;
 	}
@@ -467,6 +497,7 @@ function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
 	if (a.out) next.out = applyMatrix(m, a.out);
 	if (a.type) next.type = a.type;
 	if (a.corner) next.corner = { ...a.corner };
+	if (a.id) next.id = a.id;
 	return next;
 }
 
@@ -474,6 +505,7 @@ function mapAnchor(a: VectorAnchor, m: AffineMatrix): VectorAnchor {
 function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	if (isIdentityMatrix(m)) return node;
 	if (node.effects?.length) node = { ...node, effects: transformVectorEffects(node.effects, m, node) } as T;
+	if (isVectorFrame(node)) return bakeFrame(node, m) as unknown as T;
 	if (node.type === 'group') {
 		const group = node as VectorGroupNode;
 		const children = group.children.map((c) => transformVectorNode(c, m));
@@ -483,7 +515,8 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		const moved = { closed: spine.closed, anchors: spine.anchors.map((a) => mapAnchor(a, m)) };
 		return { ...group, children, blend: { ...group.blend, spine: moved } } as T;
 	}
-	const path = node as VectorPathNode;
+	// Text: its frame maps and its font sizes scale (`bakeVectorTextGeometry`); paints as for paths.
+	const path = (node.type === 'text' ? bakeVectorTextGeometry(node as VectorTextNode, m) : node) as VectorPathNode;
 	// A mirror swaps the sides of a variable-width stroke (the path still runs the same way).
 	const flips = m[0] * m[3] - m[1] * m[2] < 0;
 	const mirrored = flips && path.strokeWidthProfile?.length;
@@ -501,11 +534,47 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
 		...(isVectorGradient(path.stroke) ? { stroke: transformVectorPaint(path.stroke, m) } : {}),
 		...(Array.isArray(path.fills) ? { fills: path.fills.map(layer) } : {}),
 		...(Array.isArray(path.strokes) ? { strokes: path.strokes.map(layer) } : {}),
-		subpaths: path.subpaths.map((sp) => ({
-			closed: sp.closed,
-			anchors: sp.anchors.map((a) => mapAnchor(a, m))
-		}))
+		...(path.type === 'path'
+			? {
+					subpaths: path.subpaths.map((sp) => ({
+						closed: sp.closed,
+						anchors: sp.anchors.map((a) => mapAnchor(a, m))
+					}))
+				}
+			: {})
 	} as T;
+}
+
+/**
+ * A frame resized by `m` (in its own space): its rectangle maps through `m` and its children follow
+ * their `resizing` constraints (`vectorFrameChildMatrix`). Text keeps its font size: area text
+ * takes the new box, point and path text move with it. A skew, rotation or mirror scales every
+ * child instead (constraints are per axis).
+ */
+function bakeFrame(node: VectorFrameGroup, m: AffineMatrix): VectorFrameGroup {
+	const from = node.frame;
+	const r = bezierPathBounds(transformBezierPath(subpathsToBezier(vectorFrameRectPath(from)), m))!;
+	const to = { ...from, x: r.minX, y: r.minY, width: r.maxX - r.minX, height: r.maxY - r.minY };
+	const axisAligned = Math.abs(m[1]) < 1e-12 && Math.abs(m[2]) < 1e-12 && m[0] > 0 && m[3] > 0;
+	if (!axisAligned) return { ...node, frame: to, children: node.children.map((c) => transformVectorNode(c, m)) };
+	const children = node.children.map((c): VectorNode => {
+		if (c.type === 'text' && !c.transform && c.frame.kind === 'area') {
+			const f = c.frame;
+			const cm = vectorFrameChildMatrix(c.resizing, { x: f.x, y: f.y, width: f.width, height: f.height }, from, to);
+			return { ...c, frame: { ...f, x: cm[0] * f.x + cm[4], y: cm[3] * f.y + cm[5], width: f.width * cm[0], height: f.height * cm[3] } };
+		}
+		const box = vectorNodeBounds(c);
+		if (!box) return transformVectorNode(c, translateMatrix(to.x - from.x, to.y - from.y));
+		const cm = vectorFrameChildMatrix(c.resizing, box, from, to);
+		if (c.type === 'text') {
+			// Point and path text move with their box's centre; their size stays.
+			const cx = box.x + box.width / 2;
+			const cy = box.y + box.height / 2;
+			return transformVectorNode(c, translateMatrix(cm[0] * cx + cm[4] - cx, cm[3] * cy + cm[5] - cy));
+		}
+		return transformVectorNode(c, cm);
+	});
+	return { ...node, frame: to, children };
 }
 
 /**
@@ -515,6 +584,11 @@ function bakeIntoGeometry<T extends VectorNode>(node: T, m: AffineMatrix): T {
  */
 export function transformVectorNode<T extends VectorNode>(node: T, m: AffineMatrix): T {
 	const total = multiplyMatrices(nodeMatrix(node), m);
+	// An instance keeps the whole matrix: its art is drawn through it.
+	if (node.type === 'instance') {
+		const { transform: _t, ...rest } = node as VectorNode;
+		return (isIdentityMatrix(total) ? rest : { ...rest, transform: total }) as T;
+	}
 	const { rigid, residual } = decomposeRigid(total);
 	const { transform: _old, ...rest } = node as VectorNode;
 	const baked = bakeIntoGeometry(rest as T, residual);
@@ -674,6 +748,7 @@ export function reverseSubpath(sp: VectorSubpath): VectorSubpath {
 			if (a.in) next.out = { ...a.in };
 			if (a.type) next.type = a.type;
 			if (a.corner) next.corner = { ...a.corner };
+			if (a.id) next.id = a.id;
 			return next;
 		});
 	return { anchors, closed: sp.closed };

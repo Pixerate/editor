@@ -14,6 +14,7 @@ import type {
   TextAnnotation,
   ImageAnnotation,
 } from './types';
+import type { PixelTransform } from './color-management';
 import { applyAdjustments, applyDepthMask } from './filters';
 import { adjustmentLayersKey } from './adjustment-layers';
 import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './blend';
@@ -184,6 +185,19 @@ export class ImageEditorRenderer {
   /** Which path the last base render took. */
   public lastBaseRoute: 'legacy' | 'layers' | null = null;
   private comp: CompositeCanvas | null = null;
+  /** Colour transform from the document to the display (see `color-management`), or none. */
+  private display: PixelTransform | null = null;
+  private displayKey = 0;
+
+  /** Sets the viewport's display transform (document profile → sRGB, or a soft proof); `null` for none. */
+  public setDisplayTransform(t: PixelTransform | null): void {
+    if (t === this.display) return;
+    this.display = t;
+    this.displayKey++;
+    // Every tile is uploaded again through the new transform.
+    this.comp = null;
+    this.cachedBaseKey = '';
+  }
   private depthMaps = new Map<string, { width: number; height: number; data: Uint8ClampedArray }>();
   private assetVersion = 0;
   private scratch: HTMLCanvasElement | null = null;
@@ -279,6 +293,7 @@ export class ImageEditorRenderer {
         `${adjustments.brightness},${adjustments.contrast},${adjustments.saturation},${adjustments.exposure},${adjustments.temperature},${adjustments.tint ?? 0},${adjustments.blur},${adjustments.opacity},p${normalizeProcessVersion(adjustments.process)}`,
         adjustmentLayersKey(adjustments.layers),
         `${depthMask.enabled},${depthMask.maskSource},${depthMask.depthRange?.[0]}-${depthMask.depthRange?.[1]},${depthMask.softness},${depthMask.invert},${depthMask.mode}`,
+        `d${this.displayKey}`,
       ].join('|');
 
       let baseCanvas = this.cachedBaseCanvas;
@@ -286,6 +301,7 @@ export class ImageEditorRenderer {
         let histogram: ImageHistogram | null = null;
         baseCanvas = await this.renderBaseImage(img, naturalWidth, naturalHeight, region, transform, state, (pixels) => {
           histogram = computeHistogram(pixels);
+          this.display?.(pixels.data);
         });
         this.cachedBaseCanvas = baseCanvas;
         this.cachedBaseKey = baseKey;
@@ -685,6 +701,7 @@ export class ImageEditorRenderer {
     if (x1 <= x0 || y1 <= y0) return;
     const img = ctx.createImageData(TILE, TILE);
     img.data.set(data);
+    this.display?.(img.data);
     ctx.putImageData(img, ox, oy, x0, y0, x1 - x0, y1 - y0);
   }
 
@@ -740,7 +757,7 @@ export class ImageEditorRenderer {
     const rotated = getRotatedSize(region.width, region.height, transform);
     const baseW = Math.max(1, Math.round(rotated.width));
     const baseH = Math.max(1, Math.round(rotated.height));
-    const key = `${comp.version}|${region.x},${region.y},${region.width},${region.height}|${normalizeAngle(transform.rotate)},${transform.flipH},${transform.flipV}|${opacity}|${blur}`;
+    const key = `${this.displayKey}:${comp.version}|${region.x},${region.y},${region.width},${region.height}|${normalizeAngle(transform.rotate)},${transform.flipH},${transform.flipV}|${opacity}|${blur}`;
     if (this.cachedPostCanvas && this.cachedPostKey === key) return { canvas: this.cachedPostCanvas, histogram: this.cachedPostHistogram };
     const canvas =
       this.cachedPostCanvas && this.cachedPostCanvas.width === baseW && this.cachedPostCanvas.height === baseH

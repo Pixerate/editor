@@ -29,8 +29,8 @@ const click = (el: Element | null) => {
   (el as HTMLElement).click();
   flushSync();
 };
-const pointer = (type: string, x: number, y: number) => {
-  const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
+const pointer = (type: string, x: number, y: number, altKey = false) => {
+  const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, altKey });
   Object.assign(e, { pointerId: 1, pointerType: 'mouse', pressure: 0.5 });
   return e;
 };
@@ -97,6 +97,38 @@ describe('Svelte paint tools', () => {
     expect(c.getState().paint.mixer.mixing).toBe('rgb');
   });
 
+  it('BrushOptionsBar shows each retouching tool with its options', () => {
+    const c = controller();
+    component = mount(BrushOptionsBar, { target, props: { controller: c } });
+    flushSync();
+    expect(target.querySelector('[data-testid="retouch-options"]')).toBeNull();
+    click(button('Clone'));
+    expect(c.getState().activeTool).toBe('clone');
+    expect(target.querySelector('[data-testid="clone-source"]')!.textContent).toMatch(/Alt-click/);
+    click(button('Current & Below'));
+    expect(c.getState().paint.retouch.sample).toBe('current-below');
+    click(target.querySelector('input[aria-label="Aligned"]'));
+    expect(c.getState().paint.retouch.aligned).toBe(false);
+    c.setCloneSource({ x: 12, y: 34 });
+    flushSync();
+    expect(target.querySelector('[data-testid="clone-source"]')!.textContent).toBe('Source 12, 34');
+    click(button('Clear source'));
+    expect(c.getState().paint.cloneSource).toBeNull();
+    click(button('Spot Heal'));
+    click(button('Smooth'));
+    expect(c.getState().paint.retouch.spotType).toBe('smooth');
+    click(button('Dodge'));
+    click(button('Highlights'));
+    setValue(target.querySelector('input[aria-label="Exposure"]')!, '0.2');
+    expect(c.getState().paint.retouch).toMatchObject({ range: 'highlights', exposure: 0.2 });
+    click(button('Sponge'));
+    click(button('Saturate'));
+    expect(c.getState().paint.retouch.spongeMode).toBe('saturate');
+    click(button('Smudge'));
+    setValue(target.querySelector('input[aria-label="Strength"]')!, '0.9');
+    expect(c.getState().paint.retouch.strength).toBe(0.9);
+  });
+
   it('paints on the canvas in the Paint tab and handles shortcuts', () => {
     const editor = createReactiveImageEditor();
     const c = editor.controller;
@@ -130,5 +162,18 @@ describe('Svelte paint tools', () => {
     expect(c.getState().paint.brush.size).toBe(25);
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v' }));
     expect(c.getState().activeTool).toBe('move');
+    // Clone Stamp: Alt-click sets the source, a drag clones as one undo step.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' }));
+    expect(c.getState().activeTool).toBe('clone');
+    canvas.dispatchEvent(pointer('pointerdown', 130, 72, true));
+    canvas.dispatchEvent(pointer('pointerup', 130, 72, true));
+    expect(c.getState().paint.cloneSource).not.toBeNull();
+    const layers = c.getState().layers;
+    canvas.dispatchEvent(pointer('pointerdown', 40, 30));
+    canvas.dispatchEvent(pointer('pointermove', 60, 30));
+    canvas.dispatchEvent(pointer('pointerup', 60, 30));
+    flushSync();
+    expect(target.querySelector('[role="alert"]')).toBeNull();
+    expect(c.getState().layers).not.toBe(layers);
   });
 });

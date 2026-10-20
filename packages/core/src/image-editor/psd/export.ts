@@ -1,7 +1,7 @@
 // Portions ported from photocraft/crates/io/src/psd_export.rs and photocraft/crates/psd/src/builder.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
 /**
- * Our layer tree → an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment
+ * Our layer tree → an RGB PSD at 8, 16 or 32 bits (PSB above 30 000 px) with real layers, groups, adjustment
  * layers and masks, RLE-compressed, plus the merged image the caller rendered.
  *
  * The stack must be *prepared*: annotation layers rasterized, layer filters and parametric masks
@@ -9,7 +9,7 @@
  */
 
 import { adjustmentKindLabel } from '../adjustment-layers';
-import { contentBounds, readRegion, surfaceFromPixels } from '../../raster/surface';
+import { contentBounds, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 import { encodePng } from '../../raster/png';
 import { isActiveFilter, type ImageLayer, type PixelLayer, type RasterMask, type SmartContents, type SmartObjectLayer } from '../layers/model';
 import { LayerCompositor } from '../layers/compositor';
@@ -32,7 +32,7 @@ import { descBool } from './descriptor';
 import type { CropBox } from '../types';
 import { PsdError, PsdWriter, encodeLegacyName } from './binary';
 import { writeAdjustmentBlock } from './adjust';
-import { encodeRle } from './compression';
+import { encodeRle, encodeZipPredicted } from './compression';
 import {
   CHANNEL_ALPHA,
   CHANNEL_USER_MASK,
@@ -53,7 +53,8 @@ import {
   writePsd,
 } from './file';
 import { BLEND_TO_PSD } from './import';
-import { matteWhite, rgbaToPlanes } from './pixels';
+import { deepToPlanes, matteWhite, matteWhiteDeep, planeAtDepth, rgbaToPlanes } from './pixels';
+import { readDeepRegion } from '../../raster/deep';
 import { parseLfx2, writeLfx2 } from './effects';
 import { writePatternBlock } from './patterns';
 import { shapeBlocks } from './shapes';
@@ -74,6 +75,12 @@ export interface PsdExportInput {
   patterns?: readonly EffectPattern[];
   /** Written as image resources 1037 and 1049. */
   globalLight?: GlobalLight;
+  /** The document's ICC profile, written as image resource 1039. */
+  iccProfile?: Uint8Array;
+  /** Bits per channel to write (default 8): 16 and 32 write the layers' deep samples (see `raster/deep`). */
+  depth?: 8 | 16 | 32;
+  /** The composite at `depth` (RGBA samples: 16-bit sRGB or 32-bit linear), written instead of `merged`. */
+  mergedDeep?: Uint16Array | Float32Array;
 }
 
 export interface PsdExportResult {
@@ -128,13 +135,23 @@ function sectionBlock(kind: number, blendKey?: string): Uint8Array {
 
 const toRect = (r: CropBox): PsdRect => ({ top: r.y, left: r.x, bottom: r.y + r.height, right: r.x + r.width });
 
-function rleChannel(id: number, plane: Uint8Array, width: number, height: number, psb: boolean): PsdChannel {
-  return { id, compression: 1, data: encodeRle(plane, { planes: 1, width, height, depth: 8, psb }) };
+/** One channel: RLE for 8- and 16-bit planes, ZIP with prediction for 32-bit (as Photoshop writes them). */
+function rleChannel(id: number, plane: Uint8Array, width: number, height: number, psb: boolean, depth: 8 | 16 | 32 = 8): PsdChannel {
+  const layout = { planes: 1, width, height, depth, psb };
+  if (depth === 32) return { id, compression: 3, data: encodeZipPredicted(plane, layout) };
+  return { id, compression: 1, data: encodeRle(plane, layout) };
+}
+
+/** A surface's `bounds` as planes `[r, g, b, a]` at `depth` (deep samples where the tiles hold them). */
+function surfacePlanes(surface: TiledSurface, bounds: CropBox, depth: 8 | 16 | 32): [Uint8Array, Uint8Array, Uint8Array, Uint8Array] {
+  const n = bounds.width * bounds.height;
+  if (depth === 8) return rgbaToPlanes(readRegion(surface, bounds), n);
+  return deepToPlanes(readDeepRegion(surface, bounds, depth), n);
 }
 
 const emptyChannel = (id: number): PsdChannel => ({ id, compression: 0, data: new Uint8Array(0) });
 
-function maskChannel(mask: RasterMask, ox: number, oy: number, psb: boolean): { channel: PsdChannel; mask: PsdLayerMask } {
+function maskChannel(mask: RasterMask, ox: number, oy: number, psb: boolean, depth: 8 | 16 | 32 = 8): { channel: PsdChannel; mask: PsdLayerMask } {
   if (mask.source) throw new PsdError('A parametric mask must be baked before export.');
   const bounds = contentBounds(mask.surface);
   const def = mask.defaultValue;
@@ -145,7 +162,8 @@ function maskChannel(mask: RasterMask, ox: number, oy: number, psb: boolean): { 
   if (!bounds) return { channel: emptyChannel(CHANNEL_USER_MASK), mask: m };
   const plane = readRegion(mask.surface, bounds);
   m.rect = toRect({ ...bounds, x: bounds.x + ox, y: bounds.y + oy });
-  return { channel: rleChannel(CHANNEL_USER_MASK, new Uint8Array(plane.buffer, plane.byteOffset, plane.length), bounds.width, bounds.height, psb), mask: m };
+  const bytes = planeAtDepth(new Uint8Array(plane.buffer, plane.byteOffset, plane.length), depth);
+  return { channel: rleChannel(CHANNEL_USER_MASK, bytes, bounds.width, bounds.height, psb, depth), mask: m };
 }
 
 function lockBits(layer: ImageLayer): number {
@@ -237,6 +255,7 @@ function placedUnchanged(layer: SmartObjectLayer, idnt: string, placedId: string
 /** Writes the prepared stack as PSD (or PSB) bytes. */
 export function exportPsd(input: PsdExportInput): PsdExportResult {
   const { width, height } = input;
+  const depth = input.depth ?? 8;
   if (width < 1 || height < 1) throw new PsdError('The document is empty.');
   const psb = width > PSD_MAX_DIMENSION || height > PSD_MAX_DIMENSION;
   const records: PsdLayerRecord[] = [];
@@ -311,7 +330,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
           flags: base.flags | FLAG_PIXELS_IRRELEVANT,
         };
         if (layer.mask) {
-          const m = maskChannel(layer.mask, 0, 0, psb);
+          const m = maskChannel(layer.mask, 0, 0, psb, depth);
           rec.channels.push(m.channel);
           rec.mask = m.mask;
         }
@@ -327,7 +346,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
           blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm',
         };
         if (layer.mask) {
-          const m = maskChannel(layer.mask, 0, 0, psb);
+          const m = maskChannel(layer.mask, 0, 0, psb, depth);
           rec.channels.push(m.channel);
           rec.mask = m.mask;
         }
@@ -344,20 +363,19 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
+          const [r, g, b, a] = surfacePlanes(layer.surface, bounds, depth);
           rec.rect = toRect({ ...bounds, x: bounds.x + layer.offset.x, y: bounds.y + layer.offset.y });
           rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
+            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb, depth),
+            rleChannel(0, r, bounds.width, bounds.height, psb, depth),
+            rleChannel(1, g, bounds.width, bounds.height, psb, depth),
+            rleChannel(2, b, bounds.width, bounds.height, psb, depth),
           ];
         } else {
           rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
         }
         if (layer.mask) {
-          const m = maskChannel(layer.mask, layer.offset.x, layer.offset.y, psb);
+          const m = maskChannel(layer.mask, layer.offset.x, layer.offset.y, psb, depth);
           rec.channels.push(m.channel);
           rec.mask = m.mask;
         }
@@ -395,20 +413,19 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
+          const [r, g, b, a] = surfacePlanes(layer.surface, bounds, depth);
           rec.rect = toRect(bounds);
           rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
+            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb, depth),
+            rleChannel(0, r, bounds.width, bounds.height, psb, depth),
+            rleChannel(1, g, bounds.width, bounds.height, psb, depth),
+            rleChannel(2, b, bounds.width, bounds.height, psb, depth),
           ];
         } else {
           rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
         }
         if (layer.mask) {
-          const m = maskChannel(layer.mask, 0, 0, psb);
+          const m = maskChannel(layer.mask, 0, 0, psb, depth);
           rec.channels.push(m.channel);
           rec.mask = m.mask;
         }
@@ -433,20 +450,19 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
+          const [r, g, b, a] = surfacePlanes(layer.surface, bounds, depth);
           rec.rect = toRect(bounds);
           rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
+            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb, depth),
+            rleChannel(0, r, bounds.width, bounds.height, psb, depth),
+            rleChannel(1, g, bounds.width, bounds.height, psb, depth),
+            rleChannel(2, b, bounds.width, bounds.height, psb, depth),
           ];
         } else {
           rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
         }
         if (layer.mask) {
-          const m = maskChannel(layer.mask, 0, 0, psb);
+          const m = maskChannel(layer.mask, 0, 0, psb, depth);
           rec.channels.push(m.channel);
           rec.mask = m.mask;
         }
@@ -466,9 +482,15 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   // Photoshop's merged image is matted over white where it is transparent.
   const [r, g, b, a] = rgbaToPlanes(matteWhite(input.merged), n);
   const transparent = a.some((v) => v !== 255);
-  const planes = transparent ? [r, g, b, a] : [r, g, b];
-  const merged = new Uint8Array(n * planes.length);
-  planes.forEach((p, i) => merged.set(p, i * n));
+  let planes = (transparent ? [r, g, b, a] : [r, g, b]).map((p) => planeAtDepth(p, depth));
+  const deep = input.mergedDeep;
+  if (deep && depth !== 8 && deep.length >= n * 4 && (deep instanceof Uint16Array ? depth === 16 : depth === 32)) {
+    const dp = deepToPlanes(matteWhiteDeep(deep), n);
+    planes = transparent ? dp : dp.slice(0, 3);
+  }
+  const planeBytes = n * (depth >> 3);
+  const merged = new Uint8Array(planeBytes * planes.length);
+  planes.forEach((p, i) => merged.set(p, i * planeBytes));
 
   const res = Math.max(1, input.resolution ?? 72);
   const rw = new PsdWriter();
@@ -487,6 +509,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     { id: 1005, name: '', data: rw.result() },
     { id: 1057, name: '', data: version.result() },
   ];
+  if (input.iccProfile?.length) resources.push({ id: 1039, name: '', data: input.iccProfile });
   if (input.globalLight) {
     const i32 = (v: number) => {
       const w = new PsdWriter();
@@ -522,14 +545,14 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
 
   const bytes = writePsd(
     {
-      header: { psb, channels: planes.length, width, height, depth: 8, colorMode: 3 },
+      header: { psb, channels: planes.length, width, height, depth, colorMode: 3 },
       colorModeData: new Uint8Array(0),
       resources,
       layers: records,
       mergedAlpha: transparent && records.length > 0,
       globalBlocks,
-      imageCompression: 1,
-      imageData: encodeRle(merged, { planes: planes.length, width, height, depth: 8, psb }),
+      imageCompression: depth === 32 ? 0 : 1,
+      imageData: depth === 32 ? merged : encodeRle(merged, { planes: planes.length, width, height, depth, psb }),
     },
     encodeLegacyName
   );

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
 import { LayerEffectsPanel } from './LayerEffectsPanel';
 import {
+  BIT_DEPTH_OPTIONS,
   BLEND_MODES,
   PSD_FILE_ACCEPT,
   downloadPsd,
@@ -159,6 +160,19 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         >
           ⋯
         </button>
+        <select
+          aria-label="Bits per channel"
+          title="Image › Mode: bits per channel"
+          className="rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200"
+          value={controller.bitDepth}
+          onChange={(e) => attempt(() => controller.setBitDepth(Number(e.target.value) as 8 | 16 | 32))}
+        >
+          {BIT_DEPTH_OPTIONS.map((o) => (
+            <option key={o.depth} value={o.depth} title={o.title}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         {psd && (
           <>
             <button type="button" className={iconButton} onClick={() => fileInput.current?.click()}>Open PSD…</button>

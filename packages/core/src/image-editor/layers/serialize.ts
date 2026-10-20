@@ -13,6 +13,7 @@ import { normalizeProcessVersion } from '../color';
 import type { Annotation, CropBox, DepthMaskOptions, ImageTransform } from '../types';
 import type { SerializedSelection } from '../selection/mask';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
+import type { SerializedColorProfile } from '../color-management';
 import {
   newLayerId,
   type PsdSmartFilter,
@@ -41,6 +42,8 @@ import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } fro
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
 import type { EffectPattern } from '../../raster/effects/patterns';
 import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
+import { readDeepRegion, surfaceDepth, writeDeepRegion } from '../../raster/deep';
+import { deflate, inflate } from '../../raster/zlib';
 import { isInterpolation } from '../../raster/transform';
 import { isValidWarpMesh } from '../../geom/warp';
 import type { Quad, WarpMesh } from '../../geom/types';
@@ -96,6 +99,21 @@ export interface SerializedPixelLayer extends SerializedLayerBase {
   filters?: LayerFilter[];
   /** `'document'`: the pixels are the document's source image (no asset is stored). */
   source?: 'document';
+  /** 16- or 32-bit samples of the pixels (the PNG asset is their 8-bit rendering), see `raster/deep`. */
+  deep?: SerializedDeepPixels;
+}
+
+/**
+ * High bit depth pixels: `width × height` interleaved RGBA samples at (`x`, `y`) in layer space,
+ * little-endian (`Uint16` for 16-bit, `Float32` linear light for 32-bit), deflated and base64.
+ */
+export interface SerializedDeepPixels {
+  depth: 16 | 32;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  data: string;
 }
 
 export interface SerializedAdjustmentLayer extends SerializedLayerBase {
@@ -213,6 +231,10 @@ export interface SerializedLayeredImageEditorState {
   patterns?: SerializedPattern[];
   /** Contents of the smart objects (nested ones included), each stored once. */
   smartContents?: SerializedSmartContents[];
+  /** The document's colour profile (missing = sRGB). */
+  colorProfile?: SerializedColorProfile;
+  /** Bits per channel (missing = 8). */
+  bitDepth?: 16 | 32;
 }
 
 export interface SerializedPattern {
@@ -264,6 +286,47 @@ export function encodeSurface(surface: TiledSurface): EncodedSurface | null {
   }
   encodedCache.set(surface, out);
   return out;
+}
+
+const deepCache = new WeakMap<TiledSurface, SerializedDeepPixels | null>();
+
+/** A surface's deep samples over its content, or `null` when it holds only 8-bit tiles. */
+export function encodeDeepSurface(surface: TiledSurface): SerializedDeepPixels | null {
+  if (deepCache.has(surface)) return deepCache.get(surface)!;
+  let out: SerializedDeepPixels | null = null;
+  const depth = surfaceDepth(surface);
+  const b = depth === 8 ? null : contentBounds(surface);
+  if (depth !== 8 && b) {
+    const samples = readDeepRegion(surface, b, depth);
+    const bytes = new Uint8Array(samples.byteLength);
+    const view = new DataView(bytes.buffer);
+    if (samples instanceof Uint16Array) for (let i = 0; i < samples.length; i++) view.setUint16(2 * i, samples[i], true);
+    else for (let i = 0; i < samples.length; i++) view.setFloat32(4 * i, samples[i], true);
+    out = { depth, x: b.x, y: b.y, width: b.width, height: b.height, data: bytesToBase64(deflate(bytes)) };
+  }
+  deepCache.set(surface, out);
+  return out;
+}
+
+/** Puts serialized deep samples into `surface` (the 8-bit rendering read from the PNG); unreadable data leaves it 8-bit. */
+export function decodeDeepSurface(surface: TiledSurface, raw: unknown, problems: string[], label: string): TiledSurface {
+  const d = raw as SerializedDeepPixels;
+  if (!d || typeof d !== 'object') return surface;
+  try {
+    if ((d.depth !== 16 && d.depth !== 32) || !(d.width > 0 && d.height > 0) || !Number.isInteger(d.x) || !Number.isInteger(d.y) || typeof d.data !== 'string') throw new Error('malformed');
+    const n = d.width * d.height * 4;
+    const size = d.depth === 16 ? 2 : 4;
+    const bytes = inflate(base64ToBytes(d.data), { maxOutput: n * size });
+    if (bytes.length !== n * size) throw new Error('wrong length');
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const samples = d.depth === 16 ? new Uint16Array(n) : new Float32Array(n);
+    if (samples instanceof Uint16Array) for (let i = 0; i < n; i++) samples[i] = view.getUint16(2 * i, true);
+    else for (let i = 0; i < n; i++) samples[i] = view.getFloat32(4 * i, true);
+    return writeDeepRegion(surface, { x: d.x, y: d.y, width: d.width, height: d.height }, samples);
+  } catch {
+    problems.push(`${label}: its ${d.depth}-bit samples could not be read, so it was opened at 8 bits`);
+    return surface;
+  }
 }
 
 export interface SerializeContext {
@@ -346,6 +409,10 @@ export function serializeLayer(layer: ImageLayer, ctx: SerializeContext): Serial
       }
       if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
       if (layer.filters?.length) out.filters = JSON.parse(JSON.stringify(layer.filters));
+      if (layer.source !== 'document') {
+        const deep = encodeDeepSurface(layer.surface);
+        if (deep) out.deep = deep;
+      }
       return out;
     }
     case 'adjustment':
@@ -813,6 +880,7 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
         offset: { x: Math.round(num(r.offset?.x, -1e7, 1e7, 0)), y: Math.round(num(r.offset?.y, -1e7, 1e7, 0)) },
       };
       if (r.source === 'document') layer.source = 'document';
+      else if (r.deep) layer.surface = decodeDeepSurface(layer.surface, r.deep, ctx.problems, `Layer "${base.name || id}"`);
       if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) layer.fillOpacity = num(r.fillOpacity, 0, 1, 1);
       const filters = readFilters(r.filters);
       if (filters) layer.filters = filters;

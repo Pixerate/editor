@@ -1142,3 +1142,111 @@ describe("masks (react)", () => {
     expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
   });
 });
+
+describe("text (react)", () => {
+  it("types into new text through the hidden textarea, draws it as SVG text, and styles it from the panel", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] }, createId: () => `t${++n}` });
+    c.setTool("type");
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    const svg = q("svg");
+    pointer(svg, "pointerdown", 40, 60);
+    pointer(svg, "pointerup", 40, 60);
+    const input = q<HTMLTextAreaElement>('[data-testid="vector-type-input"]');
+    expect(input).not.toBeNull();
+    await act(async () => {
+      input.value = "Hi";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const id = c.getState().textEdit!.nodeId;
+    expect((c.getNode(id) as any).text).toBe("Hi");
+    expect(q('[data-vector-text-caret]')).not.toBeNull();
+    // Editing keys go to the controller from the textarea; letters do not trigger tools.
+    key(input, "Backspace");
+    expect((c.getNode(id) as any).text).toBe("H");
+    expect(key(input, "v").defaultPrevented).toBe(false);
+    expect(c.getState().tool).toBe("type");
+    await act(async () => {
+      input.value = "ey";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(q(`[data-vector-scene] [data-vector-id="${id}"] tspan`)?.textContent).toBe("Hey");
+    key(input, "Escape");
+    expect(c.getState().textEdit).toBeNull();
+    expect(q('[data-testid="vector-type-input"]')).toBeNull();
+    // Selected text: the panel styles the whole node, one undo step.
+    await act(async () => q<HTMLButtonElement>('[data-vector-text-panel] button[aria-label="Bold"]').click());
+    expect((c.getNode(id) as any).font.fontWeight).toBe(700);
+    await act(async () => q<HTMLButtonElement>('[data-vector-text-panel] button[aria-label="Align Centre"]').click());
+    expect((c.getNode(id) as any).paragraph).toEqual({ align: "center" });
+    c.undo();
+    expect((c.getNode(id) as any).paragraph).toBeUndefined();
+  });
+});
+
+describe("symbols (react)", () => {
+  it("makes a symbol from the panel, draws instances, edits the symbol in isolation and detaches", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    await act(async () => q<HTMLButtonElement>('[data-vector-symbols-panel] [data-vector-symbol-action="make"]').click());
+    const sym = c.getSymbols()[0];
+    expect(qa("[data-vector-symbols-panel] [data-vector-symbol]")).toHaveLength(1);
+    expect(q(`[data-vector-symbol="${sym.id}"] svg path`)).not.toBeNull();
+    await act(async () => q<HTMLButtonElement>(`[data-vector-symbols-panel] button[aria-label="Place ${sym.name}"]`).click());
+    expect(c.getSymbolInstances(sym.id)).toHaveLength(2);
+    const instanceId = c.getState().selection[0];
+    expect(q(`[data-vector-scene] [data-vector-id="${instanceId}"] path`)).not.toBeNull();
+    // Isolation mode: the art alone in the scene, the rest dimmed behind, a way out.
+    await act(async () => q<HTMLButtonElement>(`button[aria-label="Edit ${sym.name}"]`).click());
+    expect(c.getState().symbolEdit?.symbolId).toBe(sym.id);
+    expect(q("[data-vector-symbol-edit]")).not.toBeNull();
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Exit symbol"]').click());
+    expect(c.getState().symbolEdit).toBeNull();
+    await act(async () => c.select([instanceId]));
+    await act(async () => q<HTMLInputElement>('input[aria-label="Scale strokes"]').click());
+    expect((c.getNode(instanceId) as any).scaleStrokes).toBe(false);
+    await act(async () => qa("[data-vector-instance] button").find((b) => b.textContent === "Detach")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(c.getNode(instanceId)?.type).toBe("group");
+  });
+});
+
+describe("constraints (react)", () => {
+  it("adds a constraint from selected anchors, shows its glyph and the DOF, and edits its value", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [{ id: "p", type: "path", fill: null, stroke: "#000", subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 4 }] }] }] } });
+    c.setTool("direct");
+    c.select(["p"]);
+    c.selectAnchors([{ nodeId: "p", subpath: 0, index: 0 }, { nodeId: "p", subpath: 0, index: 1 }]);
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    expect(qa("[data-vector-constraint-action]").map((b) => b.getAttribute("data-vector-constraint-action"))).toEqual(["horizontal", "vertical", "distance", "fix"]);
+    await act(async () => q<HTMLButtonElement>('[data-vector-constraint-action="horizontal"]').click());
+    await act(async () => q<HTMLButtonElement>('[data-vector-constraint-action="distance"]').click());
+    expect(c.getConstraints().map((k) => k.kind)).toEqual(["horizontal", "distance"]);
+    expect(q("[data-vector-dof]")?.textContent).toMatch(/2 degrees of freedom remaining/);
+    expect(qa('[data-vector-constraint-glyph]').length).toBe(2);
+    const input = q<HTMLInputElement>('input[aria-label="Value of d1"]');
+    await act(async () => {
+      input.value = "40";
+      input.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    });
+    const a = (c.getNode("p") as VectorPathNode).subpaths[0].anchors;
+    expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
+  });
+});
+
+describe("corner smoothing (react)", () => {
+  it("shows the smoothing slider for rounded corners and sets it", async () => {
+    const c = make();
+    c.select(["a"]);
+    c.setCornerRadius(10);
+    await act(async () => root.render(<VectorStylePanel controller={c} />));
+    const slider = q<HTMLInputElement>('input[aria-label="Corner smoothing"]');
+    expect(slider).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(slider, "0.6");
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
+  });
+});

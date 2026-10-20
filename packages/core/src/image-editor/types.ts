@@ -345,12 +345,23 @@ export type ImageEditorTool =
   | 'brush'
   | 'eraser'
   | 'mixer'
+  /** Retouching (see `RetouchTool`): Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge. */
+  | 'clone'
+  | 'heal'
+  | 'spot-heal'
+  | 'smudge'
+  | 'dodge'
+  | 'burn'
+  | 'sponge'
   /** Live shape layers (see `ShapeDrawGesture`). */
   | 'shape'
   /** Live type layers, edited on the canvas (see `TypeToolGesture`). */
   | 'type';
 
 export type ImageEditorFit = 'contain' | 'margin';
+
+import type { DocumentColorProfile, ProofSetup } from './color-management';
+import type { BitDepth } from '../raster/deep';
 
 export interface ImageEditorState {
   sourceUrl: string | null;
@@ -416,6 +427,16 @@ export interface ImageEditorState {
    * `closeSmartObjectContents`. Missing when the document itself is shown.
    */
   editingContents?: Array<{ layerId: string; name: string }>;
+  /** The document's colour profile (working space); missing means sRGB. Recorded in history and saved. */
+  colorProfile?: DocumentColorProfile;
+  /** View › Proof Setup (view state): soft-proof the viewport through another profile, or `null`. */
+  proofSetup?: ProofSetup | null;
+  /**
+   * Bits per channel of the document (Image › Mode): 8 (missing), 16 or 32 (linear float).
+   * Pixel layers keep 16- or 32-bit samples where they have them (see `raster/deep`); the
+   * viewport shows their 8-bit rendering. Recorded in undo history and saved in `toJSON()`.
+   */
+  bitDepth?: BitDepth;
 }
 
 /**

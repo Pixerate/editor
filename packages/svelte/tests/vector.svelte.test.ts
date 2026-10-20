@@ -1082,3 +1082,106 @@ describe("masks (svelte)", () => {
     expect(c.getState().document.nodes.map((n) => n.id)).toEqual(["a", "m", "b"]);
   });
 });
+
+describe("text (svelte)", () => {
+  it("types into new text through the hidden textarea, draws it as SVG text, and styles it from the panel", async () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] }, createId: () => `t${++n}` });
+    c.setTool("type");
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    const svg = t.querySelector("svg")!;
+    pointer(svg, "pointerdown", 40, 60);
+    pointer(svg, "pointerup", 40, 60);
+    const input = t.querySelector<HTMLTextAreaElement>('[data-testid="vector-type-input"]')!;
+    expect(input).not.toBeNull();
+    input.value = "Hi";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    const id = c.getState().textEdit!.nodeId;
+    expect((c.getNode(id) as any).text).toBe("Hi");
+    expect(t.querySelector("[data-vector-text-caret]")).not.toBeNull();
+    key(input, "Backspace");
+    expect((c.getNode(id) as any).text).toBe("H");
+    expect(key(input, "v").defaultPrevented).toBe(false);
+    expect(c.getState().tool).toBe("type");
+    input.value = "ey";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect(t.querySelector(`[data-vector-scene] [data-vector-id="${id}"] tspan`)?.textContent).toBe("Hey");
+    key(input, "Escape");
+    expect(c.getState().textEdit).toBeNull();
+    expect(t.querySelector('[data-testid="vector-type-input"]')).toBeNull();
+    click(panel.querySelector('[data-vector-text-panel] button[aria-label="Bold"]'));
+    expect((c.getNode(id) as any).font.fontWeight).toBe(700);
+    click(panel.querySelector('[data-vector-text-panel] button[aria-label="Align Centre"]'));
+    expect((c.getNode(id) as any).paragraph).toEqual({ align: "center" });
+    c.undo();
+    expect((c.getNode(id) as any).paragraph).toBeUndefined();
+  });
+});
+
+describe("symbols (svelte)", () => {
+  it("makes a symbol from the panel, draws instances, edits the symbol in isolation and detaches", () => {
+    const c = make();
+    c.select(["a"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    click(panel.querySelector('[data-vector-symbols-panel] [data-vector-symbol-action="make"]'));
+    const sym = c.getSymbols()[0];
+    expect(panel.querySelectorAll("[data-vector-symbols-panel] [data-vector-symbol]")).toHaveLength(1);
+    expect(panel.querySelector(`[data-vector-symbol="${sym.id}"] svg path`)).not.toBeNull();
+    click(panel.querySelector(`[data-vector-symbols-panel] button[aria-label="Place ${sym.name}"]`));
+    expect(c.getSymbolInstances(sym.id)).toHaveLength(2);
+    const instanceId = c.getState().selection[0];
+    expect(t.querySelector(`[data-vector-scene] [data-vector-id="${instanceId}"] path`)).not.toBeNull();
+    click(panel.querySelector(`button[aria-label="Edit ${sym.name}"]`));
+    expect(c.getState().symbolEdit?.symbolId).toBe(sym.id);
+    expect(t.querySelector("[data-vector-symbol-edit]")).not.toBeNull();
+    click(t.querySelector('button[aria-label="Exit symbol"]'));
+    expect(c.getState().symbolEdit).toBeNull();
+    c.select([instanceId]);
+    flushSync();
+    click(panel.querySelector('input[aria-label="Scale strokes"]'));
+    expect((c.getNode(instanceId) as any).scaleStrokes).toBe(false);
+    click([...panel.querySelectorAll("[data-vector-instance] button")].find((b) => b.textContent === "Detach")!);
+    expect(c.getNode(instanceId)?.type).toBe("group");
+  });
+});
+
+describe("constraints (svelte)", () => {
+  it("adds a constraint from selected anchors, shows its glyph and the DOF, and edits its value", () => {
+    const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [{ id: "p", type: "path", fill: null, stroke: "#000", subpaths: [{ closed: false, anchors: [{ x: 0, y: 0 }, { x: 100, y: 4 }] }] }] } });
+    c.setTool("direct");
+    c.select(["p"]);
+    c.selectAnchors([{ nodeId: "p", subpath: 0, index: 0 }, { nodeId: "p", subpath: 0, index: 1 }]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    expect([...panel.querySelectorAll("[data-vector-constraint-action]")].map((b) => b.getAttribute("data-vector-constraint-action"))).toEqual(["horizontal", "vertical", "distance", "fix"]);
+    click(panel.querySelector('[data-vector-constraint-action="horizontal"]'));
+    click(panel.querySelector('[data-vector-constraint-action="distance"]'));
+    expect(c.getConstraints().map((k) => k.kind)).toEqual(["horizontal", "distance"]);
+    expect(panel.querySelector("[data-vector-dof]")?.textContent).toMatch(/2 degrees of freedom remaining/);
+    expect(t.querySelectorAll("[data-vector-constraint-glyph]").length).toBe(2);
+    const input = panel.querySelector<HTMLInputElement>('input[aria-label="Value of d1"]')!;
+    input.value = "40";
+    input.dispatchEvent(new FocusEvent("blur"));
+    flushSync();
+    const a = (c.getNode("p") as VectorPathNode).subpaths[0].anchors;
+    expect(Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)).toBeCloseTo(40, 5);
+  });
+});
+
+describe("corner smoothing (svelte)", () => {
+  it("shows the smoothing slider for rounded corners and sets it", () => {
+    const c = make();
+    c.select(["a"]);
+    c.setCornerRadius(10);
+    const t = render(VectorStylePanel, { controller: c });
+    const slider = t.querySelector<HTMLInputElement>('input[aria-label="Corner smoothing"]')!;
+    expect(slider).not.toBeNull();
+    slider.value = "0.6";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
+  });
+});
