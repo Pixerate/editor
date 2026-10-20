@@ -2205,3 +2205,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Keys typed right after clicking the canvas with the Type tool were lost, and IME (composed) text never arrived when keys were read from `window`.
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
+
+### [core/image-editor] Browsers Decode Images to sRGB, So an Opened Image's Own Profile Is Not Kept
+
+- **Issue / Symptom**: A Display P3 JPEG opened with `loadImage` showed as sRGB in `get_color_profile`, and assigning its embedded profile afterwards made it look oversaturated.
+- **Root Cause**: An `<img>` drawn to a 2D canvas is colour-managed by the browser into the canvas's sRGB space, so the pixels the editor reads are already sRGB numbers. The file's profile no longer describes them.
+- **Solution / Workaround**: Keep sRGB for images that came through the browser decoder (the default). Only PSDs (decoded by us) take their embedded profile as the document's. To keep a wide-gamut working space for a photo, `convert_to_profile` after opening (out-of-sRGB colours are already clipped), or decode the file yourself without colour conversion and `assignProfile(readJpegIcc(bytes))`.
+
+### [core/cms] The Synthetic CMYK Profile Is Built on First Use
+
+- **Issue / Symptom**: The first `set_proof_setup` or `convert_colors` with `coated-cmyk` took one to three seconds; later calls were instant.
+- **Root Cause**: The profile is generated from a printing model (its B2A tables are a damped least-squares separation at every grid node) instead of shipping 230 KB of measured data, and `builtinProfile` caches the result.
+- **Solution / Workaround**: Expected. Call `builtinProfile('coated-cmyk')` early (e.g. idle time) to warm it. Tests that touch it need a timeout of about a minute on slow CI machines.

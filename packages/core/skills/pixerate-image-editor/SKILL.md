@@ -183,6 +183,11 @@ drawing or editing either.
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
 
+### Colour management
+
+The working space, Assign / Convert to Profile with intents, soft proofing with a gamut warning
+and colour conversions for print briefs: read [references/color-management.md](references/color-management.md).
+
 ### Photoshop files
 
 1. **Inspect before opening.** `inspect_psd` lists every layer with the type it would become and
@@ -199,8 +204,8 @@ drawing or editing either.
    `list_layer_effects.patterns`) and its global light. An effects block the editor cannot read
    is kept and written back by `export_psd`, but not drawn; the warnings say so.
 3. **`import_psd` replaces the document** (one undo step). CMYK, Lab, grayscale, indexed, 16-bit
-   and 32-bit files are converted to 8-bit RGB, and ICC profiles are ignored; the warnings say
-   so. Afterwards work with `list_layers` as usual: there is no Background source image, every
+   and 32-bit files are converted to 8-bit RGB; an RGB file's ICC profile becomes the document's
+   colour profile; the warnings say what changed. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
@@ -390,6 +395,11 @@ drawing or editing either.
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
+| `get_color_profile` | Read-only. The document's profile (`name`, `builtin` id or null, `colorSpace`, `srgb`), the Proof Setup or null, and the built-in profiles. |
+| `assign_profile` | Make the document's numbers mean colours in `profile` (built-in id or `icc:<base64>`; RGB only). The look changes, pixels do not. One undo step. Returns the profile. |
+| `convert_to_profile` | Convert pixel layers into `profile` keeping their look (`intent`, `bpc`), then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (shape, type, effects, smart objects). |
+| `set_proof_setup` | Soft-proof the viewport through `profile` (`intent`, `bpc`, `simulatePaper`, `gamutWarning`), or `off: true`. View state. Returns the setup. |
+| `convert_colors` | Read-only. `colors` #rrggbb from the document's profile (or `from`) to `to`: channel `values` 0..1 (CMYK, RGB, grey), `hex` for RGB, and `lab`. |
 | `fill_pixels` | Fill the selection (or the canvas without one / with `useSelection: false`) on pixels or a mask with `color`, `opacity`, `blend`. Returns the changed bounds. |
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
