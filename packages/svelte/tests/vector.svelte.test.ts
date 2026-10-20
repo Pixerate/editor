@@ -1186,6 +1186,25 @@ describe("corner smoothing (svelte)", () => {
   });
 });
 
+describe("VectorPerspectivePanel (svelte)", () => {
+  it("adds a grid, draws on a plane, and the canvas shows the grid", async () => {
+    const { VectorPerspectivePanel } = await import("../src/vector");
+    const c = make();
+    const el = render(VectorPerspectivePanel, { controller: c });
+    click(el.querySelector('[data-vector-perspective-preset="2"]'));
+    expect(c.getPerspective()?.vanishingPoints).toHaveLength(2);
+    const select = el.querySelector('select[aria-label="Draw on plane"]') as HTMLSelectElement;
+    select.value = "left";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(c.getState().perspectivePlane).toBe("left");
+    const canvas = render(VectorCanvas, { controller: c });
+    expect(canvas.querySelector('[data-vector-perspective-plane="left"][data-active]')).not.toBeNull();
+    click(Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Remove")!);
+    expect(c.getPerspective()).toBeNull();
+  });
+});
+
 describe("VectorLensPanel (svelte)", () => {
   it("makes the selected closed path a lens, edits its amount and removes it", async () => {
     const { VectorLensPanel } = await import("../src/vector");

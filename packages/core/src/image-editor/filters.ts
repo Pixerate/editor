@@ -130,6 +130,59 @@ export function applyLegacyAdjustments(imageData: { data: Uint8ClampedArray }, a
   }
 }
 
+/**
+ * `applyLegacyAdjustments` on float RGBA for high bit depth: the same stages on the 0..255 scale
+ * without rounding (`data` 0..1 sRGB-encoded, or linear light when `linear`, which is encoded for
+ * the stages and decoded after, as the legacy process works on encoded values). Opacity is not
+ * applied.
+ */
+export function applyLegacyFloat(data: Float32Array, adjustments: ImageAdjustments, linear: boolean): void {
+  const { brightness, contrast, saturation, exposure, temperature } = adjustments;
+  if (!brightness && !contrast && !saturation && !exposure && !temperature) return;
+  const k = (259 * (contrast + 255)) / (255 * (259 - contrast));
+  const ex = Math.pow(2, exposure / 50);
+  const sat = 1 + saturation / 100;
+  const temp = temperature * 0.8;
+  const cl = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  const enc = (v: number) => (v <= 0 ? 0 : v >= 1 ? 1 : v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  const dec = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  for (let i = 0; i < data.length; i += 4) {
+    if (!(data[i + 3] > 0)) continue;
+    let r = (linear ? enc(data[i]) : data[i]) * 255;
+    let g = (linear ? enc(data[i + 1]) : data[i + 1]) * 255;
+    let b = (linear ? enc(data[i + 2]) : data[i + 2]) * 255;
+    if (exposure) {
+      r = cl(r * ex);
+      g = cl(g * ex);
+      b = cl(b * ex);
+    }
+    if (brightness) {
+      const o = brightness * 2.55;
+      r = cl(r + o);
+      g = cl(g + o);
+      b = cl(b + o);
+    }
+    if (contrast) {
+      r = cl(k * (r - 128) + 128);
+      g = cl(k * (g - 128) + 128);
+      b = cl(k * (b - 128) + 128);
+    }
+    if (saturation) {
+      const l = 0.2989 * r + 0.587 * g + 0.114 * b;
+      r = cl(l + (r - l) * sat);
+      g = cl(l + (g - l) * sat);
+      b = cl(l + (b - l) * sat);
+    }
+    if (temperature) {
+      r = cl(r + temp);
+      b = cl(b - temp);
+    }
+    data[i] = linear ? dec(r / 255) : r / 255;
+    data[i + 1] = linear ? dec(g / 255) : g / 255;
+    data[i + 2] = linear ? dec(b / 255) : b / 255;
+  }
+}
+
 /** sRGB byte → linear light (exact; shared by every process 2 render). */
 const DECODE_LUT: Float32Array = (() => {
   const lut = new Float32Array(256);

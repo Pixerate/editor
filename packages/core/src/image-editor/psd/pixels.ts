@@ -95,6 +95,8 @@ export interface ChannelSet {
    * plain `rgb = (1 − ink) × (1 − k)` approximation.
    */
   cmykToRgb?: (ink: Uint8Array, out: Uint8ClampedArray) => void;
+  /** 16-bit CMYK files: 16-bit ink amounts (RGBA stride 4) → 16-bit sRGB, keeping the depth. */
+  cmykToRgb16?: (ink: Uint16Array, out: Uint16Array) => void;
 }
 
 /** Interleaved 8-bit sRGB RGBA. */
@@ -195,6 +197,17 @@ export function toRgbaDeep(set: ChannelSet): Uint16Array | Float32Array | null {
   };
   const planes = set.color.map((p) => raw(p, cmyk ? 1 : 0));
   const alpha = raw(set.alpha, 1);
+  if (depth === 16 && cmyk && set.cmykToRgb16) {
+    // Through the CMYK profile at 16 bits: ink amounts in, RGB out.
+    const ink = new Uint16Array(n * 4);
+    const out = new Uint16Array(n * 4);
+    for (let i = 0, o = 0; i < n; i++, o += 4) {
+      for (let c = 0; c < 4; c++) ink[o + c] = Math.round((1 - (planes[c] ? planes[c](i) : 1)) * 65535);
+      out[o + 3] = Math.round(clamp01(alpha(i)) * 65535);
+    }
+    set.cmykToRgb16(ink, out);
+    return out;
+  }
   if (depth === 16) {
     const out = new Uint16Array(n * 4);
     const q = (v: number) => Math.round(clamp01(v) * 65535);

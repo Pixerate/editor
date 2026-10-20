@@ -213,7 +213,7 @@ import {
   tileCoord,
   tileKey,
 } from '../raster/surface';
-import { convertSurfaceDepth, deepTile, isBitDepth, keepDeepSamples, proxyOf, srgbDecode, srgbEncode, surfaceFromDeepPixels, tileSamples, to16From8, type BitDepth, type DeepSamples } from '../raster/deep';
+import { convertSurfaceDepth, deepTile, isBitDepth, keepDeepSamples, proxyOf, readDeepRegion, srgbDecode, srgbEncode, surfaceFromDeepPixels, tileSamples, to16From8, type BitDepth, type DeepSamples } from '../raster/deep';
 import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
@@ -258,6 +258,7 @@ import {
   isIdentityCloneTransform,
   IDENTITY_CLONE_TRANSFORM,
   type CloneTransform,
+  retouchFilter,
   RetouchDabStroke,
   StrokeCoverage,
   TilePixelSource,
@@ -319,6 +320,7 @@ import { INTENTS, Transform, builtinProfile, canBeDestination, writeJpegIcc, wri
 import {
   DEFAULT_PROOF,
   colorModePlanes,
+  colorModePlanes16,
   convertColorFields,
   convertSurfaceColors,
   deserializeColorMode,
@@ -594,9 +596,9 @@ export interface TypeLayerInfo {
 }
 
 /** The retouching tools (see `@pixerate/editor/paint`'s retouch module). */
-export type RetouchTool = 'clone' | 'heal' | 'spot-heal' | 'smudge' | 'dodge' | 'burn' | 'sponge';
+export type RetouchTool = 'clone' | 'heal' | 'spot-heal' | 'smudge' | 'dodge' | 'burn' | 'sponge' | 'blur' | 'sharpen' | 'history';
 
-export const RETOUCH_TOOLS: readonly RetouchTool[] = ['clone', 'heal', 'spot-heal', 'smudge', 'dodge', 'burn', 'sponge'];
+export const RETOUCH_TOOLS: readonly RetouchTool[] = ['clone', 'heal', 'spot-heal', 'smudge', 'dodge', 'burn', 'sponge', 'blur', 'sharpen', 'history'];
 
 export const isRetouchTool = (tool: unknown): tool is RetouchTool => RETOUCH_TOOLS.includes(tool as RetouchTool);
 
@@ -1011,6 +1013,23 @@ export class PaintStrokeSession {
     this.closed = true;
     this.controller._strokeCommit(this.before, this.target.id, this.target.channel, null);
   }
+}
+
+/**
+ * A region of a surface as floats on the working tiles' 0..255 scale (RGBA sRGB-encoded, or one
+ * coverage value per pixel): deep samples at `depth`, else the 8-bit values.
+ */
+function workRegionOf(surface: TiledSurface, rect: CropBox, depth: 16 | 32 | null): Float32Array {
+  if (!depth) return Float32Array.from(readRegion(surface, rect));
+  const d = readDeepRegion(surface, rect, depth);
+  const out = new Float32Array(d.length);
+  if (d instanceof Uint16Array) {
+    for (let i = 0; i < d.length; i++) out[i] = d[i] / 257;
+    return out;
+  }
+  const ch = surface.channels;
+  for (let i = 0; i < d.length; i++) out[i] = (ch === 4 && (i & 3) !== 3 ? srgbEncode(d[i]) : d[i]) * 255;
+  return out;
 }
 
 /** A layer tile as a float working tile on the 0..255 sRGB-encoded scale (`null`: transparent). */
@@ -3552,7 +3571,7 @@ export class ImageEditorController {
     if (tool === 'smudge') return { kind: 'dabs', create: (pixels) => new RetouchDabStroke(brush, pixels, smudgeEffect(brush, settings.strength)) };
     if (tool === 'sponge') return { kind: 'dabs', create: (pixels) => new RetouchDabStroke(brush, pixels, spongeEffect(brush, settings.spongeMode === 'saturate', settings.vibrance)) };
     const retouchApply: RetouchApply = {
-      opacity: tool === 'clone' || tool === 'heal' ? brush.opacity : 1,
+      opacity: tool === 'clone' || tool === 'heal' || tool === 'history' ? brush.opacity : tool === 'blur' || tool === 'sharpen' ? brush.opacity * settings.strength : 1,
       blend: tool === 'clone' && !mask ? brush.blend : 'normal',
       lockTransparency: target.lockTransparency,
       selection: apply.selection,
@@ -3561,6 +3580,40 @@ export class ImageEditorController {
     const coverage = new StrokeCoverage(brush);
     if (tool === 'dodge' || tool === 'burn') {
       const paint: RetouchPaint = { kind: 'tone', tone: toneOf(tool, settings) };
+      return { kind: 'coverage', coverage, apply: retouchApply, start: () => {}, paint: () => paint };
+    }
+    if (tool === 'blur' || tool === 'sharpen') {
+      // The layer filtered tile by tile (read with a margin), laid through the coverage at `strength`.
+      const n = target.surface.channels;
+      const depth = !mask && this.bitDepth !== 8 ? this.bitDepth : null;
+      const m = 6;
+      const filtered = new TilePixelSource(
+        (tx, ty) => {
+          const r = { x: tx * TILE - m, y: ty * TILE - m, width: TILE + 2 * m, height: TILE + 2 * m };
+          const d = workRegionOf(target.surface, r, depth);
+          retouchFilter(d, r.width, r.height, n, tool, 2, 1.2);
+          const out = new Float32Array(TILE * TILE * n);
+          for (let y = 0; y < TILE; y++) out.set(d.subarray(((y + m) * r.width + m) * n, ((y + m) * r.width + m + TILE) * n), y * TILE * n);
+          return out;
+        },
+        n,
+        target.offset
+      );
+      const paint: RetouchPaint = { kind: 'source', source: filtered, dx: 0, dy: 0 };
+      return { kind: 'coverage', coverage, apply: retouchApply, start: () => {}, paint: () => paint };
+    }
+    if (tool === 'history') {
+      const steps = settings.historySteps;
+      const entry = steps > 0 ? this.undoStack[this.undoStack.length - steps] ?? this.undoStack[0] : this.undoStack[0];
+      if (!entry) throw new LayerOperationError('There is no earlier state to paint from yet: the History Brush paints a layer as it was some undo steps back. Make a change first.');
+      const then = findLayer(entry.layers, target.id)?.layer;
+      if (!then) throw new LayerOperationError(`Layer "${target.id}" did not exist ${steps > 0 ? `${steps} steps back` : 'in the oldest state'}; choose fewer history steps (historySteps).`);
+      const surface = target.channel === 'mask' ? then.mask?.surface : then.type === 'pixel' ? then.surface : undefined;
+      if (!surface) throw new LayerOperationError(`Layer "${target.id}" had no ${target.channel === 'mask' ? 'mask' : 'pixels'} in that state.`);
+      const offset = then.type === 'pixel' ? then.offset : { x: 0, y: 0 };
+      const depth = !mask && this.bitDepth !== 8 ? this.bitDepth : null;
+      const source = depth ? new TilePixelSource((tx, ty) => workTileOf(surface.tiles.get(tileKey(tx, ty))), 4, offset) : this.surfaceSource(surface, offset);
+      const paint: RetouchPaint = { kind: 'source', source, dx: 0, dy: 0 };
       return { kind: 'coverage', coverage, apply: retouchApply, start: () => {}, paint: () => paint };
     }
     // Masks sample only themselves; pixels sample the layer or the composite.
@@ -5488,14 +5541,22 @@ export class ImageEditorController {
   }
 
   /** How `toPsd` writes colour: RGB with the working space, or CMYK / Lab channels for those modes. */
-  private psdColorOptions(warnings: string[]): { iccProfile?: Uint8Array; colorMode?: 'rgb' | 'cmyk' | 'lab'; colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[] } {
+  private psdColorOptions(warnings: string[]): {
+    iccProfile?: Uint8Array;
+    colorMode?: 'rgb' | 'cmyk' | 'lab';
+    colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[];
+    colorPlanes16?: (rgba: Uint16Array, n: number) => Uint16Array[];
+  } {
     const m = this.state.colorMode;
     if (!m) return { iccProfile: profileBytes(this.state.colorProfile) };
     if (flattenLayers(this.state.layers).some((l) => l.type === 'adjustment' && l.visible)) {
       warnings.push(`Adjustment layers were written with their RGB settings; in a ${m.mode.toUpperCase()} file Photoshop applies them to its own channels, so they may look different there.`);
     }
     const planes = colorModePlanes(this.state.colorProfile, m);
-    return m.mode === 'cmyk' ? { colorMode: 'cmyk', colorPlanes: planes, iccProfile: profileBytes(m.profile) } : { colorMode: 'lab', colorPlanes: planes };
+    const planes16 = this.bitDepth === 8 ? undefined : colorModePlanes16(this.state.colorProfile, m);
+    return m.mode === 'cmyk'
+      ? { colorMode: 'cmyk', colorPlanes: planes, colorPlanes16: planes16, iccProfile: profileBytes(m.profile) }
+      : { colorMode: 'lab', colorPlanes: planes, colorPlanes16: planes16 };
   }
 
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
@@ -5721,9 +5782,9 @@ export class ImageEditorController {
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
     const color = this.psdColorOptions(warnings);
-    // CMYK and Lab files are written at 8 bits.
-    if (color.colorMode && this.bitDepth !== 8) warnings.push(`${color.colorMode.toUpperCase()} files are written at 8 bits per channel; the ${this.bitDepth}-bit samples were rounded.`);
-    const depth = color.colorMode ? 8 : this.bitDepth;
+    // CMYK and Lab files are written at 8 or 16 bits (Photoshop has no 32-bit CMYK or Lab).
+    if (color.colorMode && this.bitDepth === 32) warnings.push(`${color.colorMode.toUpperCase()} files are written at 16 bits per channel at most; the 32-bit samples were converted (colour above 1 clipped).`);
+    const depth = color.colorMode && this.bitDepth === 32 ? 16 : this.bitDepth;
     // At 16 or 32 bits the merged image is composited at that depth too.
     const mergedDeep = depth === 8 ? undefined : workingToSamples(compositeDeep(prepared, canvas, sources, depth), depth);
     const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, ...color });

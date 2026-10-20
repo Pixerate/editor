@@ -193,7 +193,8 @@ The working space, Assign / Convert to Profile with intents, soft proofing with 
 and colour conversions for print briefs: read [references/color-management.md](references/color-management.md).
 ### Retouching
 
-Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn and Sponge: retouch on an empty
+Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen and the
+History Brush: retouch on an empty
 layer with `sample: "current-below"`, pick `spot_heal` for small spots, `heal_brush` for larger
 flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
 [references/retouching.md](references/retouching.md) before retouching.
@@ -396,7 +397,10 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `dodge` | Lighten what `points` cover, most in `range` shadows \| midtones \| highlights, at `exposure` 0..1 (overlaps in one stroke never exceed it); `protectTones` keeps hue and saturation. Alpha kept. One undo step. Returns the layer, channel, `bounds` and dabs. |
 | `burn` | As `dodge`, darkening. |
 | `sponge` | Desaturate (`mode` desaturate, default) or saturate what `points` cover; `vibrance` damps clipping; passes compound, `brush.flow` sets each pass's strength. Pixels only. One undo step. Returns the layer, channel, `bounds` and dabs. |
-| `get_retouch_options` | Read-only. The retouching defaults (`aligned`, `sample`, `spotType`, `range`, `exposure`, `protectTones`, `spongeMode`, `vibrance`, `strength`) and the `cloneSource` `{x, y, offset}` or null (an aligned stroke samples at the brush plus `offset`; the editors show it as a crosshair). Call before a clone or heal stroke without `source`. |
+| `blur_stroke` | Soften what `points` cover (`strength` 0..1 × brush opacity) on pixels or a mask. One undo step. Returns the layer, channel, `bounds` and dab count. Check with `capture_view`. |
+| `sharpen_stroke` | Crisp what `points` cover (an unsharp mask at `strength`; keep it 0.2..0.5). One undo step. Returns the layer, channel, `bounds` and dab count. |
+| `history_brush` | Paint the layer (or mask) back as it was `historySteps` undo steps ago (0 = oldest kept state) along `points`. Fails if the layer did not exist then. One undo step. Returns the layer, channel, `bounds` and dab count. |
+| `get_retouch_options` | Read-only. The retouching defaults (`aligned`, `sample`, `spotType`, `range`, `exposure`, `protectTones`, `spongeMode`, `vibrance`, `strength`, `historySteps`) and the `cloneSource` `{x, y, offset}` or null (an aligned stroke samples at the brush plus `offset`; the editors show it as a crosshair). Call before a clone or heal stroke without `source`. |
 | `set_retouch_options` | Set those defaults (view state, not an undo step); each stroke tool can override them per call. Changing `aligned` clears the kept offset. Returns the options. |
 | `set_clone_source` | Set the clone source `{x, y}` in document px (the Alt-click), or remove it with `clear: true`. View state. The next `clone_stamp` / `heal_brush` fixes the offset from its first point. Returns the source. |
 | `set_clone_transform` | The Clone Source panel: clone and heal strokes lay the source scaled (`scaleX` / `scaleY` in %, negative or `flipHorizontal` / `flipVertical` to mirror) and rotated (`rotate`°) about the stroke start; `reset: true` for 100 %, 0°. View state. Returns `{scaleX, scaleY, rotate}`. Use it for a reflection, a smaller copy or a tilted patch; read it back with `get_retouch_options`. |

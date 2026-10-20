@@ -137,6 +137,12 @@ describe('React paint tools', () => {
     await act(async () => button('Highlights').click());
     await act(async () => setValue(container.querySelector('input[aria-label="Exposure"]')!, '0.2'));
     expect(c.getState().paint.retouch).toMatchObject({ range: 'highlights', exposure: 0.2 });
+    await act(async () => button('Blur').click());
+    await act(async () => setValue(container.querySelector('input[aria-label="Strength"]')!, '0.3'));
+    expect(c.getState().paint.retouch.strength).toBe(0.3);
+    await act(async () => button('History').click());
+    await act(async () => setValue(container.querySelector('input[aria-label="Steps back"]')!, '2'));
+    expect(c.getState().paint.retouch.historySteps).toBe(2);
     await act(async () => button('Sponge').click());
     await act(async () => button('Saturate').click());
     expect(c.getState().paint.retouch.spongeMode).toBe('saturate');

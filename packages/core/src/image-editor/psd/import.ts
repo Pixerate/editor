@@ -233,6 +233,7 @@ interface Ctx {
   dpi: number;
   /** CMYK files: ink → sRGB through the file's (or the default) CMYK profile. */
   cmykToRgb?: (ink: Uint8Array, out: Uint8ClampedArray) => void;
+  cmykToRgb16?: (ink: Uint16Array, out: Uint16Array) => void;
 }
 
 function decodeOr(ctx: Ctx, rec: PsdLayerRecord, id: number, name: string): Uint8Array | undefined {
@@ -271,10 +272,11 @@ function recordPixels(ctx: Ctx, rec: PsdLayerRecord, name: string): PixelLayer['
     alpha: planes[ctx.colorCount] as Uint8Array | undefined,
     palette: ctx.palette,
     cmykToRgb: ctx.cmykToRgb,
+    cmykToRgb16: ctx.cmykToRgb16,
   };
   // 16- and 32-bit files keep their depth (see `raster/deep`).
-  // CMYK goes through its colour profile at 8 bits (deep CMYK is not kept yet).
-  const deep = set.cmykToRgb ? null : toRgbaDeep(set);
+  // CMYK goes through its colour profile (at 16 bits for a 16-bit file).
+  const deep = set.cmykToRgb && !set.cmykToRgb16 ? null : toRgbaDeep(set);
   if (deep) return surfaceFromDeepPixels({ width, height, data: deep }, 4, rec.rect.left, rec.rect.top);
   return surfaceFromPixels({ width, height, data: toRgba8(set) }, 4, rec.rect.left, rec.rect.top);
 }
@@ -294,7 +296,7 @@ function recordMask(ctx: Ctx, rec: PsdLayerRecord, name: string): RasterMask | u
     const plane = decodeOr(ctx, rec, id, name);
     const depth = ctx.file.header.depth;
     // A 16- or 32-bit mask keeps its precision (deep samples next to the 8-bit rendering).
-    if (plane && (depth === 16 || depth === 32) && ctx.file.header.colorMode !== MODE_CMYK) surface = surfaceFromDeepPixels({ width, height, data: toMaskDeep(plane, width, height, depth) }, 1, rect.left, rect.top, def);
+    if (plane && (depth === 16 || depth === 32)) surface = surfaceFromDeepPixels({ width, height, data: toMaskDeep(plane, width, height, depth) }, 1, rect.left, rect.top, def);
     else if (plane) surface = surfaceFromPixels({ width, height, data: toMask8(plane, width, height, depth) }, 1, rect.left, rect.top, def);
   }
   const mask: RasterMask = { surface, defaultValue: def };
@@ -723,8 +725,9 @@ function mergedLayer(ctx: Ctx): PixelLayer | null {
     alpha: hasAlpha ? plane(cc) : undefined,
     palette: ctx.palette,
     cmykToRgb: ctx.cmykToRgb,
+    cmykToRgb16: ctx.cmykToRgb16,
   };
-  const deep = hasAlpha || set.cmykToRgb ? null : toRgbaDeep(set);
+  const deep = hasAlpha || (set.cmykToRgb && !set.cmykToRgb16) ? null : toRgbaDeep(set);
   let surface: PixelLayer['surface'];
   if (deep) surface = surfaceFromDeepPixels({ width, height, data: deep }, 4);
   else {
@@ -786,6 +789,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     }
     const t = Transform.create(src, srgbProfile(), { intent: 'relative', bpc: true });
     ctx.cmykToRgb = (ink, out) => t.convert8(ink, 4, out, 4, false);
+    if (header.depth === 16) ctx.cmykToRgb16 = (ink, out) => t.convert16(ink, 4, out, 4, false);
   }
   for (const block of file.globalBlocks) {
     if (LINKED_FILE_KEYS.includes(block.key)) for (const f of parseLinkedFiles(block.data)) if (!ctx.linked.has(f.uuid)) ctx.linked.set(f.uuid, f);
