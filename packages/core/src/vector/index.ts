@@ -31,6 +31,7 @@ export * from './text.js';
 export * from './textPanel.js';
 export * from './symbols.js';
 export * from './symbolsPanel.js';
+export * from './constraints/index.js';
 // Fonts for text: the shapers and font reader shared with the image editor.
 export { createCanvasTextShaper, createMetricTextShaper, createOutlineTextShaper, cssFontFamily, type CanvasTextShaperOptions, type OutlineFontEntry, type OutlineFontFace, type OutlinePathCommand } from '../text/shapers.js';
 export { loadOpenTypeFont, parseOpenTypeFont, type OpenTypeFont } from '../text/opentype.js';

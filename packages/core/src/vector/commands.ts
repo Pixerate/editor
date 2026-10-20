@@ -1,7 +1,9 @@
 import type { CommandSpec } from '../commands/registry.js';
-import type { VectorEditorController, VectorShapeInput } from './controller.js';
+import type { VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
-import type { VectorMatrix, VectorTextNode } from './types.js';
+import type { VectorConstraintKind, VectorMatrix, VectorTextNode } from './types.js';
+import { VECTOR_CONSTRAINT_KINDS } from './types.js';
+import { vectorConstraintEnv, vectorConstraintResiduals, vectorConstraintValue } from './constraints/solve.js';
 import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorPathfinderOperation, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_EFFECT_TYPES, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorEffect, type VectorEffectType, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
@@ -1179,6 +1181,141 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+
+	// --- Constraints -------------------------------------------------------------
+	const CONSTRAINT_REF = {
+		type: 'object',
+		properties: {
+			nodeId: { type: 'string', description: 'The path (from vector.list).' },
+			subpath: { type: 'integer', minimum: 0, description: 'Subpath of the anchor (with index).' },
+			index: { type: 'integer', minimum: 0, description: 'Anchor index in the subpath (with subpath).' },
+			anchor: { type: 'string', description: 'The anchor\'s id instead of subpath / index (vector.listConstraints shows ids in use).' },
+			handle: { type: 'string', enum: ['in', 'out'], description: 'The anchor\'s handle instead of the anchor point.' },
+			segment: { type: 'boolean', description: 'The segment from the anchor to the next one (a line between them) instead of the point.' },
+			circle: { type: 'boolean', description: 'The whole path as a circle (its centre and radius): for round closed paths, no anchor.' }
+		},
+		required: ['nodeId'],
+		additionalProperties: false
+	} as const;
+	const constraintsSummary = () => {
+		const state = controller.getState();
+		const residuals = vectorConstraintResiduals(controller.getDocument());
+		const env = vectorConstraintEnv(controller.getDocument());
+		return {
+			constraints: controller.getConstraints().map((c) => {
+				let current: number | null = null;
+				try {
+					current = c.kind === 'distance' || c.kind === 'angle' || c.kind === 'radius' || c.kind === 'diameter' ? round(vectorConstraintValue(env, c)) : null;
+				} catch {
+					current = null;
+				}
+				const r = residuals.get(c.id);
+				return { ...c, ...(current !== null ? { evaluated: current } : {}), satisfied: r !== null && r !== undefined && r <= 1e-6 * Math.max(state.document.width, state.document.height, 1) };
+			}),
+			parameters: controller.getParameters(),
+			dof: controller.getConstraintDof(),
+			issues: state.constraintIssues
+		};
+	};
+	const constraintCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listConstraints`,
+			label: 'List Constraints',
+			readOnly: true,
+			keywords: ['constraints', 'dimensions', 'parametric', 'dof', 'degrees of freedom', 'cad'],
+			description:
+				'Reads the parametric state: every constraint (id, kind, refs with anchor ids, value expression, name, evaluated value, satisfied), the named parameters, the degrees of freedom left (dof, status unconstrained / under / fully / over, redundant equations, per path) and any conflicts the last solve reported. Constraints are solved after every edit.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => constraintsSummary()
+		},
+		{
+			...base,
+			id: `${prefix}addConstraint`,
+			label: 'Add Constraint…',
+			keywords: ['constraint', 'coincident', 'parallel', 'perpendicular', 'horizontal', 'vertical', 'tangent', 'equal', 'distance', 'angle', 'radius', 'dimension', 'fix', 'cad'],
+			description:
+				'Adds a constraint and solves (geometry moves as little as possible). Refs: anchors by { nodeId, subpath, index } (or anchor id), `handle`, `segment: true` (the line from the anchor to the next), or `circle: true` (a round path). Kinds: coincident (2 points, point + segment, point + circle), collinear (2 segments), concentric (2 circles or circle + point), fix (any), parallel / perpendicular (2 segments), horizontal / vertical (a segment or 2 points), tangent (segment + circle, 2 circles, or 1 anchor: G1), smooth (1 anchor: G2), symmetric (2 points + a segment axis), equal (2 segments or 2 circles), distance (a segment, 2 points or point + segment; `axis`), angle (2 segments, degrees), radius / diameter (a circle). Dimensional kinds take `value` (an expression; default the current measure) and `name`. Fails, changing nothing, on a conflict or a redundant constraint, naming the constraints involved. One undo step. Returns { id, constraint }.',
+			params: {
+				type: 'object',
+				properties: {
+					kind: { type: 'string', enum: VECTOR_CONSTRAINT_KINDS, description: 'The constraint kind.' },
+					refs: { type: 'array', items: CONSTRAINT_REF, minItems: 1, maxItems: 3, description: 'What it constrains, in the order the kind lists.' },
+					value: { type: ['string', 'number'], description: 'Dimensional kinds: the value (document units, degrees for angle) or an expression of parameters ("w / 2").' },
+					name: { type: 'string', description: 'Dimensional kinds: a name expressions can use (default d1, ang1, rad1, dia1, …).' },
+					axis: { type: 'string', enum: ['aligned', 'horizontal', 'vertical'], description: 'distance: measured along the line between (default), horizontally or vertically.' }
+				},
+				required: ['kind', 'refs'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: VectorConstraintInput) => {
+				const r = controller.addConstraint(params);
+				check(r);
+				return { id: r.id, constraint: controller.getConstraints().find((c) => c.id === r.id) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeConstraint`,
+			label: 'Remove Constraint',
+			keywords: ['constraint', 'delete', 'remove', 'unconstrain'],
+			description: 'Removes constraints by id (from vector.listConstraints); the geometry stays where it is. One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Constraint ids.' } }, required: ['ids'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids: string[] }) => {
+				check(controller.removeConstraints(params.ids));
+				return { ids: params.ids };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setConstraintValue`,
+			label: 'Set Dimension…',
+			keywords: ['dimension', 'value', 'parameter', 'expression', 'driving'],
+			description:
+				'Sets the value of a dimensional constraint (by id or name) or of a named parameter (creating it; null removes a parameter) and solves. Values are expressions: numbers, names, + - * /, parentheses, pi. Fails, changing nothing, when it does not evaluate or the constraints cannot meet it. One undo step. Returns the parametric summary (vector.listConstraints).',
+			params: {
+				type: 'object',
+				properties: {
+					key: { type: 'string', description: 'A dimensional constraint\'s id or name, or a parameter name.' },
+					value: { type: ['string', 'number', 'null'], description: 'The new value or expression; null removes a parameter.' }
+				},
+				required: ['key', 'value'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { key: string; value: string | number | null }) => {
+				check(controller.setConstraintValue(params.key, params.value));
+				return constraintsSummary();
+			}
+		},
+		{
+			...base,
+			id: `${prefix}autoConstrain`,
+			label: 'Auto Constrain',
+			keywords: ['auto constrain', 'infer', 'constraints', 'parametric', 'sketch'],
+			description:
+				'Adds the constraints a sketch already nearly satisfies (within `distanceTolerance` document units, default 0.5, and `angleTolerance` degrees, default 1): coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal and vertical segments, collinear, perpendicular (connected) and parallel segments, equal lengths and radii. Skips any that would conflict or repeat others. `ids` limits it to some paths (default the selection, or all). One undo step. Returns { ids } of the constraints added.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Paths or groups to constrain (default: the selection, or every path).' },
+					distanceTolerance: { type: 'number', minimum: 0, description: 'How close points must be to count as coincident (document units, default 0.5).' },
+					angleTolerance: { type: 'number', minimum: 0, maximum: 45, description: 'How close to level, square or parallel lines must be (degrees, default 1).' },
+					kinds: { type: 'array', items: { type: 'string', enum: VECTOR_CONSTRAINT_KINDS }, description: 'Kinds to infer (default all).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; distanceTolerance?: number; angleTolerance?: number; kinds?: VectorConstraintKind[] } | undefined) => {
+				const r = controller.autoConstrain(params ?? {});
+				check(r);
+				return { ids: r.ids };
+			}
+		}
+	];
+
 	return [
 		{
 			...base,
@@ -1289,6 +1426,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...maskCommands(),
 		...textCommands(),
 		...symbolCommands(),
+		...constraintCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

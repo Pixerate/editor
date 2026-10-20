@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
+
+- **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).
+- **Root Cause**: Constraints refer to anchors by `VectorAnchor.id`; code that copies anchors field by field (`mapAnchor`, `reverseSubpath`, `pathMap`'s mapper, the shape-keeping delete) dropped the new field, so the solver's purge removed constraints whose anchors it could no longer find (the same trap as live corners).
+- **Solution / Workaround**: Copy anchors with `cloneAnchor`, or add `...(a.id ? { id: a.id } : {})` to hand-built copies. Ids are given lazily (only to anchors a constraint refers to), so most documents never carry them. Operations that rebuild a path from scratch (booleans, Outline Stroke, Expand) do drop them, and the constraints go with them.
+
+### [core/vector] Dimensionless Constraint Rows Converge Too Loosely Over Long Segments
+
+- **Issue / Symptom**: Two segments constrained perpendicular were 4 × 10⁻⁶ units off at their far ends while the solve reported success.
+- **Root Cause**: The solver's tolerance is in document units (1e-9 of the largest coordinate), but a cross product of unit vectors is dimensionless: a residual just under the tolerance still turns into a visible offset over a 60-unit segment.
+- **Solution / Workaround**: Express every row in length units: parallel / perpendicular use one unit direction and one full segment, tangent at an anchor uses the outgoing handle's length, and angle rows are radians times the segments' mean length. New residuals should follow the same rule.
+
+### [core/vector] The Solve After Every Edit Needs to Know What Was Just Edited
+
+- **Issue / Symptom**: Dragging a constrained anchor left it short of the pointer; the solver pulled it back towards the rest.
+- **Root Cause**: A minimum-norm solve moves every free parameter a little. Without weights, the dragged anchor takes its share of the correction.
+- **Solution / Workaround**: The controller keeps the last solved document; `solveVectorConstraints(doc, previous)` gives every parameter that differs from it a weight of 10⁶, so edited geometry (dragged, typed by a command, undone) moves least and the dependent geometry follows. Checks that need exact positions should compare constrained quantities, not the dragged anchor's coordinates.
+
 ### [core/vector] Instances Carry Their Symbol's Art, Because Geometry Sees One Node at a Time
 
 - **Issue / Symptom**: Bounds, hit-testing, rendering and export of an instance came back empty, or stale after the symbol changed.

@@ -358,6 +358,18 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "Back to the whole drawing.", ...command("vector.exitSymbolEdit"), target: artboardBox(455, 260, 300, 90) },
     ],
   },
+  {
+    id: "vector-constraints",
+    prompt: "Make the card a parametric 2:1 rectangle",
+    steps: [
+      { say: "Constraining what the card already nearly is: level and upright sides.", ...command("vector.autoConstrain", { ids: ["card"] }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "A named width…", ...command("vector.setConstraintValue", { key: "cardW", value: 240 }) },
+      { ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 0, segment: true }], value: "cardW", name: "width" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "…and a height that follows it: half the width.", ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 1, segment: true }], value: "cardW / 2", name: "height" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Changing the width now resizes both.", ...command("vector.setConstraintValue", { key: "cardW", value: 200 }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Checking what is still free to move.", ...command("vector.listConstraints") },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [
