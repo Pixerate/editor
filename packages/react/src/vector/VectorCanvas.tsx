@@ -210,9 +210,18 @@ const VectorSceneNode = React.memo(function VectorSceneNode({ node }: { node: Ve
     return (
       // Fill and stroke stacks: each layer in order, bottom to top.
       <g data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blendStyle(node.blendMode)}>
-        {node.layers.map((layer) => (
-          <VectorPaintPath key={`${layer.kind}-${layer.index}`} paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
-        ))}
+        {node.layers.map((layer) =>
+          layer.kind === 'brushstroke' ? (
+            // A brushstroke: its rendered brush images over their boxes.
+            <g key={`${layer.kind}-${layer.index}`} data-vector-layer={`brushstroke-${layer.index}`} opacity={layer.opacity < 1 ? layer.opacity : undefined} style={blendStyle(layer.blendMode)}>
+              {(layer.images ?? []).map((im, i) => (
+                <image key={i} href={im.href} x={im.x} y={im.y} width={im.width} height={im.height} preserveAspectRatio="none" />
+              ))}
+            </g>
+          ) : (
+            <VectorPaintPath key={`${layer.kind}-${layer.index}`} paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
+          ),
+        )}
       </g>
     );
   return <VectorPaintPath paint={node} d={node.d} fillRule={node.fillRule} id={node.id} transform={node.transform} filter={node.filter} blendMode={node.blendMode} />;

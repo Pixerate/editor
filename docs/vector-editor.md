@@ -353,6 +353,26 @@ A document's pages are its top-level frames in order, numbered from 1 (`vectorPa
 - **Panel.** `<VectorPagesPanel>` has page buttons, + Page, + Master, and the selected page's master.
 - **Agent commands.** `vector.listPages`, `vector.addPage`, `vector.addMasterPage`, `vector.setPageMaster`, `vector.movePage` and `vector.goToPage`. `vector.addText` takes `parentId`, to put text on a master page.
 
+## Brushstrokes
+
+A stroke layer of kind `brushstroke` paints its path with a natural-media brush from the paint editor's library (pencils, pastels, charcoal, markers, inks: the dry dab-engine brushes, `vectorBrushstrokeBrushes()`) instead of a geometric line.
+
+- **Layer.** `{ kind: 'brushstroke', paint, brush: { brushId, size?, pressure? } }`.
+  - The paint gives the colour (a gradient gives its middle colour).
+  - `size` is the brush diameter in document units (default the brush's own).
+  - `pressure` is a profile of values 0–1 spread evenly from the start to the end of the path, so `[0.2, 1, 0.2]` tapers both ends.
+- **Rendering.** The path stays the data and the pixels are a cache. Each subpath is flattened and rendered by the shared brushstroke renderer (`renderBrushstroke` through a `BrushstrokeCache`, the one the canvas uses for brushed freehand strokes) at `VECTOR_BRUSHSTROKE_SCALE` pixels per unit. `vectorBrushstrokeImages(path, layer)` returns the images, each a PNG data URL with its box in path units.
+- **Drawing.** In the scene render data a brushstroke is a paint layer of kind `brushstroke` with `images`; both canvases draw them as `<image>` elements.
+  - SVG export writes the images, and the layer data round-trips through `data-vector-strokes`.
+  - PDF export embeds them as image objects with an alpha soft mask.
+  - Lottie leaves them out, with a note.
+  - The painted box grows by half the brush size.
+- **Editing.**
+  - `addBrushstroke({ brushId, size, pressure }, { ids, index, color, opacity })` and `setBrushstroke(index, patch, { ids })` are one undo step each.
+  - The appearance panel's stroke list shows brushstroke rows (visibility, colour, brush, size, remove) and an add-brushstroke button.
+  - Agents use `vector.listBrushes`, `vector.addBrushstroke` and `vector.setBrushstroke`, and remove a brushstroke with `vector.removeStroke`.
+- **Limits.** Only dry brushes render: wet, mixer and smudge brushes need paint under them. There is no paper grain.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:

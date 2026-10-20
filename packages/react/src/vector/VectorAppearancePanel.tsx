@@ -11,6 +11,7 @@ import {
   type VectorFilterType,
   type VectorFiltersPanelItem,
   type VectorStrokeAlign,
+  vectorBrushstrokeBrushes,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 
@@ -43,6 +44,39 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
 
   const layerRow = (l: VectorAppearancePanelLayer, count: number) => {
     const name = `${l.kind === 'fill' ? 'Fill' : 'Stroke'} ${l.index + 1}`;
+    if (l.brushstroke)
+      return (
+        <div key={`${l.kind}-${l.index}`} className="space-y-1 rounded border border-border p-1" data-vector-layer={`${l.kind}-${l.index}`} data-vector-brushstroke="">
+          <div className="flex items-center gap-1">
+            <input type="checkbox" aria-label={`${name} visible`} title="Show" checked={l.visible} onChange={(e) => update(l, { visible: e.target.checked })} />
+            <input type="color" aria-label={`${name} colour`} className="h-7 w-10 cursor-pointer rounded border border-border bg-background" value={l.color ?? '#000000'} onChange={(e) => controller.setBrushstroke(l.index, { color: e.target.value }, { ids, merge: true })} onBlur={end} />
+            <select aria-label={`${name} brush`} className={selectClass} value={l.brushstroke.brushId} onChange={(e) => controller.setBrushstroke(l.index, { brushId: e.target.value }, { ids })}>
+              {vectorBrushstrokeBrushes().map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              aria-label={`${name} brush size`}
+              title="Brush size"
+              className={numberClass}
+              value={l.brushstroke.size}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                if (Number.isFinite(n) && n > 0) controller.setBrushstroke(l.index, { size: Math.min(500, n) }, { ids, merge: true });
+              }}
+              onBlur={end}
+            />
+            <button type="button" className={buttonClass} title="Remove" aria-label={`Remove ${name}`} onClick={() => controller.removePaintLayer('stroke', l.index, { ids })}>
+              ×
+            </button>
+          </div>
+        </div>
+      );
     if (l.unknownKind)
       return (
         <div key={`${l.kind}-${l.index}`} className="text-[11px] text-muted-foreground" data-vector-layer={`${l.kind}-${l.index}`}>
@@ -154,6 +188,11 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
         >
           +
         </button>
+        {kind === 'stroke' && (
+          <button type="button" className={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onClick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id }, { ids })}>
+            ✎+
+          </button>
+        )}
       </div>
       {/* Top layer first, as it draws. */}
       {[...layers].reverse().map((l) => layerRow(l, layers.length))}

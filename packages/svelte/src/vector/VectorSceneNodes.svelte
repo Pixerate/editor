@@ -35,7 +35,14 @@
     <!-- Fill and stroke stacks: each layer in order, bottom to top. -->
     <g data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blend(node.blendMode)}>
       {#each node.layers as layer (`${layer.kind}-${layer.index}`)}
-        <VectorPaintPath paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
+        {#if layer.kind === 'brushstroke'}
+          <!-- A brushstroke: its rendered brush images over their boxes. -->
+          <g data-vector-layer={`brushstroke-${layer.index}`} opacity={layer.opacity < 1 ? layer.opacity : undefined} style={blend(layer.blendMode)}>
+            {#each layer.images ?? [] as im, i (i)}<image href={im.href} x={im.x} y={im.y} width={im.width} height={im.height} preserveAspectRatio="none" />{/each}
+          </g>
+        {:else}
+          <VectorPaintPath paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
+        {/if}
       {/each}
     </g>
   {:else}

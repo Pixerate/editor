@@ -257,6 +257,7 @@ function pathItems(node: VectorPathNode, notes: string[]): Json[] {
 function nodeGroup(node: VectorNode, notes: string[]): Json | null {
 	if (node.visible === false) return null;
 	if (node.filters?.length) notes.push(`${label(node)}: filters (shadows, glows, blurs) are not part of Lottie (left out).`);
+	if (node.type === 'path' && node.strokes?.some((l) => l.kind === 'brushstroke' && l.visible !== false)) notes.push(`${label(node)}: brushstrokes are raster images, not part of Lottie (left out).`);
 	const m = nodeMatrix(node);
 	let items: Json[] = [];
 	const live = (node.effects ?? []).some((e) => e.enabled !== false && (e.type === 'wiggle' || e.type === 'envelope' || e.type === 'contour' || e.type === 'blockShadow' || e.type === 'extrude' || e.type === 'bevel'));

@@ -1329,3 +1329,23 @@ describe("VectorPagesPanel (react)", () => {
     expect(c.getPages().pages[1].masterId).toBeNull();
   });
 });
+
+describe("Brushstrokes (react)", () => {
+  it("adds a brushstroke from the appearance panel and draws its images on the canvas", async () => {
+    const { VectorAppearancePanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    c.select(["a"]);
+    await act(async () =>
+      root.render(
+        <>
+          <VectorAppearancePanel controller={c} />
+          <VectorCanvas controller={c} />
+        </>,
+      ),
+    );
+    await act(async () => (container.querySelector("[data-vector-add-brushstroke]") as HTMLButtonElement).click());
+    expect((c.getNode("a") as VectorPathNode).strokes?.at(-1)?.kind).toBe("brushstroke");
+    expect(container.querySelector("[data-vector-brushstroke]")).not.toBeNull();
+    expect(container.querySelector('[data-vector-layer^="brushstroke-"] image')).not.toBeNull();
+  });
+});

@@ -9,7 +9,8 @@
     type VectorEditorController,
     type VectorFilterType,
     type VectorFiltersPanelItem,
-    type VectorStrokeAlign
+    type VectorStrokeAlign,
+    vectorBrushstrokeBrushes
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
 
@@ -63,7 +64,23 @@
 
 {#snippet layerRow(l: VectorAppearancePanelLayer, count: number, ids: string[])}
   {@const name = nameOf(l)}
-  {#if l.unknownKind}
+  {#if l.brushstroke}
+    {@const bs = l.brushstroke}
+    <div class="space-y-1 rounded border border-border p-1" data-vector-layer="{l.kind}-{l.index}" data-vector-brushstroke="">
+      <div class="flex items-center gap-1">
+        <input type="checkbox" aria-label="{name} visible" title="Show" checked={l.visible} onchange={(e) => update(l, { visible: e.currentTarget.checked })} />
+        <input type="color" aria-label="{name} colour" class="h-7 w-10 cursor-pointer rounded border border-border bg-background" value={l.color ?? '#000000'} oninput={(e) => controller.setBrushstroke(l.index, { color: e.currentTarget.value }, { ids, merge: true })} onblur={() => controller.endMergedEdit()} />
+        <select aria-label="{name} brush" class={selectClass} value={bs.brushId} onchange={(e) => controller.setBrushstroke(l.index, { brushId: e.currentTarget.value }, { ids })}>
+          {#each vectorBrushstrokeBrushes() as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+        </select>
+        <input type="number" min="0.5" step="0.5" aria-label="{name} brush size" title="Brush size" class={numberClass} value={bs.size} oninput={(e) => {
+          const n = parseFloat(e.currentTarget.value);
+          if (Number.isFinite(n) && n > 0) controller.setBrushstroke(l.index, { size: Math.min(500, n) }, { ids, merge: true });
+        }} onblur={() => controller.endMergedEdit()} />
+        <button type="button" class={buttonClass} title="Remove" aria-label="Remove {name}" onclick={() => controller.removePaintLayer('stroke', l.index, { ids })}>×</button>
+      </div>
+    </div>
+  {:else if l.unknownKind}
     <div class="text-[11px] text-muted-foreground" data-vector-layer="{l.kind}-{l.index}">{name}: {l.unknownKind} (not drawn by this version)</div>
   {:else}
     <div class="space-y-1 rounded border border-border p-1" data-vector-layer="{l.kind}-{l.index}" data-vector-layer-editing={l.editing ? '' : undefined}>
@@ -146,6 +163,9 @@
         disabled={!ids.length}
         onclick={() => controller.addPaintLayer(kind, {}, { ids })}>+</button
       >
+      {#if kind === 'stroke'}
+        <button type="button" class={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onclick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id }, { ids })}>✎+</button>
+      {/if}
     </div>
     <!-- Top layer first, as it draws. -->
     {#each [...layers].reverse() as l (`${l.kind}-${l.index}`)}{@render layerRow(l, layers.length, ids)}{/each}

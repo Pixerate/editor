@@ -3,6 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
+import { isVectorBrushstrokeLayer, vectorBrushstrokeBrush, vectorBrushstrokeImages, type VectorBrushstrokeImage } from './brushstroke.js';
 import { resolveVectorMasterPages } from './pages.js';
 import { vectorPerspectiveGridLines, vectorPerspectivePlanes } from './perspective.js';
 import { resolveVectorLenses } from './lens.js';
@@ -153,7 +154,8 @@ export interface VectorRenderPath {
  * `mix-blend-mode: blendMode` on its element (or on the group of its parts).
  */
 export interface VectorRenderPaintLayer {
-	kind: 'fill' | 'stroke';
+	/** `brushstroke`: draw `images` (each an `<image>` stretched over its box) instead of a path. */
+	kind: 'fill' | 'stroke' | 'brushstroke';
 	/** Index in its stack (bottom to top). */
 	index: number;
 	fill: string;
@@ -165,6 +167,8 @@ export interface VectorRenderPaintLayer {
 	opacity: number;
 	blendMode?: string;
 	strokeParts?: VectorRenderStrokeParts;
+	/** Brushstroke layers: the rendered brush images, path units (PNG data URLs). */
+	images?: VectorBrushstrokeImage[];
 }
 
 export interface VectorRenderGroup {
@@ -495,6 +499,12 @@ function lineStyle(node: VectorPathNode) {
 function renderLayers(node: VectorPathNode, defs: VectorPaintDef[], idPrefix: string): VectorRenderPaintLayer[] {
 	const out: VectorRenderPaintLayer[] = [];
 	for (const l of vectorPaintLayerNodes(node)) {
+		if (l.kind === 'stroke' && isVectorBrushstrokeLayer(l.layer as VectorStrokeLayer) && l.layer.visible !== false && (l.layer.opacity ?? 1) > 0) {
+			const images = vectorBrushstrokeImages(node, l.layer as VectorStrokeLayer);
+			const blend = vectorBlendModeCss(l.layer.blendMode);
+			if (images.length) out.push({ kind: 'brushstroke', index: l.index, fill: 'none', stroke: 'none', strokeWidth: 0, opacity: l.layer.opacity ?? 1, ...(blend ? { blendMode: blend } : {}), images });
+			continue;
+		}
 		if (!l.drawn) continue;
 		const role = l.kind;
 		const paint = vectorPaintToSvg(l.layer.paint, `${idPrefix}${role}-${node.id}-${l.index}`, { node: l.node, ...(role === 'stroke' ? { role } : {}) });
@@ -1817,6 +1827,8 @@ export interface VectorAppearancePanelLayer {
 	strokeAlign?: VectorStrokeAlign;
 	/** A stroke of a kind this version cannot draw (kept, shown read-only). */
 	unknownKind?: string;
+	/** A brushstroke layer: its brush (id, name) and size (document units). */
+	brushstroke?: { brushId: string; name: string; size: number };
 	/** The gradient editor and tool work on this layer. */
 	editing: boolean;
 }
@@ -1882,7 +1894,15 @@ export function getVectorAppearancePanel(state: Pick<VectorEditorState, 'documen
 		blendMode: l.blendMode ?? 'normal',
 		visible: l.visible !== false,
 		...(kind === 'stroke' ? { strokeWidth: l.strokeWidth ?? 1, strokeAlign: l.strokeAlign ?? 'center' } : {}),
-		...((l.kind ?? 'paint') !== 'paint' ? { unknownKind: String(l.kind) } : {}),
+		...(isVectorBrushstrokeLayer(l as VectorStrokeLayer)
+			? (() => {
+					const b = (l as VectorStrokeLayer).brush!;
+					const preset = vectorBrushstrokeBrush(b.brushId)!;
+					return { brushstroke: { brushId: b.brushId, name: preset.name, size: b.size ?? preset.tip.size } };
+				})()
+			: (l.kind ?? 'paint') !== 'paint'
+				? { unknownKind: String(l.kind) }
+				: {}),
 		editing: edit.target === kind && (edit.layer === null ? index === count - 1 : edit.layer === index)
 	});
 	const fills = first ? vectorFills(first) : [];
