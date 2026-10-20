@@ -2465,3 +2465,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.
 - **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
 - **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.
+
+### [core/paint] Stepping Part of a Wet World: Held Tiles Must Survive the Parity Flip
+
+- **Issue / Symptom**: To simulate only the wet tiles in view, the obvious approach is to take the other tiles out of the active list for a step. After an odd number of steps those tiles jumped back to an older state.
+- **Root Cause**: Every slot holds two ping-pong sets, and one global `parity` says which is current. A step writes the new state into the other set and flips `parity` for all tiles, including tiles that were not stepped. Their current set then becomes the stale one.
+- **Solution / Workaround**: `WetWorld.stepRegion` copies each held tile's current set into the other set before stepping, so the tile reads the same state whatever the parity, and it puts the tiles back afterwards (with `syncList` and `refreshHalos`). Held tiles keep their last flags, so they are never freed as dead. Water that reaches a held tile stops at its edge until it is stepped again. With a region covering every live tile, the result is bit-identical to `step`.

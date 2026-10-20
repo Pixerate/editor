@@ -6,6 +6,7 @@
 
 import { penOrientation, type PenPoint } from './engine';
 import { viewPenToDocument, type PaintView } from './view';
+import { pointerPressure } from '../paint/pointer';
 
 /** The Pointer Event fields the paint editor reads. */
 export interface PointerSample {
@@ -26,11 +27,10 @@ export type Hand = 'right' | 'left';
 
 /**
  * Pressure of a pointer sample: pens report it; mice report 0.5 while pressed and pens 0 on
- * `pointerup`, both of which mean "use full" (see GOTCHAS).
+ * `pointerup`, both of which mean "use full" (see GOTCHAS). The shared `pointerPressure`.
  */
 export function samplePressure(e: PointerSample): number {
-  if (e.pointerType === 'pen' && typeof e.pressure === 'number' && e.pressure > 0) return Math.min(1, e.pressure);
-  return 1;
+  return pointerPressure(e);
 }
 
 /**

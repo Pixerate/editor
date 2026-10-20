@@ -76,6 +76,7 @@ import {
   type CanvasGradientDef,
 } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { CanvasPaintLayerRecipe } from "./CanvasPaintLayerRecipe";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
 import { MermaidDiagramDemo } from "./MermaidDiagramDemo";
 import { TokensDemo } from "./TokensDemo";
@@ -192,6 +193,7 @@ const CanvasDemo: React.FC = () => {
     guides: { gridSize: 10 },
   });
   const [activeGradientKey, setActiveGradientKey] = useState<string | null>(null);
+  const [showPaintRecipe, setShowPaintRecipe] = useState(false);
 
   const draw = useCanvasDraw<BoxNode>({
     nodes,
@@ -620,6 +622,13 @@ const CanvasDemo: React.FC = () => {
         </ReactFlow>
       </div>
       <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
+      {showPaintRecipe ? (
+        <CanvasPaintLayerRecipe />
+      ) : (
+        <button type="button" className="text-xs text-sky-400 hover:underline" onClick={() => setShowPaintRecipe(true)}>
+          Show the recipe: a paint layer (dry and wet brushes) under the canvas
+        </button>
+      )}
 
       {/* Scene strip */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2" aria-label="Scenes">
