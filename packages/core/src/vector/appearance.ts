@@ -48,6 +48,7 @@ import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } fr
 import { vectorInstanceGroup } from './symbols.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
 import { parseVectorColor } from './gradient.js';
+import { shadeVectorColor, vectorExtrudeFaces, vectorPaintSolid } from './extrude.js';
 import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
@@ -114,7 +115,8 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 	},
 	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null },
 	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 },
-	blockShadow: { angle: 45, distance: 20, color: '#1e293b', opacity: 100, endOpacity: 100 }
+	blockShadow: { angle: 45, distance: 20, color: '#1e293b', opacity: 100, endOpacity: 100 },
+	extrude: { mode: 'parallel', angle: 45, depth: 30, vanishingPoint: { x: 0, y: -300 }, toward: 30, color: null, lightAngle: -135, shading: 60 }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -129,7 +131,8 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	repeater: 'Repeater',
 	envelope: 'Envelope',
 	contour: 'Contour',
-	blockShadow: 'Block Shadow'
+	blockShadow: 'Block Shadow',
+	extrude: 'Extrude'
 };
 
 /** How a panel edits one effect parameter. */
@@ -240,6 +243,24 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 		{ key: 'color', label: 'Colour', kind: 'color' },
 		{ key: 'opacity', label: 'Opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true },
 		{ key: 'endOpacity', label: 'End opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true }
+	],
+	extrude: [
+		{
+			key: 'mode',
+			label: 'Mode',
+			kind: 'select',
+			options: [
+				{ value: 'parallel', label: 'Parallel' },
+				{ value: 'perspective', label: 'Perspective' }
+			]
+		},
+		{ key: 'angle', label: 'Angle °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
+		{ key: 'depth', label: 'Depth', kind: 'number', min: 0, max: 2000, step: 1, slider: true },
+		{ key: 'vanishingPoint', label: 'Vanishing point', kind: 'vec2', step: 1 },
+		{ key: 'toward', label: 'Toward VP %', kind: 'number', min: 0, max: 100, step: 1, slider: true },
+		{ key: 'color', label: 'Colour', kind: 'color' },
+		{ key: 'lightAngle', label: 'Light °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
+		{ key: 'shading', label: 'Shading %', kind: 'number', min: 0, max: 100, step: 1, slider: true }
 	],
 	repeater: [
 		{ key: 'copies', label: 'Copies', kind: 'number', min: 0, max: 50, step: 0.1, slider: true },
@@ -650,6 +671,25 @@ function blockShadowShapes(shapes: readonly VectorAppearanceShape[], b: VectorEf
 	return [...shadows, ...shapes.map((s) => ({ ...s, order: [1, ...s.order] }))];
 }
 
+/**
+ * Each shape extruded (see `VectorEffectParamsMap.extrude` and `vectorExtrudeFaces`): its shaded
+ * side faces back to front, then the shape on top. A hairline stroke in each face's colour
+ * hides the seams between neighbouring faces.
+ */
+function extrudeShapes(shapes: readonly VectorAppearanceShape[], x: VectorEffectParamsMap['extrude']): VectorAppearanceShape[] {
+	const out: VectorAppearanceShape[] = [];
+	for (const s of shapes) {
+		const base = x.color ?? vectorPaintSolid(s.source.fill) ?? '#808080';
+		vectorExtrudeFaces(s.path, x).forEach((f, k) => {
+			const color = shadeVectorColor(base, f.shade);
+			const source: VectorPathNode = { ...s.source, fill: color, stroke: color, strokeWidth: 0.5, strokeLinejoin: 'round', strokeAlign: undefined, fills: undefined, strokes: undefined, fillRule: 'nonzero', startArrow: undefined, endArrow: undefined, strokeDasharray: undefined, strokeWidthProfile: undefined, filters: undefined };
+			out.push({ source, path: f.path, opacity: s.opacity, order: [...s.order, 0, k] });
+		});
+		out.push({ ...s, order: [...s.order, 1] });
+	}
+	return out;
+}
+
 /** Applies an effect stack to shapes, top to bottom (disabled effects skipped). */
 export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], effects: readonly VectorEffect[] | null | undefined): VectorAppearanceShape[] {
 	let list = shapes.slice();
@@ -696,6 +736,9 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 				break;
 			case 'blockShadow':
 				list = blockShadowShapes(list, e.params);
+				break;
+			case 'extrude':
+				list = extrudeShapes(list, e.params);
 				break;
 			case 'repeater': {
 				const r = e.params;

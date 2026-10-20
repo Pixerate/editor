@@ -984,10 +984,11 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
  * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh),
  * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours) and
- * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it).
+ * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it) and
+ * `extrude` (CorelDRAW's Extrude: shaded side faces drawing the shape as a solid).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow' | 'extrude';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow', 'extrude'];
 
 /** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
 export type VectorWarpStyle = WarpStyle;
@@ -1108,6 +1109,23 @@ export interface VectorEffectParamsMap {
 		color: string | null;
 		opacity: number;
 		endOpacity: number;
+	};
+	/**
+	 * Extrude (CorelDRAW's Extrude): each shape drawn as a solid. `parallel` moves the back
+	 * `depth` along `angle` (degrees, 0 right, 90 down); `perspective` pulls it `toward` percent
+	 * of the way to `vanishingPoint` (offset from the shape's middle). Side faces are filled with
+	 * `color` (null: the shape's own solid fill), lightened or darkened by `shading` percent as
+	 * they face toward or away from a light coming from `lightAngle` degrees.
+	 */
+	extrude: {
+		mode: 'parallel' | 'perspective';
+		angle: number;
+		depth: number;
+		vanishingPoint: Vec2;
+		toward: number;
+		color: string | null;
+		lightAngle: number;
+		shading: number;
 	};
 	/**
 	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp
