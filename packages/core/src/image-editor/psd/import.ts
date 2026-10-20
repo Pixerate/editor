@@ -63,7 +63,7 @@ import {
   u32Block,
   u8Block,
 } from './file';
-import { MODE_BITMAP, MODE_CMYK, MODE_INDEXED, MODE_LAB, colorChannelCount, toMask8, toRgba8, toRgbaDeep, unmatteWhite } from './pixels';
+import { MODE_BITMAP, MODE_CMYK, MODE_INDEXED, MODE_LAB, colorChannelCount, toMask8, toMaskDeep, toRgba8, toRgbaDeep, unmatteWhite } from './pixels';
 import { Transform, builtinProfile, parseProfile, srgbProfile, type Profile } from '../../cms';
 import type { DocumentColorProfile } from '../color-management';
 import { surfaceFromDeepPixels } from '../../raster/deep';
@@ -292,7 +292,10 @@ function recordMask(ctx: Ctx, rec: PsdLayerRecord, name: string): RasterMask | u
   const { width, height } = safeSize(ctx, rect, name);
   if (width && height && !ctx.skipPixels) {
     const plane = decodeOr(ctx, rec, id, name);
-    if (plane) surface = surfaceFromPixels({ width, height, data: toMask8(plane, width, height, ctx.file.header.depth) }, 1, rect.left, rect.top, def);
+    const depth = ctx.file.header.depth;
+    // A 16- or 32-bit mask keeps its precision (deep samples next to the 8-bit rendering).
+    if (plane && (depth === 16 || depth === 32) && ctx.file.header.colorMode !== MODE_CMYK) surface = surfaceFromDeepPixels({ width, height, data: toMaskDeep(plane, width, height, depth) }, 1, rect.left, rect.top, def);
+    else if (plane) surface = surfaceFromPixels({ width, height, data: toMask8(plane, width, height, depth) }, 1, rect.left, rect.top, def);
   }
   const mask: RasterMask = { surface, defaultValue: def };
   if (m.userDensity !== undefined && m.userDensity < 255) mask.density = percent(m.userDensity);

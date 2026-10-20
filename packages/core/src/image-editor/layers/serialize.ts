@@ -66,6 +66,8 @@ export interface SerializedRasterMask {
   /** `false`: unlinked from the layer's pixels. */
   linked?: boolean;
   source?: DepthMaskOptions;
+  /** 16- or 32-bit coverage (one sample per pixel; the PNG asset is its 8-bit rendering). */
+  deep?: SerializedDeepPixels;
 }
 
 interface SerializedLayerBase {
@@ -104,8 +106,9 @@ export interface SerializedPixelLayer extends SerializedLayerBase {
 }
 
 /**
- * High bit depth pixels: `width × height` interleaved RGBA samples at (`x`, `y`) in layer space,
- * little-endian (`Uint16` for 16-bit, `Float32` linear light for 32-bit), deflated and base64.
+ * High bit depth pixels: `width × height` interleaved RGBA samples at (`x`, `y`) in layer space
+ * (one coverage sample per pixel for a mask), little-endian (`Uint16` for 16-bit, `Float32`
+ * linear light for 32-bit; coverage 0..1 for a mask), deflated and base64.
  */
 export interface SerializedDeepPixels {
   depth: 16 | 32;
@@ -316,7 +319,7 @@ export function decodeDeepSurface(surface: TiledSurface, raw: unknown, problems:
   if (!d || typeof d !== 'object') return surface;
   try {
     if ((d.depth !== 16 && d.depth !== 32) || !(d.width > 0 && d.height > 0) || !Number.isInteger(d.x) || !Number.isInteger(d.y) || typeof d.data !== 'string') throw new Error('malformed');
-    const n = d.width * d.height * 4;
+    const n = d.width * d.height * surface.channels;
     const size = d.depth === 16 ? 2 : 4;
     const bytes = inflate(base64ToBytes(d.data), { maxOutput: n * size });
     if (bytes.length !== n * size) throw new Error('wrong length');
@@ -385,6 +388,8 @@ function serializeMask(mask: RasterMask, hint: string, ctx: SerializeContext): S
       out.x = enc.x;
       out.y = enc.y;
     }
+    const deep = encodeDeepSurface(mask.surface);
+    if (deep) out.deep = deep;
   } else {
     out.source = { ...mask.source, depthRange: [...mask.source.depthRange] as [number, number] };
   }
@@ -818,6 +823,7 @@ function readMask(raw: unknown, ctx: DeserializeContext, what: string): RasterMa
   if (typeof r.feather === 'number' && r.feather > 0) mask.feather = num(r.feather, 0, 1000, 0);
   if (r.enabled === false) mask.enabled = false;
   if (r.linked === false) mask.linked = false;
+  if (r.deep && !r.source) mask.surface = decodeDeepSurface(mask.surface, r.deep, ctx.problems, `${what} mask`);
   if (r.source && typeof r.source === 'object') {
     const s = { ...DEFAULT_DEPTH_MASK_VALUES, ...(r.source as Partial<DepthMaskOptions>) };
     mask.source = { ...s, depthRange: [...s.depthRange] as [number, number] };

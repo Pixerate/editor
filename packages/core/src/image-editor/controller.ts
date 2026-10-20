@@ -651,9 +651,10 @@ function paintCoverageInto(base: TiledSurface, coverage: CoverageMap, apply: Str
       const key = tileKey(t.tx, t.ty);
       if (done.has(key)) continue;
       done.add(key);
-      if (depth && base.channels === 4) {
-        const d = applyStrokeToDeepTile(coverage, tileSamples(base.tiles.get(key), 4, depth, base.defaultValue), t.tx, t.ty, apply);
-        const tile = deepTile(d, 4, base.defaultValue);
+      if (depth) {
+        const ch = base.channels;
+        const d = applyStrokeToDeepTile(coverage, tileSamples(base.tiles.get(key), ch, depth, base.defaultValue), t.tx, t.ty, apply, { channels: ch });
+        const tile = deepTile(d, ch, base.defaultValue);
         if (tile) tiles.set(key, tile);
         else tiles.delete(key);
         continue;
@@ -759,7 +760,8 @@ export class PaintStrokeSession {
     depth: 16 | 32 | null = null
   ) {
     const coverage = stroke instanceof StrokeCoverage || ('kind' in stroke && stroke.kind === 'coverage');
-    this.deep = depth && coverage && target.surface.channels === 4 ? depth : null;
+    // Masks paint at depth with the brush and eraser (retouching on a mask stays 8-bit).
+    this.deep = depth && coverage && (target.surface.channels === 4 || stroke instanceof StrokeCoverage) ? depth : null;
     this.dabDeep = depth && !coverage && target.surface.channels === 4 ? depth : null;
     this.before = controller._captureForStroke();
     this.base = target.surface;
@@ -908,16 +910,16 @@ export class PaintStrokeSession {
           this.retouchDeepTile(key, tx, ty, paint, prevWork ? { into: prevWork, region: r } : {});
           continue;
         }
-        const src = tileSamples(this.base.tiles.get(key), 4, this.deep, this.base.defaultValue);
+        const src = tileSamples(this.base.tiles.get(key), ch, this.deep, this.base.defaultValue);
         const prev = this.touched.has(key) ? this.liveDeep.get(key) : undefined;
         this.touched.add(key);
-        const opts = prev ? { into: prev, region: r } : {};
+        const opts = prev ? { into: prev, region: r, channels: ch } : { channels: ch };
         const d =
           rt?.kind === 'coverage' && paint?.kind === 'tone'
             ? applyToneToDeepTile(stroke.coverage, src, tx, ty, paint.tone, rt.apply, opts)
             : applyStrokeToDeepTile(stroke.coverage, src, tx, ty, this.apply, opts);
         this.liveDeep.set(key, d);
-        this.live.set(key, { data: proxyOf(d, 4), uniform: null, deep: d });
+        this.live.set(key, { data: proxyOf(d, ch), uniform: null, deep: d });
         continue;
       }
       const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
@@ -959,7 +961,7 @@ export class PaintStrokeSession {
     for (const key of this.touched) {
       const live = this.live.get(key)!;
       const deep = this.liveDeep.get(key);
-      const tile = deep ? deepTile(deep, 4, this.base.defaultValue) : finishTile(live.data, ch, this.base.defaultValue);
+      const tile = deep ? deepTile(deep, ch, this.base.defaultValue) : finishTile(live.data, ch, this.base.defaultValue);
       const prev = this.base.tiles.get(key);
       if (tile) tiles.set(key, tile);
       else tiles.delete(key);
@@ -3232,7 +3234,7 @@ export class ImageEditorController {
       selection: this.state.selection?.bounds ? this.state.selection : null,
       offset: target.offset,
     };
-    const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
+    const depth = target.channel !== 'filter-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply, depth);
     // The retouching tools work on the deep samples too (sources read at depth).
     if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, depth);
@@ -3463,7 +3465,7 @@ export class ImageEditorController {
       selection: null,
       offset: target.offset,
     };
-    const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
+    const depth = target.channel !== 'filter-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
     const surface = paintCoverageInto(target.surface, coverage, apply, [region], depth);
     const next = mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, target.channel, surface));
     this.commitLayers(next);
@@ -5096,17 +5098,26 @@ export class ImageEditorController {
   public setBitDepth(depth: BitDepth): { bitDepth: BitDepth; changedLayerIds: string[] } {
     if (!isBitDepth(depth)) throw new LayerOperationError(`Bit depth must be 8, 16 or 32, not ${String(depth)}.`);
     const changed: string[] = [];
+    // Masks convert with the layers (a 16- or 32-bit mask keeps smooth coverage).
+    const withMask = (l: ImageLayer): ImageLayer => {
+      const m = l.mask;
+      if (!m) return l;
+      const surface = convertSurfaceDepth(m.surface, depth);
+      return surface === m.surface ? l : ({ ...l, mask: { ...m, surface } } as ImageLayer);
+    };
     const convert = (layers: readonly ImageLayer[]): ImageLayer[] =>
       layers.map((l) => {
+        let next: ImageLayer = l;
         if (l.type === 'group') {
           const children = convert(l.children);
-          return children.some((c, i) => c !== l.children[i]) ? { ...l, children } : l;
+          if (children.some((c, i) => c !== l.children[i])) next = { ...l, children };
+        } else if (l.type === 'pixel') {
+          const surface = convertSurfaceDepth(l.surface, depth);
+          if (surface !== l.surface) next = { ...l, surface };
         }
-        if (l.type !== 'pixel') return l;
-        const surface = convertSurfaceDepth(l.surface, depth);
-        if (surface === l.surface) return l;
-        changed.push(l.id);
-        return { ...l, surface };
+        next = withMask(next);
+        if (next !== l && (l.type !== 'group' || next.mask !== l.mask)) changed.push(l.id);
+        return next;
       });
     if (depth === this.bitDepth) return { bitDepth: depth, changedLayerIds: [] };
     const next = convert(this.state.layers);
