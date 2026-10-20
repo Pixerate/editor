@@ -16,6 +16,7 @@ export default defineConfig({
     "tools/index": "src/tools/index.ts",
     "raster/index": "src/raster/index.ts",
     "paint/index": "src/paint/index.ts",
+    "cms/index": "src/cms/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
     "paint-editor/index": "src/paint-editor/index.ts",
     "commands/index": "src/commands/index.ts",
