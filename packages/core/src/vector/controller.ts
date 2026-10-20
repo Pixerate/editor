@@ -129,6 +129,7 @@ import {
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
 import { isIdentityMatrix } from '../geom/affine.js';
+import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
 import type { TextShaper } from '../text/types.js';
 import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
@@ -5811,7 +5812,8 @@ export class VectorEditorController {
 					});
 					this.anchors = [...drag.baseAnchors, ...inside.filter((r) => !drag.baseAnchors.some((b) => sameRef(b, r)))];
 				} else {
-					const hits = this.doc.nodes
+					const hits = vectorNodesNear(this.doc.nodes, bounds)
+						.map((i) => this.doc.nodes[i])
 						.filter((n) => !n.locked && n.visible !== false)
 						.filter((n) => {
 							const b = vectorNodeBounds(n);

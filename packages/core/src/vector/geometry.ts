@@ -38,6 +38,7 @@ import { hitTestVectorPaintStack } from './paintLayers.js';
 import { expandVectorAppearance, hasOwnVectorAppearance, transformVectorEffects, vectorAppearanceOutline, vectorAppearanceShapes } from './appearance.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskContains } from './mask.js';
 import { bakeVectorTextGeometry } from './text.js';
+import { vectorNodesNear } from './spatial.js';
 import type {
 	VectorAnchor,
 	VectorAnchorType,
@@ -420,8 +421,10 @@ export function vectorStrokeOutline(node: VectorPathNode, parent: AffineMatrix =
 
 /** The topmost node hit by `p` (skipping hidden and locked ones), or null. */
 export function hitTestVectorNodes(nodes: readonly VectorNode[], p: Vec2, tolerance = 0, options: VectorHitTestOptions = {}): VectorNode | null {
-	for (let i = nodes.length - 1; i >= 0; i--) {
-		const node = nodes[i];
+	// Large documents: only the nodes whose paint box reaches the point (the same tests then run).
+	const candidates = vectorNodesNear(nodes, { x: p.x, y: p.y, width: 0, height: 0 }, tolerance);
+	for (let k = candidates.length - 1; k >= 0; k--) {
+		const node = nodes[candidates[k]];
 		if (node.visible === false || node.locked) continue;
 		if (hitTestVectorNode(node, p, tolerance, IDENTITY_MATRIX, options)) return node;
 	}
