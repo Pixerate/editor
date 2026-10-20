@@ -45,6 +45,7 @@ import { VectorFramePanel } from './VectorFramePanel';
 import { VectorConnectorPanel } from './VectorConnectorPanel';
 import { VectorShadingPanel } from './VectorShadingPanel';
 import { VectorTracePanel } from './VectorTracePanel';
+import { VectorSymmetryPanel } from './VectorSymmetryPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -623,6 +624,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       <VectorFramePanel controller={controller} />
       <VectorConnectorPanel controller={controller} />
       <VectorShadingPanel controller={controller} />
+      <VectorSymmetryPanel controller={controller} />
       <VectorTracePanel controller={controller} />
       <VectorConstraintsPanel controller={controller} />
       <VectorSymbolsPanel controller={controller} />

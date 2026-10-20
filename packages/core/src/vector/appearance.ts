@@ -46,6 +46,7 @@ import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
 import { vectorInstanceGroup } from './symbols.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
+import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
 	VECTOR_WARP_STYLES,
@@ -346,7 +347,7 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
  * Text always does: it draws as its glyphs.
  */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || isVectorSymmetryGroup(node) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -687,9 +688,10 @@ export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[
 		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
 		return shapes;
 	}
-	// A frame draws as its clip group (its fill and children inside its rectangle).
-	if (isVectorFrame(node)) {
-		const shapes = vectorAppearanceShapes(vectorFrameDrawn(node));
+	// A frame draws as its clip group (its fill and children inside its rectangle), a symmetry
+	// group as its children and their copies.
+	if (isVectorFrame(node) || isVectorSymmetryGroup(node)) {
+		const shapes = vectorAppearanceShapes(isVectorFrame(node) ? vectorFrameDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup));
 		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
 		return shapes;
 	}
@@ -775,8 +777,8 @@ export function expandVectorAppearance(node: VectorNode): VectorPathNode | Vecto
 		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
 		return drawn;
 	}
-	if (isVectorFrame(node)) {
-		const drawn = vectorFrameDrawn(node);
+	if (isVectorFrame(node) || isVectorSymmetryGroup(node)) {
+		const drawn = isVectorFrame(node) ? vectorFrameDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup);
 		const out = hasVectorAppearance(drawn) ? expandVectorAppearance(drawn) : drawn;
 		expandCache.set(node, [vectorTextShaperGeneration(), out]);
 		return out;

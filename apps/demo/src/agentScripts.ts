@@ -416,6 +416,16 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-symmetry",
+    prompt: "Draw a mandala in the sky with live symmetry",
+    steps: [
+      { say: "An empty radial symmetry group with 8 mirrored wedges, centred in the sky…", ...command("vector.makeSymmetry", { ids: [], mode: "radial", copies: 8, mirror: true, center: { x: 470, y: 130 }, name: "Mandala" }), as: "m", target: artboardBox(420, 80, 100, 100) },
+      { say: "…one petal in a wedge…", ...commandWith("vector.addShape", (r) => ({ kind: "ellipse", x: 478, y: 92, width: 10, height: 26, fill: "#f472b6", name: "Petal", parentId: r("m").id })), target: artboardBox(470, 90, 20, 30) },
+      { say: "…and a dot: every wedge gets them, mirrored.", ...commandWith("vector.addShape", (r) => ({ kind: "ellipse", x: 488, y: 86, width: 6, height: 6, fill: "#a78bfa", name: "Dot", parentId: r("m").id })) },
+      { say: "Changing the symmetry to 12 copies: the drawing follows.", ...commandWith("vector.setSymmetry", (r) => ({ ids: [r("m").id], copies: 12 })) },
+    ],
+  },
+  {
     id: "vector-trace",
     prompt: "Trace this badge image into vectors",
     steps: [

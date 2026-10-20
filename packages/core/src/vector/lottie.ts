@@ -23,6 +23,7 @@ import { isVectorShadedPaint } from './shading.js';
 import { hasStrokeExtras } from './stroke.js';
 import { isVectorMaskGroup } from './mask.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
+import { isVectorSymmetryGroup } from './symmetry.js';
 import { vectorPathLocalBounds } from './svg.js';
 import type {
 	VectorBlendMode,
@@ -257,7 +258,7 @@ function nodeGroup(node: VectorNode, notes: string[]): Json | null {
 	const m = nodeMatrix(node);
 	let items: Json[] = [];
 	const live = (node.effects ?? []).some((e) => e.enabled !== false && (e.type === 'wiggle' || e.type === 'envelope'));
-	if (node.type === 'text' || node.type === 'instance' || live || isVectorMaskGroup(node) || isVectorFrame(node)) {
+	if (node.type === 'text' || node.type === 'instance' || live || isVectorMaskGroup(node) || isVectorFrame(node) || isVectorSymmetryGroup(node)) {
 		// Drawn shapes: text as glyph outlines, instances as their art, masks clipped, frames as clip groups.
 		if (live) notes.push(`${label(node)}: wiggle and envelope effects have no Lottie equivalent (exported as drawn).`);
 		if (isVectorMaskGroup(node) && node.mask?.type !== 'clip') notes.push(`${label(node)}: opacity masks are not exported (the contents are drawn whole).`);

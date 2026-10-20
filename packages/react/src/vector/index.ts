@@ -15,3 +15,4 @@ export * from './VectorFramePanel';
 export * from './VectorConnectorPanel';
 export * from './VectorShadingPanel';
 export * from './VectorTracePanel';
+export * from './VectorSymmetryPanel';
