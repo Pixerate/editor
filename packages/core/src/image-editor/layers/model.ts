@@ -16,6 +16,7 @@ import type {
   DepthMaskOptions,
 } from '../types';
 import type { PixelSurface } from '../../raster/surface';
+import type { EffectValue } from '../../effects/types';
 import type { BlendMode } from '../../raster/blend';
 import type { Interpolation } from '../../raster/transform';
 import type { EffectFill, GlobalLight } from '../../raster/effects/model';
@@ -75,7 +76,30 @@ export interface BlurFilter {
 export type LayerFilter = DevelopFilter | BlurFilter;
 export type LayerFilterKind = LayerFilter['kind'];
 
+/**
+ * A provider effect (see `@pixerate/editor/effects`) an effect layer is drawn from: generator or
+ * overlay effects rendered at the document's size and depth. Kept, with the layer's last rendered
+ * pixels, when no provider is registered.
+ */
+export interface ImageEffectGenerator {
+  /** The provider's effect id. */
+  effect: string;
+  /** The provider it was rendered with (its `id`). */
+  provider?: string;
+  /** The effect's name when it was applied. */
+  name?: string;
+  /** Control values (over the effect's defaults). */
+  values: Record<string, EffectValue>;
+  /** The moment of the effect drawn (ms, default 0). */
+  time?: number;
+}
+
 export interface PixelLayer extends LayerBase, Omit<RasterPixelLayer, keyof RasterLayerBase> {
+  /**
+   * An effect layer: the pixels are rendered from a provider effect at the document's size and bit
+   * depth, and rendered again when its values change (painting on it is kept until then).
+   */
+  generator?: ImageEffectGenerator;
   /** Live filters, applied bottom (first) to top before the mask and blend. */
   filters?: LayerFilter[];
   /**
@@ -385,8 +409,26 @@ export interface PsdSmartFilter {
   data: Uint8Array;
 }
 
-/** One smart filter: a layer filter (or a kept PSD filter) with its own blending over the result below it. */
-export type SmartFilter = (LayerFilter | PsdSmartFilter) & {
+/**
+ * A provider effect (see `@pixerate/editor/effects`) as a smart filter: a filter effect run on the
+ * result below it. Without a provider (or while it renders) it passes the pixels through; it keeps
+ * its effect id and values either way.
+ */
+export interface EffectSmartFilter {
+  id: string;
+  kind: 'effect';
+  enabled: boolean;
+  /** The provider's effect id. */
+  effect: string;
+  provider?: string;
+  /** The effect's name when it was applied. */
+  name?: string;
+  /** Control values (over the effect's defaults). */
+  values: Record<string, EffectValue>;
+}
+
+/** One smart filter: a layer filter, a provider effect or a kept PSD filter, with its own blending over the result below it. */
+export type SmartFilter = (LayerFilter | PsdSmartFilter | EffectSmartFilter) & {
   /** How the filter's result blends with the result below it (Photoshop's Blending Options). */
   blend: BlendMode;
   /** 0..1 */

@@ -41,6 +41,9 @@ import { ControlSlider } from './ControlSlider';
 import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 import { LayersPanel } from './LayersPanel';
+import { ImageProviderEffectsPanel } from './ImageProviderEffectsPanel';
+import type { EffectProvider } from '@pixerate/editor/effects';
+import { useEffects } from '../effects';
 import { BrushOptionsBar } from './BrushOptionsBar';
 import { ColorProfilePanel } from './ColorProfilePanel';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
@@ -59,6 +62,12 @@ export interface ImageEditorProps {
   onInpaint?: InpaintHook;
   onRemoveBackground?: RemoveBackgroundHook;
   aiHooks?: ImageEditorAIHooks;
+  /**
+   * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
+   * mounted: filter effects as smart filters and generator or overlay effects as effect layers,
+   * with an Effects section in the Layers tab. Optional: without one the editor is as before.
+   */
+  effects?: EffectProvider | null;
 }
 
 type TabType = 'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai';
@@ -73,10 +82,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   onInpaint,
   onRemoveBackground,
   aiHooks,
+  effects,
 }) => {
   const internalEditor = useImageEditor({ image: src });
   const editor = externalEditor || internalEditor;
   const { state, controller } = editor;
+  useEffects(controller, effects);
+  const effectsShown = !!controller.effectsProvider || state.layers.some(function has(l): boolean {
+    return (l.type === 'pixel' && !!l.generator) || (l.type === 'smart' && !!l.smartFilters?.filters.some((f) => f.kind === 'effect')) || (l.type === 'group' && l.children.some(has));
+  });
   const legacyProcess = normalizeProcessVersion(state.adjustments.process) < LATEST_PROCESS_VERSION;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1338,6 +1352,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 Free Transform
               </button>
               <LayersPanel controller={controller} />
+              {effectsShown && <ImageProviderEffectsPanel controller={controller} className="border-t border-slate-700/60 pt-3" />}
               <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
               <ColorProfilePanel controller={controller} />
             </div>

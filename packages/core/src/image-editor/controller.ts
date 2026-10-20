@@ -151,7 +151,13 @@ import {
   setSmartPlacement,
   updateSmartFilter as updateSmartFilterOp,
   withFilterMaskSurface,
+  activeEffectSmartFilters,
+  isSmartSurfaceIncomplete,
+  rerender as rerenderSmartObject,
 } from './layers/smart';
+import { EffectsSlot, resolveEffectValues } from '../effects/helpers';
+import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types';
+import { ImageEffectsEngine, checkImageEffectPlace, effectPixelsToSurface, type ImageEffectPlace } from './effects';
 import {
   BACKGROUND_LAYER_ID,
   BACKGROUND_LAYER_NAME,
@@ -1232,8 +1238,18 @@ export class ImageEditorController {
   private viewKey: unknown[] = [];
   /** For `compositePixels` and mask evaluation (the renderer keeps its own for the viewport). */
   private compositor = new LayerCompositor();
+  /** The effects provider slot (see `setEffectsProvider`). */
+  public readonly effects = new EffectsSlot();
+  /** Renders provider effects: effect smart filter results and effect layers. */
+  public readonly effectsEngine: ImageEffectsEngine = new ImageEffectsEngine({ slot: this.effects });
+  private effectRefresh: 'none' | 'incomplete' | 'all' = 'none';
 
   constructor(options: ImageEditorOptions = {}) {
+    // A new provider redraws every effect filter (after construction, for one given here); a
+    // finished render redraws the surfaces waiting for it.
+    this.effects.subscribe(() => this.queueEffectRefresh('all'));
+    this.effectsEngine.subscribe(() => this.queueEffectRefresh('incomplete'));
+    if (options.effects) this.effects.set(options.effects);
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
     if (options.textShaper !== undefined) this.textShaperValue = options.textShaper;
     this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
@@ -1386,6 +1402,235 @@ export class ImageEditorController {
     const currentState = { ...this.state };
     this.onStateChange?.(currentState);
     this.listeners.forEach((l) => l(currentState));
+    // An undo or redo can bring back a smart object drawn while its effects were rendering.
+    if (this.effects.provider) this.queueEffectRefresh('incomplete');
+  }
+
+  // --- Provider effects ---
+
+  private queueEffectRefresh(kind: 'incomplete' | 'all'): void {
+    const queued = this.effectRefresh !== 'none';
+    if (kind === 'all' || this.effectRefresh === 'none') this.effectRefresh = kind;
+    if (queued) return;
+    queueMicrotask(() => {
+      const all = this.effectRefresh === 'all';
+      this.effectRefresh = 'none';
+      this.refreshEffectSurfaces(all);
+    });
+  }
+
+  /**
+   * Renders smart objects with effect filters again: every one (`all`, after the provider changed)
+   * or those drawn while a result was rendering, once it is in. A cache refresh: no undo step.
+   */
+  private refreshEffectSurfaces(all: boolean): void {
+    let changed = false;
+    const canvas = this.canvasSize;
+    const walk = (layers: readonly ImageLayer[]): readonly ImageLayer[] => {
+      let out: ImageLayer[] | null = null;
+      layers.forEach((l, i) => {
+        let next: ImageLayer = l;
+        if (l.type === 'group') {
+          const children = walk(l.children);
+          if (children !== l.children) next = { ...l, children: children as ImageLayer[] };
+        } else if (l.type === 'smart' && l.smartFilters?.filters.some((f) => f.kind === 'effect') && (all || isSmartSurfaceIncomplete(l.surface))) {
+          try {
+            const r = rerenderSmartObject(l, canvas);
+            // While results are still rendering, keep the surface: the next refresh replaces it.
+            if (all || !isSmartSurfaceIncomplete(r.surface)) next = r;
+          } catch {
+            // Contents that cannot be rendered here keep their stored pixels.
+          }
+        }
+        if (next !== l) {
+          out ??= [...layers];
+          out[i] = next;
+          changed = true;
+        }
+      });
+      return out ?? layers;
+    };
+    const next = walk(this.state.layers);
+    if (!changed) return;
+    this.state.layers = next as ImageLayer[];
+    this.notify();
+  }
+
+  /** The registered effects provider, or `null`. */
+  public get effectsProvider(): EffectProvider | null {
+    return this.effects.provider;
+  }
+
+  /** Registers (or with `null` removes) the effects provider. Not an edit: no undo step. */
+  public setEffectsProvider(provider: EffectProvider | null): void {
+    this.effects.set(provider);
+  }
+
+  /** Registers `provider` and returns a function that removes it again (if it is still the one set). */
+  public useEffects(provider: EffectProvider): () => void {
+    return this.effects.use(provider);
+  }
+
+  /** The provider's description of an effect, checked for `place` (rejects without a provider or for an unknown id). */
+  public async describeEffect(effect: string, place?: ImageEffectPlace): Promise<EffectDescription> {
+    const provider = this.effects.require();
+    const d = await this.effectsEngine.describe(provider, effect);
+    if (place) checkImageEffectPlace(d, place);
+    return d;
+  }
+
+  /** Resolves when every effect render has landed and the surfaces waiting for them are drawn. */
+  public async effectsIdle(): Promise<void> {
+    const tick = () => new Promise<void>((r) => queueMicrotask(r));
+    // Effect filters stacked on each other render one after another: wait out each round.
+    for (let round = 0; round < 32; round++) {
+      await this.effectsEngine.idle();
+      await tick();
+      await tick();
+      if (!this.effectsEngine.busy && this.effectRefresh === 'none') return;
+    }
+  }
+
+  /**
+   * Applies a provider filter effect as a smart filter (at `index`, default the top), one undo
+   * step. A pixel, shape or type layer (or a group) is first converted to a smart object in the
+   * same step (Filter › Convert for Smart Filters), keeping its id when it is one layer. `values`
+   * are checked against the effect's controls and stored over its defaults.
+   */
+  public async applyEffectFilter(
+    layerId: string,
+    effect: string,
+    options: { values?: Record<string, EffectValue>; index?: number; enabled?: boolean; blend?: string; opacity?: number } = {}
+  ): Promise<{ layerId: string; filter: SmartFilter; converted: boolean }> {
+    const d = await this.describeEffect(effect, 'filter');
+    const values = resolveEffectValues(d, options.values);
+    const found = findLayer(this.state.layers, layerId);
+    if (!found) throw new LayerOperationError(`There is no layer "${layerId}"; call list_layers for the layer ids.`);
+    let layers = this.state.layers;
+    let id = layerId;
+    let converted = false;
+    if (found.layer.type !== 'smart') {
+      if (found.layer.type === 'adjustment' || found.layer.type === 'annotation') throw new LayerOperationError(`Layer "${found.layer.name || layerId}" is ${found.layer.type === 'adjustment' ? 'an adjustment layer' : 'an annotation'}, which has no pixels to filter; apply the effect to a pixel layer or smart object.`);
+      const res = convertToSmartObjectOp(layers, [layerId], this.canvasSize, { surfaceOf: (l) => this.surfaceOf(l) });
+      layers = res.layers;
+      id = res.layer.id;
+      converted = true;
+    }
+    const filter = normalizeSmartFilter({ kind: 'effect', effect: d.id, provider: this.effects.require().id, name: d.name, values, enabled: options.enabled !== false, blend: options.blend, opacity: options.opacity });
+    const res = addSmartFilterOp(layers, id, filter, this.canvasSize, options.index);
+    this.commitLayers(res.layers);
+    return { layerId: id, filter: res.filter, converted };
+  }
+
+  /**
+   * Changes an effect smart filter: `values` merged over its own (`null` resets a control to the
+   * effect's default), `enabled`, `blend`, `opacity` or its place in the stack (`index`). Values
+   * are checked against the provider's controls. One undo step (none with `commitToHistory`
+   * false, during a drag).
+   */
+  public async updateEffectFilter(
+    layerId: string,
+    filterId: string,
+    changes: { values?: Record<string, EffectValue | null>; enabled?: boolean; blend?: string; opacity?: number; index?: number },
+    commitToHistory = true
+  ): Promise<SmartFilter> {
+    const layer = requireSmartObject(this.state.layers, layerId);
+    const was = layer.smartFilters?.filters.find((f) => f.id === filterId);
+    if (!was || was.kind !== 'effect') throw new LayerOperationError(`Smart object "${layer.name || layerId}" has no effect filter "${filterId}"; its filters are ${(layer.smartFilters?.filters ?? []).map((f) => `${f.id} (${f.kind === 'effect' ? f.name ?? f.effect : f.kind})`).join(', ') || 'none'}.`);
+    const update: Record<string, unknown> = {};
+    if (changes.values) {
+      const d = await this.describeEffect(was.effect);
+      const given: Record<string, EffectValue> = {};
+      const base = { ...was.values };
+      for (const [k, v] of Object.entries(changes.values)) {
+        if (v !== null) given[k] = v;
+        else if (k in d.controls.properties) base[k] = d.defaults[k];
+        else throw new LayerOperationError(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
+      }
+      update.values = { ...base, ...resolveEffectValues({ ...d, defaults: base }, given) };
+    }
+    for (const k of ['enabled', 'blend', 'opacity'] as const) if (changes[k] !== undefined) update[k] = changes[k];
+    let res = updateSmartFilterOp(this.state.layers, layerId, filterId, update, this.canvasSize);
+    if (changes.index !== undefined) res = { ...res, layers: moveSmartFilterOp(res.layers, layerId, filterId, changes.index, this.canvasSize).layers };
+    this.commitLayers(res.layers, undefined, commitToHistory);
+    return requireSmartObject(this.state.layers, layerId).smartFilters!.filters.find((f) => f.id === filterId)!;
+  }
+
+  /**
+   * Adds an effect layer: a pixel layer drawn by a provider generator, overlay or title effect at
+   * the document's size and bit depth (at `time` ms, default 0), placed like `addPixelLayer`. One
+   * undo step. Masks, blend and opacity apply as to any layer. Returns its id.
+   */
+  public async addEffectLayer(
+    effect: string,
+    options: LayerPlacement & { values?: Record<string, EffectValue>; name?: string; time?: number; opacity?: number; blend?: string; id?: string } = {}
+  ): Promise<string> {
+    const d = await this.describeEffect(effect, 'layer');
+    const values = resolveEffectValues(d, options.values);
+    const { width, height } = this.naturalSize;
+    const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time: options.time });
+    const blend = parseBlend(options.blend) as BlendMode | undefined;
+    if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
+    const ids = new Set(flattenLayers(this.state.layers).map((l) => l.id));
+    const layer: PixelLayer = {
+      type: 'pixel',
+      id: options.id && !ids.has(options.id) ? options.id : newLayerId(),
+      name: options.name?.trim() || d.name,
+      visible: true,
+      opacity: options.opacity ?? 1,
+      blend: blend ?? 'normal',
+      surface: effectPixelsToSurface(pixels, this.bitDepth),
+      offset: { x: 0, y: 0 },
+      generator: { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(options.time ? { time: options.time } : {}) },
+    };
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(options));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * Draws an effect layer again with new `values` (merged over its own; `null` resets a control)
+   * or `time`, at the document's size and depth, replacing its pixels (painting on it is lost).
+   * One undo step (none with `commitToHistory` false). Returns its effect settings.
+   */
+  public async updateEffectLayer(layerId: string, changes: { values?: Record<string, EffectValue | null>; time?: number }, commitToHistory = true): Promise<NonNullable<PixelLayer['generator']>> {
+    const found = findLayer(this.state.layers, layerId);
+    const layer = found?.layer;
+    if (!layer || layer.type !== 'pixel' || !layer.generator) throw new LayerOperationError(`"${layerId}" is not an effect layer; add one with add_effect_layer.`);
+    requireUnlocked(layer, 'pixels', 'draw its effect again');
+    const g = layer.generator;
+    const d = await this.describeEffect(g.effect);
+    const base = { ...g.values };
+    const given: Record<string, EffectValue> = {};
+    for (const [k, v] of Object.entries(changes.values ?? {})) {
+      if (v !== null) given[k] = v;
+      else if (k in d.controls.properties) base[k] = d.defaults[k];
+      else throw new LayerOperationError(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
+    }
+    const values = { ...base, ...resolveEffectValues({ ...d, defaults: base }, given) };
+    const time = changes.time ?? g.time ?? 0;
+    const { width, height } = this.naturalSize;
+    const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time });
+    const generator = { ...g, values, provider: this.effects.require().id, ...(time ? { time } : {}) };
+    if (!time) delete generator.time;
+    const next = mapLayer(this.state.layers, layerId, (l) => ({ ...(l as PixelLayer), surface: effectPixelsToSurface(pixels, this.bitDepth), offset: { x: 0, y: 0 }, generator }));
+    this.commitLayers(next, undefined, commitToHistory);
+    return generator;
+  }
+
+  /** Turns an effect layer into a plain pixel layer keeping its pixels (one undo step). */
+  public rasterizeEffectLayer(layerId: string): void {
+    const found = findLayer(this.state.layers, layerId);
+    if (!found || found.layer.type !== 'pixel' || !found.layer.generator) throw new LayerOperationError(`"${layerId}" is not an effect layer.`);
+    this.commitLayers(
+      mapLayer(this.state.layers, layerId, (l) => {
+        const { generator: _g, ...rest } = l as PixelLayer;
+        return rest as PixelLayer;
+      })
+    );
   }
 
   private displayFor: [DocumentColorProfile | undefined, ProofSetup | null | undefined, DocumentColorMode | undefined] | null = null;
@@ -2377,8 +2622,8 @@ export class ImageEditorController {
 
   // --- Smart objects ---
 
-  private get canvasSize(): { width: number; height: number } {
-    return this.naturalSize;
+  private get canvasSize(): { width: number; height: number; effects: ImageEffectsEngine } {
+    return { ...this.naturalSize, effects: this.effectsEngine };
   }
 
   /**

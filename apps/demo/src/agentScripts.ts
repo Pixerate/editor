@@ -522,6 +522,27 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
 
 export const IMAGE_SCRIPTS: AgentScript[] = [
   {
+    id: "image-effects",
+    prompt: "Add a colour wash and a lower-third bar from the effects library",
+    steps: [
+      { say: "Looking for generators in the effects provider.", tool: "imagefx__search_effects", args: { use: "generator" } },
+      { say: "Reading the gradient's controls.", tool: "imagefx__describe_effect", args: { effect: "fake.gradient" } },
+      {
+        say: "A sunset gradient as its own layer, soft-light at half strength, so it washes the photo without hiding it.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "fake.gradient", values: { from: "#f97316", to: "#7c3aed", angle: 45 }, name: "Sunset wash", blend: "soft-light", opacity: 0.5 },
+        open: "Layers",
+      },
+      {
+        say: "A lower-third bar on top, fully slid in.",
+        tool: "imagefx__add_effect_layer",
+        args: { effect: "fake.bar", values: { color: "#0ea5e9", height: 0.1 }, time: 2000, name: "Lower third" },
+      },
+      { say: "Checking what is applied.", tool: "imagefx__list_applied_effects", args: {} },
+      { say: "Rendering a preview to check it.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
     id: "image-grade",
     prompt: "Give the photo a warm, punchy grade",
     steps: [

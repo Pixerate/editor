@@ -28,6 +28,7 @@ function reachablePackages(entry: string): Set<string> {
 /** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI. */
 const EXTRA: Record<string, readonly string[]> = {
   "video-editor": ["effects", "parameters"],
+  "image-editor": ["effects", "parameters"],
   effects: ["parameters"],
 };
 

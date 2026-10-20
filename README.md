@@ -442,7 +442,7 @@ Every feature is available from core and from both framework packages. "Via core
 </details>
 
 <details>
-<summary><strong>Image editor</strong> (17)</summary>
+<summary><strong>Image editor</strong> (18)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -470,6 +470,7 @@ Every feature is available from core and from both framework packages. "Via core
 | Image Selections & Masks (magic wand, colour range, marquees, lasso, modes, grow/shrink/feather/border/smooth, guided-filter Refine Edge, Quick Mask, adjustment layer masks, RLE in the document, agent tools) | `SelectionGesture`, `magicWand`, `refineSelection`, `layerMaskFromSelection` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` | `<SelectionOptionsBar>` & `<RefineEdgePanel>` |
 | Vector Annotations (Pen, Rect, Circle, Arrow, Line, Text) | ✅ | ✅ | ✅ |
 | Gleamforge Depth & Alpha Masking | ✅ | ✅ | ✅ |
+| Image Provider Effects (optional: with an `EffectProvider` (`effects` option, `setEffectsProvider`, `useEffects`), filter effects become `effect` smart filters (`applyEffectFilter` converts a pixel, shape or type layer to a smart object in the same undo step; blend, opacity, order and the smart filter mask apply; values checked against the effect's control schema) and generator, overlay and title effects become effect layers (`addEffectLayer`: a pixel layer with a `generator`, rendered at the document's size and bit depth, redrawn by `updateEffectLayer`); effect filters render in the background and the smart object is redrawn when they land; without a provider effect filters pass pixels through and effect layers keep their pixels, and both save and load unchanged; 7 agent tools: the shared effect tools plus `add_effect_layer`) | `ImageEffectsEngine`, `createImageEffectsToolProvider` | `<ImageEditor effects>`, `<ImageProviderEffectsPanel>`, `useImageEffectsTools` | `<ImageEditor effects>`, `<ImageProviderEffectsPanel>`, `useImageEffectsTools` |
 
 </details>
 

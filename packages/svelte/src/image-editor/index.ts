@@ -13,6 +13,7 @@ import type BrushOptionsBarComponent from "./BrushOptionsBar.svelte";
 import type FreeTransformOptionsBarComponent from "./FreeTransformOptionsBar.svelte";
 import type ShapeOptionsBarComponent from "./ShapeOptionsBar.svelte";
 import type TypeOptionsBarComponent from "./TypeOptionsBar.svelte";
+import type ImageProviderEffectsPanelComponent from "./ImageProviderEffectsPanel.svelte";
 
 export { default as ImageEditor } from './ImageEditor.svelte';
 export { default as Histogram } from './Histogram.svelte';
@@ -28,6 +29,7 @@ export { default as BrushOptionsBar } from './BrushOptionsBar.svelte';
 export { default as FreeTransformOptionsBar } from './FreeTransformOptionsBar.svelte';
 export { default as ShapeOptionsBar } from './ShapeOptionsBar.svelte';
 export { default as TypeOptionsBar } from './TypeOptionsBar.svelte';
+export { default as ImageProviderEffectsPanel } from './ImageProviderEffectsPanel.svelte';
 export * from './imageEditorState.svelte.js';
 
 export type ImageEditorProps = ComponentProps<typeof ImageEditorComponent>;
@@ -44,6 +46,7 @@ export type BrushOptionsBarProps = ComponentProps<typeof BrushOptionsBarComponen
 export type FreeTransformOptionsBarProps = ComponentProps<typeof FreeTransformOptionsBarComponent>;
 export type ShapeOptionsBarProps = ComponentProps<typeof ShapeOptionsBarComponent>;
 export type TypeOptionsBarProps = ComponentProps<typeof TypeOptionsBarComponent>;
+export type ImageProviderEffectsPanelProps = ComponentProps<typeof ImageProviderEffectsPanelComponent>;
 
 export {
 	applyRegionMosaic,
