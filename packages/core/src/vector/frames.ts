@@ -147,7 +147,7 @@ export const VECTOR_VERTICAL_RESIZING_LABELS: Readonly<Record<VectorVerticalResi
 };
 
 /** Whether `inner` lies wholly in `outer` (false for a missing box). */
-export function boundsInside(inner: VectorBounds | null, outer: VectorBounds): boolean {
+export function vectorBoundsInside(inner: VectorBounds | null, outer: VectorBounds): boolean {
 	return !!inner && inner.x >= outer.x - 1e-9 && inner.y >= outer.y - 1e-9 && inner.x + inner.width <= outer.x + outer.width + 1e-9 && inner.y + inner.height <= outer.y + outer.height + 1e-9;
 }
 

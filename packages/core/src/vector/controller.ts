@@ -131,7 +131,7 @@ import {
 import { isIdentityMatrix } from '../geom/affine.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
-import { boundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
+import { vectorBoundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import type { TextShaper } from '../text/types.js';
 import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
@@ -4053,7 +4053,7 @@ export class VectorEditorController {
 		if (!(width > 0 && height > 0)) return { ok: false, message: 'A frame needs a positive width and height.' };
 		const id = this.newId();
 		const rect: VectorBounds = { x, y, width, height };
-		const adopted = input.adopt ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep && boundsInside(vectorNodeBounds(n), rect)) : [];
+		const adopted = input.adopt ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep && vectorBoundsInside(vectorNodeBounds(n), rect)) : [];
 		const frame: VectorFrameGroup = {
 			id,
 			type: 'group',
@@ -6435,7 +6435,7 @@ export class VectorEditorController {
 				if (drag.tool === 'frame') {
 					// The rectangle becomes a frame holding the top-level objects it encloses.
 					const rest = this.doc.nodes.filter((n) => n.id !== drag.nodeId);
-					const adopted = rest.filter((n) => !n.locked && n.visible !== false && !n.blendStep && boundsInside(vectorNodeBounds(n), b));
+					const adopted = rest.filter((n) => !n.locked && n.visible !== false && !n.blendStep && vectorBoundsInside(vectorNodeBounds(n), b));
 					const taken = new Set(adopted.map((n) => n.id));
 					const frame: VectorFrameGroup = { id: drag.nodeId, type: 'group', name: this.frameName(), frame: { ...b, fill: '#ffffff' }, children: adopted };
 					this.setDoc([...rest.filter((n) => !taken.has(n.id)), frame]);
