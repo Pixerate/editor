@@ -4531,6 +4531,21 @@ export class ImageEditorController {
     return this.blankSource;
   }
 
+  /**
+   * Where the Clone Stamp or Healing Brush samples for a brush at `cursor` (document pixels), or
+   * `null` when neither tool is active or no source is set: the cursor plus the aligned offset
+   * once a stroke has fixed it, else the source point itself (where the next stroke starts
+   * sampling). The editors draw it as the clone source marker.
+   */
+  public cloneSourceMarker(cursor: { x: number; y: number } | null = null): { x: number; y: number } | null {
+    const s = this.state;
+    if (s.activeTool !== 'clone' && s.activeTool !== 'heal') return null;
+    const cs = s.paint.cloneSource;
+    if (!cs) return null;
+    if (cursor && cs.offset && s.paint.retouch.aligned) return { x: cursor.x + cs.offset.x, y: cursor.y + cs.offset.y };
+    return { x: cs.x, y: cs.y };
+  }
+
   public async render(targetCanvas: HTMLCanvasElement, options?: RenderOptions): Promise<void> {
     const source = this.drawSource();
     if (!source) return;
@@ -4540,6 +4555,8 @@ export class ImageEditorController {
     try {
       await this.renderer.renderToCanvas(targetCanvas, source, this.state, {
         ...options,
+        // The clone source follows the brush cursor (both editors pass it).
+        cloneSourceMarker: options?.cloneSourceMarker !== undefined ? options.cloneSourceMarker : options?.brushCursor ? this.cloneSourceMarker(options.brushCursor) : null,
         dirty: dirty === 'all' ? undefined : dirty,
         checkpointLayerId: this.state.activeLayerId,
       });
