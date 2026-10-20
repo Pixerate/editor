@@ -3,6 +3,8 @@ import {
   PaintCanvasPresenter,
   PaintGesture,
   documentToScreen,
+  drawWaterOverlay,
+  startWetClock,
   fitZoom,
   guideOverlay,
   handlePaintShortcut,
@@ -40,6 +42,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const water = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 800, height: 600 });
   const measured = useRef(false);
   const [predicted, setPredicted] = useState<Array<{ x: number; y: number }>>([]);
@@ -85,6 +88,15 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never);
     else controller.takeDirty();
   }, [state, presenter, controller]);
+
+  // Wet paint flows with the display.
+  useEffect(() => startWetClock(controller), [controller]);
+
+  // The water overlay.
+  useEffect(() => {
+    const ctx = water.current?.getContext('2d');
+    if (ctx && typeof ctx.createImageData === 'function') drawWaterOverlay(controller, ctx as never);
+  }, [state, controller]);
 
   // Wheel needs a non-passive listener to prevent page scroll (see GOTCHAS).
   useEffect(() => {
@@ -139,6 +151,16 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
         className="absolute left-0 top-0 shadow-2xl"
         style={{ transform, transformOrigin: '0 0', imageRendering: state.view.zoom > 2 ? 'pixelated' : 'auto' }}
       />
+      {state.wet.overlay && (
+        <canvas
+          ref={water}
+          width={doc.width}
+          height={doc.height}
+          data-testid="paint-water-overlay"
+          className="absolute left-0 top-0 pointer-events-none opacity-60"
+          style={{ transform, transformOrigin: '0 0' }}
+        />
+      )}
       <svg className="absolute left-0 top-0 pointer-events-none overflow-visible" width={doc.width} height={doc.height} style={{ transform, transformOrigin: '0 0' }} aria-hidden="true">
         {lines.map((l, i) => (
           <line

@@ -19,6 +19,7 @@ import { PaintDabStroke } from './dab-stroke';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
+import type { WetStrokeDriver } from './wet';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -51,6 +52,11 @@ export interface StrokeSessionInit {
   mixerLoad: MixerLoad;
   /** The secondary colour 0..255 RGBA (a multi-colour brush without its own colours uses it). */
   secondary?: readonly [number, number, number, number];
+  /**
+   * Wet brushes: the driver that applies the stroke to the wet layer, and the layer's current
+   * pixels (the wet layer's display). The session's own surface is not used.
+   */
+  wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
 }
 
 export interface PaintStrokeResult {
@@ -62,6 +68,8 @@ export interface PaintStrokeResult {
   strokeId: string | null;
   /** Mixer and wet-capable dab brushes: what the brush carries after the stroke (cleaned unless it is dirty). */
   mixerLoad?: MixerLoad;
+  /** Wet brushes: the paint is wet (it keeps moving until it dries; see dry_paint / advance_wet_paint). */
+  wet?: boolean;
 }
 
 function defaultTile(surface: TiledSurface): Uint8ClampedArray {
@@ -95,6 +103,9 @@ export class PaintStrokeSession {
   private readonly fresh = new Set<TileKey>();
   private readonly dry: DryStroke | null = null;
   private readonly wet: PaintDabStroke | null = null;
+  private readonly wetDriver: WetStrokeDriver | null = null;
+  /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
+  private wetEndPending = false;
   private readonly apply: StrokeApply;
   private readonly copies: readonly StrokeCopy[];
   private bounds: RasterRect | null = null;
@@ -108,6 +119,7 @@ export class PaintStrokeSession {
     this.live = new Map(this.base.tiles);
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
+    if (init.wet) this.wetDriver = init.wet.driver;
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -118,7 +130,9 @@ export class PaintStrokeSession {
       selection: null,
       offset: init.offset,
     };
-    if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
+    if (this.wetDriver) {
+      // the wet layer paints; nothing else to set up
+    } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush)) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.wet = new PaintDabStroke(brush, {
         target: this.tileTarget(),
@@ -165,7 +179,39 @@ export class PaintStrokeSession {
     if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
+    if (this.wetDriver) {
+      this.wetUpdate(this.wetDriver.push(points));
+      return;
+    }
     this.update(this.dry ? this.dry.push(points) : this.wet!.push(points));
+  }
+
+  /** Shows a wet stroke's progress (the wet layer's display). */
+  wetUpdate(rects: RasterRect[]): void {
+    if (!rects.length || !this.init.wet) return;
+    for (const r of rects) this.bounds = union(this.bounds, r);
+    this.host.update(this.layerId, this.init.wet.surface(), rects);
+  }
+
+  /** Whether a wet stroke has ended but waits for the simulation to finish a batch. */
+  get pendingEnd(): boolean {
+    return this.wetEndPending;
+  }
+
+  /** Completes a wet stroke whose end waited (the controller calls it when the driver is done). */
+  completeWetEnd(): void {
+    if (!this.wetEndPending || !this.wetDriver || !this.wetDriver.done) return;
+    this.wetEndPending = false;
+    this.finishWet();
+  }
+
+  private finishWet(): void {
+    const d = this.wetDriver!;
+    const changed = d.dabCount > 0;
+    this.result = { layerId: this.layerId, bounds: changed ? d.bounds : null, dabs: d.dabCount, strokeId: null, wet: true };
+    const carried = d.load;
+    if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
+    this.host.commit(this, changed ? this.init.wet!.surface() : null, false);
   }
 
   private update(rects: RasterRect[]): void {
@@ -200,6 +246,16 @@ export class PaintStrokeSession {
   /** Ends the stroke (one undo step) and returns what changed. */
   end(): PaintStrokeResult {
     if (this.closed) throw new Error('This stroke has already ended.');
+    if (this.wetDriver) {
+      this.wetUpdate(this.wetDriver.finish());
+      this.closed = true;
+      if (this.wetDriver.done) this.finishWet();
+      else {
+        this.wetEndPending = true;
+        this.result = { layerId: this.layerId, bounds: this.bounds, dabs: this.wetDriver.dabCount, strokeId: null, wet: true };
+      }
+      return this.result!;
+    }
     this.update(this.dry ? this.dry.finish() : this.wet!.finish());
     this.closed = true;
     const ch = this.base.channels;
@@ -243,6 +299,7 @@ export function mixerLoadForStroke(brush: PaintBrush, current: MixerLoad, color:
  */
 export function brushLoadForStroke(brush: PaintBrush, current: MixerLoad, color: readonly [number, number, number]): MixerLoad {
   if (brush.engine === 'mixer') return mixerLoadForStroke(brush, current, color);
+  if (brush.engine === 'wet') return brush.wet.tool === 'paint' ? { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null } : EMPTY_MIXER_LOAD;
   if (usesPaintExchange(brush)) return { reservoir: [color[0], color[1], color[2]], amount: 1, pickup: brush.behavior.dirty ? current.pickup : null };
   return EMPTY_MIXER_LOAD;
 }

@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-editor
-description: How to make a picture in the Pixerate paint editor (natural media in the spirit of Painter, Rebelle and ArtRage) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers) with pressure, tilt, barrel rotation and velocity, blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, strokes that replay and vary, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
+description: How to paint in the Pixerate paint editor (natural media) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers) with pressure, tilt, barrel rotation and velocity, wet media (watercolour and gouache that flow, bloom, granulate and dry), blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, replayable strokes, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, paint in watercolour, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
 ---
 
 # Paint editor
@@ -16,7 +16,17 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   (pressure, tilt, velocity, jitter), a **rotation** mode (`fixed`, `stroke`, `barrel`) and an
   engine: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
   it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
-  along the stroke).
+  along the stroke), or `wet` (watercolour, gouache and the wet tools, below).
+- **Wet media** (`engine: "wet"`, categories `watercolor` and `wet-tool`): a stroke lays water
+  and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the
+  stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the
+  rim as it dries (edge darkening), drops pigment into the paper's valleys (granulation), pushes
+  pigment back where new water flows in (blooms), bleeds between touching wet colours and runs
+  downhill on a tilted canvas. Paint stays wet until it dries by itself (a few thousand steps)
+  or `dry_paint` dries it; a dried wash is fixed, so the next wash **glazes** over it. A wet
+  brush's `wet.tool` is `paint`, `water`, `dry`, `blow`, `blend`, `smudge` or `blot`; `water`,
+  `pigment` (concentration), `body` (0 transparent watercolour .. 1 opaque gouache), `strength`
+  and `rewet` set it up. Every result says whether paint is still wet (`wet` / `stillWet`).
 - **Behaviour** (`behavior`, dab and mixer brushes) is how a brush treats paint already on the
   canvas: a **pick-up ratio** (how much paint each dab lifts and carries), a **mix ratio** (how
   much of the carried paint goes into what it lays down), **dirty** (keep the carried colour into
@@ -70,7 +80,9 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
    `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
 8. **Check** with `render_preview` after each block of work, not after each stroke.
    `pick_color` reads exact values. Undo what made it worse.
-9. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
+9. **Watercolour** is its own way of working (see "Wet media" below): wet the paper or not,
+   lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`), glaze.
+10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
    `save_document` to keep the painting with its strokes.
 
 ## Best practices
@@ -121,6 +133,37 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
 - **Save brushes you build** (`set_brush` then `save_brush`), and share them with
   `export_brushes` / `import_brushes`.
+
+## Wet media
+
+1. **Choose a watercolour paper** (`cold-pressed`, `rough-watercolor` for granulation and broken
+   edges, `hot-pressed` for smooth washes). Absorption, permeability and roughness of the paper
+   drive the simulation.
+2. **Plan light to dark.** Watercolour is transparent: you cannot paint light over dark (use
+   `gouache`, body 1, for that). Lay the lightest washes first.
+3. **Wet-in-wet or wet-on-dry.** `wet_paper` over an area first for soft, feathered, blooming
+   colour (skies, backgrounds); paint on dry paper for crisp edges with a darker rim.
+4. **Paint washes** with `watercolor-wash` (large, flat, very wet) in a few long strokes, then
+   shapes with `watercolor-round`, details with `watercolor-detail`. Colours touching while wet
+   bleed into each other; that is the point.
+5. **Let it flow, then dry.** `advance_wet_paint` (`seconds` 1..5) to let water spread, run and
+   bloom; `render_preview` shows the paint as it is now (wet paper looks a little darker).
+   `dry_paint` sets it where it is. Dry before glazing a second wash over a first, or the two
+   mix instead of layering.
+6. **Steer the water** with the wet tools: `add-water` (softens and lifts with `rewet`),
+   `hair-dryer` (stops a wash spreading), `blow` (pushes the water along the stroke),
+   `wet-blend` (evens out a wash), `wet-drag` (drags wet paint), `blot` (lifts wet paint: clouds,
+   highlights). `set_canvas_tilt` makes washes run downhill and very wet paint drip;
+   `set_flow_map` pushes water in a swirl, a direction or eddies.
+7. **Tune the medium** per layer with `set_wet_settings`: `granulation` (grainy pigment, needs a
+   rough paper), `edgeDarkening`, `bloom`, `bleed`, `viscosity` (runny .. thick), `evaporation`,
+   `pigmentWeight`, `pickup` (how easily dried paint lifts), `fixture` (staining).
+
+- **Saving dries the paint** (deterministically): the saved file and every export hold dried
+  pixels; the editor keeps painting wet. A dry brush, fill, merge or duplicate on a wet layer
+  dries it first (in the same undo step).
+- **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
+  no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
 
 ## Tool reference
 
@@ -195,8 +238,22 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color`, `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds. With `ids`, their points too. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
-| `undo_paint` | Undo the last step. Returns what was undone and what is next. |
+| `undo_paint` | Undo the last step (a wet stroke's undo puts the wet paint back as it was before it). Returns what was undone and what is next. |
 | `redo_paint` | Redo the step just undone. |
+
+### Wet media
+
+| Tool | Use |
+| --- | --- |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
+| `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
+| `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
+| `set_wet_settings` | A layer's wet settings 0..1: `viscosity`, `evaporation`, `edgeDarkening`, `pigmentWeight`, `granulation`, `pickup`, `fixture`, `bloom`, `bleed`. Saved with the document, not an undo step. Returns `params`, `stillWet`. |
+| `set_flow_map` | Push a layer's water in a pattern: `kind` linear (`angle`), swirl (`center`, `clockwise`), radial, turbulent (`scale`, `seed`) or none, at `strength`. Returns `flow`, `stillWet`. |
+| `set_canvas_tilt` | Tilt the canvas (`angle` 0..90°, `direction` downhill clockwise from the bottom): wet paint runs downhill, very wet paint drips. Returns `tilt`, `stillWet`. |
+| `pause_wet_paint` | Stop or resume time (`paused`) and set `speed` (steps per second). Editor state. |
+| `set_water_overlay` | Show where the water is (`visible`), view only. |
 
 ### Guides
 
@@ -255,5 +312,12 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   `replay_strokes` move the cursor first. Results and undo are the same; it is one more reason to
   paint a few long strokes and replay them rather than many short ones. A stroke fails with "A
   stroke is in progress" while the user is painting; try it again afterwards.
+- **Wet paint keeps changing.** A preview right after a wet stroke shows it before it has
+  flowed; `advance_wet_paint` first. Paint that should stay exactly where it was laid needs
+  `dry_paint` (or a dry medium).
+- **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry
+  the first before painting the second (glazing). At most 8 layers hold wet paint at once.
+- **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
+  looked, rather than wet.
 - **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
   only the pixels matter (smaller JSON).

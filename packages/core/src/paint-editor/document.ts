@@ -12,6 +12,7 @@ import type { RasterGroupLayer, RasterLayer, RasterPixelLayer } from '../raster/
 import { emptySurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
+import type { WetEvent } from './wet';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -39,6 +40,8 @@ export interface PaintDocumentState {
   activeLayerId: string | null;
   /** Every committed stroke, oldest first (strokes are data: replay, vary, time-lapse later). */
   strokes: RecordedStroke[];
+  /** Wet-media events other than strokes (drying, tilt, settings), with the clock they happened at. */
+  wetEvents?: WetEvent[];
 }
 
 let nextId = 1;

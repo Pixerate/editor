@@ -10,8 +10,11 @@
     patchBrushValue,
     patchPath,
     readPath,
+    WET_TOOLS,
+    WET_TOOL_LABELS,
     type BlendMode,
     type BrushRotation,
+    type WetTool,
     type MultiColorMode,
     type PaintEditorController,
   } from '@pixerate/editor/paint-editor';
@@ -104,6 +107,14 @@
   {#if engine}
     <div class="flex flex-col gap-1.5" data-testid="brush-engine">
       <span class="font-medium text-slate-300">{engine.title}</span>
+      {#if engine.wetTool}
+        <label class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Wet tool</span>
+          <select aria-label="Wet tool" value={brush.wet.tool} onchange={(e) => controller.setBrush({ wet: { tool: e.currentTarget.value as WetTool } })} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each WET_TOOLS as t (t)}<option value={t}>{WET_TOOL_LABELS[t]}</option>{/each}
+          </select>
+        </label>
+      {/if}
       {#each engine.sliders as c (c.path)}
         <PaintSlider control={c} value={readPath(brush, c.path)} onchange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
       {/each}

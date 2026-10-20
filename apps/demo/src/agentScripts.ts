@@ -816,4 +816,37 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
+  {
+    id: "paint-watercolor",
+    prompt: "Paint a watercolour sky over hills",
+    steps: [
+      { say: "Watercolour wants rough paper: its grain pins the edges and catches granulating pigment.", tool: "paint__set_paper", args: { preset: "rough-watercolor" }, open: "Paper", target: { selector: '[data-testid="paper-panel"] [aria-selected="true"]' } },
+      { say: "Sky first, wet-in-wet: soak the top of the sheet with clear water.", tool: "paint__add_layer", args: { name: "Sky wash" }, as: "sky", open: "Wet", target: { selector: '[data-testid="wet-panel"]' } },
+      { tool: "paint__wet_paper", args: (ctx) => ({ layerId: ctx.results.sky.id, rect: { x: 0, y: 0, width: 1200, height: 430 } }) },
+      {
+        say: "A broad wash of blue into the wet paper: it spreads softly, with no hard edge.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "watercolor-wash", brush: { tip: { size: 140 } }, color: "#3b6fc4", points: wave(110, 20) }),
+      },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "watercolor-wash", brush: { tip: { size: 120 } }, color: "#e9a46b", points: wave(330, 15) }) },
+      { say: "Letting it flow for two seconds: the colours bleed where they meet.", tool: "paint__advance_wet_paint", args: { seconds: 2 } },
+      {
+        say: "Lifting clouds out of the wet sky with a tissue.",
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.sky.id, brushId: "blot", brush: { tip: { size: 90 } }, points: [{ x: 300, y: 140 }, { x: 420, y: 120 }, { x: 520, y: 150 }] }),
+      },
+      { say: "Drying the sky, so the hills glaze over it instead of mixing in.", tool: "paint__dry_paint", args: {} },
+      { say: "Hills on dry paper, with heavy granulating pigment and darker rims as they dry.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
+      { tool: "paint__set_wet_settings", args: (ctx) => ({ layerId: ctx.results.hills.id, granulation: 0.9, edgeDarkening: 0.8 }) },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "watercolor-wash", brush: { tip: { size: 150 }, wet: { pigment: 0.6 } }, color: "#3f5f4a", points: wave(560, 45) }),
+      },
+      { say: "Tilting the board so the wet hills bead and run down a little.", tool: "paint__set_canvas_tilt", args: { angle: 35, direction: 0 } },
+      { tool: "paint__advance_wet_paint", args: { seconds: 3 } },
+      { tool: "paint__set_canvas_tilt", args: { angle: 0 } },
+      { tool: "paint__dry_paint", args: {} },
+      { say: "Checking the result.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
 ];

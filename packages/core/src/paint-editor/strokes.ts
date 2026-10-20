@@ -26,6 +26,8 @@ export interface RecordedStroke {
   copies?: Affine[];
   /** What the brush carried at the start (Mixer Brush and wet-capable brushes), so a replay mixes the same. */
   load?: MixerLoad;
+  /** Wet brushes: the wet simulation's clock (steps) at which each point was applied, so a replay lets the paint flow the same. */
+  steps?: number[];
 }
 
 export function applyAffine(m: Affine, x: number, y: number): { x: number; y: number } {
@@ -113,6 +115,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (copies.length) out.copies = copies;
   const load = readLoad(r.load);
   if (load) out.load = load;
+  if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
   return out;
 }
 

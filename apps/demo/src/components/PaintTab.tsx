@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
 import { PaintEditor, usePaintDirector, usePaintEditor } from '@pixerate/editor-react/paint-editor';
 import { createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
@@ -19,6 +19,8 @@ export function PaintTab() {
     [editor.controller, director]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  // Stop the wet-media worker threads when the tab goes away.
+  useEffect(() => () => editor.controller.dispose(), [editor.controller]);
 
   return (
     <div className="space-y-4">
@@ -30,7 +32,7 @@ export function PaintTab() {
         <p className="text-xs text-slate-400 mt-1">
           Natural media on generated paper: pencils, pastels and charcoal catch the paper's grain (press harder to fill it), plus airbrush, marker and ink. Blend
           with a blender that mixes nearby colours like paint, a smudge (with pigment mixing) and the Mixer Brush; give any brush pick-up and mix ratios, make it
-          dirty or multi-coloured, and glaze layers in watercolour, tint, highlight or shadow mode. Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
+          dirty or multi-coloured, and glaze layers in watercolour, tint, highlight or shadow mode. Watercolour and gouache are wet: a fluid simulation spreads the water, darkens drying edges, granulates, blooms and runs downhill on a tilted board until the paint dries (Wet panel: dry now, pause, water overlay, tilt, flow maps). Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
           mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed.
         </p>
       </div>
@@ -41,7 +43,7 @@ export function PaintTab() {
         scripts={PAINT_SCRIPTS}
         stage={stage}
         presence={presence}
-        hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing on the pad, blending, dirty and multi-colour brushes, watercolour glazes, replayed and varied strokes, and kaleidoscope symmetry."
+        hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing on the pad, blending, dirty and multi-colour brushes, watercolour glazes, wet-in-wet watercolour that flows and dries, replayed and varied strokes, and kaleidoscope symmetry."
       />
     </div>
   );

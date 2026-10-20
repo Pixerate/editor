@@ -19,6 +19,7 @@ import { BLEND_MODES, isBlendMode, standardBlendMode, type BlendMode } from '../
 import { findLayer, flattenLayers, insertLayer, isLayerLocked, mapLayer, type LayerLocks } from '../raster/layers';
 import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import {
+  translateSurface,
   contentBounds,
   emptySurface,
   readPixel,
@@ -75,6 +76,12 @@ import {
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
+import { PaintWetLayers, WetStrokeDriver, type PaintWetOptions, type WetEvent, type WetLayerInfo, type WetLayerSettings } from './wet';
+import { isWetBrush } from './brushes';
+import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
+import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
+import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
+import { wetSupport } from '../paint/wet/wasm';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 export class PaintEditorError extends Error {
@@ -98,6 +105,25 @@ export interface PaintEditorOptions extends Partial<PaintCanvas> {
   encodeImage?: ImageEncoder;
   /** Undo steps kept (default 200). */
   historyLimit?: number;
+  /** Wet media: kernel, threads, speed (steps per second) and the memory kept for undoing wet strokes. */
+  wet?: PaintWetOptions;
+}
+
+/** Wet media as panels show it. */
+export interface PaintWetStateInfo {
+  /** Layers with a wet layer (paint still wet or drying). */
+  layerIds: string[];
+  /** Some paint is wet. */
+  wet: boolean;
+  /** Time is stopped (the paint stays wet). */
+  paused: boolean;
+  /** The water overlay is shown. */
+  overlay: boolean;
+  /** Steps per second while time runs. */
+  speed: number;
+  /** Simulation steps so far. */
+  clock: number;
+  tilt: WetTilt;
 }
 
 export interface PaintEditorState {
@@ -128,6 +154,8 @@ export interface PaintEditorState {
   savedMixingPads: readonly SavedMixingPadInfo[];
   /** A stroke is in progress. */
   stroking: boolean;
+  /** Wet media. */
+  wet: PaintWetStateInfo;
   /** Increments on every change. */
   version: number;
 }
@@ -210,6 +238,12 @@ export interface RenderOptions {
   paper?: boolean;
   /** Only these layers (a group with its children). */
   layerIds?: readonly string[];
+  /**
+   * Wet paint as it is now (`display`: still wet, wet paper a little darker) or dried where it is
+   * (`dried`, the deterministic bake that saving uses). Default `dried` for exports and `display`
+   * for previews and picks.
+   */
+  wet?: 'display' | 'dried';
 }
 
 export interface PixelImage {
@@ -233,6 +267,8 @@ interface HistoryEntry {
   label: string;
   before: PaintDocumentState;
   after: PaintDocumentState;
+  /** Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry). */
+  wet?: { before: WetSnapshot | null; after: WetSnapshot | null; lost: boolean };
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -297,6 +333,10 @@ export class PaintEditorController {
   private nextReferenceId = 1;
   private readonly viewCompositor = createPaintCompositor();
   private readonly exportCompositor = createPaintCompositor();
+  /** Wet media: the simulation, its settings and time. */
+  readonly wet: PaintWetLayers;
+  /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
+  private wetOp: { before: WetSnapshot | null } | null = null;
 
   constructor(options: PaintEditorOptions = {}) {
     this.historyLimit = Math.max(1, options.historyLimit ?? 200);
@@ -308,6 +348,26 @@ export class PaintEditorController {
     this.hand = options.hand === 'left' ? 'left' : 'right';
     this.encodeImage = options.encodeImage;
     this.guides = defaultGuides(this.doc.canvas);
+    this.wet = new PaintWetLayers(
+      {
+        canvas: () => this.doc.canvas,
+        paper: () => this.doc.paper,
+        layerSurface: (id) => {
+          const l = findLayer(this.doc.layers, id)?.layer;
+          return isPixelLayer(l) ? l.surface : null;
+        },
+        updateSurfaces: (surfaces, rects) => {
+          let layers = this.doc.layers;
+          for (const [id, surface] of surfaces) if (findLayer(layers, id)) layers = mapLayer(layers, id, (l) => ({ ...(l as PaintPixelLayer), surface }));
+          // Wet paint moving is not an undo step: keep the history's documents.
+          this.doc = { ...this.doc, layers };
+          this.emit(rects.length ? rects : 'all');
+        },
+        changed: () => {},
+      },
+      options.wet
+    );
+    this.wet.onDriverDone = () => this.session?.completeWetEnd();
   }
 
   // --- State and events ----------------------------------------------------------
@@ -348,6 +408,15 @@ export class PaintEditorController {
       mixingPadVersion: this.pad.version,
       savedMixingPads: this.savedPads.map(({ id, name }) => ({ id, name })),
       stroking: Boolean(this.session),
+      wet: {
+        layerIds: this.wet.wetLayerIds(),
+        wet: this.wet.isWet(),
+        paused: this.wet.paused,
+        overlay: this.wet.overlay,
+        speed: this.wet.speed,
+        clock: this.wet.world?.clock ?? 0,
+        tilt: { ...this.wet.tilt },
+      },
       version: this.version,
     };
     return this.cached;
@@ -373,30 +442,106 @@ export class PaintEditorController {
     if (this.session) throw new PaintEditorError(`A stroke is in progress; end or cancel it before ${what}.`);
   }
 
-  private commit(label: string, next: PaintDocumentState): void {
-    this.undoStack.push({ label, before: this.doc, after: next });
+  private commit(label: string, next: PaintDocumentState, before = this.doc): void {
+    const entry: HistoryEntry = { label, before, after: next };
+    if (this.wetOp) {
+      entry.wet = { before: this.wetOp.before, after: this.wet.snapshot(), lost: false };
+      this.wetOp = null;
+    }
+    this.undoStack.push(entry);
     if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
     this.redoStack = [];
     this.doc = next;
+    this.trimWetHistory();
     this.emit();
+  }
+
+  /** Keeps the wet snapshots in history within the wet undo memory, dropping the oldest. */
+  private trimWetHistory(): void {
+    const seen = new Set<WetSnapshot>();
+    let bytes = 0;
+    // The nearest steps first: the top of the undo stack, then the redo stack.
+    const order = [...[...this.undoStack].reverse(), ...[...this.redoStack].reverse()];
+    for (const e of order) {
+      if (!e.wet || e.wet.lost) continue;
+      for (const snap of [e.wet.before, e.wet.after]) if (snap && !seen.has(snap)) {
+        seen.add(snap);
+        bytes += snap.bytes;
+      }
+      if (bytes > this.wet.undoMemory) e.wet = { before: null, after: null, lost: true };
+    }
+  }
+
+  /** Throws when wet paint is mid-step (a batch in worker threads); `wetIdle()` waits for it. */
+  private requireWetIdle(what: string): void {
+    if (this.wet.busy) throw new PaintEditorError(`Wet paint is mid-step; wait a moment (await wetIdle()) before ${what}.`);
+  }
+
+  /** Starts an operation that changes wet paint: keeps the simulation as it is now for undo. */
+  private beginWetOp(): void {
+    this.requireWetIdle('changing wet paint');
+    if (!this.wetOp) this.wetOp = { before: this.wet.snapshot() };
+  }
+
+  /**
+   * Before a non-wet change to layers that hold wet paint (a dry brush, a fill, a merge…): dries
+   * them first, in the same undo step. Returns the ids dried.
+   */
+  private dryLayersFirst(ids: readonly string[]): string[] {
+    const wetIds = ids.filter((id) => this.wet.wetLayerIds().includes(id));
+    if (!wetIds.length) return [];
+    this.beginWetOp();
+    for (const id of wetIds) this.wet.dry(id);
+    this.logWet({ kind: 'dry', layerId: wetIds.join(',') });
+    return wetIds;
+  }
+
+  /** Records a wet event (for replays) in the document being built. */
+  private pendingWetEvents: WetEvent[] = [];
+
+  private logWet(e: Omit<WetEvent, 'clock'>): void {
+    this.pendingWetEvents.push({ clock: this.wet.world?.clock ?? 0, ...e });
+  }
+
+  /** The document with the pending wet events appended. */
+  private withWetEvents(doc: PaintDocumentState): PaintDocumentState {
+    if (!this.pendingWetEvents.length) return doc;
+    const events = [...(doc.wetEvents ?? []), ...this.pendingWetEvents];
+    this.pendingWetEvents = [];
+    return { ...doc, wetEvents: events };
   }
 
   undo(): string | null {
     this.requireIdle('undoing');
-    const e = this.undoStack.pop();
+    const e = this.undoStack[this.undoStack.length - 1];
     if (!e) return null;
+    if (e.wet) this.requireWetIdle('undoing');
+    this.undoStack.pop();
     this.redoStack.push(e);
+    const paper = this.doc.paper;
     this.doc = e.before;
+    if (e.wet) {
+      if (paper !== this.doc.paper) this.wet.paperChanged();
+      this.wet.restore(e.wet.lost ? null : e.wet.before);
+      if (paper !== this.doc.paper) this.wet.paperChanged();
+    }
     this.emit();
     return e.label;
   }
 
   redo(): string | null {
     this.requireIdle('redoing');
-    const e = this.redoStack.pop();
+    const e = this.redoStack[this.redoStack.length - 1];
     if (!e) return null;
+    if (e.wet) this.requireWetIdle('redoing');
+    this.redoStack.pop();
     this.undoStack.push(e);
+    const paper = this.doc.paper;
     this.doc = e.after;
+    if (e.wet) {
+      this.wet.restore(e.wet.lost ? null : e.wet.after);
+      if (paper !== this.doc.paper) this.wet.paperChanged();
+    }
     this.emit();
     return e.label;
   }
@@ -429,6 +574,10 @@ export class PaintEditorController {
     this.extensions = {};
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
     this.tracingVersion++;
+    if (this.wet.world) {
+      this.beginWetOp();
+      this.wet.reset();
+    }
     this.commit('New canvas', next);
     return next;
   }
@@ -441,7 +590,12 @@ export class PaintEditorController {
       height: update.height ?? this.doc.canvas.height,
       dpi: update.dpi ?? this.doc.canvas.dpi,
     });
-    this.commit('Canvas size', { ...this.doc, canvas });
+    if (this.wet.world && (canvas.width !== this.doc.canvas.width || canvas.height !== this.doc.canvas.height)) {
+      // The wet simulation is canvas-sized: the paint dries first.
+      this.dryLayersFirst(this.wet.wetLayerIds());
+      this.wet.reset();
+    }
+    this.commit('Canvas size', this.withWetEvents({ ...this.doc, canvas }));
     return canvas;
   }
 
@@ -459,7 +613,9 @@ export class PaintEditorController {
     const paper = normalizePaper({ ...rest, preset: base.preset }, base);
     const changedKeys = Object.keys(rest).filter((k) => k !== 'name');
     if (changedKeys.length && update.preset === undefined) paper.preset = base.preset;
+    if (this.wet.world) this.beginWetOp();
     this.commit('Paper', { ...this.doc, paper });
+    this.wet.paperChanged();
     return clonePaper(paper);
   }
 
@@ -588,6 +744,11 @@ export class PaintEditorController {
     this.requireIdle('removing a layer');
     const l = this.requireLayer(id);
     if (isLayerLocked(l, 'all')) throw new PaintEditorError(`Layer "${l.name}" is fully locked; unlock it before removing it.`);
+    const wetIds = this.wet.wetLayerIds().filter((x) => x === id || (l.type === 'group' && findLayer(l.children, x)));
+    if (wetIds.length) {
+      this.beginWetOp();
+      for (const x of wetIds) this.wet.world!.removeLane(x);
+    }
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
@@ -597,12 +758,16 @@ export class PaintEditorController {
 
   duplicateLayer(id: string): PaintLayerInfo {
     this.requireIdle('duplicating a layer');
+    if (findLayer(this.doc.layers, id)) {
+      const inside = (l: PaintLayer): string[] => (l.type === 'group' ? l.children.flatMap(inside) : [l.id]);
+      this.dryLayersFirst(inside(findLayer(this.doc.layers, id)!.layer));
+    }
     const loc = findLayer(this.doc.layers, id);
     if (!loc) throw new PaintEditorError(`Unknown layer "${id}". Call list_layers for the ids.`);
     const copy = (l: PaintLayer): PaintLayer => (l.type === 'group' ? { ...l, id: newPaintLayerId(), children: l.children.map(copy) } : { ...l, id: newPaintLayerId() });
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', { ...this.doc, layers, activeLayerId: dup.id });
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id }));
     return this.describeLayer(dup);
   }
 
@@ -628,6 +793,11 @@ export class PaintEditorController {
   /** Merges a pixel layer into the pixel layer below it (keeping the lower one's settings). */
   mergeDown(id: string): PaintLayerInfo {
     this.requireIdle('merging');
+    const pre = findLayer(this.doc.layers, id);
+    if (pre) {
+      const sib = pre.parent ? pre.parent.children : this.doc.layers;
+      this.dryLayersFirst([id, sib[pre.index - 1]?.id].filter((x): x is string => Boolean(x)));
+    }
     const loc = findLayer(this.doc.layers, id);
     if (!loc) throw new PaintEditorError(`Unknown layer "${id}". Call list_layers for the ids.`);
     const siblings = loc.parent ? loc.parent.children : this.doc.layers;
@@ -644,7 +814,7 @@ export class PaintEditorController {
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    this.commit('Merge down', { ...this.doc, layers, activeLayerId: below.id });
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id }));
     return this.describeLayer(merged);
   }
 
@@ -652,6 +822,10 @@ export class PaintEditorController {
   clearLayer(layerId?: string): { layerId: string; bounds: RasterRect | null } {
     this.requireIdle('clearing');
     const l = this.paintTarget(layerId, 'clear');
+    if (this.wet.wetLayerIds().includes(l.id)) {
+      this.beginWetOp();
+      this.wet.world!.removeLane(l.id);
+    }
     const bounds = this.describeLayer(l).bounds;
     this.commit('Clear layer', { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })) });
     return { layerId: l.id, bounds };
@@ -663,6 +837,8 @@ export class PaintEditorController {
    */
   fillLayer(options: FillLayerOptions = {}): { layerId: string; bounds: RasterRect } {
     this.requireIdle('filling');
+    this.paintTarget(options.layerId, 'fill');
+    this.dryLayersFirst([options.layerId ?? this.doc.activeLayerId ?? '']);
     const l = this.paintTarget(options.layerId, 'fill');
     const color = options.color === undefined ? this.color : parseColor(options.color);
     const opacity = options.opacity ?? 1;
@@ -694,7 +870,7 @@ export class PaintEditorController {
       offset: l.offset,
     };
     const surface = this.applyCoverage(l, coverage, rect, apply);
-    this.commit('Fill layer', { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) });
+    this.commit('Fill layer', this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }));
     return { layerId: l.id, bounds: rect };
   }
 
@@ -917,7 +1093,7 @@ export class PaintEditorController {
   }
 
   private sessionFor(doc: PaintDocumentState, init: PaintStrokeInit, host: StrokeSessionHost): PaintStrokeSession {
-    const layer = (() => {
+    let layer = (() => {
       const id = init.layerId ?? doc.activeLayerId;
       if (!id) throw new PaintEditorError('There is no active layer to paint on; add one with add_layer.');
       const loc = findLayer(doc.layers, id);
@@ -929,6 +1105,46 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
+    let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
+    if (isWetBrush(brush)) {
+      this.requireWetIdle('painting');
+      if (layer.offset.x || layer.offset.y) {
+        // The wet simulation works in canvas space: move the pixels into it (same picture, not an undo step).
+        const moved: PaintPixelLayer = { ...layer, surface: translateSurface(layer.surface, layer.offset.x, layer.offset.y), offset: { x: 0, y: 0 } };
+        this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => moved) };
+        if (doc !== this.doc) doc = { ...doc, layers: mapLayer(doc.layers, layer.id, () => moved) };
+        layer = moved;
+      }
+      if (!this.wet.wetLayerIds().includes(layer.id) && this.wet.wetLayerIds().length >= MAX_WET_LANES) {
+        throw new PaintEditorError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one first (dry_paint).`);
+      }
+      this.beginWetOp();
+      const world = this.wet.ensureLane(layer.id);
+      const id = layer.id;
+      const [r, g, b] = hexToRgb8(init.color === undefined ? this.color : parseColor(init.color));
+      const load = init.load ?? brushLoadForStroke(brush, this.mixerLoad, [r / 255, g / 255, b / 255]);
+      const seedW = init.seed ?? mix32((this.seedCounter * 0x9e3779b1) >>> 0) & 0x7fffffff;
+      const copiesW = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
+      const driver = new WetStrokeDriver({
+        world,
+        laneId: id,
+        brush,
+        color: [r / 255, g / 255, b / 255],
+        load,
+        grain: paperGrain(doc.paper),
+        paperDepth: doc.paper.depth,
+        paperColor: hexToRgb8(doc.paper.color),
+        seed: seedW,
+        copies: [IDENTITY_AFFINE, ...copiesW].map(affineCopy),
+      });
+      init = { ...init, seed: seedW, load };
+      wet = { driver, surface: () => world.display(id).surface };
+    } else if (this.wet.wetLayerIds().includes(layer.id)) {
+      // A dry brush on wet paint: the paint dries first (in the same undo step).
+      this.dryLayersFirst([layer.id]);
+      const dried = findLayer(this.doc.layers, layer.id)!.layer as PaintPixelLayer;
+      layer = dried;
+    }
     let color = init.color === undefined ? this.color : parseColor(init.color);
     const tracing = this.guides.tracing;
     if (init.color === undefined && init.start && tracing?.visible && tracing.sampleColors) color = this.sampleTracingColor(init.start.x, init.start.y) ?? color;
@@ -954,7 +1170,9 @@ export class PaintEditorController {
       inputFilter: snapper ? (p) => snapper.snap(p) : undefined,
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
+      wet,
     });
+    if (wet) this.wet.driver = wet.driver;
     return session;
   }
 
@@ -970,6 +1188,7 @@ export class PaintEditorController {
     };
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
+    if (init.wet) stroke.steps = [...init.wet.driver.steps];
     return stroke;
   }
 
@@ -979,8 +1198,14 @@ export class PaintEditorController {
    */
   beginStroke(init: PaintStrokeInit = {}): PaintStrokeSession {
     this.requireIdle('starting another');
+    const before = this.doc;
     const host: StrokeSessionHost = {
       update: (layerId, surface, rects) => {
+        if (this.session?.init.wet) {
+          // The wet layer's display is the layer's pixels: show it (not an undo step).
+          this.wet.syncDisplays();
+          return;
+        }
         this.live = { layerId, surface };
         this.emit(rects);
       },
@@ -988,19 +1213,36 @@ export class PaintEditorController {
         this.session = null;
         this.live = null;
         this.liveLayers = null;
+        const wetStroke = Boolean(s.init.wet);
+        if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
         if (!cancelled && s.result?.mixerLoad) this.keepLoad(brush, s.result.mixerLoad);
         if (cancelled || !surface) {
+          if (this.wetOp) {
+            // Put the wet paint back as it was before the stroke.
+            const snap = this.wetOp.before;
+            this.wetOp = null;
+            this.pendingWetEvents = [];
+            if (wetStroke) this.wet.restore(snap);
+            this.doc = { ...this.doc, layers: before.layers };
+            this.wet.syncDisplays();
+          }
           this.emit();
           return;
         }
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
         const l = this.getLayer(s.layerId) as PaintPixelLayer;
-        this.commit(`${brush.name} stroke`, { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke] });
+        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke] }), wetStroke ? before : this.doc);
       },
     };
-    const session = this.sessionFor(this.doc, { snapToPerspective: true, ...init }, host);
+    let session: PaintStrokeSession;
+    try {
+      session = this.sessionFor(this.doc, { snapToPerspective: true, ...init }, host);
+    } catch (e) {
+      this.wetOp = null;
+      throw e;
+    }
     this.session = session;
     this.emit([]);
     return session;
@@ -1021,12 +1263,17 @@ export class PaintEditorController {
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
-        out = { ...out, layers: mapLayer(out.layers, l.id, () => ({ ...l, surface })), strokes: [...out.strokes, stroke] };
+        const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
+        out = { ...out, layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })), strokes: [...out.strokes, stroke] };
       },
     };
     const session = this.sessionFor(doc, init, host);
     session.push(points);
     const result = session.end();
+    if (session.init.wet) {
+      this.wet.driver = null;
+      result.wet = this.wet.isWet(session.layerId);
+    }
     return { doc: out, result, brush: session.init.brush };
   }
 
@@ -1034,9 +1281,17 @@ export class PaintEditorController {
   paintStroke(init: PaintStrokeInit & { points: readonly PenPoint[] }): PaintStrokeResult {
     this.requireIdle('painting');
     const points = this.checkPoints(init.points);
-    const { doc, result, brush } = this.runStroke(this.doc, { ...init, start: init.start ?? points[0] }, points);
+    const before = this.doc;
+    let run: ReturnType<PaintEditorController['runStroke']>;
+    try {
+      run = this.runStroke(this.doc, { ...init, start: init.start ?? points[0] }, points);
+    } catch (e) {
+      this.wetOp = null;
+      throw e;
+    }
+    const { doc, result, brush } = run;
     if (result.mixerLoad) this.keepLoad(brush, result.mixerLoad);
-    if (doc !== this.doc) this.commit(`${brush.name} stroke`, doc);
+    if (doc !== before || this.wetOp) this.commit(`${brush.name} stroke`, this.withWetEvents(doc), before);
     else this.emit([]);
     return result;
   }
@@ -1115,6 +1370,179 @@ export class PaintEditorController {
     return { strokeIds: ids, bounds, layerIds: [...layerIds] };
   }
 
+  // --- Wet media -----------------------------------------------------------------
+
+  /**
+   * Lets wet paint flow with the wall clock: call every frame with `performance.now()` (the
+   * bindings do). Steps at the wet speed unless paused; resolves when the frame's steps are done.
+   */
+  tickWet(now: number): Promise<void> {
+    return this.wet.tick(now);
+  }
+
+  /** Resolves when the wet kernel is as fast as it will get here (`null` when nothing is wet yet). */
+  wetReady(): Promise<WetBackendInfo | null> {
+    return this.wet.world ? this.wet.world.ready : Promise.resolve(null);
+  }
+
+  /** Stops the wet simulation's worker threads (call when the editor goes away). */
+  dispose(): void {
+    this.wet.destroy();
+  }
+
+  /** Resolves when wet paint is between steps (edits, undo and exports can run). */
+  wetIdle(): Promise<void> {
+    return this.wet.idle();
+  }
+
+  private wetLayer(layerId: string | undefined, what: string): PaintPixelLayer {
+    const id = layerId ?? this.doc.activeLayerId;
+    if (!id) throw new PaintEditorError(`There is no active layer to ${what}; pass layerId (list_layers).`);
+    const l = this.requireLayer(id);
+    if (!isPixelLayer(l)) throw new PaintEditorError(`Layer "${l.name}" is a group; ${what} a pixel layer inside it.`);
+    return l;
+  }
+
+  private checkRect(rect: RasterRect | undefined): RasterRect | undefined {
+    if (!rect) return undefined;
+    const { width, height } = this.doc.canvas;
+    if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) || !(rect.width > 0 && rect.height > 0)) throw new PaintEditorError('rect needs finite x, y and a width and height above 0 (document pixels).');
+    const r = { x: Math.floor(rect.x), y: Math.floor(rect.y), width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+    if (r.x >= width || r.y >= height || r.x + r.width <= 0 || r.y + r.height <= 0) throw new PaintEditorError(`rect is outside the ${width}×${height} canvas.`);
+    return r;
+  }
+
+  /** Wet media as panels and tools show it, with each wet layer's state. */
+  wetState(): PaintWetStateInfo & { layers: WetLayerInfo[]; backend: WetBackendInfo | null; message: string | null } {
+    const st = this.getState().wet;
+    const backend = this.wet.backend();
+    return { ...st, layers: this.wet.wetLayerIds().map((id) => this.wet.info(id)), backend, message: backend?.message ?? wetSupport().message };
+  }
+
+  /** One layer's wet settings and state. */
+  wetLayerInfo(layerId?: string): WetLayerInfo {
+    return this.wet.info(this.wetLayer(layerId, 'read the wet paint of').id);
+  }
+
+  /**
+   * Lets the paint flow for `steps` simulation steps now (or `seconds` at the wet speed): what
+   * agents call between strokes. Not an undo step (time passing never is). Returns the steps run
+   * and which layers are still wet.
+   */
+  async advanceWet(options: { steps?: number; seconds?: number }): Promise<{ steps: number; clock: number; stillWet: boolean; layers: WetLayerInfo[] }> {
+    const steps = options.steps ?? Math.round((options.seconds ?? 1) * this.wet.speed);
+    if (!(Number.isInteger(steps) && steps >= 0 && steps <= 100000)) throw new PaintEditorError(`steps ${steps} is out of range; use 0..100000 (or seconds).`);
+    const run = await this.wet.advance(steps);
+    this.emit();
+    const st = this.wetState();
+    return { steps: run, clock: st.clock, stillWet: st.wet, layers: st.layers };
+  }
+
+  /**
+   * Dries wet paint at once: everything settles where it is and the water goes (one undo step).
+   * On one layer or all, optionally only inside `rect`. Returns what dried and whether anything is
+   * still wet.
+   */
+  dryPaint(options: { layerId?: string; rect?: RasterRect } = {}): { dried: Array<{ layerId: string; bounds: RasterRect | null }>; stillWet: boolean } {
+    this.requireIdle('drying');
+    this.requireWetIdle('drying');
+    if (options.layerId !== undefined) this.wetLayer(options.layerId, 'dry');
+    const rect = this.checkRect(options.rect);
+    const ids = options.layerId !== undefined ? this.wet.wetLayerIds().filter((x) => x === options.layerId) : this.wet.wetLayerIds();
+    if (!ids.length) return { dried: [], stillWet: this.wet.isWet() };
+    const before = this.doc;
+    this.beginWetOp();
+    const dried = ids.flatMap((id) => this.wet.dry(id, rect));
+    this.logWet({ kind: 'dry', layerId: options.layerId, data: rect });
+    this.commit('Dry paint', this.withWetEvents(this.doc), before);
+    return { dried, stillWet: this.wet.isWet() };
+  }
+
+  /**
+   * Pre-wets the paper (wet-in-wet): fills the paper's water over `rect` (default the canvas) by
+   * `amount` 0..1 on a layer's wet layer, so paint laid there spreads softly. One undo step.
+   */
+  wetPaper(options: { layerId?: string; rect?: RasterRect; amount?: number } = {}): { layerId: string; rect: RasterRect; wet: boolean } {
+    this.requireIdle('wetting the paper');
+    const l = this.wetLayer(options.layerId, 'wet the paper of');
+    if (isLayerLocked(l, 'pixels')) throw new PaintEditorError(`Layer "${l.name}" has its pixels locked; unlock it first.`);
+    const amount = options.amount ?? 1;
+    if (!(amount > 0 && amount <= 1)) throw new PaintEditorError(`amount ${amount} is out of range; use above 0 up to 1.`);
+    const rect = this.checkRect(options.rect) ?? { x: 0, y: 0, width: this.doc.canvas.width, height: this.doc.canvas.height };
+    if (!this.wet.wetLayerIds().includes(l.id) && this.wet.wetLayerIds().length >= MAX_WET_LANES) throw new PaintEditorError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one first (dry_paint).`);
+    const before = this.doc;
+    this.beginWetOp();
+    const world = this.wet.ensureLane(l.id);
+    world.wetPaper(l.id, rect, null, amount);
+    this.wet.syncDisplays();
+    this.logWet({ kind: 'wet-paper', layerId: l.id, data: { rect, amount } });
+    this.commit('Wet paper', this.withWetEvents(this.doc), before);
+    return { layerId: l.id, rect, wet: this.wet.isWet(l.id) };
+  }
+
+  /** Records a settings change as a wet event (not an undo step). */
+  private recordWetSetting(e: Omit<WetEvent, 'clock'>): void {
+    this.doc = { ...this.doc, wetEvents: [...(this.doc.wetEvents ?? []), { clock: this.wet.world?.clock ?? 0, ...e }] };
+  }
+
+  /** Changes a layer's wet settings (viscosity, evaporation, granulation…). Editor settings saved with the document, not an undo step. */
+  setWetParams(layerId: string | undefined, update: Partial<WetParams>): WetParams {
+    const l = this.wetLayer(layerId, 'change the wet settings of');
+    this.requireWetIdle('changing wet settings');
+    const params = this.wet.setParams(l.id, update);
+    this.recordWetSetting({ kind: 'params', layerId: l.id, data: params });
+    this.emit([]);
+    return params;
+  }
+
+  /** Sets a layer's flow map (water pushed in a pattern). Saved with the document, not an undo step. */
+  setFlowMap(layerId: string | undefined, update: Partial<WetFlowSpec>): WetFlowSpec {
+    const l = this.wetLayer(layerId, 'set the flow map of');
+    this.requireWetIdle('changing the flow map');
+    const flow = this.wet.setFlow(l.id, update);
+    this.recordWetSetting({ kind: 'flow', layerId: l.id, data: flow });
+    this.emit([]);
+    return flow;
+  }
+
+  /** Tilts the canvas (water runs downhill; steep tilts make drips). Saved with the document, not an undo step. */
+  setCanvasTilt(update: Partial<WetTilt>): WetTilt {
+    this.requireWetIdle('tilting the canvas');
+    if (update.angle !== undefined && !(update.angle >= 0 && update.angle <= 90)) throw new PaintEditorError(`angle ${update.angle} is out of range; use 0 (flat) .. 90 (upright) degrees.`);
+    const tilt = this.wet.setTilt(update);
+    this.recordWetSetting({ kind: 'tilt', data: tilt });
+    this.emit([]);
+    return tilt;
+  }
+
+  /** Stops (or restarts) time: paused paint stays wet. Editor state. */
+  setWetPaused(paused: boolean): boolean {
+    this.wet.paused = paused;
+    this.emit([]);
+    return paused;
+  }
+
+  /** Simulation steps per second while time runs (1..2000; default 120). Editor state. */
+  setWetSpeed(speed: number): number {
+    if (!(speed >= 1 && speed <= 2000)) throw new PaintEditorError(`speed ${speed} is out of range; use 1..2000 steps per second.`);
+    this.wet.speed = speed;
+    this.emit([]);
+    return speed;
+  }
+
+  /** Shows or hides the water overlay (where the water is, view only). */
+  setWaterOverlay(visible: boolean): boolean {
+    this.wet.overlay = visible;
+    this.emit([]);
+    return visible;
+  }
+
+  /** The water overlay's tiles over a document rectangle (RGBA, view only). */
+  waterOverlayTiles(rect: RasterRect): Array<{ tx: number; ty: number; data: Uint8ClampedArray }> {
+    if (this.wet.busy) return [];
+    return this.wet.waterOverlay(rect);
+  }
+
   // --- Rendering -----------------------------------------------------------------
 
   private sources() {
@@ -1150,11 +1578,24 @@ export class PaintEditorController {
     return node;
   }
 
+  /** The layers with every wet layer dried where it is (what saving and exporting see). */
+  private driedLayers(layers: PaintLayer[] = this.currentLayers()): PaintLayer[] {
+    const ids = this.wet.wetLayerIds();
+    if (!ids.length) return layers;
+    this.requireWetIdle('exporting');
+    let out = layers;
+    for (const id of ids) {
+      const baked = this.wet.bakedSurface(id);
+      if (baked && findLayer(out, id)) out = mapLayer(out, id, (l) => ({ ...(l as PaintPixelLayer), surface: baked }));
+    }
+    return out;
+  }
+
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    let layers: PaintLayer[] = this.currentLayers();
+    let layers: PaintLayer[] = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
-      for (const id of options.layerIds) picked.push(this.requireLayer(id));
+      for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
     const under: ViewLayer[] = options.paper === false ? [] : [paperNode(this.doc.paper)];
@@ -1175,13 +1616,13 @@ export class PaintEditorController {
   /** The canvas as canvas-sized RGBA (paper included by default). */
   compositePixels(options: RenderOptions = {}): PixelImage {
     const { width, height } = this.doc.canvas;
-    const data = this.exportCompositor.composite(this.renderLayers(options), { x: 0, y: 0, width, height }, this.sources());
+    const data = this.exportCompositor.composite(this.renderLayers({ ...options, wet: options.wet ?? 'dried' }), { x: 0, y: 0, width, height }, this.sources());
     return { width, height, data };
   }
 
   /** The canvas (or some layers), scaled so the longest side is at most `maxSide`. */
   renderPreview(options: RenderOptions & { maxSide?: number } = {}): PixelImage {
-    const full = this.compositePixels(options);
+    const full = this.compositePixels({ ...options, wet: options.wet ?? 'display' });
     const side = Math.max(1, Math.round(options.maxSide ?? 512));
     const k = Math.min(1, side / Math.max(full.width, full.height));
     if (k >= 1) return full;
@@ -1193,17 +1634,50 @@ export class PaintEditorController {
   // --- Save, load and export -------------------------------------------------------
 
   /** The document as JSON with inline PNG assets. */
+  /** The document as saved: wet paint dried where it is (deterministically); wet settings as data. */
+  private savedState(): PaintDocumentState {
+    const layers = this.driedLayers(this.doc.layers);
+    return layers === this.doc.layers ? this.doc : { ...this.doc, layers };
+  }
+
+  /** Wet settings saved with the document (`null` when they are all defaults). */
+  private wetJSON(): unknown {
+    const layers: Record<string, WetLayerSettings> = {};
+    for (const [id, set] of this.wet.settings) if (findLayer(this.doc.layers, id)) layers[id] = { params: { ...set.params }, flow: { ...set.flow } };
+    const flat = this.wet.tilt.angle === 0;
+    if (!Object.keys(layers).length && flat) return undefined;
+    return { tilt: { ...this.wet.tilt }, layers };
+  }
+
+  private readWet(raw: unknown, problems: string[]): void {
+    this.wet.reset();
+    if (!raw || typeof raw !== 'object') return;
+    const r = raw as { tilt?: unknown; layers?: unknown };
+    this.wet.setTilt(normalizeTilt((r.tilt as Partial<WetTilt>) ?? {}));
+    if (r.layers && typeof r.layers === 'object') {
+      for (const [id, v] of Object.entries(r.layers as Record<string, unknown>)) {
+        if (!v || typeof v !== 'object') {
+          problems.push(`wet.layers["${id}"] is not wet settings; skipped.`);
+          continue;
+        }
+        const x = v as { params?: Partial<WetParams>; flow?: Partial<WetFlowSpec> };
+        this.wet.settings.set(id, { params: normalizeWetParams(x.params ?? {}), flow: normalizeFlow(x.flow ?? {}) });
+      }
+    }
+  }
+
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.doc, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON() });
+    return serializePaintDocument(this.savedState(), { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.doc, store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON() });
+    return serializePaintDocumentExternal(this.savedState(), store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
-  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown }): string[] {
+  private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown; wet?: unknown }): string[] {
     this.extensions = loaded.extensions;
+    this.readWet(loaded.wet, loaded.problems);
     this.readMixingPad(loaded.mixingPad, loaded.problems);
     this.readGuides(loaded.guides, loaded.state, loaded.problems);
     if (Array.isArray(loaded.swatches)) {
@@ -1281,6 +1755,7 @@ export class PaintEditorController {
    * pixels), and the composite as the merged image.
    */
   exportPsd(): PsdExportResult {
+    const dried = this.driedLayers(this.doc.layers);
     const { width, height, dpi } = this.doc.canvas;
     const paperPixels = this.compositePixels({ layerIds: [], paper: true });
     const paperLayer: PaintPixelLayer = {
@@ -1304,7 +1779,7 @@ export class PaintEditorController {
         const next = blend === l.blend ? l : ({ ...l, blend } as PaintLayer);
         return next.type === 'group' ? { ...next, children: toStandard(next.children) } : next;
       });
-    const layers = toStandard(this.doc.layers);
+    const layers = toStandard(dried);
     const result = exportPsd({ width, height, layers: [paperLayer, ...layers] as unknown as ImageLayer[], merged, resolution: dpi });
     for (const [mode, names] of changed) {
       const label = BLEND_MODES.find((m) => m.id === mode)?.label ?? mode;

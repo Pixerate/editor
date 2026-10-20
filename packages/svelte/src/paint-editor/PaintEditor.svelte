@@ -6,6 +6,7 @@
   import PaintLayersPanel from './PaintLayersPanel.svelte';
   import PaintToolbar from './PaintToolbar.svelte';
   import PaperPanel from './PaperPanel.svelte';
+  import WetPanel from './WetPanel.svelte';
   import { chip } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -20,11 +21,11 @@
   }
   let { controller, fileName, height = 720, presence, class: className = '' }: Props = $props();
   let tool = $state<PaintTool>('brush');
-  let tab = $state<'color' | 'paper' | 'layers'>('color');
+  let tab = $state<'color' | 'wet' | 'paper' | 'layers'>('color');
   let error = $state<string | null>(null);
 </script>
 
-<!-- Toolbar, brush library, the canvas, and colour / paper / layers. -->
+<!-- Toolbar, brush library, the canvas, and colour / wet media / paper / layers. -->
 <div class={`flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-2 ${className}`} style={`height: ${typeof height === 'number' ? `${height}px` : height}`} data-testid="paint-editor">
   <PaintToolbar {controller} {tool} ontoolchange={(t) => (tool = t)} {fileName} />
   <div class="flex min-h-0 flex-1 gap-2">
@@ -35,11 +36,12 @@
     </div>
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">
       <div class="flex gap-1" role="tablist" aria-label="Paint panels">
-        {#each ['color', 'paper', 'layers'] as const as t (t)}
-          <button type="button" role="tab" aria-selected={tab === t} class={chip(tab === t)} onclick={() => (tab = t)}>{t === 'color' ? 'Colour' : t === 'paper' ? 'Paper' : 'Layers'}</button>
+        {#each ['color', 'wet', 'paper', 'layers'] as const as t (t)}
+          <button type="button" role="tab" aria-selected={tab === t} class={chip(tab === t)} onclick={() => (tab = t)}>{t === 'color' ? 'Colour' : t === 'wet' ? 'Wet' : t === 'paper' ? 'Paper' : 'Layers'}</button>
         {/each}
       </div>
       {#if tab === 'color'}<ColorPanel {controller} />{/if}
+      {#if tab === 'wet'}<WetPanel {controller} />{/if}
       {#if tab === 'paper'}<PaperPanel {controller} />{/if}
       {#if tab === 'layers'}<PaintLayersPanel {controller} />{/if}
     </div>

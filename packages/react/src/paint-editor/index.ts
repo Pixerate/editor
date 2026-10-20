@@ -5,5 +5,6 @@ export * from './BrushPanel';
 export * from './PaperPanel';
 export * from './ColorPanel';
 export * from './PaintLayersPanel';
+export * from './WetPanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';

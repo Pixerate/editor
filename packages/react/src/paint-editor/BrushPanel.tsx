@@ -10,8 +10,11 @@ import {
   patchBrushValue,
   patchPath,
   readPath,
+  WET_TOOLS,
+  WET_TOOL_LABELS,
   type BlendMode,
   type BrushRotation,
+  type WetTool,
   type MultiColorMode,
   type PaintEditorController,
 } from '@pixerate/editor/paint-editor';
@@ -111,6 +114,18 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
       {engine && (
         <div className="flex flex-col gap-1.5" data-testid="brush-engine">
           <span className="font-medium text-slate-300">{engine.title}</span>
+          {engine.wetTool && (
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-slate-400">Wet tool</span>
+              <select aria-label="Wet tool" value={brush.wet.tool} onChange={(e) => controller.setBrush({ wet: { tool: e.target.value as WetTool } })} className="rounded bg-slate-800 px-1 py-0.5">
+                {WET_TOOLS.map((t) => (
+                  <option key={t} value={t}>
+                    {WET_TOOL_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {engine.sliders.map((c) => (
             <PaintSlider key={c.path} control={c} value={readPath(brush, c.path)} onChange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
           ))}

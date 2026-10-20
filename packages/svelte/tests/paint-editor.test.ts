@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -278,5 +278,40 @@ describe('Svelte paint editor', () => {
     expect(controller.getStrokes()).toHaveLength(1);
     // linger 0 keeps the cursor where the stroke ended.
     expect(target.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
+  });
+
+  it('WetPanel shows wet paint and dries, pauses, tilts and tunes it; the brush panel picks the wet tool', async () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    show(PaintEditor, { controller: c });
+    click(byText('Wet'));
+    const status = () => target.querySelector('[data-testid="wet-status"]')!.textContent;
+    expect(status()).toBe('Dry');
+    c.paintStroke({ points: [{ x: 50, y: 100 }, { x: 200, y: 100 }], brushId: 'watercolor-round', color: '#1d4ed8' });
+    flushSync();
+    expect(status()).toBe('Wet');
+    click(byText('Pause'));
+    expect(c.getState().wet.paused).toBe(true);
+    expect(status()).toBe('Wet (paused)');
+    expect(target.querySelector('[data-testid="paint-water-overlay"]')).toBeNull();
+    click(byText('Water'));
+    expect(target.querySelector('[data-testid="paint-water-overlay"]')).not.toBeNull();
+    setValue(target.querySelector('[data-testid="wet-layer"] input[aria-label="Granulation"]') as HTMLInputElement, '0.9', true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.wetLayerInfo().params.granulation).toBe(0.9);
+    setValue(target.querySelector('input[aria-label="Tilt"]') as HTMLInputElement, '40', true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.getState().wet.tilt.angle).toBe(40);
+    byText('Dry now').click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(status()).toBe('Dry');
+    c.setBrush({ id: 'watercolor-round' });
+    flushSync();
+    const tool = target.querySelector('select[aria-label="Wet tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('paint');
+    setValue(tool, 'blot');
+    expect(c.getState().brush.wet.tool).toBe('blot');
+    expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    c.dispose();
   });
 });
