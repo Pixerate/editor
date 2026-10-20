@@ -310,3 +310,15 @@ export function matteWhite(data: ArrayLike<number>): Uint8ClampedArray {
   }
   return out;
 }
+
+/** `matteWhite` for deep RGBA: 16-bit sRGB samples, or 32-bit linear (white is 1 in both). */
+export function matteWhiteDeep(data: Uint16Array | Float32Array): Uint16Array | Float32Array {
+  const out = data.slice() as Uint16Array | Float32Array;
+  const one = out instanceof Uint16Array ? 65535 : 1;
+  for (let i = 0; i < out.length; i += 4) {
+    const a = Math.min(1, Math.max(0, out[i + 3] / one));
+    if (a >= 1) continue;
+    for (let c = 0; c < 3; c++) out[i + c] = out instanceof Uint16Array ? Math.round(out[i + c] * a + one * (1 - a)) : out[i + c] * a + one * (1 - a);
+  }
+  return out;
+}
