@@ -13,7 +13,7 @@ import { normalizeProcessVersion } from '../color';
 import type { Annotation, CropBox, DepthMaskOptions, ImageTransform } from '../types';
 import type { SerializedSelection } from '../selection/mask';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
-import type { SerializedColorProfile } from '../color-management';
+import type { SerializedColorMode, SerializedColorProfile } from '../color-management';
 import {
   newLayerId,
   type PsdSmartFilter,
@@ -216,6 +216,8 @@ export interface SerializedLayeredImageEditorState {
   smartContents?: SerializedSmartContents[];
   /** The document's colour profile (missing = sRGB). */
   colorProfile?: SerializedColorProfile;
+  /** Image › Mode CMYK or Lab (missing = RGB). */
+  colorMode?: SerializedColorMode;
 }
 
 export interface SerializedPattern {

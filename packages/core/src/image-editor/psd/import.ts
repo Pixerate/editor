@@ -63,7 +63,9 @@ import {
   u32Block,
   u8Block,
 } from './file';
-import { MODE_INDEXED, colorChannelCount, toMask8, toRgba8, unmatteWhite } from './pixels';
+import { MODE_CMYK, MODE_INDEXED, MODE_LAB, colorChannelCount, toMask8, toRgba8, unmatteWhite } from './pixels';
+import { Transform, builtinProfile, parseProfile, srgbProfile, type Profile } from '../../cms';
+import type { DocumentColorProfile } from '../color-management';
 import { parseLfx2, parseLrfx } from './effects';
 import { PATTERN_BLOCK_KEYS, parsePatternBlock, psdPatternToEffectPattern } from './patterns';
 import { builtinPattern, type EffectPattern } from '../../raster/effects/patterns';
@@ -144,6 +146,8 @@ export interface PsdImportResult {
   info: { psb: boolean; depth: number; colorMode: string; channels: number };
   /** The embedded ICC profile (image resource 1039), raw bytes, when the file has one. */
   iccProfile?: Uint8Array;
+  /** CMYK and Lab files: the mode (and CMYK profile) their pixels were converted from, to write them back. */
+  sourceMode?: { mode: 'cmyk'; profile: DocumentColorProfile } | { mode: 'lab' };
 }
 
 export interface PsdImportOptions {
@@ -224,6 +228,8 @@ interface Ctx {
   depth: number;
   /** Pixels per inch (for lengths stored in points). */
   dpi: number;
+  /** CMYK files: ink → sRGB through the file's (or the default) CMYK profile. */
+  cmykToRgb?: (ink: Uint8Array, out: Uint8ClampedArray) => void;
 }
 
 function decodeOr(ctx: Ctx, rec: PsdLayerRecord, id: number, name: string): Uint8Array | undefined {
@@ -261,6 +267,7 @@ function recordPixels(ctx: Ctx, rec: PsdLayerRecord, name: string): PixelLayer['
     color: planes.slice(0, ctx.colorCount) as Array<Uint8Array | undefined>,
     alpha: planes[ctx.colorCount] as Uint8Array | undefined,
     palette: ctx.palette,
+    cmykToRgb: ctx.cmykToRgb,
   });
   return surfaceFromPixels({ width, height, data }, 4, rec.rect.left, rec.rect.top);
 }
@@ -705,6 +712,7 @@ function mergedLayer(ctx: Ctx): PixelLayer | null {
     color: Array.from({ length: cc }, (_, i) => plane(i)),
     alpha: hasAlpha ? plane(cc) : undefined,
     palette: ctx.palette,
+    cmykToRgb: ctx.cmykToRgb,
   });
   if (hasAlpha) unmatteWhite(data);
   return {
@@ -739,6 +747,29 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     depth: options.depth ?? 0,
     dpi: resolution(file) ?? 72,
   };
+  // CMYK through a colour profile: the file's own, else the default coated CMYK.
+  let cmykProfile: DocumentColorProfile | null = null;
+  if (header.colorMode === MODE_CMYK && !ctx.skipPixels) {
+    const icc = resource(file, 1039);
+    let src: Profile | null = null;
+    if (icc) {
+      try {
+        const p = parseProfile(icc);
+        if (p.colorSpace === 'cmyk') {
+          src = p;
+          cmykProfile = { name: p.description || 'Embedded CMYK profile', icc: icc.slice() };
+        } else warn.extra.push(`The CMYK file embeds a ${p.colorSpace.toUpperCase()} profile; the default coated CMYK profile was used.`);
+      } catch (e) {
+        warn.extra.push(`The CMYK profile could not be read (${e instanceof Error ? e.message : String(e)}); the default coated CMYK profile was used.`);
+      }
+    }
+    if (!src) {
+      src = builtinProfile('coated-cmyk');
+      cmykProfile = { builtin: 'coated-cmyk', name: src.description };
+    }
+    const t = Transform.create(src, srgbProfile(), { intent: 'relative', bpc: true });
+    ctx.cmykToRgb = (ink, out) => t.convert8(ink, 4, out, 4, false);
+  }
   for (const block of file.globalBlocks) {
     if (LINKED_FILE_KEYS.includes(block.key)) for (const f of parseLinkedFiles(block.data)) if (!ctx.linked.has(f.uuid)) ctx.linked.set(f.uuid, f);
     if (FILTER_EFFECTS_KEYS.includes(block.key)) {
@@ -759,7 +790,8 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
   }
   const mode = COLOR_MODES[header.colorMode] ?? `mode ${header.colorMode}`;
   if (mode !== 'rgb' || header.depth !== 8) {
-    warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to 8-bit RGB.`);
+    const how = header.colorMode === MODE_CMYK ? ` through ${cmykProfile?.name ?? 'its profile'}` : '';
+    warn.extra.push(`The file is ${header.depth}-bit ${mode}; it was converted to 8-bit RGB${how}.`);
   }
 
   let layers: ImageLayer[] = [];
@@ -798,6 +830,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       ? { globalLight: { angle: Math.max(-360, Math.min(360, angle ?? 120)), altitude: Math.max(0, Math.min(90, altitude ?? 30)) } }
       : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
+    ...(cmykProfile ? { sourceMode: { mode: 'cmyk' as const, profile: cmykProfile } } : header.colorMode === MODE_LAB ? { sourceMode: { mode: 'lab' as const } } : {}),
     ...(resource(file, 1039) ? { iccProfile: resource(file, 1039)!.slice() } : {}),
   };
 }

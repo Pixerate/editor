@@ -74,6 +74,13 @@ export interface PsdExportInput {
   patterns?: readonly EffectPattern[];
   /** Written as image resources 1037 and 1049. */
   globalLight?: GlobalLight;
+  /**
+   * The file's colour mode (default rgb). For cmyk and lab, `colorPlanes` turns RGBA pixels into
+   * the mode's channel planes (CMYK as Photoshop stores it: 255 is no ink; Lab: L 0..255 for
+   * 0..100, a and b offset by 128).
+   */
+  colorMode?: 'rgb' | 'cmyk' | 'lab';
+  colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[];
   /** The document's ICC profile, written as image resource 1039. */
   iccProfile?: Uint8Array;
 }
@@ -240,6 +247,16 @@ function placedUnchanged(layer: SmartObjectLayer, idnt: string, placedId: string
 export function exportPsd(input: PsdExportInput): PsdExportResult {
   const { width, height } = input;
   if (width < 1 || height < 1) throw new PsdError('The document is empty.');
+  const mode = input.colorMode ?? 'rgb';
+  if (mode !== 'rgb' && !input.colorPlanes) throw new PsdError(`A ${mode.toUpperCase()} file needs colorPlanes to convert the pixels.`);
+  const colorIds = mode === 'cmyk' ? [0, 1, 2, 3] : [0, 1, 2];
+  /** Colour planes of RGBA pixels in the file's mode. */
+  const colorPlanes = (rgba: Uint8ClampedArray, n: number): Uint8Array[] => (mode === 'rgb' ? rgbaToPlanes(rgba, n).slice(0, 3) : input.colorPlanes!(rgba, n));
+  const pixelChannels = (rgba: Uint8ClampedArray, w: number, h: number): PsdChannel[] => {
+    const n = w * h;
+    const alpha = rgbaToPlanes(rgba, n)[3];
+    return [rleChannel(CHANNEL_ALPHA, alpha, w, h, psb), ...colorPlanes(rgba, n).map((p, i) => rleChannel(i, p, w, h, psb))];
+  };
   const psb = width > PSD_MAX_DIMENSION || height > PSD_MAX_DIMENSION;
   const records: PsdLayerRecord[] = [];
   let nextId = 0;
@@ -291,7 +308,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
       case 'group': {
         records.push({
           rect: EMPTY_RECT,
-          channels: [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel),
+          channels: [CHANNEL_ALPHA, ...colorIds].map(emptyChannel),
           blendKey: 'norm',
           opacity: 255,
           clipping: 0,
@@ -308,7 +325,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = {
           ...base,
           rect: EMPTY_RECT,
-          channels: [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel),
+          channels: [CHANNEL_ALPHA, ...colorIds].map(emptyChannel),
           blendKey,
           flags: base.flags | FLAG_PIXELS_IRRELEVANT,
         };
@@ -325,7 +342,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = {
           ...common(layer, [{ key: block.key, data: block.data }]),
           rect: EMPTY_RECT,
-          channels: [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel),
+          channels: [CHANNEL_ALPHA, ...colorIds].map(emptyChannel),
           blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm',
         };
         if (layer.mask) {
@@ -346,17 +363,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
           rec.rect = toRect({ ...bounds, x: bounds.x + layer.offset.x, y: bounds.y + layer.offset.y });
-          rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
-          ];
+          rec.channels = pixelChannels(readRegion(layer.surface, bounds), bounds.width, bounds.height);
         } else {
-          rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
+          rec.channels = [CHANNEL_ALPHA, ...colorIds].map(emptyChannel);
         }
         if (layer.mask) {
           const m = maskChannel(layer.mask, layer.offset.x, layer.offset.y, psb);
@@ -397,17 +407,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
           rec.rect = toRect(bounds);
-          rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
-          ];
+          rec.channels = pixelChannels(readRegion(layer.surface, bounds), bounds.width, bounds.height);
         } else {
-          rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
+          rec.channels = [CHANNEL_ALPHA, ...colorIds].map(emptyChannel);
         }
         if (layer.mask) {
           const m = maskChannel(layer.mask, 0, 0, psb);
@@ -435,17 +438,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
         const rec: PsdLayerRecord = { ...common(layer, extra), rect: EMPTY_RECT, channels: [], blendKey: BLEND_TO_PSD[layer.blend] ?? 'norm' };
         const bounds = contentBounds(layer.surface);
         if (bounds) {
-          const n = bounds.width * bounds.height;
-          const [r, g, b, a] = rgbaToPlanes(readRegion(layer.surface, bounds), n);
           rec.rect = toRect(bounds);
-          rec.channels = [
-            rleChannel(CHANNEL_ALPHA, a, bounds.width, bounds.height, psb),
-            rleChannel(0, r, bounds.width, bounds.height, psb),
-            rleChannel(1, g, bounds.width, bounds.height, psb),
-            rleChannel(2, b, bounds.width, bounds.height, psb),
-          ];
+          rec.channels = pixelChannels(readRegion(layer.surface, bounds), bounds.width, bounds.height);
         } else {
-          rec.channels = [CHANNEL_ALPHA, 0, 1, 2].map(emptyChannel);
+          rec.channels = [CHANNEL_ALPHA, ...colorIds].map(emptyChannel);
         }
         if (layer.mask) {
           const m = maskChannel(layer.mask, 0, 0, psb);
@@ -466,9 +462,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   const n = width * height;
   if (input.merged.length < n * 4) throw new PsdError(`The merged image has ${input.merged.length} bytes, expected ${n * 4}.`);
   // Photoshop's merged image is matted over white where it is transparent.
-  const [r, g, b, a] = rgbaToPlanes(matteWhite(input.merged), n);
+  const matted = matteWhite(input.merged);
+  const a = rgbaToPlanes(matted, n)[3];
   const transparent = a.some((v) => v !== 255);
-  const planes = transparent ? [r, g, b, a] : [r, g, b];
+  const planes = [...colorPlanes(matted, n), ...(transparent ? [a] : [])];
   const merged = new Uint8Array(n * planes.length);
   planes.forEach((p, i) => merged.set(p, i * n));
 
@@ -525,7 +522,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
 
   const bytes = writePsd(
     {
-      header: { psb, channels: planes.length, width, height, depth: 8, colorMode: 3 },
+      header: { psb, channels: planes.length, width, height, depth: 8, colorMode: mode === 'cmyk' ? 4 : mode === 'lab' ? 9 : 3 },
       colorModeData: new Uint8Array(0),
       resources,
       layers: records,

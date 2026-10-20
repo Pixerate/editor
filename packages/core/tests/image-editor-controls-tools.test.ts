@@ -127,7 +127,7 @@ describe('image editor agent tools', () => {
       'list_fonts', 'get_text_layer', 'add_text_layer', 'set_text', 'set_text_style', 'set_paragraph_style', 'set_text_frame', 'convert_text_to_shape',
       'list_layer_effects', 'add_layer_effect', 'update_layer_effect', 'remove_layer_effect', 'set_layer_effects_enabled', 'set_global_light',
       'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush',
-      'get_color_profile', 'assign_profile', 'convert_to_profile', 'set_proof_setup', 'convert_colors',
+      'get_color_profile', 'assign_profile', 'convert_to_profile', 'set_proof_setup', 'convert_colors', 'set_color_mode',
       'mix_colors', 'inspect_psd', 'import_psd', 'export_psd',
     ]);
     for (const t of tools) {

@@ -54,6 +54,66 @@ export interface ProofSetup {
 
 export const DEFAULT_PROOF: Omit<ProofSetup, 'profile'> = { intent: 'relative', bpc: true, simulatePaper: false, gamutWarning: false };
 
+/**
+ * Image › Mode beyond RGB. The document is still edited as RGB in its working space; the mode is
+ * what it is for: the viewport soft-proofs through the CMYK profile (unless Proof Setup says
+ * otherwise) and PSD export writes CMYK or Lab channels.
+ */
+export type DocumentColorMode = { mode: 'cmyk'; profile: DocumentColorProfile; intent: Intent } | { mode: 'lab' };
+
+export interface SerializedColorMode {
+  mode: 'cmyk' | 'lab';
+  profile?: SerializedColorProfile;
+  intent?: Intent;
+}
+
+export function serializeColorMode(m: DocumentColorMode): SerializedColorMode {
+  return m.mode === 'cmyk' ? { mode: 'cmyk', profile: serializeColorProfile(m.profile), intent: m.intent } : { mode: 'lab' };
+}
+
+export function deserializeColorMode(raw: unknown, problems: string[]): DocumentColorMode | null {
+  const r = raw as SerializedColorMode;
+  if (!r || typeof r !== 'object') return null;
+  if (r.mode === 'lab') return { mode: 'lab' };
+  if (r.mode !== 'cmyk') return null;
+  const profile = (r.profile && deserializeColorProfile(r.profile, problems)) || documentProfile('coated-cmyk');
+  const intent = (['perceptual', 'relative', 'saturation', 'absolute'] as const).includes(r.intent as Intent) ? (r.intent as Intent) : 'relative';
+  return { mode: 'cmyk', profile, intent };
+}
+
+/** The proof the viewport shows: Proof Setup, else a CMYK document's own profile. */
+export function effectiveProof(proof: ProofSetup | null | undefined, mode: DocumentColorMode | null | undefined): ProofSetup | null {
+  if (proof) return proof;
+  if (mode?.mode === 'cmyk') return { ...DEFAULT_PROOF, profile: mode.profile, intent: mode.intent };
+  return null;
+}
+
+/**
+ * RGBA pixels (in the document profile `doc`) as the channel planes of `mode`, for a PSD:
+ * CMYK as Photoshop stores it (255 = no ink), Lab with L 0..255 for 0..100 and a, b offset by 128.
+ */
+export function colorModePlanes(doc: DocumentColorProfile | null | undefined, mode: DocumentColorMode): (rgba: Uint8ClampedArray, n: number) => Uint8Array[] {
+  const src = resolveProfile(doc);
+  if (mode.mode === 'cmyk') {
+    const t = Transform.create(src, resolveProfile(mode.profile), { intent: mode.intent, bpc: true });
+    return (rgba, n) => {
+      const ink = new Uint8Array(n * 4);
+      t.convert8(rgba, 4, ink, 4, false);
+      const planes = [0, 1, 2, 3].map(() => new Uint8Array(n));
+      for (let i = 0; i < n; i++) for (let c = 0; c < 4; c++) planes[c][i] = 255 - ink[i * 4 + c];
+      return planes;
+    };
+  }
+  const t = Transform.create(src, builtinProfile('lab-d50'), { intent: 'relative', bpc: false });
+  return (rgba, n) => {
+    const lab = new Uint8Array(n * 4);
+    t.convert8(rgba, 4, lab, 4, false);
+    const planes = [0, 1, 2].map(() => new Uint8Array(n));
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) planes[c][i] = lab[i * 4 + c];
+    return planes;
+  };
+}
+
 const resolved = new WeakMap<object, Profile>();
 const fromBytes = new Map<string, Profile>();
 

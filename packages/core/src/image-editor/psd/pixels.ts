@@ -86,6 +86,12 @@ export interface ChannelSet {
   alpha?: Uint8Array;
   /** Indexed: 768-byte palette (all reds, all greens, all blues). */
   palette?: Uint8Array;
+  /**
+   * CMYK: converts interleaved ink amounts (C, M, Y, K, 0..255 = no ink..full ink, stride 4)
+   * to RGB (stride 4, alpha untouched), e.g. through the file's ICC profile. Missing: the
+   * plain `rgb = (1 − ink) × (1 − k)` approximation.
+   */
+  cmykToRgb?: (ink: Uint8Array, out: Uint8ClampedArray) => void;
 }
 
 /** Interleaved 8-bit sRGB RGBA. */
@@ -109,6 +115,16 @@ export function toRgba8(set: ChannelSet): Uint8ClampedArray {
       out[o + 2] = b[i];
       out[o + 3] = a ? a[i] : 255;
     }
+    return out;
+  }
+  if (mode === MODE_CMYK && set.cmykToRgb) {
+    // Through a colour profile: ink amounts in, RGB out.
+    const ink = new Uint8Array(n * 4);
+    for (let i = 0, o = 0; i < n; i++, o += 4) {
+      for (let c = 0; c < 4; c++) ink[o + c] = Math.round((1 - (planes[c] ? planes[c](i) : 1)) * 255);
+      out[o + 3] = Math.round(alpha(i) * 255);
+    }
+    set.cmykToRgb(ink, out);
     return out;
   }
   const palette = set.palette;

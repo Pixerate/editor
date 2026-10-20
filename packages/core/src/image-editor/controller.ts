@@ -281,7 +281,12 @@ import { WARP_STYLES } from '../geom/warp';
 import { INTENTS, Transform, builtinProfile, canBeDestination, writeJpegIcc, writePngIcc, type BuiltinProfileId, type ColorSpace, type Intent, type Profile } from '../cms';
 import {
   DEFAULT_PROOF,
+  colorModePlanes,
   convertSurfaceColors,
+  deserializeColorMode,
+  effectiveProof,
+  serializeColorMode,
+  type DocumentColorMode,
   deserializeColorProfile,
   displayTransform,
   documentProfile,
@@ -781,6 +786,7 @@ interface HistoryEntry {
   selection: SelectionMask | null;
   source: SourceSnapshot;
   colorProfile?: DocumentColorProfile;
+  colorMode?: DocumentColorMode;
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = DEFAULT_ADJUSTMENTS_VALUES;
@@ -1063,15 +1069,16 @@ export class ImageEditorController {
     this.listeners.forEach((l) => l(currentState));
   }
 
-  private displayFor: [DocumentColorProfile | undefined, ProofSetup | null | undefined] | null = null;
+  private displayFor: [DocumentColorProfile | undefined, ProofSetup | null | undefined, DocumentColorMode | undefined] | null = null;
 
-  /** Keeps the renderer's display transform in step with the document profile and Proof Setup. */
+  /** Keeps the renderer's display transform in step with the document profile, mode and Proof Setup. */
   private syncDisplay(): void {
     const s = this.state;
-    if (this.displayFor && this.displayFor[0] === s.colorProfile && this.displayFor[1] === s.proofSetup) return;
-    this.displayFor = [s.colorProfile, s.proofSetup];
+    const d = this.displayFor;
+    if (d && d[0] === s.colorProfile && d[1] === s.proofSetup && d[2] === s.colorMode) return;
+    this.displayFor = [s.colorProfile, s.proofSetup, s.colorMode];
     try {
-      this.renderer.setDisplayTransform(displayTransform(s.colorProfile, s.proofSetup));
+      this.renderer.setDisplayTransform(displayTransform(s.colorProfile, effectiveProof(s.proofSetup, s.colorMode)));
     } catch {
       this.renderer.setDisplayTransform(null);
     }
@@ -1118,6 +1125,7 @@ export class ImageEditorController {
     if (s.globalLight) entry.globalLight = { ...s.globalLight };
     if (s.patterns) entry.patterns = s.patterns;
     if (s.colorProfile) entry.colorProfile = s.colorProfile;
+    if (s.colorMode) entry.colorMode = s.colorMode;
     return entry;
   }
 
@@ -1137,6 +1145,8 @@ export class ImageEditorController {
     else delete s.patterns;
     if (entry.colorProfile) s.colorProfile = entry.colorProfile;
     else delete s.colorProfile;
+    if (entry.colorMode) s.colorMode = entry.colorMode;
+    else delete s.colorMode;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -4411,11 +4421,53 @@ export class ImageEditorController {
 
   // --- Colour management ---
 
-  /** The document's colour profile: its name, built-in id (or `null` for an embedded profile) and colour space. */
-  public getColorProfile(): { name: string; builtin: BuiltinProfileId | null; colorSpace: ColorSpace; srgb: boolean } {
+  /** The document's colour profile: its name, built-in id (or `null` for an embedded profile), colour space, and Image › Mode. */
+  public getColorProfile(): {
+    name: string;
+    builtin: BuiltinProfileId | null;
+    colorSpace: ColorSpace;
+    srgb: boolean;
+    mode: 'rgb' | 'cmyk' | 'lab';
+    cmykProfile?: { name: string; builtin: BuiltinProfileId | null; intent: Intent };
+  } {
     const doc = this.state.colorProfile;
     const p = resolveProfile(doc);
-    return { name: doc?.name ?? p.description, builtin: doc ? (doc.builtin ?? null) : 'srgb', colorSpace: p.colorSpace, srgb: isSrgb(doc) };
+    const m = this.state.colorMode;
+    const out: ReturnType<ImageEditorController['getColorProfile']> = { name: doc?.name ?? p.description, builtin: doc ? (doc.builtin ?? null) : 'srgb', colorSpace: p.colorSpace, srgb: isSrgb(doc), mode: m?.mode ?? 'rgb' };
+    if (m?.mode === 'cmyk') out.cmykProfile = { name: m.profile.name, builtin: m.profile.builtin ?? null, intent: m.intent };
+    return out;
+  }
+
+  /**
+   * Image › Mode (one undo step): `rgb`, `cmyk` (with a CMYK `profile`, default the coated
+   * CMYK, and the `intent` RGB is separated with) or `lab`. The pixels stay RGB in the working
+   * space; a CMYK document is soft-proofed through its profile in the viewport, and PSD export
+   * writes CMYK or Lab channels. Returns the profile summary.
+   */
+  public setColorMode(mode: 'rgb' | 'cmyk' | 'lab', options: { profile?: string | Uint8Array; intent?: Intent } = {}): ReturnType<ImageEditorController['getColorProfile']> {
+    let next: DocumentColorMode | null;
+    if (mode === 'rgb') {
+      if (options.profile !== undefined) throw new LayerOperationError('An RGB document takes no CMYK profile; use assign_profile for its working space.');
+      next = null;
+    } else if (mode === 'lab') next = { mode: 'lab' };
+    else if (mode === 'cmyk') {
+      let doc: DocumentColorProfile;
+      try {
+        doc = documentProfile(options.profile ?? 'coated-cmyk');
+      } catch (e) {
+        throw new LayerOperationError(e instanceof Error ? e.message : String(e));
+      }
+      const cs = resolveProfile(doc).colorSpace;
+      if (cs !== 'cmyk') throw new LayerOperationError(`CMYK mode needs a CMYK profile; "${doc.name}" is ${cs.toUpperCase()}.`);
+      const intent = options.intent ?? 'relative';
+      if (!INTENTS.includes(intent)) throw new LayerOperationError(`Unknown rendering intent "${String(intent)}"; use ${INTENTS.join(', ')}.`);
+      next = { mode: 'cmyk', profile: doc, intent };
+    } else throw new LayerOperationError(`Unknown colour mode "${String(mode)}"; use rgb, cmyk or lab.`);
+    this.recordHistory();
+    if (next) this.state.colorMode = next;
+    else delete this.state.colorMode;
+    this.notify();
+    return this.getColorProfile();
   }
 
   /** Resolves a profile argument (built-in id or alias, or ICC bytes) as an RGB document profile. */
@@ -4543,6 +4595,17 @@ export class ImageEditorController {
     });
   }
 
+  /** How `toPsd` writes colour: RGB with the working space, or CMYK / Lab channels for those modes. */
+  private psdColorOptions(warnings: string[]): { iccProfile?: Uint8Array; colorMode?: 'rgb' | 'cmyk' | 'lab'; colorPlanes?: (rgba: Uint8ClampedArray, n: number) => Uint8Array[] } {
+    const m = this.state.colorMode;
+    if (!m) return { iccProfile: profileBytes(this.state.colorProfile) };
+    if (flattenLayers(this.state.layers).some((l) => l.type === 'adjustment' && l.visible)) {
+      warnings.push(`Adjustment layers were written with their RGB settings; in a ${m.mode.toUpperCase()} file Photoshop applies them to its own channels, so they may look different there.`);
+    }
+    const planes = colorModePlanes(this.state.colorProfile, m);
+    return m.mode === 'cmyk' ? { colorMode: 'cmyk', colorPlanes: planes, iccProfile: profileBytes(m.profile) } : { colorMode: 'lab', colorPlanes: planes };
+  }
+
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
   private psdResolution: number | undefined;
 
@@ -4577,13 +4640,16 @@ export class ImageEditorController {
     if (result.globalLight) s.globalLight = result.globalLight;
     else delete s.globalLight;
     delete s.colorProfile;
-    if (result.iccProfile) {
+    delete s.colorMode;
+    if (result.sourceMode?.mode === 'cmyk') s.colorMode = { mode: 'cmyk', profile: result.sourceMode.profile, intent: 'relative' };
+    else if (result.sourceMode?.mode === 'lab') s.colorMode = { mode: 'lab' };
+    else if (result.iccProfile) {
       try {
         const doc = documentProfile(result.iccProfile);
         const cs = resolveProfile(doc).colorSpace;
         if (cs === 'rgb') {
           if (!isSrgb(doc)) s.colorProfile = doc;
-        } else result.warnings.push(`The file's ${cs.toUpperCase()} profile "${doc.name}" was not used; its colours were converted to sRGB numerically.`);
+        } else result.warnings.push(`The file's ${cs.toUpperCase()} profile "${doc.name}" was not used; its colours were read as sRGB.`);
       } catch (e) {
         result.warnings.push(`The embedded ICC profile could not be read (${e instanceof Error ? e.message : String(e)}); colours are read as sRGB.`);
       }
@@ -4760,7 +4826,7 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, iccProfile: profileBytes(this.state.colorProfile) });
+    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, ...this.psdColorOptions(warnings) });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -4935,6 +5001,9 @@ export class ImageEditorController {
       const profile = data.colorProfile ? deserializeColorProfile(data.colorProfile, problems) : null;
       if (profile) s.colorProfile = profile;
       else delete s.colorProfile;
+      const cmode = data.colorMode ? deserializeColorMode(data.colorMode, problems) : null;
+      if (cmode) s.colorMode = cmode;
+      else delete s.colorMode;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -4951,6 +5020,7 @@ export class ImageEditorController {
       delete s.globalLight;
       delete s.patterns;
       delete s.colorProfile;
+      delete s.colorMode;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -4962,7 +5032,7 @@ export class ImageEditorController {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
     // A global light is only stored in the layered schema.
-    if (view.exact && !this.state.globalLight && !this.state.patterns?.length && !this.state.colorProfile) {
+    if (view.exact && !this.state.globalLight && !this.state.patterns?.length && !this.state.colorProfile && !this.state.colorMode) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -4993,6 +5063,7 @@ export class ImageEditorController {
     if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
     if (smartContents) out.smartContents = smartContents;
     if (this.state.colorProfile) out.colorProfile = serializeColorProfile(this.state.colorProfile);
+    if (this.state.colorMode) out.colorMode = serializeColorMode(this.state.colorMode);
     return out;
   }
 }
