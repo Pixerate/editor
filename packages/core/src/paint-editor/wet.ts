@@ -365,6 +365,9 @@ export interface WetEngineInfo {
   cpu: WetBackendInfo | null;
 }
 
+/** Steps the GPU may show ahead of the CPU between strokes (the longest CPU batch then). */
+export const GPU_LEAD = 16;
+
 /** Tiles reshaded per frame at most (the rest catch up over the next frames). */
 const DISPLAY_TILES_PER_TICK = 24;
 
@@ -385,6 +388,7 @@ export class PaintWetLayers {
   private ticking: Promise<void> | null = null;
   private stepsOwed = 0;
   private displaying: Promise<void> | null = null;
+  private leadAt = 0;
   gpuMode: WetGpuMode;
   gpuMinTiles: number;
   private gpu: WetGpuEngine | null = null;
@@ -583,13 +587,13 @@ export class PaintWetLayers {
   }
 
   /** Like `syncDisplays`, shading on the GPU when Engine B is active (all stale tiles at once). */
-  async syncDisplaysGpu(maxCpuTiles: number): Promise<RasterRect[]> {
+  async syncDisplaysGpu(maxCpuTiles: number, lead = false): Promise<RasterRect[]> {
     const w = this.world;
     if (!w) return [];
     const surfaces = new Map<string, TiledSurface>();
     const rects: RasterRect[] = [];
     for (const id of w.laneIds()) {
-      const d = await w.displayGpu(id, maxCpuTiles);
+      const d = await w.displayGpu(id, maxCpuTiles, lead);
       if (!w.hasLane(id)) continue;
       if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
       rects.push(...d.changed);
@@ -616,7 +620,11 @@ export class PaintWetLayers {
    * Resolves when the steps are done and the display is up to date.
    */
   tick(now: number, maxSteps = 8): Promise<void> {
-    if (this.ticking) return this.ticking;
+    if (this.ticking) {
+      // Between strokes, while the CPU works through a batch, the GPU shows its steps as they come.
+      this.leadFrame(now);
+      return this.ticking;
+    }
     // The GPU is still shading the last frame: wait for it (edits need not; they just win).
     if (this.displaying) return this.displaying;
     const last = this.lastTick;
@@ -631,8 +639,13 @@ export class PaintWetLayers {
       this.retireDry();
       return Promise.resolve();
     }
-    this.stepsOwed = Math.min(maxSteps * 4, this.stepsOwed + ((now - last) / 1000) * this.speed);
-    const n = Math.min(maxSteps, Math.floor(this.stepsOwed));
+    // Engine B between strokes: longer CPU batches (up to GPU_LEAD steps) that the GPU runs ahead through.
+    const lead = w.gpuActive && !this.driver;
+    w.gpuLeadMode = lead;
+    const most = lead ? Math.max(maxSteps, GPU_LEAD) : maxSteps;
+    this.stepsOwed = Math.min(most * 4, this.stepsOwed + ((now - last) / 1000) * this.speed);
+    const n = Math.min(most, Math.floor(this.stepsOwed));
+    this.leadAt = now;
     if (n < 1) {
       this.flushDriver();
       return Promise.resolve();
@@ -659,6 +672,20 @@ export class PaintWetLayers {
     })();
     this.ticking = run;
     return run;
+  }
+
+  /** Lead mode: steps the GPU on by the time since the last frame (within the running batch) and shows it. */
+  private leadFrame(now: number): void {
+    const w = this.world;
+    if (!w || this.displaying || this.driver || !w.gpuLeading) return;
+    const k = Math.max(1, Math.round(((now - this.leadAt) / 1000) * this.speed));
+    if (!w.gpuLead(k)) return;
+    this.leadAt = now;
+    const shading = this.syncDisplaysGpu(0, true).then(() => this.host.changed());
+    this.displaying = shading;
+    void shading.finally(() => {
+      if (this.displaying === shading) this.displaying = null;
+    });
   }
 
   private flushDriver(): void {

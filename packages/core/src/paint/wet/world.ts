@@ -19,8 +19,10 @@
  *   compositor. Tiles that dry are baked into the base and their slots freed.
  * - **Engine B (WebGPU).** With a GPU engine attached (`attachGpu`) and at least `gpuMinTiles` live
  *   tiles, the GPU keeps a mirror of the slots: each edit uploads the rows it changed, each batch
- *   runs on the GPU too, and `displayGpu` shades every stale tile there at once. The CPU state stays
- *   the authority (edits, reads, drying, snapshots, baking); the GPU's copy only feeds the display.
+ *   runs on the GPU too, and `displayGpu` shades every stale tile there at once. In lead mode
+ *   (between strokes) the GPU steps a batch frame by frame while the CPU computes it (`gpuLead`).
+ *   The CPU state stays the authority (edits, reads, drying, snapshots, baking); the GPU's copy
+ *   only feeds the display.
  */
 
 import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile } from '../../raster/surface';
@@ -230,6 +232,13 @@ export class WetWorld {
   /** Slot → rows (1..256, inclusive) to upload; `[0, 257]` means the whole slot. */
   private readonly gpuDirty = new Map<number, [number, number]>();
   private gpuParamsDirty = true;
+  /**
+   * Lead mode (between strokes): a batch is not sent to the GPU all at once; `gpuLead` steps it
+   * frame by frame while the CPU works through it, so the display moves on before the CPU is done.
+   */
+  gpuLeadMode = false;
+  /** The batch the GPU is working through in lead mode. */
+  private gpuPlan: { jobs: WetGpuJob[]; parity: number; total: number; done: number } | null = null;
   /** Resolves when the fastest available kernel is running (it may stay `typescript`). */
   readonly ready: Promise<WetBackendInfo>;
 
@@ -1359,6 +1368,7 @@ export class WetWorld {
 
   private gpuStop(reason: string | null): void {
     this.gpuLive = false;
+    this.gpuPlan = null;
     this.gpuDirty.clear();
     if (reason) {
       this.gpuFailure = reason;
@@ -1385,8 +1395,41 @@ export class WetWorld {
     return this.gpuLive;
   }
 
+  /** Sends the rest of a lead batch to the GPU (before anything else touches its state). */
+  private gpuFinishPlan(): void {
+    const plan = this.gpuPlan;
+    this.gpuPlan = null;
+    if (!plan || plan.done >= plan.total || !this.gpu) return;
+    this.gpu.step(plan.jobs, (plan.parity + plan.done) & 1, plan.total - plan.done).catch((e: Error) => this.gpuStop(`Wet paint stopped using the GPU (${e.message}).`));
+  }
+
+  /**
+   * Lead mode: steps the GPU up to `steps` further into the batch the CPU is running (never past
+   * it, so the GPU is never ahead of the CPU's next edit). Returns the steps taken.
+   */
+  gpuLead(steps: number): number {
+    const plan = this.gpuPlan;
+    if (!plan || !this.gpu || !this.gpuLive) return 0;
+    const n = Math.max(0, Math.min(Math.floor(steps), plan.total - plan.done));
+    if (!n) return 0;
+    this.gpu.step(plan.jobs, (plan.parity + plan.done) & 1, n).catch((e: Error) => this.gpuStop(`Wet paint stopped using the GPU (${e.message}).`));
+    plan.done += n;
+    return n;
+  }
+
+  /** Steps the GPU is ahead of the CPU's last finished batch (lead mode), 0 otherwise. */
+  get gpuAhead(): number {
+    return this.gpuPlan && this.busyFlag ? this.gpuPlan.done : 0;
+  }
+
+  /** Whether the GPU can show steps the CPU has not finished (a lead batch is running). */
+  get gpuLeading(): boolean {
+    return Boolean(this.gpuLive && this.gpuPlan && this.busyFlag && this.gpuPlan.done < this.gpuPlan.total);
+  }
+
   /** Uploads what the CPU changed since the last upload (the current set and deposits; whole slots on wake-up). */
   private gpuSync(): void {
+    this.gpuFinishPlan();
     const gpu = this.gpu!;
     if (!gpu.ensureSlots(this.slotCount)) {
       this.gpuStop(null);
@@ -1439,7 +1482,9 @@ export class WetWorld {
     try {
       this.gpuSync();
       if (!this.gpuLive) return;
-      this.gpu.step(this.gpuJobs(this.active), this.parity, n).catch((e: Error) => this.gpuStop(`Wet paint stopped using the GPU (${e.message}).`));
+      const jobs = this.gpuJobs(this.active);
+      if (this.gpuLeadMode) this.gpuPlan = { jobs, parity: this.parity, total: n, done: 0 };
+      else this.gpu.step(jobs, this.parity, n).catch((e: Error) => this.gpuStop(`Wet paint stopped using the GPU (${e.message}).`));
     } catch (e) {
       this.gpuStop(`Wet paint stopped using the GPU (${(e as Error).message}).`);
     }
@@ -1450,18 +1495,21 @@ export class WetWorld {
    * otherwise, or when the world changed while the GPU worked, it is `display(id, maxCpuTiles)`).
    * Call between batches.
    */
-  async displayGpu(id: string, maxCpuTiles = Infinity): Promise<{ surface: TiledSurface; changed: RasterRect[]; pending: number; gpu: boolean }> {
-    if (!this.gpu || this.busyFlag || !this.gpuDecide()) return { ...this.display(id, maxCpuTiles), gpu: false };
+  async displayGpu(id: string, maxCpuTiles = Infinity, lead = this.busyFlag): Promise<{ surface: TiledSurface; changed: RasterRect[]; pending: number; gpu: boolean }> {
+    // Leading: the CPU is mid-batch and the GPU is partway through it; show the GPU's step.
+    const plan = lead && this.gpuLive ? this.gpuPlan : null;
+    if (!this.gpu || (this.busyFlag && !plan) || (!plan && !this.gpuDecide())) return { ...this.display(id, maxCpuTiles), gpu: false };
     const lane = this.laneOf(id);
     const keys = this.active.filter((k) => this.laneIndexOf(k) === lane.index);
-    const stale = keys.filter((k) => lane.shaded.get(this.tileKeyOf(k))?.stamp !== lane.stamp);
+    const stale = plan ? keys : keys.filter((k) => lane.shaded.get(this.tileKeyOf(k))?.stamp !== lane.stamp);
     if (!stale.length) return { ...this.display(id, 0), gpu: true };
     let tiles: Uint8ClampedArray[];
     const stamp = lane.stamp;
     const base = lane.base;
     try {
-      this.gpuSync();
-      tiles = await this.gpu.shade(this.gpuJobs(stale), this.parity, stale.map((k) => base.tiles.get(this.tileKeyOf(k))?.data ?? null), [this.paperBytes[0], this.paperBytes[1], this.paperBytes[2]]);
+      if (!plan) this.gpuSync();
+      const parity = plan ? (plan.parity + plan.done) & 1 : this.parity;
+      tiles = await this.gpu.shade(this.gpuJobs(stale), parity, stale.map((k) => base.tiles.get(this.tileKeyOf(k))?.data ?? null), [this.paperBytes[0], this.paperBytes[1], this.paperBytes[2]]);
     } catch (e) {
       this.gpuStop(`Wet paint stopped using the GPU (${(e as Error).message}).`);
       return { ...this.display(id, maxCpuTiles), gpu: false };

@@ -280,4 +280,58 @@ describe('Engine B on a GPU (WET_GPU)', () => {
     on.dispose();
     off.dispose();
   }, 120000);
+
+  withGpu('between strokes the GPU runs ahead within the CPU batch, never past it, and shows the right step', async () => {
+    const { engine } = await createWetGpuEngine(gpu);
+    const make = async () => {
+      const w = new WetWorld(600, 420, paper, { kernel: 'wasm', threads: 0 });
+      await w.ready;
+      w.ensureLane('a', { params: { granulation: 0.8 } });
+      w.setTilt({ angle: 40, direction: 0 });
+      const a = disc(260, 200, 60);
+      w.paint('a', a.rect, a.cov, 0.6, Array.from(pigmentOf([0.15, 0.3, 0.75], 0), (v) => v * 0.06));
+      w.stepSync(8);
+      return w;
+    };
+    const lead = await make();
+    lead.attachGpu(engine);
+    lead.gpuMinTiles = 1;
+    lead.stepSync(8); // mirrored, in lockstep
+    lead.gpuLeadMode = true;
+    lead.stepSync(16); // the CPU runs the batch; the GPU has not started it
+    expect(lead.gpuLead(5)).toBe(5);
+    const at = async (steps: number) => {
+      const cpu = await make();
+      cpu.stepSync(8 + steps);
+      return cpu.display('a').surface;
+    };
+    const compare = (want: { tiles: Map<number, { data: Uint8ClampedArray }> }, got: { tiles: Map<number, { data: Uint8ClampedArray }> }) => {
+      let worst = 0;
+      for (const [k, t] of want.tiles) {
+        const g = got.tiles.get(k)!;
+        for (let i = 0; i < t.data.length; i += 4)
+          for (let ch = 0; ch < 3; ch++) {
+            const over = (px: Uint8ClampedArray) => (px[i + 3] / 255) * px[i + ch] + (1 - px[i + 3] / 255) * paper.color[ch];
+            worst = Math.max(worst, Math.abs(over(t.data) - over(g.data)));
+          }
+      }
+      return worst;
+    };
+    const mid = await lead.displayGpu('a', Infinity, true);
+    expect(mid.gpu).toBe(true);
+    expect(compare(await at(5), mid.surface)).toBeLessThanOrEqual(2);
+    // Ahead of step 5 it is not: the GPU really shows step 5 of 16.
+    expect(compare(await at(16), mid.surface)).toBeGreaterThan(2);
+    expect(lead.gpuLead(100)).toBe(11);
+    expect(lead.gpuLead(1)).toBe(0);
+    const end = await lead.displayGpu('a', Infinity, true);
+    expect(compare(await at(16), end.surface)).toBeLessThanOrEqual(2);
+    // Back in step: the next batch picks up from the same clock.
+    lead.gpuLeadMode = false;
+    lead.stepSync(8);
+    const after = await lead.displayGpu('a');
+    expect(after.gpu).toBe(true);
+    expect(compare(await at(24), after.surface)).toBeLessThanOrEqual(2);
+    engine!.destroy();
+  }, 60000);
 });
