@@ -87,6 +87,7 @@ export const RETOUCH_CHOICES: readonly {
     tools: ['spot-heal'],
     options: [
       { id: 'proximity-match', label: 'Proximity Match', title: 'Copy the best matching patch nearby' },
+      { id: 'content-aware', label: 'Content-Aware', title: 'Synthesise texture and edges from patches around the spot' },
       { id: 'smooth', label: 'Smooth', title: 'Fill smoothly from the edges' },
     ],
   },
