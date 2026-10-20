@@ -2589,3 +2589,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Holes (a frame, the counter of an "O") were bevelled into the hole, and thin parts had faces poking out the other side.
 - **Root Cause**: A ring's winding alone doesn't say where the inside is: holes may wind either way under `evenodd`. And a mitred inset corner `width` deep can cross the opposite outline wherever the shape is thinner than the bevel.
 - **Solution / Workaround**: `vectorBevelFaces` finds each ring's inside by testing a point just off its longest edge against all rings with the shape's fill rule. It then cuts each corner's inset to half the distance at which it would cross any outline edge.
+
+### [core/vector] A Lens Depends On Other Nodes, So Its Backdrop Is Resolved Into The Node
+
+- **Issue / Symptom**: A lens didn't follow edits to the art below it, because render data is cached per node object and the lens node itself hadn't changed.
+- **Root Cause**: What a lens draws depends on nodes other than itself. The per-node caches (`renderCache`, `expandCache`, `shapeCache`) can't see that.
+- **Solution / Workaround**: The backdrop lives on the lens as a derived `lensView`. `resolveVectorLenses` sets it in the controller's refresh, as connectors' routes and instances' art are set. It keeps node objects (and so caches) when the backdrop's nodes are the same objects, and `toJSON()` strips it. Code drawing a caller's document resolves it first (`getVectorSceneRenderData`, `vectorDocumentToSvg`, `vectorDocumentToPdf`, `vectorDocumentToLottie`).

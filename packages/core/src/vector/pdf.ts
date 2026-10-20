@@ -14,6 +14,7 @@
  * opacity masks, stop opacity and text without glyph outlines are left out and named in `notes`.
  */
 
+import { resolveVectorLenses } from './lens.js';
 import { deflate } from '../raster/zlib.js';
 import { parseSvgPath } from '../canvas/shapeGeometry.js';
 import type { SvgGradientDef } from '../canvas/gradient.js';
@@ -396,6 +397,7 @@ const pdfString = (s: string) => `(${s.replace(/[\\()]/g, (c) => `\\${c}`).repla
  */
 export function vectorDocumentToPdf(doc: VectorDocument, options: VectorPdfOptions = {}): VectorPdfExport {
 	const notes = new Set<string>();
+	doc = resolveVectorLenses(doc);
 	const scale = options.scale ?? 1;
 	const compress = options.compress !== false;
 	const frames = options.pages === 'artboards' ? vectorArtboards(doc) : [];
