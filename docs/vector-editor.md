@@ -346,6 +346,28 @@ Both are paint objects in the node's own space, like its anchors, and move with 
   - Drag a point to move it. Click inside a freeform shape to add a point in the colour shown there, and Alt-click a freeform point to remove it.
   - The picked point is `state.shadingPoint`, which `VectorShadingPanel` recolours.
 
+## Image Trace
+
+```ts
+controller.traceImage(pixels, { mode: "threshold", threshold: 0.5, tolerance: 1, cornerRoundness: 0.5, x: 0, y: 0, width: 200 });
+controller.traceImage(pixels, { mode: "color", colors: 6 }); // a stacked path per colour
+traceVectorImage({ width, height, data }, options); // the paths alone, in pixel units
+```
+
+After effectcraft's `trace.rs`. The steps:
+
+- **Contours.** Marching squares runs over the samples at pixel centres. Each crossing is interpolated along its cell edge, a saddle cell is resolved by the cell's mean, and the field is padded with "outside" so every contour closes.
+- **Simplification.** Each loop is simplified with Douglas–Peucker to `tolerance` (pixels), and loops smaller than `minArea` are dropped.
+- **Nesting.** Each loop gets its nesting depth. Holes come out as even-odd subpaths of one compound path, outer loops first.
+- **Fitting.** Loops are fitted with our `fitCubics`. `cornerRoundness` 0 keeps the simplified polygon. Higher values let larger turns stay smooth: the corner angle is 25° + 125° × roundness.
+
+The two modes:
+
+- **Threshold** traces where darkness over white reaches `threshold`, or where alpha does with `channel: "alpha"`.
+- **Colour** quantises the opaque pixels by median cut. A split falls where the channel value changes, so identical colours stay in one box. The colours are traced from the most common up, and each colour's path also covers the colours traced after it, so the stacked shapes leave no gaps between them.
+
+`traceImage` places the result as one group (one undo step). Agents pass a PNG data URL to `vector.traceImage`, which core decodes with its own PNG reader, up to 4 million pixels. The panels decode any image the browser can read, scaled to at most 1 million pixels.
+
 ## Text
 
 ```ts

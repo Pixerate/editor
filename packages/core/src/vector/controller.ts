@@ -156,6 +156,7 @@ import {
 	VECTOR_MESH_MAX
 } from './shading.js';
 import { parseVectorColor } from './gradient.js';
+import { traceVectorImage, type VectorTraceOptions, type VectorTracePixels } from './trace.js';
 import { pointInBezierPath } from '../canvas/pathops/bezier.js';
 import type { VectorFreeformGradient, VectorFreeformPoint, VectorMeshGradient } from './types.js';
 import { vectorBoundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
@@ -4113,6 +4114,41 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Image tracing
+
+	/**
+	 * Image Trace: traces RGBA `pixels` into paths (see `traceVectorImage`) and adds them as one
+	 * group, the image placed with its top-left at `x, y` (default 0, 0) and `width` wide (default:
+	 * one unit per pixel; the height follows). One undo step; selects the group. Returns its id and
+	 * the traced paths' ids, bottom to top.
+	 */
+	traceImage(pixels: VectorTracePixels, options: VectorTraceOptions & { x?: number; y?: number; width?: number; name?: string } = {}): VectorActionResult & { id?: string; ids?: string[] } {
+		if (options.threshold !== undefined && !(options.threshold >= 0 && options.threshold <= 1)) return { ok: false, message: 'threshold must be from 0 to 1.' };
+		if (options.colors !== undefined && !(Number.isInteger(options.colors) && options.colors >= 2 && options.colors <= 32)) return { ok: false, message: 'colors must be a whole number from 2 to 32.' };
+		if (options.tolerance !== undefined && !(options.tolerance > 0)) return { ok: false, message: 'tolerance must be above 0 (pixels).' };
+		if (options.width !== undefined && !(options.width > 0)) return { ok: false, message: 'width must be above 0.' };
+		if (options.color !== undefined && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
+		let traced: VectorPathNode[];
+		try {
+			traced = traceVectorImage(pixels, options);
+		} catch (e) {
+			return { ok: false, message: (e as Error).message };
+		}
+		if (!traced.length) return { ok: false, message: 'Nothing to trace: no shape reached the threshold (try another threshold, the alpha channel, or colour mode).' };
+		const k = (options.width ?? pixels.width) / pixels.width;
+		const m: AffineMatrix = [k, 0, 0, k, options.x ?? 0, options.y ?? 0];
+		const children = traced.map((n) => ({ ...transformVectorNode(n, m), id: this.newId() }));
+		const id = this.newId();
+		this.change('Image Trace', () => {
+			this.setDoc([...this.doc.nodes, { id, type: 'group', name: options.name ?? 'Image Trace', children }]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id, ids: children.map((c) => c.id) };
 	}
 
 	// -----------------------------------------------------------------------------------------

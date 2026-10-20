@@ -18,7 +18,9 @@ import { isVectorMaskGroup, vectorMaskSummary, type VectorMaskSummary } from './
 import { isVectorFrame } from './frames.js';
 import { vectorPolarAngles } from './snap.js';
 import { sanitizeVectorShadedPaint } from './shading.js';
-import type { VectorFreeformPoint } from './types.js';
+import type { VectorFreeformPoint, VectorPathNode } from './types.js';
+import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
+import { decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -1234,6 +1236,58 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const traceCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}traceImage`,
+			label: 'Image Trace…',
+			keywords: ['trace', 'image trace', 'live trace', 'vectorize', 'bitmap to vector', 'png to svg', 'autotrace', 'posterize'],
+			description:
+				'Traces a PNG (base64 data URL) into vector paths and adds them as one group: `threshold` mode makes one even-odd path where the image is dark (or opaque with channel alpha); `color` mode makes a stacked path per colour (median-cut to `colors`, the most common at the bottom). Placed with its top-left at x, y and `width` wide (default one unit per pixel). One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					image: { type: 'string', description: 'The image as a data:image/png;base64,… URL (up to 4 million pixels).' },
+					mode: { type: 'string', enum: ['threshold', 'color'], description: 'threshold (one colour, default) or color (a path per colour).' },
+					channel: { type: 'string', enum: ['luminance', 'alpha'], description: 'Threshold mode: trace dark pixels (luminance, default) or opaque ones (alpha).' },
+					threshold: { type: 'number', minimum: 0, maximum: 1, description: 'Threshold mode: inside where darkness (or alpha) reaches this (default 0.5).' },
+					color: { type: 'string', description: 'Threshold mode: the fill (default black).' },
+					colors: { type: 'integer', minimum: 2, maximum: 32, description: 'Colour mode: how many colours (default 6).' },
+					tolerance: { type: 'number', exclusiveMinimum: 0, description: 'How far the outline may stray from the pixels, in pixels (default 1; larger is simpler).' },
+					minArea: { type: 'number', minimum: 0, description: 'Drop shapes smaller than this many square pixels (default 10).' },
+					cornerRoundness: { type: 'number', minimum: 0, maximum: 1, description: '0: polygons with sharp corners; 1: smooth curves (default 0.5).' },
+					x: { type: 'number', description: 'Left edge in document units (default 0).' },
+					y: { type: 'number', description: 'Top edge in document units (default 0).' },
+					width: { type: 'number', exclusiveMinimum: 0, description: 'Width in document units (default: the image width in pixels).' },
+					name: { type: 'string', description: 'Group name (default "Image Trace").' }
+				},
+				required: ['image'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { image: string } & VectorTraceOptions & { x?: number; y?: number; width?: number; name?: string }) => {
+				const { image, ...options } = params;
+				const parsed = parseDataUrl(image);
+				if (!parsed || !isPng(parsed.bytes)) fail('image must be a PNG data URL (data:image/png;base64,…).');
+				let decoded: { width: number; height: number; data: ArrayLike<number> };
+				try {
+					decoded = decodePng(parsed!.bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
+				} catch (e) {
+					return fail(`The PNG could not be read: ${(e as Error).message}`);
+				}
+				const r = controller.traceImage(decoded, options);
+				check(r);
+				return {
+					id: r.id,
+					paths: r.ids!.map((id) => {
+						const n = controller.getNode(id) as VectorPathNode;
+						return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
+					})
+				};
+			}
+		}
+	];
+
 	const shadingResult = (id: string) => ({ id, shading: controller.getShading(id) ?? fail(`"${id}" has no mesh or freeform fill.`) });
 	const COLOR = { type: 'string', description: 'A CSS colour.' } as const;
 	const FREEFORM_POINT = {
@@ -1962,6 +2016,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...connectorCommands(),
 		...trackingCommands(),
 		...shadingCommands(),
+		...traceCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

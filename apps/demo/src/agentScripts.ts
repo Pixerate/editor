@@ -1,4 +1,5 @@
 import type { AgentScript, AgentScriptContext } from "./agentScript";
+import { pngDataUrl } from "@pixerate/editor/raster";
 
 // One or two scripted requests per editor. Every step is a real tool call through the demo's
 // ToolRegistry (the same tools listed in "Agent tools for this editor"); later steps take ids and
@@ -278,6 +279,24 @@ function artboardBox(x: number, y: number, width: number, height: number) {
   };
 }
 
+/** A small two-colour "P" badge as a PNG data URL, for the tracing script. */
+function badgePng(): string {
+  const w = 96;
+  const h = 96;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const r = Math.hypot(x + 0.5 - 48, y + 0.5 - 48);
+      const inBowl = Math.hypot(x + 0.5 - 52, y + 0.5 - 38) <= 16 && Math.hypot(x + 0.5 - 52, y + 0.5 - 38) >= 7;
+      const inStem = x >= 30 && x < 40 && y >= 22 && y < 74;
+      const inBar = x >= 30 && x < 52 && ((y >= 22 && y < 29) || (y >= 47 && y < 54));
+      const c = r > 44 ? [0, 0, 0, 0] : inBowl || inStem || inBar ? [255, 255, 255, 255] : [139, 92, 246, 255];
+      data.set(c, (y * w + x) * 4);
+    }
+  }
+  return pngDataUrl(w, h, data);
+}
+
 export const VECTOR_SCRIPTS: AgentScript[] = [
   {
     id: "vector-night",
@@ -385,6 +404,19 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "The bar stretches with the banner, the badge stays in its corner.", ...commandWith("vector.setResizing", (r) => ({ ids: [r("bar").id], horizontal: "leftRight", vertical: "bottom" })) },
       { ...commandWith("vector.setResizing", (r) => ({ ids: [r("badge").id], horizontal: "right", vertical: "top" })) },
       { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
+    ],
+  },
+  {
+    id: "vector-trace",
+    prompt: "Trace this badge image into vectors",
+    steps: [
+      {
+        say: "Tracing the badge in colour: a stacked path per colour, smooth curves.",
+        ...commandWith("vector.traceImage", () => ({ image: badgePng(), mode: "color", colors: 3, cornerRoundness: 0.8, x: 620, y: 360, width: 120, name: "Badge trace" })),
+        as: "trace",
+        target: artboardBox(620, 360, 120, 120),
+      },
+      { say: "Checking what it made.", ...command("vector.list") },
     ],
   },
   {
