@@ -317,6 +317,19 @@ A closed path with `lens` set is a lens, after CorelDRAW's Lens. Inside its outl
   - Agents use `vector.setLens` / `vector.removeLens`, and `vector.list` shows each lens.
   - SVG export writes `data-vector-lens` and imports it back.
 
+## Stylise images
+
+Besides tracing outlines (Image Trace), a picture can become stylised vector art. `stylizeVectorImage(pixels, style, options)` returns path nodes in pixel units, and `stylizeImage(pixels, style, { x, y, width, name, … })` adds them as one group in one undo step.
+
+- **Styles.** Each samples the picture on a grid of cells:
+  - `mosaic` draws a square or round tile per cell, with `gap` grout between them.
+  - `halftone` draws dots on a grid turned by `angle`. Each dot's area follows the darkness under it, in one ink `color`, or with `color: null` in the picture's colours.
+  - `lowPoly` splits a jittered grid (`jitter`, `seed`) into triangles, each in the colour under it. A hairline in the fill hides seams.
+  - `hatch` draws engraving lines along a turned grid. They swell where the picture is dark and taper off where it is light.
+- **Colours** are reduced to a `colors`-sized palette by the same median cut Image Trace uses, applied to the cells' colours. The shapes of one colour are one compound path, so a picture becomes a few dozen paths.
+- **Limits.** At most 60,000 shapes; a larger `cell` draws fewer.
+- **Panel and agents.** The trace panel's mode menu offers the four styles next to tracing. Agents use `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` with a PNG data URL.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:
