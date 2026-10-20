@@ -252,6 +252,37 @@ export function convertHex(hex: string, from: Profile, to: Profile, intent: Inte
 }
 
 /**
+ * A copy of `value` (layer settings: effects, a shape's paint, text runs, an annotation) with
+ * every `#rrggbb` colour converted by `convert`. Colours are the string fields whose key ends in
+ * "color" (`color`, `strokeColor`, `highlightColor`, …), including gradient stops; text and other
+ * strings are left alone. Plain objects and arrays are copied only where something changed.
+ */
+export function convertColorFields<T>(value: T, convert: (hex: string) => string): T {
+  const walk = (v: unknown, key: string): unknown => {
+    if (typeof v === 'string') return /color$/i.test(key) && /^#[0-9a-f]{6}$/i.test(v) ? convert(v) : v;
+    if (Array.isArray(v)) {
+      let changed = false;
+      const out = v.map((x) => {
+        const y = walk(x, key);
+        if (y !== x) changed = true;
+        return y;
+      });
+      return changed ? out : v;
+    }
+    if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+      let out: Record<string, unknown> | null = null;
+      for (const [k, x] of Object.entries(v)) {
+        const y = walk(x, k);
+        if (y !== x) (out ??= { ...(v as Record<string, unknown>) })[k] = y;
+      }
+      return out ?? v;
+    }
+    return v;
+  };
+  return walk(value, '') as T;
+}
+
+/**
  * A layer surface with every pixel's colour converted through `t` (an RGB → RGB transform):
  * 8-bit tiles through its tables, 16-bit tiles at 16 bits, 32-bit (linear) tiles through the
  * float path. Alpha is kept.

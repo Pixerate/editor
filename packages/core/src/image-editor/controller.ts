@@ -112,6 +112,7 @@ import {
   patchTextStyle,
   replaceTextRange,
   requireTypeLayer,
+  rerenderText,
   restyleRange,
   styleAt,
   textIndexAt,
@@ -313,6 +314,7 @@ import { INTENTS, Transform, builtinProfile, canBeDestination, writeJpegIcc, wri
 import {
   DEFAULT_PROOF,
   colorModePlanes,
+  convertColorFields,
   convertSurfaceColors,
   deserializeColorMode,
   effectiveProof,
@@ -5275,19 +5277,49 @@ export class ImageEditorController {
     const t = Transform.create(resolveProfile(this.state.colorProfile), resolveProfile(doc), { intent, bpc: options.bpc ?? true });
     const converted: string[] = [];
     const unconverted: string[] = [];
+    // Colour settings (effects, shape paint, text, annotations) convert through the same transform.
+    const memo = new Map<string, string>();
+    const px = new Float32Array(4);
+    const hex = (h: string): string => {
+      let out = memo.get(h.toLowerCase());
+      if (out === undefined) {
+        const n = parseInt(h.slice(1), 16);
+        t.eval([((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255], px);
+        const c = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');
+        out = `#${c(px[0])}${c(px[1])}${c(px[2])}`;
+        memo.set(h.toLowerCase(), out);
+      }
+      return out;
+    };
+    const shapeEnv = this.shapeEnv();
+    const textEnv = this.textEnv();
     const walk = (layers: readonly ImageLayer[]): ImageLayer[] =>
       layers.map((l) => {
-        if (l.type === 'group') return { ...l, children: walk(l.children) };
-        if (l.type === 'pixel' && l.source !== 'document') {
-          converted.push(l.id);
-          return { ...l, surface: convertSurfaceColors(l.surface, t) };
+        let next: ImageLayer = l;
+        if (l.effects?.items.length) next = { ...next, effects: convertColorFields(l.effects, hex) };
+        if (l.type === 'group') {
+          if (next !== l) converted.push(l.id);
+          return { ...(next as typeof l), children: walk(l.children) };
         }
-        if (l.type === 'pixel' && l.source === 'document') {
-          converted.push(l.id);
-          return { ...l, surface: convertSurfaceColors(this.surfaceOf(l), t), source: undefined } as ImageLayer;
+        if (l.type === 'pixel' && l.source !== 'document') next = { ...(next as typeof l), surface: convertSurfaceColors(l.surface, t) };
+        else if (l.type === 'pixel') next = { ...(next as typeof l), surface: convertSurfaceColors(this.surfaceOf(l), t), source: undefined } as ImageLayer;
+        else if (l.type === 'shape') {
+          const s = next as typeof l;
+          next = rerenderShape({ ...s, fill: convertColorFields(s.fill, hex), stroke: convertColorFields(s.stroke, hex), ...(s.annotation ? { annotation: convertColorFields(s.annotation, hex) } : {}) }, shapeEnv);
+        } else if (l.type === 'type') {
+          const recoloured = { ...(next as typeof l), runs: convertColorFields(l.runs, hex) };
+          try {
+            next = rerenderText(recoloured, textEnv);
+          } catch {
+            // No text shaper here (Node without fonts): keep the drawn pixels, converted.
+            next = { ...recoloured, surface: convertSurfaceColors(l.surface, t) };
+          }
         }
-        if (l.type === 'shape' || l.type === 'type' || l.type === 'smart' || l.effects?.items.length) unconverted.push(l.id);
-        return l;
+        else if (l.type === 'annotation') next = { ...(next as typeof l), annotation: convertColorFields(l.annotation, hex) };
+        // A smart object's contents keep their own colours (convert inside them).
+        if (l.type === 'smart') unconverted.push(l.id);
+        else if (next !== l) converted.push(l.id);
+        return next;
       });
     const next = walk(this.state.layers);
     this.commitLayers(next, () => {
