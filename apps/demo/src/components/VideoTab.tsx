@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Film } from "lucide-react";
-import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools } from "@pixerate/editor-react/video-editor";
+import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools } from "@pixerate/editor-react/video-editor";
+import { createFakeEffectProvider } from "@pixerate/editor/effects";
 import { VideoFrameCache } from "@pixerate/editor/video-editor";
 import { demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
@@ -66,6 +67,9 @@ export function VideoTab() {
   const controller = useVideoEditorController({ project, frameCache });
   const state = useVideoEditorState(controller);
   useVideoEditorTools(demoToolRegistry, controller, { id: "video", namespace: "video" });
+  // A deterministic stand-in for an effects provider such as Flair's flairEffects().
+  const effects = useMemo(() => createFakeEffectProvider(), []);
+  useVideoEffectsTools(demoToolRegistry, controller, { id: "video-effects", namespace: "videofx" });
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -117,7 +121,7 @@ export function VideoTab() {
         </div>
       </div>
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <VideoEditor controller={controller} showScopes />
+        <VideoEditor controller={controller} showScopes effects={effects} />
       </div>
       <AgentScriptPanel
         scripts={VIDEO_SCRIPTS}

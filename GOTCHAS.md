@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] Provider Effects Render Asynchronously, but the Canvas Draws Synchronously
+
+- **Issue / Symptom**: An effects provider's `render` returns a promise, while `drawVideoFrame` draws a whole frame synchronously. Awaiting effects inside a draw would stall playback. Drawing the playhead's exact time while playing also missed the effect cache on every animation frame, and a layer whose media was still loading got cached with the wrong picture.
+- **Root Cause**: The playhead moves continuously, so values derived from it (source time, fades, keyframes) never repeat between frames. An effect's input is read from a scratch canvas: if the media was not ready, the provider received a placeholder.
+- **Solution / Workaround**: `VideoEffectsEngine` keeps rendered pictures by key, using the LUT cache's pattern. A draw asks for a picture: if it is cached it draws at once; if not it requests one, draws the layer without effects, and redraws when the engine notifies. With effects on screen, the preview evaluates the frame at the start of its frame (`videoEffectFrameTime`), so each frame has one key. Inputs go to the provider only when the draw found every media picture ready. `renderVideoFrameExact` draws, awaits `engine.idle()` and draws again until nothing is waiting, which is what exports use.
+
+### [core/video-editor] Clip Effects Cannot Be ffmpeg Filters: Export Takes Rendered Frames
+
+- **Issue / Symptom**: A project with provider effects (from Flair, for example) cannot be expressed as an ffmpeg filter graph.
+- **Root Cause**: Provider effects are arbitrary shaders or CPU code that run in the host. ffmpeg has no equivalent.
+- **Solution / Workaround**: `toVideoFfmpeg` throws, naming the clips with enabled effects, unless `frames` is passed. With `frames`, the host renders every frame with `renderVideoFrameExact` (the preview's own drawing) to PNGs or to raw RGBA on a pipe. ffmpeg then takes those as the picture and still builds the sound graph. Turning the effects off (`enabled: false`) makes a quick draft export possible again.
+
+### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
+
+- **Issue / Symptom**: An editor's `catch (e) { if (e instanceof UnknownEffectError) ... }` missed errors thrown by an effects provider, so a bad effect id surfaced as a generic failure instead of a useful tool error.
+- **Root Cause**: Providers live in other packages (Flair's `flairEffects()`). A provider bundled with its own copy of `@pixerate/editor/effects`, or a second install of a different version, throws errors from a different class object, and `instanceof` compares identity.
+- **Solution / Workaround**: Check `isEffectError(e)` and `e.code` (`unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider`) instead of `instanceof`. Providers should run `checkEffectProvider` in their own tests: it fails when an error has no `code`.
+
 ### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
 
 - **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).
@@ -2460,6 +2478,26 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
 - **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.
 
+### [core/paint] WebGPU Shading Looks 240 Levels Off in Straight RGBA, Yet Is Within 1/255 on Screen
+- **Issue / Symptom**: Comparing Engine B's shaded wet tiles with the CPU's byte by byte found channels up to 243 apart, all at alpha 1..40.
+- **Root Cause**: Wet layer pixels are stored as straight (unpremultiplied) colour over the paper; the colour is `(film − (1 − a)·paper) / a`. At a tiny alpha a one-level difference in the composited film (GPU `exp`/`pow` against the CPU's tables) becomes a huge difference in the straight colour, though the pixel looks the same.
+- **Solution / Workaround**: Compare what shows: each pixel composited over the paper (`a·rgb + (1 − a)·paper`). Both engines round colour and alpha to bytes, so allow up to ~1.5 levels and require almost no pixels over 1 (`tests/paint-wet-gpu.test.ts`).
+
+### [core/paint] WGSL Kernels: Reserved Words, Dynamic Indexing and One Hot Atomic
+- **Issue / Symptom**: The halo shader failed to compile only with "is invalid due to a previous error"; the step ran at half the expected speed.
+- **Root Cause**: `from` is a reserved word in WGSL. `createComputePipeline` errors don't name the line: `getCompilationInfo()` on the shader module does. Speed: every one of the 65,536 threads of a tile did `atomicOr` on one flag word each step, and loops over 9 directions indexed private arrays dynamically (spilled to memory).
+- **Solution / Workaround**: Read `getCompilationInfo()` and put its messages in the error (`gpu.ts`). OR flags into a `var<workgroup>` atomic and let one thread per workgroup touch global memory. Generate the per-direction code unrolled from TypeScript. The step is then bandwidth-bound (~47 floats per cell-step for this model).
+
+### [core/paint] Engine B Cannot Make the Simulation Faster While the CPU Is the Authority
+- **Issue / Symptom**: A WebGPU wet step is 1.5–2× the wasm engine, yet turning it on doesn't let wet paint run more steps per second.
+- **Root Cause**: Saved output must never depend on the GPU (GPU results are close, not bit-identical, and differ between browsers), so the CPU still runs every step; edits and pick-up read CPU state.
+- **Solution / Workaround**: Engine B mirrors the CPU (the same slot layout; edits upload only the rows `markEdited` reports; each batch is also stepped on the GPU) and takes over the display: `displayGpu` shades every stale tile in one dispatch instead of 24 tiles of main-thread JS per frame. A GPU result is dropped when the lane's stamp changed while it was in flight. Between strokes the GPU may run ahead, but only within the CPU batch in flight (`gpuLead`, at most 16 steps): edits only happen between batches, so the GPU never has to be rewound. Making the GPU the live engine ("option B": the CPU follows by replaying strokes) is a possible later upgrade for very large, fully wet canvases; it needs async pick-up readback, accepts a live picture that differs from the saved one within 1/255, and makes save wait for the replay.
+
+### [core/tests] Node WebGPU (Dawn): One Instance per Process, Opt-In Tests
+- **Issue / Symptom**: The GPU bench crashed the vitest worker with SIGSEGV.
+- **Root Cause**: Each test called the `webgpu` package's `create()`, making a new Dawn instance per test.
+- **Solution / Workaround**: Create the provider once per file and reuse it. The package is ~140 MB and CI has no GPU, so it is not a dependency: GPU tests run when `WET_GPU` names a local install (`WET_GPU=/path/to/node_modules/webgpu`); without it only the capability checks run.
+
 ### [core/paint] A Gradient Stroke's Colour Lags Half a Tip Behind the Pen
 - **Issue / Symptom**: With gradient paint by distance, the colour at a pixel was that of a dab up to a radius behind, and tests sampling "the pixel at 100 px of travel" found a mixed colour.
 - **Root Cause**: Build-up stops at the stroke's opacity ceiling: the first dab to reach a pixel lays most of its coverage, and later dabs only top up the antialiased edge. Each pixel's colour is the coverage-weighted mix of the dabs that added to it (`CoverageMap.colors`), as paint would be.
@@ -2480,6 +2518,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.
 - **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
 - **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.
+
+### [core/paint] Stepping Part of a Wet World: Held Tiles Must Survive the Parity Flip
+
+- **Issue / Symptom**: To simulate only the wet tiles in view, the obvious approach is to take the other tiles out of the active list for a step. After an odd number of steps those tiles jumped back to an older state.
+- **Root Cause**: Every slot holds two ping-pong sets, and one global `parity` says which is current. A step writes the new state into the other set and flips `parity` for all tiles, including tiles that were not stepped. Their current set then becomes the stale one.
+- **Solution / Workaround**: `WetWorld.stepRegion` copies each held tile's current set into the other set before stepping, so the tile reads the same state whatever the parity, and it puts the tiles back afterwards (with `syncList` and `refreshHalos`). Held tiles keep their last flags, so they are never freed as dead. Water that reaches a held tile stops at its edge until it is stepped again. With a region covering every live tile, the result is bit-identical to `step`.
 
 ### [core/canvas] Lazy Paint for Brushed Strokes: Keep Every Paint Import in `brushstrokeRender.ts`, and Keep Types Out of the Graph
 

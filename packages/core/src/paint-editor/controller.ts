@@ -81,7 +81,7 @@ import { normalizeStencil, StencilSnapper, stencilMask, type Stencil, type Stenc
 import { normalizeStickerUpdate, STAMP_KINDS, stickerSurface, type Sticker } from './stickers';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
-import { PaintWetLayers, WetStrokeDriver, type PaintWetOptions, type WetEvent, type WetLayerInfo, type WetLayerSettings } from './wet';
+import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
 import { isWetBrush } from './brushes';
 import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from '../paint/wet/model';
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
@@ -133,6 +133,10 @@ export interface PaintWetStateInfo {
   /** Simulation steps so far. */
   clock: number;
   tilt: WetTilt;
+  /** Engine B (WebGPU): `auto` (used for large wet areas when there is a GPU) or `off` (CPU only). */
+  gpu: WetGpuMode;
+  /** Engine B is shading the wet paint now. */
+  gpuActive: boolean;
 }
 
 export interface PaintEditorState {
@@ -450,6 +454,8 @@ export class PaintEditorController {
         speed: this.wet.speed,
         clock: this.wet.world?.clock ?? 0,
         tilt: { ...this.wet.tilt },
+        gpu: this.wet.gpuMode,
+        gpuActive: Boolean(this.wet.world?.gpuActive),
       },
       version: this.version,
     };
@@ -1673,10 +1679,36 @@ export class PaintEditorController {
   }
 
   /** Wet media as panels and tools show it, with each wet layer's state. */
-  wetState(): PaintWetStateInfo & { layers: WetLayerInfo[]; backend: WetBackendInfo | null; message: string | null } {
+  wetState(): PaintWetStateInfo & { layers: WetLayerInfo[]; backend: WetBackendInfo | null; message: string | null; engine: WetEngineInfo } {
     const st = this.getState().wet;
     const backend = this.wet.backend();
-    return { ...st, layers: this.wet.wetLayerIds().map((id) => this.wet.info(id)), backend, message: backend?.message ?? wetSupport().message };
+    return { ...st, layers: this.wet.wetLayerIds().map((id) => this.wet.info(id)), backend, message: backend?.message ?? wetSupport().message, engine: this.wet.engineInfo() };
+  }
+
+  /**
+   * Engine B, the WebGPU accelerator for large wet areas: whether it may run, its state (`off`,
+   * `not-started`, `starting`, `unavailable`, `standby`, `active`, `failed`), why, and the GPU.
+   * The CPU engine stays the authority: drying, saving, export and replay never use the GPU.
+   */
+  wetEngine(): WetEngineInfo {
+    return this.wet.engineInfo();
+  }
+
+  /**
+   * Lets Engine B run (`gpu: 'auto'`, the default) or forces the CPU (`'off'`); `minTiles` is the
+   * wet area (live 256 px tiles) at which the GPU takes over. Not an undo step and not saved with
+   * the painting (it changes how wet paint is computed on this machine, never the result).
+   * Resolves once the GPU has started or turned out unavailable.
+   */
+  async setWetEngine(options: { gpu?: WetGpuMode; minTiles?: number }): Promise<WetEngineInfo> {
+    const gpu = options.gpu ?? this.wet.gpuMode;
+    if (!WET_GPU_MODES.includes(gpu)) throw new PaintEditorError(`gpu must be ${WET_GPU_MODES.join(' or ')}, not ${JSON.stringify(gpu)}.`);
+    if (options.minTiles !== undefined && !(Number.isInteger(options.minTiles) && options.minTiles >= 1 && options.minTiles <= 1024)) throw new PaintEditorError(`minTiles ${options.minTiles} is out of range; use 1..1024 tiles of 256 px.`);
+    this.wet.setGpu(gpu, options.minTiles);
+    this.emit();
+    const info = await this.wet.gpuReady();
+    this.emit();
+    return info;
   }
 
   /** One layer's wet settings and state. */

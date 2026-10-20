@@ -42,7 +42,7 @@ import { ChartController, createChartToolProvider, createOfficeChartToolProvider
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider } from '../src/canvas';
 import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
+import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
@@ -127,7 +127,10 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-image-editor': toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
 		'pixerate-paint-editor': toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
 		'pixerate-animation-editor': toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
-		'pixerate-video-editor': toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+		'pixerate-video-editor': [
+			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
+			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' }))
+		],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -163,6 +166,9 @@ const FACTORIES: Record<string, string> = {
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
+	createVideoEffectsToolProvider: 'pixerate-video-editor',
+	// The shared effect tools; each editor that hosts them documents them in its own skill.
+	createEffectToolProvider: 'pixerate-video-editor',
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',

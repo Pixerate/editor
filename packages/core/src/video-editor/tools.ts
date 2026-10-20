@@ -82,7 +82,7 @@ const TRANSFORM = object(
 );
 const TRANSITION = object(
 	{
-		type: { type: 'string', enum: [...VIDEO_TRANSITION_TYPES], description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it), wipe (an edge travels across revealing this clip), push (this clip slides in and pushes the one before out), slide (this clip slides in over the one before) or iris (a circle opens from the centre).' },
+		type: { type: 'string', enum: VIDEO_TRANSITION_TYPES.filter((t) => t !== 'effect'), description: 'crossfade (this clip fades up over the one before), dip (down into a colour and up out of it), wipe (an edge travels across revealing this clip), push (this clip slides in and pushes the one before out), slide (this clip slides in over the one before) or iris (a circle opens from the centre). For a transition effect from the effects provider use set_video_effect_transition.' },
 		duration: { type: 'number', exclusiveMinimum: 0, description: 'Length in ms, centred on the cut. Every type but dip needs half of it in media past the cut on both sides (handles); a dip needs none.' },
 		color: COLOR('For dip: the colour passed through (default black)'),
 		direction: { type: 'string', enum: [...VIDEO_WIPE_DIRECTIONS], description: 'For wipe, push and slide: the way the edge or picture travels (default right, coming in from the left).' },
@@ -970,7 +970,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
 		const { clip } = at;
 		if (clip.type === 'sequence') throw new Error(`Clip "${id}" is a compound clip, which plays its sequence at normal speed; change the speed of the clips inside the sequence instead.`);
-		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to change the speed of; use a video or audio clip.`);
+		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to change the speed of; use a video or audio clip.`);
 		if (project().assets.find((a) => a.id === clip.asset)?.kind === 'image') throw new Error(`Clip "${id}" is a still, so it has no motion to change the speed of.`);
 		return clip;
 	};

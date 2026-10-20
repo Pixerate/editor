@@ -166,6 +166,11 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   dries it first (in the same undo step).
 - **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
   no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
+- **The GPU only draws.** With WebGPU and a large wet area (16 tiles of 256 px by default), Engine B
+  shades the wet paint on the GPU; the CPU engine still computes every step, so the painting,
+  `dry_paint`, saving, export and replay come out the same with it on or off. `get_wet_paint`
+  shows it as `engine` (`state`, `reason`). Leave it on `auto`; `set_wet_engine` with `gpu` "off"
+  only when the user says the display looks wrong or the GPU is needed for something else.
 
 ## Oils and thick paint
 
@@ -312,7 +317,7 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -321,6 +326,7 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 | `set_canvas_tilt` | Tilt the canvas (`angle` 0..90°, `direction` downhill clockwise from the bottom): wet paint runs downhill, very wet paint drips. Returns `tilt`, `stillWet`. |
 | `pause_wet_paint` | Stop or resume time (`paused`) and set `speed` (steps per second). Editor state. |
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
+| `set_wet_engine` | Let Engine B (WebGPU) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
 
 ### Thick paint and light

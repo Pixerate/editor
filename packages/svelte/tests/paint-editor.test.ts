@@ -341,6 +341,18 @@ describe('Svelte paint editor', () => {
     setValue(tool, 'blot');
     expect(c.getState().brush.wet.tool).toBe('blot');
     expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    // Engine B: force the CPU, then let the GPU run again (there is none in jsdom: the reason shows).
+    const engine = () => target.querySelector('[data-testid="wet-engine"]')!.textContent;
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'off');
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('off');
+    expect(engine()).toBe('CPU only (GPU off).');
+    setValue(target.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'auto');
+    await c.setWetEngine({});
+    flushSync();
+    expect(c.getState().wet.gpu).toBe('auto');
+    expect(engine()).toMatch(/no WebGPU/);
     c.dispose();
   });
 

@@ -183,7 +183,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'effects', 'values', 'provider', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
@@ -664,7 +664,7 @@ class Editor {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
 				if (clip.type === 'sequence') refuse(`Clip "${clip.id}" is a compound clip, which plays its sequence at normal speed; ramp the clips inside the sequence instead.`);
-				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to ramp; only video and audio clips change speed.`);
+				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to ramp; only video and audio clips change speed.`);
 				const asset = this.asset((clip as VideoMediaClip).asset);
 				if (asset.kind === 'image') refuse(`Clip "${clip.id}" is a still ("${asset.id}"), so it has no motion to ramp.`);
 				const media = clip as VideoMediaClip;
@@ -722,7 +722,7 @@ class Editor {
 			case 'slip_clip': {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
-				if (clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : 'colour'}, so it has no source to slip; only video, audio and compound clips slip.`);
+				if (clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to slip; only video, audio and compound clips slip.`);
 				const source = clip.type === 'sequence' ? `sequence "${clip.sequence}"` : `"${this.asset((clip as { asset: string }).asset).id}"`;
 				if (clip.type === 'media' && this.asset(clip.asset).kind === 'image') refuse(`Clip "${clip.id}" is a still ("${clip.asset}"), so it has no source to slip; only video and audio clips slip.`);
 				// Keep the media a transition at either edge plays past the cut.

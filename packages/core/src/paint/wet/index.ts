@@ -11,3 +11,5 @@ export * from './wasm';
 export * from './world';
 export * from './flow';
 export * from './medium';
+export * from './gpu';
+export { WGSL_STEP, WGSL_HALO, WGSL_SHADE } from './gpu-kernels';
