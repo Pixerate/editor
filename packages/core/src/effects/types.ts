@@ -202,7 +202,13 @@ export interface EffectProvider {
 	/** Effects matching every word of `query` (in name, id, category, tags or description), best first. */
 	search(query: string, options?: EffectSearchOptions): MaybePromise<readonly EffectSummary[]>;
 	describe(id: string): MaybePromise<EffectDescription>;
+	/** A pixel renderer. A `vector` effect may refuse with `EffectUnsupportedError` where it cannot lay out SVG (a Worker). */
 	createRenderer(id: string, options: EffectRendererOptions): MaybePromise<EffectRenderer>;
-	/** Vector and motion effects as an animated SVG. Present when `capabilities.supportsVector`. */
+	/**
+	 * Vector and motion effects as an animated SVG. Present when `capabilities.supportsVector`. A
+	 * `motion` effect animates the target's elements (`nodeIds`, else each top-level element with an
+	 * id); a `vector` effect brings its own picture and ignores the target. Refuse a target the
+	 * effect cannot use with `EffectUnsupportedError`.
+	 */
 	applyVectorEffect?(id: string, target: EffectVectorTarget, values?: EffectValues): MaybePromise<EffectVectorMotion>;
 }

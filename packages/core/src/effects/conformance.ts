@@ -83,7 +83,8 @@ async function checkRender(provider: EffectProvider, d: EffectDescription, size:
 	try {
 		renderer = await provider.createRenderer(d.id, { width: size, height: size });
 	} catch (e) {
-		at(`createRenderer failed: ${codeOf(e)}`);
+		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG).
+		if (!(d.kind === 'vector' && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
 		return;
 	}
 	try {
@@ -147,7 +148,8 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 				if (typeof m.svg !== 'string' || !m.svg.includes('<svg')) issues.push({ effectId: id, message: 'applyVectorEffect returned no SVG' });
 				if (!(m.duration >= 0)) issues.push({ effectId: id, message: 'applyVectorEffect returned no duration' });
 			} catch (e) {
-				issues.push({ effectId: id, message: `applyVectorEffect failed: ${codeOf(e)}` });
+				// The probe target is a bare <rect>; an effect that needs more (a path to follow, a fill colour) may refuse it.
+				if (codeOf(e) !== 'unsupported') issues.push({ effectId: id, message: `applyVectorEffect failed: ${codeOf(e)}` });
 			}
 			const bad = await rejectsWith('invalid_values', () => provider.applyVectorEffect!(id, '<svg xmlns="http://www.w3.org/2000/svg"/>', { __not_a_control__: 1 }));
 			if (bad) issues.push({ effectId: id, message: `applyVectorEffect with an unknown control ${bad}` });

@@ -196,6 +196,27 @@ describe('effects contract: helpers', () => {
 });
 
 describe('effects contract: conformance check catches broken providers', () => {
+	it('accepts unsupported from vector renderers and from the vector probe', async () => {
+		const good = createFakeEffectProvider();
+		const { EffectUnsupportedError } = await import('../src/effects');
+		const d = { ...(await good.describe('fake.fade-in')), id: 'v', kind: 'vector' as const };
+		const p: EffectProvider = {
+			...good,
+			list: () => [d],
+			search: () => [d],
+			describe: (id) => (id === 'v' ? d : good.describe(id)),
+			createRenderer: (id, o) => {
+				if (id === 'v') throw new EffectUnsupportedError('Needs rasterizeSvg in a Worker.', id);
+				return good.createRenderer(id, o);
+			},
+			applyVectorEffect: (id, target, values) => {
+				if (values && '__not_a_control__' in values) return good.applyVectorEffect!('fake.fade-in', target, values);
+				throw new EffectUnsupportedError('Needs a path element.', id);
+			}
+		};
+		expect(await checkEffectProvider(p)).toEqual([]);
+	});
+
 	it('reports loose schemas, missing descriptions, bad defaults and untyped errors', async () => {
 		const good = createFakeEffectProvider();
 		const broken: EffectProvider = {
