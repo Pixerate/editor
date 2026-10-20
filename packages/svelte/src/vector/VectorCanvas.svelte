@@ -247,6 +247,28 @@
   <g data-vector-scene="" transform={scene.transform}>
     <VectorSceneNodes nodes={scene.nodes} />
   </g>
+  {#if overlay.frames.length}
+    <g data-vector-frame-labels="">
+      {#each overlay.frames as f (f.id)}
+        <!-- A frame's name selects it (clicking inside a frame may pick its contents). -->
+        <text
+          role="button"
+          tabindex="-1"
+          data-vector-frame-label={f.id}
+          x={f.x}
+          y={f.y - 6}
+          font-size="11"
+          font-weight={f.selected ? 600 : 400}
+          fill={f.selected ? accentColor : '#737373'}
+          style="font-family:system-ui,sans-serif;cursor:default;user-select:none"
+          onpointerdown={(e) => {
+            e.stopPropagation();
+            controller.select([f.id]);
+          }}>{f.name}</text
+        >
+      {/each}
+    </g>
+  {/if}
   <g data-vector-overlay="" pointer-events="none" fill="none">
     {#each overlay.outlines as o (o.id)}
       <path d={o.d} stroke={accentColor} stroke-width={o.selected ? 1 : 1.5} opacity={o.selected ? 1 : 0.7} />

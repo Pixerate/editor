@@ -374,6 +374,24 @@ controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", red
 - **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
 - **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
 
+## Frames and artboards
+
+```ts
+const { id } = controller.addFrame({ x: 0, y: 0, width: 375, height: 812, name: "Phone", adopt: true }) as { ok: true; id: string };
+controller.frameSelection({ ids: ["bar", "badge"], padding: 16, fill: "#0f172a" });
+controller.setResizing({ horizontal: "leftRight", vertical: "bottom" }, { ids: ["bar"] });
+controller.setFrame({ width: 414 }, { ids: [id] }); // children follow their constraints
+controller.frameToSvg(id); // the artboard alone, its corner at the origin
+```
+
+- **Model.** A frame is a group with `frame: { x, y, width, height, fill?, clip? }`, a rectangle in the group's own space. Top-level frames are artboards. Blends, live booleans and mask groups ignore `frame`. Each node may carry `resizing: { horizontal?, vertical? }`, used when its parent is a frame.
+- **Drawing.** `vectorFrameDrawn` turns a frame into an equivalent clip group: the rectangle as the mask (`<id>~frame-clip`), then the fill (`<id>~frame-fill`) and the children. Without the clip it becomes a plain group of the fill and the children. Rendering, appearance shapes, mask regions and snapping go through it, so both canvases draw frames with no code of their own.
+- **Selection.** Bounds are the rectangle (plus the children when `clip: false`). A frame is hit anywhere in its rectangle, filled or not. Clicking it selects the frame; double-click enters it like a group. The overlay's `frames` lists each artboard's name label in screen space, and clicking a label selects that frame.
+- **Resizing.** `transformVectorNode` on a frame maps its rectangle. With an axis-aligned scale and translation, each child then takes the matrix `vectorFrameChildMatrix` gives for its constraints: the child keeps its left or right margin, keeps both (stretch), keeps its offset from the centre, or scales. These are figcraft's `apply_constraints`, as the canvas package's auto layout has them. Area text takes the new box at the same font size, and point and path text move with their box's centre. A skew, rotation or mirror scales every child instead. This applies to the selection handles, `scale` and `setFrame`, which maps the rectangle in the frame's own space so a rotated frame keeps its rotation.
+- **Frame tool (F).** Drags out a rectangle, previewed as a white rectangle. On release it becomes a frame holding the top-level objects it fully encloses. `frameSelection` wraps objects that share a parent in a frame fitted to their bounds, placed where they sit in the stacking order.
+- **SVG.** A frame exports as a `<g data-vector-frame>` with the frame as JSON, a `frame-fill` part and a `frame-contents` part clipped by a `<clipPath>` rectangle. Import rebuilds the frame, keeping its rotation as the group's transform. `data-vector-resizing` carries constraints. `vectorFrameDocument` / `frameToSvg` export one frame as a document of its own size.
+- **UI.** `getVectorFramePanel(state)` gives the selected frame and the resizing constraints of the selected children of frames (`mixed` when they differ). Both panels apply typed sizes on Enter or blur.
+
 ## Large documents
 
 Hit-testing (`hitTestVectorNodes`), marquee selection and snapping to segments go through an R-tree once a node list (or a gesture's segment targets) reaches 256 entries (`VECTOR_SPATIAL_MIN`). The tree is packed sort-tile-recursive over each node's paint box (strokes and filters included) and cached per node array; each node's box is cached per node object, so after an edit only the nodes it replaced are measured again. Queries return candidates in draw order and the same exact tests then run, so results match a scan.

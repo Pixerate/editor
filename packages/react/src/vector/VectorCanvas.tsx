@@ -514,6 +514,29 @@ export function VectorCanvas({
       <g data-vector-scene="" transform={scene.transform}>
         <VectorSceneNodes nodes={scene.nodes} />
       </g>
+      {overlay.frames.length > 0 && (
+        <g data-vector-frame-labels="">
+          {overlay.frames.map((f) => (
+            <text
+              key={f.id}
+              data-vector-frame-label={f.id}
+              x={f.x}
+              y={f.y - 6}
+              fontSize={11}
+              fontWeight={f.selected ? 600 : 400}
+              fill={f.selected ? accentColor : '#737373'}
+              style={{ fontFamily: 'system-ui, sans-serif', cursor: 'default', userSelect: 'none' }}
+              onPointerDown={(e) => {
+                // A frame's name selects it (clicking inside a frame may pick its contents).
+                e.stopPropagation();
+                controller.select([f.id]);
+              }}
+            >
+              {f.name}
+            </text>
+          ))}
+        </g>
+      )}
       <g data-vector-overlay="" pointerEvents="none" fill="none">
         {overlay.outlines.map((o) => (
           <path key={o.id} d={o.d} stroke={accentColor} strokeWidth={o.selected ? 1 : 1.5} opacity={o.selected ? 1 : 0.7} />

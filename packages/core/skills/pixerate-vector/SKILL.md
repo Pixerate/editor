@@ -1,6 +1,6 @@
 ---
 name: pixerate-vector
-description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab interpolation), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, live path effects (trim paths, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, stacking order, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
+description: How to draw and edit vector artwork in the Pixerate vector editor through its vector.* commands - adding shapes and SVG paths, text (point, area, on a path, styles, Create Outlines), symbols and instances, CAD constraints (parallel, tangent, dimensions, auto-constrain), artboards and frames with resizing constraints, fills, strokes, stacked fills and strokes with blend modes, drop shadows, glows and blurs, clipping masks and opacity masks, gradients (linear, radial, conic, Oklab), stroke alignment, arrowheads, variable-width and tapered strokes, live corner radii, boolean operations and Pathfinder (unite, subtract, divide, trim), Shape Builder, paint bucket, path effects (trim, repeater, zig zag, offset), envelope warps and free distort, blends and morphing, anchor editing (join, smooth, simplify, scissors, knife, eraser), align, distribute, group, and SVG import and export. Use when creating an icon, logo, illustration, glyph, badge or any Bezier path artwork, or editing an SVG in a Pixerate vector editor.
 ---
 
 # Pixerate vector editor
@@ -38,6 +38,11 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
   (`vector.editSymbol` … `vector.exitSymbolEdit`) changes every instance.
 - **Constraints** (CAD-style) keep geometric relations and dimensions between anchors, segments
   and round paths; they are solved after every edit, so later moves keep them.
+- **Frames** are groups with a `frame` rectangle (`vector.listFrames`): they draw a background,
+  clip their children and select by their rectangle; top-level frames are **artboards**. When a
+  frame is resized its children follow their **resizing constraints** (horizontal `left` /
+  `right` / `leftRight` / `center` / `scale`, vertical `top` / `bottom` / `topBottom` / `center` /
+  `scale`) instead of scaling.
 - Coordinates are document units. A rotated node stores its geometry in its own space: the
   `bounds` that `vector.list` reports are document-space, its `d` is the node's own.
 
@@ -63,6 +68,12 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
    it over.
 
 ## Best practices
+
+- **Frames for anything that resizes.** Build screens, cards, buttons and banners inside a frame
+  (`vector.addFrame` or `vector.frameSelection`), set each child's constraints with
+  `vector.setResizing` (backgrounds and dividers `leftRight`, icons pinned to their corner, titles
+  `center`), then resize with `vector.setFrame` to produce other sizes from one design. Export each
+  artboard with `vector.exportFrameSvg`.
 
 - **Constraints for precise, editable geometry.** For technical drawings, diagrams, floor plans or
   any shape that must keep exact relations, draw it roughly, run `vector.autoConstrain`, then add
@@ -256,6 +267,17 @@ the browser's shaper they are kept but not drawn until outlines are available.
 | `vector.setConstraintValue` | Set a dimension's value (by id or name) or a named parameter (`null` removes a parameter); values are expressions. Returns the summary. |
 | `vector.autoConstrain` | Add what a sketch nearly satisfies (tolerances `distanceTolerance`, `angleTolerance`), skipping redundant or conflicting candidates. Returns `{ ids }`. |
 
+### Frames and artboards
+
+| Command | Use it to |
+| --- | --- |
+| `vector.listFrames` | Read every frame: id, name, parent, whether it is an artboard (top-level), its rectangle, fill and clip, document bounds, and its children's resizing constraints. Call before resizing or exporting frames. |
+| `vector.addFrame` | Add an empty artboard at `x, y, width, height` (white unless `fill`; `adopt: true` takes in the top-level objects it encloses). Use for screens, cards, pages and export areas. Returns the frame as listed. |
+| `vector.frameSelection` | Put objects sharing a parent into a frame fitted to their bounds plus `padding` (no fill unless given), in their place. Use to turn finished art into a resizable component. Returns the frame as listed. |
+| `vector.setFrame` | Move or resize a frame's rectangle (`x`, `y`, `width`, `height`; children follow their constraints) or change its `fill` / `clip`. Returns `{ frames }`. Set the children's constraints first. |
+| `vector.setResizing` | Set how children of a frame follow it on resize (`horizontal`, `vertical`; a missing axis keeps its value). Fails on objects not directly inside a frame. Returns `{ nodes: [{ id, horizontal, vertical }] }`. |
+| `vector.exportFrameSvg` | Export one frame as an SVG of its own size (its corner at the origin). Returns `{ svg, width, height }`; use it per artboard instead of `vector.exportSvg`. |
+
 ### Masks and clipping
 
 | Command | Use it to |
@@ -313,6 +335,12 @@ contents whole while you work, without losing the mask.
 | `vector.setTool` | Switch the interactive tool (select, direct, pen, pencil, rect, ellipse, polygon, star, line, scissors, knife, eraser, width, shapeBuilder, paintBucket, blend, gradient, envelope, type, typePath). Only for handing the canvas to the user in a given mode; commands do not need a tool. |
 
 ## Pitfalls
+
+- Scaling a frame (`vector.scale`, the selection handles) lays its children out by their
+  constraints, so it is a resize, not a zoom; group the frame (or scale its children) to scale the
+  art itself. A frame clips by default: objects moved outside it disappear (`clip: false` shows
+  them). Moving an object over a frame does not put it inside; use `vector.frameSelection` or
+  `adopt`.
 
 - The `d` in `vector.list` draws live corners cut, which adds anchors. On a path with corner
   radii, anchor indices counted from `d` do not match the stored anchors; count anchors on a path

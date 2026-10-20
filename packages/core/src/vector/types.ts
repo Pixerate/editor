@@ -369,6 +369,43 @@ interface VectorNodeBase {
 	 * booleans ignore them.
 	 */
 	filters?: VectorFilter[] | null;
+	/**
+	 * How the node follows its frame when the frame is resized (`VectorGroupNode.frame`): per
+	 * axis, pinned to the start (default `left` / `top`), the end, both (it stretches), the centre,
+	 * or scaled with the frame. Ignored outside frames.
+	 */
+	resizing?: VectorResizing | null;
+}
+
+/** Horizontal resizing constraint of a frame's child (see `VectorNodeBase.resizing`). */
+export type VectorHorizontalResizing = 'left' | 'right' | 'leftRight' | 'center' | 'scale';
+/** Vertical resizing constraint of a frame's child (see `VectorNodeBase.resizing`). */
+export type VectorVerticalResizing = 'top' | 'bottom' | 'topBottom' | 'center' | 'scale';
+export const VECTOR_HORIZONTAL_RESIZING: readonly VectorHorizontalResizing[] = ['left', 'right', 'leftRight', 'center', 'scale'];
+export const VECTOR_VERTICAL_RESIZING: readonly VectorVerticalResizing[] = ['top', 'bottom', 'topBottom', 'center', 'scale'];
+
+/** A frame child's resizing constraints (Figma's "constraints"). */
+export interface VectorResizing {
+	/** Default `left`. */
+	horizontal?: VectorHorizontalResizing;
+	/** Default `top`. */
+	vertical?: VectorVerticalResizing;
+}
+
+/**
+ * Makes a group a frame (an artboard when top-level): a rectangle in the group's own space with an
+ * optional fill drawn below the children, which by default it clips. Resizing the frame moves and
+ * resizes its children by their `resizing` constraints instead of scaling them.
+ */
+export interface VectorFrame {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	/** The frame's background, drawn below its children (default none). */
+	fill?: VectorPaint;
+	/** Clip the children to the frame (default true). */
+	clip?: boolean;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -449,6 +486,12 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * path effects to the contents (not the mask). Ignored on blends and live booleans.
 	 */
 	mask?: VectorMask | null;
+	/**
+	 * Makes the group a frame (see `VectorFrame`): it draws its fill below the children, clips them,
+	 * selects and snaps by its rectangle, and lays its children out by their `resizing` constraints
+	 * when resized. Ignored on blends, live booleans and mask groups.
+	 */
+	frame?: VectorFrame | null;
 }
 
 /**
@@ -715,7 +758,8 @@ export interface VectorHandleRef extends VectorAnchorRef {
  * blends the shape clicked first into the one clicked next (clicking an anchor of a closed path
  * starts the blend there). `envelope` edits the mesh of the selection's envelope: drag its
  * anchors and handles, or inside a patch to pull the surface. `type` adds point text (click) or
- * area text (drag) and edits text it clicks; `typePath` sets text along the path it clicks.
+ * area text (drag) and edits text it clicks; `typePath` sets text along the path it clicks. `frame`
+ * drags out a frame (`VectorGroupNode.frame`), taking in the top-level objects it fully encloses.
  */
 export type VectorTool =
 	| 'select'
@@ -737,7 +781,8 @@ export type VectorTool =
 	| 'gradient'
 	| 'envelope'
 	| 'type'
-	| 'typePath';
+	| 'typePath'
+	| 'frame';
 
 export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'select',
@@ -759,7 +804,8 @@ export const VECTOR_TOOLS: readonly VectorTool[] = [
 	'gradient',
 	'envelope',
 	'type',
-	'typePath'
+	'typePath',
+	'frame'
 ];
 
 /** Keyboard modifiers held during a pointer event. */
