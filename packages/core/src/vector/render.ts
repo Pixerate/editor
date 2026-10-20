@@ -62,6 +62,8 @@ import { applyMatrix } from '../geom/affine.js';
 import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame, vectorFrameRectPath } from './frames.js';
+import { isVectorSymmetryGroup, vectorSymmetryAxes } from './symmetry.js';
+import { invertMatrix } from '../geom/affine.js';
 import { vectorNodePaintBox, vectorNodesNear } from './spatial.js';
 import { vectorTextShaperGeneration } from './text.js';
 import { vectorConnectionSites, vectorConnectorTargetAt } from './connectors.js';
@@ -416,6 +418,11 @@ export interface VectorOverlayRenderData {
 	 * the panel edits), each with its colour.
 	 */
 	shading: { nodeId: string; kind: 'mesh' | 'freeform'; lines: string[]; points: { index: number; x: number; y: number; color: string; selected: boolean }[] }[];
+	/**
+	 * Axes of the symmetry groups that are selected or being drawn into, screen space: each line as
+	 * `x1, y1, x2, y2`; `drawing` when new art goes into that group (draw it more strongly).
+	 */
+	symmetry: { nodeId: string; drawing: boolean; lines: { x1: number; y1: number; x2: number; y2: number }[] }[];
 	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
 	trackingPoints: { x: number; y: number }[];
 	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
@@ -797,6 +804,51 @@ function shadingOverlay(state: VectorEditorState): VectorOverlayRenderData['shad
 	return out;
 }
 
+/** The axes of selected (or drawn-into) symmetry groups (see `VectorOverlayRenderData.symmetry`). */
+function symmetryOverlay(state: VectorEditorState): VectorOverlayRenderData['symmetry'] {
+	const ids = new Set([...state.selection, ...(state.symmetryTarget ? [state.symmetryTarget] : [])]);
+	const out: VectorOverlayRenderData['symmetry'] = [];
+	for (const id of ids) {
+		const n = findVectorNode(state.document.nodes, id);
+		if (!isVectorSymmetryGroup(n)) continue;
+		const world = vectorWorldMatrix(state.document.nodes, id);
+		if (!world) continue;
+		// Long enough to cross the artboard and the art, in the group's space.
+		const inv = invertMatrix(world);
+		const corners = [
+			{ x: 0, y: 0 },
+			{ x: state.document.width, y: 0 },
+			{ x: 0, y: state.document.height },
+			{ x: state.document.width, y: state.document.height }
+		].map((p) => applyMatrix(inv, p));
+		const { transform: _t, ...own } = n;
+		const b = unionBoxes([vectorNodeBounds(own as VectorNode), boundsFromCorners(corners)]);
+		if (!b) continue;
+		const pad = Math.max(b.width, b.height) * 0.05;
+		const lines = vectorSymmetryAxes(n.symmetry, { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad }).map(([a, c]) => {
+			const p = toScreen(state, applyMatrix(world, a));
+			const q = toScreen(state, applyMatrix(world, c));
+			return { x1: p.x, y1: p.y, x2: q.x, y2: q.y };
+		});
+		out.push({ nodeId: id, drawing: state.symmetryTarget === id, lines });
+	}
+	return out;
+}
+
+function unionBoxes(list: readonly (VectorBounds | null)[]): VectorBounds | null {
+	const ok = list.filter((b): b is VectorBounds => !!b);
+	if (!ok.length) return null;
+	const x = Math.min(...ok.map((b) => b.x));
+	const y = Math.min(...ok.map((b) => b.y));
+	return { x, y, width: Math.max(...ok.map((b) => b.x + b.width)) - x, height: Math.max(...ok.map((b) => b.y + b.height)) - y };
+}
+
+function boundsFromCorners(pts: readonly Vec2[]): VectorBounds {
+	const xs = pts.map((p) => p.x);
+	const ys = pts.map((p) => p.y);
+	return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+}
+
 /** Connection sites under the pointer while the Connector tool is on (see `VectorOverlayRenderData.connectorSites`). */
 function connectorSiteOverlay(state: VectorEditorState): VectorOverlayRenderData['connectorSites'] {
 	if (state.tool !== 'connector' || !state.pointer) return [];
@@ -1073,6 +1125,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	}
 	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
 		shading: shadingOverlay(state),
+		symmetry: symmetryOverlay(state),
 		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
 		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
 	};

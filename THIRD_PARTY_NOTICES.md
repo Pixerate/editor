@@ -184,6 +184,7 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 
 © 2026 ArtCraft Team and the PhotoCraft contributors.
 
+- `crates/paint/src/symmetry.rs` (`SymmetryMode` vertical / horizontal / dual / diagonal, `PresetSymmetry` centre and rotation, `directions`, `reflected_passes`, `segments` clipping axes to a box) → `packages/core/src/vector/symmetry.ts` (live symmetry groups drawing mirrored copies of their children, plus radial and kaleidoscope modes of our own); test cases re-expressed → `packages/core/tests/vector-symmetry.test.ts`
 - `crates/ops/src/lib.rs` (`History { max_states, max_bytes }`, `trim`, `unique_bytes`) → `packages/core/src/history/HistoryManager.ts`
 - `crates/ui-egui/src/palette.rs` (`fuzzy_score`, `exact_bonus`, `push_recent`) → `packages/core/src/commands/palette.ts`
 - `crates/doc/src/adjust.rs` (`Adjustment` model, `HueRange::neutral` / `weight`, `LevelsChannel` defaults) → `packages/core/src/image-editor/types.ts`, `packages/core/src/image-editor/adjustment-layers.ts`

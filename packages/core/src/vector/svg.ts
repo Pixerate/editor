@@ -26,6 +26,7 @@ import { invertMatrix } from '../geom/affine.js';
 import { isVectorFrame, sanitizeVectorFrame, sanitizeVectorResizing, vectorFrameRectPath, type VectorFrameGroup } from './frames.js';
 import type { VectorConnector, VectorResizing } from './types.js';
 import { sanitizeVectorConnector } from './connectors.js';
+import { sanitizeVectorSymmetry, transformVectorSymmetry } from './symmetry.js';
 import { isVectorShadedPaint, sanitizeVectorShadedPaint, vectorShadedSvgDefs } from './shading.js';
 
 /** `v` rounded to a whole number when within 1e-9 of one. */
@@ -764,7 +765,8 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			const live = {
 				kind: node.type,
 				...(node.effects?.length ? { effects: node.effects } : {}),
-				...(node.type === 'group' && node.liveBoolean ? { liveBoolean: node.liveBoolean } : {})
+				...(node.type === 'group' && node.liveBoolean ? { liveBoolean: node.liveBoolean } : {}),
+				...(node.type === 'group' && node.symmetry ? { symmetry: node.symmetry } : {})
 			};
 			lines.push(`${indent(depth)}<g${common(node)} data-vector-live="${escapeAttr(JSON.stringify(live))}">`);
 			lines.push(`${indent(depth + 1)}<g data-vector-part="appearance">`);
@@ -1480,6 +1482,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const group: VectorGroupNode = { id, type: 'group', ...meta, children: inner };
 		if (effects.length) group.effects = transformVectorEffects(effects, m);
 		if (liveBoolean) group.liveBoolean = liveBoolean;
+		const symmetry = sanitizeVectorSymmetry(raw.symmetry);
+		if (symmetry) group.symmetry = transformVectorSymmetry(symmetry, m);
 		const blend = blendFromAttribute(g.attrs['data-vector-blend'], m);
 		if (blend) group.blend = blend;
 		return group;

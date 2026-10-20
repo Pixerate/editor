@@ -22,6 +22,7 @@ import type { VectorFreeformPoint, VectorPathNode } from './types.js';
 import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
+import { VECTOR_SYMMETRY_MODES, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -85,6 +86,8 @@ export interface VectorNodeListing {
 	frameRect?: VectorFrame;
 	/** A frame child's resizing constraints, when set. */
 	resizing?: VectorResizing;
+	/** A symmetry group's settings. */
+	symmetry?: VectorSymmetry;
 	/** A connector's ends and route (see vector.listConnectors). */
 	connector?: VectorConnector;
 	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
@@ -92,13 +95,15 @@ export interface VectorNodeListing {
 }
 
 const EFFECT_PARAMS_DESCRIPTION =
-	'Effect parameters (missing ones keep their value or default). trim: start, end (percent), offset (degrees), mode simultaneous|individual. roundCorners: radius. puckerBloat: amount (−100…100). twist: angle, center {x, y} (offset from the middle). zigzag: size, ridges, smooth. wiggle: size, detail, smooth, speed, correlation, phase, seed, time (seconds). offset: amount, join miter|round|bevel, miterLimit, copies, copyOffset. merge: mode merge|add|subtract|intersect|exclude. repeater: copies (fractions fade the last), offset, position {x, y}, anchor {x, y} (offset from the middle), rotation, scale {x, y} (percent), startOpacity, endOpacity (percent), composite below|above. envelope: style (a warp preset: arc|arcLower|arcUpper|arch|bulge|shellLower|shellUpper|flag|wave|fish|rise|fisheye|inflate|squeeze|twist, or mesh), bend, horizontal, vertical (percent, −100…100), orientation horizontal|vertical, rows, columns, mesh { us, vs, points } (node space; prefer vector.envelope).';
+	'Effect parameters (missing ones keep their value or default). trim: start, end (percent), offset (degrees), mode simultaneous|individual. roundCorners: radius. puckerBloat: amount (−100…100). twist: angle, center {x, y} (offset from the middle). zigzag: size, ridges, smooth. wiggle: size, detail, smooth, speed, correlation, phase, seed, time (seconds). offset: amount, join miter|round|bevel, miterLimit, copies, copyOffset. merge: mode merge|add|subtract|intersect|exclude. repeater: copies (fractions fade the last), offset, position {x, y}, anchor {x, y} (offset from the middle), rotation, scale {x, y} (percent), startOpacity, endOpacity (percent), composite below|above. contour: direction inside|outside|center, steps, offset, fillColor / strokeColor (end colours, null keeps the colour), acceleration (−100…100), join. envelope: style (a warp preset: arc|arcLower|arcUpper|arch|bulge|shellLower|shellUpper|flag|wave|fish|rise|fisheye|inflate|squeeze|twist, or mesh), bend, horizontal, vertical (percent, −100…100), orientation horizontal|vertical, rows, columns, mesh { us, vs, points } (node space; prefer vector.envelope).';
 
 const fail = (message: string): never => {
 	throw new Error(message);
 };
 
 const IDS = { type: 'array', items: { type: 'string' }, description: 'Node ids (default: the selection).' } as const;
+
+const PARENT_ID = { type: 'string', description: 'A group to add into, on top of its children (default: the document). Coordinates are the group\'s own space (the document\'s for an unturned top-level group).' } as const;
 
 const ANCHORS = {
 	type: 'array',
@@ -265,6 +270,12 @@ export function createVectorCommands(controller: VectorEditorController, options
 	const prefix = options.prefix ?? 'vector.';
 	const group = options.group ?? 'Vector';
 	const base = { group, ...(options.scope ? { scope: options.scope } : {}) };
+	/** Checks a `parentId` (a group to add into) and turns it into add options. */
+	const parentOf = (parentId: string | undefined) => {
+		if (parentId === undefined) return {};
+		if (controller.getNode(parentId)?.type !== 'group') fail(`"${parentId}" is not a group to add into.`);
+		return { parentId };
+	};
 	const hasSelection = () => (controller.getState().selection.length ? true : 'Nothing is selected.');
 	const ids = (params: { ids?: string[] } | undefined) => {
 		const list = params?.ids ?? controller.getState().selection;
@@ -320,7 +331,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {}),
 					...(isVectorFrame(n) ? { frameRect: n.frame } : {}),
 					...(n.resizing ? { resizing: n.resizing } : {}),
-					...(n.type === 'path' && n.connector ? { connector: n.connector } : {})
+					...(n.type === 'path' && n.connector ? { connector: n.connector } : {}),
+					...(n.type === 'group' && n.symmetry ? { symmetry: n.symmetry } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -1237,6 +1249,91 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const SYMMETRY_PROPS = {
+		mode: { type: 'string', enum: VECTOR_SYMMETRY_MODES, description: 'vertical (mirror left / right), horizontal (top / bottom), dual (four quarters), diagonal, or radial (turns round the centre).' },
+		center: { type: 'object', properties: { x: { type: 'number', description: 'Document units (the group\'s space).' }, y: { type: 'number', description: 'Document units (the group\'s space).' } }, required: ['x', 'y'], additionalProperties: false, description: 'Where the axes cross.' },
+		rotation: { type: 'number', description: 'Turn of the axes, degrees clockwise (default 0).' },
+		copies: { type: 'integer', minimum: 2, maximum: 64, description: 'Radial: how many turns round the circle (default 6).' },
+		mirror: { type: 'boolean', description: 'Radial: mirror each turn too, like a kaleidoscope (default false).' }
+	} as const;
+	const symmetryResult = (id: string) => {
+		const n = controller.getNode(id);
+		return n?.type === 'group' && n.symmetry ? { id, symmetry: n.symmetry, children: n.children.map((c) => c.id) } : fail(`"${id}" is not a symmetry group.`);
+	};
+	const symmetryCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}makeSymmetry`,
+			label: 'Make Symmetry…',
+			keywords: ['symmetry', 'mirror', 'kaleidoscope', 'radial', 'mandala', 'reflect', 'live symmetry'],
+			description:
+				'Puts objects sharing a parent (`ids`, default the selection) into a live symmetry group: it draws them with their mirrored or rotated copies, which follow every edit of the originals. center defaults to the objects\' centre (the artboard\'s with no objects: an empty group to add art to with parentId). One undo step. Returns { id, symmetry, children }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Objects to repeat (default: the selection; [] for an empty group).' }, ...SYMMETRY_PROPS, name: { type: 'string', description: 'Group name (default "Symmetry").' } }, required: ['mode'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; mode: VectorSymmetryMode; center?: { x: number; y: number }; rotation?: number; copies?: number; mirror?: boolean; name?: string }) => {
+				const { ids: list, ...input } = params;
+				const r = controller.makeSymmetry(input, list ? { ids: list } : {});
+				if (!r.ok) fail(r.message);
+				return symmetryResult((r as { id: string }).id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setSymmetry`,
+			label: 'Symmetry Options…',
+			keywords: ['symmetry', 'mirror', 'radial', 'axis', 'copies'],
+			description: 'Changes symmetry groups (`ids`, default the selected one or the one holding the selection): mode, center, rotation, copies, mirror. Pass at least one. One undo step. Returns { groups }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Symmetry group ids (default: the selection).' }, ...SYMMETRY_PROPS }, additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[] } & Partial<VectorSymmetry> | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of mode, center, rotation, copies, mirror.');
+				check(controller.setSymmetry(patch, list ? { ids: list } : {}));
+				const ids = list ?? controller.getState().selection.filter((id) => controller.getNode(id)?.type === 'group');
+				return { groups: ids.filter((id) => (controller.getNode(id) as { symmetry?: unknown } | undefined)?.symmetry).map(symmetryResult) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}releaseSymmetry`,
+			label: 'Release Symmetry',
+			keywords: ['symmetry', 'release', 'expand', 'bake'],
+			description: 'Stops symmetry groups repeating their children. With expand: true the copies become real, editable objects in the group (new ids); otherwise they go. One undo step. Returns { ids } of the objects expanding added.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Symmetry group ids (default: the selection).' }, expand: { type: 'boolean', description: 'Keep the copies as real objects (default false).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; expand?: boolean } | undefined) => {
+				const r = controller.releaseSymmetry({ ...(params?.ids ? { ids: params.ids } : {}), ...(params?.expand ? { expand: true } : {}) });
+				check(r);
+				return { ids: r.ids ?? [] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}enterSymmetry`,
+			label: 'Draw Inside Symmetry',
+			keywords: ['symmetry', 'draw inside', 'mirror drawing'],
+			description: 'Hands the canvas to the user drawing inside a top-level symmetry group: new pen, pencil, shape and text art goes into it, mirrored as it is drawn, until vector.exitSymmetry or Escape. Returns { id }.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The symmetry group.' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => {
+				check(controller.enterSymmetry(params.id));
+				return { id: params.id };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}exitSymmetry`,
+			label: 'Stop Drawing Inside Symmetry',
+			keywords: ['symmetry', 'exit'],
+			description: 'New art goes on top of the document again (no symmetry group is entered). Returns { ok: true }.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => {
+				controller.exitSymmetry();
+				return { ok: true };
+			}
+		}
+	];
+
 	const pdfCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2022,12 +2119,16 @@ export function createVectorCommands(controller: VectorEditorController, options
 					points: { type: 'integer', minimum: 3 },
 					innerRatio: { type: 'number', minimum: 0, maximum: 1 },
 					name: { type: 'string' },
+					parentId: PARENT_ID,
 					...STYLE_PROPS
 				},
 				required: ['kind', 'x', 'y', 'width', 'height']
 			},
 			undoable: true,
-			run: (_ctx: unknown, params: VectorShapeInput) => ({ id: controller.addShape(params) })
+			run: (_ctx: unknown, params: VectorShapeInput & { parentId?: string }) => {
+				const { parentId, ...input } = params;
+				return { id: controller.addShape(input, parentOf(parentId)) };
+			}
 		},
 		{
 			...base,
@@ -2035,10 +2136,10 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Add Path…',
 			keywords: ['svg', 'path data', 'bezier', 'curve'],
 			description: 'Adds a path from SVG path data (`d`), in document units.',
-			params: { type: 'object', properties: { d: { type: 'string' }, name: { type: 'string' }, ...STYLE_PROPS }, required: ['d'] },
+			params: { type: 'object', properties: { d: { type: 'string' }, name: { type: 'string' }, parentId: PARENT_ID, ...STYLE_PROPS }, required: ['d'] },
 			undoable: true,
-			run: (_ctx: unknown, params: { d: string; name?: string } & Record<string, unknown>) => {
-				const id = controller.addPath(params.d, { ...pickStyle(params), ...(params.name ? { name: params.name } : {}) });
+			run: (_ctx: unknown, params: { d: string; name?: string; parentId?: string } & Record<string, unknown>) => {
+				const id = controller.addPath(params.d, { ...pickStyle(params), ...(params.name ? { name: params.name } : {}) }, parentOf(params.parentId));
 				const node = controller.getNode(id);
 				if (node?.type === 'path' && !node.subpaths.length) {
 					controller.undo();
@@ -2096,6 +2197,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...traceCommands(),
 		...lottieCommands(),
 		...pdfCommands(),
+		...symmetryCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
