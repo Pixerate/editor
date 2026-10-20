@@ -348,3 +348,10 @@ export function extractNormalizedLayerItems(
   });
 }
 
+
+/** Image › Mode: the bit depths a panel offers, with their labels. */
+export const BIT_DEPTH_OPTIONS: readonly { depth: 8 | 16 | 32; label: string; title: string }[] = [
+  { depth: 8, label: '8-bit', title: '8 bits per channel' },
+  { depth: 16, label: '16-bit', title: '16 bits per channel: smooth gradients, no banding under strong adjustments' },
+  { depth: 32, label: '32-bit', title: '32-bit float per channel, linear light (HDR)' },
+];

@@ -40,6 +40,19 @@ function controller() {
 }
 
 describe('Svelte LayersPanel', () => {
+  it('sets the bits per channel as an undo step', () => {
+    const c = controller();
+    component = mount(LayersPanel, { target, props: { controller: c } });
+    flushSync();
+    const select = target.querySelector('select[aria-label="Bits per channel"]') as HTMLSelectElement;
+    expect(select.value).toBe('8');
+    setValue(select, '32');
+    expect(c.bitDepth).toBe(32);
+    c.undo();
+    flushSync();
+    expect((target.querySelector('select[aria-label="Bits per channel"]') as HTMLSelectElement).value).toBe('8');
+  });
+
   it('lists layers top first and runs layer actions as undo steps', async () => {
     const c = controller();
     component = mount(LayersPanel, { target, props: { controller: c } });

@@ -335,11 +335,18 @@ const FEATURES: ParityRow[] = [
     note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; fx badges and an effects section in <LayersPanel>; six agent tools",
   },
   {
+    feature: "Image High Bit Depth (16-bit and 32-bit float layers)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "Deep samples ride next to each tile's 8-bit rendering; Image › Mode 8 / 16 / 32 as one undo step; 16- and 32-bit PSD open and save at depth; set_bit_depth agent tool",
+  },
+  {
     feature: "Photoshop PSD / PSB Open & Export",
     core: true,
     react: true,
     svelte: true,
-    note: "Pixel, group and adjustment layers, masks, blend, opacity, fill, clipping, locks and layer effects (with patterns and global light) both ways; type, smart-object, fill and shape layers as pixels with warnings; CMYK / Lab / 16- and 32-bit converted; inspect_psd / import_psd / export_psd agent tools",
+    note: "Pixel, group and adjustment layers, masks, blend, opacity, fill, clipping, locks and layer effects (with patterns and global light) both ways; type, smart-object, fill and shape layers as pixels with warnings; CMYK / Lab converted, 16- and 32-bit kept; inspect_psd / import_psd / export_psd agent tools",
   },
   {
     feature: "Image Selections, Refine Edge & Layer Masks",

@@ -21,6 +21,7 @@ export * from './mosaic-filter';
 export * from './capture';
 export * from './layers/model';
 export * from '../raster/surface';
+export * from '../raster/deep';
 export * from '../raster/effects/model';
 export * from '../raster/effects/patterns';
 export { renderLayerEffects, type EffectRect } from '../raster/effects/render';
