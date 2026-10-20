@@ -165,6 +165,7 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 | `vector.list` | Read the document: `{ width, height, nodes, selection, tool }`. Each node has id, type, name, depth, document-space `bounds`, `rotation` (degrees clockwise), visible, locked, selected, and for paths fill, stroke, strokeWidth and `d`; groups list `children`, `blend`, `liveBoolean`, `effects`, `mask`. A mask group's `bounds` are its masked result. Call it first and after any batch. |
 | `vector.shapeBuilderFaces` | List the regions the given paths divide the plane into: path data, area, a point inside each and the ids of paths filling it. Use the points with `vector.shapeBuilder`. |
 | `vector.exportSvg` | Get the document as standalone SVG markup (`{ svg }`); `precision` 0 to 8 decimals (default 3). |
+| `vector.exportPdf` | Get a print-ready vector PDF as a base64 data URL: one page, or one per artboard with `pages: "artboards"`. Returns `{ pdf, pages, bytes, notes }`; check `notes` (filters, opacity masks and text without loaded fonts are left out). |
 | `vector.exportLottie` | Get the document (or `ids`) as Lottie JSON for animation players: path effects stay live as Lottie modifiers, gradients as gradient fills. Returns `{ lottie, notes }`; read `notes` for what was approximated (filters, mesh gradients, text without outlines). |
 
 ### Create and delete

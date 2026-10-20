@@ -156,6 +156,7 @@ import {
 	VECTOR_MESH_MAX
 } from './shading.js';
 import { parseVectorColor } from './gradient.js';
+import { vectorDocumentToPdf, type VectorPdfExport, type VectorPdfOptions } from './pdf.js';
 import { parseVectorLottie, vectorDocumentToLottie, type VectorLottieExport, type VectorLottieExportOptions, type VectorLottieImport, type VectorLottieImportOptions } from './lottie.js';
 import { traceVectorImage, type VectorTraceOptions, type VectorTracePixels } from './trace.js';
 import { pointInBezierPath } from '../canvas/pathops/bezier.js';
@@ -4115,6 +4116,18 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// PDF
+
+	/**
+	 * The document as a vector PDF (see `vectorDocumentToPdf`): one page of the artboard, or a page
+	 * per artboard (`pages: 'artboards'`). Returns the file's bytes, its page count and notes on
+	 * what was approximated or left out.
+	 */
+	toPdf(options: VectorPdfOptions = {}): VectorPdfExport {
+		return vectorDocumentToPdf(resolveVectorSymbols(this.storedDocument()), options);
 	}
 
 	// -----------------------------------------------------------------------------------------
