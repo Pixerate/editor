@@ -372,6 +372,10 @@ controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", red
 - **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
 - **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
 
+## Large documents
+
+Hit-testing (`hitTestVectorNodes`), marquee selection and snapping to segments go through an R-tree once a node list (or a gesture's segment targets) reaches 256 entries (`VECTOR_SPATIAL_MIN`). The tree is packed sort-tile-recursive over each node's paint box (strokes and filters included) and cached per node array; each node's box is cached per node object, so after an edit only the nodes it replaced are measured again. Queries return candidates in draw order and the same exact tests then run, so results match a scan.
+
 ## Smart guides and snapping
 
 Drags snap to the other objects in the drawing while `snap.objects` is on (the default), and show labelled smart guides while `snap.guides` is on:

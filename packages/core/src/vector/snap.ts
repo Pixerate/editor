@@ -20,6 +20,7 @@
  * tangent points by sign-change sampling and bisection) (MIT OR Apache-2.0, © ArtCraft Team
  * and contributors). See THIRD_PARTY_NOTICES.md.
  */
+import { VectorRTree, VECTOR_SPATIAL_MIN } from './spatial.js';
 import type { Point } from '../canvas/types.js';
 import { expandVectorAppearance, vectorAppearanceNodes } from './appearance.js';
 import { isVectorMaskActive } from './mask.js';
@@ -245,6 +246,7 @@ export class VectorSnapTargets {
 	private readonly boxes: VectorBounds[] = [];
 	/** Side lengths of the other objects (in their own frames), which a resize may match. */
 	private readonly sizes: number[] = [];
+	private segmentTree: VectorRTree | null = null;
 
 	private constructor() {}
 
@@ -375,6 +377,8 @@ export class VectorSnapTargets {
 
 	/** Sorts the targets for `within` (stable: of targets alike, the first gathered wins). */
 	private index(): this {
+		// Many segments: an R-tree over their control boxes (a scan is quicker for a few).
+		this.segmentTree = this.segments.length >= VECTOR_SPATIAL_MIN ? new VectorRTree(this.segments) : null;
 		this.points.sort((a, b) => a.p.x - b.p.x);
 		this.xs.sort((a, b) => a.v - b.v);
 		this.ys.sort((a, b) => a.v - b.v);
@@ -565,7 +569,8 @@ export class VectorSnapTargets {
 	private segmentsNear(p: Vec2, tol: number): { seg: Point[]; t: number; distance: number }[] {
 		const out: { seg: Point[]; t: number; distance: number }[] = [];
 		const pt = toPoint(p);
-		for (const s of this.segments) {
+		const candidates = this.segmentTree ? this.segmentTree.search({ minX: p.x - tol, minY: p.y - tol, maxX: p.x + tol, maxY: p.y + tol }).map((i) => this.segments[i]) : this.segments;
+		for (const s of candidates) {
 			if (p.x < s.minX - tol || p.x > s.maxX + tol || p.y < s.minY - tol || p.y > s.maxY + tol) continue;
 			const hit = segmentNearest(s.seg, pt);
 			if (hit.distance <= tol) out.push({ seg: s.seg, t: hit.t, distance: hit.distance });
