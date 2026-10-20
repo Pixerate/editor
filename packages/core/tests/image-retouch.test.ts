@@ -427,3 +427,47 @@ describe('clone source marker', () => {
   });
 });
 
+describe('Clone Source transform', () => {
+  /** A horizontal ramp: red is 2·x, so where a pixel was sampled shows in its red. */
+  const ramp = (x: number): [number, number, number] => [Math.min(255, 2 * x), 80, 80];
+
+  it('flips, scales and rotates what the Clone Stamp lays down', () => {
+    const { c, id } = setup((x) => ramp(x));
+    c.setCloneTransform({ scaleX: -1 });
+    c.paintStroke({ tool: 'clone', layerId: id, source: { x: 30, y: 30 }, points: [{ x: 90, y: 30 }], brush: { size: 15, hardness: 1 } });
+    // Mirrored: 3 px right of the stroke start shows the source 3 px left of the source point.
+    expect(pixel(c, id, 93, 30)[0]).toBe(2 * 27);
+    expect(pixel(c, id, 87, 30)[0]).toBe(2 * 33);
+    c.undo();
+    c.setCloneTransform({ scaleX: 2 });
+    c.paintStroke({ tool: 'clone', layerId: id, source: { x: 30, y: 30 }, points: [{ x: 90, y: 30 }], brush: { size: 15, hardness: 1 } });
+    // Twice as wide: 4 px right samples 2 px right of the source.
+    expect(pixel(c, id, 94, 30)[0]).toBe(2 * 32);
+    c.undo();
+    c.setCloneTransform({ scaleX: 1, rotate: 90 });
+    c.paintStroke({ tool: 'clone', layerId: id, source: { x: 30, y: 30 }, points: [{ x: 90, y: 30 }], brush: { size: 15, hardness: 1 } });
+    // Rotated 90° clockwise: the source's x axis now runs down, so 4 px below samples 4 px right.
+    expect(pixel(c, id, 90, 34)[0]).toBe(2 * 34);
+    expect(c.setCloneTransform(null)).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
+  });
+
+  it('set_clone_transform validates and reports the transform; get_retouch_options reads it', async () => {
+    const { registry } = setup();
+    const res = await registry.callTool('set_clone_transform', { scaleX: 50, rotate: 200, flipVertical: true });
+    expect(res.structuredContent).toEqual({ scaleX: 0.5, scaleY: -1, rotate: -160 });
+    const read = await registry.callTool('get_retouch_options', {});
+    expect(read.structuredContent).toMatchObject({ cloneTransform: { scaleX: 0.5, scaleY: -1, rotate: -160 } });
+    for (const [args, pattern] of [
+      [{ scaleX: 0 }, /between 0.01 and 10/],
+      [{ reset: true, rotate: 10 }, /not both/],
+      [{}, /Pass scaleX/],
+      [{ angle: 3 }, /Invalid arguments|additional/],
+    ] as const) {
+      const r = await registry.callTool('set_clone_transform', args as never);
+      expect(r.isError).toBe(true);
+      expect(String((r.content?.[0] as { text?: string }).text)).toMatch(pattern);
+    }
+    expect((await registry.callTool('set_clone_transform', { reset: true })).structuredContent).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
+  });
+});
+

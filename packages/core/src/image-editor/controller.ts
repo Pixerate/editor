@@ -252,6 +252,11 @@ import {
   DEFAULT_RETOUCH,
   MixerStroke,
   RegionPixelSource,
+  TransformedPixelSource,
+  cloneSamplePoint,
+  isIdentityCloneTransform,
+  IDENTITY_CLONE_TRANSFORM,
+  type CloneTransform,
   RetouchDabStroke,
   StrokeCoverage,
   TilePixelSource,
@@ -3600,11 +3605,10 @@ export class ImageEditorController {
     let first = { x: 0, y: 0 };
     // A Clone Source transform samples around the source point through its inverse (bilinear).
     const xf = this.state.paint.cloneTransform;
+    // The target point that maps onto the source point is the source minus the offset.
     const transformed = isIdentityCloneTransform(xf)
       ? null
-      : new TransformedPixelSource(source, (x, y) => cloneSamplePoint(xf, { x: first.x + offset.x, y: first.y + offset.y }, cloneAnchor(), x, y));
-    // The target point that maps onto the source point: where the aligned offset was fixed.
-    const cloneAnchor = () => ({ x: first.x + offset.x - (settings.aligned && cs.offset ? cs.offset.x : offset.x), y: first.y + offset.y - (settings.aligned && cs.offset ? cs.offset.y : offset.y) });
+      : new TransformedPixelSource(source, (x, y) => cloneSamplePoint(xf, cs, { x: cs.x - offset.x, y: cs.y - offset.y }, x, y));
     const paint = (): RetouchPaint => (transformed ? { kind: 'source', source: transformed, dx: 0, dy: 0 } : { kind: 'source', source, dx: offset.x, dy: offset.y });
     return {
       kind: 'coverage',
@@ -4542,7 +4546,10 @@ export class ImageEditorController {
     if (s.activeTool !== 'clone' && s.activeTool !== 'heal') return null;
     const cs = s.paint.cloneSource;
     if (!cs) return null;
-    if (cursor && cs.offset && s.paint.retouch.aligned) return { x: cursor.x + cs.offset.x, y: cursor.y + cs.offset.y };
+    if (cursor && cs.offset && s.paint.retouch.aligned) {
+      const [x, y] = cloneSamplePoint(s.paint.cloneTransform, cs, { x: cs.x - cs.offset.x, y: cs.y - cs.offset.y }, cursor.x, cursor.y);
+      return { x, y };
+    }
     return { x: cs.x, y: cs.y };
   }
 

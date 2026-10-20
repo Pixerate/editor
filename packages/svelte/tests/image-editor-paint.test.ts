@@ -131,6 +131,13 @@ describe('Svelte paint tools', () => {
     expect(target.querySelector('[data-testid="clone-source"]')!.textContent).toBe('Source 12, 34');
     click(button('Clear source'));
     expect(c.getState().paint.cloneSource).toBeNull();
+    // The Clone Source panel: scale, angle and flips, and a reset.
+    setValue(target.querySelector('input[aria-label="Source W"]')!, '50');
+    setValue(target.querySelector('input[aria-label="Source angle"]')!, '30');
+    click(button('Flip H'));
+    expect(c.getState().paint.cloneTransform).toEqual({ scaleX: -0.5, scaleY: 1, rotate: 30 });
+    click(button('Reset transform'));
+    expect(c.getState().paint.cloneTransform).toEqual({ scaleX: 1, scaleY: 1, rotate: 0 });
     click(button('Spot Heal'));
     click(button('Smooth'));
     expect(c.getState().paint.retouch.spotType).toBe('smooth');

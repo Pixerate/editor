@@ -8,7 +8,10 @@
     RETOUCH_CHOICES,
     RETOUCH_OPTION_CONTROLS,
     RETOUCH_TOGGLES,
+    CLONE_TRANSFORM_CONTROLS,
     cloneSourceLabel,
+    cloneTransformView,
+    setCloneTransformValue,
     isRetouchPaintTool,
     rgbUnitToHex,
     setRetouchChoice,
@@ -34,7 +37,7 @@
   const view = $derived.by(() => {
     void tick;
     const s = controller.getState();
-    return { tool: s.activeTool, sourceLabel: cloneSourceLabel(controller), ...s.paint };
+    return { tool: s.activeTool, sourceLabel: cloneSourceLabel(controller), cloneView: cloneTransformView(controller), ...s.paint };
   });
   let error = $state<string | null>(null);
 
@@ -162,6 +165,18 @@
           {#if view.cloneSource}
             <button type="button" title="Forget the source point" class={chip(false)} onclick={() => controller.setCloneSource(null)}>Clear source</button>
           {/if}
+        </div>
+        <div class="flex flex-col gap-1" role="group" aria-label="Clone source transform" data-testid="clone-transform">
+          {#each CLONE_TRANSFORM_CONTROLS as spec (spec.id)}
+            <ControlSlider {spec} value={view.cloneView[spec.id]} onchange={(v) => setCloneTransformValue(controller, spec.id, v)} />
+          {/each}
+          <div class="flex items-center gap-1">
+            <button type="button" aria-pressed={view.cloneView.flipH} title="Mirror the source left to right" class={chip(view.cloneView.flipH)} onclick={() => setCloneTransformValue(controller, 'flipH')}>Flip H</button>
+            <button type="button" aria-pressed={view.cloneView.flipV} title="Mirror the source top to bottom" class={chip(view.cloneView.flipV)} onclick={() => setCloneTransformValue(controller, 'flipV')}>Flip V</button>
+            {#if !view.cloneView.identity}
+              <button type="button" title="Back to 100 %, no flip, 0°" class={chip(false)} onclick={() => controller.setCloneTransform(null)}>Reset transform</button>
+            {/if}
+          </div>
         </div>
       {/if}
       {#each RETOUCH_CHOICES.filter((c) => c.tools.includes(view.tool as never)) as choice (choice.id)}

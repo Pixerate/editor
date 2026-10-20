@@ -64,6 +64,36 @@ export const RETOUCH_OPTION_CONTROLS: readonly (ControlSpec & { id: 'exposure' |
   { id: 'strength', label: 'Strength', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['smudge'] },
 ];
 
+/** The Clone Source panel's sliders (Clone Stamp and Healing Brush): width and height in percent, angle in degrees. */
+export const CLONE_TRANSFORM_CONTROLS: readonly (ControlSpec & { id: 'width' | 'height' | 'angle' })[] = [
+  { id: 'width', label: 'Source W', section: 'layer', min: 1, max: 400, step: 1, default: 100, decimals: 0, track: plain, unit: '%' },
+  { id: 'height', label: 'Source H', section: 'layer', min: 1, max: 400, step: 1, default: 100, decimals: 0, track: plain, unit: '%' },
+  { id: 'angle', label: 'Source angle', section: 'layer', min: -180, max: 180, step: 1, default: 0, decimals: 0, track: plain, unit: '°' },
+];
+
+/** The clone transform as the panel shows it: width / height in percent, angle in degrees, flips. */
+export function cloneTransformView(controller: ImageEditorController): { width: number; height: number; angle: number; flipH: boolean; flipV: boolean; identity: boolean } {
+  const t = controller.getState().paint.cloneTransform;
+  return {
+    width: Math.round(Math.abs(t.scaleX) * 100),
+    height: Math.round(Math.abs(t.scaleY) * 100),
+    angle: t.rotate,
+    flipH: t.scaleX < 0,
+    flipV: t.scaleY < 0,
+    identity: t.scaleX === 1 && t.scaleY === 1 && t.rotate === 0,
+  };
+}
+
+/** Sets one Clone Source panel value (`width` / `height` in percent keep the flip; `angle` in degrees; `flipH` / `flipV` toggle). */
+export function setCloneTransformValue(controller: ImageEditorController, id: 'width' | 'height' | 'angle' | 'flipH' | 'flipV', value?: number): void {
+  const t = controller.getState().paint.cloneTransform;
+  if (id === 'width') controller.setCloneTransform({ scaleX: Math.sign(t.scaleX) * (value ?? 100) / 100 });
+  else if (id === 'height') controller.setCloneTransform({ scaleY: Math.sign(t.scaleY) * (value ?? 100) / 100 });
+  else if (id === 'angle') controller.setCloneTransform({ rotate: value ?? 0 });
+  else if (id === 'flipH') controller.setCloneTransform({ scaleX: -t.scaleX });
+  else controller.setCloneTransform({ scaleY: -t.scaleY });
+}
+
 /** Retouch choices, each a row of toggle buttons, with the tools that show it. */
 export const RETOUCH_CHOICES: readonly {
   id: 'sample' | 'spotType' | 'range' | 'spongeMode';
