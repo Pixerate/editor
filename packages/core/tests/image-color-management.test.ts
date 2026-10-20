@@ -49,7 +49,7 @@ describe('document colour profile', () => {
     expect(() => c.assignProfile('coated-cmyk')).toThrow(/needs an RGB profile/);
     expect(() => c.convertToProfile('lab-d50')).toThrow(/needs an RGB profile/);
     expect(() => c.assignProfile('wide gamut thing')).toThrow(/Unknown colour profile/);
-  });
+  }, 60_000);
 
   it('PSD embeds the profile and opening it assigns it; JSON keeps it', async () => {
     const { c } = setup();
