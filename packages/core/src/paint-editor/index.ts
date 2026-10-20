@@ -39,6 +39,8 @@ export * from './stencils';
 export * from './stickers';
 export * from './procedural';
 export * from './sticker-tools';
+export * from './effects';
+export * from './effect-tools';
 export { WET_FLOW_KINDS, DEFAULT_FLOW, normalizeFlow, type WetFlowKind, type WetFlowSpec } from '../paint/wet/flow';
 export { DEFAULT_WET_PARAMS, WET_PARAM_KEYS, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 export { wetSupport, type WetSupport } from '../paint/wet/wasm';

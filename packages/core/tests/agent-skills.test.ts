@@ -35,7 +35,7 @@ import {
 	type CommandSpec
 } from '../src/commands';
 import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
-import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
@@ -128,7 +128,10 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' }))
 		],
-		'pixerate-paint-editor': toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
+		'pixerate-paint-editor': [
+			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
+			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' }))
+		],
 		'pixerate-animation-editor': toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
 		'pixerate-video-editor': [
 			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
@@ -168,11 +171,12 @@ const FACTORIES: Record<string, string> = {
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
+	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
-	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor',
+	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-paint-editor',
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',

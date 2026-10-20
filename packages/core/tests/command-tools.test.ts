@@ -22,7 +22,7 @@ import { createFakeEffectProvider } from '../src/effects';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
 import { createCanvasCaptureToolProvider } from '../src/canvas';
-import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 
 beforeAll(() => {
 	const dom = new JSDOM();
@@ -195,6 +195,11 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createImageEffectsToolProvider(new ImageEditorController({ effects: createFakeEffectProvider() }), { id: 'img-effects', namespace: 'imgfx' }));
 		registry.register(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint', namespace: 'paint' }));
+		{
+			const painter = new PaintEditorController({ width: 64, height: 64 });
+			painter.setEffectsProvider(createFakeEffectProvider());
+			registry.register(createPaintEffectsToolProvider(painter, { id: 'paint-effects', namespace: 'paintfx' }));
+		}
 		registry.register(createCanvasCaptureToolProvider({ id: 'capture', namespace: 'capture', element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] }));
 		registry.register(createCaptureToolProvider(createElementCaptureSurface({ element: null }), { id: 'dom-capture', namespace: 'dom' }));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
