@@ -27,9 +27,10 @@
    (resampled at depth; whole-pixel moves exact) keep the depth (32-bit paint and resampling work
    in linear light). Layer masks keep the depth too: 16- and 32-bit masks open and save at depth,
    blend with their full precision, and the brush, eraser, `fill_pixels` and `clear_pixels` paint
-   them at depth (retouching on a mask stays 8-bit). Layer filters and layer effects still
-   compute in 8 bits: the pixels they change get 8-bit precision, every pixel they leave alone
-   keeps its deep samples. Afterwards work with `list_layers` as
+   them at depth (retouching on a mask stays 8-bit). Layer filters (develop, blur) and layer
+   effects composite at depth in merges, `compositeDeepPixels` and the exported merged image (a
+   group's effects and legacy-process develop filters stay 8-bit). The viewport always shows
+   the 8-bit rendering. Afterwards work with `list_layers` as
    usual: there is no Background source image, every pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the
