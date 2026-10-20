@@ -20,13 +20,18 @@ means sRGB. The viewport assumes an sRGB display and converts other working spac
 4. **Soft proof before printing**: `set_proof_setup` with `coated-cmyk` (or the printer's
    profile as `icc:<base64>`), `gamutWarning: true` to grey out colours the press cannot hit;
    look with `capture_view`; adjust (lower saturation in the greyed areas); then `off: true`.
-5. **Numbers for a print brief**: `convert_colors` gives CMYK percentages (values × 100) and
+5. **Print documents**: `set_color_mode` `cmyk` with the press profile makes the document a
+   CMYK one: you keep editing RGB, the viewport proofs through the press, and `export_psd`
+   writes a CMYK PSD (the separation uses `intent`). Opening a CMYK PSD does this for you. Check
+   out-of-gamut colours with `set_proof_setup` `gamutWarning` before exporting.
+6. **Numbers for a print brief**: `convert_colors` gives CMYK percentages (values × 100) and
    Lab for any `#rrggbb`, without changing the document.
 
 ## Pitfalls
 
-- The working space must be RGB: CMYK, grey and Lab profiles are for proofing and
-  `convert_colors` here.
+- The working space must be RGB: CMYK and Lab are document modes (`set_color_mode`) for
+  output, not spaces you edit numbers in. Adjustment layers keep their RGB settings in a CMYK or
+  Lab PSD, where Photoshop applies them to its own channels; `export_psd` warns.
 - `convert_to_profile` converts pixel layers (and the source image). Shape and type colours,
   layer effects and smart objects keep their numbers and are listed in `unconvertedLayerIds`:
   check them and recolour if the look matters.
