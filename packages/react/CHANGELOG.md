@@ -1,5 +1,20 @@
 # @pixerate/editor-react
 
+## 0.78.0
+
+### Minor Changes
+
+- d995e9d: Optional provider effects in the image editor. With an `EffectProvider` (`effects` option, `setEffectsProvider` / `useEffects`), filter effects become `effect` smart filters (`applyEffectFilter`; a pixel, shape or type layer converts to a smart object in the same undo step) with blend, opacity, order and the filter mask. Generator, overlay and title effects become effect layers (`addEffectLayer` / `updateEffectLayer` / `rasterizeEffectLayer`): pixel layers with a `generator`, rendered at the document's size and bit depth. Effect filters render in the background (`ImageEffectsEngine`). Without a provider they pass pixels through, and effect layers keep their pixels; both round-trip through JSON. New agent tools via `createImageEffectsToolProvider`: the shared effect tools plus `add_effect_layer`. React and Svelte add `<ImageProviderEffectsPanel>`, `<ImageEditor effects>` and `useImageEffectsTools`.
+- 27b6502: Optional provider effects in the video editor. With an `EffectProvider` (`effects` option, `setEffectsProvider` / `useEffects`), clips get an ordered effect stack (`effects`, with enabled, opacity and keyframable values), transitions can use a provider effect (`type: 'effect'`), and effect clips (`type: 'effect'`) draw generators, titles and overlays. Effects render frame-exact through the provider, cached per frame (`VideoEffectsEngine`), in the preview and in `renderVideoFrameExact`. `toVideoFfmpeg` refuses projects with enabled provider effects unless it gets the rendered `frames`. Without a provider, projects keep their effects and show them as placeholders. New agent tools: `search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect`, `remove_effect`, `add_video_effect_clip`, `set_video_effect_transition` and `set_video_effect_keyframes` (`createVideoEffectsToolProvider`; the shared `createEffectToolProvider` is in `@pixerate/editor/effects`). React and Svelte add a new `effects` subpath with `<EffectsBrowser>`, `<EffectParameters>`, `<EffectThumbnail>` and `useEffects`, plus `<VideoEffectsPanel>`, `<VideoEditor effects>` and `useVideoEffectsTools`.
+
+### Patch Changes
+
+- Updated dependencies [244ccba]
+- Updated dependencies [bd1ff5f]
+- Updated dependencies [d995e9d]
+- Updated dependencies [27b6502]
+  - @pixerate/editor@0.124.0
+
 ## 0.77.0
 
 ### Minor Changes
