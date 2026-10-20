@@ -2406,6 +2406,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Strokes were recorded, but fills, clears and drying were not, and wet strokes replayed all their points at once although the simulation ran between them while the user painted.
 - **Solution / Workaround**: Fills, clears and relief flattening are recorded as `paintEvents` with `at` (strokes recorded before them); wet events also carry `at` and their `clock`. Wet strokes record the clock of every point (`RecordedStroke.steps`), and `replayPainting` steps the scratch editor's simulation to each clock before pushing that point (`advanceWet` steps even when nothing is wet, so clocks stay in line). The replay test paints a live stroke with time passing between points and compares the replay byte for byte. Imported pixels, merges and transforms are still not data: those layers replay empty.
 
+### [core/paint-editor] Simulated Brushes Must Step by Distance, Not by Input Sample
+
+- **Issue / Symptom**: A spring-ink line drawn with a mouse looked different from the same path painted by `paint_stroke`, and a replay did not match the original.
+- **Root Cause**: Particle and bristle simulations advance a step per update; pointer events arrive at whatever rate the device sends them, so steps per pixel differed.
+- **Solution / Workaround**: `MarkStroke` walks the smoothed path with a fine dab walk (about 1.5 px per step) and advances the simulation once per walked dab, so the number of steps depends only on the path. Randomness comes from `rand01(seed, index, stream)`. The test pushes the same points in chunks of three and compares the pixels.
+
+### [core/paint-editor] A Sticker Layer's Pixels Are Drawn From Its Stickers, So Other Paint Is Refused There
+
+- **Issue / Symptom**: Editing a sticker after painting a pencil line on the same layer would wipe the line.
+- **Root Cause**: Every sticker edit redraws the layer from its sticker list (`stickerSurface`), the only way to keep stickers editable objects with exact pixels.
+- **Solution / Workaround**: Sticker spray needs an empty layer (or a sticker layer), and other brushes and fills on a sticker layer are refused with a message to add a layer. Sticker edits record a `stickers` paint event with the whole list, so replays rebuild the same layer.
+
 ### Wet-media tests time out on CI when the scene is "small"
 - **Issue / Symptom**: `paint-wet-kernel.test.ts` took ~130 s on CI (Ubuntu, Node 24) and the physics tests in `paint-wet.test.ts` 5–9 s each, although they looked modest locally.
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.

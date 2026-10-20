@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+  import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
   import { attempt, button, chip, paintEditorState } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -110,6 +110,12 @@
     <button type="button" class={button} onclick={() => controller.clearTracingImage()}>Remove tracing</button>
   {/if}
   <button type="button" class={button} onclick={() => refInput?.click()}>Reference…</button>
+  <span class="flex items-center gap-1" role="group" aria-label="Stencils">
+    <button type="button" class={button} title="A ruler: strokes that start near it follow it" onclick={() => run(() => controller.addStencil(quickStencil('ruler', canvas)))}>Ruler</button>
+    <button type="button" class={button} title="A circle guide: strokes that start near it follow it" onclick={() => run(() => controller.addStencil(quickStencil('circle', canvas)))}>Circle</button>
+    <button type="button" class={button} title="An ellipse mask: paint lands only inside it" onclick={() => run(() => controller.addStencil(quickStencil('ellipse-mask', canvas)))}>Mask</button>
+    {#if snap.guides.stencils.length > 0}<button type="button" class={button} onclick={() => run(() => controller.removeStencils())}>Clear stencils</button>{/if}
+  </span>
   <button type="button" class={button} title="Which hand holds the pen (palm rejection)" onclick={() => controller.setHand(snap.hand === 'right' ? 'left' : 'right')}>{snap.hand === 'right' ? 'Right-handed' : 'Left-handed'}</button>
   <span class="mx-1 h-4 w-px bg-slate-700"></span>
   <button type="button" class={button} onclick={() => run(() => downloadBytes(JSON.stringify(controller.toJSON()), `${fileName}.paint.json`, 'application/json'))}>Save</button>

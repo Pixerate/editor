@@ -366,4 +366,35 @@ describe('Svelte paint editor', () => {
     expect(downloads).toContain('painting@2x.png');
     HTMLAnchorElement.prototype.click = click;
   });
+
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    show(PaintEditor, { controller: c });
+    c.setBrush({ id: 'hair-strands' });
+    flushSync();
+    setValue(target.querySelector('select[aria-label="Particle kind"]') as HTMLSelectElement, 'orbit');
+    expect(c.getState().brush.particle.kind).toBe('orbit');
+    setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
+    expect(c.getState().brush.particle.render).toBe('sequence');
+    c.setBrush({ id: 'bristle-round' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Splay"]')).not.toBeNull();
+    c.setBrush({ id: 'sticker-stars' });
+    flushSync();
+    click(target.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]'));
+    expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    click(byText('Ruler'));
+    expect(c.listStencils()[0].kind).toBe('ruler');
+    expect(target.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);
+    click(byText('Clear stencils'));
+    expect(c.listStencils()).toHaveLength(0);
+    c.paintStroke({ points: [{ x: 20, y: 100 }, { x: 280, y: 100 }] });
+    flushSync();
+    click(byText('Layers'));
+    const list = target.querySelectorAll('[data-testid="sticker-panel"] [role="option"]');
+    expect(list.length).toBe(c.listStickers().length);
+    click(list[0]);
+    click(Array.from(target.querySelectorAll('[data-testid="sticker-edit"] button')).find((b) => b.textContent?.trim() === 'Delete')!);
+    expect(c.listStickers().length).toBe(list.length - 1);
+  });
 });

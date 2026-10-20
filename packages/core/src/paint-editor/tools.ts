@@ -10,6 +10,9 @@ import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
+import { PARTICLE_KINDS, PARTICLE_RENDERS } from './procedural';
+import { STAMP_KINDS } from './stickers';
+import { createPaintStickerTools } from './sticker-tools';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
 import type { PaintEditorController } from './controller';
@@ -192,13 +195,60 @@ const IMPASTO_BRUSH = {
   additionalProperties: false,
 } as const;
 
+const PARTICLE_BRUSH = {
+  type: 'object',
+  description: 'Particle engine settings (procedural brushes). Missing fields keep their current values.',
+  properties: {
+    kind: { type: 'string', enum: [...PARTICLE_KINDS], description: 'string: strands of masses on springs dragged behind the pen (hair, fur, wet string); spring: particles on springs to the pen, overshooting and wobbling; orbit: particles circling the pen (curls); flow: particles thrown off the pen into a swirling flow until they fade.' },
+    render: { type: 'string', enum: [...PARTICLE_RENDERS], description: 'dot: a mark at each step; line: each particle draws a continuous line; sequence: beads spaced along each path.' },
+    count: { type: 'integer', minimum: 1, maximum: 64, description: 'Particles (flow: how many are thrown per tip of travel).' },
+    size: { type: 'number', minimum: 0, maximum: 1, description: 'Mark size as a fraction of the tip size.' },
+    spread: { type: 'number', minimum: 0, maximum: 1, description: 'How far apart the particles start, as a fraction of the tip size.' },
+    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Spring and string stiffness: stiff follows closely, soft swings wide.' },
+    damping: { type: 'number', minimum: 0, maximum: 1, description: 'How quickly motion dies down.' },
+    speed: { type: 'number', minimum: 0, maximum: 1, description: 'Orbit and flow speed.' },
+    gravity: { type: 'number', minimum: -1, maximum: 1, description: 'Pull downwards (negative: upwards).' },
+    life: { type: 'number', minimum: 0, maximum: 1, description: 'Flow particles: how long they live.' },
+    interval: { type: 'number', minimum: 0, maximum: 1, description: 'Sequence: spacing of the beads.' },
+  },
+  additionalProperties: false,
+} as const;
+
+const BRISTLE_BRUSH = {
+  type: 'object',
+  description: 'Bristle engine settings: a tuft of bristles, each its own line. Missing fields keep their current values.',
+  properties: {
+    count: { type: 'integer', minimum: 3, maximum: 128, description: 'Bristles in the tuft.' },
+    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Stiff bristles follow the tip; soft ones lag and bend into curves at turns.' },
+    splay: { type: 'number', minimum: 0, maximum: 1, description: 'How far pressure spreads the tuft.' },
+    thickness: { type: 'number', minimum: 0, maximum: 1, description: "Each bristle's line width as a fraction of the tip size." },
+    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint per bristle: 1 never runs dry; lower, bristles run out along the stroke (dry brush).' },
+    jitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random variation between bristles.' },
+  },
+  additionalProperties: false,
+} as const;
+
+const STICKER_BRUSH = {
+  type: 'object',
+  description: 'Sticker engine settings: stamps sprayed along the stroke as editable stickers. Missing fields keep their current values.',
+  properties: {
+    stamps: { type: 'array', minItems: 1, maxItems: 9, items: { type: 'string', enum: [...STAMP_KINDS], description: 'A stamp.' }, description: 'The stamps to spray (one picked at random per sticker).' },
+    density: { type: 'number', minimum: 0, maximum: 1, description: 'Stickers per distance travelled.' },
+    sizeJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random size change.' },
+    rotationJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random turn as a fraction of ±180°.' },
+    scatter: { type: 'number', minimum: 0, maximum: 2, description: 'How far from the path stickers land, in tip diameters.' },
+    colorJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random colour change around the paint colour.' },
+  },
+  additionalProperties: false,
+} as const;
+
 const BRUSH_FIELDS = {
   name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name.' },
   category: { type: 'string', enum: [...PAINT_BRUSH_CATEGORIES], description: 'Library category.' },
   engine: {
     type: 'string',
     enum: [...PAINT_BRUSH_ENGINES],
-    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto).',
+    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto); particle: procedural particle brushes (see particle); bristle: a tuft of bristles that bend and splay (see bristle); sticker: sprays editable sticker stamps (see sticker).',
   },
   tip: TIP,
   grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Multiplied by the paper depth.' },
@@ -212,6 +262,9 @@ const BRUSH_FIELDS = {
   smudge: SMUDGE,
   wet: WET_BRUSH,
   impasto: IMPASTO_BRUSH,
+  particle: PARTICLE_BRUSH,
+  bristle: BRISTLE_BRUSH,
+  sticker: STICKER_BRUSH,
 } as const;
 
 const POINTS = {
@@ -780,7 +833,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet), and impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1022,6 +1075,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   tools.push(...createPaintWetTools(c));
   tools.push(...createPaintThickTools(c));
   tools.push(...createPaintReplayTools(c));
+  tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
 
   return { id: options.id ?? 'paint-editor', namespace: options.namespace, tools };

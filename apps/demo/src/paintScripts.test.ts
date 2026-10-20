@@ -48,4 +48,12 @@ describe("paint agent scripts", () => {
     expect(controller.getState().wet.wet).toBe(false);
     controller.dispose();
   }, 120_000);
+
+  it("draws with stencils, particle and bristle brushes and editable stickers", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-procedural")!, { control: { speed: Infinity, stopped: false } });
+    const stars = controller.listLayers().find((l) => l.name === "Stars")!;
+    expect(controller.listStickers(stars.id)[0].size).toBe(70);
+    expect(controller.listStencils()).toHaveLength(0);
+  }, 120_000);
 });

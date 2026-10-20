@@ -26,6 +26,8 @@ import type { PaintEditorController, PixelImage } from './controller';
 import type { PenPoint } from './engine';
 import { IDENTITY_AFFINE, varyStroke, type Affine, type RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
+import { scaleStencil } from './stencils';
+import type { Sticker } from './stickers';
 import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
 import { downsampleRgba } from './render';
@@ -128,7 +130,10 @@ export async function replayPainting(
       if (!target.getLayer(e.layerId)) continue;
       if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
       else if (e.kind === 'clear') target.clearLayer(e.layerId);
-      else target.flattenRelief(e.layerId);
+      else if (e.kind === 'stickers') {
+        const list = ((e.data as { stickers?: Sticker[] })?.stickers ?? []).map((x) => (s === 1 ? x : { ...x, x: x.x * s, y: x.y * s, size: x.size * s }));
+        target.replaceStickers(e.layerId, list);
+      } else target.flattenRelief(e.layerId);
       continue;
     }
     if (item.kind === 'wet') {
@@ -171,7 +176,7 @@ export async function replayPainting(
     const st = s === 1 ? item.stroke : varyStroke(item.stroke, scaleM, { scale: s });
     strokes++;
     if (!target.getLayer(st.layerId)) continue;
-    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), snapToPerspective: false };
+    const init = { layerId: st.layerId, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), snapToPerspective: false, stencils: false, maskStencils: (st.stencils ?? []).map((x) => (s === 1 ? x : scaleStencil(x, s))) };
     if (st.brush.engine === 'wet' && st.steps?.length === st.points.length) {
       // Each point at the clock it was recorded at, the simulation stepped in between.
       await target.wetIdle();

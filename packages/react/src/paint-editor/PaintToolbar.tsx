@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
+import { PAINT_TOOLS, SYMMETRY_MODES, decodeImageBlob, downloadBytes, quickStencil, timeLapseZip, type PaintEditorController, type PaintTool, type SymmetryMode } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, useAttempt } from './shared';
 
@@ -14,7 +14,7 @@ export interface PaintToolbarProps {
 
 /**
  * Tools (brush, eyedropper, pan, rotate view), undo / redo, view rotation, mirroring and reset,
- * the symmetry and perspective guides, the tracing image and reference images, the drawing hand,
+ * the symmetry and perspective guides, stencils (ruler, circle, mask), the tracing image and reference images, the drawing hand,
  * and file actions: save / open JSON, export PNG, JPEG and PSD, a time-lapse (zipped frames, video
  * project and ffmpeg command) and a PNG repainted from the strokes at twice the size.
  */
@@ -147,6 +147,22 @@ export const PaintToolbar: React.FC<PaintToolbarProps> = ({ controller, tool, on
       <button type="button" className={button} onClick={() => refRef.current?.click()}>
         Reference…
       </button>
+      <span className="flex items-center gap-1" role="group" aria-label="Stencils">
+        <button type="button" className={button} title="A ruler: strokes that start near it follow it" onClick={() => attempt(() => controller.addStencil(quickStencil('ruler', canvas)))}>
+          Ruler
+        </button>
+        <button type="button" className={button} title="A circle guide: strokes that start near it follow it" onClick={() => attempt(() => controller.addStencil(quickStencil('circle', canvas)))}>
+          Circle
+        </button>
+        <button type="button" className={button} title="An ellipse mask: paint lands only inside it" onClick={() => attempt(() => controller.addStencil(quickStencil('ellipse-mask', canvas)))}>
+          Mask
+        </button>
+        {state.guides.stencils.length > 0 && (
+          <button type="button" className={button} onClick={() => attempt(() => controller.removeStencils())}>
+            Clear stencils
+          </button>
+        )}
+      </span>
       <button type="button" className={button} title="Which hand holds the pen (palm rejection)" onClick={() => controller.setHand(state.hand === 'right' ? 'left' : 'right')}>
         {state.hand === 'right' ? 'Right-handed' : 'Left-handed'}
       </button>

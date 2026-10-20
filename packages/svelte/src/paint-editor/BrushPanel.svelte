@@ -16,6 +16,15 @@
     WET_MEDIUM_LABELS,
     IMPASTO_TOOLS,
     IMPASTO_TOOL_LABELS,
+    PARTICLE_KINDS,
+    PARTICLE_KIND_LABELS,
+    PARTICLE_RENDERS,
+    PARTICLE_RENDER_LABELS,
+    STAMP_KINDS,
+    STAMP_LABELS,
+    toggleStamp,
+    type ParticleKind,
+    type ParticleRender,
     type ImpastoTool,
     type WetMediumKind,
     type BlendMode,
@@ -128,6 +137,31 @@
             {#each WET_MEDIA as m (m)}<option value={m}>{WET_MEDIUM_LABELS[m]}</option>{/each}
           </select>
         </label>
+      {/if}
+      {#if engine.particleMenus}
+        <label class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Particles</span>
+          <select aria-label="Particle kind" value={brush.particle.kind} onchange={(e) => controller.setBrush({ particle: { kind: e.currentTarget.value as ParticleKind } })} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each PARTICLE_KINDS as k (k)}<option value={k}>{PARTICLE_KIND_LABELS[k]}</option>{/each}
+          </select>
+        </label>
+        <label class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Drawn as</span>
+          <select aria-label="Particle render" value={brush.particle.render} onchange={(e) => controller.setBrush({ particle: { render: e.currentTarget.value as ParticleRender } })} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each PARTICLE_RENDERS as k (k)}<option value={k}>{PARTICLE_RENDER_LABELS[k]}</option>{/each}
+          </select>
+        </label>
+      {/if}
+      {#if engine.stickerStamps}
+        <div class="flex flex-wrap gap-1" role="group" aria-label="Sticker stamps">
+          {#each STAMP_KINDS as k (k)}
+            <button
+              type="button"
+              aria-pressed={brush.sticker.stamps.includes(k)}
+              class={`px-1.5 py-0.5 rounded text-[10px] ${brush.sticker.stamps.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+              onclick={() => controller.setBrush({ sticker: { stamps: toggleStamp(brush.sticker.stamps, k) } })}>{STAMP_LABELS[k]}</button>
+          {/each}
+        </div>
       {/if}
       {#if engine.impastoTool}
         <label class="flex items-center justify-between gap-2">

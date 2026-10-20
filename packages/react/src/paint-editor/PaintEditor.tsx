@@ -7,6 +7,7 @@ import { PaintLayersPanel } from './PaintLayersPanel';
 import { PaintToolbar } from './PaintToolbar';
 import { PaperPanel } from './PaperPanel';
 import { WetPanel } from './WetPanel';
+import { StickerPanel } from './StickerPanel';
 import { chip } from './shared';
 
 export interface PaintEditorProps {
@@ -55,6 +56,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
           {tab === 'wet' && <WetPanel controller={controller} />}
           {tab === 'paper' && <PaperPanel controller={controller} />}
           {tab === 'layers' && <PaintLayersPanel controller={controller} />}
+          {tab === 'layers' && <StickerPanel controller={controller} />}
         </div>
       </div>
     </div>
