@@ -271,6 +271,27 @@ A `blockShadow` path effect works like CorelDRAW's Block Shadow.
 - **Colour.** `color` fills it (null: the shape's own solid fill) at `opacity` percent. An `endOpacity` different from `opacity` fades it along the direction, from the near side of the shape to the far end, for a flat-design long shadow.
 - **Export.** SVG and PDF draw it as a path, with a linear gradient when it fades. PDF shadings have no stop opacity, so a fading shadow is drawn opaque there, with a note. Lottie has no equivalent, so it gets the drawn shapes.
 
+### Extrude
+
+An `extrude` path effect works like CorelDRAW's Extrude and draws each shape as a solid.
+
+- **Depth.** In `parallel` mode the back is the shape moved `depth` along `angle` (degrees, 0 right, 90 down). In `perspective` mode every point is pulled `toward` percent of the way to `vanishingPoint`, an offset from the shape's middle.
+- **Faces.** Each edge (curves flattened) gets a side face between it and its copy at the back. `vectorExtrudeFaces(path, params)` returns them.
+- **Shading.** The faces are filled with `color` (null: the shape's own solid fill). Each is lightened or darkened by up to `shading` percent by the cosine between its normal and a light coming from `lightAngle` degrees (`shadeVectorColor`).
+- **Draw order.** Faces are drawn back to front: two faces overlap only over viewing rays that cross both edges, and there the edge further along the ray is in front. A topological sort of that relation keeps concave outlines correct. The shape itself is drawn on top.
+- **Export.** Each face also gets a hairline stroke in its own colour, which hides anti-aliasing seams between neighbouring faces. Lottie gets the drawn shapes.
+
+### Bevel
+
+A `bevel` path effect works like CorelDRAW's Bevel and gives each shape a chiselled edge.
+
+- **Faces.** A band `width` wide inside the outline is split into one face per edge (curves flattened), from the edge to an inset copy of it. `vectorBevelFaces(path, params, fillRule)` returns them.
+  - Corners are mitred, at most 4 × `width` deep.
+  - Where the shape is thinner than the bevel, an inset corner stops half-way to the outline it would cross.
+  - Holes bevel into the shape, not into the hole.
+- **Shading.** A face slopes up from the edge toward the middle. It is lightened or darkened by up to `shading` percent as that slope faces toward or away from a light coming from `lightAngle`. Faces use `color`, or the shape's paint as one colour (`vectorPaintSolid`).
+- **Drawing.** The shape's fill goes under the faces. The middle (the shape inset by `width`, exact) is drawn over them in the shape's own paint, so gradients survive, and the stroke goes on top. Bounds do not change. Lottie gets the drawn shapes.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:
