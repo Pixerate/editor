@@ -1,7 +1,7 @@
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
-import type { VectorTextNode } from './types.js';
+import type { VectorMatrix, VectorTextNode } from './types.js';
 import type { VectorAlign, VectorAnchorRef, VectorArrange, VectorAverageAxis, VectorBooleanOperation, VectorCornerKind, VectorNode, VectorPathfinderOperation, VectorStyle, VectorTool } from './types.js';
 import { VECTOR_ARROWHEADS, VECTOR_CORNER_KINDS, VECTOR_EFFECT_TYPES, VECTOR_PATHFINDER_OPERATIONS, VECTOR_TOOLS, type VectorEffect, type VectorEffectType, type VectorWidthPoint } from './types.js';
 import { VECTOR_WIDTH_PRESET_IDS, type VectorTaperOptions, type VectorWaveOptions, type VectorWidthPreset } from './width.js';
@@ -29,7 +29,7 @@ export interface VectorCommandOptions {
 /** A node as listed for agents. */
 export interface VectorNodeListing {
 	id: string;
-	type: 'path' | 'group' | 'text';
+	type: 'path' | 'group' | 'text' | 'instance';
 	name?: string;
 	depth: number;
 	/** Axis-aligned bounds in document units. */
@@ -44,6 +44,10 @@ export interface VectorNodeListing {
 	strokeWidth?: number;
 	/** SVG path data (paths only). */
 	d?: string;
+	/** An instance's symbol, transform (it may scale and skew) and overrides. */
+	symbolId?: string;
+	transform?: number[];
+	overrides?: unknown;
 	/** A text node's text and frame kind (`point`, `area` or `path`); `vector.getText` has the rest. */
 	text?: string;
 	frame?: 'point' | 'area' | 'path';
@@ -280,7 +284,9 @@ export function createVectorCommands(controller: VectorEditorController, options
 						? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, d: vectorPathData(n, 2) }
 						: n.type === 'text'
 							? { fill: n.fill ?? null, stroke: n.stroke ?? null, strokeWidth: n.strokeWidth ?? 1, text: n.text, frame: n.frame.kind }
-							: { children: n.children.length }),
+							: n.type === 'instance'
+								? { symbolId: n.symbolId, ...(n.transform ? { transform: [...n.transform] } : {}), ...(n.overrides ? { overrides: n.overrides } : {}) }
+								: { children: n.children.length }),
 					...(n.type === 'group' && n.blend
 						? { blend: { ...resolveVectorBlendOptions(n.blend), spine: !!n.blend.spine, keys: vectorBlendKeys(n).map((k) => k.id) } }
 						: {}),
@@ -288,8 +294,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(n.effects?.length ? { effects: n.effects } : {}),
 					...(n.type === 'group' && n.liveBoolean ? { liveBoolean: n.liveBoolean } : {}),
 					...(n.booleanOperation ? { booleanOperation: n.booleanOperation } : {}),
-					...(n.type !== 'group' && Array.isArray(n.fills) ? { fills: n.fills } : {}),
-					...(n.type !== 'group' && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
+					...((n.type === 'path' || n.type === 'text') && Array.isArray(n.fills) ? { fills: n.fills } : {}),
+					...((n.type === 'path' || n.type === 'text') && Array.isArray(n.strokes) ? { strokes: n.strokes } : {}),
 					...(n.blendMode && n.blendMode !== 'normal' ? { blendMode: n.blendMode } : {}),
 					...(n.filters?.length ? { filters: n.filters } : {}),
 					...(isVectorMaskGroup(n) ? { mask: vectorMaskSummary(n)! } : {})
@@ -330,7 +336,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 	};
 	const pathsUnder = (list: readonly string[]) => {
 		const out: string[] = [];
-		const walk = (n: VectorNode) => (n.type !== 'group' ? out.push(n.id) : n.children.forEach(walk));
+		const walk = (n: VectorNode) => (n.type === 'group' ? n.children.forEach(walk) : n.type === 'instance' ? undefined : out.push(n.id));
 		for (const id of list) walk(controller.getNode(id)!);
 		return out;
 	};
@@ -963,6 +969,216 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+
+	// --- Symbols ---------------------------------------------------------------
+	const symbolSummary = (id: string) => {
+		const sym = controller.getSymbols().find((x) => x.id === id) ?? fail(`There is no symbol "${id}"; vector.listSymbols lists them.`);
+		const nodes: { id: string; type: string; name?: string }[] = [];
+		const walk = (list: readonly VectorNode[]) => {
+			for (const n of list) {
+				nodes.push({ id: n.id, type: n.type, ...(n.name ? { name: n.name } : {}) });
+				if (n.type === 'group') walk(n.children);
+			}
+		};
+		walk(sym.nodes);
+		const b = unionBoundsOf(sym.nodes);
+		return { id: sym.id, name: sym.name, nodes, bounds: b, instances: controller.getSymbolInstances(sym.id) };
+	};
+	const unionBoundsOf = (list: readonly VectorNode[]) => {
+		let x0 = Infinity;
+		let y0 = Infinity;
+		let x1 = -Infinity;
+		let y1 = -Infinity;
+		for (const n of list) {
+			const b = vectorNodeBounds(n, IDENTITY_MATRIX);
+			if (!b) continue;
+			x0 = Math.min(x0, b.x);
+			y0 = Math.min(y0, b.y);
+			x1 = Math.max(x1, b.x + b.width);
+			y1 = Math.max(y1, b.y + b.height);
+		}
+		return x0 < Infinity ? { x: round(x0), y: round(y0), width: round(x1 - x0), height: round(y1 - y0) } : null;
+	};
+	const MATRIX = { type: 'array', items: { type: 'number' }, minItems: 6, maxItems: 6, description: 'An affine matrix [a, b, c, d, e, f] (SVG order): x\' = a·x + c·y + e, y\' = b·x + d·y + f. Instances may scale and skew.' } as const;
+	const symbolCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}listSymbols`,
+			label: 'List Symbols',
+			readOnly: true,
+			keywords: ['symbol', 'symbols', 'library', 'component', 'reuse', 'instance'],
+			description:
+				'Lists the document\'s symbols: id, name, the art\'s nodes (ids, types, names; use them for hidden overrides), its bounds in symbol space (around the registration point at 0, 0) and the ids of its instances. Also says which symbol is being edited in isolation, if any.',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			run: () => ({ symbols: controller.getSymbols().map((x) => symbolSummary(x.id)), editing: controller.getState().symbolEdit?.symbolId ?? null })
+		},
+		{
+			...base,
+			id: `${prefix}makeSymbol`,
+			label: 'Make Symbol',
+			shortcut: 'F8',
+			keywords: ['symbol', 'make symbol', 'component', 'reuse', 'library'],
+			description:
+				'Turns objects that share a parent (`ids`, default the selection) into a new symbol, its registration point at their centre, and puts an instance of it in their place (selected). One undo step. Returns { symbolId, instanceId, symbol } (the symbol summary of vector.listSymbols).',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Objects to make the symbol from (default: the selection).' }, name: { type: 'string', description: 'Symbol name (default "Symbol n").' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; name?: string } | undefined) => {
+				const r = controller.makeSymbol({ ids: ids(params), ...(params?.name ? { name: params.name } : {}) });
+				check(r);
+				return { symbolId: r.symbolId, instanceId: r.instanceId, symbol: symbolSummary(r.symbolId!) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}placeSymbol`,
+			label: 'Place Symbol…',
+			keywords: ['symbol', 'instance', 'place', 'stamp', 'reuse'],
+			description:
+				'Places a new instance of symbol `symbolId` with its registration point at (x, y) (default the artboard centre), or through `transform` (which may scale, rotate and skew). Fails when the symbol is being edited and would contain itself. One undo step. Returns { id }.',
+			params: {
+				type: 'object',
+				properties: {
+					symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' },
+					x: { type: 'number', description: 'Where the registration point goes (document units).' },
+					y: { type: 'number', description: 'Where the registration point goes (document units).' },
+					transform: { ...MATRIX, description: 'Placement instead of x / y: an affine matrix [a, b, c, d, e, f] (scale and skew allowed).' },
+					name: { type: 'string', description: 'Instance name (default the symbol\'s).' }
+				},
+				required: ['symbolId'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; x?: number; y?: number; transform?: number[]; name?: string }) => {
+				if (params.transform && (params.x !== undefined || params.y !== undefined)) fail('Pass either x / y or transform, not both.');
+				const r = controller.placeSymbol(params.symbolId, {
+					...(params.x !== undefined ? { x: params.x } : {}),
+					...(params.y !== undefined ? { y: params.y } : {}),
+					...(params.transform ? { transform: params.transform as unknown as VectorMatrix } : {}),
+					...(params.name ? { name: params.name } : {})
+				});
+				check(r);
+				return { id: r.id };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setInstanceOptions`,
+			label: 'Instance Options…',
+			keywords: ['symbol', 'instance', 'override', 'tint', 'scale strokes', 'hide'],
+			description:
+				'Changes instances (`ids`, default the selection): `scaleStrokes` (strokes of the art scale with the instance, default true), and overrides — `fill` / `stroke` paint every fill or stroke of the art with one paint (null clears), `hidden` lists art node ids (from vector.listSymbols) not drawn ([] clears). Pass at least one. One undo step. Returns the instances as vector.list lists them.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Instance ids (default: the selection).' },
+					scaleStrokes: { type: 'boolean', description: 'Strokes scale with the instance (true, default) or keep their width (false).' },
+					fill: { ...PAINT, description: 'Paint for every fill of the art in these instances; null clears the override.' },
+					stroke: { ...PAINT, description: 'Paint for every stroke of the art; null clears the override.' },
+					hidden: { type: ['array', 'null'], items: { type: 'string' }, description: 'Ids of art nodes to hide in these instances; [] or null shows them all.' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; scaleStrokes?: boolean; fill?: unknown; stroke?: unknown; hidden?: string[] | null } | undefined) => {
+				const patch = {
+					...(params?.scaleStrokes !== undefined ? { scaleStrokes: params.scaleStrokes } : {}),
+					...(params?.fill !== undefined ? { fill: params.fill === null ? null : checkPaint(params.fill, 'fill') } : {}),
+					...(params?.stroke !== undefined ? { stroke: params.stroke === null ? null : checkPaint(params.stroke, 'stroke') } : {}),
+					...(params?.hidden !== undefined ? { hidden: params.hidden } : {})
+				};
+				if (!Object.keys(patch).length) fail('Pass at least one of scaleStrokes, fill, stroke, hidden.');
+				const targetIds = ids(params);
+				check(controller.setInstanceOptions(patch, { ids: targetIds }));
+				const listed = list().nodes;
+				return { instances: targetIds.map((id) => listed.find((n) => n.id === id)) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}replaceSymbol`,
+			label: 'Replace Symbol…',
+			keywords: ['symbol', 'instance', 'swap', 'replace'],
+			description: 'Makes instances (`ids`, default the selection) draw symbol `symbolId` instead, keeping their placement and colour overrides (hidden art ids are dropped). One undo step. Returns { ids }.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Instance ids (default: the selection).' }, symbolId: { type: 'string', description: 'The symbol to draw (from vector.listSymbols).' } }, required: ['symbolId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { ids?: string[]; symbolId: string }) => {
+				const targetIds = ids(params);
+				check(controller.replaceSymbol(params.symbolId, { ids: targetIds }));
+				return { ids: targetIds };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}detachInstance`,
+			label: 'Break Link to Symbol',
+			keywords: ['symbol', 'instance', 'detach', 'break link', 'unlink', 'expand'],
+			description: 'Replaces instances (`ids`, default the selection) by plain groups of their art as drawn (placement, scaled strokes and overrides baked in), no longer linked to the symbol. One undo step. Returns { ids } (the groups keep the instances\' ids).',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Instance ids (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const r = controller.detachInstances({ ids: ids(params) });
+				check(r);
+				return { ids: r.ids };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}renameSymbol`,
+			label: 'Rename Symbol…',
+			keywords: ['symbol', 'rename', 'name'],
+			description: 'Renames symbol `symbolId`. One undo step. Returns the symbol summary.',
+			params: { type: 'object', properties: { symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' }, name: { type: 'string', minLength: 1, description: 'Its new name.' } }, required: ['symbolId', 'name'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; name: string }) => {
+				check(controller.renameSymbol(params.symbolId, params.name));
+				return symbolSummary(params.symbolId);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}deleteSymbol`,
+			label: 'Delete Symbol…',
+			keywords: ['symbol', 'delete', 'remove'],
+			description: 'Deletes symbol `symbolId`. Fails while instances use it unless `detach: true` turns them into plain groups first. One undo step. Returns { ok }.',
+			params: { type: 'object', properties: { symbolId: { type: 'string', description: 'The symbol (from vector.listSymbols).' }, detach: { type: 'boolean', description: 'Turn its instances into groups first (default false: fail when it is used).' } }, required: ['symbolId'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { symbolId: string; detach?: boolean }) => {
+				check(controller.deleteSymbol(params.symbolId, { detach: params.detach }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}editSymbol`,
+			label: 'Edit Symbol',
+			keywords: ['symbol', 'edit symbol', 'isolation', 'master'],
+			description:
+				'Enters isolation mode on a symbol (`id` of the symbol, or of one of its instances): the document then holds the symbol\'s art in its own space (registration point at 0, 0), so every vector.* command edits the art and every instance follows. Call vector.exitSymbolEdit when done. Not an undo step itself. Returns { symbolId, nodes } (vector.list for the art).',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'A symbol id (vector.listSymbols) or an instance id (vector.list).' } }, required: ['id'], additionalProperties: false },
+			run: (_ctx: unknown, params: { id: string }) => {
+				check(controller.editSymbol(params.id));
+				return { symbolId: controller.getState().symbolEdit!.symbolId, nodes: list().nodes };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}exitSymbolEdit`,
+			label: 'Exit Symbol',
+			keywords: ['symbol', 'done', 'exit isolation'],
+			description: 'Leaves isolation mode: back to the whole document, every instance of the edited symbol updated. Returns { symbolId } of the symbol that was edited (null when none was).',
+			params: { type: 'object', properties: {}, additionalProperties: false },
+			enabled: () => (controller.getState().symbolEdit ? true : 'No symbol is being edited.'),
+			run: () => {
+				const id = controller.getState().symbolEdit?.symbolId ?? null;
+				controller.exitSymbolEdit();
+				return { symbolId: id };
+			}
+		}
+	];
+
 	return [
 		{
 			...base,
@@ -1072,6 +1288,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...appearanceCommands(),
 		...maskCommands(),
 		...textCommands(),
+		...symbolCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,

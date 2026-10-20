@@ -77,7 +77,7 @@ function fadePaint(paint: VectorPaint | undefined, alpha: number): VectorPaint |
 /** Applies `fn` to the node if it is a path, else to every path inside it. */
 function mapPaths(node: VectorNode, fn: (path: VectorPathNode) => VectorPathNode): VectorNode {
 	if (node.type === 'path') return fn(node);
-	if (node.type === 'text') return node;
+	if (node.type === 'text' || node.type === 'instance') return node;
 	return { ...node, children: node.children.map((c) => mapPaths(c, fn)) };
 }
 

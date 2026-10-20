@@ -37,6 +37,7 @@ import { VectorAppearancePanel } from './VectorAppearancePanel';
 import { VectorEnvelopePanel } from './VectorEnvelopePanel';
 import { VectorMaskPanel } from './VectorMaskPanel';
 import { VectorTextPanel } from './VectorTextPanel';
+import { VectorSymbolsPanel } from './VectorSymbolsPanel';
 import { VectorGradientEditor } from './VectorGradientEditor';
 
 const VECTOR_SNAP_TITLE = 'Snap to objects';
@@ -580,6 +581,7 @@ export function VectorStylePanel({ controller, className }: VectorStylePanelProp
       {style && <VectorEffectsPanel controller={controller} />}
       {style && <VectorEnvelopePanel controller={controller} />}
       {style && <VectorMaskPanel controller={controller} />}
+      <VectorSymbolsPanel controller={controller} />
     </div>
   );
 }

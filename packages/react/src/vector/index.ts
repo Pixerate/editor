@@ -9,3 +9,4 @@ export * from './VectorEditor';
 export * from './VectorGradientEditor';
 export * from './VectorAppearancePanel';
 export * from './VectorTextPanel';
+export * from './VectorSymbolsPanel';

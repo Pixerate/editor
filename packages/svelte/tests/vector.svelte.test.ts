@@ -1119,3 +1119,31 @@ describe("text (svelte)", () => {
     expect((c.getNode(id) as any).paragraph).toBeUndefined();
   });
 });
+
+describe("symbols (svelte)", () => {
+  it("makes a symbol from the panel, draws instances, edits the symbol in isolation and detaches", () => {
+    const c = make();
+    c.select(["a"]);
+    const t = render(VectorCanvas, { controller: c, fitOnMount: false });
+    const panel = render(VectorStylePanel, { controller: c });
+    click(panel.querySelector('[data-vector-symbols-panel] [data-vector-symbol-action="make"]'));
+    const sym = c.getSymbols()[0];
+    expect(panel.querySelectorAll("[data-vector-symbols-panel] [data-vector-symbol]")).toHaveLength(1);
+    expect(panel.querySelector(`[data-vector-symbol="${sym.id}"] svg path`)).not.toBeNull();
+    click(panel.querySelector(`[data-vector-symbols-panel] button[aria-label="Place ${sym.name}"]`));
+    expect(c.getSymbolInstances(sym.id)).toHaveLength(2);
+    const instanceId = c.getState().selection[0];
+    expect(t.querySelector(`[data-vector-scene] [data-vector-id="${instanceId}"] path`)).not.toBeNull();
+    click(panel.querySelector(`button[aria-label="Edit ${sym.name}"]`));
+    expect(c.getState().symbolEdit?.symbolId).toBe(sym.id);
+    expect(t.querySelector("[data-vector-symbol-edit]")).not.toBeNull();
+    click(t.querySelector('button[aria-label="Exit symbol"]'));
+    expect(c.getState().symbolEdit).toBeNull();
+    c.select([instanceId]);
+    flushSync();
+    click(panel.querySelector('input[aria-label="Scale strokes"]'));
+    expect((c.getNode(instanceId) as any).scaleStrokes).toBe(false);
+    click([...panel.querySelectorAll("[data-vector-instance] button")].find((b) => b.textContent === "Detach")!);
+    expect(c.getNode(instanceId)?.type).toBe("group");
+  });
+});

@@ -124,11 +124,14 @@ import {
 	vectorEnteredGroups,
 	vectorEnvelopeFrame,
 	vectorNodeEnvelope,
+	vectorInstanceDrawn,
 	type VectorEnvelopeParams,
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
+import { isIdentityMatrix } from '../geom/affine.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
 import type { TextShaper } from '../text/types.js';
+import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
 import {
 	DEFAULT_VECTOR_FONT,
 	getVectorTextShaper,
@@ -243,7 +246,12 @@ import type {
 	VectorParagraphStyle,
 	VectorTextAlign,
 	VectorTextFrame,
-	VectorTextNode
+	VectorTextNode,
+	VectorMatrix,
+	VectorSymbol,
+	VectorInstanceNode,
+	VectorInstanceOverrides,
+	VectorPaint
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -524,6 +532,12 @@ export interface VectorEditorState {
 	textEdit: VectorTextEditState | null;
 	/** Font and alignment new text gets. */
 	textDefaults: VectorTextDefaults;
+	/**
+	 * Isolation mode: `document` is then the art of symbol `symbolId`, in the symbol's own space.
+	 * `host` is the whole document with that art (draw it dimmed behind, through `hostTransform`,
+	 * which lines the instance it was entered from up with the art).
+	 */
+	symbolEdit: { symbolId: string; name: string; instanceId: string | null; host: VectorDocument; hostTransform: VectorMatrix | null } | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -1129,7 +1143,7 @@ export const VECTOR_PATHFINDER_LABELS: Readonly<Record<VectorPathfinderOperation
 function normalizeVectorTree(nodes: readonly VectorNode[], prefer: 'stack' | 'shorthand'): VectorNode[] {
 	let changed = false;
 	const out = nodes.map((n) => {
-		let next: VectorNode = n.type !== 'group' ? normalizeVectorPaintStacks(n, prefer) : n;
+		let next: VectorNode = n.type === 'path' || n.type === 'text' ? normalizeVectorPaintStacks(n, prefer) : n;
 		if (next.type === 'group') {
 			const children = normalizeVectorTree(next.children, prefer);
 			if (children !== next.children) next = { ...next, children };
@@ -1142,9 +1156,10 @@ function normalizeVectorTree(nodes: readonly VectorNode[], prefer: 'stack' | 'sh
 
 /** A document as loaded: a copy, stacks preferred over stale shorthands. */
 function loadedDocument(doc: VectorDocument): VectorDocument {
-	const copy = cloneVectorDocument(doc);
+	const copy = cloneVectorDocument(stripVectorSymbolArt(doc));
 	const nodes = normalizeVectorTree(copy.nodes, 'stack');
-	return nodes === copy.nodes ? copy : { ...copy, nodes };
+	const symbols = copy.symbols?.map((s) => ({ ...s, nodes: normalizeVectorTree(s.nodes, 'stack') }));
+	return resolveVectorSymbols({ ...copy, nodes, ...(symbols ? { symbols } : {}) });
 }
 
 function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorNode | null): VectorNode[] {
@@ -1210,6 +1225,19 @@ interface Snapshot {
 	anchors: VectorAnchorRef[];
 	editingId: string | null;
 	pen: { nodeId: string; subpath: number } | null;
+	/** The symbol being edited in isolation when the snapshot was taken (`doc` is then its art). */
+	symbolEdit: SymbolEditContext | null;
+}
+
+/** Isolation mode: `doc` holds a symbol's art; `host` is the document it belongs to. */
+interface SymbolEditContext {
+	symbolId: string;
+	/** The instance it was entered from (its placement lines the art up with the document), if any. */
+	instanceId: string | null;
+	host: VectorDocument;
+	/** Where the instance put the symbol's origin, and its scale (√|det|): the view follows them in and out. */
+	origin: Vec2 | null;
+	scale: number;
 }
 
 /** Snap targets of a drag, gathered on its first move that needs them. */
@@ -1334,6 +1362,7 @@ export class VectorEditorController {
 	/** The text edit session: selection, the snapshot before a text node it created (until the first change), the merge key of its undo step. */
 	private textEdit: (VectorTextEditState & { before: Snapshot | null; key: string; created: boolean }) | null = null;
 	private textEditCount = 0;
+	private symbolEdit: SymbolEditContext | null = null;
 	private textDefaults: VectorTextDefaults = { ...DEFAULT_VECTOR_FONT };
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
@@ -1446,6 +1475,7 @@ export class VectorEditorController {
 			freeDistort: this.freeDistort,
 			textEdit: this.textEdit ? { nodeId: this.textEdit.nodeId, anchor: this.textEdit.anchor, focus: this.textEdit.focus } : null,
 			textDefaults: this.textDefaults,
+			symbolEdit: this.symbolEditState(),
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1458,7 +1488,14 @@ export class VectorEditorController {
 	private refreshed(doc: VectorDocument): VectorDocument {
 		// Shorthand fills and strokes written by any edit go to the top layer of their stack.
 		const nodes = refreshVectorBlends(normalizeVectorTree(doc.nodes, 'shorthand'));
-		return nodes === doc.nodes ? doc : { ...doc, nodes };
+		let out = nodes === doc.nodes ? doc : { ...doc, nodes };
+		// In isolation mode the edited symbol's art is the document's nodes.
+		const edit = this.symbolEdit;
+		if (edit && out.symbols?.some((s) => s.id === edit.symbolId && s.nodes !== out.nodes)) {
+			out = { ...out, symbols: out.symbols.map((s) => (s.id === edit.symbolId ? { ...s, nodes: out.nodes } : s)) };
+		}
+		// Instances draw their symbols' art.
+		return resolveVectorSymbols(out);
 	}
 
 	private notify(docChanged = false) {
@@ -1468,7 +1505,7 @@ export class VectorEditorController {
 		if (this.blendStart && !this.getNode(this.blendStart.nodeId)) this.blendStart = null;
 		this.revision++;
 		this.state = this.computeState();
-		if (docChanged) this.onChange?.(this.doc);
+		if (docChanged) this.onChange?.(this.storedDocument());
 		const state = this.state;
 		this.listeners.forEach((listener) => {
 			try {
@@ -1554,7 +1591,7 @@ export class VectorEditorController {
 	// -------------------------------------------------------------------------
 
 	private snapshot(): Snapshot {
-		return { doc: this.doc, selection: this.selection, anchors: this.anchors, editingId: this.editingId, pen: this.pen };
+		return { doc: this.doc, selection: this.selection, anchors: this.anchors, editingId: this.editingId, pen: this.pen, symbolEdit: this.symbolEdit };
 	}
 
 	private restore(s: Snapshot) {
@@ -1565,6 +1602,13 @@ export class VectorEditorController {
 		this.applying = true;
 		try {
 			this.doc = s.doc;
+			// Undo and redo step in and out of isolation mode with the edits made there (the view follows).
+			const was = this.symbolEdit;
+			this.symbolEdit = s.symbolEdit ?? null;
+			if (was !== this.symbolEdit) {
+				if (was?.origin) this.viewport = this.viewOutOf(was);
+				if (this.symbolEdit?.origin) this.viewport = this.viewInto(this.symbolEdit);
+			}
 			this.selection = s.selection.filter((id) => this.getNode(id));
 			this.anchors = s.anchors.filter((r) => getAnchor(this.doc, r));
 			this.editingId = s.editingId && this.getNode(s.editingId) ? s.editingId : null;
@@ -1887,11 +1931,11 @@ export class VectorEditorController {
 	}
 
 	toSvg(options?: VectorSvgExportOptions): string {
-		return vectorDocumentToSvg(this.doc, options);
+		return vectorDocumentToSvg(this.storedDocument(), options);
 	}
 
 	toJSON(): VectorDocument {
-		return cloneVectorDocument(this.doc);
+		return cloneVectorDocument(stripVectorSymbolArt(this.storedDocument()));
 	}
 
 	/** Adds a node (ids are kept unless taken). Returns its id. */
@@ -6154,6 +6198,14 @@ export class VectorEditorController {
 	 */
 	doubleClick(screen: Vec2): void {
 		const p = this.screenToDocument(screen);
+		if (this.tool === 'select') {
+			// Into a symbol instance: Edit Symbol in isolation.
+			const instance = this.hitOfType(p, 'instance');
+			if (instance) {
+				this.editSymbol(instance.id);
+				return;
+			}
+		}
 		if (this.tool === 'select' || this.tool === 'type' || this.tool === 'typePath') {
 			const text = this.hitText(p);
 			if (text) {
@@ -6711,6 +6763,25 @@ export class VectorEditorController {
 		return vectorTextIndexAt(node, { x: c.top.x, y: layout.origin.y + target.baseline });
 	}
 
+	/** The topmost node of `type` under `p` (inside groups too, hit where it draws), or null. */
+	private hitOfType<K extends 'instance'>(p: Vec2, type: K): Extract<VectorNode, { type: K }> | null {
+		const tol = this.tolerance();
+		const search = (list: readonly VectorNode[], parent: AffineMatrix): Extract<VectorNode, { type: K }> | null => {
+			for (let i = list.length - 1; i >= 0; i--) {
+				const n = list[i];
+				if (n.visible === false || n.locked) continue;
+				if (n.type === type) {
+					if (hitTestVectorNode(n, p, tol, parent)) return n as Extract<VectorNode, { type: K }>;
+				} else if (n.type === 'group' && hitTestVectorNode(n, p, tol, parent)) {
+					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (found) return found;
+				}
+			}
+			return null;
+		};
+		return search(this.doc.nodes, IDENTITY_MATRIX);
+	}
+
 	/** The topmost text node under `p` (inside groups too), or null. */
 	private hitText(p: Vec2): VectorTextNode | null {
 		const tol = this.tolerance();
@@ -6793,6 +6864,313 @@ export class VectorEditorController {
 		this.startNewText(node);
 	}
 
+
+	// -------------------------------------------------------------------------
+	// Symbols and instances
+	// -------------------------------------------------------------------------
+
+	/** The whole document: in isolation mode, the host with the edited symbol's art. */
+	private storedDocument(): VectorDocument {
+		const edit = this.symbolEdit;
+		if (!edit) return this.doc;
+		const symbols = (edit.host.symbols ?? []).map((s) => (s.id === edit.symbolId ? { ...s, nodes: this.doc.nodes } : (this.doc.symbols?.find((x) => x.id === s.id) ?? s)));
+		return resolveVectorSymbols({ ...edit.host, symbols });
+	}
+
+	private symbolEditState(): VectorEditorState['symbolEdit'] {
+		const edit = this.symbolEdit;
+		if (!edit) return null;
+		const host = this.storedDocument();
+		const sym = host.symbols?.find((s) => s.id === edit.symbolId);
+		// The document in symbol space, lined up with the instance by its origin and scale (the art
+		// shows unrotated and unskewed: a view cannot turn).
+		const hostTransform: VectorMatrix | null = edit.origin ? ([1 / edit.scale, 0, 0, 1 / edit.scale, -edit.origin.x / edit.scale + 0, -edit.origin.y / edit.scale + 0] as const) : null;
+		return { symbolId: edit.symbolId, name: sym?.name ?? edit.symbolId, instanceId: edit.instanceId, host, hostTransform };
+	}
+
+	/** The document's symbols (the stored ones, also while one is being edited). */
+	getSymbols(): readonly VectorSymbol[] {
+		return this.storedDocument().symbols ?? [];
+	}
+
+	/** Ids of the instances of symbol `symbolId` in the whole document (inside other symbols too). */
+	getSymbolInstances(symbolId: string): string[] {
+		const doc = this.storedDocument();
+		const out: string[] = [];
+		const visit = (list: readonly VectorNode[]) => {
+			for (const n of list) {
+				if (n.type === 'instance' && n.symbolId === symbolId) out.push(n.id);
+				if (n.type === 'group') visit(n.children);
+			}
+		};
+		visit(doc.nodes);
+		for (const s of doc.symbols ?? []) visit(s.nodes);
+		return out;
+	}
+
+	private newSymbolId(): string {
+		const used = new Set(this.getSymbols().map((s) => s.id));
+		let id = `symbol-${this.createId()}`;
+		while (used.has(id)) id = `symbol-${this.createId()}`;
+		return id;
+	}
+
+	/**
+	 * Make Symbol: turns the selected (or given) objects, which must share a parent, into a new
+	 * symbol whose registration point is their centre, and puts an instance in their place. One
+	 * undo step. Returns the symbol's and the instance's ids.
+	 */
+	makeSymbol(options: { ids?: readonly string[]; name?: string } = {}): VectorActionResult & { symbolId?: string; instanceId?: string } {
+		const ids = options.ids ?? this.selectedRoots();
+		if (!ids.length) return { ok: false, message: 'Select the objects to make a symbol from.' };
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id));
+		if (locs.some((l) => !l)) return { ok: false, message: `There is no node "${ids[locs.findIndex((l) => !l)]}".` };
+		const parent = locs[0]!.parent?.id ?? null;
+		if (locs.some((l) => (l!.parent?.id ?? null) !== parent)) return { ok: false, message: 'The objects must share a parent (the same group) to make one symbol.' };
+		if (ids.some((id) => hiddenOrLocked(this.doc.nodes, id))) return { ok: false, message: 'Unlock and show the objects first.' };
+		const parentMatrix = parent ? this.worldOf(parent) : IDENTITY_MATRIX;
+		const box = unionBounds(ids.map((id) => vectorNodeBounds(this.getNode(id)!, IDENTITY_MATRIX)));
+		if (!box) return { ok: false, message: 'The objects have no geometry to make a symbol from.' };
+		void parentMatrix;
+		const cx = box.x + box.width / 2;
+		const cy = box.y + box.height / 2;
+		const symbolId = this.newSymbolId();
+		const instanceId = this.newId();
+		const name = options.name?.trim() || `Symbol ${this.getSymbols().length + 1}`;
+		const set = new Set(ids);
+		this.change('Make Symbol', () => {
+			const replace = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = list.filter((n) => set.has(n.id));
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const art = members.map((n) => transformVectorNode(n, translateMatrix(-cx, -cy)));
+				this.doc = { ...this.doc, symbols: [...(this.doc.symbols ?? []), { id: symbolId, name, nodes: art }] };
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id: instanceId, type: 'instance', name, symbolId, transform: translateMatrix(cx, cy) });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(replace(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: replace(n.children) } : n)));
+			this.selection = [instanceId];
+			this.anchors = [];
+		});
+		return { ok: true, symbolId, instanceId };
+	}
+
+	/**
+	 * Places an instance of symbol `symbolId` with its registration point at (`x`, `y`) (default the
+	 * artboard's centre), or through `transform`. One undo step. Returns its id.
+	 */
+	placeSymbol(symbolId: string, options: { x?: number; y?: number; transform?: VectorMatrix; name?: string; parentId?: string } = {}): VectorActionResult & { id?: string } {
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}"; vector.listSymbols lists them.` };
+		if (this.symbolEdit && (symbolId === this.symbolEdit.symbolId || vectorSymbolUses(this.getSymbols(), symbolId, this.symbolEdit.symbolId))) {
+			return { ok: false, message: `"${sym.name}" would contain itself: a symbol cannot hold an instance of itself.` };
+		}
+		const t = options.transform ?? translateMatrix(options.x ?? this.doc.width / 2, options.y ?? this.doc.height / 2);
+		if (!t.every(Number.isFinite)) return { ok: false, message: 'transform must be six finite numbers [a, b, c, d, e, f].' };
+		const node: VectorInstanceNode = { id: this.newId(), type: 'instance', name: options.name ?? sym.name, symbolId, ...(isIdentityMatrix(t) ? {} : { transform: [...t] as unknown as VectorMatrix }) };
+		const id = this.addNode(node, { label: 'Place Symbol', ...(options.parentId ? { parentId: options.parentId } : {}) });
+		return { ok: true, id };
+	}
+
+	private instanceTargets(ids: readonly string[] | undefined): VectorInstanceNode[] | string {
+		const list = ids ?? this.selection;
+		if (!list.length) return 'Select an instance.';
+		const out: VectorInstanceNode[] = [];
+		for (const id of list) {
+			const n = this.getNode(id);
+			if (!n) return `There is no node "${id}".`;
+			if (n.type !== 'instance') return `"${id}" is a ${n.type}, not a symbol instance.`;
+			out.push(n);
+		}
+		return out;
+	}
+
+	/**
+	 * Detach: replaces instances by groups of their symbol's art as drawn (placed, strokes scaled,
+	 * overrides applied), unlinked from the symbol. One undo step. Returns the groups' ids (the
+	 * instances' own).
+	 */
+	detachInstances(options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const next = new Map<string, VectorNode>();
+		for (const t of targets) {
+			const drawn = vectorInstanceDrawn(t);
+			const fresh = this.freshIds(drawn);
+			next.set(t.id, { ...fresh, id: t.id, name: t.name ?? 'Group' });
+		}
+		this.change('Detach Instance', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return { ok: true, ids: [...next.keys()] };
+	}
+
+	/** Replace Symbol: instances draw symbol `symbolId` instead, keeping their placement. One undo step. */
+	replaceSymbol(symbolId: string, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}"; vector.listSymbols lists them.` };
+		if (this.symbolEdit && (symbolId === this.symbolEdit.symbolId || vectorSymbolUses(this.getSymbols(), symbolId, this.symbolEdit.symbolId))) return { ok: false, message: `"${sym.name}" would contain itself.` };
+		const set = new Set(targets.map((t) => t.id));
+		this.change('Replace Symbol', () =>
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || n.type !== 'instance') return n;
+					const { art: _a, ...rest } = n;
+					const hidden = n.overrides?.hidden;
+					// Hidden art ids belong to the old symbol.
+					const overrides = n.overrides ? { ...n.overrides } : null;
+					if (overrides && hidden) delete overrides.hidden;
+					return { ...rest, symbolId, ...(overrides && Object.keys(overrides).length ? { overrides } : { overrides: undefined }) } as VectorNode;
+				})
+			)
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Instance options: `scaleStrokes` (strokes of the art scale with the instance), and overrides —
+	 * `fill` / `stroke` (every fill or stroke of the art in one paint; `null` clears), `hidden` (art
+	 * node ids not drawn). One undo step.
+	 */
+	setInstanceOptions(patch: { scaleStrokes?: boolean; fill?: VectorPaint | null; stroke?: VectorPaint | null; hidden?: string[] | null }, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const next = new Map<string, VectorNode>();
+		for (const t of targets) {
+			const n: VectorInstanceNode = { ...t };
+			if (patch.scaleStrokes !== undefined) {
+				if (patch.scaleStrokes) delete n.scaleStrokes;
+				else n.scaleStrokes = false;
+			}
+			const o: VectorInstanceOverrides = { ...(t.overrides ?? {}) };
+			for (const key of ['fill', 'stroke'] as const) {
+				if (patch[key] === undefined) continue;
+				if (patch[key] === null) delete o[key];
+				else o[key] = patch[key] as VectorPaint;
+			}
+			if (patch.hidden !== undefined) {
+				if (patch.hidden?.length) {
+					const known = new Set<string>();
+					walkVectorNodes(t.art ?? [], (a) => known.add(a.id));
+					const unknown = patch.hidden.filter((id) => !known.has(id));
+					if (unknown.length) return { ok: false, message: `The symbol's art has no nodes ${unknown.map((u) => `"${u}"`).join(', ')}; vector.listSymbols lists its node ids.` };
+					o.hidden = [...patch.hidden];
+				} else delete o.hidden;
+			}
+			if (Object.keys(o).length) n.overrides = o;
+			else delete n.overrides;
+			next.set(t.id, n);
+		}
+		this.change('Instance Options', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return { ok: true };
+	}
+
+	/** Renames symbol `symbolId`. One undo step. */
+	renameSymbol(symbolId: string, name: string): VectorActionResult {
+		const trimmed = name.trim();
+		if (!trimmed) return { ok: false, message: 'A symbol needs a name.' };
+		if (!this.getSymbols().some((s) => s.id === symbolId)) return { ok: false, message: `There is no symbol "${symbolId}".` };
+		this.change('Rename Symbol', () => {
+			this.doc = { ...this.doc, symbols: (this.doc.symbols ?? []).map((s) => (s.id === symbolId ? { ...s, name: trimmed } : s)) };
+			if (this.symbolEdit) this.symbolEdit = { ...this.symbolEdit, host: { ...this.symbolEdit.host, symbols: (this.symbolEdit.host.symbols ?? []).map((s) => (s.id === symbolId ? { ...s, name: trimmed } : s)) } };
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Deletes symbol `symbolId`. With instances in use it refuses unless `detach` (they become plain
+	 * groups first). One undo step.
+	 */
+	deleteSymbol(symbolId: string, options: { detach?: boolean } = {}): VectorActionResult {
+		if (this.symbolEdit) return { ok: false, message: 'Leave the symbol being edited first (exitSymbolEdit).' };
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}".` };
+		const used = this.getSymbolInstances(symbolId);
+		if (used.length && !options.detach) return { ok: false, message: `"${sym.name}" has ${used.length} instance${used.length === 1 ? '' : 's'}; pass detach to turn them into groups, or delete them first.` };
+		const before = this.snapshot();
+		const detach = (list: VectorNode[]): VectorNode[] =>
+			list.map((n) => {
+				if (n.type === 'instance' && n.symbolId === symbolId) return { ...this.freshIds(vectorInstanceDrawn(n)), id: n.id, name: n.name ?? 'Group' };
+				if (n.type === 'group') return { ...n, children: detach(n.children) };
+				return n;
+			});
+		this.doc = { ...this.doc, nodes: detach(this.doc.nodes), symbols: (this.doc.symbols ?? []).filter((s) => s.id !== symbolId).map((s) => ({ ...s, nodes: detach(s.nodes) })) };
+		this.commit('Delete Symbol', before);
+		return { ok: true };
+	}
+
+	/**
+	 * Edit Symbol (isolation mode): the document becomes the art of symbol `id` (or of instance `id`'s
+	 * symbol), in its own space; everything else draws dimmed behind it. Edits are ordinary undo
+	 * steps; `exitSymbolEdit` returns to the document with every instance updated.
+	 */
+	editSymbol(id: string): VectorActionResult {
+		const node = this.getNode(id);
+		const symbolId = node?.type === 'instance' ? node.symbolId : id;
+		const host = this.storedDocument();
+		const sym = host.symbols?.find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: node ? `"${id}" is a ${node.type}, not a symbol instance.` : `There is no symbol or instance "${id}".` };
+		if (this.symbolEdit) this.exitSymbolEdit();
+		this.endTextEdit();
+		this.finishPath();
+		const fresh = this.storedDocument();
+		let origin: Vec2 | null = null;
+		let scale = 1;
+		const world = node?.type === 'instance' ? vectorWorldMatrix(fresh.nodes, node.id) : null;
+		if (world) {
+			const det = Math.abs(world[0] * world[3] - world[1] * world[2]);
+			if (det > 1e-12) {
+				origin = { x: world[4], y: world[5] };
+				scale = Math.sqrt(det);
+			}
+		}
+		this.symbolEdit = { symbolId, instanceId: origin ? node!.id : null, host: fresh, origin, scale };
+		// The view follows: the art's origin where the instance's was, at its scale.
+		if (origin) this.viewport = this.viewInto(this.symbolEdit);
+		this.doc = { width: fresh.width, height: fresh.height, ...(fresh.background ? { background: fresh.background } : {}), nodes: sym.nodes, symbols: fresh.symbols };
+		this.selection = [];
+		this.anchors = [];
+		this.editingId = null;
+		this.notify();
+		return { ok: true };
+	}
+
+	/** The view inside isolation mode for the current (document) view. */
+	private viewInto(edit: SymbolEditContext): VectorViewport {
+		const v = this.viewport;
+		if (!edit.origin) return v;
+		return { x: v.zoom * edit.origin.x + v.x, y: v.zoom * edit.origin.y + v.y, zoom: v.zoom * edit.scale };
+	}
+
+	/** The document's view for the current view inside isolation mode. */
+	private viewOutOf(edit: SymbolEditContext): VectorViewport {
+		const v = this.viewport;
+		if (!edit.origin) return v;
+		const zoom = v.zoom / edit.scale;
+		return { x: v.x - zoom * edit.origin.x, y: v.y - zoom * edit.origin.y, zoom };
+	}
+
+	/** Leaves isolation mode: back to the whole document, the symbol's instances showing the edits. */
+	exitSymbolEdit(): void {
+		if (!this.symbolEdit) return;
+		this.endTextEdit();
+		this.finishPath();
+		const { instanceId, origin } = this.symbolEdit;
+		// Back to the document's view, where it was.
+		if (origin) this.viewport = this.viewOutOf(this.symbolEdit);
+		this.doc = this.storedDocument();
+		this.symbolEdit = null;
+		this.selection = instanceId && this.getNode(instanceId) ? [instanceId] : [];
+		this.anchors = [];
+		this.editingId = null;
+		this.history.endGesture();
+		this.notify(true);
+	}
+
 	// -------------------------------------------------------------------------
 	// Keyboard input
 	// -------------------------------------------------------------------------
@@ -6870,6 +7248,7 @@ export class VectorEditorController {
 					this.anchors = [];
 					this.notify();
 				} else if (this.tool !== 'select') this.setTool('select');
+				else if (this.symbolEdit && !this.selection.length) this.exitSymbolEdit();
 				else this.clearSelection();
 				return true;
 			case 'Enter':

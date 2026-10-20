@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Instances Carry Their Symbol's Art, Because Geometry Sees One Node at a Time
+
+- **Issue / Symptom**: Bounds, hit-testing, rendering and export of an instance came back empty, or stale after the symbol changed.
+- **Root Cause**: Every geometry helper takes a node, not the document, so an instance cannot look its symbol up. A module-level lookup would also go stale whenever an edit creates a new instance object (moves spread the node).
+- **Solution / Workaround**: Instances carry `art`, the symbol's own `nodes` array, resolved by `resolveVectorSymbols` in the controller's `refreshed()` (with the blend refresh) and on load; spreads carry it along. Storage strips it (`toJSON`, `stripVectorSymbolArt`), and `vectorDocumentToSvg` resolves documents that come without it. Code that builds documents outside the controller should call `resolveVectorSymbols` before measuring instances.
+
+### [core/vector] An Instance's Transform Scales, So Draw It Through a Group Whose Transform Stays Rigid
+
+- **Issue / Symptom**: Strokes in scaled instances hit-tested at the wrong width, and filters and distance tolerances were off.
+- **Root Cause**: Everything else in the editor relies on rigid node transforms (local distances are document distances). An instance is the one node whose transform may scale and skew.
+- **Solution / Workaround**: `vectorInstanceGroup` splits the instance's matrix with `decomposeRigid`: the rotation goes on the drawn group, the scale and skew are baked into the art (`transformVectorNode`), and strokes are multiplied by √|det| unless `scaleStrokes` is false. Everything downstream sees ordinary nodes. Anything that reads `nodeMatrix(instance)` directly (it is the full matrix) must go through `vectorInstanceDrawn` instead, as `vectorChildAppearanceShapes` and the overlay outline do.
+
+### [core/vector] Isolation Mode Swaps the Controller's Document, So Snapshots Must Carry It
+
+- **Issue / Symptom**: After leaving a symbol, Undo put the symbol's art in place of the whole document.
+- **Root Cause**: Editing a symbol in isolation makes the controller's `doc` the art, so every command works unchanged; history snapshots taken there hold that art.
+- **Solution / Workaround**: Snapshots keep the isolation context (`symbolEdit`, with the host document), and `restore` steps into or out of isolation with the view following (`viewInto` / `viewOutOf`). `toJSON`, `toSvg` and `onChange` compose the whole document (`storedDocument`). Entering and leaving are not undo steps themselves.
+
 ### [core/text] `r.pos += r.u16()` Reads the Old Position Before the Call Advances It
 
 - **Issue / Symptom**: The OpenType reader drew garbage glyph outlines (points shifted and mixed on and off curve) for a valid TrueType font.

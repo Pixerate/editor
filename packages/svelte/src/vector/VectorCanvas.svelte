@@ -9,6 +9,7 @@
     VECTOR_OVERLAY_THEME as THEME,
     getVectorOverlayRenderData,
     getVectorSceneRenderData,
+    getVectorSymbolEditBackground,
     isVectorTextTarget,
     toVectorKeyInput,
     toVectorPointerInput,
@@ -56,6 +57,8 @@
   const view = $derived(store.current);
   const scene = $derived(getVectorSceneRenderData(view, { idPrefix }));
   const overlay = $derived(getVectorOverlayRenderData(view));
+  // Isolation mode: the rest of the document, dimmed behind the symbol's art.
+  const host = $derived(getVectorSymbolEditBackground(view, { idPrefix: `${idPrefix}host-` }));
   const box = $derived(overlay.selectionBox);
   const edit = $derived(view.widthPointEdit);
   const editAt = $derived(edit ? { x: edit.point.x * view.viewport.zoom + view.viewport.x, y: edit.point.y * view.viewport.zoom + view.viewport.y } : null);
@@ -234,6 +237,13 @@
     fill={scene.background ?? (checkerboard ? `url(#${idPrefix}checker)` : '#ffffff')}
     stroke="rgba(0,0,0,0.12)"
   />
+  {#if host}
+    <g data-vector-symbol-host="" opacity="0.3" pointer-events="none" transform={host.transform}>
+      <VectorGradientDefs defs={host.defs} />
+      <VectorFilterDefs filters={host.filters} />
+      <VectorSceneNodes nodes={host.nodes} />
+    </g>
+  {/if}
   <g data-vector-scene="" transform={scene.transform}>
     <VectorSceneNodes nodes={scene.nodes} />
   </g>
@@ -493,6 +503,21 @@
         oncut={onTextClipboard('cut')}
         onpaste={onTextClipboard('paste')}
       ></textarea>
+    </foreignObject>
+  {/if}
+  {#if view.symbolEdit}
+    <!-- Isolation mode: which symbol, and the way out (Escape with nothing selected works too). -->
+    <foreignObject data-vector-symbol-edit={view.symbolEdit.symbolId} x="8" y="8" width="320" height="32" style="overflow:visible">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        style="display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;background:rgba(15,23,42,0.85);color:#fff;font:12px system-ui,sans-serif"
+        onpointerdown={(e) => e.stopPropagation()}
+        ondblclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <span>Symbol: {view.symbolEdit.name}</span>
+        <button type="button" aria-label="Exit symbol" style="border:1px solid rgba(255,255,255,0.4);border-radius:4px;padding:0 6px;background:transparent;color:#fff;cursor:pointer" onclick={() => controller.exitSymbolEdit()}>Done</button>
+      </div>
     </foreignObject>
   {/if}
   {#if edit && editAt}

@@ -13,6 +13,17 @@ const STARTER: VectorDocument = {
   width: 800,
   height: 500,
   background: "#ffffff",
+  // A symbol: double-click a tree to edit them all (isolation mode); Esc or Done to leave.
+  symbols: [
+    {
+      id: "tree",
+      name: "Tree",
+      nodes: [
+        { id: "trunk", type: "path", name: "Trunk", fill: "#78350f", stroke: null, subpaths: [rectSubpath({ x: -3, y: 0, width: 6, height: 18 })] },
+        { id: "crown", type: "path", name: "Crown", fill: "#15803d", stroke: "#14532d", strokeWidth: 1.5, subpaths: [ellipseSubpath({ x: -14, y: -26, width: 28, height: 32 })] },
+      ],
+    },
+  ],
   nodes: [
     {
       id: "sun",
@@ -266,6 +277,10 @@ const STARTER: VectorDocument = {
       stroke: null,
       frame: { kind: "path", path: { closed: false, anchors: [{ x: 20, y: 330, out: { x: 160, y: 250 } }, { x: 380, y: 318, in: { x: 260, y: 290 } }] }, baseline: "descender" },
     },
+    // Instances of the Tree symbol: scaled and skewed copies that follow the symbol.
+    { id: "tree-1", type: "instance", name: "Tree", symbolId: "tree", transform: [1, 0, 0, 1, 610, 300] },
+    { id: "tree-2", type: "instance", name: "Tree", symbolId: "tree", transform: [1.4, 0, 0, 1.4, 660, 292] },
+    { id: "tree-3", type: "instance", name: "Tree", symbolId: "tree", transform: [0.8, 0, -0.15, 0.8, 715, 298], overrides: { fill: "#65a30d" } },
     {
       id: "brush",
       type: "path",
@@ -326,7 +341,7 @@ export function VectorTab() {
             click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
             Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
             Type (T): click for point text, drag for area text, double-click text to edit; Type on a Path (Q): click a path. Without loaded fonts, text draws as SVG text in the browser's fonts.
-            Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
+            Symbols: select objects and press F8 (or New in the Symbols panel); double-click an instance to edit the symbol. Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
             Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
           </p>
         </div>

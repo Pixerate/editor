@@ -1182,3 +1182,30 @@ describe("text (react)", () => {
     expect((c.getNode(id) as any).paragraph).toBeUndefined();
   });
 });
+
+describe("symbols (react)", () => {
+  it("makes a symbol from the panel, draws instances, edits the symbol in isolation and detaches", async () => {
+    const c = make();
+    c.select(["a"]);
+    await act(async () => root.render(<><VectorCanvas controller={c} fitOnMount={false} /><VectorStylePanel controller={c} /></>));
+    await act(async () => q<HTMLButtonElement>('[data-vector-symbols-panel] [data-vector-symbol-action="make"]').click());
+    const sym = c.getSymbols()[0];
+    expect(qa("[data-vector-symbols-panel] [data-vector-symbol]")).toHaveLength(1);
+    expect(q(`[data-vector-symbol="${sym.id}"] svg path`)).not.toBeNull();
+    await act(async () => q<HTMLButtonElement>(`[data-vector-symbols-panel] button[aria-label="Place ${sym.name}"]`).click());
+    expect(c.getSymbolInstances(sym.id)).toHaveLength(2);
+    const instanceId = c.getState().selection[0];
+    expect(q(`[data-vector-scene] [data-vector-id="${instanceId}"] path`)).not.toBeNull();
+    // Isolation mode: the art alone in the scene, the rest dimmed behind, a way out.
+    await act(async () => q<HTMLButtonElement>(`button[aria-label="Edit ${sym.name}"]`).click());
+    expect(c.getState().symbolEdit?.symbolId).toBe(sym.id);
+    expect(q("[data-vector-symbol-edit]")).not.toBeNull();
+    await act(async () => q<HTMLButtonElement>('button[aria-label="Exit symbol"]').click());
+    expect(c.getState().symbolEdit).toBeNull();
+    await act(async () => c.select([instanceId]));
+    await act(async () => q<HTMLInputElement>('input[aria-label="Scale strokes"]').click());
+    expect((c.getNode(instanceId) as any).scaleStrokes).toBe(false);
+    await act(async () => qa("[data-vector-instance] button").find((b) => b.textContent === "Detach")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(c.getNode(instanceId)?.type).toBe("group");
+  });
+});

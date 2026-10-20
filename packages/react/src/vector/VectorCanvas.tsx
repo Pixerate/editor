@@ -3,6 +3,7 @@ import {
   VECTOR_OVERLAY_THEME as THEME,
   getVectorOverlayRenderData,
   getVectorSceneRenderData,
+  getVectorSymbolEditBackground,
   isVectorTextTarget,
   toVectorKeyInput,
   toVectorPointerInput,
@@ -387,6 +388,8 @@ export function VectorCanvas({
   const uid = useId().replace(/:/g, '');
   const scene = getVectorSceneRenderData(state, { idPrefix: `ve${uid}-` });
   const overlay = getVectorOverlayRenderData(state);
+  // Isolation mode: the rest of the document, dimmed behind the symbol's art.
+  const host = getVectorSymbolEditBackground(state, { idPrefix: `ve${uid}-host-` });
 
   useEffect(() => {
     const el = svgRef.current;
@@ -501,6 +504,13 @@ export function VectorCanvas({
         fill={scene.background ?? (checkerboard ? `url(#ve${uid}-checker)` : '#ffffff')}
         stroke="rgba(0,0,0,0.12)"
       />
+      {host && (
+        <g data-vector-symbol-host="" opacity={0.3} pointerEvents="none" transform={host.transform}>
+          <VectorGradientDefs defs={host.defs} />
+          <VectorFilterDefs filters={host.filters} />
+          <VectorSceneNodes nodes={host.nodes} />
+        </g>
+      )}
       <g data-vector-scene="" transform={scene.transform}>
         <VectorSceneNodes nodes={scene.nodes} />
       </g>
@@ -797,6 +807,22 @@ export function VectorCanvas({
               e.stopPropagation();
             }}
           />
+        </foreignObject>
+      )}
+      {state.symbolEdit && (
+        // Isolation mode: which symbol, and the way out (Escape with nothing selected works too).
+        <foreignObject data-vector-symbol-edit={state.symbolEdit.symbolId} x={8} y={8} width={320} height={32} style={{ overflow: 'visible' }}>
+          <div
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 6, background: 'rgba(15,23,42,0.85)', color: '#fff', font: '12px system-ui, sans-serif' }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <span>Symbol: {state.symbolEdit.name}</span>
+            <button type="button" aria-label="Exit symbol" style={{ border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, padding: '0 6px', background: 'transparent', color: '#fff', cursor: 'pointer' }} onClick={() => controller.exitSymbolEdit()}>
+              Done
+            </button>
+          </div>
         </foreignObject>
       )}
       {edit && editAt && (
