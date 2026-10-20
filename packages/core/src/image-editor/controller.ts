@@ -182,7 +182,7 @@ import {
   type ImageEditorAssetStore,
   type SerializedLayeredImageEditorState,
 } from './layers/serialize';
-import { LayerCompositor, type CompositorSources } from './layers/compositor';
+import { LayerCompositor, compositeDeep, type CompositorSources } from './layers/compositor';
 import {
   SurfaceDraft,
   TILE,
@@ -205,7 +205,8 @@ import {
   finishTile,
   tileKey,
 } from '../raster/surface';
-import { convertSurfaceDepth, isBitDepth, type BitDepth } from '../raster/deep';
+import { convertSurfaceDepth, isBitDepth, surfaceFromDeepPixels, to16From8, type BitDepth } from '../raster/deep';
+import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
   addLayerEffect as addLayerEffectOp,
@@ -2538,8 +2539,29 @@ export class ImageEditorController {
       throw new LayerOperationError('Merging annotation layers needs a canvas (a browser); hide or delete them first, or merge in the browser.');
     }
     await this.renderer.prepareLayerAssets(layers, width, height);
-    const data = new LayerCompositor().composite(layers, rect, this.renderer.compositorSources(width, height));
+    const sources = this.renderer.compositorSources(width, height);
+    const depth = this.bitDepth;
+    if (depth !== 8) {
+      // Merges keep the document's depth.
+      const samples = workingToSamples(compositeDeep(layers, rect, sources, depth), depth);
+      return surfaceFromDeepPixels({ width: rect.width, height: rect.height, data: samples }, 4, rect.x, rect.y);
+    }
+    const data = new LayerCompositor().composite(layers, rect, sources);
     return surfaceFromPixels({ width: rect.width, height: rect.height, data }, 4, rect.x, rect.y);
+  }
+
+  /**
+   * The composite of the layer stack at the document's bit depth (as `compositePixels`, no
+   * canvas): 16-bit sRGB samples, or 32-bit linear float, over `rect` (default the canvas). At 8
+   * bits, the 8-bit composite widened to 16 bits.
+   */
+  public compositeDeepPixels(rect?: CropBox): { width: number; height: number; depth: 16 | 32; data: Uint16Array | Float32Array } {
+    const { width, height } = this.naturalSize;
+    const r = rect ?? { x: 0, y: 0, width, height };
+    const depth = this.bitDepth;
+    if (depth === 8) return { width: r.width, height: r.height, depth: 16, data: to16From8(this.compositePixels(r).data as Uint8ClampedArray) };
+    const data = workingToSamples(compositeDeep(this.state.layers, r, this.compositorSources(), depth), depth);
+    return { width: r.width, height: r.height, depth, data };
   }
 
   /** Document bounds a layer can paint into (pixel content, annotations, or the canvas for the rest). */
@@ -4600,7 +4622,10 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth: this.bitDepth });
+    const depth = this.bitDepth;
+    // At 16 or 32 bits the merged image is composited at that depth too.
+    const mergedDeep = depth === 8 ? undefined : workingToSamples(compositeDeep(prepared, canvas, sources, depth), depth);
+    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }

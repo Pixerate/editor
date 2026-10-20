@@ -202,8 +202,10 @@ drawing or editing either.
    depth (`get_image_info.bitDepth`); CMYK, Lab, grayscale and indexed files are converted to RGB,
    and ICC profiles are ignored; the warnings say so. `export_psd` writes at the document's depth.
    Change it with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit for
-   linear-light HDR. Painting, filters and transforms still work in 8 bits on the tiles they
-   change, so grade and export a 16-bit file without repainting it when the depth matters. Afterwards work with `list_layers` as usual: there is no Background source image, every
+   linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes, merges
+   and the exported merged image keep the depth; layer effects, layer filters, painting and
+   transforms still work in 8 bits on what they change, so grade a deep file with adjustment
+   layers rather than repainting it when the depth matters. Afterwards work with `list_layers` as usual: there is no Background source image, every
    pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the

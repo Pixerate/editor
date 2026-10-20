@@ -53,7 +53,7 @@ import {
   writePsd,
 } from './file';
 import { BLEND_TO_PSD } from './import';
-import { deepToPlanes, matteWhite, planeAtDepth, rgbaToPlanes } from './pixels';
+import { deepToPlanes, matteWhite, matteWhiteDeep, planeAtDepth, rgbaToPlanes } from './pixels';
 import { readDeepRegion } from '../../raster/deep';
 import { parseLfx2, writeLfx2 } from './effects';
 import { writePatternBlock } from './patterns';
@@ -77,6 +77,8 @@ export interface PsdExportInput {
   globalLight?: GlobalLight;
   /** Bits per channel to write (default 8): 16 and 32 write the layers' deep samples (see `raster/deep`). */
   depth?: 8 | 16 | 32;
+  /** The composite at `depth` (RGBA samples: 16-bit sRGB or 32-bit linear), written instead of `merged`. */
+  mergedDeep?: Uint16Array | Float32Array;
 }
 
 export interface PsdExportResult {
@@ -478,7 +480,12 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   // Photoshop's merged image is matted over white where it is transparent.
   const [r, g, b, a] = rgbaToPlanes(matteWhite(input.merged), n);
   const transparent = a.some((v) => v !== 255);
-  const planes = (transparent ? [r, g, b, a] : [r, g, b]).map((p) => planeAtDepth(p, depth));
+  let planes = (transparent ? [r, g, b, a] : [r, g, b]).map((p) => planeAtDepth(p, depth));
+  const deep = input.mergedDeep;
+  if (deep && depth !== 8 && deep.length >= n * 4 && (deep instanceof Uint16Array ? depth === 16 : depth === 32)) {
+    const dp = deepToPlanes(matteWhiteDeep(deep), n);
+    planes = transparent ? dp : dp.slice(0, 3);
+  }
   const planeBytes = n * (depth >> 3);
   const merged = new Uint8Array(planeBytes * planes.length);
   planes.forEach((p, i) => merged.set(p, i * planeBytes));

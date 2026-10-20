@@ -6,7 +6,9 @@
  * the host; pixel layers can carry develop and blur filters; masks can be depth masks.
  */
 
-import { applyAdjustmentLayers } from '../adjustment-layers';
+import { applyAdjustmentLayers, applyAdjustmentLayersFloat } from '../adjustment-layers';
+import { DeepCompositor } from '../../raster/deep-compositor';
+import type { RasterRect } from '../../raster/surface';
 import { applyBoxBlur, applyLegacyAdjustments, applyProcess2Adjustments } from '../filters';
 import { LATEST_PROCESS_VERSION, normalizeProcessVersion } from '../color';
 import type { BlendMode } from '../blend';
@@ -162,4 +164,16 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
   constructor(options: CompositorOptions = {}) {
     super(PHOTO_PROFILE, options);
   }
+}
+
+/**
+ * The composite of an image editor stack at 16 or 32 bits (see `raster/deep-compositor`): float
+ * RGBA over `rect`, sRGB-encoded 0..1 at 16 bits, linear light at 32. Adjustment layers run in
+ * float; layers with effects or filters and annotation layers are drawn at 8 bits.
+ */
+export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, sources: CompositorSources, depth: 16 | 32): Float32Array {
+  const deep = new DeepCompositor(new LayerCompositor(), PHOTO_PROFILE, {
+    applyFilterRunDeep: (run, acc, _r, masks) => applyAdjustmentLayersFloat(acc, (run as AdjustmentLayerNode[]).map(adjustmentNodeAsLayer), masks),
+  }, depth);
+  return deep.composite(layers, rect, sources);
 }

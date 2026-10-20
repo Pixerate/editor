@@ -2217,3 +2217,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A 16-bit PSD written with the layer records in the usual layer-info section read back fine here but is not how Photoshop writes such files; and 32-bit values read as sRGB looked washed out.
 - **Root Cause**: Photoshop stores the layer info of 16- and 32-bit files in a global `Lr16` / `Lr32` tagged block and leaves the layer-info section empty. Its 32-bit mode is scene-referred linear light, so float samples can exceed 1.
 - **Solution / Workaround**: `writePsd` puts the layer info into `Lr16` / `Lr32` when the header depth is 16 or 32 (`readPsd` reads both places). 32-bit channels are ZIP with prediction (byte planes, then deltas); 16-bit channels are RLE. Our `Float32Array` samples are linear too; converting to 16 or 8 bits encodes to sRGB and clips colour above 1.
+
+### [core/image-editor] Levels Quantise to 256 Levels, Which Bands a 16-bit Image
+
+- **Issue / Symptom**: A strong Levels adjustment over a smooth 16-bit gradient came out with about thirty flat bands in the 16-bit composite.
+- **Root Cause**: To match Photoshop at 8 bits, the Levels table rounds its input to whole levels and the stretch to whole steps (`LEVELS_QUANTUM`). Fed 16-bit values, that rounding throws the extra precision away. A default parameter hid a second bug: passing `undefined` to turn the rounding off brings the default back.
+- **Solution / Workaround**: `compileAdjustmentLayer(layer, { deep: true })` builds Levels without the quantum (`toneLuts(layer, null)`), and `applyAdjustmentLayersFloat` (the deep compositor's filter run) uses those compiled ops through their own cache key. The 8-bit path is unchanged. Use `null`, not `undefined`, to switch off a parameter that has a default.
+
+### [core/raster] The Deep Compositor Draws Effect, Filter and Annotation Layers at 8 Bits
+
+- **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
+- **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
+- **Solution / Workaround**: Expected until effects and filters get float paths. Everything else in the stack (pixel layers, masks, clipping, groups, adjustment layers) keeps full depth. If a deep merge must match the viewport exactly, rasterize the effects first.
