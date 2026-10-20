@@ -325,6 +325,82 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })), target: artboardBox(716, 306, 60, 60) },
     ],
   },
+  {
+    id: "vector-text",
+    prompt: "Add a title and a curved caption",
+    steps: [
+      { say: "Checking which fonts the shaper has.", ...command("vector.listFonts") },
+      {
+        say: "A bold title, centred over the card.",
+        ...command("vector.addText", { text: "Hello, hills", x: 190, y: 250, font: { fontFamily: "sans-serif", fontWeight: 700, fontSize: 36 }, paragraph: { align: "center" }, fill: "#0f172a", name: "Title" }),
+        as: "title",
+        target: artboardBox(80, 215, 220, 45),
+      },
+      { say: "Colouring the second word.", ...commandWith("vector.setTextStyle", (r) => ({ id: r("title").id, start: 7, end: 12, fill: "#16a34a" })), target: artboardBox(80, 215, 220, 45) },
+      { say: "An arc for the caption to follow…", ...command("vector.addPath", { d: "M440 470 C520 400 640 400 720 470", name: "Caption path" }), as: "arc", target: artboardBox(440, 400, 280, 70) },
+      {
+        say: "…and the caption set along it, centred.",
+        ...commandWith("vector.typeOnPath", (r) => ({ pathId: r("arc").id, text: "rolling green since forever", font: { fontSize: 18, italic: true }, paragraph: { align: "center" }, fill: "#14532d" })),
+        target: artboardBox(440, 400, 280, 70),
+      },
+    ],
+  },
+  {
+    id: "vector-symbols",
+    prompt: "Plant a row of trees and make them autumn",
+    steps: [
+      { say: "Reading the document's symbols.", ...command("vector.listSymbols") },
+      { say: "Placing three more trees along the hill.", ...command("vector.placeSymbol", { symbolId: "tree", x: 470, y: 330, name: "Tree" }), target: artboardBox(455, 300, 30, 50) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [1.2, 0, 0, 1.2, 520, 322], name: "Tree" }), target: artboardBox(500, 290, 36, 56) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [0.9, 0, 0.1, 0.9, 565, 316], name: "Tree" }), target: artboardBox(550, 290, 30, 46) },
+      { say: "Editing the symbol once turns every tree orange.", ...command("vector.editSymbol", { id: "tree" }) },
+      { ...command("vector.setStyle", { ids: ["crown"], fill: "#ea580c", stroke: "#7c2d12" }) },
+      { say: "Back to the whole drawing.", ...command("vector.exitSymbolEdit"), target: artboardBox(455, 260, 300, 90) },
+    ],
+  },
+  {
+    id: "vector-constraints",
+    prompt: "Make the card a parametric 2:1 rectangle",
+    steps: [
+      { say: "Constraining what the card already nearly is: level and upright sides.", ...command("vector.autoConstrain", { ids: ["card"] }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "A named width…", ...command("vector.setConstraintValue", { key: "cardW", value: 240 }) },
+      { ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 0, segment: true }], value: "cardW", name: "width" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "…and a height that follows it: half the width.", ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 1, segment: true }], value: "cardW / 2", name: "height" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Changing the width now resizes both.", ...command("vector.setConstraintValue", { key: "cardW", value: 200 }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Checking what is still free to move.", ...command("vector.listConstraints") },
+    ],
+  },
+  {
+    id: "vector-frames",
+    prompt: "Make a banner that I can resize",
+    steps: [
+      { say: "A background bar and a badge for the banner…", ...command("vector.addShape", { kind: "rect", x: 440, y: 300, width: 180, height: 12, cornerRadius: 6, fill: "#38bdf8", name: "Bar" }), as: "bar", target: artboardBox(440, 300, 180, 12) },
+      { ...command("vector.addShape", { kind: "ellipse", x: 590, y: 250, width: 30, height: 30, fill: "#f43f5e", name: "Badge" }), as: "badge", target: artboardBox(590, 250, 30, 30) },
+      {
+        say: "…framed together with some padding: the frame is the banner.",
+        ...commandWith("vector.frameSelection", (r) => ({ ids: [r("bar").id, r("badge").id], padding: 16, fill: "#0f172a", name: "Banner" })),
+        as: "banner",
+        target: artboardBox(424, 234, 212, 94),
+      },
+      { say: "The bar stretches with the banner, the badge stays in its corner.", ...commandWith("vector.setResizing", (r) => ({ ids: [r("bar").id], horizontal: "leftRight", vertical: "bottom" })) },
+      { ...commandWith("vector.setResizing", (r) => ({ ids: [r("badge").id], horizontal: "right", vertical: "top" })) },
+      { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
+    ],
+  },
+  {
+    id: "vector-connectors",
+    prompt: "Connect the card to the sun and the badge",
+    steps: [
+      { say: "Where can things attach to the card? Checking its connection sites.", ...command("vector.listConnectionSites", { id: "card" }), target: { selector: '[data-vector-id="card"]' } },
+      {
+        say: "An elbow connector from the card to the sun, with rounded bends…",
+        ...command("vector.connect", { start: { nodeId: "card" }, end: { nodeId: "sun" }, route: "elbow", radius: 8, stroke: "#0369a1", strokeWidth: 2 }),
+        as: "toSun",
+      },
+      { say: "…and a curved one down to the badge.", ...command("vector.connect", { start: { nodeId: "card", side: "bottom" }, end: { nodeId: "badge" }, route: "curved", stroke: "#7e22ce", strokeWidth: 2 }), as: "toBadge" },
+      { say: "Moving the card: both connectors follow it.", ...command("vector.transform", { ids: ["card", "star"], dx: 40, dy: 30 }), target: { selector: '[data-vector-id="card"]' } },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [
@@ -433,6 +509,64 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "A drop shadow on the copy follows its new shape.",
         tool: "image__add_layer_effect",
         args: (ctx) => ({ layerId: ctx.results.copy.layerId, kind: "drop-shadow", settings: { distance: 8, size: 12, opacity: 0.5 } }),
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
+    id: "image-retouch",
+    prompt: "Clean up a spot, clone over a patch and lift the midtones",
+    steps: [
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { tool: "image__get_selection", args: {}, as: "sel" },
+      { tool: "image__select_region", args: { shape: "none" } },
+      { say: "Reading the layers, to find the photo.", tool: "image__list_layers", args: {}, as: "layers" },
+      {
+        say: "An empty layer for the retouching, so the photo stays untouched.",
+        tool: "image__add_pixel_layer",
+        args: { name: "Retouch" },
+        open: "Paint",
+      },
+      {
+        say: "Spot Healing in the centre, sampling every layer below onto the new one.",
+        tool: "image__spot_heal",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { points: [{ x: width / 2, y: height / 2 }], sample: "all", brush: { size: Math.max(8, Math.round(width / 20)), hardness: 0.5 } };
+        },
+      },
+      {
+        say: "The Clone Stamp source: a point on the left, then a short soft stroke on the right.",
+        tool: "image__set_clone_source",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { x: Math.round(width * 0.25), y: Math.round(height * 0.5) };
+        },
+      },
+      {
+        tool: "image__clone_stamp",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return {
+            points: [{ x: width * 0.62, y: height * 0.45 }, { x: width * 0.72, y: height * 0.5 }],
+            sample: "current-below",
+            brush: { size: Math.max(10, Math.round(width / 14)), hardness: 0.4 },
+          };
+        },
+      },
+      {
+        say: "Dodging the midtones of the photo a little, in one gentle stroke.",
+        tool: "image__dodge",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return {
+            layerId: ctx.results.layers.layers[0].id,
+            points: [{ x: width * 0.3, y: height * 0.3 }, { x: width * 0.7, y: height * 0.3 }],
+            range: "midtones",
+            exposure: 0.25,
+            brush: { size: Math.max(16, Math.round(width / 8)), hardness: 0 },
+          };
+        },
       },
       { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
     ],

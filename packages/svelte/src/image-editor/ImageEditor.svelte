@@ -381,7 +381,7 @@
     } catch {
       // Synthetic events have no active pointer to capture.
     }
-    paintError = paintGesture.down(paintSamples(e)[0]);
+    paintError = paintGesture.down({ ...paintSamples(e)[0], altKey: e.altKey });
   }
   function handlePaintPointerMove(e: PointerEvent) {
     if (handleTransformPointerMove(e)) return;

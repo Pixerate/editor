@@ -37,6 +37,7 @@
 import { bezierPathBounds, bezierPathToSvg, distanceToBezierPath, transformBezierPath, pointInBezierPath, type AffineMatrix, type BezierPath } from '../canvas/pathops/bezier.js';
 import { pathBoolean } from '../canvas/pathops/boolean.js';
 import { IDENTITY_MATRIX, isIdentityMatrix, multiplyMatrices } from '../geom/affine.js';
+import { isVectorFrame, vectorFrameDrawn } from './frames.js';
 import { applyVectorEffects, expandVectorAppearance, vectorAppearanceNodes, vectorAppearanceShapes, vectorChildAppearanceShapes, type VectorAppearanceShape } from './appearance.js';
 import { bezierToSubpaths, hitTestVectorNode, nodeMatrix, subpathsToBezier, unionBounds, vectorNodeBounds } from './geometry.js';
 import { vectorPaintLayerNodes, vectorStrokeStackReach } from './paintLayers.js';
@@ -136,6 +137,8 @@ const place = (path: BezierPath, m: AffineMatrix) => (isIdentityMatrix(m) ? path
  */
 export function vectorMaskRegionShapes(node: VectorNode, type: VectorMaskType, parent: AffineMatrix = IDENTITY_MATRIX, self = true): VectorMaskRegionShape[] {
 	if (!self && node.visible === false) return [];
+	// A frame covers what it draws: its fill and its children, clipped to its rectangle.
+	if (isVectorFrame(node)) node = vectorFrameDrawn(node);
 	const m = multiplyMatrices(nodeMatrix(node), parent);
 	if (isVectorMaskActive(node) || (node.type === 'group' && node.effects?.length)) {
 		// Drawn as shapes: a nested mask's masked result, or a group's effects applied.
@@ -319,6 +322,7 @@ export function vectorMaskedLocalBounds(group: VectorMaskGroup): VectorBounds | 
 function paintReach(node: VectorNode): number {
 	const own = vectorFilterReach(activeVectorFilters(node));
 	if (node.type === 'path') return own + vectorStrokeStackReach(node);
+	if (node.type === 'text' || node.type === 'instance') return own + paintReach(expandVectorAppearance(node));
 	return own + Math.max(0, ...node.children.map(paintReach));
 }
 

@@ -56,7 +56,7 @@ function histogramSummary(h: ImageHistogram, bins: number | undefined) {
  * Agent tools for the image editor's layers, geometry and history: `get_image_info`,
  * `get_histogram`, `update_adjustment_layer`, `remove_adjustment_layer`,
  * `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`, `flip_image`,
- * `undo_image` and `redo_image`. Each write is one undo step and returns what changed.
+ * `set_bit_depth`, `undo_image` and `redo_image`. Each write is one undo step and returns what changed.
  */
 export function createImageEditTools(controller: ImageEditorController): AgentTool[] {
   const layerOrThrow = (id: string) => {
@@ -93,10 +93,25 @@ export function createImageEditTools(controller: ImageEditorController): AgentTo
     name: 'get_image_info',
     title: 'Read image geometry',
     description:
-      'Returns the source image size in pixels, the crop box (natural image pixels, or null for the whole image), rotation in degrees, flips, the output size after crop and rotation, the number of adjustment layers and whether undo / redo are available.',
+      'Returns the source image size in pixels, the crop box (natural image pixels, or null for the whole image), rotation in degrees, flips, the output size after crop and rotation, the bits per channel (bitDepth 8, 16 or 32), the number of adjustment layers and whether undo / redo are available.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Read image geometry', ...READ },
-    handler: () => ({ ...geometry(), layers: controller.getAdjustmentLayers().length, ...history() })
+    handler: () => ({ ...geometry(), bitDepth: controller.bitDepth, layers: controller.getAdjustmentLayers().length, ...history() })
+  };
+
+  const setBitDepth: AgentTool = {
+    name: 'set_bit_depth',
+    title: 'Set the bit depth',
+    description:
+      "Image › Mode › 8 / 16 / 32 Bits/Channel. 16-bit keeps smooth gradients and survives strong adjustments without banding; 32-bit holds linear-light float values (HDR, colour above 1). Going up costs nothing and changes no pixels; going down rounds every pixel layer's extra precision away (32 → 16 also clips colour above 1). The viewport always shows an 8-bit rendering. One undo step. Returns the bitDepth and changedLayerIds (the layers whose samples were rounded).",
+    inputSchema: {
+      type: 'object',
+      properties: { depth: { type: 'number', enum: [8, 16, 32], description: 'Bits per channel: 8, 16 or 32 (float, linear light).' } },
+      required: ['depth'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Set the bit depth', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    handler: (args) => ({ ...controller.setBitDepth(args.depth as 8 | 16 | 32), ...history() }),
   };
 
   const getHistogram: AgentTool = {
@@ -289,5 +304,5 @@ export function createImageEditTools(controller: ImageEditorController): AgentTo
     }
   };
 
-  return [getImageInfo, getHistogram, updateLayer, removeLayer, moveLayer, setCrop, resetCrop, setRotation, flipImage, undo, redo];
+  return [getImageInfo, getHistogram, updateLayer, removeLayer, moveLayer, setCrop, resetCrop, setRotation, flipImage, setBitDepth, undo, redo];
 }

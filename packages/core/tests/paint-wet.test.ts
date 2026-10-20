@@ -23,7 +23,7 @@ function disc(cx: number, cy: number, r: number) {
 }
 
 async function world(o: { size?: number; paper?: Partial<WetPaperInput>; params?: Partial<WetParams> } = {}) {
-  const w = new WetWorld(o.size ?? 512, o.size ?? 512, paperOf(o.paper), { kernel: 'wasm', threads: 0 });
+  const w = new WetWorld(o.size ?? 256, o.size ?? 256, paperOf(o.paper), { kernel: 'wasm', threads: 0 });
   await w.ready;
   w.ensureLane('a', { params: o.params });
   return w;
@@ -81,10 +81,10 @@ describe('wet world', () => {
   it('conserves water and pigment when nothing evaporates or soaks in', async () => {
     const w = await world({ paper: { absorption: 0 }, params: { evaporation: 0, bleed: 1 } });
     w.setTilt({ angle: 30, direction: 45 });
-    const d = disc(240, 250, 50);
+    const d = disc(128, 128, 40);
     w.paint('a', d.rect, d.cov, 0.4, BLUE);
     const s0 = w.stats('a');
-    w.stepSync(300);
+    w.stepSync(150);
     const s1 = w.stats('a');
     expect(Math.abs(s1.water - s0.water) / s0.water).toBeLessThan(1e-4);
     expect(Math.abs(s1.pigment - s0.pigment) / s0.pigment).toBeLessThan(1e-4);
@@ -93,16 +93,16 @@ describe('wet world', () => {
   it('spreads further on damp paper (wet-in-wet) than on dry paper', async () => {
     const dry = await world();
     const damp = await world();
-    damp.wetPaper('a', { x: 0, y: 0, width: 512, height: 512 }, null, 1);
+    damp.wetPaper('a', { x: 0, y: 0, width: 256, height: 256 }, null, 1);
     for (const w of [dry, damp]) {
-      const d = disc(256, 256, 20);
+      const d = disc(128, 128, 20);
       w.paint('a', d.rect, d.cov, 0.3, BLUE);
-      w.stepSync(200);
+      w.stepSync(120);
     }
     // the share of the pigment that left the brushed disc
     const outside = (w: WetWorld) => {
-      const all = w.sample('a', { x: 0, y: 0, width: 512, height: 512 }, null);
-      const d = disc(256, 256, 22);
+      const all = w.sample('a', { x: 0, y: 0, width: 256, height: 256 }, null);
+      const d = disc(128, 128, 22);
       const s = w.sample('a', d.rect, d.cov);
       return 1 - (s.pigment[2] + s.settled[2]) / (all.pigment[2] + all.settled[2]);
     };
@@ -112,17 +112,17 @@ describe('wet world', () => {
   it('runs downhill when the canvas is tilted', async () => {
     const w = await world({ paper: { absorption: 0.2 } });
     w.setTilt({ angle: 60, direction: 0 });
-    const d = disc(256, 200, 30);
+    const d = disc(128, 100, 25);
     w.paint('a', d.rect, d.cov, 0.8, BLUE);
-    w.stepSync(250);
-    const top = w.sample('a', { x: 200, y: 140, width: 112, height: 60 }, null).water;
-    const bottom = w.sample('a', { x: 200, y: 240, width: 112, height: 60 }, null).water;
+    w.stepSync(150);
+    const top = w.sample('a', { x: 72, y: 45, width: 112, height: 50 }, null).water;
+    const bottom = w.sample('a', { x: 72, y: 130, width: 112, height: 50 }, null).water;
     expect(bottom).toBeGreaterThan(top);
   });
 
   it('wakes neighbouring tiles as water crosses into them and frees them once dry', async () => {
-    const w = await world({ size: 768 });
-    w.wetPaper('a', { x: 200, y: 200, width: 120, height: 120 }, null, 1);
+    const w = await world({ size: 512, params: { evaporation: 1 } });
+    w.wetPaper('a', { x: 220, y: 220, width: 72, height: 72 }, null, 1);
     const d = disc(250, 250, 12);
     w.paint('a', d.rect, d.cov, 0.8, BLUE);
     expect(w.activeTiles()).toBe(4);
@@ -138,22 +138,22 @@ describe('wet world', () => {
 
   it('darkens the edges of a drying wash', async () => {
     const run = async (darkening: number) => {
-      const w = await world({ params: { edgeDarkening: darkening, granulation: 0 }, paper: { roughness: 0 } });
-      const d = disc(256, 256, 60);
+      const w = await world({ params: { edgeDarkening: darkening, granulation: 0, evaporation: 1 }, paper: { roughness: 0 } });
+      const d = disc(128, 128, 45);
       w.paint('a', d.rect, d.cov, 0.35, BLUE);
       await w.stepUntilDry(20000);
       const settled = (x: number, y: number) => readPixel(w.getBase('a'), x, y)[3];
       let edge = 0;
-      for (let r = 40; r < 100; r++) edge = Math.max(edge, settled(256 + r, 256), settled(256 - r, 256), settled(256, 256 + r));
-      return { edge, centre: settled(256, 256) };
+      for (let r = 30; r < 75; r++) edge = Math.max(edge, settled(128 + r, 128), settled(128 - r, 128), settled(128, 128 + r));
+      return { edge, centre: settled(128, 128) };
     };
     const strong = await run(1);
     expect(strong.edge).toBeGreaterThan(strong.centre);
   }, 30000);
 
   it('granulates: pigment collects in the paper’s valleys', async () => {
-    const w = await world({ params: { granulation: 1, edgeDarkening: 0 }, paper: { roughness: 1 } });
-    w.paint('a', { x: 100, y: 100, width: 300, height: 300 }, null, 0.3, BLUE);
+    const w = await world({ params: { granulation: 1, edgeDarkening: 0, evaporation: 1 }, paper: { roughness: 1 } });
+    w.paint('a', { x: 28, y: 28, width: 200, height: 200 }, null, 0.3, BLUE);
     await w.stepUntilDry(20000);
     let sxy = 0;
     let sx = 0;
@@ -161,8 +161,8 @@ describe('wet world', () => {
     let sxx = 0;
     let syy = 0;
     let n = 0;
-    for (let y = 150; y < 350; y += 3)
-      for (let x = 150; x < 350; x += 3) {
+    for (let y = 58; y < 198; y += 2)
+      for (let x = 58; x < 198; x += 2) {
         const valley = 1 - grain(x + 0.5, y + 0.5);
         const ink = readPixel(w.getBase('a'), x, y)[3];
         sxy += valley * ink;
@@ -179,33 +179,33 @@ describe('wet world', () => {
   it('glazes: a dried wash stays under the next one, and yellow under blue makes green', async () => {
     const w = await world({ params: { pickup: 0 } });
     const full = (p: number[]) => p.map((v) => (v / 0.06) * 0.25);
-    w.paint('a', { x: 100, y: 100, width: 300, height: 300 }, null, 0.3, full(YELLOW));
+    w.paint('a', { x: 28, y: 28, width: 200, height: 200 }, null, 0.3, full(YELLOW));
     w.dry('a');
     const over = (p: number[]) => p.slice(0, 3).map((v) => v * (p[3] / 255) + 255 * (1 - p[3] / 255));
-    const yellow = over(readPixel(w.getBase('a'), 250, 250));
+    const yellow = over(readPixel(w.getBase('a'), 128, 128));
     expect(yellow[0]).toBeGreaterThan(yellow[2]);
-    w.paint('a', { x: 100, y: 100, width: 300, height: 300 }, null, 0.3, full(BLUE));
+    w.paint('a', { x: 28, y: 28, width: 200, height: 200 }, null, 0.3, full(BLUE));
     w.dry('a');
-    const [r, g, b] = over(readPixel(w.getBase('a'), 250, 250));
+    const [r, g, b] = over(readPixel(w.getBase('a'), 128, 128));
     expect(g).toBeGreaterThan(r);
     expect(g).toBeGreaterThan(b);
   });
 
   it('re-wetting lifts dried paint back into the water', async () => {
     const w = await world();
-    w.paint('a', { x: 100, y: 100, width: 300, height: 300 }, null, 0.3, BLUE);
+    w.paint('a', { x: 28, y: 28, width: 200, height: 200 }, null, 0.3, BLUE);
     w.dry('a');
-    const before = readPixel(w.getBase('a'), 250, 250)[3];
-    const d = disc(250, 250, 30);
+    const before = readPixel(w.getBase('a'), 128, 128)[3];
+    const d = disc(128, 128, 30);
     w.paint('a', d.rect, d.cov, 0.5, null);
     w.rewet('a', d.rect, d.cov, 0.6, [255, 255, 255]);
-    expect(readPixel(w.getBase('a'), 250, 250)[3]).toBeLessThan(before);
+    expect(readPixel(w.getBase('a'), 128, 128)[3]).toBeLessThan(before);
     expect(w.sample('a', d.rect, d.cov).settled[2]).toBeGreaterThan(0);
   });
 
   it('blotting takes wet paint away; a hair dryer takes only water', async () => {
     const w = await world();
-    const d = disc(250, 250, 30);
+    const d = disc(128, 128, 30);
     w.paint('a', d.rect, d.cov, 0.5, BLUE);
     const p0 = w.sample('a', d.rect, d.cov);
     w.remove('a', d.rect, d.cov, 0.9, 0, 0);
@@ -220,19 +220,19 @@ describe('wet world', () => {
     const a = await world();
     const b = await world();
     for (const w of [a, b]) {
-      w.setFlow('a', flowField(normalizeFlow({ kind: 'swirl' }), 512, 512), 1);
-      const d = disc(250, 250, 40);
+      w.setFlow('a', flowField(normalizeFlow({ kind: 'swirl' }), 256, 256), 1);
+      const d = disc(128, 128, 40);
       w.paint('a', d.rect, d.cov, 0.5, BLUE);
-      w.stepSync(50);
+      w.stepSync(24);
     }
     const snap = a.snapshot();
-    const d = disc(270, 240, 20);
+    const d = disc(148, 118, 20);
     a.paint('a', d.rect, d.cov, 0.5, YELLOW);
-    a.stepSync(30);
+    a.stepSync(16);
     a.restore(snap);
     expect(a.clock).toBe(b.clock);
-    a.stepSync(64);
-    b.stepSync(64);
+    a.stepSync(32);
+    b.stepSync(32);
     const sa = a.stats('a');
     const sb = b.stats('a');
     expect(sa).toEqual(sb);

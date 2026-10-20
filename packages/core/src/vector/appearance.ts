@@ -43,6 +43,10 @@ import {
 } from './pathEffects.js';
 import { mapBezierPath } from './pathMap.js';
 import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
+import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
+import { vectorInstanceGroup } from './symbols.js';
+import { isVectorFrame, vectorFrameDrawn } from './frames.js';
+import { transformVectorNode } from './geometry.js';
 import {
 	VECTOR_WARP_STYLES,
 	VECTOR_WARP_STYLE_LABELS,
@@ -62,6 +66,7 @@ import type {
 	VectorEffectType,
 	VectorFillRule,
 	VectorGroupNode,
+	VectorInstanceNode,
 	VectorNode,
 	VectorPathNode,
 	VectorWarpMesh
@@ -336,9 +341,12 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
 	return node.effects?.filter(isEnabled) ?? [];
 }
 
-/** Whether the node itself draws differently from its stored geometry (effects or a live boolean). */
+/**
+ * Whether the node itself draws differently from its stored geometry (effects or a live boolean).
+ * Text always does: it draws as its glyphs.
+ */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return (node.type === 'group' && !!node.liveBoolean) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -574,9 +582,23 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 	return list;
 }
 
+const instanceGroups = new WeakMap<VectorInstanceNode, VectorGroupNode>();
+
+/** What an instance draws as a plain group (cached per instance object; see `vectorInstanceGroup`). */
+export function vectorInstanceDrawn(node: VectorInstanceNode): VectorGroupNode {
+	let g = instanceGroups.get(node);
+	if (!g) {
+		g = vectorInstanceGroup(node, (n, m) => transformVectorNode(n, m));
+		instanceGroups.set(node, g);
+	}
+	return g;
+}
+
 /** The shapes of a child in its parent's space (hidden children have none), ordered by its index. */
 export function vectorChildAppearanceShapes(child: VectorNode, index: number): VectorAppearanceShape[] {
 	if (child.visible === false) return [];
+	// An instance's transform may scale: its drawn group's is rigid.
+	if (child.type === 'instance') child = vectorInstanceDrawn(child);
 	const m = child.transform;
 	const k = child.opacity ?? 1;
 	return vectorAppearanceShapes(child).map((s) => ({
@@ -604,11 +626,16 @@ function liveBooleanShapes(group: VectorGroupNode): VectorAppearanceShape[] {
 	return [{ source, path: foldVectorBooleanOperands(operands), opacity: 1, order: [0] }];
 }
 
-const shapeCache = new WeakMap<VectorNode, VectorAppearanceShape[]>();
+/** Caches keyed by node, valid while the text shaper stays the same (text lays out by it). */
+const shapeCache = new WeakMap<VectorNode, [number, VectorAppearanceShape[]]>();
+const fresh = <T>(entry: [number, T] | undefined): T | undefined => (entry && entry[0] === vectorTextShaperGeneration() ? entry[1] : undefined);
 
 /** What a node's effect stack starts from: its own outline, its live boolean result or its children's shapes. */
 function baseShapes(node: VectorNode): VectorAppearanceShape[] {
 	if (node.type === 'path') return [{ source: node, path: subpathsToBezier(node.subpaths), opacity: 1, order: [] }];
+	// Text: its glyphs, one shape per fill (a run's own fill paints its characters).
+	if (node.type === 'text') return vectorTextPaths(node).parts.map((p, k) => ({ source: vectorTextPaintSource(node, p.fill), path: p.path, opacity: 1, order: [k] }));
+	if (node.type === 'instance') return baseShapes(vectorInstanceDrawn(node));
 	if (node.liveBoolean) return liveBooleanShapes(node);
 	// A mask group's effects act on its contents (the mask stays as it is).
 	if (isVectorMaskGroup(node)) return node.children.flatMap((c, i) => (i === 0 ? [] : vectorChildAppearanceShapes(c, i)));
@@ -652,22 +679,36 @@ export function vectorEnvelopeFrame(node: VectorNode, effectId?: string): { effe
  * object.
  */
 export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[] {
-	const hit = shapeCache.get(node);
+	const hit = fresh(shapeCache.get(node));
 	if (hit) return hit;
-	// A mask group draws its contents (effects applied) clipped by its mask.
-	const out = (isVectorMaskGroup(node) ? vectorMaskedShapes(node) : applyVectorEffects(baseShapes(node), node.effects)).sort((a, b) => compareOrder(a.order, b.order));
-	shapeCache.set(node, out);
+	if (node.type === 'instance') {
+		// In the space of the drawn group (the instance's rotation and translation not applied).
+		const shapes = vectorAppearanceShapes(vectorInstanceDrawn(node));
+		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
+		return shapes;
+	}
+	// A frame draws as its clip group (its fill and children inside its rectangle).
+	if (isVectorFrame(node)) {
+		const shapes = vectorAppearanceShapes(vectorFrameDrawn(node));
+		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
+		return shapes;
+	}
+	// A mask group draws its contents (effects applied) clipped by its mask. Text without glyph
+	// outlines has only glyph boxes, which effects would distort meaninglessly: they are skipped.
+	const effects = node.type === 'text' && !vectorTextPaths(node).outlines ? null : node.effects;
+	const out = (isVectorMaskGroup(node) ? vectorMaskedShapes(node) : applyVectorEffects(baseShapes(node), effects)).sort((a, b) => compareOrder(a.order, b.order));
+	shapeCache.set(node, [vectorTextShaperGeneration(), out]);
 	return out;
 }
 
-const outlineCache = new WeakMap<VectorNode, BezierPath>();
+const outlineCache = new WeakMap<VectorNode, [number, BezierPath]>();
 
 /** Everything a node draws as one path in its own space (live corners cut, effects applied). */
 export function vectorAppearanceOutline(node: VectorNode): BezierPath {
-	let hit = outlineCache.get(node);
+	let hit = fresh(outlineCache.get(node));
 	if (!hit) {
 		hit = node.type === 'path' && !hasOwnVectorAppearance(node) ? subpathsToBezier(node.subpaths) : vectorAppearanceShapes(node).flatMap((s) => s.path);
-		outlineCache.set(node, hit);
+		outlineCache.set(node, [vectorTextShaperGeneration(), hit]);
 	}
 	return hit;
 }
@@ -716,7 +757,7 @@ export function vectorAppearanceNodes(node: VectorNode): VectorPathNode[] {
 	return vectorAppearanceShapes(node).map((s, k) => shapeNode(s, `${node.id}~fx${k}`));
 }
 
-const expandCache = new WeakMap<VectorNode, VectorNode>();
+const expandCache = new WeakMap<VectorNode, [number, VectorPathNode | VectorGroupNode]>();
 
 /**
  * The node as plain geometry: path effects and live booleans evaluated into paths (the node
@@ -724,11 +765,23 @@ const expandCache = new WeakMap<VectorNode, VectorNode>();
  * otherwise, like any live group, it becomes a group with that id holding one path per shape
  * (ids `<id>~fx<n>`). Groups without effects of their own keep their structure. Cached per node.
  */
-export function expandVectorAppearance(node: VectorNode): VectorNode {
-	if (!hasVectorAppearance(node)) return node;
-	const hit = expandCache.get(node);
+export function expandVectorAppearance(node: VectorNode): VectorPathNode | VectorGroupNode {
+	// Text always has an appearance (its glyphs), so what is returned as is is a path or group.
+	if (!hasVectorAppearance(node)) return node as VectorPathNode | VectorGroupNode;
+	const hit = fresh(expandCache.get(node));
 	if (hit) return hit;
-	let out: VectorNode;
+	if (node.type === 'instance') {
+		const drawn = expandVectorAppearance(vectorInstanceDrawn(node));
+		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
+		return drawn;
+	}
+	if (isVectorFrame(node)) {
+		const drawn = vectorFrameDrawn(node);
+		const out = hasVectorAppearance(drawn) ? expandVectorAppearance(drawn) : drawn;
+		expandCache.set(node, [vectorTextShaperGeneration(), out]);
+		return out;
+	}
+	let out: VectorPathNode | VectorGroupNode;
 	if (!hasOwnVectorAppearance(node)) {
 		const group = node as VectorGroupNode;
 		out = { ...group, children: group.children.map(expandVectorAppearance) };
@@ -745,6 +798,12 @@ export function expandVectorAppearance(node: VectorNode): VectorNode {
 			const { effects: _e, opacity: _o, ...rest } = node;
 			const opacity = (node.opacity ?? 1) * one.opacity;
 			out = { ...rest, subpaths: bezierToSubpaths(one.path), ...(opacity < 1 ? { opacity } : {}) };
+		} else if (node.type === 'text' && shapes.length === 1) {
+			// Text in one paint draws as one compound path with the text's id.
+			const one = shapes[0];
+			const opacity = (node.opacity ?? 1) * one.opacity;
+			out = { ...shapeNode(one, node.id), ...placement(node), ...(opacity < 1 ? { opacity } : {}) };
+			if (opacity >= 1) delete out.opacity;
 		} else {
 			out = {
 				id: node.id,
@@ -755,7 +814,7 @@ export function expandVectorAppearance(node: VectorNode): VectorNode {
 			};
 		}
 	}
-	expandCache.set(node, out);
+	expandCache.set(node, [vectorTextShaperGeneration(), out]);
 	return out;
 }
 

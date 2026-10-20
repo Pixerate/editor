@@ -21,6 +21,66 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/vector] Constraints Need Anchor Ids, and Every Hand-Built Anchor Copy Must Carry Them
+
+- **Issue / Symptom**: Constraints disappeared after ordinary edits (a move, a reverse, a shape-keeping delete of a neighbour).
+- **Root Cause**: Constraints refer to anchors by `VectorAnchor.id`; code that copies anchors field by field (`mapAnchor`, `reverseSubpath`, `pathMap`'s mapper, the shape-keeping delete) dropped the new field, so the solver's purge removed constraints whose anchors it could no longer find (the same trap as live corners).
+- **Solution / Workaround**: Copy anchors with `cloneAnchor`, or add `...(a.id ? { id: a.id } : {})` to hand-built copies. Ids are given lazily (only to anchors a constraint refers to), so most documents never carry them. Operations that rebuild a path from scratch (booleans, Outline Stroke, Expand) do drop them, and the constraints go with them.
+
+### [core/vector] Dimensionless Constraint Rows Converge Too Loosely Over Long Segments
+
+- **Issue / Symptom**: Two segments constrained perpendicular were 4 × 10⁻⁶ units off at their far ends while the solve reported success.
+- **Root Cause**: The solver's tolerance is in document units (1e-9 of the largest coordinate), but a cross product of unit vectors is dimensionless: a residual just under the tolerance still turns into a visible offset over a 60-unit segment.
+- **Solution / Workaround**: Express every row in length units: parallel / perpendicular use one unit direction and one full segment, tangent at an anchor uses the outgoing handle's length, and angle rows are radians times the segments' mean length. New residuals should follow the same rule.
+
+### [core/vector] The Solve After Every Edit Needs to Know What Was Just Edited
+
+- **Issue / Symptom**: Dragging a constrained anchor left it short of the pointer; the solver pulled it back towards the rest.
+- **Root Cause**: A minimum-norm solve moves every free parameter a little. Without weights, the dragged anchor takes its share of the correction.
+- **Solution / Workaround**: The controller keeps the last solved document; `solveVectorConstraints(doc, previous)` gives every parameter that differs from it a weight of 10⁶, so edited geometry (dragged, typed by a command, undone) moves least and the dependent geometry follows. Checks that need exact positions should compare constrained quantities, not the dragged anchor's coordinates.
+
+### [core/vector] Instances Carry Their Symbol's Art, Because Geometry Sees One Node at a Time
+
+- **Issue / Symptom**: Bounds, hit-testing, rendering and export of an instance came back empty, or stale after the symbol changed.
+- **Root Cause**: Every geometry helper takes a node, not the document, so an instance cannot look its symbol up. A module-level lookup would also go stale whenever an edit creates a new instance object (moves spread the node).
+- **Solution / Workaround**: Instances carry `art`, the symbol's own `nodes` array, resolved by `resolveVectorSymbols` in the controller's `refreshed()` (with the blend refresh) and on load; spreads carry it along. Storage strips it (`toJSON`, `stripVectorSymbolArt`), and `vectorDocumentToSvg` resolves documents that come without it. Code that builds documents outside the controller should call `resolveVectorSymbols` before measuring instances.
+
+### [core/vector] An Instance's Transform Scales, So Draw It Through a Group Whose Transform Stays Rigid
+
+- **Issue / Symptom**: Strokes in scaled instances hit-tested at the wrong width, and filters and distance tolerances were off.
+- **Root Cause**: Everything else in the editor relies on rigid node transforms (local distances are document distances). An instance is the one node whose transform may scale and skew.
+- **Solution / Workaround**: `vectorInstanceGroup` splits the instance's matrix with `decomposeRigid`: the rotation goes on the drawn group, the scale and skew are baked into the art (`transformVectorNode`), and strokes are multiplied by √|det| unless `scaleStrokes` is false. Everything downstream sees ordinary nodes. Anything that reads `nodeMatrix(instance)` directly (it is the full matrix) must go through `vectorInstanceDrawn` instead, as `vectorChildAppearanceShapes` and the overlay outline do.
+
+### [core/vector] Isolation Mode Swaps the Controller's Document, So Snapshots Must Carry It
+
+- **Issue / Symptom**: After leaving a symbol, Undo put the symbol's art in place of the whole document.
+- **Root Cause**: Editing a symbol in isolation makes the controller's `doc` the art, so every command works unchanged; history snapshots taken there hold that art.
+- **Solution / Workaround**: Snapshots keep the isolation context (`symbolEdit`, with the host document), and `restore` steps into or out of isolation with the view following (`viewInto` / `viewOutOf`). `toJSON`, `toSvg` and `onChange` compose the whole document (`storedDocument`). Entering and leaving are not undo steps themselves.
+
+### [core/text] `r.pos += r.u16()` Reads the Old Position Before the Call Advances It
+
+- **Issue / Symptom**: The OpenType reader drew garbage glyph outlines (points shifted and mixed on and off curve) for a valid TrueType font.
+- **Root Cause**: In `x += f()` JavaScript reads `x` before calling `f`, so `r.pos += r.u16()` added the instruction length to the position from before the two-byte length was read, landing two bytes short.
+- **Solution / Workaround**: Read into a local first (`const n = r.u16(); r.pos += n;`). Watch for the same pattern with any reader whose methods move a cursor.
+
+### [core/vector] Text Lays Out with One Page-Wide Shaper, and Caches Key on It
+
+- **Issue / Symptom**: After loading fonts (`setTextShaper`), text kept its old glyphs: expanded appearance, bounds and outlines were cached per node object, and the node objects had not changed.
+- **Root Cause**: Geometry helpers (`vectorNodeBounds`, `expandVectorAppearance`, hit-testing) are pure functions of the node, with no editor to ask for fonts, so text reaches its shaper through a module-level setting (`setVectorTextShaper`). Every cache keyed only by node object went stale when it changed.
+- **Solution / Workaround**: `setVectorTextShaper` bumps a generation that the appearance caches (`shapeCache`, `outlineCache`, `expandCache`) and the text caches store with each entry, and `controller.setTextShaper` also gives every text node a new object so views keyed on the document draw again. The shaper is shared by every vector editor on the page: set it once, before documents load where possible. Web fonts must be loaded before the Canvas shaper measures them, or the fallback's widths are cached.
+
+### [core/vector] Text Without Glyph Outlines Draws as SVG Text but Has Box Geometry
+
+- **Issue / Symptom**: With the browser's (Canvas 2D) shaper, path effects and envelopes on text did nothing visible, and hit-testing, snapping and bounds used rectangles rather than letter shapes.
+- **Root Cause**: Canvas 2D measures and draws text but cannot give glyph outlines. Without outlines, text renders as SVG `<text>` (placed character by character from our layout, so it matches the measurements), and its geometry is a box per line fragment (a box per character on a path).
+- **Solution / Workaround**: Effects need geometry to act on, so `vectorAppearanceShapes` skips a text node's effects while it has no outlines (they stay stored and apply as soon as an outline shaper is set). Create Outlines refuses with the reason. Hosts that need effects on text or font-independent SVG load font files (`loadOpenTypeFont`) into `createOutlineTextShaper`; the demo's "Load fonts…" button does this.
+
+### [react|svelte/vector] The Hidden Textarea Must Not Forward Printable Keys, and Must Stop Its Events
+
+- **Issue / Symptom**: Typing "v" into text switched to the Select tool, and typed characters were inserted twice.
+- **Root Cause**: The canvas `<svg>` handles tool shortcuts on `keydown`, and the textarea sits inside it, so its key events bubbled to the canvas; forwarding every key to `controller.keyDown` also inserted characters that the textarea's `input` event delivers again.
+- **Solution / Workaround**: The textarea stops propagation of its key and clipboard events, lets printable keys (no Cmd / Ctrl) through to the browser so they arrive as `input` (and as `compositionend` for IME), and forwards only editing keys and shortcuts to `controller.keyDown`, whose text mode handles them (and swallows other Mod shortcuts while editing). Keys typed while the canvas itself has focus are inserted by the controller.
+
 ### [core/video-editor] A Frame Cache Keyed by Clip Is Thrown Away by Every Edit
 
 - **Issue / Symptom**: Keyed by clip and timeline frame, as a sequencer's final-frame cache is, every trim, slip or move invalidated frames whose pictures had not changed. Two clips cut from one shot each decoded it again.
@@ -2206,6 +2266,70 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
 
+### [core/vector] A Frame's Size Field Must Not Apply Each Keystroke
+
+- **Issue / Symptom**: Typing a new width such as 400 into a frame's size field squashed children that stretch with the frame (`leftRight` / `topBottom`), and their margins came back wrong.
+- **Root Cause**: Resizing a frame lays its children out again by their constraints. Applied on every keystroke, the frame went through widths 4, 40 and 400. At width 4 a stretched child's span became a sliver, and its margins could not be recovered from that.
+- **Solution / Workaround**: Both frame panels apply x, y, width and height on Enter or blur (React: an uncontrolled input keyed by the value; Svelte: `onchange`), never per keystroke. Code that drives `setFrame` in steps should go straight to the final size, or start every step from the original document.
+
+### [core/vector] Frames Draw, Hit and Bound Through Different Paths
+
+- **Issue / Symptom**: An empty frame could not be selected, and children outside a clipping frame stayed clickable, while the frame itself drew correctly.
+- **Root Cause**: Drawing goes through `expandVectorAppearance`, which turns a frame into a clip group (`vectorFrameDrawn`). Hit-testing and bounds instead start from the stored node, where a frame is just a group.
+- **Solution / Workaround**: `vectorNodeBounds` and `hitTestVectorNode` handle frames first: the bounds are the rectangle (plus the children when it does not clip), and a hit is any point inside the rectangle. `vectorAppearanceShapes`, `expandVectorAppearance` and `vectorMaskRegionShapes` swap in the drawn clip group. Any new code that walks groups should check `isVectorFrame` before treating a frame as a plain group.
+
+### [core/vector] Connector Anchors Are Overwritten After Every Edit
+
+- **Issue / Symptom**: Moving a glued connector's anchors, or setting its subpaths through `updateNode`, appeared to do nothing.
+- **Root Cause**: `rerouteVectorConnectors` runs in the controller's `refreshed`, after every edit (and after the constraint solve). It writes each glued connector's geometry again from its ends' sites. Only a free end keeps its stored point.
+- **Solution / Workaround**: To reshape a connector, change its `route`, `radius` or `gap`, or unglue the end (`setConnector({ end: null })`); the end then stays where it is. The method is `addConnector`, not `connect`, because `connect()` is the controller's private history subscription.
+
+### [core/vector] Tracking Acquisition Runs on a Timer, so Tests Need Fake Timers
+
+- **Issue / Symptom**: In tests, resting the pointer on an anchor never acquired it for tracking. In a page, a point was acquired even though the pointer had stopped moving.
+- **Root Cause**: Acquisition happens when the pointer has rested on a point for 400 ms (`TRACKING_DWELL_MS`). It cannot wait for the next pointer move, because a resting pointer sends none, so the controller sets a `setTimeout`. The timer is cleared when the candidate changes, when tools switch, on `clearTracking` and on `destroy`.
+- **Solution / Workaround**: Tests use `vi.useFakeTimers()` and `vi.advanceTimersByTime(TRACKING_DWELL_MS + 10)`, or call `acquireTrackingPoint` directly. Turn tracking off with `setSnap({ tracking: false })` where it is not wanted.
+
+### [core/vector] Typed Entry Takes Digit Keys While the Pen Draws
+
+- **Issue / Symptom**: Digit shortcuts did nothing while a pen path was in progress.
+- **Root Cause**: Like CAD direct distance entry, `keyDown` turns `0`–`9`, `.`, `-` and `@` into a typed entry while the pen has a path open (`state.typedEntry`). Enter places the point, Backspace edits the entry and Escape drops it.
+- **Solution / Workaround**: Bind digit shortcuts with a modifier, or finish the path first (Escape, or switch tools). Hosts that show the entry should read `overlay.typedEntry`.
+### [core/raster] Deep Samples Ride Next to the 8-bit Tile, and 8-bit Writers Drop Them
+
+- **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
+- **Root Cause**: High bit depth is additive: a `Tile` may carry `deep` samples (`Uint16Array`, or `Float32Array` in linear light) and its `data` is always their 8-bit rendering. Every existing 8-bit path (compositor, viewport, brushes, the paint editor) reads and writes `data` only, and a tile it rewrites is built by `finishTile` without `deep`.
+- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. Making each editing path depth-aware is follow-up work; until then the skill tells agents to grade and export deep files rather than repaint them.
+
+### [core/image-editor] 16- and 32-bit PSDs Keep Their Layers in an Lr16 / Lr32 Block, and 32-bit Is Linear Light
+
+- **Issue / Symptom**: A 16-bit PSD written with the layer records in the usual layer-info section read back fine here but is not how Photoshop writes such files; and 32-bit values read as sRGB looked washed out.
+- **Root Cause**: Photoshop stores the layer info of 16- and 32-bit files in a global `Lr16` / `Lr32` tagged block and leaves the layer-info section empty. Its 32-bit mode is scene-referred linear light, so float samples can exceed 1.
+- **Solution / Workaround**: `writePsd` puts the layer info into `Lr16` / `Lr32` when the header depth is 16 or 32 (`readPsd` reads both places). 32-bit channels are ZIP with prediction (byte planes, then deltas); 16-bit channels are RLE. Our `Float32Array` samples are linear too; converting to 16 or 8 bits encodes to sRGB and clips colour above 1.
+
+### [core/image-editor] Levels Quantise to 256 Levels, Which Bands a 16-bit Image
+
+- **Issue / Symptom**: A strong Levels adjustment over a smooth 16-bit gradient came out with about thirty flat bands in the 16-bit composite.
+- **Root Cause**: To match Photoshop at 8 bits, the Levels table rounds its input to whole levels and the stretch to whole steps (`LEVELS_QUANTUM`). Fed 16-bit values, that rounding throws the extra precision away. A default parameter hid a second bug: passing `undefined` to turn the rounding off brings the default back.
+- **Solution / Workaround**: `compileAdjustmentLayer(layer, { deep: true })` builds Levels without the quantum (`toneLuts(layer, null)`), and `applyAdjustmentLayersFloat` (the deep compositor's filter run) uses those compiled ops through their own cache key. The 8-bit path is unchanged. Use `null`, not `undefined`, to switch off a parameter that has a default.
+
+### [core/raster] The Deep Compositor Draws Effect, Filter and Annotation Layers at 8 Bits
+
+- **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
+- **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
+- **Solution / Workaround**: Expected until effects and filters get float paths. Everything else in the stack (pixel layers, masks, clipping, groups, adjustment layers) keeps full depth. If a deep merge must match the viewport exactly, rasterize the effects first.
+### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
+
+- **Issue / Symptom**: A Healing Brush stroke sampling Current & Below or All came out matched to its own clone instead of to the photo, and a Clone Stamp stroke running over its own source copied the same pixels on and on.
+- **Root Cause**: While a stroke is drawn, `_strokeUpdate` puts the live surface into `state.layers`, so a composite built at the end of the stroke (or a source that reads the live tiles) sees the stroke itself.
+- **Solution / Workaround**: `retouchStroke` builds every `PixelSource` (the layer's pre-stroke surface, or a `TilePixelSource` over a compositor and the layer list as they were) in `beginStroke`, and the heal's `finalPaint` reads only those. Sources cache their tiles, so make a new one per stroke.
+
+### [core/paint] Sequential Retouching on a Mask Needs an RGBA View, and an Empty Mask Tile Is Black, Not Transparent
+
+- **Issue / Symptom**: The Smudge did nothing on a "hide all" mask, and on other masks it skipped whole tiles.
+- **Root Cause**: `TileMedium` and `SmudgeTip` work on RGBA tiles, where a missing tile means transparent and a locked layer skips transparent pixels. A mask has one byte per pixel, and a missing tile (default 0) holds the value black.
+- **Solution / Workaround**: `PaintStrokeSession` wraps a one-channel target in `rgbaViewOfGrey`: it expands every tile it reads (an empty one as zeros) to opaque grey RGBA with transparency locked, and `flush` writes the red channel back through `writeTile` after each push. The Sponge refuses masks, since a mask has no saturation.
+
 ### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
 
 - **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".
@@ -2247,3 +2371,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Undoing a watercolour stroke while other paint was still wet showed the wrong wet paint, and a fill on a wet layer could be overwritten by the next frame.
 - **Root Cause**: A wet layer's pixels are the simulation's display: every frame replaces the layer's surface in the document (not an undo step). History entries hold documents, but the wet state lives in the world.
 - **Solution / Workaround**: Every operation that changes wet paint takes a world snapshot before it (`beginWetOp`) and after it, kept on the history entry within `undoMemory` (oldest dropped: undoing past them leaves that paint dry). Undo and redo restore the snapshot with the document. Non-wet operations on a wet layer (a dry brush, fill, merge, duplicate, resize) dry it first inside the same undo step. Operations that touch the world while a worker batch runs throw; async callers (the agent tools, the Wet panel) `await controller.wetIdle()` first.
+
+### Wet-media tests time out on CI when the scene is "small"
+- **Issue / Symptom**: `paint-wet-kernel.test.ts` took ~130 s on CI (Ubuntu, Node 24) and the physics tests in `paint-wet.test.ts` 5–9 s each, although they looked modest locally.
+- **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
+- **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.

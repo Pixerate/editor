@@ -1,6 +1,18 @@
 <script lang="ts">
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
-  import { BRUSH_OPTION_CONTROLS, MIXER_MIXING_OPTIONS, MIXER_OPTION_CONTROLS, PAINT_TOOLS, rgbUnitToHex } from '@pixerate/editor/image-editor';
+  import {
+    BRUSH_OPTION_CONTROLS,
+    MIXER_MIXING_OPTIONS,
+    MIXER_OPTION_CONTROLS,
+    PAINT_TOOLS,
+    RETOUCH_CHOICES,
+    RETOUCH_OPTION_CONTROLS,
+    RETOUCH_TOGGLES,
+    cloneSourceLabel,
+    isRetouchPaintTool,
+    rgbUnitToHex,
+    setRetouchChoice,
+  } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import ControlSlider from './ControlSlider.svelte';
 
@@ -20,7 +32,7 @@
   const view = $derived.by(() => {
     void tick;
     const s = controller.getState();
-    return { tool: s.activeTool, ...s.paint };
+    return { tool: s.activeTool, sourceLabel: cloneSourceLabel(controller), ...s.paint };
   });
   let error = $state<string | null>(null);
 
@@ -37,12 +49,12 @@
 </script>
 
 <div class="flex flex-col gap-2 text-xs text-slate-200 {className}" data-testid="brush-options">
-  <div class="flex gap-1" role="toolbar" aria-label="Paint tools">
+  <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
     {#each PAINT_TOOLS as t (t.id)}
       <button
         type="button"
         aria-pressed={view.tool === t.id}
-        title={`${t.label} (${t.shortcut})`}
+        title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
         class={chip(view.tool === t.id)}
         onclick={() => controller.setTool(t.id)}>{t.label}</button>
     {/each}
@@ -124,6 +136,49 @@
           />
           Clean each stroke
         </label>
+      </div>
+    </div>
+  {/if}
+
+  {#if isRetouchPaintTool(view.tool)}
+    <div class="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
+      {#if view.tool === 'clone' || view.tool === 'heal'}
+        <div class="flex items-center gap-2">
+          <span class="text-slate-400" data-testid="clone-source">{view.sourceLabel}</span>
+          {#if view.cloneSource}
+            <button type="button" title="Forget the source point" class={chip(false)} onclick={() => controller.setCloneSource(null)}>Clear source</button>
+          {/if}
+        </div>
+      {/if}
+      {#each RETOUCH_CHOICES.filter((c) => c.tools.includes(view.tool as never)) as choice (choice.id)}
+        <div class="flex flex-wrap items-center gap-1" role="group" aria-label={choice.label}>
+          <span class="text-slate-400">{choice.label}</span>
+          {#each choice.options as o (o.id)}
+            <button
+              type="button"
+              aria-pressed={view.retouch[choice.id] === o.id}
+              title={o.title}
+              class={chip(view.retouch[choice.id] === o.id)}
+              onclick={() => setRetouchChoice(controller, choice.id, o.id)}>{o.label}</button>
+          {/each}
+        </div>
+      {/each}
+      {#each RETOUCH_OPTION_CONTROLS.filter((c) => c.tools.includes(view.tool as never)) as spec (spec.id)}
+        <ControlSlider {spec} value={view.retouch[spec.id]} onchange={(v) => controller.setPaintOptions({ retouch: { [spec.id]: v } })} />
+      {/each}
+      <div class="flex flex-wrap gap-3 text-slate-300">
+        {#each RETOUCH_TOGGLES.filter((t) => t.tools.includes(view.tool as never)) as t (t.id)}
+          <label class="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              aria-label={t.label}
+              checked={view.retouch[t.id]}
+              onchange={(e) => controller.setPaintOptions({ retouch: { [t.id]: (e.target as HTMLInputElement).checked } })}
+              class="accent-indigo-500"
+            />
+            {t.label}
+          </label>
+        {/each}
       </div>
     </div>
   {/if}
