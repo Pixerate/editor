@@ -634,7 +634,7 @@ const LEVELS_QUANTUM = 255;
  * Per-channel LUTs of a Curves or Levels layer: each channel's record first, then the master.
  * `null` for any other kind.
  */
-export function toneLuts(layer: AdjustmentLayer): [Float32Array, Float32Array, Float32Array] | null {
+export function toneLuts(layer: AdjustmentLayer, quantum: number | null = LEVELS_QUANTUM): [Float32Array, Float32Array, Float32Array] | null {
   const n = ADJUSTMENT_LUT_SIZE;
   if (layer.kind === 'curves') {
     const m = curveLutFromLevels(layer.params.master);
@@ -649,7 +649,8 @@ export function toneLuts(layer: AdjustmentLayer): [Float32Array, Float32Array, F
     return [layer.params.red, layer.params.green, layer.params.blue].map((rec) => {
       const c = toUnitLevels(rec);
       const out = new Float32Array(n);
-      for (let k = 0; k < n; k++) out[k] = levelsValue(m, levelsValue(c, k / (n - 1), LEVELS_QUANTUM), LEVELS_QUANTUM);
+      const q = quantum ?? undefined;
+      for (let k = 0; k < n; k++) out[k] = levelsValue(m, levelsValue(c, k / (n - 1), q), q);
       return out;
     }) as [Float32Array, Float32Array, Float32Array];
   }
@@ -660,7 +661,7 @@ export function toneLuts(layer: AdjustmentLayer): [Float32Array, Float32Array, F
  * Compiles a layer into a pixel function, or `null` when it is the identity (neutral parameters).
  * Pure: depends on `kind` and `params` only.
  */
-export function compileAdjustmentLayer(layer: AdjustmentLayer): PixelOp | null {
+export function compileAdjustmentLayer(layer: AdjustmentLayer, options: { deep?: boolean } = {}): PixelOp | null {
   switch (layer.kind) {
     case 'curves': {
       const p = layer.params;
@@ -670,7 +671,8 @@ export function compileAdjustmentLayer(layer: AdjustmentLayer): PixelOp | null {
     case 'levels': {
       const p = layer.params;
       if ([p.master, p.red, p.green, p.blue].every(isIdentityLevels)) return null;
-      return lutOp(toneLuts(layer)!);
+      // At 16 and 32 bits Levels works on continuous values, not Photoshop's 256 whole levels.
+      return lutOp(toneLuts(layer, options.deep ? null : LEVELS_QUANTUM)!);
     }
     case 'hueSaturation': {
       const p = layer.params;
@@ -778,8 +780,8 @@ export function compileAdjustmentLayer(layer: AdjustmentLayer): PixelOp | null {
 const COMPILE_CACHE_LIMIT = 64;
 const compileCache = new Map<string, PixelOp | null>();
 
-function compiledFor(layer: AdjustmentLayer): PixelOp | null {
-  const key = `${layer.kind}:${JSON.stringify(layer.params)}`;
+function compiledFor(layer: AdjustmentLayer, deep = false): PixelOp | null {
+  const key = `${deep ? 'deep:' : ''}${layer.kind}:${JSON.stringify(layer.params)}`;
   if (compileCache.has(key)) {
     const op = compileCache.get(key)!;
     // Refresh recency.
@@ -787,7 +789,7 @@ function compiledFor(layer: AdjustmentLayer): PixelOp | null {
     compileCache.set(key, op);
     return op;
   }
-  const op = compileAdjustmentLayer(layer);
+  const op = compileAdjustmentLayer(layer, { deep });
   compileCache.set(key, op);
   if (compileCache.size > COMPILE_CACHE_LIMIT) compileCache.delete(compileCache.keys().next().value as string);
   return op;
@@ -870,6 +872,39 @@ export function applyAdjustmentLayers(
     data[i] = Math.round(clamp01(c[0]) * 255);
     data[i + 1] = Math.round(clamp01(c[1]) * 255);
     data[i + 2] = Math.round(clamp01(c[2]) * 255);
+  }
+}
+
+/**
+ * `applyAdjustmentLayers` on float RGBA (sRGB-encoded 0..1, straight alpha) for high bit depth:
+ * the same per-pixel evaluation with no rounding, so 16-bit and 32-bit layers keep their
+ * precision. Colour is clamped to 0..1 only by the adjustments that clamp.
+ */
+export function applyAdjustmentLayersFloat(
+  data: Float32Array,
+  layers: readonly AdjustmentLayer[] | undefined,
+  masks?: ReadonlyMap<string, ArrayLike<number>>
+): void {
+  const active = activeAdjustmentLayers(layers);
+  if (!active.length) return;
+  const ops = active.map((l) => compiledFor(l, true));
+  const planes = active.map((l) => masks?.get(l.id));
+  const c: Rgb = [0, 0, 0];
+  for (let i = 0; i < data.length; i += 4) {
+    if (!(data[i + 3] > 0)) continue;
+    c[0] = data[i];
+    c[1] = data[i + 1];
+    c[2] = data[i + 2];
+    for (let k = 0; k < active.length; k++) {
+      const plane = planes[k];
+      if (plane) {
+        const cov = plane[i >> 2];
+        if (cov > 0) applyLayer(c, active[k], ops[k], cov >= 1 ? 1 : cov);
+      } else applyLayer(c, active[k], ops[k]);
+    }
+    data[i] = c[0];
+    data[i + 1] = c[1];
+    data[i + 2] = c[2];
   }
 }
 

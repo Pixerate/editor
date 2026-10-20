@@ -514,6 +514,64 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "image-retouch",
+    prompt: "Clean up a spot, clone over a patch and lift the midtones",
+    steps: [
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { tool: "image__get_selection", args: {}, as: "sel" },
+      { tool: "image__select_region", args: { shape: "none" } },
+      { say: "Reading the layers, to find the photo.", tool: "image__list_layers", args: {}, as: "layers" },
+      {
+        say: "An empty layer for the retouching, so the photo stays untouched.",
+        tool: "image__add_pixel_layer",
+        args: { name: "Retouch" },
+        open: "Paint",
+      },
+      {
+        say: "Spot Healing in the centre, sampling every layer below onto the new one.",
+        tool: "image__spot_heal",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { points: [{ x: width / 2, y: height / 2 }], sample: "all", brush: { size: Math.max(8, Math.round(width / 20)), hardness: 0.5 } };
+        },
+      },
+      {
+        say: "The Clone Stamp source: a point on the left, then a short soft stroke on the right.",
+        tool: "image__set_clone_source",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { x: Math.round(width * 0.25), y: Math.round(height * 0.5) };
+        },
+      },
+      {
+        tool: "image__clone_stamp",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return {
+            points: [{ x: width * 0.62, y: height * 0.45 }, { x: width * 0.72, y: height * 0.5 }],
+            sample: "current-below",
+            brush: { size: Math.max(10, Math.round(width / 14)), hardness: 0.4 },
+          };
+        },
+      },
+      {
+        say: "Dodging the midtones of the photo a little, in one gentle stroke.",
+        tool: "image__dodge",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return {
+            layerId: ctx.results.layers.layers[0].id,
+            points: [{ x: width * 0.3, y: height * 0.3 }, { x: width * 0.7, y: height * 0.3 }],
+            range: "midtones",
+            exposure: 0.25,
+            brush: { size: Math.max(16, Math.round(width / 8)), hardness: 0 },
+          };
+        },
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
     id: "image-poster",
     prompt: "Turn the photo into a sale poster with a badge and a headline",
     steps: [
