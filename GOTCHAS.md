@@ -2363,7 +2363,6 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An imported Lottie donut came in as two filled discs, and a shape with a stroke above its fill lost the fill.
 - **Root Cause**: In Lottie, a fill, stroke or modifier applies to every shape item above it in its group, nested groups included. Shapes that share a paint therefore form one compound path. Items listed first draw on top, which is the reverse of our bottom-to-top order.
 - **Solution / Workaround**: `parseVectorLottie` splits a group's items at its paint items. The shapes before them become one compound path, with all the paints and modifiers after them (top first, so the stack is reversed). The export writes strokes before fills and repeaters after the paint, so the painted result is what gets copied.
-
 ### [core/paint] The Wet Kernels Only Agree Bit for Bit If Every Operation Is the Same f32 Operation
 
 - **Issue / Symptom**: After adding the edge field, the TypeScript and WebAssembly wet kernels drifted apart (different state hashes after a few steps), although the maths was "the same".
