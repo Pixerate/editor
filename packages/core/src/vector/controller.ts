@@ -1,4 +1,5 @@
 import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, stylizeVectorImage, type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
+import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
 import { VECTOR_LENS_SPECS, resolveVectorLenses, sanitizeVectorLens, stripVectorLensViews } from './lens.js';
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
@@ -1645,7 +1646,8 @@ export class VectorEditorController {
 		out = resolveVectorSymbols(out);
 		// Connectors follow what they are glued to (after the constraints have moved it).
 		// Lenses show what is below them (after connectors have moved).
-		return resolveVectorLenses(rerouteVectorConnectors(this.solved(out)));
+		// Pages draw their master page's art (before lenses, which may show it).
+		return resolveVectorLenses(resolveVectorMasterPages(rerouteVectorConnectors(this.solved(out))));
 	}
 
 	/**
@@ -2199,7 +2201,7 @@ export class VectorEditorController {
 	}
 
 	toJSON(): VectorDocument {
-		return cloneVectorDocument(stripVectorLensViews(stripVectorSymbolArt(this.storedDocument())));
+		return cloneVectorDocument(stripVectorMasterArt(stripVectorLensViews(stripVectorSymbolArt(this.storedDocument()))));
 	}
 
 	/** Adds a node (ids are kept unless taken). Returns its id. */
@@ -5407,6 +5409,155 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Pages and master pages
+
+	/**
+	 * The document's pages (top-level frames that are not master pages, in order: `number` from 1)
+	 * with the master each uses, and its master pages.
+	 */
+	getPages(): { pages: { id: string; name: string; number: number; masterId: string | null; bounds: VectorBounds }[]; masters: { id: string; name: string; usedBy: string[]; bounds: VectorBounds }[] } {
+		const pages = vectorPages(this.doc);
+		const masters = vectorMasterPages(this.doc);
+		const box = (f: VectorFrameGroup) => ({ x: f.frame.x, y: f.frame.y, width: f.frame.width, height: f.frame.height });
+		return {
+			pages: pages.map((p, i) => ({ id: p.id, name: p.name ?? `Page ${i + 1}`, number: i + 1, masterId: p.frame.masterId && masters.some((m) => m.id === p.frame.masterId) ? p.frame.masterId : null, bounds: box(p) })),
+			masters: masters.map((m) => ({ id: m.id, name: m.name ?? 'Master', usedBy: pages.filter((p) => p.frame.masterId === m.id).map((p) => p.id), bounds: box(m) }))
+		};
+	}
+
+	/** Where a new page or master goes: right of every top-level frame, or below them for a master. */
+	private nextPageRect(master: boolean): VectorBounds {
+		const frames = this.doc.nodes.filter(isVectorFrame);
+		const pages = vectorPages(this.doc);
+		const like = pages[pages.length - 1]?.frame ?? frames[frames.length - 1]?.frame;
+		const width = like?.width ?? this.doc.width;
+		const height = like?.height ?? this.doc.height;
+		if (!frames.length) return { x: 0, y: 0, width, height };
+		const gap = Math.max(20, Math.round(width * 0.1));
+		if (master) {
+			const bottom = Math.max(...frames.map((f) => f.frame.y + f.frame.height));
+			const left = Math.min(...frames.map((f) => f.frame.x));
+			return { x: left, y: bottom + gap * 2, width, height };
+		}
+		const right = Math.max(...pages.map((f) => f.frame.x + f.frame.width), ...(pages.length ? [] : frames.map((f) => f.frame.x + f.frame.width)));
+		const top = pages.length ? Math.min(...pages.map((f) => f.frame.y)) : Math.min(...frames.map((f) => f.frame.y));
+		return { x: right + gap, y: top, width, height };
+	}
+
+	/**
+	 * Adds a page: a frame the size of the last page (or the document), to the right of the others,
+	 * after page `after` in the page order (default last), using master page `masterId` (default:
+	 * the master the last page uses). The first page added to a document without frames covers the
+	 * artboard and takes the existing top-level art in. One undo step; selects it. Returns its id.
+	 */
+	addPage(input: { name?: string; masterId?: string | null; after?: string } = {}): VectorMaskResult {
+		const pages = vectorPages(this.doc);
+		if (input.masterId && !isVectorMasterPage(this.doc.nodes.find((n) => n.id === input.masterId))) return { ok: false, message: `"${input.masterId}" is not a master page (add one with vector.addMasterPage).` };
+		if (input.after !== undefined && !pages.some((p) => p.id === input.after)) return { ok: false, message: `"${input.after}" is not a page.` };
+		const first = !this.doc.nodes.some(isVectorFrame);
+		const rect = this.nextPageRect(false);
+		const id = this.newId();
+		const masterId = input.masterId === undefined ? (pages[pages.length - 1]?.frame.masterId ?? null) : input.masterId;
+		const adopted = first ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep) : [];
+		const page: VectorFrameGroup = {
+			id,
+			type: 'group',
+			name: input.name ?? `Page ${pages.length + 1}`,
+			frame: { ...rect, fill: '#ffffff', ...(masterId ? { masterId } : {}) },
+			children: adopted
+		};
+		const taken = new Set(adopted.map((n) => n.id));
+		this.change('Add Page', () => {
+			const rest = this.doc.nodes.filter((n) => !taken.has(n.id));
+			const at = input.after ? rest.findIndex((n) => n.id === input.after) + 1 : rest.length;
+			this.setDoc([...rest.slice(0, at), page, ...rest.slice(at)]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Adds an empty master page (a frame with `master` set, the size of the last page) below the
+	 * pages. Art drawn in it shows on every page that uses it; text can show `{page}` and `{pages}`.
+	 * With `assignTo` (page ids, or `all`), those pages use it. One undo step; selects it.
+	 */
+	addMasterPage(input: { name?: string; assignTo?: readonly string[] | 'all' } = {}): VectorMaskResult {
+		const pages = vectorPages(this.doc);
+		const assign = input.assignTo === 'all' ? pages.map((p) => p.id) : (input.assignTo ?? []);
+		for (const pid of assign) if (!pages.some((p) => p.id === pid)) return { ok: false, message: `"${pid}" is not a page.` };
+		const rect = this.nextPageRect(true);
+		const id = this.newId();
+		const master: VectorFrameGroup = { id, type: 'group', name: input.name ?? `Master ${String.fromCharCode(65 + vectorMasterPages(this.doc).length % 26)}`, frame: { ...rect, master: true }, children: [] };
+		const set = new Set(assign);
+		this.change('Add Master Page', () => {
+			this.setDoc([...this.doc.nodes.map((n) => (set.has(n.id) && isVectorFrame(n) ? { ...n, frame: { ...n.frame, masterId: id } } : n)), master]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/** Makes pages use master page `masterId`, or none with null. One undo step. */
+	setPageMaster(masterId: string | null, options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const pages = vectorPages(this.doc);
+		const ids = options.ids ?? this.selection.filter((id) => pages.some((p) => p.id === id));
+		if (!ids.length) return { ok: false, message: 'Select a page (a top-level frame) first.' };
+		for (const id of ids) if (!pages.some((p) => p.id === id)) return { ok: false, message: `"${id}" is not a page${isVectorMasterPage(this.getNode(id)) ? ' (it is a master page)' : ''}.` };
+		if (masterId !== null && !isVectorMasterPage(this.doc.nodes.find((n) => n.id === masterId))) return { ok: false, message: `"${masterId}" is not a master page.` };
+		const set = new Set(ids);
+		this.change(masterId ? 'Apply Master Page' : 'Remove Master Page', () => {
+			this.setDoc(
+				this.doc.nodes.map((n) => {
+					if (!set.has(n.id) || !isVectorFrame(n)) return n;
+					const { masterId: _m, ...frame } = n.frame;
+					return { ...n, frame: masterId ? { ...frame, masterId } : frame };
+				})
+			);
+		});
+		return { ok: true, ids: [...ids] };
+	}
+
+	/** Moves page `id` to position `index` (0-based) in the page order. One undo step. Returns the new order. */
+	movePage(id: string, index: number): VectorActionResult & { order?: string[] } {
+		const pages = vectorPages(this.doc);
+		const from = pages.findIndex((p) => p.id === id);
+		if (from < 0) return { ok: false, message: `"${id}" is not a page.` };
+		if (!Number.isInteger(index) || index < 0 || index >= pages.length) return { ok: false, message: `index must be from 0 to ${pages.length - 1}.` };
+		if (index === from) return { ok: true, order: pages.map((p) => p.id) };
+		const order = pages.map((p) => p.id);
+		order.splice(index, 0, ...order.splice(from, 1));
+		// Pages keep their slots in the document; only which page sits in each slot changes.
+		const slots = this.doc.nodes.map((n, i) => (pages.some((p) => p.id === n.id) ? i : -1)).filter((i) => i >= 0);
+		const byId = new Map(pages.map((p) => [p.id, p as VectorNode]));
+		this.change('Move Page', () => {
+			const nodes = this.doc.nodes.slice();
+			slots.forEach((slot, k) => (nodes[slot] = byId.get(order[k])!));
+			this.setDoc(nodes);
+		});
+		return { ok: true, order };
+	}
+
+	/**
+	 * Goes to a page (or master page): selects it and brings it into view, fitted to a canvas of
+	 * `size` screen pixels when given, otherwise at the current zoom with its corner near the
+	 * canvas's top-left. Not an undo step.
+	 */
+	goToPage(id: string, options: { size?: { width: number; height: number } } = {}): VectorActionResult {
+		const n = this.doc.nodes.find((x) => x.id === id);
+		if (!isVectorFrame(n)) return { ok: false, message: `"${id}" is not a page or master page.` };
+		const b = vectorNodeBounds(n) ?? { x: n.frame.x, y: n.frame.y, width: n.frame.width, height: n.frame.height };
+		this.selection = [id];
+		this.anchors = [];
+		if (options.size) this.zoomToFit(options.size, { bounds: b });
+		else this.setViewport({ x: 40 - b.x * this.viewport.zoom, y: 40 - b.y * this.viewport.zoom });
+		this.notify();
+		return { ok: true };
 	}
 
 	/**

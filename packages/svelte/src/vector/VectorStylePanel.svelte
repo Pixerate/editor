@@ -25,6 +25,7 @@
   import VectorSymbolsPanel from './VectorSymbolsPanel.svelte';
   import VectorConstraintsPanel from './VectorConstraintsPanel.svelte';
   import VectorFramePanel from './VectorFramePanel.svelte';
+  import VectorPagesPanel from './VectorPagesPanel.svelte';
   import VectorConnectorPanel from './VectorConnectorPanel.svelte';
   import VectorShadingPanel from './VectorShadingPanel.svelte';
   import VectorTracePanel from './VectorTracePanel.svelte';
@@ -257,6 +258,7 @@
     <VectorMaskPanel {controller} />
   {/if}
   <VectorFramePanel {controller} />
+  <VectorPagesPanel {controller} />
   <VectorConnectorPanel {controller} />
   <VectorShadingPanel {controller} />
   <VectorSymmetryPanel {controller} />

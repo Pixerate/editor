@@ -2613,3 +2613,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An agent that retried `generate_vector_art` after a timeout got two copies of the art (and two charges).
 - **Root Cause**: Model calls are slow and paid for. A retry after a lost response is indistinguishable from a new request unless the caller says otherwise.
 - **Solution / Workaround**: `generateVectorArt` and `regenerateVectorArt` require an `idempotencyKey`, remembered per controller. A repeat with the same key and input returns the first call's result, or joins it while it runs. The same key with other input is refused. A failed call forgets its key so it can be retried. UIs make a fresh key per click, and scripts that replay make one per run.
+
+### [core/vector] A Page's Master Art Is Placed By The Master's Frame, So Put It In The Master's Space
+
+- **Issue / Symptom**: Art added to a master page showed on its pages shifted by the distance between the master and the page.
+- **Root Cause**: The master's children are in the master frame's space. Each is laid onto a page by `vectorFrameChildMatrix(resizing, box, masterFrame, pageFrame)`, which moves art relative to the master frame's corner. Art drawn at the page's coordinates but added to the master sits outside the master's rectangle.
+- **Solution / Workaround**: Place master art inside the master page's own rectangle: `vector.listPages` and `vector.addMasterPage` give each master's `bounds`. Give each object a `resizing` (e.g. `vertical: "bottom"` for a footer) so it follows pages of other sizes.

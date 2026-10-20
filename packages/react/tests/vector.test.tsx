@@ -1325,3 +1325,26 @@ describe("VectorGeneratePanel (react)", () => {
     expect(group.generation.rawPrompt).toBe("a red square");
   });
 });
+
+describe("VectorPagesPanel (react)", () => {
+  it("adds pages and a master page, goes to a page and changes its master", async () => {
+    const { VectorPagesPanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    await act(async () => root.render(<VectorPagesPanel controller={c} />));
+    const click = async (sel: string) => act(async () => (container.querySelector(sel) as HTMLButtonElement).click());
+    await click('[data-vector-pages-action="add"]');
+    await click('[data-vector-pages-action="add"]');
+    await click('[data-vector-pages-action="master"]');
+    const { pages, masters } = c.getPages();
+    expect(pages).toHaveLength(2);
+    expect(pages.every((p) => p.masterId === masters[0].id)).toBe(true);
+    await click(`[data-vector-page="${pages[1].id}"]`);
+    expect(c.getState().selection).toEqual([pages[1].id]);
+    const select = container.querySelector('select[aria-label="Master page"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(c.getPages().pages[1].masterId).toBeNull();
+  });
+});

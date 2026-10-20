@@ -19,6 +19,7 @@ export * from './appearance.js';
 export * from './pathEffects.js';
 export * from './generate.js';
 export * from './stylize.js';
+export * from './pages.js';
 export * from './extrude.js';
 export * from './bevel.js';
 export * from './lens.js';

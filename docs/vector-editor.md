@@ -361,6 +361,27 @@ The vector editor generates art from prompts through `@pixerate/editor/generatio
 - **Agents.** `createVectorGenerationToolProvider(controller, { models, generate, readOnly })` gives `list_vector_art_models`, `generate_vector_art` and `regenerate_vector_art`. The write tools are hidden while read-only. Register it with `useVectorGenerationTools` in React or Svelte.
 - **Panel.** `<VectorGeneratePanel models generate>` has a prompt field, a model menu and (for image models) how the picture becomes vectors.
 
+## Pages and master pages
+
+A document's pages are its top-level frames in order, numbered from 1 (`vectorPages`). This follows CorelDRAW's pages and master page.
+
+- **Master pages.** A frame with `frame.master` set is a master page (`vectorMasterPages`). It is not a page: it is not numbered, and PDF export by artboards skips it.
+- **Using a master.** A page whose `frame.masterId` names a master draws the master's children under its own art. Each child is laid out by its `resizing` constraints from the master's rectangle to the page's (`vectorFrameChildMatrix`), so a footer pinned to the bottom stays at the bottom of a taller page. Master text can show `{page}` and `{pages}`.
+- **Derived art.** The drawn master art (`masterArt`, its ids prefixed with the page's and locked) is derived:
+  - `resolveVectorMasterPages` brings it up to date after every edit, before lenses, so a lens can show it.
+  - `stripVectorMasterArt` removes it from `toJSON()`.
+  - Rendering and the SVG, PDF and Lottie exports resolve it themselves.
+  - SVG writes it in a `frame-master` part that import skips.
+- **Editing.** Each of these is one undo step:
+  - `addPage({ name, masterId, after })` adds a frame the size of the last page, to the right of the others. The first page of a document without frames covers the artboard and takes its art in.
+  - `addMasterPage({ name, assignTo })` adds a master below the pages.
+  - `setPageMaster(masterId | null, { ids })` applies or removes a master.
+  - `movePage(id, index)` reorders pages.
+
+  `goToPage(id, { size })` selects a page and brings it into view, and `getPages()` lists them.
+- **Panel.** `<VectorPagesPanel>` has page buttons, + Page, + Master, and the selected page's master.
+- **Agent commands.** `vector.listPages`, `vector.addPage`, `vector.addMasterPage`, `vector.setPageMaster`, `vector.movePage` and `vector.goToPage`. `vector.addText` takes `parentId`, to put text on a master page.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:

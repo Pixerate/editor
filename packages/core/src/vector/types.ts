@@ -448,6 +448,13 @@ export interface VectorFrame {
 	fill?: VectorPaint;
 	/** Clip the children to the frame (default true). */
 	clip?: boolean;
+	/**
+	 * A top-level frame with `master` set is a master page: it is not a page itself (not numbered
+	 * or exported as one), and its children are drawn on every page that uses it.
+	 */
+	master?: boolean;
+	/** The master page (a top-level master frame's id) this page draws under its own art, or null. */
+	masterId?: string | null;
 }
 
 /** A shape made of one or more subpaths (holes and compound shapes included). */
@@ -624,6 +631,11 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * model, planned request; see `@pixerate/editor/generation`), so it can be regenerated.
 	 */
 	generation?: GenerationProvenance;
+	/**
+	 * Derived, not stored: a page's master art (its master page's children laid out on it), brought
+	 * up to date after every edit (`resolveVectorMasterPages`) and drawn under the page's children.
+	 */
+	masterArt?: VectorNode[];
 	/**
 	 * Makes the group a live symmetry group: it draws its children and their mirrored (or rotated)
 	 * copies, regenerated whenever a child changes. Ignored on blends, live booleans, mask groups

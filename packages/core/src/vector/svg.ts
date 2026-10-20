@@ -21,6 +21,7 @@
  * `<g data-vector-part="mask-source">`. An opacity mask's `<mask>` holds the mask as drawn.
  */
 import { parseProvenance } from '../generation/provenance.js';
+import { resolveVectorMasterPages } from './pages.js';
 import { bezierPathToSvg } from '../canvas/pathops/bezier.js';
 import { bezierPathBounds, transformBezierPath } from '../canvas/pathops/bezier.js';
 import { invertMatrix } from '../geom/affine.js';
@@ -423,7 +424,7 @@ function blendFromAttribute(value: string | undefined, m: AffineMatrix): VectorB
 /** Serializes a vector document as a standalone SVG string. */
 export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExportOptions = {}): string {
 	// Instances draw their symbol's art: resolve it when the caller's document has not.
-	doc = resolveVectorLenses(resolveVectorSymbols(doc));
+	doc = resolveVectorLenses(resolveVectorMasterPages(resolveVectorSymbols(doc)));
 	const precision = options.precision ?? 3;
 	const prefix = options.idPrefix ?? 'vg-';
 	const pretty = options.pretty !== false;
@@ -742,6 +743,12 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 			ref = ` clip-path="url(#${escapeAttr(id)})"`;
 		}
 		lines.push(`${indent(depth + 1)}<g data-vector-part="frame-contents"${ref}>`);
+		// A page's master art, drawn under its own (left out on import: it is resolved again).
+		if (node.masterArt?.length) {
+			lines.push(`${indent(depth + 2)}<g data-vector-part="frame-master">`);
+			for (const child of node.masterArt) emit(child, depth + 3);
+			lines.push(`${indent(depth + 2)}</g>`);
+		}
 		for (const child of node.children) emit(child, depth + 2);
 		lines.push(`${indent(depth + 1)}</g>`);
 		lines.push(`${indent(depth)}</g>`);
@@ -1760,7 +1767,8 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const raw = parseJson(g.attrs['data-vector-frame']);
 		const frame = sanitizeVectorFrame(raw);
 		const contentsEl = g.children.find((c) => c.name === 'g' && c.attrs['data-vector-part'] === 'frame-contents');
-		const children = contentsEl ? visit(contentsEl, style, m) : [];
+		// A page's drawn master art is not part of it (it is resolved again from the master page).
+		const children = contentsEl ? visit({ ...contentsEl, children: contentsEl.children.filter((c) => c.attrs['data-vector-part'] !== 'frame-master') }, style, m) : [];
 		const id = idFor(g);
 		if (!frame) return children.length ? { id, type: 'group', ...meta, children } : null;
 		const { rigid, residual } = decomposeRigid(m);
