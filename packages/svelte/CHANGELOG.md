@@ -1,5 +1,30 @@
 # @pixerate/editor-svelte
 
+## 0.87.0
+
+### Minor Changes
+
+- 09befd1: Brushed freehand strokes on the canvas, opt-in. `FreehandStrokeStyle.brush` takes a dry paint preset id (`ink-pen`, `pencil-hb`, …) or tip settings. The stroke stays a path shape node and gains `data.shape.brush`, with pressure and tilt profiles along its length taken from the pen, so selecting, erasing, grouping and export work as before. It is drawn with the paint engine's `renderBrushstroke` and re-rendered when the path, the brush or the zoom bucket changes. The paint engine loads only when the first brushed stroke is drawn. Strokes without a brush are unchanged.
+
+  - Core: `renderShapeBrushstroke`, `getBrushedShapeSvg` (SVG with the image embedded), `listCanvasBrushes`, `pointerPenSample`. The draw controller takes pen samples in `startStroke` / `continueStroke`, and its `drawStroke` draws a whole stroke in one undo step.
+  - Agents: `createDrawCommands` adds `canvas.drawFreehand` (points, tool, colour, width, opacity, `brush`, and `pressure` / `tiltX` / `tiltY` profiles; wet brushes are refused) and `canvas.listBrushes`.
+  - React: `<ShapeNode>` draws brushed shapes, `<ShapeNodeZoomProvider>` keeps them sharp, `useCanvasBrushes` lists the brushes, and `<CanvasDrawLayer>` passes pen pressure and tilt (coalesced events for brushed strokes).
+  - Svelte: the same, with `setShapeNodeZoom` and `createCanvasBrushes`.
+
+- aea6c2c: Gradient paint: a colour slot can hold a gradient (`PaintSource`) that brushes sample dab by dab, by distance dragged out (the default: 300 px, mirrored), pressure, tilt, speed, direction, time, across the tip or at random, mixed as pigment, Oklab or sRGB, with opacity stops, midpoints and softness. Every colour engine paints it (dab, Mixer Brush, watercolour and gouache, oil and impasto, particles, bristles, stickers), in the paint editor (`setPaint`, `paint` on strokes, `brush.paint`, gradient swatches) and the image editor's brush (`PaintOptions.paint`, also on masks and at 16 / 32 bits). Strokes record the resolved gradient, so replays and re-renders are exact.
+
+  The multi-colour brush is now a brush's own gradient (`brush.paint`): `behavior.multicolor` is still accepted on input and in old documents and presets, converted to the gradient that paints the same pixels, and reported back as a read-only view when the gradient has a multi-colour equivalent. New agent tools: `set_paint` (both editors), `get_paint` (image editor); `paint_stroke` takes `paint`, `set_brush` takes `paint`, `get_brush` returns `paint` and `strokePaint`, `add_swatch` takes `paint`. React and Svelte add `PaintGradientEditor` to the colour panel, the brush panel (replacing the multi-colour controls) and the image editor's brush options.
+
+- b89d301: Wet media: Engine B, a WebGPU accelerator for large wet areas. With `navigator.gpu` and at least 16 wet tiles (256 px), the wet step and the display shading also run in WebGPU compute shaders on the CPU engine's tile layout, and every stale tile is shaded at once instead of in main-thread JavaScript. Between strokes the GPU runs up to 16 steps ahead within the batch the CPU is computing, so large washes keep moving on screen. The CPU engine stays the authority: drying, saving, export and replay are byte-identical with the GPU on or off, and the display stays within 1/255. New in `/paint`: `createWetGpuEngine`, `wetGpuSupport`, `WetGpuEngine`, `WetWorld.attachGpu` and `displayGpu`. New in the paint editor: the `gpu` and `gpuMinTiles` wet options, `setWetEngine`, `wetEngine`, `engine` in `wetState`, `wetEngineSummary`, and the `set_wet_engine` agent tool. React and Svelte `WetPanel` get an engine select (GPU for large washes, or CPU only) and a status line.
+
+### Patch Changes
+
+- Updated dependencies [09befd1]
+- Updated dependencies [280b767]
+- Updated dependencies [aea6c2c]
+- Updated dependencies [b89d301]
+  - @pixerate/editor@0.123.0
+
 ## 0.86.3
 
 ### Patch Changes

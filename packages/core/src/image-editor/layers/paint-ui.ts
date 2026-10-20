@@ -220,10 +220,7 @@ export interface PaintPointerSample extends ImagePoint {
 }
 
 /** Pressure of a pointer event: pens report it; mice report 0.5 while pressed, which means "full". */
-export function pointerPressure(e: { pointerType?: string; pressure?: number }): number {
-  if (e.pointerType === 'pen' && typeof e.pressure === 'number' && e.pressure > 0) return Math.min(1, e.pressure);
-  return 1;
-}
+export { pointerPressure } from '../../paint/pointer';
 
 /**
  * Turns pointer events into strokes (Brush, Mixer Brush, Eraser on the active layer's target) or layer moves
