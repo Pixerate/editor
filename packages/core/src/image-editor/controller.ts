@@ -484,6 +484,8 @@ export interface PaintOptions {
   retouch: RetouchSettings;
   /** The Clone Stamp and Healing Brush source point (Alt-click), or `null` when none is set. */
   cloneSource: CloneSource | null;
+  /** Clone Source panel: how cloned pixels are scaled, flipped and rotated (identity by default). */
+  cloneTransform: CloneTransform;
 }
 
 /** Where the Clone Stamp and Healing Brush sample from. */
@@ -1298,7 +1300,7 @@ export class ImageEditorController {
       activeLayerId: null,
       activeTarget: 'pixels',
       outputOpacity: 1,
-      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', paint: { type: 'color', color: '#000000' }, mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD, retouch: { ...DEFAULT_RETOUCH }, cloneSource: null },
+      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', paint: { type: 'color', color: '#000000' }, mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD, retouch: { ...DEFAULT_RETOUCH }, cloneSource: null, cloneTransform: { ...IDENTITY_CLONE_TRANSFORM } },
       fit: options.fit ?? 'margin',
     };
 
@@ -3349,7 +3351,7 @@ export class ImageEditorController {
 
   /** Brush settings, colours and tool options of the paint tools (view state, no undo). */
   public setPaintOptions(
-    options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad' | 'retouch' | 'cloneSource'>> & {
+    options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad' | 'retouch' | 'cloneSource' | 'cloneTransform'>> & {
       brush?: Partial<BrushSettings>;
       mixer?: Partial<MixerSettings>;
       retouch?: Partial<RetouchSettings>;
@@ -3376,6 +3378,7 @@ export class ImageEditorController {
       mixerLoad: cur.mixerLoad,
       retouch,
       cloneSource,
+      cloneTransform: cur.cloneTransform,
     };
     this.state.paint = next;
     this.notify();
@@ -3419,6 +3422,25 @@ export class ImageEditorController {
     this.state.paint = { ...this.state.paint, cloneSource: source };
     this.notify();
     return source;
+  }
+
+  /**
+   * The Clone Source panel's transform for the Clone Stamp and Healing Brush: `scaleX` / `scaleY`
+   * (factors, 0.01..10 in size; negative flips) and `rotate` (degrees, clockwise), merged into the
+   * current one; `null` resets it. View state, no undo. Returns the transform.
+   */
+  public setCloneTransform(t: Partial<CloneTransform> | null): CloneTransform {
+    const cur = this.state.paint.cloneTransform;
+    const next: CloneTransform = t ? { ...cur, ...t } : { ...IDENTITY_CLONE_TRANSFORM };
+    for (const k of ['scaleX', 'scaleY'] as const) {
+      const v = next[k];
+      if (!Number.isFinite(v) || Math.abs(v) < 0.01 || Math.abs(v) > 10) throw new LayerOperationError(`${k} must be a scale factor between 0.01 and 10 in size (negative flips), not ${String(v)}.`);
+    }
+    if (!Number.isFinite(next.rotate)) throw new LayerOperationError('rotate must be a number of degrees.');
+    next.rotate = ((((next.rotate + 180) % 360) + 360) % 360) - 180;
+    this.state.paint = { ...this.state.paint, cloneTransform: next };
+    this.notify();
+    return next;
   }
 
   /** D: black foreground, white background. */
@@ -3576,7 +3598,14 @@ export class ImageEditorController {
     if (!cs) throw new LayerOperationError(`The ${tool === 'clone' ? 'Clone Stamp' : 'Healing Brush'} needs a source point; Alt-click the canvas, call set_clone_source, or pass source { x, y }.`);
     let offset = { x: 0, y: 0 };
     let first = { x: 0, y: 0 };
-    const paint = (): RetouchPaint => ({ kind: 'source', source, dx: offset.x, dy: offset.y });
+    // A Clone Source transform samples around the source point through its inverse (bilinear).
+    const xf = this.state.paint.cloneTransform;
+    const transformed = isIdentityCloneTransform(xf)
+      ? null
+      : new TransformedPixelSource(source, (x, y) => cloneSamplePoint(xf, { x: first.x + offset.x, y: first.y + offset.y }, cloneAnchor(), x, y));
+    // The target point that maps onto the source point: where the aligned offset was fixed.
+    const cloneAnchor = () => ({ x: first.x + offset.x - (settings.aligned && cs.offset ? cs.offset.x : offset.x), y: first.y + offset.y - (settings.aligned && cs.offset ? cs.offset.y : offset.y) });
+    const paint = (): RetouchPaint => (transformed ? { kind: 'source', source: transformed, dx: 0, dy: 0 } : { kind: 'source', source, dx: offset.x, dy: offset.y });
     return {
       kind: 'coverage',
       coverage,
@@ -3592,7 +3621,7 @@ export class ImageEditorController {
           ? (cov) => {
               if (!cov.bounds) return null;
               const g = pad(cov.bounds, 2);
-              const src = readSourceRegion(source, g, offset.x, offset.y);
+              const src = transformed ? readSourceRegion(transformed, g) : readSourceRegion(source, g, offset.x, offset.y);
               // The texture is fitted to what is seen: the layer, or the composite when sampling several layers.
               const dst = readSourceRegion(source, g);
               return { kind: 'source', source: new RegionPixelSource(g, healPixels(g.width, g.height, src, dst, covered(cov, g))), dx: 0, dy: 0 };
