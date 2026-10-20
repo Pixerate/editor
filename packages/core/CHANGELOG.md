@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.120.0
+
+### Minor Changes
+
+- ee7b0c3: A live Block Shadow path effect (`blockShadow`): each shape swept along an angle and drawn under the art as one solid shadow, fading into a long shadow with `endOpacity`, like CorelDRAW's Block Shadow. `sweepPath` exposes the sweep.
+
 ## 0.119.0
 
 ### Minor Changes
