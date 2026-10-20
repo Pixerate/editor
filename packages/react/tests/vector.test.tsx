@@ -1250,3 +1250,33 @@ describe("corner smoothing (react)", () => {
     expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
   });
 });
+
+describe("VectorLensPanel (react)", () => {
+  it("makes the selected closed path a lens, edits its amount and removes it", async () => {
+    const { VectorLensPanel } = await import("../src/vector");
+    const c = new VectorEditorController({ document: doc() });
+    c.select(["a"]);
+    await act(async () => root.render(<VectorLensPanel controller={c} />));
+    const select = container.querySelector('select[aria-label="Lens type"]') as HTMLSelectElement;
+    const setValue = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
+      const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+    };
+    await act(async () => {
+      setValue(select, "magnify");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens).toEqual({ type: "magnify", amount: 2 });
+    const amount = container.querySelector('input[aria-label="Lens amount"]') as HTMLInputElement;
+    await act(async () => {
+      setValue(amount, "3");
+      amount.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens?.amount).toBe(3);
+    await act(async () => {
+      setValue(select, "");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect((c.getNode("a") as VectorPathNode).lens).toBeUndefined();
+  });
+});

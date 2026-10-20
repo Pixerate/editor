@@ -50,6 +50,7 @@ import { isVectorFrame, vectorFrameDrawn } from './frames.js';
 import { parseVectorColor } from './gradient.js';
 import { shadeVectorColor, vectorExtrudeFaces, vectorPaintSolid } from './extrude.js';
 import { vectorBevelFaces } from './bevel.js';
+import { isVectorLens, vectorLensDrawn } from './lens.js';
 import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
@@ -420,7 +421,7 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
  * Text always does: it draws as its glyphs.
  */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || isVectorSymmetryGroup(node) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || isVectorSymmetryGroup(node) || isVectorLens(node) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -998,8 +999,9 @@ export function expandVectorAppearance(node: VectorNode): VectorPathNode | Vecto
 		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
 		return drawn;
 	}
-	if (isVectorFrame(node) || isVectorSymmetryGroup(node)) {
-		const drawn = isVectorFrame(node) ? vectorFrameDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup);
+	if (isVectorFrame(node) || isVectorSymmetryGroup(node) || isVectorLens(node)) {
+		// A lens draws its changed backdrop; its bounds and hits stay its own shape (vectorAppearanceShapes).
+		const drawn = isVectorFrame(node) ? vectorFrameDrawn(node) : isVectorLens(node) ? vectorLensDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup);
 		const out = hasVectorAppearance(drawn) ? expandVectorAppearance(drawn) : drawn;
 		expandCache.set(node, [vectorTextShaperGeneration(), out]);
 		return out;

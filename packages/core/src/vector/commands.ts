@@ -1,3 +1,4 @@
+import { VECTOR_LENS_SPECS } from './lens.js';
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
 import { vectorNodeBounds, vectorNodeRotation, vectorParentMatrix, vectorPathData, IDENTITY_MATRIX } from './geometry.js';
@@ -22,7 +23,7 @@ import type { VectorFreeformPoint, VectorPathNode } from './types.js';
 import { VECTOR_TRACE_MAX_PIXELS, type VectorTraceOptions } from './trace.js';
 import { bytesToBase64, decodePng, isPng, parseDataUrl } from '../raster/png.js';
 import type { VectorPdfOptions } from './pdf.js';
-import { VECTOR_SYMMETRY_MODES, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
+import { VECTOR_LENS_TYPES, VECTOR_SYMMETRY_MODES, type VectorLens, type VectorLensType, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
 import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute } from './types.js';
 import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import { layoutVectorText, vectorTextFamilies, vectorTextHasOutlines } from './text.js';
@@ -90,6 +91,8 @@ export interface VectorNodeListing {
 	symmetry?: VectorSymmetry;
 	/** A connector's ends and route (see vector.listConnectors). */
 	connector?: VectorConnector;
+	/** A lens's settings (see vector.setLens). */
+	lens?: VectorLens;
 	/** A mask group's mask: type, inversion, the mask's id (its first child) and the masked contents. */
 	mask?: VectorMaskSummary;
 }
@@ -332,7 +335,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...(isVectorFrame(n) ? { frameRect: n.frame } : {}),
 					...(n.resizing ? { resizing: n.resizing } : {}),
 					...(n.type === 'path' && n.connector ? { connector: n.connector } : {}),
-					...(n.type === 'group' && n.symmetry ? { symmetry: n.symmetry } : {})
+					...(n.type === 'group' && n.symmetry ? { symmetry: n.symmetry } : {}),
+					...(n.type === 'path' && n.lens ? { lens: n.lens } : {})
 				});
 				if (n.type === 'group') visit(n.children, depth + 1);
 			}
@@ -1334,6 +1338,52 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	const LENS_AMOUNTS = VECTOR_LENS_TYPES.map((t) => `${t} ${VECTOR_LENS_SPECS[t].min}…${VECTOR_LENS_SPECS[t].max} ${VECTOR_LENS_SPECS[t].unit} (default ${VECTOR_LENS_SPECS[t].amount})`).join('; ');
+	const lensCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}setLens`,
+			label: 'Lens…',
+			keywords: ['lens', 'magnify', 'fisheye', 'fish eye', 'invert', 'brighten', 'grayscale', 'heat map', 'wireframe', 'transparency', 'tint', 'loupe'],
+			description:
+				'Makes closed paths (`ids`, default the selection) lenses, or changes their lens: inside its outline, what is drawn below shows changed (magnify, fisheye, brighten, invert, tintedGrayscale, colorAdd, colorLimit, heatMap, wireframe, or the lens\'s own fill see-through for transparency). The lens follows every edit below it; its bounds stay its own shape. Pass type to make or switch a lens (missing values take that type\'s defaults); omit it to change amount or color of existing lenses. One undo step. Returns { lenses: [{ id, lens }] }.',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Closed paths to make or change (default: the selection).' },
+					type: { type: 'string', enum: [...VECTOR_LENS_TYPES], description: 'What the lens does. Required for a path that is not a lens yet.' },
+					amount: { type: 'number', description: `Strength, by type: ${LENS_AMOUNTS}.` },
+					color: { type: ['string', 'null'], description: 'CSS colour for tintedGrayscale, colorAdd, colorLimit and wireframe (default per type; ignored by the others).' }
+				},
+				additionalProperties: false
+			},
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[]; type?: VectorLensType; amount?: number; color?: string | null } | undefined) => {
+				const { ids: list, ...patch } = params ?? {};
+				if (!Object.keys(patch).length) fail('Pass at least one of type, amount, color.');
+				const r = controller.setLens(patch, list ? { ids: list } : {});
+				check(r);
+				return { lenses: r.lenses ?? [] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeLens`,
+			label: 'Remove Lens',
+			keywords: ['lens', 'remove', 'plain'],
+			description: 'Makes lenses (`ids`, default the selection) plain paths again; ids that are not lenses are skipped. One undo step. Returns { ids } of the paths that stopped being lenses.',
+			params: { type: 'object', properties: { ids: { ...IDS, description: 'Lens ids (default: the selection).' } }, additionalProperties: false },
+			undoable: true,
+			enabled: enabledFor,
+			run: (_ctx: unknown, params: { ids?: string[] } | undefined) => {
+				const r = controller.setLens(null, params?.ids ? { ids: params.ids } : {});
+				check(r);
+				return { ids: (r.lenses ?? []).map((l) => l.id) };
+			}
+		}
+	];
+
 	const pdfCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2198,6 +2248,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...lottieCommands(),
 		...pdfCommands(),
 		...symmetryCommands(),
+		...lensCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
