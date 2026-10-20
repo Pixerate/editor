@@ -240,13 +240,22 @@ const CanvasDemo: React.FC = () => {
     initialTool: "select",
   });
   // Dry paint brushes for freehand strokes; the paint engine loads when this list is first read.
+  // Picking a brush sets the size to the preset's own; the slider then changes the brush size.
   const [brushId, setBrushId] = useState("");
-  const brushes = useCanvasBrushes();
+  const [brushSize, setBrushSize] = useState<number | undefined>(undefined);
+  const [brushMenuOpen, setBrushMenuOpen] = useState(false);
+  const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, color: "#e2e8f0" } });
+  const pickBrush = useCallback((id: string) => {
+    setBrushId(id);
+    setBrushSize(brushes.brushes.find((b) => b.id === id)?.size);
+    setBrushMenuOpen(false);
+  }, [brushes.brushes]);
   useEffect(() => {
-    if ((draw.tool === "pen" || draw.tool === "highlighter") && (draw.style.brush ?? "") !== brushId) {
-      draw.setStyle({ brush: brushId || undefined });
+    if ((draw.tool === "pen" || draw.tool === "highlighter") && ((draw.style.brush ?? "") !== brushId || draw.style.brushSize !== brushSize)) {
+      draw.setStyle({ brush: brushId || undefined, brushSize: brushId ? brushSize : undefined });
     }
-  }, [draw, brushId]);
+  }, [draw, brushId, brushSize]);
+  const currentBrush = brushes.brushes.find((b) => b.id === brushId);
   // Gradient paint for brushed strokes, sampled dab by dab (the stroke colour fills "paint" stops).
   const [brushPaintId, setBrushPaintId] = useState("");
   useEffect(() => {
@@ -605,29 +614,65 @@ const CanvasDemo: React.FC = () => {
             })}
           </div>
           {draw.tool !== "select" && draw.tool !== "eraser" && (
-            <input
-              type="range"
-              min={draw.tool === "highlighter" ? 12 : 1}
-              max={draw.tool === "highlighter" ? 48 : draw.style.brush ? 60 : 16}
-              value={draw.style.width}
-              onChange={(e) => draw.setStyle({ width: Number(e.target.value) })}
-              className="w-16 accent-sky-500 cursor-pointer"
-              title={`Stroke width: ${draw.style.width}px`}
-            />
+            brushId ? (
+              <input
+                type="range"
+                min={1}
+                max={120}
+                value={brushSize ?? currentBrush?.size ?? 10}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                className="w-16 accent-sky-500 cursor-pointer"
+                title={`Brush size: ${brushSize ?? currentBrush?.size}px`}
+                aria-label="Brush size"
+              />
+            ) : (
+              <input
+                type="range"
+                min={draw.tool === "highlighter" ? 12 : 1}
+                max={draw.tool === "highlighter" ? 48 : 16}
+                value={draw.style.width}
+                onChange={(e) => draw.setStyle({ width: Number(e.target.value) })}
+                className="w-16 accent-sky-500 cursor-pointer"
+                title={`Stroke width: ${draw.style.width}px`}
+              />
+            )
           )}
           {draw.tool !== "select" && draw.tool !== "eraser" && (
-            <select
-              value={brushId}
-              onChange={(e) => setBrushId(e.target.value)}
-              className="bg-slate-800 text-slate-200 text-xs rounded px-1 py-1 max-w-[8.5rem]"
-              title="Brush: a plain vector stroke, or a dry paint brush (pressure and tilt from a pen)"
-              aria-label="Freehand brush"
-            >
-              <option value="">Vector stroke</option>
-              {brushes.brushes.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 bg-slate-800 text-slate-200 text-xs rounded px-1.5 py-1"
+                onClick={() => setBrushMenuOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={brushMenuOpen}
+                aria-label="Freehand brush"
+                title="Brush: a plain vector stroke, or a dry paint brush (pressure and tilt from a pen)"
+              >
+                {currentBrush?.swatch ? <img src={currentBrush.swatch} alt="" className="h-4 w-12 object-contain" /> : null}
+                <span>{currentBrush?.name ?? "Vector stroke"}</span>
+              </button>
+              {brushMenuOpen && (
+                <ul role="listbox" aria-label="Brushes" className="absolute z-50 mt-1 w-52 max-h-72 overflow-auto bg-slate-900 border border-slate-700 rounded shadow-lg p-1">
+                  <li role="option" aria-selected={!brushId}>
+                    <button type="button" className="w-full text-left text-xs text-slate-200 px-2 py-1.5 rounded hover:bg-slate-800" onClick={() => pickBrush("")}>
+                      Vector stroke
+                    </button>
+                  </li>
+                  {brushes.brushes.map((b) => (
+                    <li key={b.id} role="option" aria-selected={b.id === brushId}>
+                      <button
+                        type="button"
+                        className={`w-full flex items-center gap-2 text-left text-xs text-slate-200 px-2 py-1 rounded hover:bg-slate-800 ${b.id === brushId ? "bg-slate-800" : ""}`}
+                        onClick={() => pickBrush(b.id)}
+                      >
+                        {b.swatch ? <img src={b.swatch} alt="" className="h-[22px] w-24 object-contain" /> : <span className="h-[22px] w-24" />}
+                        <span>{b.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {draw.tool !== "select" && draw.tool !== "eraser" && brushId && (
             <select

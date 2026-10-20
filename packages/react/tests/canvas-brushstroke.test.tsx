@@ -120,4 +120,17 @@ describe('brushed freehand strokes (react)', () => {
 		expect(ref.brushes.map((b) => b.id)).toContain('ink-pen');
 		expect(ref.brushes.some((b) => b.id === 'watercolor-round')).toBe(false);
 	});
+
+	it('useCanvasBrushes renders a swatch per brush on request', async () => {
+		const ref: { brushes: Array<CanvasBrushPreset & { swatch?: string }> } = { brushes: [] };
+		function Test() {
+			ref.brushes = useCanvasBrushes({ swatches: { width: 60, height: 20 } }).brushes;
+			return null;
+		}
+		await act(async () => root.render(<Test />));
+		await act(async () => new Promise((r) => setTimeout(r, 300)));
+		expect(ref.brushes.length).toBeGreaterThan(5);
+		expect(ref.brushes.every((b) => b.swatch?.startsWith('data:image/png;base64,'))).toBe(true);
+		expect(new Set(ref.brushes.map((b) => b.swatch)).size).toBe(ref.brushes.length);
+	});
 });

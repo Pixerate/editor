@@ -22,13 +22,16 @@
 		width?: number;
 		height?: number;
 		selected?: boolean;
+		/** Absolute canvas position (SvelteFlow passes it): brushed strokes sample the paper grain there. */
+		positionAbsoluteX?: number;
+		positionAbsoluteY?: number;
 		class?: string;
 		/** Rendered over the shape, e.g. SvelteFlow `<Handle>`s or a label. */
 		children?: Snippet;
 		[key: string]: any;
 	}
 
-	let { id, data, width, height, selected = false, class: className = '', children }: Props = $props();
+	let { id, data, width, height, selected = false, class: className = '', children, positionAbsoluteX = 0, positionAbsoluteY = 0 }: Props = $props();
 
 	const shape = $derived(isShapeDescription(data?.shape) ? data.shape : null);
 	const effectsProvider = getCanvasEffectsProvider();
@@ -46,12 +49,16 @@
 	$effect(() => {
 		const target = brushed;
 		const scale = brushScale;
+		const vb = target?.viewBox;
+		const unit = vb && width && vb[2] > 0 ? width / vb[2] : 1;
+		// Path (0, 0) on the canvas, in whole units so small drags do not re-render.
+		const origin = { x: Math.round(positionAbsoluteX - (vb?.[0] ?? 0) * unit), y: Math.round(positionAbsoluteY - (vb?.[1] ?? 0) * unit) };
 		if (!target) {
 			brushImage = null;
 			return;
 		}
 		let live = true;
-		renderShapeBrushstroke(target, { scale }).then(
+		renderShapeBrushstroke(target, { scale, origin, unit }).then(
 			(img) => {
 				if (live) brushImage = img;
 			},

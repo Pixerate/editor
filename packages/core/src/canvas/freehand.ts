@@ -11,7 +11,7 @@ import { getNodeRect } from './arrange.js';
 export type FreehandTool = 'select' | 'pen' | 'highlighter' | 'eraser';
 
 import type { CanvasGradientDef } from './gradient.js';
-import { profileAlongPolyline } from './brushstroke.js';
+import { brushstrokeSeed, profileAlongPolyline } from './brushstroke.js';
 import type { CanvasBrush, CanvasBrushPaint, CanvasBrushstroke } from './brushTypes.js';
 
 export interface FreehandStrokeStyle {
@@ -33,6 +33,11 @@ export interface FreehandStrokeStyle {
 	 * paths, exactly as before.
 	 */
 	brush?: CanvasBrush;
+	/**
+	 * Brush diameter in canvas units for brushed strokes. Default: the preset's own size (tip
+	 * settings: their `size`, else `width`). Set it when the user picks a size.
+	 */
+	brushSize?: number;
 	/**
 	 * Gradient paint (or one colour) for a brushed stroke instead of `color`, sampled dab by dab
 	 * along the path; `color` still gives the alpha and fills `paint` stops. Only with `brush`.
@@ -227,7 +232,8 @@ export function strokeToShapeNode(
 	options: StrokeToShapeNodeOptions = {}
 ): CanvasNode {
 	const points = stroke.points;
-	const strokeWidth = stroke.style.width || 3;
+	// A brushed stroke with a chosen size is that wide (the eraser and bounds read strokeWidth).
+	const strokeWidth = (stroke.style.brush !== undefined && stroke.style.brushSize) || stroke.style.width || 3;
 	const bounds = strokeBoundingBox(points, 0);
 
 	// Normalize points to node-local origin (0, 0)
@@ -272,7 +278,10 @@ export function strokeToShapeNode(
 					? {
 							brush: {
 								...freehandBrushstroke(stroke.style.brush, localPoints, stroke.samples, options.profileLength),
-								...(stroke.style.paint !== undefined ? { paint: stroke.style.paint } : {})
+								...(stroke.style.paint !== undefined ? { paint: stroke.style.paint } : {}),
+								// New strokes carry a character seed (jitter and grain) and their size, if chosen.
+								seed: brushstrokeSeed(options.id ?? stroke.id),
+								...(stroke.style.brushSize !== undefined && stroke.style.brushSize > 0 ? { size: stroke.style.brushSize } : {})
 							}
 						}
 					: {}),

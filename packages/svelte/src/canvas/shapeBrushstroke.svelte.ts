@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import { brushstrokeScaleBucket, listCanvasBrushes, type CanvasBrushPreset } from '@pixerate/editor/canvas';
+import { brushstrokeScaleBucket, listCanvasBrushes, renderCanvasBrushSwatch, type CanvasBrushPreset, type CanvasBrushSwatchOptions } from '@pixerate/editor/canvas';
 
 const ZOOM_KEY = Symbol('pixerate-shape-node-zoom');
 
@@ -17,12 +17,18 @@ export function getShapeNodeZoom(): () => number {
 	return getContext<(() => number) | undefined>(ZOOM_KEY) ?? (() => 1);
 }
 
-/** The dry paint presets a freehand stroke can be brushed with (loads the paint engine). */
-export function createCanvasBrushes() {
-	let brushes = $state.raw<CanvasBrushPreset[]>([]);
+/**
+ * The dry paint presets a freehand stroke can be brushed with (loads the paint engine); with
+ * `swatches`, each with a preview image (`renderCanvasBrushSwatch`) for a brush menu.
+ */
+export function createCanvasBrushes(options: { swatches?: CanvasBrushSwatchOptions } = {}) {
+	let brushes = $state.raw<Array<CanvasBrushPreset & { swatch?: string }>>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	listCanvasBrushes().then(
+	const opts = options.swatches;
+	listCanvasBrushes()
+		.then(async (list) => (opts ? Promise.all(list.map(async (b) => ({ ...b, swatch: await renderCanvasBrushSwatch(b.id, opts) }))) : list))
+		.then(
 		(list) => {
 			brushes = list;
 			loading = false;

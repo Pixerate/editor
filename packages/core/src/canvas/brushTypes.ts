@@ -90,6 +90,32 @@ export interface CanvasBrushstroke {
 	/** Pointer Events pen tilt in degrees (−90..90) along the length. */
 	tiltX?: number[];
 	tiltY?: number[];
+	/**
+	 * Character seed. A stroke with one renders the brush's character: its seeded size, angle,
+	 * opacity and scatter jitter and the paper grain it catches (charcoal, pastel and pencil get
+	 * their look from these). New strokes get one; older strokes without it render plain dabs at
+	 * the stroke width, exactly as before.
+	 */
+	seed?: number;
+	/**
+	 * Brush diameter in path units. Missing: the preset's own size (tip settings: their `size`, else
+	 * the stroke width) for strokes with a `seed`, the stroke width for older ones.
+	 */
+	size?: number;
+	/** The paper the grain comes from (default the built-in sanded grain); `null` for no grain. */
+	paper?: CanvasBrushPaper | null;
+}
+
+/** Paper for a brushed stroke's grain (the paint engine's `BrushstrokePaper`). */
+export interface CanvasBrushPaper {
+	/** Grain pattern (default `sanded`: a fine, even tooth). */
+	pattern?: 'smooth' | 'cold-pressed' | 'hot-pressed' | 'rough' | 'vellum' | 'laid' | 'ingres' | 'sanded' | 'canvas' | 'linen' | 'gesso';
+	/** Grain seed (default 1). */
+	seed?: number;
+	/** Grain scale in canvas units, 1 the pattern's natural size (0.25..8, default 1). */
+	scale?: number;
+	/** Grain depth 0..1, times the brush's grain response (default 0.5). */
+	depth?: number;
 }
 
 /** A dry paint preset that can brush a canvas stroke. */
@@ -97,6 +123,6 @@ export interface CanvasBrushPreset {
 	id: string;
 	name: string;
 	category: string;
-	/** The preset's own tip diameter in pixels (the stroke width replaces it). */
+	/** The preset's own tip diameter in canvas units: a new brushed stroke's default size. */
 	size: number;
 }

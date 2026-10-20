@@ -74,4 +74,14 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect(brushes!.loading).toBe(false);
 		cleanup();
 	});
+
+	it('createCanvasBrushes renders a swatch per brush on request', async () => {
+		let brushes: ReturnType<typeof createCanvasBrushes> | undefined;
+		const cleanup = $effect.root(() => {
+			brushes = createCanvasBrushes({ swatches: { width: 60, height: 20 } });
+		});
+		await new Promise((r) => setTimeout(r, 300));
+		expect(brushes!.brushes.every((b) => b.swatch?.startsWith('data:image/png;base64,'))).toBe(true);
+		cleanup();
+	});
 });
