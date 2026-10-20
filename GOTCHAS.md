@@ -1780,6 +1780,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A Svelte test that opened a real WebSocket under the jsdom environment threw `The "event" argument must be an instance of Event`.
 - **Root Cause**: jsdom replaces the global `Event`, and Node's built-in WebSocket (undici) rejects events that are not its own. Under the `node` environment, the Svelte tests resolve the server build, where `$effect.root` does not run.
 - **Solution / Workaround**: Test the network path in core under the `node` environment (`tests/tool-bridge.test.ts`). Test runes with a fake socket passed as `options.WebSocket`.
+
 ### [core/chart] Agent Cursors Never Disappeared After `linger`
 
 - **Issue / Symptom**: A `ChartDirector` cursor stayed on the chart after its command finished, although `linger` should hide it.
@@ -2158,6 +2159,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging the paper's grain-depth slider, or the colour picker, in the React paint editor left dozens of "Paper" entries in the undo history.
 - **Root Cause**: `setPaper` is one undo step per call. React's `onChange` on a range or colour input fires on every `input` event, not on release. Brush settings are editor state, so updating them live is fine, but paper settings are document state.
 - **Solution / Workaround**: `PaintSlider` takes `onCommit`, which runs on the native `change` event (attached with `addEventListener` in React, `onchange` in Svelte), and keeps a local draft value while dragging. `CommitColorInput` does the same for the React colour input. Tests dispatch `input` then `change` and check for exactly one undo step.
+
 ### [core/image-editor] A Smart Object's Pixels Are a Cache the Compositor Draws Like a Pixel Layer
 
 - **Issue / Symptom**: A smart object's `surface` looks like a pixel layer's, but painting into it, or changing `placement` / `smartFilters` / `contents` with a plain object spread, leaves the layer showing stale pixels (and the next transform throws the paint away).
@@ -2266,6 +2268,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The canvas cannot take text input. Focus has to move to an element that can, and that element only exists once the click has opened a `TextEditSession` (after the pointer is released). Composed text comes as `compositionend` / `input`, not as `keydown` keys.
 - **Solution / Workaround**: Both editors render a 1 px transparent `<textarea data-testid="type-input">` while a session is open and focus it on the next tick after mouse-up. `keydown` goes to `TextEditSession.handleKey` (single characters, Backspace, Delete, Enter, arrows, Home / End, Cmd/Ctrl+A) unless `isComposing`; `compositionend` and `input` insert the composed or pasted text and clear the textarea. Cmd/Ctrl+Z / C / X / V are left to the browser. All edits of one session are one undo step (the first change records history, the rest pass `commitToHistory: false`). Automated tests type into the textarea; a browser driver that types immediately after the click can beat the focus.
 
+### [core/image-editor] Browsers Decode Images to sRGB, So an Opened Image's Own Profile Is Not Kept
+
+- **Issue / Symptom**: A Display P3 JPEG opened with `loadImage` showed as sRGB in `get_color_profile`, and assigning its embedded profile afterwards made it look oversaturated.
+- **Root Cause**: An `<img>` drawn to a 2D canvas is colour-managed by the browser into the canvas's sRGB space, so the pixels the editor reads are already sRGB numbers. The file's profile no longer describes them.
+- **Solution / Workaround**: Keep sRGB for images that came through the browser decoder (the default). Only PSDs (decoded by us) take their embedded profile as the document's. To keep a wide-gamut working space for a photo, `convert_to_profile` after opening (out-of-sRGB colours are already clipped), or decode the file yourself without colour conversion and `assignProfile(readJpegIcc(bytes))`.
+
+### [core/cms] The Synthetic CMYK Profile Is Built on First Use
+
+- **Issue / Symptom**: The first `set_proof_setup` or `convert_colors` with `coated-cmyk` took one to three seconds; later calls were instant.
+- **Root Cause**: The profile is generated from a printing model (its B2A tables are a damped least-squares separation at every grid node) instead of shipping 230 KB of measured data, and `builtinProfile` caches the result.
+- **Solution / Workaround**: Expected. Call `builtinProfile('coated-cmyk')` early (e.g. idle time) to warm it. Tests that touch it need a timeout of about a minute on slow CI machines.
+
 ### [core/vector] A Frame's Size Field Must Not Apply Each Keystroke
 
 - **Issue / Symptom**: Typing a new width such as 400 into a frame's size field squashed children that stretch with the frame (`leftRight` / `topBottom`), and their margins came back wrong.
@@ -2295,6 +2309,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Digit shortcuts did nothing while a pen path was in progress.
 - **Root Cause**: Like CAD direct distance entry, `keyDown` turns `0`–`9`, `.`, `-` and `@` into a typed entry while the pen has a path open (`state.typedEntry`). Enter places the point, Backspace edits the entry and Escape drops it.
 - **Solution / Workaround**: Bind digit shortcuts with a modifier, or finish the path first (Escape, or switch tools). Hosts that show the entry should read `overlay.typedEntry`.
+
 ### [core/raster] Deep Samples Ride Next to the 8-bit Tile, and 8-bit Writers Drop Them
 
 - **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
@@ -2318,6 +2333,7 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In a 16-bit merge, a layer with a drop shadow or a develop filter kept only 8-bit precision, and a Multiply shadow over a coloured backdrop looked slightly different from the viewport.
 - **Root Cause**: `DeepCompositor` hands those layers to the 8-bit compositor it wraps, rendered alone (normal blend, full opacity, over transparency), converts the result and blends it in float with the layer's blend mode and opacity. An effect's own blend mode therefore sees a transparent backdrop.
 - **Solution / Workaround**: Expected until effects and filters get float paths. Everything else in the stack (pixel layers, masks, clipping, groups, adjustment layers) keeps full depth. If a deep merge must match the viewport exactly, rasterize the effects first.
+
 ### [core/image-editor] Retouch Sources Must Be Captured When the Stroke Starts
 
 - **Issue / Symptom**: A Healing Brush stroke sampling Current & Below or All came out matched to its own clone instead of to the photo, and a Clone Stamp stroke running over its own source copied the same pixels on and on.

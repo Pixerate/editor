@@ -514,6 +514,25 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "image-color",
+    prompt: "Check how this prints on a coated press and give me the CMYK of the brand blue",
+    steps: [
+      { say: "Reading the document's colour profile.", tool: "image__get_color_profile", args: {}, open: "Layers" },
+      {
+        say: "Soft-proofing through the coated CMYK profile, with a gamut warning on the colours the press cannot hit.",
+        tool: "image__set_proof_setup",
+        args: { profile: "coated-cmyk", intent: "relative", gamutWarning: true },
+      },
+      { say: "Rendering a preview of the proof.", tool: "image__render_preview", args: { maxSide: 360 } },
+      {
+        say: "The CMYK values for the brand blue and a neutral grey.",
+        tool: "image__convert_colors",
+        args: { colors: ["#1e40af", "#808080"], to: "coated-cmyk" },
+      },
+      { say: "Proofing off again; the pixels never changed.", tool: "image__set_proof_setup", args: { off: true } },
+    ],
+  },
+  {
     id: "image-retouch",
     prompt: "Clean up a spot, clone over a patch and lift the midtones",
     steps: [

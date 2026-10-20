@@ -183,6 +183,10 @@ drawing or editing either.
    false` and `cleanEachStroke: false`, start with `load_mixer_brush`, read the brush with
    `get_mixer_brush` when unsure, and reset it with `clean_mixer_brush`.
 
+### Colour management
+
+The working space, Assign / Convert to Profile with intents, soft proofing with a gamut warning
+and colour conversions for print briefs: read [references/color-management.md](references/color-management.md).
 ### Retouching
 
 Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn and Sponge: retouch on an empty
@@ -192,9 +196,9 @@ flaws and `clone_stamp` to copy exactly, and keep strokes short and soft. Read
 
 ### Photoshop files
 
-Call `inspect_psd` before `import_psd` and tell the user what would be lost; `import_psd` replaces
-the document and `export_psd` writes the stack as it is. Read
-[references/photoshop-files.md](references/photoshop-files.md) before opening or writing a PSD.
+`inspect_psd` before `import_psd`, then work with `list_layers`; `export_psd` writes the stack
+in the source frame at the document's bit depth, colour mode and profile. Read
+[references/photoshop-files.md](references/photoshop-files.md) before opening or saving a PSD.
 
 ## Best practices
 
@@ -370,6 +374,11 @@ the document and `export_psd` writes the stack as it is. Read
 | `get_mixer_brush` | Read-only. The Mixer Brush settings and what it carries (`reservoir` #rrggbb or null, `amount` left 0..1, `pickup` #rrggbb or null). Call it before a mixer stroke with `loadEachStroke: false`. |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with `color` (default the foreground), amount 1; keeps the pickup. View state, not an undo step. Use before strokes with `loadEachStroke: false`. Returns the load. |
 | `clean_mixer_brush` | Empty the Mixer Brush pickup well (`emptyReservoir: true` also drops the loaded paint, so it only smears). View state, not an undo step. Returns the load. |
+| `get_color_profile` | Read-only. The document's profile (`name`, `builtin` id or null, `colorSpace`, `srgb`), the Proof Setup or null, and the built-in profiles. |
+| `assign_profile` | Make the document's numbers mean colours in `profile` (built-in id or `icc:<base64>`; RGB only). The look changes, pixels do not. One undo step. Returns the profile. |
+| `convert_to_profile` | Convert pixel layers into `profile` keeping their look (`intent`, `bpc`), then assign it. One undo step. Returns the profile, `convertedLayerIds` and `unconvertedLayerIds` (shape, type, effects, smart objects). |
+| `set_proof_setup` | Soft-proof the viewport through `profile` (`intent`, `bpc`, `simulatePaper`, `gamutWarning`), or `off: true`. View state. Returns the setup. |
+| `convert_colors` | Read-only. `colors` #rrggbb from the document's profile (or `from`) to `to`: channel `values` 0..1 (CMYK, RGB, grey), `hex` for RGB, and `lab`. |
 | `clone_stamp` | Copy pixels from the clone source along `points`: each point paints what is at point + offset (source − first point, whole px). `source` `{x, y}` sets the source for this stroke (else the current one, see `set_clone_source`); `aligned` keeps the offset for later strokes; `sample` current \| current-below \| all; `brush` `{size, hardness, spacing, opacity, flow, smoothing, pressureSize, pressureOpacity}`; `layerId`, `channel` (a mask clones from itself). One undo step. Returns the layer, channel, `bounds`, dabs and `clone` `{offset, source, aligned}`. Call `set_clone_source` or pass `source` first. |
 | `heal_brush` | As `clone_stamp`, then blends the cloned texture into the colour and light around the stroke (Poisson seamless cloning, when the stroke ends). Use for blemishes, wrinkles, dust and seams where the surroundings have the right tone. Returns as `clone_stamp`. |
 | `spot_heal` | Remove what `points` cover with no source: `type` proximity-match (default: copies the best matching nearby patch, then heals it in) or smooth (fills from the edges). `sample`, `brush`, `layerId`, `channel`. One undo step. Returns the layer, channel, `bounds`, dabs and `spotHeal` `{offset}` (null for a smooth fill). |

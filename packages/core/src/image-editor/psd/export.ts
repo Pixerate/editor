@@ -75,6 +75,8 @@ export interface PsdExportInput {
   patterns?: readonly EffectPattern[];
   /** Written as image resources 1037 and 1049. */
   globalLight?: GlobalLight;
+  /** The document's ICC profile, written as image resource 1039. */
+  iccProfile?: Uint8Array;
   /** Bits per channel to write (default 8): 16 and 32 write the layers' deep samples (see `raster/deep`). */
   depth?: 8 | 16 | 32;
   /** The composite at `depth` (RGBA samples: 16-bit sRGB or 32-bit linear), written instead of `merged`. */
@@ -507,6 +509,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     { id: 1005, name: '', data: rw.result() },
     { id: 1057, name: '', data: version.result() },
   ];
+  if (input.iccProfile?.length) resources.push({ id: 1039, name: '', data: input.iccProfile });
   if (input.globalLight) {
     const i32 = (v: number) => {
       const w = new PsdWriter();

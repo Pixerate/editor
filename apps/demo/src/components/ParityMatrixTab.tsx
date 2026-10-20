@@ -321,6 +321,13 @@ const FEATURES: ParityRow[] = [
     note: "Round brush with hardness, spacing, opacity vs flow, smoothing and pressure; mask painting; selection-limited; one undo step per stroke; paint_stroke / fill_pixels / clear_pixels agent tools",
   },
   {
+    feature: "Image Colour Management (working space, assign / convert, soft proofing)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "TypeScript ICC engine (@pixerate/editor/cms); document profile in history and JSON; intents and BPC; colour-managed viewport; Proof Setup with gamut warning; profiles in PSD, PNG and JPEG; five agent tools",
+  },
+  {
     feature: "Image Retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge)",
     core: true,
     react: true,
