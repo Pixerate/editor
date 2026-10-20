@@ -52,6 +52,11 @@ export interface Tile {
   readonly data: Uint8ClampedArray;
   /** The packed value of every pixel when the tile is uniform, else `null`. */
   readonly uniform: number | null;
+  /**
+   * High bit depth samples (see `./deep`): 16-bit sRGB-encoded or 32-bit linear float, of which
+   * `data` is the 8-bit rendering. Missing: the tile is 8-bit.
+   */
+  readonly deep?: Uint16Array | Float32Array;
 }
 
 let nextSurfaceId = 1;

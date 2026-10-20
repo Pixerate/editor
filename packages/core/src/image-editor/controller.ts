@@ -182,7 +182,7 @@ import {
   type ImageEditorAssetStore,
   type SerializedLayeredImageEditorState,
 } from './layers/serialize';
-import { LayerCompositor, type CompositorSources } from './layers/compositor';
+import { LayerCompositor, compositeDeep, type CompositorSources } from './layers/compositor';
 import {
   SurfaceDraft,
   TILE,
@@ -203,8 +203,11 @@ import {
   type TileKey,
   TiledSurface as TiledSurfaceClass,
   finishTile,
+  tileCoord,
   tileKey,
 } from '../raster/surface';
+import { convertSurfaceDepth, isBitDepth, surfaceFromDeepPixels, to16From8, type BitDepth } from '../raster/deep';
+import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
   addLayerEffect as addLayerEffectOp,
@@ -239,17 +242,36 @@ import {
   DEFAULT_BRUSH,
   DEFAULT_MIXER,
   EMPTY_MIXER_LOAD,
+  DEFAULT_RETOUCH,
   MixerStroke,
+  RegionPixelSource,
+  RetouchDabStroke,
   StrokeCoverage,
+  TilePixelSource,
+  applyRetouchToTile,
   applyStrokeToTile,
   cleanMixer,
+  healPixels,
   loadMixer,
   normalizeBrush,
   normalizeMixer,
+  normalizeRetouch,
+  readSourceRegion,
+  rgbaViewOfGrey,
+  smudgeEffect,
+  spongeEffect,
+  spotHealPixels,
+  spotHealWindow,
+  toneOf,
   type BrushSettings,
   type MixerLoad,
   type MixerSettings,
   type MixerTarget,
+  type PaintTileTarget,
+  type PixelSource,
+  type RetouchApply,
+  type RetouchPaint,
+  type RetouchSettings,
   type StrokeApply,
   type StrokePoint,
 } from '../paint';
@@ -423,6 +445,19 @@ export interface PaintOptions {
   mixer: MixerSettings;
   /** What the Mixer Brush carries now: its reservoir, how much is left and the picked-up colour. */
   mixerLoad: MixerLoad;
+  /** The retouching tools' options (aligned, sample, spot healing type, tone range, exposure, sponge mode, smudge strength). */
+  retouch: RetouchSettings;
+  /** The Clone Stamp and Healing Brush source point (Alt-click), or `null` when none is set. */
+  cloneSource: CloneSource | null;
+}
+
+/** Where the Clone Stamp and Healing Brush sample from. */
+export interface CloneSource {
+  /** The source point, document pixels. */
+  x: number;
+  y: number;
+  /** With Aligned on: the offset (source − stroke start) the first stroke fixed, kept for the next strokes; `null` until a stroke has used the point. */
+  offset: { x: number; y: number } | null;
 }
 
 /**
@@ -514,8 +549,17 @@ export interface TypeLayerInfo {
   annotationId?: string;
 }
 
+/** The retouching tools (see `@pixerate/editor/paint`'s retouch module). */
+export type RetouchTool = 'clone' | 'heal' | 'spot-heal' | 'smudge' | 'dodge' | 'burn' | 'sponge';
+
+export const RETOUCH_TOOLS: readonly RetouchTool[] = ['clone', 'heal', 'spot-heal', 'smudge', 'dodge', 'burn', 'sponge'];
+
+export const isRetouchTool = (tool: unknown): tool is RetouchTool => RETOUCH_TOOLS.includes(tool as RetouchTool);
+
 /** Paint tools a stroke can use. */
-export type StrokeTool = 'brush' | 'eraser' | 'mixer';
+export type StrokeTool = 'brush' | 'eraser' | 'mixer' | RetouchTool;
+
+const STROKE_TOOLS: readonly StrokeTool[] = ['brush', 'eraser', 'mixer', ...RETOUCH_TOOLS];
 
 /** A stroke: tool, target (default the active layer and target) and brush / colour overrides. */
 export interface StrokeInit {
@@ -533,6 +577,13 @@ export interface StrokeInit {
   mixer?: Partial<MixerSettings>;
   /** Eraser colour on locked transparency / masks (default the background). */
   background?: string | number[];
+  /** Overrides of the paint options' retouch settings (the retouching tools). */
+  retouch?: Partial<RetouchSettings>;
+  /**
+   * Clone Stamp / Healing Brush: the source point for this stroke (document pixels). Given, it
+   * becomes the clone source (as an Alt-click), so the stroke starts its offset afresh.
+   */
+  source?: { x: number; y: number };
   /** Kept with the stroke for replays (v1 brushes have no jitter). */
   seed?: number;
 }
@@ -558,6 +609,13 @@ export interface PaintStrokeResult {
   dabs: number;
   /** The Mixer Brush's load after the stroke (tool `mixer` only). */
   mixerLoad?: MixerLoad;
+  /**
+   * Clone Stamp / Healing Brush: the offset used (source − first stroke point, whole pixels) and
+   * where the stroke's first point sampled.
+   */
+  clone?: { offset: { x: number; y: number }; source: { x: number; y: number }; aligned: boolean };
+  /** Spot Healing: the offset of the patch it copied, or `null` when it filled smoothly. */
+  spotHeal?: { offset: { x: number; y: number } | null };
 }
 
 /** An opaque pre-stroke history snapshot. */
@@ -596,11 +654,46 @@ export interface MixerStrokeInit {
   end(load: MixerLoad): MixerLoad;
 }
 
+/** A stroke that paints dab by dab into live pixels (Mixer Brush, Smudge, Sponge). */
+interface LiveDabStroke {
+  push(points: readonly StrokePoint[]): CropBox[];
+  finish(last?: StrokePoint): CropBox[];
+  readonly bounds: CropBox | null;
+  readonly dabCount: number;
+}
+
+/**
+ * How a retouching stroke starts (see `PaintStrokeSession`): either coverage-based (Clone Stamp,
+ * Healing Brush, Spot Healing, Dodge, Burn: `coverage` composited with `paint()` over the
+ * pre-stroke pixels, optionally replaced by `finalPaint` when the stroke ends) or sequential
+ * (`create`: dabs over live pixels, Smudge and Sponge).
+ */
+export type RetouchStrokeInit =
+  | {
+      kind: 'coverage';
+      coverage: StrokeCoverage;
+      apply: RetouchApply;
+      /** Called with the first point before any dab is shown (the clone offset is fixed here). */
+      start(first: StrokePoint): void;
+      /** What the coverage lays while the stroke is drawn. */
+      paint(): RetouchPaint;
+      /** What it lays once the stroke ends, from the whole coverage (healing); `null` keeps `paint()`. */
+      finalPaint?(coverage: CoverageMap): RetouchPaint | null;
+      /** Extra result fields. */
+      result?(): Partial<PaintStrokeResult>;
+    }
+  | {
+      kind: 'dabs';
+      /** Makes the stroke over the session's live pixels (RGBA, or an RGBA view of a mask). */
+      create(pixels: PaintTileTarget): LiveDabStroke;
+      result?(): Partial<PaintStrokeResult>;
+    };
+
 /**
  * A stroke in progress (see `beginStroke`): `push` input points as they arrive, then `end` (one
  * undo step) or `cancel`. Brush and eraser strokes build up a coverage map composited over the
  * pre-stroke pixels; Mixer Brush strokes paint dab by dab into the live pixels, so each dab picks
- * up what the dabs before it laid down.
+ * up what the dabs before it laid down. Retouching strokes take one of the two shapes.
  */
 export class PaintStrokeSession {
   private readonly before: HistoryEntryHandle;
@@ -608,8 +701,12 @@ export class PaintStrokeSession {
   private readonly live: Map<TileKey, Tile>;
   private readonly touched = new Set<TileKey>();
   private readonly stroke: StrokeCoverage | null;
-  private readonly mixer: MixerStroke | null;
+  private readonly mixer: LiveDabStroke | null;
   private readonly mixerInit: MixerStrokeInit | null = null;
+  private readonly retouch: RetouchStrokeInit | null = null;
+  /** Writes a mask's RGBA view back (sequential retouching on a mask). */
+  private readonly flushView: (() => void) | null = null;
+  private started = false;
   /** Mixer tiles written since the last update: they get new tile objects so the compositor sees them change. */
   private readonly fresh = new Set<TileKey>();
   private last: StrokePoint | null = null;
@@ -618,7 +715,7 @@ export class PaintStrokeSession {
   constructor(
     private readonly controller: ImageEditorController,
     readonly target: { id: string; channel: LayerTarget; surface: TiledSurface },
-    stroke: StrokeCoverage | MixerStrokeInit,
+    stroke: StrokeCoverage | MixerStrokeInit | RetouchStrokeInit,
     private readonly apply: StrokeApply
   ) {
     this.before = controller._captureForStroke();
@@ -627,11 +724,30 @@ export class PaintStrokeSession {
     if (stroke instanceof StrokeCoverage) {
       this.stroke = stroke;
       this.mixer = null;
+    } else if ('kind' in stroke && stroke.kind === 'coverage') {
+      this.stroke = stroke.coverage;
+      this.mixer = null;
+      this.retouch = stroke;
+    } else if ('kind' in stroke) {
+      this.stroke = null;
+      this.retouch = stroke;
+      if (this.base.channels === 1) {
+        const view = rgbaViewOfGrey(this.mixerPixels());
+        this.mixer = stroke.create(view.target);
+        this.flushView = view.flush;
+      } else this.mixer = stroke.create(this.mixerPixels());
     } else {
       this.stroke = null;
       this.mixer = stroke.create(this.mixerPixels());
       this.mixerInit = stroke;
     }
+  }
+
+  /** The new tile of a coverage stroke over the pre-stroke tile `src`. */
+  private compositeTile(src: Uint8ClampedArray, tx: number, ty: number, options: { into?: Uint8ClampedArray; region?: CropBox } = {}, paint?: RetouchPaint): Uint8ClampedArray {
+    const r = this.retouch;
+    if (r && r.kind === 'coverage') return applyRetouchToTile(this.stroke!.coverage, src, this.base.channels, tx, ty, paint ?? r.paint(), r.apply, options);
+    return applyStrokeToTile(this.stroke!.coverage, src, this.base.channels, tx, ty, this.apply, options);
   }
 
   /** The live pixels a mixer stroke reads and writes; base tiles are copied on first write. */
@@ -662,8 +778,14 @@ export class PaintStrokeSession {
   /** Adds input points (document pixels); the stack shows the stroke so far. */
   push(points: readonly StrokePoint[]): void {
     if (this.closed || !points.length) return;
+    if (!this.started) {
+      this.started = true;
+      if (this.retouch?.kind === 'coverage') this.retouch.start(points[0]);
+    }
     this.last = points[points.length - 1];
-    this.update(this.mixer ? this.mixer.push(points) : this.stroke!.push(points));
+    const rects = this.mixer ? this.mixer.push(points) : this.stroke!.push(points);
+    this.flushView?.();
+    this.update(rects);
   }
 
   private update(rects: CropBox[]): void {
@@ -689,7 +811,7 @@ export class PaintStrokeSession {
       const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
       const prev = this.touched.has(key) ? this.live.get(key)?.data : undefined;
       this.touched.add(key);
-      const data = applyStrokeToTile(stroke.coverage, src, ch, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
+      const data = this.compositeTile(src, tx, ty, prev ? { into: prev, region: r } : {});
       this.live.set(key, { data, uniform: null });
     }
     this.controller._strokeUpdate(this.target.id, this.target.channel, new TiledSurfaceClass(ch, new Map(this.live), this.base.defaultValue), rects);
@@ -699,9 +821,23 @@ export class PaintStrokeSession {
   end(): PaintStrokeResult {
     if (this.closed) throw new LayerOperationError('This stroke has already ended.');
     const last = this.last ?? undefined;
-    this.update(this.mixer ? this.mixer.finish(last) : this.stroke!.finish(last));
+    const rects = this.mixer ? this.mixer.finish(last) : this.stroke!.finish(last);
+    this.flushView?.();
+    this.update(rects);
     this.closed = true;
     const ch = this.base.channels;
+    const r = this.retouch;
+    if (r?.kind === 'coverage' && r.finalPaint) {
+      // Healing: redo every touched tile from the pre-stroke pixels with the final paint.
+      const final = r.finalPaint(this.stroke!.coverage);
+      if (final) {
+        for (const key of this.touched) {
+          const { tx, ty } = tileCoord(key);
+          const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
+          this.live.set(key, { data: this.compositeTile(src, tx, ty, {}, final), uniform: null });
+        }
+      }
+    }
     const tiles = new Map(this.base.tiles);
     let changed = false;
     for (const key of this.touched) {
@@ -713,11 +849,12 @@ export class PaintStrokeSession {
       if (!sameTile(prev, tile)) changed = true;
     }
     const surface = changed ? new TiledSurfaceClass(ch, tiles, this.base.defaultValue) : null;
-    const mixerLoad = this.mixer ? this.mixerInit!.end(this.mixer.load) : undefined;
+    const mixerLoad = this.mixerInit ? this.mixerInit.end((this.mixer as MixerStroke).load) : undefined;
     this.controller._strokeCommit(this.before, this.target.id, this.target.channel, surface);
     const b = this.mixer ? this.mixer.bounds : this.stroke!.coverage.bounds;
     const result: PaintStrokeResult = { layerId: this.target.id, channel: this.target.channel, bounds: changed ? b : null, dabs: (this.mixer ?? this.stroke!).dabCount };
     if (mixerLoad) result.mixerLoad = mixerLoad;
+    if (r?.result) Object.assign(result, r.result());
     return result;
   }
 
@@ -766,6 +903,7 @@ interface HistoryEntry {
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
   source: SourceSnapshot;
+  bitDepth?: BitDepth;
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = DEFAULT_ADJUSTMENTS_VALUES;
@@ -929,7 +1067,7 @@ export class ImageEditorController {
       activeLayerId: null,
       activeTarget: 'pixels',
       outputOpacity: 1,
-      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD },
+      paint: { brush: { ...DEFAULT_BRUSH }, foreground: '#000000', background: '#ffffff', mixer: { ...DEFAULT_MIXER }, mixerLoad: EMPTY_MIXER_LOAD, retouch: { ...DEFAULT_RETOUCH }, cloneSource: null },
       fit: options.fit ?? 'margin',
     };
 
@@ -1087,6 +1225,7 @@ export class ImageEditorController {
     if (s.legacyOutputBlur !== undefined) entry.legacyOutputBlur = s.legacyOutputBlur;
     if (s.globalLight) entry.globalLight = { ...s.globalLight };
     if (s.patterns) entry.patterns = s.patterns;
+    if (s.bitDepth && s.bitDepth !== 8) entry.bitDepth = s.bitDepth;
     return entry;
   }
 
@@ -1104,6 +1243,8 @@ export class ImageEditorController {
     else delete s.globalLight;
     if (entry.patterns) s.patterns = entry.patterns;
     else delete s.patterns;
+    if (entry.bitDepth) s.bitDepth = entry.bitDepth;
+    else delete s.bitDepth;
     s.selection = entry.selection;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
@@ -2533,8 +2674,29 @@ export class ImageEditorController {
       throw new LayerOperationError('Merging annotation layers needs a canvas (a browser); hide or delete them first, or merge in the browser.');
     }
     await this.renderer.prepareLayerAssets(layers, width, height);
-    const data = new LayerCompositor().composite(layers, rect, this.renderer.compositorSources(width, height));
+    const sources = this.renderer.compositorSources(width, height);
+    const depth = this.bitDepth;
+    if (depth !== 8) {
+      // Merges keep the document's depth.
+      const samples = workingToSamples(compositeDeep(layers, rect, sources, depth), depth);
+      return surfaceFromDeepPixels({ width: rect.width, height: rect.height, data: samples }, 4, rect.x, rect.y);
+    }
+    const data = new LayerCompositor().composite(layers, rect, sources);
     return surfaceFromPixels({ width: rect.width, height: rect.height, data }, 4, rect.x, rect.y);
+  }
+
+  /**
+   * The composite of the layer stack at the document's bit depth (as `compositePixels`, no
+   * canvas): 16-bit sRGB samples, or 32-bit linear float, over `rect` (default the canvas). At 8
+   * bits, the 8-bit composite widened to 16 bits.
+   */
+  public compositeDeepPixels(rect?: CropBox): { width: number; height: number; depth: 16 | 32; data: Uint16Array | Float32Array } {
+    const { width, height } = this.naturalSize;
+    const r = rect ?? { x: 0, y: 0, width, height };
+    const depth = this.bitDepth;
+    if (depth === 8) return { width: r.width, height: r.height, depth: 16, data: to16From8(this.compositePixels(r).data as Uint8ClampedArray) };
+    const data = workingToSamples(compositeDeep(this.state.layers, r, this.compositorSources(), depth), depth);
+    return { width: r.width, height: r.height, depth, data };
   }
 
   /** Document bounds a layer can paint into (pixel content, annotations, or the canvas for the rest). */
@@ -2702,15 +2864,24 @@ export class ImageEditorController {
 
   /** Brush settings, colours and tool options of the paint tools (view state, no undo). */
   public setPaintOptions(
-    options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad'>> & { brush?: Partial<BrushSettings>; mixer?: Partial<MixerSettings> }
+    options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad' | 'retouch' | 'cloneSource'>> & {
+      brush?: Partial<BrushSettings>;
+      mixer?: Partial<MixerSettings>;
+      retouch?: Partial<RetouchSettings>;
+    }
   ): PaintOptions {
     const cur = this.state.paint;
+    const retouch = options.retouch ? normalizeRetouch(options.retouch, cur.retouch) : cur.retouch;
+    // Turning Aligned off (or on) starts the offset afresh at the next stroke.
+    const cloneSource = cur.cloneSource && retouch.aligned !== cur.retouch.aligned ? { ...cur.cloneSource, offset: null } : cur.cloneSource;
     const next: PaintOptions = {
       brush: options.brush ? normalizeBrush({ ...cur.brush, ...options.brush }) : cur.brush,
       foreground: options.foreground !== undefined ? toHex(parseColor(options.foreground)) : cur.foreground,
       background: options.background !== undefined ? toHex(parseColor(options.background)) : cur.background,
       mixer: options.mixer ? normalizeMixer({ ...cur.mixer, ...options.mixer }) : cur.mixer,
       mixerLoad: cur.mixerLoad,
+      retouch,
+      cloneSource,
     };
     this.state.paint = next;
     this.notify();
@@ -2742,6 +2913,18 @@ export class ImageEditorController {
     this.state.paint = { ...this.state.paint, mixerLoad: EMPTY_MIXER_LOAD };
     this.notify();
     return EMPTY_MIXER_LOAD;
+  }
+
+  /**
+   * Sets (Alt-click) or clears the Clone Stamp and Healing Brush source point, in document
+   * pixels. The next stroke fixes the offset from its first point. View state, no undo.
+   */
+  public setCloneSource(point: { x: number; y: number } | null): CloneSource | null {
+    if (point && (!Number.isFinite(point.x) || !Number.isFinite(point.y))) throw new LayerOperationError('The clone source needs finite x and y (document pixels).');
+    const source = point ? { x: Math.round(point.x), y: Math.round(point.y), offset: null } : null;
+    this.state.paint = { ...this.state.paint, cloneSource: source };
+    this.notify();
+    return source;
   }
 
   /** D: black foreground, white background. */
@@ -2802,8 +2985,8 @@ export class ImageEditorController {
    */
   public beginStroke(init: StrokeInit = {}): PaintStrokeSession {
     const tool = init.tool ?? 'brush';
-    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mixer') throw new LayerOperationError(`Unknown paint tool "${String(tool)}"; use brush, eraser or mixer.`);
-    const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : 'paint');
+    if (!STROKE_TOOLS.includes(tool)) throw new LayerOperationError(`Unknown paint tool "${String(tool)}"; use one of ${STROKE_TOOLS.join(', ')}.`);
+    const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : isRetouchTool(tool) ? 'retouch' : 'paint');
     if (tool === 'mixer' && target.channel !== 'pixels') {
       throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.');
     }
@@ -2825,7 +3008,107 @@ export class ImageEditorController {
       offset: target.offset,
     };
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply);
+    if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply);
     return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply);
+  }
+
+  /** A retouching stroke's start: its settings, what it samples and how it composites. */
+  private retouchStroke(tool: RetouchTool, init: StrokeInit, brush: BrushSettings, target: ReturnType<ImageEditorController['paintTarget']>, apply: StrokeApply): RetouchStrokeInit {
+    const settings = normalizeRetouch(init.retouch ?? {}, this.state.paint.retouch);
+    const mask = target.channel !== 'pixels';
+    if (tool === 'sponge' && mask) throw new LayerOperationError('The Sponge changes saturation, and a mask has none; target pixels (channel pixels), or use dodge or burn on the mask.');
+    if (tool === 'smudge') return { kind: 'dabs', create: (pixels) => new RetouchDabStroke(brush, pixels, smudgeEffect(brush, settings.strength)) };
+    if (tool === 'sponge') return { kind: 'dabs', create: (pixels) => new RetouchDabStroke(brush, pixels, spongeEffect(brush, settings.spongeMode === 'saturate', settings.vibrance)) };
+    const retouchApply: RetouchApply = {
+      opacity: tool === 'clone' || tool === 'heal' ? brush.opacity : 1,
+      blend: tool === 'clone' && !mask ? brush.blend : 'normal',
+      lockTransparency: target.lockTransparency,
+      selection: apply.selection,
+      offset: target.offset,
+    };
+    const coverage = new StrokeCoverage(brush);
+    if (tool === 'dodge' || tool === 'burn') {
+      const paint: RetouchPaint = { kind: 'tone', tone: toneOf(tool, settings) };
+      return { kind: 'coverage', coverage, apply: retouchApply, start: () => {}, paint: () => paint };
+    }
+    // Masks sample only themselves; pixels sample the layer or the composite.
+    const sample = mask ? 'current' : settings.sample;
+    const own = this.surfaceSource(target.surface, target.offset);
+    const source = sample === 'current' ? own : this.compositeSource(sample === 'all' ? null : target.id);
+    const pad = (r: CropBox, m: number): CropBox => ({ x: r.x - m, y: r.y - m, width: r.width + 2 * m, height: r.height + 2 * m });
+    const covered = (cov: CoverageMap, r: CropBox) => {
+      const m = new Uint8Array(r.width * r.height);
+      for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) m[y * r.width + x] = cov.get(r.x + x, r.y + y) > 0 ? 1 : 0;
+      return m;
+    };
+    if (tool === 'spot-heal') {
+      const { width, height } = this.naturalSize;
+      let patch: { x: number; y: number } | null = null;
+      const trail: RetouchPaint = { kind: 'color', color: [0, 0, 0, 96] };
+      return {
+        kind: 'coverage',
+        coverage,
+        apply: retouchApply,
+        start: () => {},
+        paint: () => trail,
+        finalPaint: (cov) => {
+          if (!cov.bounds) return null;
+          const win = spotHealWindow(cov.bounds, { width, height });
+          if (win.width <= 0 || win.height <= 0) return null;
+          const img = readSourceRegion(source, win);
+          const hole = covered(cov, win);
+          const healed = spotHealPixels(win.width, win.height, img, hole, brush.size, settings.spotType, (off) => {
+            patch = off ? { x: off[0], y: off[1] } : null;
+          });
+          return { kind: 'source', source: new RegionPixelSource(win, healed), dx: 0, dy: 0 };
+        },
+        result: () => ({ spotHeal: { offset: patch } }),
+      };
+    }
+    // Clone Stamp and Healing Brush: the offset from the source point.
+    if (init.source) this.setCloneSource(init.source);
+    const cs = this.state.paint.cloneSource;
+    if (!cs) throw new LayerOperationError(`The ${tool === 'clone' ? 'Clone Stamp' : 'Healing Brush'} needs a source point; Alt-click the canvas, call set_clone_source, or pass source { x, y }.`);
+    let offset = { x: 0, y: 0 };
+    let first = { x: 0, y: 0 };
+    const paint = (): RetouchPaint => ({ kind: 'source', source, dx: offset.x, dy: offset.y });
+    return {
+      kind: 'coverage',
+      coverage,
+      apply: retouchApply,
+      start: (p) => {
+        first = { x: Math.round(p.x), y: Math.round(p.y) };
+        offset = settings.aligned && cs.offset ? { ...cs.offset } : { x: cs.x - first.x, y: cs.y - first.y };
+        if (settings.aligned) this.state.paint = { ...this.state.paint, cloneSource: { x: cs.x, y: cs.y, offset: { ...offset } } };
+      },
+      paint,
+      finalPaint:
+        tool === 'heal'
+          ? (cov) => {
+              if (!cov.bounds) return null;
+              const g = pad(cov.bounds, 2);
+              const src = readSourceRegion(source, g, offset.x, offset.y);
+              // The texture is fitted to what is seen: the layer, or the composite when sampling several layers.
+              const dst = readSourceRegion(source, g);
+              return { kind: 'source', source: new RegionPixelSource(g, healPixels(g.width, g.height, src, dst, covered(cov, g))), dx: 0, dy: 0 };
+            }
+          : undefined,
+      result: () => ({ clone: { offset: { ...offset }, source: { x: first.x + offset.x, y: first.y + offset.y }, aligned: settings.aligned } }),
+    };
+  }
+
+  /** A pixel source over a surface (layer pixels or a mask) in layer space at `offset`. */
+  private surfaceSource(surface: TiledSurface, offset: { x: number; y: number }): PixelSource {
+    return new TilePixelSource((tx, ty) => surface.tiles.get(tileKey(tx, ty))?.data ?? (surface.defaultValue ? defaultTile(surface) : null), surface.channels, offset);
+  }
+
+  /** A pixel source over the composite of the current layers (through `throughId` and below, or all of them), as it is now. */
+  private compositeSource(throughId: string | null): PixelSource {
+    const stack = withoutAnnotations(this.state.layers);
+    const layers = throughId ? layersThrough(stack, throughId) : stack;
+    const compositor = new LayerCompositor();
+    const sources = this.compositorSources();
+    return new TilePixelSource((tx, ty) => compositor.tile(layers, tx, ty, sources), 4);
   }
 
   /** A Mixer Brush stroke's start: the settings, and the load (refilled when asked or set to). */
@@ -4352,6 +4635,42 @@ export class ImageEditorController {
 
   // --- PSD ---
 
+  /** The document's bits per channel (8 unless set to 16 or 32). */
+  public get bitDepth(): BitDepth {
+    return this.state.bitDepth ?? 8;
+  }
+
+  /**
+   * Image › Mode › 8 / 16 / 32 Bits/Channel (one undo step). Going up costs nothing: layers keep
+   * their pixels and read them at the new depth, and edits that understand depth keep the extra
+   * precision from then on. Going down rounds every pixel layer's deep samples to the new depth
+   * (8 bits: their 8-bit rendering; 32 → 16: colour above 1 is clipped). Returns the depth and
+   * the ids of the layers whose pixels changed.
+   */
+  public setBitDepth(depth: BitDepth): { bitDepth: BitDepth; changedLayerIds: string[] } {
+    if (!isBitDepth(depth)) throw new LayerOperationError(`Bit depth must be 8, 16 or 32, not ${String(depth)}.`);
+    const changed: string[] = [];
+    const convert = (layers: readonly ImageLayer[]): ImageLayer[] =>
+      layers.map((l) => {
+        if (l.type === 'group') {
+          const children = convert(l.children);
+          return children.some((c, i) => c !== l.children[i]) ? { ...l, children } : l;
+        }
+        if (l.type !== 'pixel') return l;
+        const surface = convertSurfaceDepth(l.surface, depth);
+        if (surface === l.surface) return l;
+        changed.push(l.id);
+        return { ...l, surface };
+      });
+    if (depth === this.bitDepth) return { bitDepth: depth, changedLayerIds: [] };
+    const next = convert(this.state.layers);
+    this.commitLayers(next, () => {
+      if (depth === 8) delete this.state.bitDepth;
+      else this.state.bitDepth = depth;
+    });
+    return { bitDepth: depth, changedLayerIds: changed };
+  }
+
   /** Pixels per inch of the last opened PSD (written back by `toPsd`). */
   private psdResolution: number | undefined;
 
@@ -4385,6 +4704,8 @@ export class ImageEditorController {
     else delete s.patterns;
     if (result.globalLight) s.globalLight = result.globalLight;
     else delete s.globalLight;
+    if (result.bitDepth !== 8) s.bitDepth = result.bitDepth;
+    else delete s.bitDepth;
     this.lastLoadProblems = result.warnings;
     this.notify();
     return {
@@ -4424,7 +4745,7 @@ export class ImageEditorController {
   }
 
   /**
-   * The document as an 8-bit RGB PSD (PSB above 30 000 px) with real layers, groups, adjustment
+   * The document as an RGB PSD at its bit depth (8, 16 or 32) (PSB above 30 000 px) with real layers, groups, adjustment
    * layers and masks, in the source frame. Layer filters and parametric (depth) masks are baked
    * into pixels and masks, annotation layers are rasterized (in a browser; elsewhere they are left
    * out), and the merged image is our composite. `warnings` lists every such change.
@@ -4557,7 +4878,10 @@ export class ImageEditorController {
     for (const [msg, names] of note) warnings.push(`${msg} (${names.length === 1 ? 'layer' : 'layers'} ${names.map((n) => `"${n}"`).join(', ')}).`);
 
     const merged = compositor.composite(prepared, canvas, { ...sources, version: `psd:${Date.now()}` });
-    const result = exportPsd({ width, height, layers: prepared, merged, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight });
+    const depth = this.bitDepth;
+    // At 16 or 32 bits the merged image is composited at that depth too.
+    const mergedDeep = depth === 8 ? undefined : workingToSamples(compositeDeep(prepared, canvas, sources, depth), depth);
+    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -4729,6 +5053,8 @@ export class ImageEditorController {
       const patterns = deserializePatterns(data.patterns, problems);
       if (patterns.length) s.patterns = patterns;
       else delete s.patterns;
+      if (data.bitDepth === 16 || data.bitDepth === 32) s.bitDepth = data.bitDepth;
+      else delete s.bitDepth;
       if (!this.imageElement && typeof data.width === 'number' && typeof data.height === 'number' && data.width > 0 && data.height > 0) {
         s.imageDimensions = { width: data.width, height: data.height };
       }
@@ -4744,6 +5070,7 @@ export class ImageEditorController {
       s.activeLayerId = null;
       delete s.globalLight;
       delete s.patterns;
+      delete s.bitDepth;
     }
     s.activeTarget = 'pixels';
     this.viewKey = [];
@@ -4754,8 +5081,8 @@ export class ImageEditorController {
   private serializeState(): SerializedImageEditorState {
     const { width, height } = this.naturalSize;
     const view = legacyView(this.stack(), width, height, null);
-    // A global light is only stored in the layered schema.
-    if (view.exact && !this.state.globalLight && !this.state.patterns?.length) {
+    // A global light and a bit depth are only stored in the layered schema.
+    if (view.exact && !this.state.globalLight && !this.state.patterns?.length && this.bitDepth === 8) {
       return {
         // States without adjustment layers keep schema 1, so they round-trip unchanged.
         version: view.adjustments.layers?.length ? 2 : 1,
@@ -4785,6 +5112,7 @@ export class ImageEditorController {
     if (this.state.globalLight) out.globalLight = { ...this.state.globalLight };
     if (this.state.patterns?.length) out.patterns = serializePatterns(this.state.patterns);
     if (smartContents) out.smartContents = smartContents;
+    if (this.state.bitDepth === 16 || this.state.bitDepth === 32) out.bitDepth = this.state.bitDepth;
     return out;
   }
 }
@@ -4945,6 +5273,29 @@ function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void
       if (l.contents.document) collectStateTiles(l.contents.document.layers, into);
     }
   }
+}
+
+/** The stack with every layer above `id` left out (Sample: Current & Below). */
+function layersThrough(layers: readonly ImageLayer[], id: string): ImageLayer[] {
+  const walk = (list: readonly ImageLayer[]): { out: ImageLayer[]; found: boolean } => {
+    const out: ImageLayer[] = [];
+    for (const l of list) {
+      if (l.id === id) {
+        out.push(l);
+        return { out, found: true };
+      }
+      if (l.type === 'group') {
+        const sub = walk(l.children);
+        if (sub.found) {
+          out.push({ ...l, children: sub.out });
+          return { out, found: true };
+        }
+      }
+      out.push(l);
+    }
+    return { out, found: false };
+  };
+  return walk(layers).out;
 }
 
 /** The stack without adjustment layers and layer filters (the pixels as painted). */

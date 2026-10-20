@@ -1,15 +1,15 @@
 /**
  * The paint tools' view model, shared by the React and Svelte editors: the brush options bar's
- * controls, Photoshop's shortcuts (B, Shift+B, E, V, [ ], Shift+[ ], number keys, D, X) and a
- * pointer gesture that turns pointer events into strokes (Brush, Mixer Brush, Eraser) or layer
- * moves (Move).
+ * controls, Photoshop's shortcuts (B, Shift+B, E, V, S, J, Shift+J, O, Shift+O, [ ], Shift+[ ],
+ * number keys, D, X) and a pointer gesture that turns pointer events into strokes (Brush, Mixer
+ * Brush, Eraser and the retouching tools; Alt-click sets the clone source) or layer moves (Move).
  */
 
 import type { ControlSpec } from '../controls';
 import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
 import { shapeGeometryBounds } from './shape';
-import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings } from '../../paint';
+import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings, type RetouchSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
 
@@ -41,11 +41,93 @@ export const PAINT_TOOLS = [
   { id: 'brush', label: 'Brush', shortcut: 'B' },
   { id: 'mixer', label: 'Mixer', shortcut: 'Shift+B' },
   { id: 'eraser', label: 'Eraser', shortcut: 'E' },
+  { id: 'clone', label: 'Clone', shortcut: 'S' },
+  { id: 'heal', label: 'Heal', shortcut: 'Shift+J' },
+  { id: 'spot-heal', label: 'Spot Heal', shortcut: 'J' },
+  { id: 'smudge', label: 'Smudge', shortcut: '' },
+  { id: 'dodge', label: 'Dodge', shortcut: 'O' },
+  { id: 'burn', label: 'Burn', shortcut: 'Shift+O' },
+  { id: 'sponge', label: 'Sponge', shortcut: 'Shift+O' },
 ] as const;
 
 export type PaintTool = (typeof PAINT_TOOLS)[number]['id'];
 
-export const isPaintTool = (tool: string): tool is PaintTool => tool === 'move' || tool === 'brush' || tool === 'mixer' || tool === 'eraser';
+export const isPaintTool = (tool: string): tool is PaintTool => PAINT_TOOLS.some((t) => t.id === tool);
+
+/** The paint tools that retouch (their options show instead of the brush colours). */
+export const isRetouchPaintTool = (tool: string): boolean =>
+  tool === 'clone' || tool === 'heal' || tool === 'spot-heal' || tool === 'smudge' || tool === 'dodge' || tool === 'burn' || tool === 'sponge';
+
+/** Retouch sliders: dodge / burn exposure and smudge strength (shown in %). */
+export const RETOUCH_OPTION_CONTROLS: readonly (ControlSpec & { id: 'exposure' | 'strength'; tools: readonly PaintTool[] })[] = [
+  { id: 'exposure', label: 'Exposure', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['dodge', 'burn'] },
+  { id: 'strength', label: 'Strength', section: 'layer', min: 0, max: 1, step: 0.01, default: 0.5, decimals: 0, track: plain, displayScale: 100, unit: '%', tools: ['smudge'] },
+];
+
+/** Retouch choices, each a row of toggle buttons, with the tools that show it. */
+export const RETOUCH_CHOICES: readonly {
+  id: 'sample' | 'spotType' | 'range' | 'spongeMode';
+  label: string;
+  tools: readonly PaintTool[];
+  options: readonly { id: string; label: string; title: string }[];
+}[] = [
+  {
+    id: 'sample',
+    label: 'Sample',
+    tools: ['clone', 'heal', 'spot-heal'],
+    options: [
+      { id: 'current', label: 'Current', title: 'Sample the layer being retouched' },
+      { id: 'current-below', label: 'Current & Below', title: 'Sample this layer and the layers under it' },
+      { id: 'all', label: 'All', title: 'Sample every layer (retouch onto an empty layer)' },
+    ],
+  },
+  {
+    id: 'spotType',
+    label: 'Type',
+    tools: ['spot-heal'],
+    options: [
+      { id: 'proximity-match', label: 'Proximity Match', title: 'Copy the best matching patch nearby' },
+      { id: 'smooth', label: 'Smooth', title: 'Fill smoothly from the edges' },
+    ],
+  },
+  {
+    id: 'range',
+    label: 'Range',
+    tools: ['dodge', 'burn'],
+    options: [
+      { id: 'shadows', label: 'Shadows', title: 'Change the dark tones most' },
+      { id: 'midtones', label: 'Midtones', title: 'Change the middle tones most' },
+      { id: 'highlights', label: 'Highlights', title: 'Change the light tones most' },
+    ],
+  },
+  {
+    id: 'spongeMode',
+    label: 'Mode',
+    tools: ['sponge'],
+    options: [
+      { id: 'desaturate', label: 'Desaturate', title: 'Take colour out' },
+      { id: 'saturate', label: 'Saturate', title: 'Add colour' },
+    ],
+  },
+];
+
+/** Retouch on / off options, with the tools that show each. */
+export const RETOUCH_TOGGLES: readonly { id: 'aligned' | 'protectTones' | 'vibrance'; label: string; tools: readonly PaintTool[] }[] = [
+  { id: 'aligned', label: 'Aligned', tools: ['clone', 'heal'] },
+  { id: 'protectTones', label: 'Protect tones', tools: ['dodge', 'burn'] },
+  { id: 'vibrance', label: 'Vibrance', tools: ['sponge'] },
+];
+
+/** Sets one retouch choice from the options bar. */
+export function setRetouchChoice(controller: ImageEditorController, id: (typeof RETOUCH_CHOICES)[number]['id'], value: string): void {
+  controller.setPaintOptions({ retouch: { [id]: value } as Partial<RetouchSettings> });
+}
+
+/** What the options bar says about the clone source. */
+export function cloneSourceLabel(controller: ImageEditorController): string {
+  const cs = controller.getState().paint.cloneSource;
+  return cs ? `Source ${cs.x}, ${cs.y}${cs.offset ? ` (offset ${cs.offset.x}, ${cs.offset.y})` : ''}` : 'Alt-click to set the source';
+}
 
 /** `#rrggbb` of an sRGB triple (0..1), e.g. the Mixer Brush's reservoir. */
 export function rgbUnitToHex(c: readonly [number, number, number]): string {
@@ -92,6 +174,19 @@ export function handlePaintShortcut(controller: ImageEditorController, e: Shortc
     case 'v':
       controller.setTool('move');
       return true;
+    case 's':
+      controller.setTool('clone');
+      return true;
+    case 'j':
+      controller.setTool(e.shiftKey || key === 'J' ? (controller.getState().activeTool === 'heal' ? 'spot-heal' : 'heal') : 'spot-heal');
+      return true;
+    case 'o': {
+      // O: Dodge; Shift+O cycles Dodge → Burn → Sponge.
+      const cur = controller.getState().activeTool;
+      const next = e.shiftKey || key === 'O' ? (cur === 'dodge' ? 'burn' : cur === 'burn' ? 'sponge' : 'dodge') : 'dodge';
+      controller.setTool(next);
+      return true;
+    }
     case 'd':
       controller.resetPaintColors();
       return true;
@@ -120,6 +215,8 @@ export function handlePaintShortcut(controller: ImageEditorController, e: Shortc
 export interface PaintPointerSample extends ImagePoint {
   /** 0..1; a mouse is 1. */
   pressure: number;
+  /** Alt (Option) held on the press: with the Clone Stamp or Healing Brush it sets the source. */
+  altKey?: boolean;
 }
 
 /** Pressure of a pointer event: pens report it; mice report 0.5 while pressed, which means "full". */
@@ -161,9 +258,13 @@ export class PaintGesture {
         this.move = { id: layer.id, start: { x: sample.x, y: sample.y }, origin, moved: false };
         return null;
       }
-      if (tool === 'brush' || tool === 'eraser' || tool === 'mixer') {
+      if ((tool === 'clone' || tool === 'heal') && sample.altKey) {
+        this.controller.setCloneSource({ x: sample.x, y: sample.y });
+        return null;
+      }
+      if (isPaintTool(tool)) {
         this.stroke = this.controller.beginStroke({ tool });
-        this.stroke.push([sample]);
+        this.stroke.push([{ x: sample.x, y: sample.y, pressure: sample.pressure }]);
         return null;
       }
     } catch (err) {
