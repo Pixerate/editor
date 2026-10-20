@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
 	createCanvasDrawController,
 	type ArrangeHistoryTarget,
+	type CanvasBrushPreset,
 	type CanvasNode,
+	type DrawStrokeInput,
+	type DrawStrokeResult,
 	type FreehandDrawOptions,
+	type FreehandPenSample,
 	type FreehandStroke,
 	type FreehandStrokeStyle,
 	type FreehandTool
@@ -31,11 +35,16 @@ export interface CanvasDrawState {
 export interface CanvasDrawActions<TNode extends CanvasNode = CanvasNode> {
 	setTool: (tool: FreehandTool) => void;
 	setStyle: (style: Partial<FreehandStrokeStyle>) => void;
-	startStroke: (point: [number, number]) => void;
-	continueStroke: (point: [number, number]) => void;
+	/** Starts a stroke; `pen` carries pressure and tilt (`pointerPenSample(event)`), used by brushed strokes. */
+	startStroke: (point: [number, number], pen?: FreehandPenSample) => void;
+	continueStroke: (point: [number, number], pen?: FreehandPenSample) => void;
 	endStroke: () => TNode | null;
 	cancelStroke: () => void;
 	eraseAt: (point: [number, number], radius?: number) => TNode[];
+	/** Draws a whole stroke at once (agents, code); validates the brush first. One undo step. */
+	drawStroke: (input: DrawStrokeInput) => Promise<DrawStrokeResult<TNode>>;
+	/** The dry paint presets `style.brush` accepts (loads the paint engine). */
+	listBrushes: () => Promise<CanvasBrushPreset[]>;
 }
 
 export type CanvasDraw<TNode extends CanvasNode = CanvasNode> = CanvasDrawState &
@@ -100,7 +109,9 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 			continueStroke: controller.continueStroke,
 			endStroke: controller.endStroke,
 			cancelStroke: controller.cancelStroke,
-			eraseAt: controller.eraseAt
+			eraseAt: controller.eraseAt,
+			drawStroke: controller.drawStroke,
+			listBrushes: controller.listBrushes
 		}),
 		[tool, style, activeStroke, controller]
 	);

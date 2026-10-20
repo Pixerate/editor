@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { CanvasDraw } from './useCanvasDraw.js';
 import {
+	pointerPenSample,
 	strokePointsToPathData,
 	resolveCanvasGradient,
 	gradientToSvgDef,
@@ -90,7 +91,7 @@ export function CanvasDrawLayer<TNode extends CanvasNode = CanvasNode>({
 		(e.target as Element).setPointerCapture?.(e.pointerId);
 
 		const flowPt = clientToFlow(e.clientX, e.clientY);
-		draw.startStroke(flowPt);
+		draw.startStroke(flowPt, pointerPenSample(e));
 
 		if (draw.tool === 'eraser') {
 			setEraserPos([e.clientX, e.clientY]);
@@ -107,8 +108,12 @@ export function CanvasDrawLayer<TNode extends CanvasNode = CanvasNode>({
 		if (e.buttons === 1) {
 			e.preventDefault();
 			e.stopPropagation();
-			const flowPt = clientToFlow(e.clientX, e.clientY);
-			draw.continueStroke(flowPt);
+			// Brushed strokes take the coalesced events (the full pen rate, pressure between frames);
+			// plain strokes keep one point per event, as before.
+			const events = (draw.style.brush !== undefined ? (e.nativeEvent.getCoalescedEvents?.() ?? []) : []) as PointerEvent[];
+			for (const ev of events.length ? events : [e.nativeEvent]) {
+				draw.continueStroke(clientToFlow(ev.clientX, ev.clientY), pointerPenSample(ev));
+			}
 		}
 	};
 

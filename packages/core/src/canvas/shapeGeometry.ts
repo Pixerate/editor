@@ -11,6 +11,7 @@ import { fitPathData } from './curveFit.js';
 // ---------------------------------------------------------------------------
 
 import type { CanvasGradientDef, SvgGradientDef } from './gradient.js';
+import type { CanvasBrushstroke } from './brushTypes.js';
 import { gradientToSvgDef, resolveCanvasGradient } from './gradient.js';
 
 /** Paint shared by every shape kind. Colours are any CSS colour, preset name, or gradient definition. */
@@ -69,6 +70,11 @@ export interface PathShape extends ShapeBase {
 	viewBox?: readonly [number, number, number, number];
 	/** Fill rule (default `nonzero`, as in SVG). */
 	fillRule?: PolygonFillRule;
+	/**
+	 * Draw the path with a dry paint brush instead of an SVG stroke (a brushed freehand stroke):
+	 * the brush and pen profiles along the path. Rendered by `renderShapeBrushstroke`.
+	 */
+	brush?: CanvasBrushstroke;
 }
 
 /**

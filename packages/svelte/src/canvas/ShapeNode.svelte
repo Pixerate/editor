@@ -1,6 +1,15 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { getShapeRenderData, isShapeDescription, type ShapeDescription } from '@pixerate/editor/canvas';
+	import {
+		brushstrokeScaleBucket,
+		getShapeRenderData,
+		isBrushedShape,
+		isShapeDescription,
+		renderShapeBrushstroke,
+		type CanvasBrushstrokeImage,
+		type ShapeDescription
+	} from '@pixerate/editor/canvas';
+	import { getShapeNodeZoom } from './shapeBrushstroke.svelte.js';
 
 	interface Props {
 		/** Unique node id (passed by SvelteFlow or user). */
@@ -21,6 +30,38 @@
 
 	const shape = $derived(isShapeDescription(data?.shape) ? data.shape : null);
 	const render = $derived(shape ? getShapeRenderData(shape, { width, height }, { id: id || data?.id }) : null);
+
+	// Brushed strokes: the paint-engine image at the bucketed zoom (the plain path until it is ready).
+	const zoom = getShapeNodeZoom();
+	const brushed = $derived(isBrushedShape(shape) ? shape : null);
+	const brushScale = $derived.by(() => {
+		const vb = brushed?.viewBox;
+		const nodeScale = vb && width && height && vb[2] > 0 && vb[3] > 0 ? Math.max(width / vb[2], height / vb[3]) : 1;
+		return brushstrokeScaleBucket(zoom() * nodeScale, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+	});
+	let brushImage = $state.raw<CanvasBrushstrokeImage | null>(null);
+	$effect(() => {
+		const target = brushed;
+		const scale = brushScale;
+		if (!target) {
+			brushImage = null;
+			return;
+		}
+		let live = true;
+		renderShapeBrushstroke(target, { scale }).then(
+			(img) => {
+				if (live) brushImage = img;
+			},
+			(error) => {
+				if (!live) return;
+				brushImage = null;
+				console.warn('[pixerate] brushed stroke not rendered:', error instanceof Error ? error.message : error);
+			}
+		);
+		return () => {
+			live = false;
+		};
+	});
 </script>
 
 <!--
@@ -75,6 +116,20 @@
 					{/if}
 				</defs>
 			{/if}
+			{#if brushImage}
+				<g transform={render.transform}>
+					<image
+						class="pixerate-shape-brushstroke"
+						href={brushImage.href}
+						x={brushImage.x}
+						y={brushImage.y}
+						width={brushImage.width}
+						height={brushImage.height}
+						preserveAspectRatio="none"
+						opacity={render.opacity}
+					/>
+				</g>
+			{:else}
 			<path
 				d={render.d}
 				transform={render.transform}
@@ -87,6 +142,7 @@
 				opacity={render.opacity}
 				vector-effect="non-scaling-stroke"
 			/>
+			{/if}
 		</svg>
 		{@render children?.()}
 	</div>
