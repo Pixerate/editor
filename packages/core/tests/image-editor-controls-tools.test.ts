@@ -129,6 +129,7 @@ describe('image editor agent tools', () => {
       'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush', 'set_paint', 'get_paint',
       'get_color_profile', 'assign_profile', 'convert_to_profile', 'set_proof_setup', 'convert_colors', 'set_color_mode',
       'clone_stamp', 'heal_brush', 'spot_heal', 'smudge', 'dodge', 'burn', 'sponge', 'get_retouch_options', 'set_retouch_options', 'set_clone_source',
+      'set_clone_transform',
       'mix_colors', 'inspect_psd', 'import_psd', 'export_psd',
     ]);
     for (const t of tools) {
