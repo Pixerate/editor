@@ -116,4 +116,20 @@ describe('dab tools at 16 and 32 bits', () => {
       expect(readDeepRegion(surfaceOf(c, id), ALL, 16)).toEqual(data);
     }
   });
+
+  it('Blur and the History Brush keep 16-bit samples', () => {
+    const { c, id } = deepSetup(ramp16(), 16);
+    c.paintStroke({ tool: 'blur', layerId: id, points: [{ x: 100, y: 20 }, { x: 200, y: 20 }], brush: { size: 20 }, retouch: { strength: 1 } });
+    const s = surfaceOf(c, id);
+    for (const tile of s.tiles.values()) expect(tile.deep).toBeInstanceOf(Uint16Array);
+    // A linear ramp blurs to itself, sample for sample (a little rounding at most).
+    const d = readDeepRegion(s, ALL, 16);
+    const i = (20 * W + 150) * 4;
+    expect(Math.abs(d[i] - ramp16()[i])).toBeLessThanOrEqual(1);
+    c.fillPixels({ layerId: id, color: '#000000' });
+    c.paintStroke({ tool: 'history', layerId: id, points: [{ x: 150, y: 20 }], brush: { size: 10, hardness: 1 }, retouch: { historySteps: 1 } });
+    const back = readDeepRegion(surfaceOf(c, id), ALL, 16);
+    expect(back[i]).toBe(d[i]);
+  });
 });
+

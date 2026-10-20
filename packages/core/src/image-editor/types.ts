@@ -345,7 +345,7 @@ export type ImageEditorTool =
   | 'brush'
   | 'eraser'
   | 'mixer'
-  /** Retouching (see `RetouchTool`): Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge. */
+  /** Retouching (see `RetouchTool`): Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen, History Brush. */
   | 'clone'
   | 'heal'
   | 'spot-heal'
@@ -353,6 +353,10 @@ export type ImageEditorTool =
   | 'dodge'
   | 'burn'
   | 'sponge'
+  /** Blur, Sharpen and the History Brush (retouching tools too). */
+  | 'blur'
+  | 'sharpen'
+  | 'history'
   /** Live shape layers (see `ShapeDrawGesture`). */
   | 'shape'
   /** Live type layers, edited on the canvas (see `TypeToolGesture`). */
