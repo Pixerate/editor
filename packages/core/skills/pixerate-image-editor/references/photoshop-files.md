@@ -25,8 +25,11 @@
    included), `fill_pixels`, `clear_pixels`, every retouching tool (Clone Stamp and the healing
    tools sample at depth, from the layer or the float composite) and `transform_layer`
    (resampled at depth; whole-pixel moves exact) keep the depth (32-bit paint and resampling work
-   in linear light). Mask painting, layer filters and layer effects still compute in 8 bits: the
-   pixels they change get 8-bit precision, every pixel they leave alone keeps its deep samples. Afterwards work with `list_layers` as
+   in linear light). Layer masks keep the depth too: 16- and 32-bit masks open and save at depth,
+   blend with their full precision, and the brush, eraser, `fill_pixels` and `clear_pixels` paint
+   them at depth (retouching on a mask stays 8-bit). Layer filters and layer effects still
+   compute in 8 bits: the pixels they change get 8-bit precision, every pixel they leave alone
+   keeps its deep samples. Afterwards work with `list_layers` as
    usual: there is no Background source image, every pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the

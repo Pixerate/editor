@@ -53,8 +53,8 @@ import {
   writePsd,
 } from './file';
 import { BLEND_TO_PSD } from './import';
-import { deepToPlanes, matteWhite, matteWhiteDeep, planeAtDepth, rgbaToPlanes } from './pixels';
-import { readDeepRegion } from '../../raster/deep';
+import { deepMaskPlane, deepToPlanes, matteWhite, matteWhiteDeep, planeAtDepth, rgbaToPlanes } from './pixels';
+import { readDeepRegion, surfaceDepth } from '../../raster/deep';
 import { parseLfx2, writeLfx2 } from './effects';
 import { writePatternBlock } from './patterns';
 import { shapeBlocks } from './shapes';
@@ -167,9 +167,13 @@ function maskChannel(mask: RasterMask, ox: number, oy: number, psb: boolean, dep
   if ((mask.density ?? 1) < 1) m.userDensity = Math.round(Math.max(0, mask.density ?? 1) * 255);
   if ((mask.feather ?? 0) > 0) m.userFeather = mask.feather;
   if (!bounds) return { channel: emptyChannel(CHANNEL_USER_MASK), mask: m };
-  const plane = readRegion(mask.surface, bounds);
   m.rect = toRect({ ...bounds, x: bounds.x + ox, y: bounds.y + oy });
-  const bytes = planeAtDepth(new Uint8Array(plane.buffer, plane.byteOffset, plane.length), depth);
+  let bytes: Uint8Array;
+  if (depth !== 8 && surfaceDepth(mask.surface) !== 8) bytes = deepMaskPlane(readDeepRegion(mask.surface, bounds, depth));
+  else {
+    const plane = readRegion(mask.surface, bounds);
+    bytes = planeAtDepth(new Uint8Array(plane.buffer, plane.byteOffset, plane.length), depth);
+  }
   return { channel: rleChannel(CHANNEL_USER_MASK, bytes, bounds.width, bounds.height, psb, depth), mask: m };
 }
 

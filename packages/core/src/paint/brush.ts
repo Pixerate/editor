@@ -559,7 +559,8 @@ export function applyStrokeToTile(
  * samples (`Uint16Array` sRGB or `Float32Array` linear light, see `raster/deep`) of the target's
  * tile (tx, ty) as it was before the stroke, and returns new samples of the same type. Blending
  * runs in float in the samples' own space (sRGB at 16 bits, linear light at 32 bits); the paint
- * colours are 8-bit sRGB and converted. Layers only (masks stay 8-bit).
+ * colours are 8-bit sRGB and converted. With `options.channels` 1, a mask's coverage samples
+ * (16-bit, or float 0..1) move towards the paint's grey, as `applyStrokeToTile` does at 8 bits.
  */
 export function applyStrokeToDeepTile(
   coverage: CoverageMap,
@@ -567,10 +568,11 @@ export function applyStrokeToDeepTile(
   tx: number,
   ty: number,
   s: StrokeApply,
-  options: { into?: Uint16Array | Float32Array; region?: CropBox } = {}
+  options: { into?: Uint16Array | Float32Array; region?: CropBox; channels?: 1 | 4 } = {}
 ): Uint16Array | Float32Array {
   const linear = samples instanceof Float32Array;
   const scale = linear ? 1 : 65535;
+  const n = options.channels ?? 4;
   const out = (options.into ?? samples).slice() as Uint16Array | Float32Array;
   const ox = tx * TILE + s.offset.x;
   const oy = ty * TILE + s.offset.y;
@@ -585,8 +587,9 @@ export function applyStrokeToDeepTile(
     x1 = Math.min(TILE, Math.ceil(r.x + r.width) - ox);
     y1 = Math.min(TILE, Math.ceil(r.y + r.height) - oy);
     if (x1 <= x0 || y1 <= y0) return out;
-    if (options.into) for (let y = y0; y < y1; y++) out.set(samples.subarray((y * TILE + x0) * 4, (y * TILE + x1) * 4), (y * TILE + x0) * 4);
+    if (options.into) for (let y = y0; y < y1; y++) out.set(samples.subarray((y * TILE + x0) * n, (y * TILE + x1) * n), (y * TILE + x0) * n);
   }
+  const grey = ((s.mode === 'erase' ? s.background[0] : s.color[0]) / 255) * scale;
   const colour = (c: readonly number[]) => {
     const v = [c[0] / 255, c[1] / 255, c[2] / 255, c[3] / 255];
     if (linear) for (let k = 0; k < 3; k++) v[k] = srgbDecode(v[k]);
@@ -614,6 +617,13 @@ export function applyStrokeToDeepTile(
       }
       if (k > 1) k = 1;
       if (k <= 0) continue;
+      if (n === 1) {
+        // Mask coverage: towards the paint's grey (masks take the colour's grey value).
+        const p = y * TILE + x;
+        const v = out[p] + (grey - out[p]) * k;
+        out[p] = linear ? v : Math.round(v);
+        continue;
+      }
       const i = (y * TILE + x) * 4;
       if (s.mode === 'erase' && !s.lockTransparency) {
         put(i + 3, (out[i + 3] / scale) * (1 - k));

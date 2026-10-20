@@ -28,6 +28,7 @@
 
 import { blendChannel, blendRgb, isSeparableBlendMode, mixPigment8, type BlendMode } from './blend';
 import { gaussianBlur } from './blur';
+import { readDeepRegion, surfaceDepth } from './deep';
 import { DEFAULT_GLOBAL_LIGHT, effectReach, effectsFingerprint, effectsMargin, hasActiveEffects, MAX_EFFECT_REACH, type GlobalLight, type LayerEffects } from './effects/model';
 import { builtinPattern, PatternTile, type EffectPattern } from './effects/patterns';
 import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, patchEffectMaps, type EffectContext, type EffectMaps } from './effects/render';
@@ -347,6 +348,15 @@ export interface CompositeStats {
 }
 
 const isGroup = (l: CompositorLayer) => l.type === 'group';
+
+
+/** A mask surface's depth, cached per surface (surfaces are immutable). */
+const maskDepths = new WeakMap<TiledSurface, number>();
+function maskDepth(surface: TiledSurface): number {
+  let d = maskDepths.get(surface);
+  if (d === undefined) maskDepths.set(surface, (d = surfaceDepth(surface)));
+  return d;
+}
 
 export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S extends RasterSources = RasterSources> {
   private readonly tiles = new Map<TileKey, TileEntry<L>>();
@@ -1100,11 +1110,22 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
         for (let x = x0; x < x1; x++) out[d + x] = plane.data[s + x];
       }
     } else {
-      const bytes = readRegion(mask.surface, { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height });
+      const rect = { x: r.x - ox, y: r.y - oy, width: r.width, height: r.height };
       let all = true;
-      for (let i = 0; i < n; i++) {
-        out[i] = bytes[i] / 255;
-        if (bytes[i] !== 255) all = false;
+      if (maskDepth(mask.surface) !== 8) {
+        // A 16- or 32-bit mask: coverage from its deep samples.
+        const d = readDeepRegion(mask.surface, rect, 32);
+        for (let i = 0; i < n; i++) {
+          const v = d[i] <= 0 ? 0 : d[i] >= 1 ? 1 : d[i];
+          out[i] = v;
+          if (v !== 1) all = false;
+        }
+      } else {
+        const bytes = readRegion(mask.surface, rect);
+        for (let i = 0; i < n; i++) {
+          out[i] = bytes[i] / 255;
+          if (bytes[i] !== 255) all = false;
+        }
       }
       if (all) return null;
       if (density !== 1) for (let i = 0; i < n; i++) out[i] = 1 - density * (1 - out[i]);
