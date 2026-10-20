@@ -20,8 +20,9 @@ import {
 import type { ImageLayer } from '../image-editor/layers/model';
 import { findLayer, flattenLayers } from '../raster/layers';
 import { normalizeBrushStroke, type RecordedStroke } from './strokes';
-import { normalizeCanvas, type PaintDocumentState, type PaintLayer } from './document';
+import { normalizeCanvas, type PaintDocumentState, type PaintEvent, type PaintLayer } from './document';
 import { normalizePaper, type PaperSettings } from './paper';
+import type { WetEvent } from './wet';
 
 export const PAINT_FORMAT = 'pixerate-paint' as const;
 export const PAINT_SCHEMA_VERSION = 1 as const;
@@ -32,7 +33,7 @@ export type PaintAssetStore = ImageEditorAssetStore;
 /**
  * Fields a later version adds. Phase 1 writes none of them and keeps any it reads. Planned:
  * `layerChannels: { [layerId]: { height?: asset, material?: asset } }` for impasto and
- * metallic paint. Wet paint is never saved (saving dries it), so there is no wet field.
+ * metallic paint. Wet paint itself is never saved (saving dries it); its settings are (`wet`).
  */
 export type PaintDocumentExtensions = Record<string, unknown>;
 
@@ -54,7 +55,7 @@ export interface SerializedPaintDocument {
   [extension: string]: unknown;
 }
 
-const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches', 'mixingPad']);
+const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches', 'mixingPad', 'wet', 'wetEvents', 'paintEvents']);
 
 /** Fields of a saved document this version does not read, kept for writing back. */
 export function documentExtensions(raw: Record<string, unknown>): PaintDocumentExtensions {
@@ -73,6 +74,8 @@ export interface SerializeOptions {
   swatches?: unknown;
   /** The mixing pad: `{ current?: png data URL, saved: [{ id, name, png }] }`. */
   mixingPad?: unknown;
+  /** Wet media settings: `{ tilt, layers: { [layerId]: { params, flow } } }`. */
+  wet?: unknown;
 }
 
 function header(state: PaintDocumentState, options: SerializeOptions): Omit<SerializedPaintDocument, 'layers' | 'assets'> {
@@ -90,6 +93,9 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
   if (options.guides !== undefined) out.guides = JSON.parse(JSON.stringify(options.guides));
   if (options.swatches !== undefined) out.swatches = JSON.parse(JSON.stringify(options.swatches));
   if (options.mixingPad !== undefined) (out as Record<string, unknown>).mixingPad = JSON.parse(JSON.stringify(options.mixingPad));
+  if (options.wet !== undefined) (out as Record<string, unknown>).wet = JSON.parse(JSON.stringify(options.wet));
+  if (state.wetEvents?.length) (out as Record<string, unknown>).wetEvents = JSON.parse(JSON.stringify(state.wetEvents));
+  if (state.paintEvents?.length) (out as Record<string, unknown>).paintEvents = JSON.parse(JSON.stringify(state.paintEvents));
   return out;
 }
 
@@ -113,6 +119,8 @@ export interface LoadedPaintDocument {
   swatches?: unknown;
   /** The saved mixing pad, as stored (the controller validates it). */
   mixingPad?: unknown;
+  /** The saved wet settings, as stored (the controller validates them). */
+  wet?: unknown;
   /** What could not be read (the rest still loads). */
   problems: string[];
 }
@@ -158,7 +166,12 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   const layers = paintLayersOnly(deserializeLayers(r.layers, { assets, problems }), problems);
   const wanted = typeof r.activeLayerId === 'string' ? r.activeLayerId : null;
   const activeLayerId = wanted && findLayer(layers, wanted) ? wanted : (flattenLayers(layers).filter((l) => l.type === 'pixel').pop()?.id ?? null);
-  return { state: { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) }, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, mixingPad: r.mixingPad, problems };
+  const wetEvents = Array.isArray(r.wetEvents) ? (r.wetEvents as WetEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.clock) && typeof e.kind === 'string') : [];
+  const state: PaintDocumentState = { canvas, paper, layers, activeLayerId, strokes: readStrokes(r.strokes, problems) };
+  if (wetEvents.length) state.wetEvents = wetEvents;
+  const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'clear', 'flatten', 'stickers'].includes(e.kind)) : [];
+  if (paintEvents.length) state.paintEvents = paintEvents;
+  return { state, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, mixingPad: r.mixingPad, wet: r.wet, problems };
 }
 
 /** Reads a saved document whose assets may be external references in `store`. */

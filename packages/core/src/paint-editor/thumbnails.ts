@@ -12,6 +12,48 @@ import { IDENTITY_COPY } from './engine';
 import { hexToRgb8, type PaperSettings } from './paper';
 import { createPaintCompositor, paperGrain, paperNode, type ViewLayer } from './render';
 import { brushLoadForStroke, PaintStrokeSession } from './stroke';
+import { WetWorld } from '../paint/wet/world';
+import { pigmentOf } from '../paint/wet/film';
+import { WetStrokeDriver, wetPaperInput } from './wet';
+import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
+
+/** One small wet world reused for wet brush thumbnails (by size). */
+let thumbWorld: WetWorld | null = null;
+
+/** A wet brush's test stroke: laid on a wet layer (over a wet band of colour for the tools that move paint), shown as painted, before any time passes. */
+function paintWetTestStroke(brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): TiledSurface {
+  if (!thumbWorld || thumbWorld.width !== width || thumbWorld.height !== height) {
+    thumbWorld?.destroy();
+    thumbWorld = new WetWorld(width, height, wetPaperInput(paper), { kernel: 'typescript', threads: 0 });
+  } else thumbWorld.setPaper(wetPaperInput(paper));
+  const w = thumbWorld;
+  if (w.hasLane('thumb')) w.removeLane('thumb');
+  w.ensureLane('thumb');
+  const [r, g, b] = hexToRgb8(color);
+  if (brush.wet.tool !== 'paint' && brush.wet.tool !== 'water') {
+    // Wet paint to work in: the colour over ochre, as for the dry brushes that move paint.
+    const half = Math.ceil(height / 2);
+    w.paint('thumb', { x: 0, y: 0, width, height: half }, null, 0.4, Array.from(pigmentOf([r / 255, g / 255, b / 255], 0), (v) => v * 0.05));
+    w.paint('thumb', { x: 0, y: half, width, height: height - half }, null, 0.4, Array.from(pigmentOf([232 / 255, 196 / 255, 64 / 255], 0), (v) => v * 0.05));
+  }
+  const driver = new WetStrokeDriver({
+    world: w,
+    laneId: 'thumb',
+    brush,
+    color: [r / 255, g / 255, b / 255],
+    load: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
+    grain: paperGrain(paper),
+    paperDepth: paper.depth,
+    paperColor: hexToRgb8(paper.color),
+    seed: 7,
+    copies: [IDENTITY_COPY],
+  });
+  driver.push(thumbnailStroke(width, height));
+  driver.finish();
+  // Blowing only shows once the water has moved.
+  if (brush.wet.tool === 'blow') w.stepSync(4);
+  return w.display('thumb').surface;
+}
 
 export interface BrushThumbnail {
   width: number;
@@ -38,8 +80,15 @@ export function thumbnailStroke(width: number, height: number): PenPoint[] {
 function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): TiledSurface {
   const [r, g, b] = hexToRgb8(color);
   let result = surface;
+  let thick: ThickChannels | null = null;
   const session = new PaintStrokeSession(
-    { update: () => {}, commit: (_s, s) => (result = s ?? result) },
+    {
+      update: () => {},
+      commit: (sess, s) => {
+        result = s ?? result;
+        thick = sess.thickChannels();
+      },
+    },
     {
       layerId: 'thumbnail',
       surface,
@@ -55,11 +104,14 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       affineCopies: [],
       copies: [IDENTITY_COPY],
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
+      thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
+      sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
     }
   );
   session.push(thumbnailStroke(width, height));
   session.end();
-  return result;
+  // Thick paint is shown lit, as on the canvas.
+  return thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
 }
 
 export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperSettings; width?: number; height?: number; color: string }): BrushThumbnail {
@@ -73,13 +125,15 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
   if (b.engine === 'eraser') {
     // Something to erase: a band of the colour.
     surface = fillRect(surface, { x: 0, y: 0, width, height }, rgba);
+  } else if (b.engine === 'wet') {
+    // the wet layer draws its own band
   } else if (b.engine === 'blender' || b.engine === 'smudge' || (b.engine === 'mixer' && !b.loadsColor) || b.behavior.pickup > 0) {
     // Something to move: two bands, the colour over ochre.
     const half = Math.ceil(height / 2);
     surface = fillRect(surface, { x: 0, y: 0, width, height: half }, rgba);
     surface = fillRect(surface, { x: 0, y: half, width, height: height - half }, [232, 196, 64, 255]);
   }
-  surface = paintTestStroke(surface, b, options.paper, options.color, width, height);
+  surface = b.engine === 'wet' ? paintWetTestStroke(b, options.paper, options.color, width, height) : paintTestStroke(surface, b, options.paper, options.color, width, height);
   const layer: ViewLayer = { type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } };
   const data = createPaintCompositor().composite([paperNode(options.paper), layer], { x: 0, y: 0, width, height }, { width, height });
   return { width, height, data };

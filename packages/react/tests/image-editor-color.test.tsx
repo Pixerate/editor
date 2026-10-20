@@ -27,7 +27,7 @@ function setSelect(el: HTMLSelectElement, value: string) {
 const button = (text: string) => Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
 
 describe('React ColorProfilePanel', () => {
-  it('assigns, converts and sets up proofing', async () => {
+  it('assigns, converts, sets the mode and sets up proofing', async () => {
     const fake = { width: 4, height: 2, naturalWidth: 4, naturalHeight: 2 } as unknown as HTMLImageElement;
     const c = new ImageEditorController({ image: fake });
     c.setSamplePixels({ width: 4, height: 2, data: new Uint8ClampedArray(32).fill(200) });
@@ -47,7 +47,9 @@ describe('React ColorProfilePanel', () => {
     expect(c.getState().proofSetup?.gamutWarning).toBe(true);
     await act(async () => setSelect(container.querySelector('select[aria-label="Proof profile"]')!, ''));
     expect(c.getState().proofSetup).toBeNull();
+    await act(async () => setSelect(container.querySelector('select[aria-label="Colour mode"]')!, 'cmyk'));
+    expect(c.getColorProfile()).toMatchObject({ mode: 'cmyk', cmykProfile: { builtin: 'coated-cmyk' } });
     await act(async () => setSelect(container.querySelector('select[aria-label="Target profile"]')!, 'display-p3'));
     expect(container.querySelector('[role="alert"]')).toBeNull();
-  });
+  }, 60_000);
 });

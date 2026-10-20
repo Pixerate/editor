@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, Intent } from '@pixerate/editor/image-editor';
-import { INTENT_OPTIONS, PROOF_PROFILE_OPTIONS, WORKING_SPACE_OPTIONS, colorPanelView } from '@pixerate/editor/image-editor';
+import { COLOR_MODE_OPTIONS, INTENT_OPTIONS, PROOF_PROFILE_OPTIONS, WORKING_SPACE_OPTIONS, colorPanelView } from '@pixerate/editor/image-editor';
 
 export interface ColorProfilePanelProps {
   controller: ImageEditorController;
@@ -12,8 +12,8 @@ const select = 'rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200';
 
 /**
  * Colour management: the document's profile (working space) with Assign Profile and Convert to
- * Profile (intent, black point compensation), and View › Proof Setup (profile, intent, simulate
- * paper, gamut warning).
+ * Profile (intent, black point compensation), Image › Mode (RGB, CMYK, Lab), and View › Proof
+ * Setup (profile, intent, simulate paper, gamut warning).
  */
 export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller, className }) => {
   const [, setTick] = useState(0);
@@ -49,6 +49,17 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
       <div className="flex items-center gap-2">
         <span className="text-slate-400">Profile</span>
         <span data-testid="color-profile-name">{view.profileName}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Colour mode">
+        <span className="text-slate-400">Mode</span>
+        <select aria-label="Colour mode" className={select} value={view.mode} onChange={(e) => attempt(() => controller.setColorMode(e.target.value as 'rgb' | 'cmyk' | 'lab'))}>
+          {COLOR_MODE_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id} title={o.title}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {view.cmykProfileName && <span className="text-slate-400">{view.cmykProfileName}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Assign or convert">
         <select aria-label="Target profile" className={select} value={target} onChange={(e) => setTarget(e.target.value)}>

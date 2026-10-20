@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+  import { LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
@@ -14,6 +14,10 @@
   let error = $state<string | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
   const SWATCH = { x: 0, y: 0, width: 64, height: 40 };
+  const lighting = $derived.by(() => {
+    void editor.current;
+    return controller.getLighting();
+  });
   const previews = new Map(PAPER_LIBRARY.map((p) => [p.preset, { ...SWATCH, data: renderPaper({ ...p, shading: Math.max(0.8, p.shading) }, SWATCH) }]));
 </script>
 
@@ -50,5 +54,12 @@
     <input type="checkbox" checked={paper.tiling === 'mirror'} onchange={(e) => run(() => controller.setPaper({ tiling: e.currentTarget.checked ? 'mirror' : 'repeat' }))} /> Mirror tiling
   </label>
   <button type="button" class={`self-start ${button}`} onclick={() => run(() => controller.setPaper({ seed: paper.seed + 1 }))}>New sheet</button>
+  <div class="flex flex-col gap-1.5" data-testid="light-panel">
+    <span class="font-medium text-slate-300">Light (thick paint, metallic paper)</span>
+    {#each LIGHT_SLIDERS as c (c.path)}
+      <PaintSlider control={c} value={readPath(lighting, c.path)} onchange={(v) => run(() => controller.setLighting({ [c.path]: v }))} />
+    {/each}
+    <button type="button" class={`self-start ${button}`} onclick={() => run(() => controller.flattenRelief())}>Flatten relief</button>
+  </div>
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
 </div>
