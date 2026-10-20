@@ -8,6 +8,7 @@
  */
 
 import { composeAffine, type Affine } from './strokes';
+import type { Stencil } from './stencils';
 
 export type SymmetryMode = 'off' | 'vertical' | 'horizontal' | 'dual' | 'diagonal' | 'kaleidoscope';
 
@@ -73,6 +74,8 @@ export interface PaintGuides {
   perspective: PerspectiveGuide;
   tracing: TracingImage | null;
   references: ReferenceImage[];
+  /** Rulers, arcs, straight edges and shape templates that guide or mask strokes. */
+  stencils: Stencil[];
 }
 
 export function defaultGuides(canvas: { width: number; height: number }): PaintGuides {
@@ -81,6 +84,7 @@ export function defaultGuides(canvas: { width: number; height: number }): PaintG
     perspective: { enabled: false, points: [], snap: true },
     tracing: null,
     references: [],
+    stencils: [],
   };
 }
 

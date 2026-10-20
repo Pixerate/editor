@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -278,5 +278,123 @@ describe('Svelte paint editor', () => {
     expect(controller.getStrokes()).toHaveLength(1);
     // linger 0 keeps the cursor where the stroke ended.
     expect(target.querySelector('[data-paint-presence] [data-actor="agent"]')).not.toBeNull();
+  });
+
+  it('WetPanel shows wet paint and dries, pauses, tilts and tunes it; the brush panel picks the wet tool', async () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    show(PaintEditor, { controller: c });
+    click(byText('Wet'));
+    const status = () => target.querySelector('[data-testid="wet-status"]')!.textContent;
+    expect(status()).toBe('Dry');
+    c.paintStroke({ points: [{ x: 50, y: 100 }, { x: 200, y: 100 }], brushId: 'watercolor-round', color: '#1d4ed8' });
+    flushSync();
+    expect(status()).toBe('Wet');
+    click(byText('Pause'));
+    expect(c.getState().wet.paused).toBe(true);
+    expect(status()).toBe('Wet (paused)');
+    expect(target.querySelector('[data-testid="paint-water-overlay"]')).toBeNull();
+    click(byText('Water'));
+    expect(target.querySelector('[data-testid="paint-water-overlay"]')).not.toBeNull();
+    setValue(target.querySelector('[data-testid="wet-layer"] input[aria-label="Granulation"]') as HTMLInputElement, '0.9', true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.wetLayerInfo().params.granulation).toBe(0.9);
+    setValue(target.querySelector('input[aria-label="Tilt"]') as HTMLInputElement, '40', true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(c.getState().wet.tilt.angle).toBe(40);
+    byText('Dry now').click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(status()).toBe('Dry');
+    c.setBrush({ id: 'watercolor-round' });
+    flushSync();
+    const tool = target.querySelector('select[aria-label="Wet tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('paint');
+    setValue(tool, 'blot');
+    expect(c.getState().brush.wet.tool).toBe('blot');
+    expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    c.dispose();
+  });
+
+  it('thick paint and oil controls: impasto tool, wet medium, instant dry and the light', () => {
+    const c = new PaintEditorController({ width: 300, height: 200, wet: { kernel: 'typescript' } });
+    show(PaintEditor, { controller: c });
+    c.setBrush({ id: 'impasto-brush' });
+    flushSync();
+    const tool = target.querySelector('select[aria-label="Impasto tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('brush');
+    setValue(tool, 'knife');
+    expect(c.getState().brush.impasto.tool).toBe('knife');
+    expect(target.querySelector('input[aria-label="Thickness"]')).not.toBeNull();
+    c.setBrush({ id: 'oil-round' });
+    flushSync();
+    const medium = target.querySelector('select[aria-label="Wet medium"]') as HTMLSelectElement;
+    expect(medium.value).toBe('oil');
+    setValue(medium, 'gouache');
+    expect(c.getState().brush.wet.medium).toBe('gouache');
+    click(byText('Wet'));
+    click(byText('Instant dry'));
+    expect(c.getState().wet.instantDry).toBe(true);
+    click(byText('Paper'));
+    setValue(target.querySelector('[data-testid="light-panel"] input[aria-label="Light height"]') as HTMLInputElement, '20');
+    expect(c.getLighting().elevation).toBe(20);
+    c.setBrush({ id: 'impasto-brush' });
+    c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 200, y: 50 }] });
+    flushSync();
+    expect(c.reliefOf()).not.toBeNull();
+    click(byText('Flatten relief'));
+    expect(c.reliefOf()).toBeNull();
+  });
+
+  it('the toolbar exports a time-lapse and a PNG repainted at twice the size', async () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    c.paintStroke({ points: [{ x: 10, y: 40 }, { x: 110, y: 40 }], brushId: 'soft-pastel' });
+    const downloads: string[] = [];
+    (URL as any).createObjectURL = () => 'blob:x';
+    (URL as any).revokeObjectURL = () => {};
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    };
+    show(PaintToolbar, { controller: c, tool: 'brush', ontoolchange: () => {} });
+    byText('Time-lapse').click();
+    for (let i = 0; i < 50 && downloads.length < 1; i++) await new Promise((r) => setTimeout(r, 20));
+    flushSync();
+    expect(downloads).toContain('painting-timelapse.zip');
+    expect(target.querySelector('[data-testid="paint-replay-status"]')!.textContent).toMatch(/frames/);
+    byText('PNG 2×').click();
+    for (let i = 0; i < 50 && downloads.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(downloads).toContain('painting@2x.png');
+    HTMLAnchorElement.prototype.click = click;
+  });
+
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    show(PaintEditor, { controller: c });
+    c.setBrush({ id: 'hair-strands' });
+    flushSync();
+    setValue(target.querySelector('select[aria-label="Particle kind"]') as HTMLSelectElement, 'orbit');
+    expect(c.getState().brush.particle.kind).toBe('orbit');
+    setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
+    expect(c.getState().brush.particle.render).toBe('sequence');
+    c.setBrush({ id: 'bristle-round' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Splay"]')).not.toBeNull();
+    c.setBrush({ id: 'sticker-stars' });
+    flushSync();
+    click(target.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]'));
+    expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    click(byText('Ruler'));
+    expect(c.listStencils()[0].kind).toBe('ruler');
+    expect(target.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);
+    click(byText('Clear stencils'));
+    expect(c.listStencils()).toHaveLength(0);
+    c.paintStroke({ points: [{ x: 20, y: 100 }, { x: 280, y: 100 }] });
+    flushSync();
+    click(byText('Layers'));
+    const list = target.querySelectorAll('[data-testid="sticker-panel"] [role="option"]');
+    expect(list.length).toBe(c.listStickers().length);
+    click(list[0]);
+    click(Array.from(target.querySelectorAll('[data-testid="sticker-edit"] button')).find((b) => b.textContent?.trim() === 'Delete')!);
+    expect(c.listStickers().length).toBe(list.length - 1);
   });
 });

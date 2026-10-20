@@ -2,7 +2,9 @@
   import {
     PaintCanvasPresenter,
     PaintGesture,
+    drawWaterOverlay,
     fitZoom,
+    startWetClock,
     guideOverlay,
     handlePaintShortcut,
     viewCssTransform,
@@ -35,6 +37,7 @@
   const snap = $derived(editor.current);
   let viewport = $state<HTMLDivElement | null>(null);
   let canvas = $state<HTMLCanvasElement | null>(null);
+  let water = $state<HTMLCanvasElement | null>(null);
   let size = $state({ width: 800, height: 600 });
   let predicted = $state<Array<{ x: number; y: number }>>([]);
   const presenter = $derived(new PaintCanvasPresenter(controller));
@@ -80,6 +83,21 @@
     untrack(() => {
       if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never);
       else controller.takeDirty();
+    });
+  });
+
+  // Wet paint flows with the display.
+  $effect(() => {
+    const c = controller;
+    return untrack(() => startWetClock(c));
+  });
+
+  // The water overlay.
+  $effect(() => {
+    void snap;
+    const ctx = water?.getContext('2d');
+    untrack(() => {
+      if (ctx && typeof ctx.createImageData === 'function') drawWaterOverlay(controller, ctx as never);
     });
   });
 
@@ -141,6 +159,16 @@
     class="absolute left-0 top-0 shadow-2xl"
     style={`transform: ${transform}; transform-origin: 0 0; image-rendering: ${snap.view.zoom > 2 ? 'pixelated' : 'auto'}`}
   ></canvas>
+  {#if snap.wet.overlay}
+    <canvas
+      bind:this={water}
+      width={doc.width}
+      height={doc.height}
+      data-testid="paint-water-overlay"
+      class="absolute left-0 top-0 pointer-events-none opacity-60"
+      style={`transform: ${transform}; transform-origin: 0 0`}
+    ></canvas>
+  {/if}
   <svg class="absolute left-0 top-0 pointer-events-none overflow-visible" width={doc.width} height={doc.height} style={`transform: ${transform}; transform-origin: 0 0`} aria-hidden="true">
     {#each lines as l, i (i)}
       <line
@@ -148,8 +176,8 @@
         y1={l.from.y}
         x2={l.to.x}
         y2={l.to.y}
-        stroke={l.kind === 'symmetry' ? '#22d3ee' : '#f472b6'}
-        stroke-opacity={l.kind === 'symmetry' ? 0.8 : 0.35}
+        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : '#f472b6'}
+        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' ? 0.8 : 0.35}
         stroke-width={1 / snap.view.zoom}
         stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
       />

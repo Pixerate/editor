@@ -42,16 +42,32 @@ const refInfo = ({ src: _s, ...r }: ReferenceImage) => r;
 
 export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
   const guides = () => c.getState().guides;
+  const STENCIL_GEOMETRY = {
+    mode: { type: 'string', enum: ['guide', 'mask'], description: 'guide: strokes that start within snap px of the edge follow it; mask: paint lands only inside (or on the left of a line going from → to), outside with invert. Default guide for ruler and arc, mask for line and shape.' },
+    enabled: { type: 'boolean', description: 'In effect and shown (default true).' },
+    from: { ...POINT, description: 'ruler / line: a point on the edge.' },
+    to: { ...POINT, description: 'ruler / line: another point on the edge (the edge runs on past both).' },
+    center: { ...POINT, description: 'arc: the centre.' },
+    radius: { type: 'number', exclusiveMinimum: 0, description: 'arc: the radius in pixels.' },
+    startAngle: { type: 'number', minimum: -720, maximum: 720, description: 'arc: where it starts, degrees clockwise from +x (default 0).' },
+    endAngle: { type: 'number', minimum: -720, maximum: 720, description: 'arc: where it ends (default 360: the whole circle).' },
+    shape: { type: 'string', enum: ['rect', 'ellipse', 'polygon'], description: 'shape: rect or ellipse (with rect) or polygon (with points).' },
+    rect: { ...RECT, description: 'shape rect / ellipse: its bounds in document pixels.' },
+    points: { type: 'array', minItems: 3, maxItems: 500, items: POINT, description: 'shape polygon: its corners in order.' },
+    invert: { type: 'boolean', description: 'mask: paint outside the shape (or on the right of the line) instead (default false).' },
+    snap: { type: 'number', minimum: 1, maximum: 400, description: 'guide: how near the edge a stroke must start to follow it, px (default 40).' },
+    feather: { type: 'number', minimum: 0, maximum: 100, description: 'mask: soft edge width in pixels (default 1).' },
+  } as const;
   return [
     {
       name: 'get_guides',
       title: 'Get the painting guides',
-      description: 'Reads the painting guides: symmetry (mode, centre, rotation, segments, mirror, and how many copies each stroke paints), the perspective guide (vanishing points, snap), the tracing image (size, placement, opacity, visibility, colour sampling) and the reference images.',
+      description: 'Reads the painting guides: symmetry (mode, centre, rotation, segments, mirror, and how many copies each stroke paints), the perspective guide (vanishing points, snap), the tracing image (size, placement, opacity, visibility, colour sampling), the reference images and the stencils (id, kind, mode, geometry).',
       inputSchema: EMPTY,
       annotations: { title: 'Get the painting guides', ...READ },
       handler: () => {
         const g = guides();
-        return { symmetry: { ...g.symmetry, copies: symmetryCopies(g.symmetry).length }, perspective: g.perspective, tracing: tracingInfo(g.tracing), references: g.references.map(refInfo) };
+        return { symmetry: { ...g.symmetry, copies: symmetryCopies(g.symmetry).length }, perspective: g.perspective, tracing: tracingInfo(g.tracing), references: g.references.map(refInfo), stencils: g.stencils };
       },
     },
     {
@@ -410,6 +426,31 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
           ],
         };
       },
+    },
+    {
+      name: 'add_stencil',
+      title: 'Lay a stencil',
+      description:
+        'Lays a stencil on the canvas: a ruler (straight edge to draw along) or an arc (circle or part of one) that pointer and agent strokes starting near it follow exactly, or a line (straight masking edge) or a shape (rect, ellipse or polygon template) that paint lands only inside of (outside with invert). Editor state saved with the document, not an undo step; replays keep the mask they were painted through. Returns the stencil with its id.',
+      inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['ruler', 'arc', 'line', 'shape'], description: 'ruler, arc, line or shape.' }, ...STENCIL_GEOMETRY }, required: ['kind'], additionalProperties: false },
+      annotations: { title: 'Lay a stencil', ...WRITE },
+      handler: (a) => c.addStencil(a as Parameters<PaintEditorController["addStencil"]>[0]),
+    },
+    {
+      name: 'update_stencil',
+      title: 'Change a stencil',
+      description: 'Moves, reshapes, switches (guide or mask, invert) or hides (enabled false) a stencil by id from get_guides. Returns the stencil.',
+      inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Stencil id from get_guides.' }, ...STENCIL_GEOMETRY }, required: ['id'], additionalProperties: false },
+      annotations: { title: 'Change a stencil', ...SET },
+      handler: ({ id, ...update }) => c.updateStencil(id, update),
+    },
+    {
+      name: 'remove_stencils',
+      title: 'Take stencils away',
+      description: 'Removes stencils by id, or every stencil when ids is missing. Returns the ids removed.',
+      inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string', description: 'Stencil id.' }, description: 'Stencil ids from get_guides (default all).' } }, additionalProperties: false },
+      annotations: { title: 'Take stencils away', ...DESTRUCTIVE },
+      handler: ({ ids }) => ({ removed: c.removeStencils(ids) }),
     },
   ];
 }

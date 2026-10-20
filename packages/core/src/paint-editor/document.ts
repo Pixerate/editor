@@ -12,6 +12,9 @@ import type { RasterGroupLayer, RasterLayer, RasterPixelLayer } from '../raster/
 import { emptySurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
+import type { WetEvent } from './wet';
+import type { ThickChannels } from './thick';
+import type { Sticker } from './stickers';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -39,6 +42,23 @@ export interface PaintDocumentState {
   activeLayerId: string | null;
   /** Every committed stroke, oldest first (strokes are data: replay, vary, time-lapse later). */
   strokes: RecordedStroke[];
+  /** Wet-media events other than strokes (drying, tilt, settings), with the clock they happened at. */
+  wetEvents?: WetEvent[];
+  /** Changes besides strokes that a replay repeats (fills, clears, flattened relief), in order. */
+  paintEvents?: PaintEvent[];
+  /** Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them). */
+  stickers?: Readonly<Record<string, Sticker[]>>;
+  /** Thick paint: each layer's height and material channels (layers without relief are missing). */
+  thick?: Readonly<Record<string, ThickChannels>>;
+}
+
+/** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
+export interface PaintEvent {
+  at: number;
+  kind: 'fill' | 'clear' | 'flatten' | 'stickers';
+  layerId: string;
+  /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers after an edit. */
+  data?: Record<string, unknown>;
 }
 
 let nextId = 1;

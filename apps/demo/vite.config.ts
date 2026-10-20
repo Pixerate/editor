@@ -15,5 +15,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    // Cross-origin isolation, so wet paint runs in Web Workers on shared memory (see GOTCHAS).
+    headers: { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "credentialless" },
+  },
+  preview: {
+    headers: { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "credentialless" },
   },
 });
