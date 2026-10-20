@@ -430,6 +430,13 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-extrude",
+    prompt: "Make the card a 3D block",
+    steps: [
+      { say: "Extruding the card back and down-right, lit from the top left.", ...command("vector.addEffect", { ids: ["card"], type: "extrude", params: { mode: "parallel", angle: 45, depth: 24, lightAngle: -135, shading: 60 } }), target: { selector: '[data-vector-id="card"]' } },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [
