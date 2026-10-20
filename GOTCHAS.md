@@ -2607,3 +2607,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A lens didn't follow edits to the art below it, because render data is cached per node object and the lens node itself hadn't changed.
 - **Root Cause**: What a lens draws depends on nodes other than itself. The per-node caches (`renderCache`, `expandCache`, `shapeCache`) can't see that.
 - **Solution / Workaround**: The backdrop lives on the lens as a derived `lensView`. `resolveVectorLenses` sets it in the controller's refresh, as connectors' routes and instances' art are set. It keeps node objects (and so caches) when the backdrop's nodes are the same objects, and `toJSON()` strips it. Code drawing a caller's document resolves it first (`getVectorSceneRenderData`, `vectorDocumentToSvg`, `vectorDocumentToPdf`, `vectorDocumentToLottie`).
+
+### [core/vector] A Page's Master Art Is Placed By The Master's Frame, So Put It In The Master's Space
+
+- **Issue / Symptom**: Art added to a master page showed on its pages shifted by the distance between the master and the page.
+- **Root Cause**: The master's children are in the master frame's space. Each is laid onto a page by `vectorFrameChildMatrix(resizing, box, masterFrame, pageFrame)`, which moves art relative to the master frame's corner. Art drawn at the page's coordinates but added to the master sits outside the master's rectangle.
+- **Solution / Workaround**: Place master art inside the master page's own rectangle: `vector.listPages` and `vector.addMasterPage` give each master's `bounds`. Give each object a `resizing` (e.g. `vertical: "bottom"` for a footer) so it follows pages of other sizes.
