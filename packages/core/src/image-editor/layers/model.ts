@@ -22,6 +22,7 @@ import type { EffectFill, GlobalLight } from '../../raster/effects/model';
 import type { EffectPattern } from '../../raster/effects/patterns';
 import type { AffineMatrix, Quad, WarpMesh } from '../../geom/types';
 import type { VectorSubpath } from '../../vector/types';
+import type { TextRun, ParagraphRun } from '../../text/types';
 import {
   findLayer,
   flattenLayers,
@@ -262,62 +263,8 @@ export interface ShapeLayer extends LayerBase {
 // Type layers
 // ---------------------------------------------------------------------------
 
-/**
- * The character style of a run of text (Photoshop's Character panel). Sizes are document pixels;
- * tracking is in 1/1000 em.
- */
-export interface TextStyle {
-  /** Family name ("Inter"); fonts the system lacks fall back to a generic family, with a warning. */
-  fontFamily: string;
-  /** CSS weight, 100..900 (default 400). */
-  fontWeight: number;
-  /** Default false. */
-  italic?: boolean;
-  /** Font size in pixels. */
-  fontSize: number;
-  /** `#rrggbb`. */
-  color: string;
-  /** 0..1 (missing = 1). */
-  opacity?: number;
-  /** Letter spacing in 1/1000 em (missing = 0). */
-  tracking?: number;
-  /** Baseline-to-baseline distance in pixels; missing = auto (the paragraph's `autoLeading` × size). */
-  leading?: number;
-  /** Pixels; positive raises the text (missing = 0). */
-  baselineShift?: number;
-  underline?: boolean;
-  strikethrough?: boolean;
-  /** PostScript name from a PSD (`ArialMT`), kept so the exact face can be found and written back. */
-  postScriptName?: string;
-}
-
-/** A character style over `length` UTF-16 code units of the text, in order. */
-export interface TextRun {
-  length: number;
-  style: TextStyle;
-}
-
-export type TextAlign = 'left' | 'center' | 'right' | 'justify';
-export const TEXT_ALIGNS: readonly TextAlign[] = ['left', 'center', 'right', 'justify'];
-
-/** Paragraph style (Photoshop's Paragraph panel); lengths in pixels. */
-export interface ParagraphStyle {
-  /** Default `left`. `justify` stretches every line of a paragraph box but the last. */
-  align?: TextAlign;
-  /** Auto leading as a multiple of the font size (default 1.2). */
-  autoLeading?: number;
-  firstLineIndent?: number;
-  startIndent?: number;
-  endIndent?: number;
-  spaceBefore?: number;
-  spaceAfter?: number;
-}
-
-/** A paragraph style over `length` UTF-16 code units (whole paragraphs, line break included). */
-export interface ParagraphRun {
-  length: number;
-  style: ParagraphStyle;
-}
+export type { TextStyle, TextRun, TextAlign, ParagraphStyle, ParagraphRun } from '../../text/types';
+export { TEXT_ALIGNS } from '../../text/types';
 
 /** PSD data of a type layer kept for round trips (see the PSD module). */
 export interface TypePsdData {

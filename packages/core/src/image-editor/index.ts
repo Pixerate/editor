@@ -46,6 +46,7 @@ export * from './layers/panel';
 export * from './layers/effects-ui';
 export * from '../paint';
 export * from './paint-tools';
+export * from './retouch-tools';
 export * from './layers/paint-ui';
 export * from './psd';
 export * from './psd-tools';

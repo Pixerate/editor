@@ -2,7 +2,8 @@
 import { resolveEasing, reverseCubicBezier } from '../animation/easing.js';
 import { toBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
 import { normalizeTokenColor } from '../tokens/color.js';
-import { expandVectorAppearances } from '../vector/appearance.js';
+import { expandVectorAppearance, expandVectorAppearances } from '../vector/appearance.js';
+import { vectorTextHasOutlines } from '../vector/text.js';
 import { IDENTITY_MATRIX, nodeMatrix, vectorPathWorldBezier, type AffineMatrix } from '../vector/geometry.js';
 import type { VectorNode, VectorPaint, VectorPathNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionTrackKey, trackValue, type MotionNodeEntry, type MotionProperty, type MotionSegment, motionDriverSources, motionPropertyValue } from './compile.js';
@@ -373,7 +374,12 @@ export function toLottie(scene: MotionScene, options: LottieExportOptions = {}):
 		let inner: LottieShape[];
 		const innerTr = STATIC_TR();
 		if (node.type === 'path') inner = [...pathShapes(node)];
-		else {
+		else if (node.type === 'text' || node.type === 'instance') {
+			// Lottie text layers need fonts the player has: text (and a symbol's art) is exported as outlines.
+			const drawn = expandVectorAppearance(node);
+			inner = drawn.type === 'path' ? [...pathShapes(drawn)] : drawn.children.filter((c): c is VectorPathNode => c.type === 'path').reverse().flatMap((c) => [...pathShapes(c)]);
+			notes.push(`"${node.id}": text is exported as its outlines${vectorTextHasOutlines() ? '' : ' (glyph boxes: set an outline text shaper for real glyphs)'}.`);
+		} else {
 			// Later children draw on top: Lottie lists the top item first.
 			inner = shown(node.children).reverse().map(nodeGroup);
 			const m = nodeMatrix(node);

@@ -345,6 +345,14 @@ export type ImageEditorTool =
   | 'brush'
   | 'eraser'
   | 'mixer'
+  /** Retouching (see `RetouchTool`): Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge. */
+  | 'clone'
+  | 'heal'
+  | 'spot-heal'
+  | 'smudge'
+  | 'dodge'
+  | 'burn'
+  | 'sponge'
   /** Live shape layers (see `ShapeDrawGesture`). */
   | 'shape'
   /** Live type layers, edited on the canvas (see `TypeToolGesture`). */

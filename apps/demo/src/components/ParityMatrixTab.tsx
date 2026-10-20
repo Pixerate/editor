@@ -321,6 +321,13 @@ const FEATURES: ParityRow[] = [
     note: "Round brush with hardness, spacing, opacity vs flow, smoothing and pressure; mask painting; selection-limited; one undo step per stroke; paint_stroke / fill_pixels / clear_pixels agent tools",
   },
   {
+    feature: "Image Retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "On the shared brush engine with pressure, selection, locks and masks; aligned / non-aligned clone source sampling the layer, the layers below or all; Poisson healing; one undo step per stroke; ten agent tools",
+  },
+  {
     feature: "Image Layer Integrations (AI to layers, rasterize, sampling, asset store)",
     core: true,
     react: true,

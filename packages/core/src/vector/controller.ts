@@ -13,6 +13,7 @@ import {
 	cloneVectorDocument,
 	cloneVectorNode,
 	collectPathNodes,
+	collectPaintedNodes,
 	convertAnchor,
 	ellipseSubpath,
 	findVectorNode,
@@ -123,10 +124,49 @@ import {
 	vectorEnteredGroups,
 	vectorEnvelopeFrame,
 	vectorNodeEnvelope,
+	vectorInstanceDrawn,
 	type VectorEnvelopeParams,
 	VECTOR_EFFECT_LABELS
 } from './appearance.js';
+import { isIdentityMatrix } from '../geom/affine.js';
+import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
+import type { TextShaper } from '../text/types.js';
+import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
+import {
+	addVectorConstraint,
+	findVectorAnchorById,
+	purgeVectorConstraints,
+	solveVectorConstraints,
+	vectorConstraintDof,
+	vectorConstraintEnv,
+	VectorConstraintError,
+	VECTOR_DIMENSIONAL_KINDS,
+	type VectorDofReport
+} from './constraints/solve.js';
+import { autoConstrainVector, withVectorAnchorIds, type VectorInferOptions } from './constraints/auto.js';
+import { checkVectorExpression, isValidVectorParameterName } from './constraints/expr.js';
+import {
+	DEFAULT_VECTOR_FONT,
+	getVectorTextShaper,
+	layoutVectorText,
+	pathTextFrameFromBezier,
+	patchVectorCharacterStyle,
+	patchVectorParagraphStyle,
+	replaceVectorText,
+	sanitizeVectorTextFrame,
+	setVectorTextShaper,
+	styleVectorText,
+	vectorTextCaret,
+	vectorTextHasOutlines,
+	vectorTextIndexAt,
+	vectorTextName,
+	vectorTextPaths,
+	vectorTextPaintSource,
+	vectorTextRange,
+	VectorTextError,
+	type VectorTextLayout
+} from './text.js';
 import { applyVectorHomography, vectorHomography, vectorHomographyKeepsQuad } from './perspective.js';
 import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
 import {
@@ -215,7 +255,21 @@ import type {
 	VectorTool,
 	VectorTransformHandle,
 	VectorViewport,
-	VectorWidthPoint
+	VectorWidthPoint,
+	VectorCharacterStyle,
+	VectorParagraphStyle,
+	VectorTextAlign,
+	VectorTextFrame,
+	VectorTextNode,
+	VectorMatrix,
+	VectorSymbol,
+	VectorInstanceNode,
+	VectorInstanceOverrides,
+	VectorPaint,
+	VectorConstraint,
+	VectorConstraintKind,
+	VectorGeomRef,
+	VectorParameter
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -307,6 +361,63 @@ export interface VectorEditorOptions {
 	onChange?: (document: VectorDocument) => void;
 	/** Start in Free Distort mode (see `setFreeDistort`). */
 	freeDistort?: boolean;
+	/**
+	 * The text shaper text nodes lay out with (see `setVectorTextShaper`; it is shared by every
+	 * editor on the page). Default: the browser's fonts, or estimated metrics outside a browser.
+	 */
+	textShaper?: TextShaper | null;
+	/** Font and alignment new text gets (default 24 px sans-serif, left). */
+	textDefaults?: Partial<VectorTextDefaults>;
+}
+
+/** Font and alignment of new text. */
+export interface VectorTextDefaults extends VectorCharacterStyle {
+	align?: VectorTextAlign;
+}
+
+/** Text to add (`addText`): point text at (`x`, `y`), area text with `width` and `height`, or text on `path`. */
+export interface VectorTextInput extends VectorStyle {
+	text: string;
+	/** Point text: the first baseline's start; area text: the box's top left. */
+	x?: number;
+	y?: number;
+	/** Area text: the box (both needed). */
+	width?: number;
+	height?: number;
+	/** Text on a path: SVG path data or a subpath (document units); `x`, `y`, `width` and `height` are then ignored. */
+	path?: string | VectorSubpath;
+	/** Text on a path: margins from the path's start and end, side, orientation and baseline. */
+	pathOptions?: Omit<Extract<VectorTextFrame, { kind: 'path' }>, 'kind' | 'path'>;
+	font?: Partial<VectorCharacterStyle>;
+	paragraph?: VectorParagraphStyle;
+	name?: string;
+}
+
+/** A constraint reference from loose input: an anchor by `subpath` / `index` (or its `id` as `anchor`), its handle, its segment, or a path as a circle. */
+export interface VectorConstraintRefInput {
+	nodeId: string;
+	subpath?: number;
+	index?: number;
+	anchor?: string;
+	handle?: 'in' | 'out';
+	segment?: boolean;
+	circle?: boolean;
+}
+
+/** A constraint to add (`addConstraint`). */
+export interface VectorConstraintInput {
+	kind: VectorConstraintKind;
+	refs: VectorConstraintRefInput[];
+	value?: string | number;
+	name?: string;
+	axis?: 'aligned' | 'horizontal' | 'vertical';
+}
+
+/** The text being edited on the canvas: the node and the selection in UTF-16 code units (`anchor` where it started, `focus` the caret). */
+export interface VectorTextEditState {
+	nodeId: string;
+	anchor: number;
+	focus: number;
 }
 
 /** A pointer event as the controller needs it. Positions are in screen pixels relative to the canvas. */
@@ -401,6 +512,10 @@ export type VectorInteraction =
 	| { type: 'distort'; mode: VectorDistortMode | 'skew'; corners: Vec2[] }
 	/** Envelope tool: a mesh point (`index`) or the surface (`index` null) being dragged. */
 	| { type: 'envelope'; nodeId: string; index: number | null }
+	/** The Type tool dragging out an area text box (document space). */
+	| { type: 'textBox'; bounds: VectorBounds }
+	/** Selecting text by dragging over it. */
+	| { type: 'textSelect'; nodeId: string }
 	| { type: 'pan' };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -451,6 +566,18 @@ export interface VectorEditorState {
 	 * a side skews along it (Alt: about the centre).
 	 */
 	freeDistort: boolean;
+	/** The text being edited on the canvas, or null. Typing goes to `textInput`, keys to `keyDown`. */
+	textEdit: VectorTextEditState | null;
+	/** Font and alignment new text gets. */
+	textDefaults: VectorTextDefaults;
+	/**
+	 * Isolation mode: `document` is then the art of symbol `symbolId`, in the symbol's own space.
+	 * `host` is the whole document with that art (draw it dimmed behind, through `hostTransform`,
+	 * which lines the instance it was entered from up with the art).
+	 */
+	symbolEdit: { symbolId: string; name: string; instanceId: string | null; host: VectorDocument; hostTransform: VectorMatrix | null } | null;
+	/** Constraints the last solve could not satisfy (`conflicts`) or interpret (`skipped`), or null when all hold. */
+	constraintIssues: { conflicts: string[]; skipped: { id: string; message: string }[] } | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -946,7 +1073,9 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	paintBucket: 'Paint Bucket',
 	blend: 'Blend',
 	gradient: 'Gradient',
-	envelope: 'Envelope Mesh'
+	envelope: 'Envelope Mesh',
+	type: 'Type',
+	typePath: 'Type on a Path'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -967,7 +1096,9 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	b: 'paintBucket',
 	j: 'blend',
 	g: 'gradient',
-	u: 'envelope'
+	u: 'envelope',
+	t: 'type',
+	q: 'typePath'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -993,7 +1124,9 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	paintBucket: 'B',
 	blend: 'J',
 	gradient: 'G',
-	envelope: 'U'
+	envelope: 'U',
+	type: 'T',
+	typePath: 'Q'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -1015,7 +1148,9 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	paintBucket: '◍',
 	blend: '⧓',
 	gradient: '◐',
-	envelope: '⌗'
+	envelope: '⌗',
+	type: 'T',
+	typePath: '𝒯'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
@@ -1048,7 +1183,7 @@ export const VECTOR_PATHFINDER_LABELS: Readonly<Record<VectorPathfinderOperation
 function normalizeVectorTree(nodes: readonly VectorNode[], prefer: 'stack' | 'shorthand'): VectorNode[] {
 	let changed = false;
 	const out = nodes.map((n) => {
-		let next: VectorNode = n.type === 'path' ? normalizeVectorPaintStacks(n, prefer) : n;
+		let next: VectorNode = n.type === 'path' || n.type === 'text' ? normalizeVectorPaintStacks(n, prefer) : n;
 		if (next.type === 'group') {
 			const children = normalizeVectorTree(next.children, prefer);
 			if (children !== next.children) next = { ...next, children };
@@ -1061,9 +1196,10 @@ function normalizeVectorTree(nodes: readonly VectorNode[], prefer: 'stack' | 'sh
 
 /** A document as loaded: a copy, stacks preferred over stale shorthands. */
 function loadedDocument(doc: VectorDocument): VectorDocument {
-	const copy = cloneVectorDocument(doc);
+	const copy = cloneVectorDocument(stripVectorSymbolArt(doc));
 	const nodes = normalizeVectorTree(copy.nodes, 'stack');
-	return nodes === copy.nodes ? copy : { ...copy, nodes };
+	const symbols = copy.symbols?.map((s) => ({ ...s, nodes: normalizeVectorTree(s.nodes, 'stack') }));
+	return resolveVectorSymbols({ ...copy, nodes, ...(symbols ? { symbols } : {}) });
 }
 
 function mapTree(nodes: readonly VectorNode[], fn: (node: VectorNode) => VectorNode | null): VectorNode[] {
@@ -1129,6 +1265,19 @@ interface Snapshot {
 	anchors: VectorAnchorRef[];
 	editingId: string | null;
 	pen: { nodeId: string; subpath: number } | null;
+	/** The symbol being edited in isolation when the snapshot was taken (`doc` is then its art). */
+	symbolEdit: SymbolEditContext | null;
+}
+
+/** Isolation mode: `doc` holds a symbol's art; `host` is the document it belongs to. */
+interface SymbolEditContext {
+	symbolId: string;
+	/** The instance it was entered from (its placement lines the art up with the document), if any. */
+	instanceId: string | null;
+	host: VectorDocument;
+	/** Where the instance put the symbol's origin, and its scale (√|det|): the view follows them in and out. */
+	origin: Vec2 | null;
+	scale: number;
 }
 
 /** Snap targets of a drag, gathered on its first move that needs them. */
@@ -1161,6 +1310,8 @@ type Drag =
 	| { kind: 'builder'; erase: boolean; points: Vec2[]; touched: VectorBuilderTouched; map: VectorShapeBuilderMap }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
+	| { kind: 'textBox'; start: Vec2; moved: boolean }
+	| { kind: 'textSelect'; nodeId: string }
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
 	| {
 			kind: 'width';
@@ -1248,6 +1399,14 @@ export class VectorEditorController {
 	private blendDefaults: VectorBlendOptions = {};
 	private gradientEdit: VectorEditorState['gradientEdit'] = { target: 'fill', stop: null, layer: null };
 	private freeDistort = false;
+	/** The text edit session: selection, the snapshot before a text node it created (until the first change), the merge key of its undo step. */
+	private textEdit: (VectorTextEditState & { before: Snapshot | null; key: string; created: boolean }) | null = null;
+	private textEditCount = 0;
+	private symbolEdit: SymbolEditContext | null = null;
+	/** The document as last solved: what differs from it was just edited, so the solver moves it least. */
+	private lastSolved: VectorDocument | null = null;
+	private constraintIssues: VectorEditorState['constraintIssues'] = null;
+	private textDefaults: VectorTextDefaults = { ...DEFAULT_VECTOR_FONT };
 	/** What the highlight shows, to skip notifying when the pointer stays over the same face. */
 	private builderHoverKey: string | null = null;
 	private readonly createId: () => string;
@@ -1273,6 +1432,8 @@ export class VectorEditorController {
 		this.createId = options.createId ?? defaultCreateId;
 		this.onChange = options.onChange;
 		this.freeDistort = !!options.freeDistort;
+		if (options.textShaper !== undefined) setVectorTextShaper(options.textShaper);
+		if (options.textDefaults) this.textDefaults = { ...this.textDefaults, ...options.textDefaults };
 		this.state = this.computeState();
 		this.connect();
 	}
@@ -1355,6 +1516,10 @@ export class VectorEditorController {
 			blendDefaults: this.blendDefaults,
 			gradientEdit: this.gradientEdit,
 			freeDistort: this.freeDistort,
+			textEdit: this.textEdit ? { nodeId: this.textEdit.nodeId, anchor: this.textEdit.anchor, focus: this.textEdit.focus } : null,
+			textDefaults: this.textDefaults,
+			symbolEdit: this.symbolEditState(),
+			constraintIssues: this.constraintIssues,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1367,7 +1532,33 @@ export class VectorEditorController {
 	private refreshed(doc: VectorDocument): VectorDocument {
 		// Shorthand fills and strokes written by any edit go to the top layer of their stack.
 		const nodes = refreshVectorBlends(normalizeVectorTree(doc.nodes, 'shorthand'));
-		return nodes === doc.nodes ? doc : { ...doc, nodes };
+		let out = nodes === doc.nodes ? doc : { ...doc, nodes };
+		// In isolation mode the edited symbol's art is the document's nodes.
+		const edit = this.symbolEdit;
+		if (edit && out.symbols?.some((s) => s.id === edit.symbolId && s.nodes !== out.nodes)) {
+			out = { ...out, symbols: out.symbols.map((s) => (s.id === edit.symbolId ? { ...s, nodes: out.nodes } : s)) };
+		}
+		// Instances draw their symbols' art.
+		out = resolveVectorSymbols(out);
+		return this.solved(out);
+	}
+
+	/**
+	 * `doc` with its constraints solved (geometry edited since the last solve moving least) and
+	 * constraints on deleted anchors removed; the same object when nothing changes.
+	 */
+	private solved(doc: VectorDocument): VectorDocument {
+		if (!doc.constraints?.length) {
+			this.constraintIssues = null;
+			this.lastSolved = doc;
+			return doc;
+		}
+		if (this.lastSolved && doc.nodes === this.lastSolved.nodes && doc.constraints === this.lastSolved.constraints && doc.parameters === this.lastSolved.parameters) return doc;
+		const purged = purgeVectorConstraints(doc).document;
+		const r = solveVectorConstraints(purged, this.lastSolved);
+		this.constraintIssues = r.conflicts.length || r.skipped.length ? { conflicts: [...new Set(r.conflicts)], skipped: r.skipped } : null;
+		this.lastSolved = r.document;
+		return r.document;
 	}
 
 	private notify(docChanged = false) {
@@ -1377,7 +1568,7 @@ export class VectorEditorController {
 		if (this.blendStart && !this.getNode(this.blendStart.nodeId)) this.blendStart = null;
 		this.revision++;
 		this.state = this.computeState();
-		if (docChanged) this.onChange?.(this.doc);
+		if (docChanged) this.onChange?.(this.storedDocument());
 		const state = this.state;
 		this.listeners.forEach((listener) => {
 			try {
@@ -1421,6 +1612,10 @@ export class VectorEditorController {
 				if (h?.transformHandle && this.freeDistort && h.transformHandle !== 'rotate') return 'crosshair';
 				if (h?.transformHandle) return vectorResizeCursor(h.transformHandle, this.frameOf(this.selectedRoots())?.angle ?? 0);
 				return h?.nodeId ? 'move' : 'default';
+			case 'type':
+				return 'text';
+			case 'typePath':
+				return h?.nodeId ? 'text' : 'crosshair';
 			case 'envelope':
 				if (this.drag?.kind === 'envelope') return 'grabbing';
 				if (h?.envelope) return h.envelope.index === null ? 'grab' : 'pointer';
@@ -1459,7 +1654,7 @@ export class VectorEditorController {
 	// -------------------------------------------------------------------------
 
 	private snapshot(): Snapshot {
-		return { doc: this.doc, selection: this.selection, anchors: this.anchors, editingId: this.editingId, pen: this.pen };
+		return { doc: this.doc, selection: this.selection, anchors: this.anchors, editingId: this.editingId, pen: this.pen, symbolEdit: this.symbolEdit };
 	}
 
 	private restore(s: Snapshot) {
@@ -1470,10 +1665,25 @@ export class VectorEditorController {
 		this.applying = true;
 		try {
 			this.doc = s.doc;
+			// Undo and redo step in and out of isolation mode with the edits made there (the view follows).
+			const was = this.symbolEdit;
+			this.symbolEdit = s.symbolEdit ?? null;
+			if (was !== this.symbolEdit) {
+				if (was?.origin) this.viewport = this.viewOutOf(was);
+				if (this.symbolEdit?.origin) this.viewport = this.viewInto(this.symbolEdit);
+			}
 			this.selection = s.selection.filter((id) => this.getNode(id));
 			this.anchors = s.anchors.filter((r) => getAnchor(this.doc, r));
 			this.editingId = s.editingId && this.getNode(s.editingId) ? s.editingId : null;
 			this.pen = s.pen && (this.getNode(s.pen.nodeId) as VectorPathNode | undefined)?.subpaths?.[s.pen.subpath] ? s.pen : null;
+			if (this.textEdit) {
+				const t = this.getNode(this.textEdit.nodeId);
+				if (t?.type !== 'text') this.textEdit = null;
+				else {
+					const n = t.text.length;
+					this.textEdit = { ...this.textEdit, anchor: Math.min(this.textEdit.anchor, n), focus: Math.min(this.textEdit.focus, n), before: null };
+				}
+			}
 			if (this.widthPoints.length) {
 				const kept = this.widthPoints.filter((r) => {
 					const n = this.getNode(r.nodeId);
@@ -1608,6 +1818,7 @@ export class VectorEditorController {
 
 	setTool(tool: VectorTool): void {
 		if (tool === this.tool) return;
+		if (tool !== 'type' && tool !== 'typePath') this.endTextEdit();
 		this.finishPath();
 		this.cancelDrag();
 		this.tool = tool;
@@ -1783,11 +1994,11 @@ export class VectorEditorController {
 	}
 
 	toSvg(options?: VectorSvgExportOptions): string {
-		return vectorDocumentToSvg(this.doc, options);
+		return vectorDocumentToSvg(this.storedDocument(), options);
 	}
 
 	toJSON(): VectorDocument {
-		return cloneVectorDocument(this.doc);
+		return cloneVectorDocument(stripVectorSymbolArt(this.storedDocument()));
 	}
 
 	/** Adds a node (ids are kept unless taken). Returns its id. */
@@ -1899,7 +2110,7 @@ export class VectorEditorController {
 		for (const id of ids) {
 			const node = this.getNode(id);
 			if (!node) return { ok: false, message: `There is no node "${id}".` };
-			for (const p of collectPathNodes(node)) targets.add(p.id);
+			for (const p of collectPaintedNodes(node)) targets.add(p.id);
 		}
 		if (!targets.size) return { ok: false, message: 'Nothing is selected.' };
 		this.change(options.label ?? 'Change Style', () => {
@@ -2337,13 +2548,29 @@ export class VectorEditorController {
 	 * anchors (direct tool), else every anchor of the `ids` / selected paths. Radius 0 makes the
 	 * corners sharp again. Corners shrink to fit when drawn, so any radius is accepted.
 	 */
-	setCornerRadius(radius: number, options: { kind?: VectorCornerKind; refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
+	setCornerRadius(radius: number, options: { kind?: VectorCornerKind; smoothing?: number; refs?: readonly VectorAnchorRef[]; ids?: readonly string[] } = {}): VectorActionResult {
 		if (!Number.isFinite(radius) || radius < 0) return { ok: false, message: 'The radius must be a number of at least 0.' };
+		if (options.smoothing !== undefined && !(options.smoothing >= 0 && options.smoothing <= 1)) return { ok: false, message: 'Corner smoothing must be from 0 to 1.' };
 		const refs = this.cornerTargets(options);
 		if (!refs.length) return { ok: false, message: 'Nothing is selected.' };
 		this.change(radius > 0 ? 'Corner Radius' : 'Sharpen Corners', () => {
-			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, radius, options.kind));
+			this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, radius, options.kind, options.smoothing));
 		});
+		return { ok: true };
+	}
+
+	/** Sets corner smoothing (squircle, 0–1) of the same anchors as `setCornerRadius`, keeping their radii. */
+	setCornerSmoothing(smoothing: number, options: { refs?: readonly VectorAnchorRef[]; ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		if (!(smoothing >= 0 && smoothing <= 1)) return { ok: false, message: 'Corner smoothing must be from 0 to 1.' };
+		const refs = this.cornerTargets(options).filter((r) => (getAnchor(this.doc, r)?.corner?.radius ?? 0) > 0);
+		if (!refs.length) return { ok: false, message: 'Give the corners a radius first: smoothing shapes rounded corners.' };
+		this.change(
+			'Corner Smoothing',
+			() => {
+				this.doc = this.updateAnchors(this.doc, refs, (a) => setAnchorCorner(a, a.corner?.radius ?? 0, undefined, smoothing));
+			},
+			options.merge
+		);
 		return { ok: true };
 	}
 
@@ -2436,9 +2663,9 @@ export class VectorEditorController {
 		for (const id of list) {
 			const node = this.getNode(id);
 			if (!node) return `There is no node "${id}".`;
-			for (const p of collectPathNodes(node)) if (!p.blendStep) out.set(p.id, p);
+			for (const p of collectPaintedNodes(node)) if (!p.blendStep) out.set(p.id, p as VectorPathNode);
 		}
-		if (!out.size) return 'The selection has no paths (fills and strokes belong to paths).';
+		if (!out.size) return 'The selection has no paths or text (fills and strokes belong to them).';
 		return [...out.values()];
 	}
 
@@ -3618,7 +3845,7 @@ export class VectorEditorController {
 			const split = (list: readonly VectorNode[]): VectorNode[] =>
 				list.flatMap((n): VectorNode[] => {
 					if (n.type === 'group') return [{ ...n, children: split(n.children) }];
-					if (!set.has(n.id)) return [n];
+					if (n.type !== 'path' || !set.has(n.id)) return [n];
 					return n.subpaths.map((sp, i) => {
 						const id = i === 0 ? n.id : this.newId();
 						created.push(id);
@@ -4445,7 +4672,7 @@ export class VectorEditorController {
 		const map = (p: Vec2) => applyMatrix(m, p);
 		return from.subpaths.map((sp) => ({
 			closed: sp.closed,
-			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}), ...(a.corner ? { corner: { ...a.corner } } : {}) }))
+			anchors: sp.anchors.map((a) => ({ ...map(a), ...(a.in ? { in: map(a.in) } : {}), ...(a.out ? { out: map(a.out) } : {}), ...(a.type ? { type: a.type } : {}), ...(a.corner ? { corner: { ...a.corner } } : {}), ...(a.id ? { id: a.id } : {}) }))
 		}));
 	}
 
@@ -4887,7 +5114,7 @@ export class VectorEditorController {
 					if ((hasOwnVectorAppearance(n) || isVectorMaskActive(n)) && !entered.has(n.id) && !hitTestVectorNode(n, p, tol, parent, { entered })) continue;
 					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
 					if (found) return found;
-				} else if (hitTestVectorNode(n, p, tol, parent, { entered })) return n;
+				} else if (n.type === 'path' && hitTestVectorNode(n, p, tol, parent, { entered })) return n;
 			}
 			return null;
 		};
@@ -4961,6 +5188,14 @@ export class VectorEditorController {
 				if (a && part) return { nodeId: a.nodeId, gradient: part };
 				const path = this.hitPath(p);
 				return path ? { nodeId: path.id } : null;
+			}
+			case 'type': {
+				const hit = this.hitText(p);
+				return hit ? { nodeId: hit.id } : null;
+			}
+			case 'typePath': {
+				const hit = this.hitText(p) ?? this.hitPath(p);
+				return hit ? { nodeId: hit.id } : null;
 			}
 			case 'envelope': {
 				const hit = this.hitEnvelope(screen, p);
@@ -5159,6 +5394,7 @@ export class VectorEditorController {
 					visit(n.children, m);
 					continue;
 				}
+				if (n.type !== 'path') continue;
 				const hit = nearestSegment(n, applyMatrix(invertMatrix(m), p));
 				// Node matrices are rigid, so local distances are document distances.
 				if (hit && hit.distance <= tol && (!best || hit.distance < best.distance - 1e-9)) {
@@ -5208,6 +5444,9 @@ export class VectorEditorController {
 				return this.downGradient(screen, p, input);
 			case 'envelope':
 				return this.downEnvelope(screen, p, input);
+			case 'type':
+			case 'typePath':
+				return this.downType(p, input);
 			case 'scissors': {
 				const seg = this.nearestOutline(p);
 				if (seg) this.cutPathAt(seg.nodeId, seg.point);
@@ -5510,6 +5749,19 @@ export class VectorEditorController {
 		}
 		this.pointer = p;
 		switch (drag.kind) {
+			case 'textBox':
+				drag.moved ||= Math.hypot(p.x - drag.start.x, p.y - drag.start.y) * this.viewport.zoom > 3;
+				this.interaction = { type: 'textBox', bounds: boundsFromPoints(drag.start, p) };
+				this.notify();
+				return;
+			case 'textSelect': {
+				const node = this.getNode(drag.nodeId);
+				if (node?.type === 'text' && this.textEdit) {
+					this.textEdit = { ...this.textEdit, focus: vectorTextIndexAt(node, this.toLocal(node.id, p)) };
+					this.notify();
+				}
+				return;
+			}
 			case 'pan':
 				this.viewport = { ...drag.viewport, x: drag.viewport.x + screen.x - drag.start.x, y: drag.viewport.y + screen.y - drag.start.y };
 				this.notify();
@@ -5576,7 +5828,8 @@ export class VectorEditorController {
 					});
 					this.anchors = [...drag.baseAnchors, ...inside.filter((r) => !drag.baseAnchors.some((b) => sameRef(b, r)))];
 				} else {
-					const hits = this.doc.nodes
+					const hits = vectorNodesNear(this.doc.nodes, bounds)
+						.map((i) => this.doc.nodes[i])
 						.filter((n) => !n.locked && n.visible !== false)
 						.filter((n) => {
 							const b = vectorNodeBounds(n);
@@ -5845,6 +6098,11 @@ export class VectorEditorController {
 		this.guides = null;
 		if (!drag) return;
 		switch (drag.kind) {
+			case 'textBox':
+				return this.upTypeBox(drag);
+			case 'textSelect':
+				this.notify();
+				return;
 			case 'pan':
 			case 'marquee':
 				this.notify();
@@ -5996,6 +6254,10 @@ export class VectorEditorController {
 		this.drag = null;
 		this.interaction = null;
 		this.guides = null;
+		if (drag.kind === 'textBox' || drag.kind === 'textSelect') {
+			this.notify();
+			return;
+		}
 		if (drag.kind === 'pan' || drag.kind === 'builder') {
 			if (drag.kind === 'builder') this.builderPreview = null;
 			this.notify();
@@ -6016,6 +6278,28 @@ export class VectorEditorController {
 	 */
 	doubleClick(screen: Vec2): void {
 		const p = this.screenToDocument(screen);
+		if (this.tool === 'select') {
+			// Into a symbol instance: Edit Symbol in isolation.
+			const instance = this.hitOfType(p, 'instance');
+			if (instance) {
+				this.editSymbol(instance.id);
+				return;
+			}
+		}
+		if (this.tool === 'select' || this.tool === 'type' || this.tool === 'typePath') {
+			const text = this.hitText(p);
+			if (text) {
+				// Into the text: the Type tool, the caret where it was clicked (twice inside the text: the word).
+				if (this.tool === 'select') this.setTool('type');
+				const index = vectorTextIndexAt(text, this.toLocal(text.id, p));
+				if (this.textEdit?.nodeId === text.id) {
+					const [a, b] = wordAt(text.text, index);
+					this.textEdit = { ...this.textEdit, anchor: a, focus: b };
+					this.notify();
+				} else this.editText(text.id, { index });
+				return;
+			}
+		}
 		if (this.tool === 'select') {
 			const path = this.hitPath(p);
 			if (!path) return;
@@ -6055,6 +6339,1086 @@ export class VectorEditorController {
 		if (this.tool === 'pen') this.finishPath();
 	}
 
+
+	// -------------------------------------------------------------------------
+	// Text
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Sets the text shaper (shared by every vector editor on the page, see `setVectorTextShaper`) and
+	 * lays every text node out again with it. Not an undo step.
+	 */
+	setTextShaper(shaper: TextShaper | null): void {
+		setVectorTextShaper(shaper);
+		// New node objects so views keyed by the document draw the text again.
+		this.doc = { ...this.doc, nodes: mapTree(this.doc.nodes, (n) => (n.type === 'text' ? { ...n } : n)) };
+		this.notify(true);
+	}
+
+	/** The text shaper in use. */
+	getTextShaper(): TextShaper {
+		return getVectorTextShaper();
+	}
+
+	/** Changes the font and alignment new text gets (validated; throws on a bad value). */
+	setTextDefaults(patch: Partial<VectorTextDefaults>): void {
+		const { align, ...font } = patch;
+		const next: VectorTextDefaults = patchVectorCharacterStyle({ ...this.textDefaults }, font as Record<string, unknown>, 'textDefaults');
+		if (align !== undefined) {
+			const p = patchVectorParagraphStyle({}, { align });
+			if (p.align) next.align = p.align;
+			else delete next.align;
+		}
+		this.textDefaults = next;
+		this.notify();
+	}
+
+	/** The paint new text gets: black, no stroke (`addText` and the style panel change it). */
+	private textStyle(): VectorStyle {
+		return { fill: '#000000', stroke: null, strokeWidth: this.defaults.strokeWidth ?? 1 };
+	}
+
+	/** Builds a text node from `input` with the text defaults (not added). Throws a `VectorTextError` on bad input. */
+	createTextNode(input: VectorTextInput): VectorTextNode {
+		if (typeof input.text !== 'string') throw new VectorTextError('text must be a string.');
+		const { align, ...defaultFont } = this.textDefaults;
+		const font = patchVectorCharacterStyle({ ...defaultFont }, (input.font ?? {}) as Record<string, unknown>, 'font');
+		const paragraph = patchVectorParagraphStyle(align ? { align } : {}, (input.paragraph ?? {}) as Record<string, unknown>);
+		let frame: VectorTextFrame;
+		if (input.path !== undefined) {
+			const sp = typeof input.path === 'string' ? pathTextFrameFromBezier(toBezierPathLoose(input.path)) : input.path;
+			frame = sanitizeVectorTextFrame({ kind: 'path', path: sp, ...(input.pathOptions ?? {}) });
+		} else if (input.width !== undefined || input.height !== undefined) {
+			frame = sanitizeVectorTextFrame({ kind: 'area', x: input.x ?? 0, y: input.y ?? 0, width: input.width, height: input.height });
+		} else frame = sanitizeVectorTextFrame({ kind: 'point', x: input.x ?? 0, y: input.y ?? 0 });
+		const own: VectorStyle = {};
+		for (const key of VECTOR_STYLE_KEYS) if (input[key] !== undefined) (own as Record<string, unknown>)[key] = input[key];
+		const text = input.text.replace(/\r\n?/g, '\n');
+		const node: VectorTextNode = {
+			id: this.newId(),
+			type: 'text',
+			name: input.name ?? vectorTextName(text),
+			...this.textStyle(),
+			text,
+			font,
+			...(Object.keys(paragraph).length ? { paragraph } : {}),
+			frame
+		};
+		return withStyle(node as unknown as VectorPathNode, own) as unknown as VectorTextNode;
+	}
+
+	/** Adds text (point, area or on a path, see `VectorTextInput`). Returns its id. */
+	addText(input: VectorTextInput, options: AddVectorNodeOptions = {}): string {
+		const node = this.createTextNode(input);
+		return this.addNode(node, { label: 'Add Text', ...options });
+	}
+
+	/** The text node `id`, or an error message. */
+	private textNode(id: string): VectorTextNode | string {
+		const node = this.getNode(id);
+		if (!node) return `There is no node "${id}".`;
+		if (node.type !== 'text') return `"${id}" is a ${node.type}, not text; vector.list shows each node's type.`;
+		if (node.blendStep) return `"${id}" is a blend step; edit the blend's keys instead.`;
+		return node;
+	}
+
+	/** Replaces text node `id` by `fn(node)` as one undo step (merged with others of `merge`). */
+	private editTextNode(id: string, label: string, fn: (node: VectorTextNode) => VectorTextNode, merge?: string): VectorActionResult {
+		const node = this.textNode(id);
+		if (typeof node === 'string') return { ok: false, message: node };
+		let next: VectorTextNode;
+		try {
+			next = fn(node);
+		} catch (e) {
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
+		}
+		if (next === node) return { ok: true };
+		// The edit session's pending creation folds into its first change.
+		const pending = this.textEdit?.nodeId === id ? this.textEdit.before : null;
+		const before = pending ?? this.snapshot();
+		if (pending && this.textEdit) this.textEdit.before = null;
+		this.replaceNode(id, next);
+		this.commit(label, before, merge);
+		return { ok: true };
+	}
+
+	/** Replaces [start, end) of text node `id` (default: all of it) with `text`. One undo step. */
+	setText(id: string, text: string, range: { start?: number; end?: number } = {}, options: { merge?: string } = {}): VectorActionResult {
+		const node = this.textNode(id);
+		if (typeof node === 'string') return { ok: false, message: node };
+		return this.editTextNode(
+			id,
+			'Edit Text',
+			(n) => {
+				const [a, b] = vectorTextRange(n.text, range.start, range.end);
+				const next = replaceVectorText(n, a, b, text);
+				// A name that followed the text keeps following it.
+				return n.name === vectorTextName(n.text) ? { ...next, name: vectorTextName(next.text) } : next;
+			},
+			options.merge
+		);
+	}
+
+	/**
+	 * Applies character style fields (`fontFamily`, `fontWeight`, `italic`, `fontSize`, `tracking`,
+	 * `leading`, `baselineShift`, `underline`, `strikethrough`, `null` to clear) and `fill` to
+	 * [start, end) of text node `id` (default: all of it, which changes its own style). One undo step.
+	 */
+	setTextStyle(id: string, patch: Record<string, unknown>, range: { start?: number; end?: number } = {}, options: { merge?: string } = {}): VectorActionResult {
+		return this.editTextNode(
+			id,
+			'Character Style',
+			(n) => {
+				const [a, b] = vectorTextRange(n.text, range.start, range.end);
+				return styleVectorText(n, a, b, patch);
+			},
+			options.merge
+		);
+	}
+
+	/**
+	 * Applies character style fields (and `fill`) to the whole of every text node in `ids` (default:
+	 * the selected text, including text inside selected groups), or a paragraph patch with
+	 * `paragraph`. One undo step for all of them.
+	 */
+	styleTexts(patch: { style?: Record<string, unknown>; paragraph?: Record<string, unknown> }, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		const targets: VectorTextNode[] = [];
+		for (const id of options.ids ?? this.selection) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			walkVectorNodes([n], (c) => {
+				if (c.type === 'text' && !c.blendStep && !targets.includes(c)) targets.push(c);
+			});
+		}
+		if (!targets.length) return { ok: false, message: 'Select text to style.' };
+		const next = new Map<string, VectorNode>();
+		try {
+			for (const t of targets) {
+				let n = t;
+				if (patch.style) n = styleVectorText(n, 0, n.text.length, patch.style);
+				if (patch.paragraph) {
+					const paragraph = patchVectorParagraphStyle(n.paragraph ?? {}, patch.paragraph);
+					n = { ...n, paragraph };
+					if (!Object.keys(paragraph).length) delete (n as Partial<VectorTextNode>).paragraph;
+				}
+				next.set(t.id, n);
+			}
+		} catch (e) {
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
+		}
+		this.change(patch.paragraph && !patch.style ? 'Paragraph Style' : 'Character Style', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
+		return { ok: true };
+	}
+
+	/** Changes paragraph fields (`align`, `autoLeading`, indents, spacing; `null` clears) of text node `id`. One undo step. */
+	setParagraphStyle(id: string, patch: Record<string, unknown>, options: { merge?: string } = {}): VectorActionResult {
+		return this.editTextNode(
+			id,
+			'Paragraph Style',
+			(n) => {
+				const paragraph = patchVectorParagraphStyle(n.paragraph ?? {}, patch);
+				const next = { ...n, paragraph };
+				if (!Object.keys(paragraph).length) delete (next as Partial<VectorTextNode>).paragraph;
+				return next;
+			},
+			options.merge
+		);
+	}
+
+	/**
+	 * Changes how text node `id` is set: `point` (keeps where its first line starts), `area` (a box:
+	 * `width` / `height` default to its current size, `x` / `y` to its top left) or `path` options
+	 * (`start`, `end`, `flip`, `orientation`, `baseline`; a new `path` needs path data or a subpath in
+	 * the node's own space). One undo step.
+	 */
+	setTextFrame(id: string, patch: Record<string, unknown>): VectorActionResult {
+		return this.editTextNode(id, 'Text Frame', (n) => {
+			const kind = (patch.kind as string | undefined) ?? n.frame.kind;
+			const layout = layoutVectorText(n);
+			const cur = n.frame;
+			const box = layout.bounds ?? { x: 0, y: 0, width: 0, height: 0 };
+			let frame: VectorTextFrame;
+			if (kind === 'point') {
+				const first = layout.lines[0];
+				const x = (patch.x as number | undefined) ?? (cur.kind === 'point' ? cur.x : (first?.x ?? box.x));
+				const y = (patch.y as number | undefined) ?? (cur.kind === 'point' ? cur.y : (first?.baseline ?? box.y));
+				frame = sanitizeVectorTextFrame({ kind: 'point', x, y });
+				// Point text has no wrap: the left edge stays where the lines started.
+				if (cur.kind !== 'point' && first && n.paragraph?.align && n.paragraph.align !== 'left') frame = sanitizeVectorTextFrame({ kind: 'point', x: box.x, y });
+			} else if (kind === 'area') {
+				const base = cur.kind === 'area' ? cur : { x: box.x, y: box.y, width: Math.max(box.width, n.font.fontSize), height: Math.max(box.height, n.font.fontSize * 1.2) };
+				frame = sanitizeVectorTextFrame({ kind: 'area', x: patch.x ?? base.x, y: patch.y ?? base.y, width: patch.width ?? base.width, height: patch.height ?? base.height });
+			} else if (kind === 'path') {
+				let path = patch.path ?? (cur.kind === 'path' ? cur.path : undefined);
+				if (typeof path === 'string') path = pathTextFrameFromBezier(toBezierPathLoose(path)) ?? undefined;
+				if (!path) throw new VectorTextError('Pass path (SVG path data or a subpath) to set text on a path, or use vector.typeOnPath with a path node.');
+				const { kind: _k, path: _p, ...options } = patch;
+				const keep = cur.kind === 'path' ? { start: cur.start, end: cur.end, flip: cur.flip, orientation: cur.orientation, baseline: cur.baseline } : {};
+				frame = sanitizeVectorTextFrame({ ...keep, ...options, kind: 'path', path });
+			} else throw new VectorTextError(`kind must be point, area or path, got ${JSON.stringify(kind)}.`);
+			return { ...n, frame };
+		});
+	}
+
+	/**
+	 * Turns path `pathId` into text set along it (Type on a Path): a text node in its place, its
+	 * anchors the text's path, its paint dropped for the text defaults (or `input`'s). Returns the
+	 * text's id, or an error.
+	 */
+	typeOnPath(pathId: string, input: Partial<VectorTextInput> = {}): VectorActionResult & { id?: string } {
+		const node = this.getNode(pathId);
+		if (!node) return { ok: false, message: `There is no node "${pathId}".` };
+		if (node.type !== 'path' || !node.subpaths.length || node.subpaths[0].anchors.length < 2) return { ok: false, message: `"${pathId}" is not a path with at least two anchors; type on a path needs one.` };
+		let text: VectorTextNode;
+		try {
+			text = this.createTextNode({ ...input, text: input.text ?? '', path: node.subpaths[0] });
+		} catch (e) {
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
+		}
+		const placed: VectorTextNode = { ...text, ...(node.transform ? { transform: node.transform } : {}), ...(node.name && node.name !== 'Path' ? { name: node.name } : {}) };
+		this.change('Type on a Path', () => {
+			this.replaceNode(pathId, placed);
+			this.selection = [placed.id];
+			this.anchors = [];
+			if (this.editingId === pathId) this.editingId = null;
+		});
+		return { ok: true, id: placed.id };
+	}
+
+	/**
+	 * Create Outlines: turns text into paths of its glyph outlines (one compound path, or a group
+	 * with one per run fill), keeping its paint, effects, filters and placement. Needs an outline
+	 * text shaper. Returns the new nodes' ids, or an error.
+	 */
+	createOutlines(options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const list = options.ids ?? this.selection;
+		const targets: VectorTextNode[] = [];
+		for (const id of list) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.type === 'text') targets.push(n);
+			else walkVectorNodes([n], (c) => {
+				if (c.type === 'text') targets.push(c);
+			});
+		}
+		if (!targets.length) return { ok: false, message: 'Select text to outline.' };
+		if (!vectorTextHasOutlines()) {
+			return {
+				ok: false,
+				message: `The text shaper "${getVectorTextShaper().id}" gives no glyph outlines. Load a font file and set an outline shaper (createOutlineTextShaper with parseOpenTypeFont) to create outlines.`
+			};
+		}
+		const replaced = new Map<string, VectorNode>();
+		for (const t of targets) {
+			const parts = vectorTextPaths(t).parts;
+			const keep = {
+				...(t.name ? { name: t.name } : {}),
+				...(t.transform ? { transform: t.transform } : {}),
+				...(t.visible === false ? { visible: false } : {}),
+				...(t.locked ? { locked: true } : {}),
+				...(t.opacity !== undefined ? { opacity: t.opacity } : {}),
+				...(t.blendMode ? { blendMode: t.blendMode } : {}),
+				...(t.filters?.length ? { filters: t.filters } : {}),
+				...(t.effects?.length ? { effects: t.effects } : {}),
+				...(t.booleanOperation ? { booleanOperation: t.booleanOperation } : {})
+			};
+			const pathOf = (fill: VectorTextNode['fill'] | undefined, path: BezierPath, id: string): VectorPathNode => {
+				const { transform: _t, visible: _v, locked: _l, opacity: _o, blendMode: _b, filters: _f, effects: _e, booleanOperation: _bo, name: _n, ...style } = vectorTextPaintSource(t, fill, bezierToSubpaths(path));
+				return { ...style, id };
+			};
+			if (parts.length <= 1) replaced.set(t.id, { ...pathOf(parts[0]?.fill, parts[0]?.path ?? [], t.id), ...keep });
+			else replaced.set(t.id, { id: t.id, type: 'group', ...keep, children: parts.map((p) => ({ ...pathOf(p.fill, p.path, this.newId()), name: 'Outlines' })) });
+		}
+		if (this.textEdit && replaced.has(this.textEdit.nodeId)) this.endTextEdit();
+		this.change('Create Outlines', () => this.setDoc(mapTree(this.doc.nodes, (n) => replaced.get(n.id) ?? n)));
+		return { ok: true, ids: [...replaced.keys()] };
+	}
+
+	/** The layout of text node `id` (lines, glyphs, bounds, overflow), or null. */
+	getTextLayout(id: string): VectorTextLayout | null {
+		const node = this.getNode(id);
+		return node?.type === 'text' ? layoutVectorText(node) : null;
+	}
+
+	// --- Editing on the canvas ------------------------------------------------
+
+	/**
+	 * Starts editing text node `id` on the canvas (the caret at `index`, default the end; or a
+	 * selection from `anchor` to `focus`). Typing goes to `textInput`, keys to `keyDown`.
+	 */
+	editText(id: string, options: { index?: number; anchor?: number; focus?: number } = {}): VectorActionResult {
+		const node = this.textNode(id);
+		if (typeof node === 'string') return { ok: false, message: node };
+		if (this.textEdit?.nodeId !== id) this.endTextEdit();
+		const n = node.text.length;
+		const clamp = (v: number | undefined, d: number) => Math.max(0, Math.min(n, v ?? d));
+		const focus = clamp(options.focus ?? options.index, n);
+		const anchor = clamp(options.anchor, focus);
+		this.textEdit = { nodeId: id, anchor, focus, before: this.textEdit?.nodeId === id ? this.textEdit.before : null, key: this.textEdit?.nodeId === id ? this.textEdit.key : `text-edit:${id}:${++this.textEditCount}`, created: this.textEdit?.nodeId === id ? this.textEdit.created : false };
+		this.selection = [id];
+		this.anchors = [];
+		this.notify();
+		return { ok: true };
+	}
+
+	/** Moves the caret or selection of the text being edited. */
+	selectText(anchor: number, focus: number = anchor): void {
+		const t = this.textEdit;
+		const node = t ? this.getNode(t.nodeId) : null;
+		if (!t || node?.type !== 'text') return;
+		const n = node.text.length;
+		this.textEdit = { ...t, anchor: Math.max(0, Math.min(n, anchor)), focus: Math.max(0, Math.min(n, focus)) };
+		this.notify();
+	}
+
+	/**
+	 * Ends the text edit session. Text it created and left empty is removed (with no undo step when
+	 * nothing was typed); other emptied text is deleted as its own step.
+	 */
+	endTextEdit(): void {
+		const t = this.textEdit;
+		if (!t) return;
+		this.textEdit = null;
+		this.history.endGesture();
+		const node = this.getNode(t.nodeId);
+		if (node?.type === 'text' && !node.text) {
+			if (t.before) {
+				this.doc = t.before.doc;
+				this.selection = t.before.selection.filter((id) => this.getNode(id));
+				this.notify(true);
+				return;
+			}
+			if (t.created) {
+				this.change('Delete Text', () => {
+					this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === t.nodeId ? null : n)));
+					this.selection = this.selection.filter((id) => id !== t.nodeId);
+				});
+				return;
+			}
+		}
+		this.notify();
+	}
+
+	/** Types `text` over the selection of the text being edited (one undo step per session). */
+	textInput(text: string): VectorActionResult {
+		const t = this.textEdit;
+		if (!t) return { ok: false, message: 'No text is being edited.' };
+		const a = Math.min(t.anchor, t.focus);
+		const b = Math.max(t.anchor, t.focus);
+		const clean = text.replace(/\r\n?/g, '\n');
+		const r = this.setText(t.nodeId, clean, { start: a, end: b }, { merge: t.key });
+		if (r.ok && this.textEdit) {
+			this.textEdit = { ...this.textEdit, anchor: a + clean.length, focus: a + clean.length };
+			this.notify();
+		}
+		return r;
+	}
+
+	/** Deletes the selection, or one character (a whole surrogate pair) before or after the caret. */
+	private textDelete(forward: boolean, word = false): void {
+		const t = this.textEdit;
+		const node = t ? this.getNode(t.nodeId) : null;
+		if (!t || node?.type !== 'text') return;
+		let a = Math.min(t.anchor, t.focus);
+		let b = Math.max(t.anchor, t.focus);
+		if (a === b) {
+			if (forward) b = word ? wordEdge(node.text, b, 1) : nextIndex(node.text, b);
+			else a = word ? wordEdge(node.text, a, -1) : prevIndex(node.text, a);
+		}
+		if (a === b) return;
+		if (this.setText(t.nodeId, '', { start: a, end: b }, { merge: t.key }).ok && this.textEdit) {
+			this.textEdit = { ...this.textEdit, anchor: a, focus: a };
+			this.notify();
+		}
+	}
+
+	/** Keys while text is being edited: caret movement, deleting, Enter, Escape and style shortcuts. */
+	private textKey(input: VectorKeyInput): boolean {
+		const t = this.textEdit!;
+		const node = this.getNode(t.nodeId);
+		if (node?.type !== 'text') {
+			this.textEdit = null;
+			return false;
+		}
+		const text = node.text;
+		const key = input.key;
+		const move = (to: number) => {
+			const focus = Math.max(0, Math.min(text.length, to));
+			this.textEdit = { ...t, focus, anchor: input.shift ? t.anchor : focus };
+			this.notify();
+			return true;
+		};
+		const a = Math.min(t.anchor, t.focus);
+		const b = Math.max(t.anchor, t.focus);
+		const collapsed = a === b;
+		if (input.mod) {
+			const lower = key.toLowerCase();
+			if (lower === 'a') {
+				this.textEdit = { ...t, anchor: 0, focus: text.length };
+				this.notify();
+				return true;
+			}
+			const toggle = lower === 'b' ? 'bold' : lower === 'i' ? 'italic' : lower === 'u' ? 'underline' : null;
+			if (toggle && !collapsed) {
+				const style = vectorTextStyleOf(node, a);
+				const patch = toggle === 'bold' ? { fontWeight: style.fontWeight >= 600 ? 400 : 700 } : toggle === 'italic' ? { italic: !style.italic } : { underline: !style.underline };
+				this.setTextStyle(node.id, patch, { start: a, end: b });
+				return true;
+			}
+			if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') return move(key === 'ArrowLeft' || key === 'ArrowUp' ? 0 : text.length);
+			if (key === 'Backspace' || key === 'Delete') {
+				this.textDelete(key === 'Delete', true);
+				return true;
+			}
+			// Undo, redo and the clipboard keep working; other shortcuts wait until editing ends.
+			return !['z', 'y', 'c', 'x', 'v'].includes(lower);
+		}
+		switch (key) {
+			case 'Escape':
+				this.endTextEdit();
+				if (this.getNode(t.nodeId)) this.select([t.nodeId]);
+				return true;
+			case 'Enter':
+				if (input.alt || input.shift) return false;
+				this.textInput('\n');
+				return true;
+			case 'Tab':
+				this.textInput('\t');
+				return true;
+			case 'Backspace':
+				this.textDelete(false, !!input.alt);
+				return true;
+			case 'Delete':
+				this.textDelete(true, !!input.alt);
+				return true;
+			case 'ArrowLeft':
+				if (!collapsed && !input.shift) return move(a);
+				return move(input.alt ? wordEdge(text, t.focus, -1) : prevIndex(text, t.focus));
+			case 'ArrowRight':
+				if (!collapsed && !input.shift) return move(b);
+				return move(input.alt ? wordEdge(text, t.focus, 1) : nextIndex(text, t.focus));
+			case 'ArrowUp':
+			case 'ArrowDown':
+				return move(this.lineMove(node, t.focus, key === 'ArrowUp' ? -1 : 1));
+			case 'Home':
+			case 'End': {
+				const layout = layoutVectorText(node);
+				const line = layout.text.lines[vectorTextCaret(node, t.focus).line];
+				if (!line) return move(key === 'Home' ? 0 : text.length);
+				return move(key === 'Home' ? line.start : line.end);
+			}
+		}
+		// Printable characters normally arrive through `textInput` (the canvases' hidden textarea);
+		// typed into the canvas itself, they go in here.
+		if (key.length === 1) {
+			this.textInput(key);
+			return true;
+		}
+		return false;
+	}
+
+	/** The selected characters of the text being edited ('' when the selection is collapsed), or null when not editing. */
+	getSelectedText(): string | null {
+		const t = this.textEdit;
+		const node = t ? this.getNode(t.nodeId) : null;
+		if (!t || node?.type !== 'text') return null;
+		return node.text.slice(Math.min(t.anchor, t.focus), Math.max(t.anchor, t.focus));
+	}
+
+	/** Cut while editing text: returns the selected characters and deletes them (null when not editing). */
+	cutText(): string | null {
+		const text = this.getSelectedText();
+		if (text) this.textInput('');
+		return text;
+	}
+
+	/** The index one line up or down from `index`, at the same x (start or end of the text past the first or last line). */
+	private lineMove(node: VectorTextNode, index: number, dir: -1 | 1): number {
+		const layout = layoutVectorText(node);
+		if (node.frame.kind === 'path') return dir < 0 ? 0 : node.text.length;
+		const c = vectorTextCaret(node, index);
+		const lines = layout.text.lines;
+		const target = lines[c.line + dir];
+		if (!target) return dir < 0 ? 0 : node.text.length;
+		return vectorTextIndexAt(node, { x: c.top.x, y: layout.origin.y + target.baseline });
+	}
+
+	/** The topmost node of `type` under `p` (inside groups too, hit where it draws), or null. */
+	private hitOfType<K extends 'instance'>(p: Vec2, type: K): Extract<VectorNode, { type: K }> | null {
+		const tol = this.tolerance();
+		const search = (list: readonly VectorNode[], parent: AffineMatrix): Extract<VectorNode, { type: K }> | null => {
+			for (let i = list.length - 1; i >= 0; i--) {
+				const n = list[i];
+				if (n.visible === false || n.locked) continue;
+				if (n.type === type) {
+					if (hitTestVectorNode(n, p, tol, parent)) return n as Extract<VectorNode, { type: K }>;
+				} else if (n.type === 'group' && hitTestVectorNode(n, p, tol, parent)) {
+					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (found) return found;
+				}
+			}
+			return null;
+		};
+		return search(this.doc.nodes, IDENTITY_MATRIX);
+	}
+
+	/** The topmost text node under `p` (inside groups too), or null. */
+	private hitText(p: Vec2): VectorTextNode | null {
+		const tol = this.tolerance();
+		const search = (list: readonly VectorNode[], parent: AffineMatrix): VectorTextNode | null => {
+			for (let i = list.length - 1; i >= 0; i--) {
+				const n = list[i];
+				if (n.visible === false || n.locked || n.blendStep) continue;
+				if (n.type === 'group') {
+					const found = search(n.children, multiplyMatrices(nodeMatrix(n), parent));
+					if (found) return found;
+				} else if (n.type === 'text') {
+					// Text is picked by its glyph boxes or (area text) its frame, so gaps between letters still hit.
+					const local = applyMatrix(invertMatrix(multiplyMatrices(nodeMatrix(n), parent)), p);
+					const b = layoutVectorText(n).bounds;
+					if (b && local.x >= b.x - tol && local.x <= b.x + b.width + tol && local.y >= b.y - tol && local.y <= b.y + b.height + tol) {
+						if (n.frame.kind !== 'path' || hitTestVectorNode(n, p, tol + 4, parent)) return n;
+					}
+				}
+			}
+			return null;
+		};
+		return search(this.doc.nodes, IDENTITY_MATRIX);
+	}
+
+	/** A text node created for the edit session (no undo step until something is typed). */
+	private startNewText(node: VectorTextNode, replace?: string): void {
+		this.endTextEdit();
+		const before = this.snapshot();
+		if (replace) this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === replace ? node : n)));
+		else this.setDoc([...this.doc.nodes, node]);
+		this.selection = [node.id];
+		this.anchors = [];
+		this.textEdit = { nodeId: node.id, anchor: 0, focus: 0, before, key: `text-edit:${node.id}:${++this.textEditCount}`, created: true };
+		this.notify();
+	}
+
+	private downType(p: Vec2, input: VectorPointerInput) {
+		const text = this.hitText(p);
+		if (text) {
+			const index = vectorTextIndexAt(text, this.toLocal(text.id, p));
+			if (this.textEdit?.nodeId === text.id) {
+				this.textEdit = { ...this.textEdit, focus: index, anchor: input.shift ? this.textEdit.anchor : index };
+				this.notify();
+			} else this.editText(text.id, { index });
+			this.drag = { kind: 'textSelect', nodeId: text.id };
+			this.interaction = { type: 'textSelect', nodeId: text.id };
+			return;
+		}
+		if (this.textEdit) {
+			// A click outside the text being edited ends the session.
+			this.endTextEdit();
+			if (this.tool === 'type') {
+				this.clearSelection();
+				return;
+			}
+		}
+		if (this.tool === 'typePath') {
+			const path = this.hitPath(p);
+			if (!path || path.subpaths[0]?.anchors.length < 2 || hiddenOrLocked(this.doc.nodes, path.id)) return;
+			// The path's own space is the text's: its anchors become the text's path as they are.
+			let node: VectorTextNode;
+			try {
+				node = this.createTextNode({ text: '', path: path.subpaths[0] });
+			} catch {
+				return;
+			}
+			this.startNewText({ ...node, ...(path.transform ? { transform: path.transform } : {}) }, path.id);
+			return;
+		}
+		this.drag = { kind: 'textBox', start: p, moved: false };
+		this.interaction = { type: 'textBox', bounds: { x: p.x, y: p.y, width: 0, height: 0 } };
+		this.notify();
+	}
+
+	private upTypeBox(drag: Extract<Drag, { kind: 'textBox' }>) {
+		const p = this.pointer ?? drag.start;
+		const box = boundsFromPoints(drag.start, p);
+		const area = drag.moved && box.width > 2 && box.height > 2;
+		const node = this.createTextNode(area ? { text: '', x: box.x, y: box.y, width: box.width, height: box.height } : { text: '', x: drag.start.x, y: drag.start.y });
+		this.startNewText(node);
+	}
+
+
+	// -------------------------------------------------------------------------
+	// Symbols and instances
+	// -------------------------------------------------------------------------
+
+	/** The whole document: in isolation mode, the host with the edited symbol's art. */
+	private storedDocument(): VectorDocument {
+		const edit = this.symbolEdit;
+		if (!edit) return this.doc;
+		const symbols = (edit.host.symbols ?? []).map((s) => (s.id === edit.symbolId ? { ...s, nodes: this.doc.nodes } : (this.doc.symbols?.find((x) => x.id === s.id) ?? s)));
+		return resolveVectorSymbols({ ...edit.host, symbols });
+	}
+
+	private symbolEditState(): VectorEditorState['symbolEdit'] {
+		const edit = this.symbolEdit;
+		if (!edit) return null;
+		const host = this.storedDocument();
+		const sym = host.symbols?.find((s) => s.id === edit.symbolId);
+		// The document in symbol space, lined up with the instance by its origin and scale (the art
+		// shows unrotated and unskewed: a view cannot turn).
+		const hostTransform: VectorMatrix | null = edit.origin ? ([1 / edit.scale, 0, 0, 1 / edit.scale, -edit.origin.x / edit.scale + 0, -edit.origin.y / edit.scale + 0] as const) : null;
+		return { symbolId: edit.symbolId, name: sym?.name ?? edit.symbolId, instanceId: edit.instanceId, host, hostTransform };
+	}
+
+	/** The document's symbols (the stored ones, also while one is being edited). */
+	getSymbols(): readonly VectorSymbol[] {
+		return this.storedDocument().symbols ?? [];
+	}
+
+	/** Ids of the instances of symbol `symbolId` in the whole document (inside other symbols too). */
+	getSymbolInstances(symbolId: string): string[] {
+		const doc = this.storedDocument();
+		const out: string[] = [];
+		const visit = (list: readonly VectorNode[]) => {
+			for (const n of list) {
+				if (n.type === 'instance' && n.symbolId === symbolId) out.push(n.id);
+				if (n.type === 'group') visit(n.children);
+			}
+		};
+		visit(doc.nodes);
+		for (const s of doc.symbols ?? []) visit(s.nodes);
+		return out;
+	}
+
+	private newSymbolId(): string {
+		const used = new Set(this.getSymbols().map((s) => s.id));
+		let id = `symbol-${this.createId()}`;
+		while (used.has(id)) id = `symbol-${this.createId()}`;
+		return id;
+	}
+
+	/**
+	 * Make Symbol: turns the selected (or given) objects, which must share a parent, into a new
+	 * symbol whose registration point is their centre, and puts an instance in their place. One
+	 * undo step. Returns the symbol's and the instance's ids.
+	 */
+	makeSymbol(options: { ids?: readonly string[]; name?: string } = {}): VectorActionResult & { symbolId?: string; instanceId?: string } {
+		const ids = options.ids ?? this.selectedRoots();
+		if (!ids.length) return { ok: false, message: 'Select the objects to make a symbol from.' };
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id));
+		if (locs.some((l) => !l)) return { ok: false, message: `There is no node "${ids[locs.findIndex((l) => !l)]}".` };
+		const parent = locs[0]!.parent?.id ?? null;
+		if (locs.some((l) => (l!.parent?.id ?? null) !== parent)) return { ok: false, message: 'The objects must share a parent (the same group) to make one symbol.' };
+		if (ids.some((id) => hiddenOrLocked(this.doc.nodes, id))) return { ok: false, message: 'Unlock and show the objects first.' };
+		const parentMatrix = parent ? this.worldOf(parent) : IDENTITY_MATRIX;
+		const box = unionBounds(ids.map((id) => vectorNodeBounds(this.getNode(id)!, IDENTITY_MATRIX)));
+		if (!box) return { ok: false, message: 'The objects have no geometry to make a symbol from.' };
+		void parentMatrix;
+		const cx = box.x + box.width / 2;
+		const cy = box.y + box.height / 2;
+		const symbolId = this.newSymbolId();
+		const instanceId = this.newId();
+		const name = options.name?.trim() || `Symbol ${this.getSymbols().length + 1}`;
+		const set = new Set(ids);
+		this.change('Make Symbol', () => {
+			const replace = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = list.filter((n) => set.has(n.id));
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const art = members.map((n) => transformVectorNode(n, translateMatrix(-cx, -cy)));
+				this.doc = { ...this.doc, symbols: [...(this.doc.symbols ?? []), { id: symbolId, name, nodes: art }] };
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id: instanceId, type: 'instance', name, symbolId, transform: translateMatrix(cx, cy) });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (parent === null) this.setDoc(replace(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent && n.type === 'group' ? { ...n, children: replace(n.children) } : n)));
+			this.selection = [instanceId];
+			this.anchors = [];
+		});
+		return { ok: true, symbolId, instanceId };
+	}
+
+	/**
+	 * Places an instance of symbol `symbolId` with its registration point at (`x`, `y`) (default the
+	 * artboard's centre), or through `transform`. One undo step. Returns its id.
+	 */
+	placeSymbol(symbolId: string, options: { x?: number; y?: number; transform?: VectorMatrix; name?: string; parentId?: string } = {}): VectorActionResult & { id?: string } {
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}"; vector.listSymbols lists them.` };
+		if (this.symbolEdit && (symbolId === this.symbolEdit.symbolId || vectorSymbolUses(this.getSymbols(), symbolId, this.symbolEdit.symbolId))) {
+			return { ok: false, message: `"${sym.name}" would contain itself: a symbol cannot hold an instance of itself.` };
+		}
+		const t = options.transform ?? translateMatrix(options.x ?? this.doc.width / 2, options.y ?? this.doc.height / 2);
+		if (!t.every(Number.isFinite)) return { ok: false, message: 'transform must be six finite numbers [a, b, c, d, e, f].' };
+		const node: VectorInstanceNode = { id: this.newId(), type: 'instance', name: options.name ?? sym.name, symbolId, ...(isIdentityMatrix(t) ? {} : { transform: [...t] as unknown as VectorMatrix }) };
+		const id = this.addNode(node, { label: 'Place Symbol', ...(options.parentId ? { parentId: options.parentId } : {}) });
+		return { ok: true, id };
+	}
+
+	private instanceTargets(ids: readonly string[] | undefined): VectorInstanceNode[] | string {
+		const list = ids ?? this.selection;
+		if (!list.length) return 'Select an instance.';
+		const out: VectorInstanceNode[] = [];
+		for (const id of list) {
+			const n = this.getNode(id);
+			if (!n) return `There is no node "${id}".`;
+			if (n.type !== 'instance') return `"${id}" is a ${n.type}, not a symbol instance.`;
+			out.push(n);
+		}
+		return out;
+	}
+
+	/**
+	 * Detach: replaces instances by groups of their symbol's art as drawn (placed, strokes scaled,
+	 * overrides applied), unlinked from the symbol. One undo step. Returns the groups' ids (the
+	 * instances' own).
+	 */
+	detachInstances(options: { ids?: readonly string[] } = {}): VectorActionResult & { ids?: string[] } {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const next = new Map<string, VectorNode>();
+		for (const t of targets) {
+			const drawn = vectorInstanceDrawn(t);
+			const fresh = this.freshIds(drawn);
+			next.set(t.id, { ...fresh, id: t.id, name: t.name ?? 'Group' });
+		}
+		this.change('Detach Instance', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return { ok: true, ids: [...next.keys()] };
+	}
+
+	/** Replace Symbol: instances draw symbol `symbolId` instead, keeping their placement. One undo step. */
+	replaceSymbol(symbolId: string, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}"; vector.listSymbols lists them.` };
+		if (this.symbolEdit && (symbolId === this.symbolEdit.symbolId || vectorSymbolUses(this.getSymbols(), symbolId, this.symbolEdit.symbolId))) return { ok: false, message: `"${sym.name}" would contain itself.` };
+		const set = new Set(targets.map((t) => t.id));
+		this.change('Replace Symbol', () =>
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || n.type !== 'instance') return n;
+					const { art: _a, ...rest } = n;
+					const hidden = n.overrides?.hidden;
+					// Hidden art ids belong to the old symbol.
+					const overrides = n.overrides ? { ...n.overrides } : null;
+					if (overrides && hidden) delete overrides.hidden;
+					return { ...rest, symbolId, ...(overrides && Object.keys(overrides).length ? { overrides } : { overrides: undefined }) } as VectorNode;
+				})
+			)
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Instance options: `scaleStrokes` (strokes of the art scale with the instance), and overrides —
+	 * `fill` / `stroke` (every fill or stroke of the art in one paint; `null` clears), `hidden` (art
+	 * node ids not drawn). One undo step.
+	 */
+	setInstanceOptions(patch: { scaleStrokes?: boolean; fill?: VectorPaint | null; stroke?: VectorPaint | null; hidden?: string[] | null }, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		const targets = this.instanceTargets(options.ids);
+		if (typeof targets === 'string') return { ok: false, message: targets };
+		const next = new Map<string, VectorNode>();
+		for (const t of targets) {
+			const n: VectorInstanceNode = { ...t };
+			if (patch.scaleStrokes !== undefined) {
+				if (patch.scaleStrokes) delete n.scaleStrokes;
+				else n.scaleStrokes = false;
+			}
+			const o: VectorInstanceOverrides = { ...(t.overrides ?? {}) };
+			for (const key of ['fill', 'stroke'] as const) {
+				if (patch[key] === undefined) continue;
+				if (patch[key] === null) delete o[key];
+				else o[key] = patch[key] as VectorPaint;
+			}
+			if (patch.hidden !== undefined) {
+				if (patch.hidden?.length) {
+					const known = new Set<string>();
+					walkVectorNodes(t.art ?? [], (a) => known.add(a.id));
+					const unknown = patch.hidden.filter((id) => !known.has(id));
+					if (unknown.length) return { ok: false, message: `The symbol's art has no nodes ${unknown.map((u) => `"${u}"`).join(', ')}; vector.listSymbols lists its node ids.` };
+					o.hidden = [...patch.hidden];
+				} else delete o.hidden;
+			}
+			if (Object.keys(o).length) n.overrides = o;
+			else delete n.overrides;
+			next.set(t.id, n);
+		}
+		this.change('Instance Options', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)));
+		return { ok: true };
+	}
+
+	/** Renames symbol `symbolId`. One undo step. */
+	renameSymbol(symbolId: string, name: string): VectorActionResult {
+		const trimmed = name.trim();
+		if (!trimmed) return { ok: false, message: 'A symbol needs a name.' };
+		if (!this.getSymbols().some((s) => s.id === symbolId)) return { ok: false, message: `There is no symbol "${symbolId}".` };
+		this.change('Rename Symbol', () => {
+			this.doc = { ...this.doc, symbols: (this.doc.symbols ?? []).map((s) => (s.id === symbolId ? { ...s, name: trimmed } : s)) };
+			if (this.symbolEdit) this.symbolEdit = { ...this.symbolEdit, host: { ...this.symbolEdit.host, symbols: (this.symbolEdit.host.symbols ?? []).map((s) => (s.id === symbolId ? { ...s, name: trimmed } : s)) } };
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Deletes symbol `symbolId`. With instances in use it refuses unless `detach` (they become plain
+	 * groups first). One undo step.
+	 */
+	deleteSymbol(symbolId: string, options: { detach?: boolean } = {}): VectorActionResult {
+		if (this.symbolEdit) return { ok: false, message: 'Leave the symbol being edited first (exitSymbolEdit).' };
+		const sym = this.getSymbols().find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: `There is no symbol "${symbolId}".` };
+		const used = this.getSymbolInstances(symbolId);
+		if (used.length && !options.detach) return { ok: false, message: `"${sym.name}" has ${used.length} instance${used.length === 1 ? '' : 's'}; pass detach to turn them into groups, or delete them first.` };
+		const before = this.snapshot();
+		const detach = (list: VectorNode[]): VectorNode[] =>
+			list.map((n) => {
+				if (n.type === 'instance' && n.symbolId === symbolId) return { ...this.freshIds(vectorInstanceDrawn(n)), id: n.id, name: n.name ?? 'Group' };
+				if (n.type === 'group') return { ...n, children: detach(n.children) };
+				return n;
+			});
+		this.doc = { ...this.doc, nodes: detach(this.doc.nodes), symbols: (this.doc.symbols ?? []).filter((s) => s.id !== symbolId).map((s) => ({ ...s, nodes: detach(s.nodes) })) };
+		this.commit('Delete Symbol', before);
+		return { ok: true };
+	}
+
+	/**
+	 * Edit Symbol (isolation mode): the document becomes the art of symbol `id` (or of instance `id`'s
+	 * symbol), in its own space; everything else draws dimmed behind it. Edits are ordinary undo
+	 * steps; `exitSymbolEdit` returns to the document with every instance updated.
+	 */
+	editSymbol(id: string): VectorActionResult {
+		const node = this.getNode(id);
+		const symbolId = node?.type === 'instance' ? node.symbolId : id;
+		const host = this.storedDocument();
+		const sym = host.symbols?.find((s) => s.id === symbolId);
+		if (!sym) return { ok: false, message: node ? `"${id}" is a ${node.type}, not a symbol instance.` : `There is no symbol or instance "${id}".` };
+		if (this.symbolEdit) this.exitSymbolEdit();
+		this.endTextEdit();
+		this.finishPath();
+		const fresh = this.storedDocument();
+		let origin: Vec2 | null = null;
+		let scale = 1;
+		const world = node?.type === 'instance' ? vectorWorldMatrix(fresh.nodes, node.id) : null;
+		if (world) {
+			const det = Math.abs(world[0] * world[3] - world[1] * world[2]);
+			if (det > 1e-12) {
+				origin = { x: world[4], y: world[5] };
+				scale = Math.sqrt(det);
+			}
+		}
+		this.symbolEdit = { symbolId, instanceId: origin ? node!.id : null, host: fresh, origin, scale };
+		// The view follows: the art's origin where the instance's was, at its scale.
+		if (origin) this.viewport = this.viewInto(this.symbolEdit);
+		this.doc = { width: fresh.width, height: fresh.height, ...(fresh.background ? { background: fresh.background } : {}), nodes: sym.nodes, symbols: fresh.symbols };
+		this.selection = [];
+		this.anchors = [];
+		this.editingId = null;
+		this.notify();
+		return { ok: true };
+	}
+
+	/** The view inside isolation mode for the current (document) view. */
+	private viewInto(edit: SymbolEditContext): VectorViewport {
+		const v = this.viewport;
+		if (!edit.origin) return v;
+		return { x: v.zoom * edit.origin.x + v.x, y: v.zoom * edit.origin.y + v.y, zoom: v.zoom * edit.scale };
+	}
+
+	/** The document's view for the current view inside isolation mode. */
+	private viewOutOf(edit: SymbolEditContext): VectorViewport {
+		const v = this.viewport;
+		if (!edit.origin) return v;
+		const zoom = v.zoom / edit.scale;
+		return { x: v.x - zoom * edit.origin.x, y: v.y - zoom * edit.origin.y, zoom };
+	}
+
+	/** Leaves isolation mode: back to the whole document, the symbol's instances showing the edits. */
+	exitSymbolEdit(): void {
+		if (!this.symbolEdit) return;
+		this.endTextEdit();
+		this.finishPath();
+		const { instanceId, origin } = this.symbolEdit;
+		// Back to the document's view, where it was.
+		if (origin) this.viewport = this.viewOutOf(this.symbolEdit);
+		this.doc = this.storedDocument();
+		this.symbolEdit = null;
+		this.selection = instanceId && this.getNode(instanceId) ? [instanceId] : [];
+		this.anchors = [];
+		this.editingId = null;
+		this.history.endGesture();
+		this.notify(true);
+	}
+
+
+	// -------------------------------------------------------------------------
+	// Constraints
+	// -------------------------------------------------------------------------
+
+	/** The document's constraints. */
+	getConstraints(): readonly VectorConstraint[] {
+		return this.doc.constraints ?? [];
+	}
+
+	/** The document's named parameters. */
+	getParameters(): readonly VectorParameter[] {
+		return this.doc.parameters ?? [];
+	}
+
+	/** Degrees of freedom the constraints leave, and whether any are redundant. */
+	getConstraintDof(): VectorDofReport {
+		return vectorConstraintDof(this.doc);
+	}
+
+	/**
+	 * References from loose input to stable ones: anchors given by `subpath` / `index` get ids (the
+	 * path is updated in `nodes`). Throws on a missing path or anchor.
+	 */
+	private resolveRefs(refs: readonly VectorConstraintRefInput[], nodes: Map<string, VectorPathNode>): VectorGeomRef[] {
+		return refs.map((r, i) => {
+			const node = nodes.get(r.nodeId) ?? (this.getNode(r.nodeId) as VectorNode | undefined);
+			if (!node) throw new VectorConstraintError(`refs[${i}]: there is no node "${r.nodeId}".`);
+			if (node.type !== 'path') throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" is a ${node.type}; constraints refer to paths.`);
+			if (r.circle) return { nodeId: r.nodeId, circle: true };
+			let anchor = r.anchor;
+			if (anchor === undefined) {
+				if (r.subpath === undefined || r.index === undefined) throw new VectorConstraintError(`refs[${i}]: give an anchor (subpath and index, or its id), or circle: true.`);
+				const sp = node.subpaths[r.subpath];
+				if (!sp?.anchors[r.index]) throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" has no anchor ${r.index} on subpath ${r.subpath}.`);
+				const withIds = withVectorAnchorIds(node);
+				nodes.set(node.id, withIds);
+				anchor = withIds.subpaths[r.subpath].anchors[r.index].id!;
+			} else if (!findVectorAnchorById(node, anchor)) throw new VectorConstraintError(`refs[${i}]: "${r.nodeId}" has no anchor "${anchor}".`);
+			return { nodeId: r.nodeId, anchor, ...(r.handle ? { handle: r.handle } : {}), ...(r.segment ? { segment: true } : {}) };
+		});
+	}
+
+	private newConstraintId(): string {
+		const used = new Set((this.doc.constraints ?? []).map((c) => c.id));
+		let id = `k${used.size + 1}`;
+		for (let n = used.size + 1; used.has(id); n++) id = `k${n}`;
+		return id;
+	}
+
+	/**
+	 * Adds a constraint: refs by anchor (`subpath` / `index`, or its id), handle, segment or circle;
+	 * dimensional kinds take a `value` expression (default: what the geometry measures now) and a
+	 * `name`. Refuses (changing nothing) one that conflicts with the others or repeats them, naming
+	 * them. One undo step. Returns the new constraint's id.
+	 */
+	addConstraint(input: VectorConstraintInput): VectorActionResult & { id?: string; ids?: string[] } {
+		const nodes = new Map<string, VectorPathNode>();
+		let refs: VectorGeomRef[];
+		try {
+			refs = this.resolveRefs(input.refs, nodes);
+		} catch (e) {
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
+		}
+		const id = this.newConstraintId();
+		const withIds = nodes.size ? { ...this.doc, nodes: mapTree(this.doc.nodes, (n) => nodes.get(n.id) ?? n) } : this.doc;
+		let next: VectorDocument;
+		try {
+			next = addVectorConstraint(withIds, {
+				id,
+				kind: input.kind,
+				refs,
+				...(input.value !== undefined ? { value: String(input.value) } : {}),
+				...(input.name ? { name: input.name } : {}),
+				...(input.axis && input.axis !== 'aligned' ? { axis: input.axis } : {})
+			});
+		} catch (e) {
+			if (e instanceof VectorConstraintError) return { ok: false, message: e.message, ids: e.ids };
+			throw e;
+		}
+		this.change(`Add ${input.kind[0].toUpperCase()}${input.kind.slice(1)} Constraint`, () => {
+			this.doc = next;
+			this.lastSolved = next;
+		});
+		return { ok: true, id };
+	}
+
+	/** Removes constraints by id. One undo step. */
+	removeConstraints(ids: readonly string[]): VectorActionResult {
+		const set = new Set(ids);
+		const missing = ids.filter((id) => !(this.doc.constraints ?? []).some((c) => c.id === id));
+		if (missing.length) return { ok: false, message: `There is no constraint ${missing.map((m) => `"${m}"`).join(', ')}.` };
+		this.change(ids.length === 1 ? 'Remove Constraint' : 'Remove Constraints', () => {
+			const kept = (this.doc.constraints ?? []).filter((c) => !set.has(c.id));
+			this.doc = { ...this.doc, constraints: kept };
+			if (!kept.length) delete this.doc.constraints;
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Sets a dimensional constraint's value expression (by id or name), or a named parameter's
+	 * (creating it; `null` removes a parameter), then solves. Refuses (changing nothing) a value
+	 * that does not evaluate or that the constraints cannot meet. One undo step.
+	 */
+	setConstraintValue(key: string, value: string | number | null, options: { merge?: string } = {}): VectorActionResult & { ids?: string[] } {
+		const text = value === null ? null : String(value).trim();
+		const cons = this.doc.constraints ?? [];
+		const c = cons.find((x) => x.id === key || x.name === key);
+		let trial: VectorDocument;
+		if (c) {
+			if (!VECTOR_DIMENSIONAL_KINDS.has(c.kind)) return { ok: false, message: `"${key}" is a ${c.kind} constraint, which has no value.` };
+			if (text === null || text === '') return { ok: false, message: 'A dimensional constraint needs a value; remove the constraint instead.' };
+			trial = { ...this.doc, constraints: cons.map((x) => (x === c ? { ...x, value: text } : x)) };
+		} else {
+			if (!isValidVectorParameterName(key)) return { ok: false, message: `"${key}" is not a constraint or a valid parameter name (a letter or _, then letters, digits or _).` };
+			const params = this.doc.parameters ?? [];
+			if (text === null) {
+				if (!params.some((p) => p.name === key)) return { ok: false, message: `There is no parameter "${key}".` };
+				trial = { ...this.doc, parameters: params.filter((p) => p.name !== key) };
+			} else {
+				trial = { ...this.doc, parameters: params.some((p) => p.name === key) ? params.map((p) => (p.name === key ? { ...p, value: text } : p)) : [...params, { name: key, value: text }] };
+			}
+		}
+		try {
+			if (text !== null) checkVectorExpression(text);
+			// Every dimensional constraint must still evaluate.
+			const env = vectorConstraintEnv(trial);
+			for (const x of trial.constraints ?? []) if (VECTOR_DIMENSIONAL_KINDS.has(x.kind)) (x.name && env.has(x.name) ? env.value(x.name) : env.eval(x.value ?? ''));
+		} catch (e) {
+			return { ok: false, message: `${key}: ${e instanceof Error ? e.message : String(e)}` };
+		}
+		const r = solveVectorConstraints(trial, null);
+		if (!r.converged) return { ok: false, message: `The constraints cannot meet ${key} = ${text}: it conflicts with ${[...new Set(r.conflicts)].map((i) => `"${i}"`).join(', ')}.`, ids: r.conflicts };
+		this.change(c ? 'Constraint Value' : 'Parameter', () => {
+			this.doc = r.document;
+			this.lastSolved = r.document;
+		}, options.merge);
+		return { ok: true };
+	}
+
+	/**
+	 * Auto-constrain: constraints the paths `ids` (default the selection, or every path) nearly
+	 * satisfy, added one by one (redundant or conflicting ones skipped). One undo step. Returns the
+	 * ids of the constraints added.
+	 */
+	autoConstrain(options: { ids?: readonly string[] } & VectorInferOptions = {}): VectorActionResult & { ids?: string[] } {
+		const { ids, ...infer } = options;
+		const roots = ids ?? (this.selection.length ? this.selection : null);
+		if (roots) for (const id of roots) if (!this.getNode(id)) return { ok: false, message: `There is no node "${id}".` };
+		const used = new Set((this.doc.constraints ?? []).map((c) => c.id));
+		let n = used.size;
+		const newId = () => {
+			let id = `k${++n}`;
+			while (used.has(id)) id = `k${++n}`;
+			used.add(id);
+			return id;
+		};
+		const pathIds = roots ? roots.flatMap((id) => collectPathNodes(this.getNode(id)!).map((p) => p.id)) : null;
+		const r = autoConstrainVector(this.doc, pathIds, newId, infer);
+		if (!r.added.length) return { ok: true, ids: [] };
+		this.change('Auto Constrain', () => {
+			this.doc = r.document;
+			this.lastSolved = r.document;
+		});
+		return { ok: true, ids: r.added.map((c) => c.id) };
+	}
+
 	// -------------------------------------------------------------------------
 	// Keyboard input
 	// -------------------------------------------------------------------------
@@ -6064,6 +7428,7 @@ export class VectorEditorController {
 	 * Do not forward keys typed into text inputs.
 	 */
 	keyDown(input: VectorKeyInput): boolean {
+		if (this.textEdit && this.textKey(input)) return true;
 		const key = input.key;
 		const lower = key.length === 1 ? key.toLowerCase() : key;
 		if (key === ' ') {
@@ -6131,6 +7496,7 @@ export class VectorEditorController {
 					this.anchors = [];
 					this.notify();
 				} else if (this.tool !== 'select') this.setTool('select');
+				else if (this.symbolEdit && !this.selection.length) this.exitSymbolEdit();
 				else this.clearSelection();
 				return true;
 			case 'Enter':
@@ -6254,6 +7620,66 @@ function withStyle(node: VectorPathNode, style: VectorStyle & { opacity?: number
 	if (fills !== undefined) next = withVectorFills(next, sanitizeVectorFills(fills ?? []));
 	if (strokes !== undefined) next = withVectorStrokes(next, sanitizeVectorStrokes(strokes ?? []));
 	return next;
+}
+
+
+/** The resolved character style at `index` of a text node. */
+function vectorTextStyleOf(node: VectorTextNode, index: number): VectorCharacterStyle {
+	let at = 0;
+	for (const r of node.runs ?? []) {
+		if (index < at + r.length) {
+			const { fill: _f, ...fields } = r.style;
+			return { ...node.font, ...fields };
+		}
+		at += r.length;
+	}
+	return node.font;
+}
+
+const isLowSurrogate = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+const isHighSurrogate = (c: number) => c >= 0xd800 && c <= 0xdbff;
+/** The index after the character at `i` (a surrogate pair moves two). */
+function nextIndex(text: string, i: number): number {
+	if (i >= text.length) return text.length;
+	return isHighSurrogate(text.charCodeAt(i)) && isLowSurrogate(text.charCodeAt(i + 1)) ? i + 2 : i + 1;
+}
+/** The index before the character ending at `i`. */
+function prevIndex(text: string, i: number): number {
+	if (i <= 0) return 0;
+	return isLowSurrogate(text.charCodeAt(i - 1)) && isHighSurrogate(text.charCodeAt(i - 2)) ? i - 2 : i - 1;
+}
+const isWordChar = (c: string) => /[\p{L}\p{N}_'’]/u.test(c);
+/** The next word boundary from `i` in direction `dir` (spaces, then a word). */
+function wordEdge(text: string, i: number, dir: 1 | -1): number {
+	let j = i;
+	if (dir > 0) {
+		while (j < text.length && !isWordChar(text[j])) j++;
+		while (j < text.length && isWordChar(text[j])) j++;
+	} else {
+		while (j > 0 && !isWordChar(text[j - 1])) j--;
+		while (j > 0 && isWordChar(text[j - 1])) j--;
+	}
+	return j;
+}
+/** The word around `i` as [start, end) (a single character when it is not part of a word). */
+function wordAt(text: string, i: number): [number, number] {
+	const at = Math.min(i, text.length - 1);
+	if (at < 0) return [0, 0];
+	if (!isWordChar(text[at])) return [at, at + 1];
+	let a = at;
+	let b = at;
+	while (a > 0 && isWordChar(text[a - 1])) a--;
+	while (b < text.length && isWordChar(text[b])) b++;
+	return [a, b];
+}
+
+/** SVG path data or Bézier commands read loosely (bad data gives an empty path). */
+function toBezierPathLoose(d: string): BezierPath {
+	try {
+		return subpathsToBezier(bezierToSubpaths(d), { corners: false });
+	} catch {
+		return [];
+	}
 }
 
 /** True when node `id` or one of its ancestors is locked or hidden. */
