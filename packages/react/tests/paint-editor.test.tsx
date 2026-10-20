@@ -345,6 +345,20 @@ describe('React paint editor', () => {
     setValue(tool, 'blot');
     expect(c.getState().brush.wet.tool).toBe('blot');
     expect(container.querySelector('input[aria-label="Strength"]')).not.toBeNull();
+    // Engine B: force the CPU, then let the GPU run again (there is none in jsdom: the reason shows).
+    const engine = () => container.querySelector('[data-testid="wet-engine"]')!.textContent;
+    await act(async () => {
+      setValue(container.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'off');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(c.getState().wet.gpu).toBe('off');
+    expect(engine()).toBe('CPU only (GPU off).');
+    await act(async () => {
+      setValue(container.querySelector('select[aria-label="Wet engine"]') as HTMLSelectElement, 'auto');
+      await c.setWetEngine({});
+    });
+    expect(c.getState().wet.gpu).toBe('auto');
+    expect(engine()).toMatch(/no WebGPU/);
     c.dispose();
   });
 

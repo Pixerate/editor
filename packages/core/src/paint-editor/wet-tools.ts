@@ -49,7 +49,7 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
       name: 'get_wet_paint',
       title: 'Get the wet paint',
       description:
-        'Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings and flow map. Call it after wet strokes to see what is still wet.',
+        'Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings and flow map. Also engine: Engine B, the WebGPU accelerator (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.',
       inputSchema: EMPTY,
       annotations: { title: 'Get the wet paint', ...READ },
       handler: () => c.wetState(),
@@ -184,6 +184,23 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
         const s = c.getState().wet;
         return { paused: s.paused, speed: s.speed, stillWet: s.wet };
       },
+    },
+    {
+      name: 'set_wet_engine',
+      title: 'Choose the wet-media engine',
+      description:
+        'Lets Engine B, the WebGPU accelerator, run for large wet areas (gpu "auto", the default) or forces the CPU (gpu "off"), and optionally sets minTiles, the wet area at which the GPU takes over. The GPU only shades what is shown: the CPU engine stays the authority, so the painting, drying, saving, export and replay come out the same either way; force the CPU when the display looks wrong or the GPU is busy with other work. Editor setting, not an undo step, not saved with the painting. Returns the engine: mode, state (off, not-started, starting, unavailable, standby, active, failed), reason, adapter, maxTiles, minTiles and activeTiles.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          gpu: { type: 'string', enum: ['auto', 'off'], description: '"auto": use the GPU when there is one and the wet area is large; "off": the CPU only.' },
+          minTiles: { type: 'integer', minimum: 1, maximum: 1024, description: 'Live 256 px tiles (all wet layers) at which the GPU takes over (default unchanged; 16 at start, a fully wet 1024² canvas).' },
+        },
+        required: ['gpu'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Choose the wet-media engine', ...SET },
+      handler: async ({ gpu, minTiles }) => ({ engine: await c.setWetEngine({ gpu, minTiles }) }),
     },
     {
       name: 'set_water_overlay',

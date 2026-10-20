@@ -2447,3 +2447,23 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `paint-wet-kernel.test.ts` took ~130 s on CI (Ubuntu, Node 24) and the physics tests in `paint-wet.test.ts` 5–9 s each, although they looked modest locally.
 - **Root Cause**: The TypeScript spec kernel costs ~45–70 ms per 256² tile-step, and a disc centred on a tile seam (e.g. 256, 256) wakes four tiles. A 600×420 scene for 160 steps is ~1000 TS tile-steps; CI runners are ~3× slower than a laptop and run test files in parallel.
 - **Solution / Workaround**: Keep CI scenes to one tile (centre marks at 128 on a 256 grid) unless the test is about tiles, use `evaporation: 1` for tests that wait for drying, and keep the TS-vs-wasm parity scene to 2 tiles and a few steps (bit differences show from the first step). The full parity and batching scenes run with `WET_BENCH=1`.
+
+### [core/paint] WebGPU Shading Looks 240 Levels Off in Straight RGBA, Yet Is Within 1/255 on Screen
+- **Issue / Symptom**: Comparing Engine B's shaded wet tiles with the CPU's byte by byte found channels up to 243 apart, all at alpha 1..40.
+- **Root Cause**: Wet layer pixels are stored as straight (unpremultiplied) colour over the paper; the colour is `(film − (1 − a)·paper) / a`. At a tiny alpha a one-level difference in the composited film (GPU `exp`/`pow` against the CPU's tables) becomes a huge difference in the straight colour, though the pixel looks the same.
+- **Solution / Workaround**: Compare what shows: each pixel composited over the paper (`a·rgb + (1 − a)·paper`). Both engines round colour and alpha to bytes, so allow up to ~1.5 levels and require almost no pixels over 1 (`tests/paint-wet-gpu.test.ts`).
+
+### [core/paint] WGSL Kernels: Reserved Words, Dynamic Indexing and One Hot Atomic
+- **Issue / Symptom**: The halo shader failed to compile only with "is invalid due to a previous error"; the step ran at half the expected speed.
+- **Root Cause**: `from` is a reserved word in WGSL. `createComputePipeline` errors don't name the line: `getCompilationInfo()` on the shader module does. Speed: every one of the 65,536 threads of a tile did `atomicOr` on one flag word each step, and loops over 9 directions indexed private arrays dynamically (spilled to memory).
+- **Solution / Workaround**: Read `getCompilationInfo()` and put its messages in the error (`gpu.ts`). OR flags into a `var<workgroup>` atomic and let one thread per workgroup touch global memory. Generate the per-direction code unrolled from TypeScript. The step is then bandwidth-bound (~47 floats per cell-step for this model).
+
+### [core/paint] Engine B Cannot Make the Simulation Faster While the CPU Is the Authority
+- **Issue / Symptom**: A WebGPU wet step is 1.5–2× the wasm engine, yet turning it on doesn't let wet paint run more steps per second.
+- **Root Cause**: Saved output must never depend on the GPU (GPU results are close, not bit-identical, and differ between browsers), so the CPU still runs every step; edits and pick-up read CPU state.
+- **Solution / Workaround**: Engine B mirrors the CPU (the same slot layout; edits upload only the rows `markEdited` reports; each batch is also stepped on the GPU) and takes over the display: `displayGpu` shades every stale tile in one dispatch instead of 24 tiles of main-thread JS per frame. A GPU result is dropped when the lane's stamp changed while it was in flight. Making the GPU the live engine would need the CPU to follow by replaying strokes; that is a separate design.
+
+### [core/tests] Node WebGPU (Dawn): One Instance per Process, Opt-In Tests
+- **Issue / Symptom**: The GPU bench crashed the vitest worker with SIGSEGV.
+- **Root Cause**: Each test called the `webgpu` package's `create()`, making a new Dawn instance per test.
+- **Solution / Workaround**: Create the provider once per file and reuse it. The package is ~140 MB and CI has no GPU, so it is not a dependency: GPU tests run when `WET_GPU` names a local install (`WET_GPU=/path/to/node_modules/webgpu`); without it only the capability checks run.
