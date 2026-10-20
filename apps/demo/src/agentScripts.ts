@@ -416,6 +416,13 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-contour",
+    prompt: "Give the star a contour glow",
+    steps: [
+      { say: "Four contour steps outside the star, fading to the sky colour.", ...command("vector.addEffect", { ids: ["star"], type: "contour", params: { direction: "outside", steps: 4, offset: 4, fillColor: "#e0f2fe", strokeColor: "#e0f2fe" } }), target: { selector: '[data-vector-id="star"]' } },
+    ],
+  },
+  {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [

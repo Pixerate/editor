@@ -253,6 +253,16 @@ Each entry is `{ id, type, enabled?, params }` (`VectorEffect`); `createVectorEf
 
 The operators are exported for direct use on Bézier paths: `trimPaths`, `trimPathsIndividually`, `roundCornerPaths`, `puckerBloatPaths`, `twistPaths`, `zigzagPaths`, `wigglePaths`, `offsetPaths`, `mergePaths`, `vectorRepeaterCopies` / `repeatPaths`, and `applyVectorEffects(shapes, effects)` runs a stack.
 
+### Contour
+
+A `contour` path effect works like CorelDRAW's Contour.
+
+- **Steps.** Each shape gets `steps` concentric copies, `offset` apart (`offsetPaths`, with `join`). They go `inside`, `outside`, or to the `center` (inward until the shape is used up).
+- **Colour.** Each step's fill and stroke blend from the shape's own solid colours to `fillColor` / `strokeColor`; null keeps the colour. `acceleration` (−100…100) holds the change back toward the end (positive) or rushes it (negative).
+- **Draw order.** Inside steps draw over the shape and outside steps under it.
+- **Interaction with other effects.** Like the other effects, it acts on what is above it in the stack, and the effects after it act on its steps.
+- **Panels and export.** The effects panels edit end colours with the new `color` parameter kind. Lottie has no equivalent, so it gets the drawn shapes.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:
