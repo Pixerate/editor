@@ -19,6 +19,7 @@
 import { blendRgb, mixPigmentRgb, type BlendMode } from './blend';
 import type { CompositorLayer, CompositorProfile, RasterCompositor, RasterSources } from './compositor';
 import { hasActiveEffects } from './effects/model';
+import { compositeLayerEffects } from './effects/render';
 import { readDeepRegion, srgbDecode, srgbEncode, to32From8 } from './deep';
 import type { RasterRect } from './surface';
 
@@ -105,6 +106,7 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     const layer = step.layer;
     if (!layer.visible) return empty;
     const clipped = step.clipped.filter((l) => l.visible);
+    if (step.kind === 'content' && this.deepEffects(layer)) return this.runEffects(layer, clipped, acc, r) ? false : empty;
     const coverage = this.renderedAlone(layer) ? null : this.base.maskCoverage(layer, r, this.sources);
     if (coverage && coverage.every((v) => v <= 0)) return empty;
     if (step.kind === 'group' && !this.renderedAlone(layer)) {
@@ -137,6 +139,35 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     this.applyClipped(clipped, buf, r);
     this.blend(acc, buf, mode, layer.opacity, null);
     return false;
+  }
+
+  /**
+   * A pixel layer with effects onto `acc` over `r`: its deep content (filters, mask, clipped
+   * layers) and the effects composited in float. Effect maps come from the 8-bit shape. At 32
+   * bits the effects composite in sRGB-encoded values (their colours and blends are defined
+   * there) and the result is decoded back. Returns whether anything was drawn.
+   */
+  private runEffects(layer: L, clipped: L[], acc: Float32Array, r: RasterRect): boolean {
+    const fx = this.base.effectsInput(layer, r, this.sources);
+    if (!fx) return false;
+    const a = fx.rect;
+    const content = this.content(layer, a) ?? new Float32Array(a.width * a.height * 4);
+    const coverage = this.base.maskCoverage(layer, a, this.sources);
+    if (coverage) for (let i = 0; i < coverage.length; i++) content[i * 4 + 3] *= coverage[i];
+    if (clipped.length) this.applyClipped(clipped, content, a);
+    const sub = new Float32Array(a.width * a.height * 4);
+    for (let y = 0; y < a.height; y++) {
+      const s = ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4;
+      sub.set(acc.subarray(s, s + a.width * 4), y * a.width * 4);
+    }
+    if (this.linear) {
+      encodeInPlace(sub);
+      encodeInPlace(content);
+    }
+    compositeLayerEffects({ ...fx, backdrop: sub, content });
+    if (this.linear) decodeInPlace(sub);
+    for (let y = 0; y < a.height; y++) acc.set(sub.subarray(y * a.width * 4, (y + 1) * a.width * 4), ((a.y - r.y + y) * r.width + (a.x - r.x)) * 4);
+    return true;
   }
 
   private applyClipped(clipped: L[], buf: Float32Array, r: RasterRect): void {
@@ -197,8 +228,13 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
   // --- Layer content ---------------------------------------------------------------
 
   /** Layers drawn by the 8-bit compositor alone (effects, pixel filters, content the editor draws). */
+  /** A pixel(-like) layer with effects: composited in float through `compositeLayerEffects`. */
+  private deepEffects(layer: L): boolean {
+    return hasActiveEffects(layer.effects) && !this.isFilter(layer) && this.isPixel(layer) && !isGroup(layer);
+  }
+
   private renderedAlone(layer: L): boolean {
-    if (hasActiveEffects(layer.effects) && !this.isFilter(layer)) return true;
+    if (hasActiveEffects(layer.effects) && !this.isFilter(layer) && !this.deepEffects(layer)) return true;
     if (this.isPixel(layer)) return Boolean(this.profile.pixelFilters?.(layer)) && !this.deep.pixelFiltersDeep?.(layer);
     return !isGroup(layer);
   }
@@ -358,4 +394,22 @@ export function workingToSamples(data: Float32Array, depth: 16 | 32): Uint16Arra
     out[i] = v > 0 ? (v < 1 ? Math.round(v * 65535) : 65535) : 0;
   }
   return out;
+}
+
+/** Linear float RGBA to sRGB-encoded in place (colour only; values above 1 extend the curve). */
+function encodeInPlace(d: Float32Array): void {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = srgbEncode(d[i]);
+    d[i + 1] = srgbEncode(d[i + 1]);
+    d[i + 2] = srgbEncode(d[i + 2]);
+  }
+}
+
+/** sRGB-encoded float RGBA to linear in place (colour only). */
+function decodeInPlace(d: Float32Array): void {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = srgbDecode(d[i]);
+    d[i + 1] = srgbDecode(d[i + 1]);
+    d[i + 2] = srgbDecode(d[i + 2]);
+  }
 }
