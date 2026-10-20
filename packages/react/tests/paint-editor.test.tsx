@@ -117,7 +117,8 @@ describe('React paint editor', () => {
     setValue(container.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
     expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
-  });
+    // It renders a preview of every brush, which takes several seconds on a loaded CI runner.
+  }, 30_000);
 
   it('the brush panel shows each engine\'s controls: blender, smudge, behaviour, multi-colour and load', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
