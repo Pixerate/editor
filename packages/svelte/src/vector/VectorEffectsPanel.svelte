@@ -2,6 +2,7 @@
   import {
     VECTOR_EFFECT_MENU,
     getVectorEffectsPanel,
+    vectorPaintToHex,
     type VectorEditorController,
     type VectorEffectsPanelItem,
     type VectorEffectType
@@ -144,7 +145,15 @@
                 <span class="min-w-0 flex-1 truncate">{spec.label}</span>
                 <input type="checkbox" aria-label="{e.label} {spec.label}" checked={!!e.params[spec.key]} onchange={(ev) => set(e, spec.key, ev.currentTarget.checked, false)} />
               </label>
-            {:else}
+            {:else if spec.kind === 'color'}
+              <!-- A colour, or none (the checkbox): none keeps the shape's own colour. -->
+              {@const c = e.params[spec.key] as string | null}
+              <div class="flex items-center gap-2 text-xs text-foreground" data-vector-effect-param={spec.key}>
+                <span class={labelClass}>{spec.label}</span>
+                <input type="checkbox" aria-label="{e.label} {spec.label} on" checked={c !== null} onchange={(ev) => set(e, spec.key, ev.currentTarget.checked ? '#ffffff' : null, false)} />
+                <input type="color" aria-label="{e.label} {spec.label}" class="h-6 w-8 cursor-pointer rounded border border-border bg-background disabled:opacity-40" disabled={c === null} value={vectorPaintToHex(c ?? '#ffffff') ?? '#ffffff'} oninput={(ev) => set(e, spec.key, ev.currentTarget.value, true)} onblur={end} />
+              </div>
+            {:else if spec.kind === 'select'}
               <label class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-foreground" data-vector-effect-param={spec.key}>
                 <span class={labelClass}>{spec.label}</span>
                 <select aria-label="{e.label} {spec.label}" class={selectClass} value={String(e.params[spec.key] ?? '')} onchange={(ev) => set(e, spec.key, ev.currentTarget.value, false)}>

@@ -2320,7 +2320,19 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
 - **Root Cause**: High bit depth is additive: a `Tile` may carry `deep` samples (`Uint16Array`, or `Float32Array` in linear light) and its `data` is always their 8-bit rendering. Every existing 8-bit path (compositor, viewport, brushes, the paint editor) reads and writes `data` only, and a tile it rewrites is built by `finishTile` without `deep`.
-- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. The brush, eraser, Fill, Clear, Dodge, Burn and transforms are depth-aware (`applyStrokeToDeepTile`, `applyToneToDeepTile`, `transformSurface` / `warpSurface` resampling deep surfaces). For everything else, `keepDeepSamples` runs at each layer commit (`commitLayers`, `_strokeCommit`): a rewritten tile gets its old deep samples back wherever its 8-bit value did not change, so only the pixels an 8-bit tool changed lose precision. Never run it across a bit-depth change: going down to 8 bits would bring the samples back.
+- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. The brush, eraser, Fill, Clear, Dodge, Burn and transforms are depth-aware (`applyStrokeToDeepTile`, `applyToneToDeepTile`, `transformSurface` / `warpSurface` resampling deep surfaces); the Mixer Brush, Smudge, Sponge, Clone and healing run their 8-bit code on float working tiles (next entry). For everything else, `keepDeepSamples` runs at each layer commit (`commitLayers`, `_strokeCommit`): a rewritten tile gets its old deep samples back wherever its 8-bit value did not change, so only the pixels an 8-bit tool changed lose precision. Never run it across a bit-depth change: going down to 8 bits would bring the samples back.
+
+### [core/paint] Dab Tools Run at Depth on Float Working Tiles, so Never Round a Write
+
+- **Issue / Symptom**: The Mixer Brush, Smudge, Sponge, Clone and healing on a 16-bit layer came out at 8-bit precision even with deep tiles in and out, and pigment mixing on a float tile picked stale colours.
+- **Root Cause**: Their engines (`TileMedium`, `SmudgeTip`, `applyRetouchToTile`) read `px / 255` and wrote `Math.round(v * 255)`. On a float working tile the read is exact but the write rounds every pixel to a whole level. The pigment caches key on `(r << 16) | (g << 8) | b`, which truncates fractions.
+- **Solution / Workaround**: On a deep document `PaintStrokeSession` hands them `Float32Array` working tiles on the same 0..255 sRGB-encoded scale (`workTileOf`, back with `deepOfWorkTile`, which copies the exact original samples for pixels still equal to what was read). Write through `put255` (rounds bytes as before, keeps fractions on floats), pass `Math.round(px[i])` to `mixPigment8` / `pigment8`, and skip byte-keyed caches on floats. Sources for Clone and healing read the same scale (`TilePixelSource` over working tiles, or `compositeDeep` encoded to it).
+
+### [core/raster] A Deep Mask Is Coverage, Not Colour
+
+- **Issue / Symptom**: A 32-bit mask read back from a PSD or painted at depth came out darker or lighter than its 16-bit copy, and a soft mask on a 16-bit layer banded in the deep composite.
+- **Root Cause**: Deep RGBA samples at 32 bits are linear light, but a mask holds coverage. Running a one-channel surface through the colour transfer functions would linearise it. And the compositor read mask coverage through `readRegion`, the 8-bit rendering, whatever the mask held.
+- **Solution / Workaround**: The deep helpers already take `channels`: for 1 they treat samples as plain 0..1 coverage (16-bit `v / 65535`, 32-bit as is). Always pass the surface's channel count (`tileSamples(tile, ch, …)`, `deepTile(d, ch, …)`, `applyStrokeToDeepTile(…, { channels })`). The compositor's `maskTile` reads `readDeepRegion(mask.surface, rect, 32)` when the mask has deep tiles (depth cached per surface). PSD masks at 16/32 bits are big-endian planes (`toMaskDeep`, `deepMaskPlane`). CMYK files keep 8-bit masks, as their layers do.
 
 ### [core/paint] A Deep Eraser Must Zero the Colour of Pixels It Clears
 
@@ -2467,3 +2479,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The GPU bench crashed the vitest worker with SIGSEGV.
 - **Root Cause**: Each test called the `webgpu` package's `create()`, making a new Dawn instance per test.
 - **Solution / Workaround**: Create the provider once per file and reuse it. The package is ~140 MB and CI has no GPU, so it is not a dependency: GPU tests run when `WET_GPU` names a local install (`WET_GPU=/path/to/node_modules/webgpu`); without it only the capability checks run.
+
+### [core/vector] A Swept Shape's Edge Bands Must All Wind The Same Way
+
+- **Issue / Symptom**: A block shadow (`sweepPath`) came out with holes along some sides of the shape.
+- **Root Cause**: The sweep puts one band (edge, edge moved, back) per flattened edge into a single `nonzero` operand. Edges facing against the sweep direction give bands that wind the other way, so where two bands overlap their windings cancel to zero.
+- **Solution / Workaround**: Swap an edge's ends when the cross product of the edge and the sweep is negative, and skip edges parallel to the sweep. Every band then winds the same way and `nonzero` unites them.

@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
   VECTOR_OVERLAY_THEME as THEME,
   getVectorOverlayRenderData,
@@ -187,51 +187,36 @@ export function VectorTextElement({ node }: { node: VectorRenderText }) {
 export function VectorSceneNodes({ nodes }: { nodes: readonly VectorRenderNode[] }) {
   return (
     <>
-      {nodes.map((node) =>
-        node.kind === 'text' ? (
-          <VectorTextElement key={node.id} node={node} />
-        ) : node.kind === 'group' ? (
-          <g
-            key={node.id}
-            data-vector-id={node.id}
-            data-vector-mask={node.mask?.type}
-            transform={node.transform}
-            opacity={node.opacity < 1 ? node.opacity : undefined}
-            filter={node.filter}
-            style={blendStyle(node.blendMode)}
-          >
-            {node.mask ? <VectorMaskedNodes mask={node.mask} nodes={node.children} /> : <VectorSceneNodes nodes={node.children} />}
-          </g>
-        ) : node.layers ? (
-          // Fill and stroke stacks: each layer in order, bottom to top.
-          <g
-            key={node.id}
-            data-vector-id={node.id}
-            transform={node.transform}
-            opacity={node.opacity < 1 ? node.opacity : undefined}
-            filter={node.filter}
-            style={blendStyle(node.blendMode)}
-          >
-            {node.layers.map((layer) => (
-              <VectorPaintPath key={`${layer.kind}-${layer.index}`} paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
-            ))}
-          </g>
-        ) : (
-          <VectorPaintPath
-            key={node.id}
-            paint={node}
-            d={node.d}
-            fillRule={node.fillRule}
-            id={node.id}
-            transform={node.transform}
-            filter={node.filter}
-            blendMode={node.blendMode}
-          />
-        ),
-      )}
+      {nodes.map((node) => (
+        <VectorSceneNode key={node.id} node={node} />
+      ))}
     </>
   );
 }
+
+/**
+ * One scene node. Memoised on the node object: the scene data hands back the same object for a
+ * node an edit did not touch, so only changed nodes re-render.
+ */
+const VectorSceneNode = React.memo(function VectorSceneNode({ node }: { node: VectorRenderNode }) {
+  if (node.kind === 'text') return <VectorTextElement node={node} />;
+  if (node.kind === 'group')
+    return (
+      <g data-vector-id={node.id} data-vector-mask={node.mask?.type} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blendStyle(node.blendMode)}>
+        {node.mask ? <VectorMaskedNodes mask={node.mask} nodes={node.children} /> : <VectorSceneNodes nodes={node.children} />}
+      </g>
+    );
+  if (node.layers)
+    return (
+      // Fill and stroke stacks: each layer in order, bottom to top.
+      <g data-vector-id={node.id} transform={node.transform} opacity={node.opacity < 1 ? node.opacity : undefined} filter={node.filter} style={blendStyle(node.blendMode)}>
+        {node.layers.map((layer) => (
+          <VectorPaintPath key={`${layer.kind}-${layer.index}`} paint={layer} d={node.d} fillRule={node.fillRule} layer={`${layer.kind}-${layer.index}`} />
+        ))}
+      </g>
+    );
+  return <VectorPaintPath paint={node} d={node.d} fillRule={node.fillRule} id={node.id} transform={node.transform} filter={node.filter} blendMode={node.blendMode} />;
+});
 
 /**
  * A mask group's contents under its mask: the `<clipPath>` (clip) or `<mask>` (alpha, luminance;
@@ -386,7 +371,9 @@ export function VectorCanvas({
   const editingText = state.textEdit?.nodeId ?? null;
   const fitted = useRef(!fitOnMount);
   const uid = useId().replace(/:/g, '');
-  const scene = getVectorSceneRenderData(state, { idPrefix: `ve${uid}-` });
+  // The canvas size, so the scene leaves out what is off screen and simplifies what is tiny.
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const scene = getVectorSceneRenderData(state, { idPrefix: `ve${uid}-`, ...(size ? { viewportSize: size } : {}) });
   const overlay = getVectorOverlayRenderData(state);
   // Isolation mode: the rest of the document, dimmed behind the symbol's art.
   const host = getVectorSymbolEditBackground(state, { idPrefix: `ve${uid}-host-` });
@@ -406,6 +393,19 @@ export function VectorCanvas({
     observer.observe(el);
     return () => observer.disconnect();
   }, [controller]);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setSize((s) => (s && s.width === r.width && s.height === r.height ? s : { width: r.width, height: r.height }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Typing goes into a hidden textarea while text is edited (focused after the click that started it).
   useEffect(() => {
@@ -738,6 +738,13 @@ export function VectorCanvas({
             ))}
             {sh.points.map((p) => (
               <circle key={p.index} data-vector-shading-point={p.index} data-selected={p.selected || undefined} cx={p.x} cy={p.y} r={p.selected ? 6 : 4.5} fill={p.color} stroke={p.selected ? accentColor : '#ffffff'} strokeWidth={p.selected ? 2 : 1.5} />
+            ))}
+          </g>
+        ))}
+        {overlay.symmetry.map((sy) => (
+          <g key={`sym:${sy.nodeId}`} data-vector-symmetry-axes={sy.nodeId} stroke={accentColor} strokeDasharray={sy.drawing ? undefined : '6 4'} opacity={sy.drawing ? 0.9 : 0.6}>
+            {sy.lines.map((l, i) => (
+              <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
             ))}
           </g>
         ))}

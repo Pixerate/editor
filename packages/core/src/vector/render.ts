@@ -62,6 +62,10 @@ import { applyMatrix } from '../geom/affine.js';
 import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
 import { isVectorFrame, vectorFrameRectPath } from './frames.js';
+import { isVectorSymmetryGroup, vectorSymmetryAxes } from './symmetry.js';
+import { invertMatrix } from '../geom/affine.js';
+import { vectorNodePaintBox, vectorNodesNear } from './spatial.js';
+import { vectorTextShaperGeneration } from './text.js';
 import { vectorConnectionSites, vectorConnectorTargetAt } from './connectors.js';
 import { isVectorMeshGradient, isVectorShadedPaint, vectorFreeformLineSegments, vectorMeshLines } from './shading.js';
 import type { VectorFreeformGradient, VectorMeshGradient } from './types.js';
@@ -225,6 +229,8 @@ export interface VectorSceneRenderData {
 	filters: VectorRenderFilter[];
 	/** Visible nodes, bottom to top. */
 	nodes: VectorRenderNode[];
+	/** Top-level nodes in the document, left out as off screen (with `viewportSize`), and drawn collapsed (`lod`). */
+	stats: { nodes: number; culled: number; collapsed: number };
 }
 
 export interface VectorRenderAnchor {
@@ -412,6 +418,11 @@ export interface VectorOverlayRenderData {
 	 * the panel edits), each with its colour.
 	 */
 	shading: { nodeId: string; kind: 'mesh' | 'freeform'; lines: string[]; points: { index: number; x: number; y: number; color: string; selected: boolean }[] }[];
+	/**
+	 * Axes of the symmetry groups that are selected or being drawn into, screen space: each line as
+	 * `x1, y1, x2, y2`; `drawing` when new art goes into that group (draw it more strongly).
+	 */
+	symmetry: { nodeId: string; drawing: boolean; lines: { x1: number; y1: number; x2: number; y2: number }[] }[];
 	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
 	trackingPoints: { x: number; y: number }[];
 	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
@@ -533,7 +544,31 @@ function renderText(node: VectorTextNode, defs: VectorPaintDef[], filters: Vecto
 	};
 }
 
+/**
+ * Render data per stored node object (and id prefix and text shaper generation), with the defs and
+ * filters it made: a node an edit did not replace comes back as the same object, so the canvases
+ * skip redrawing it (React.memo, Svelte's keyed blocks).
+ */
+const renderCache = new WeakMap<VectorNode, Map<string, { gen: number; node: VectorRenderNode | null; defs: VectorPaintDef[]; filters: VectorRenderFilter[] }>>();
+
 function renderNode(stored: VectorNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderNode | null {
+	const gen = vectorTextShaperGeneration();
+	let byPrefix = renderCache.get(stored);
+	const hit = byPrefix?.get(idPrefix);
+	if (hit && hit.gen === gen) {
+		defs.push(...hit.defs);
+		filters.push(...hit.filters);
+		return hit.node;
+	}
+	const d0 = defs.length;
+	const f0 = filters.length;
+	const node = renderNodeFresh(stored, defs, filters, idPrefix);
+	if (!byPrefix) renderCache.set(stored, (byPrefix = new Map()));
+	byPrefix.set(idPrefix, { gen, node, defs: defs.slice(d0), filters: filters.slice(f0) });
+	return node;
+}
+
+function renderNodeFresh(stored: VectorNode, defs: VectorPaintDef[], filters: VectorRenderFilter[], idPrefix: string): VectorRenderNode | null {
 	if (stored.visible === false) return null;
 	// Text without glyph outlines draws as SVG text; with them it draws as its outlines below.
 	if (stored.type === 'text' && !vectorTextHasOutlines()) return renderText(stored, defs, filters, idPrefix);
@@ -607,17 +642,89 @@ function renderMask(group: VectorGroupNode, defs: VectorPaintDef[], filters: Vec
 	return { ...mask, nodes: source ? [source] : [] };
 }
 
+/** Options of `getVectorSceneRenderData`. */
+export interface VectorSceneRenderOptions {
+	/** Prefix of the ids of defs and filters (default `ve-`); give each editor on a page its own. */
+	idPrefix?: string;
+	/**
+	 * The canvas size in screen pixels. With it, top-level nodes outside the view are left out and
+	 * small live subtrees are simplified (see `lod`); leave it out for exports, which must be exact.
+	 */
+	viewportSize?: { width: number; height: number };
+	/** With `viewportSize`: groups, text and instances smaller than this many screen pixels draw as one rectangle in their main colour (default 2; 0 turns it off). */
+	lod?: number;
+}
+
+/** A small subtree as one rectangle over its paint box in its main colour (cached per node), or null when it paints nothing solid. */
+const collapsedCache = new WeakMap<VectorNode, Map<string, VectorRenderPath | null>>();
+function collapsedNode(node: VectorNode, box: { minX: number; minY: number; maxX: number; maxY: number }, prefix: string): VectorRenderPath | null {
+	let byPrefix = collapsedCache.get(node);
+	if (byPrefix?.has(prefix)) return byPrefix.get(prefix)!;
+	let fill: string | null = null;
+	const look = (n: VectorNode) => {
+		if (fill || n.visible === false) return;
+		if (n.type === 'path' || n.type === 'text') {
+			const f = n.fill;
+			if (typeof f === 'string' && f !== 'none') fill = f;
+			else if (isVectorGradient(f)) fill = f.stops[0]?.color ?? null;
+		} else if (n.type === 'group') n.children.forEach(look);
+		else if (n.type === 'instance') (n.art ?? []).forEach(look);
+	};
+	look(node);
+	const out: VectorRenderPath | null = fill
+		? { kind: 'path', id: node.id, d: `M${fmt(box.minX)} ${fmt(box.minY)}H${fmt(box.maxX)}V${fmt(box.maxY)}H${fmt(box.minX)}Z`, fill, stroke: 'none', strokeWidth: 0, fillRule: 'nonzero', opacity: node.opacity ?? 1 }
+		: null;
+	if (!byPrefix) collapsedCache.set(node, (byPrefix = new Map()));
+	byPrefix.set(prefix, out);
+	return out;
+}
+
 /**
  * The document layer. Render the nodes inside `<g transform={transform}>` and `defs` in a
- * `<defs>` block. Pass a unique `idPrefix` when several editors share a page.
+ * `<defs>` block. Pass a unique `idPrefix` when several editors share a page, and the canvas size
+ * (`viewportSize`) to draw only what the view shows.
  */
-export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: { idPrefix?: string } = {}): VectorSceneRenderData {
+export function getVectorSceneRenderData(state: Pick<VectorEditorState, 'document' | 'viewport'>, options: VectorSceneRenderOptions = {}): VectorSceneRenderData {
 	const defs: VectorPaintDef[] = [];
 	const filters: VectorRenderFilter[] = [];
 	const prefix = options.idPrefix ?? 've-';
-	const nodes = state.document.nodes.map((n) => renderNode(n, defs, filters, prefix)).filter((n): n is VectorRenderNode => !!n);
 	const v = state.viewport;
+	const all = state.document.nodes;
+	const stats = { nodes: all.length, culled: 0, collapsed: 0 };
+	let nodes: VectorRenderNode[];
+	const size = options.viewportSize;
+	if (size && size.width > 0 && size.height > 0 && v.zoom > 0) {
+		// Only what the view shows: top-level nodes off screen are left out (found through the
+		// spatial index on large documents), and live subtrees smaller than `lod` screen pixels
+		// draw as one rectangle in their main colour.
+		const z = v.zoom;
+		const pad = 2 / z;
+		const view = { minX: -v.x / z - pad, minY: -v.y / z - pad, maxX: (size.width - v.x) / z + pad, maxY: (size.height - v.y) / z + pad };
+		const lod = options.lod ?? 2;
+		const near = vectorNodesNear(all, { x: view.minX, y: view.minY, width: view.maxX - view.minX, height: view.maxY - view.minY });
+		stats.culled = all.length - near.length;
+		nodes = [];
+		for (const i of near) {
+			const n = all[i];
+			const box = vectorNodePaintBox(n);
+			if (box && (box.maxX < view.minX || box.minX > view.maxX || box.maxY < view.minY || box.minY > view.maxY)) {
+				stats.culled++;
+				continue;
+			}
+			if (box && lod > 0 && n.type !== 'path' && n.visible !== false && Math.max(box.maxX - box.minX, box.maxY - box.minY) * z < lod) {
+				const c = collapsedNode(n, box, prefix);
+				if (c) {
+					stats.collapsed++;
+					nodes.push(c);
+					continue;
+				}
+			}
+			const r = renderNode(n, defs, filters, prefix);
+			if (r) nodes.push(r);
+		}
+	} else nodes = all.map((n) => renderNode(n, defs, filters, prefix)).filter((n): n is VectorRenderNode => !!n);
 	return {
+		stats,
 		transform: `translate(${fmt(v.x)} ${fmt(v.y)}) scale(${v.zoom})`,
 		width: state.document.width,
 		height: state.document.height,
@@ -695,6 +802,51 @@ function shadingOverlay(state: VectorEditorState): VectorOverlayRenderData['shad
 		}
 	}
 	return out;
+}
+
+/** The axes of selected (or drawn-into) symmetry groups (see `VectorOverlayRenderData.symmetry`). */
+function symmetryOverlay(state: VectorEditorState): VectorOverlayRenderData['symmetry'] {
+	const ids = new Set([...state.selection, ...(state.symmetryTarget ? [state.symmetryTarget] : [])]);
+	const out: VectorOverlayRenderData['symmetry'] = [];
+	for (const id of ids) {
+		const n = findVectorNode(state.document.nodes, id);
+		if (!isVectorSymmetryGroup(n)) continue;
+		const world = vectorWorldMatrix(state.document.nodes, id);
+		if (!world) continue;
+		// Long enough to cross the artboard and the art, in the group's space.
+		const inv = invertMatrix(world);
+		const corners = [
+			{ x: 0, y: 0 },
+			{ x: state.document.width, y: 0 },
+			{ x: 0, y: state.document.height },
+			{ x: state.document.width, y: state.document.height }
+		].map((p) => applyMatrix(inv, p));
+		const { transform: _t, ...own } = n;
+		const b = unionBoxes([vectorNodeBounds(own as VectorNode), boundsFromCorners(corners)]);
+		if (!b) continue;
+		const pad = Math.max(b.width, b.height) * 0.05;
+		const lines = vectorSymmetryAxes(n.symmetry, { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad }).map(([a, c]) => {
+			const p = toScreen(state, applyMatrix(world, a));
+			const q = toScreen(state, applyMatrix(world, c));
+			return { x1: p.x, y1: p.y, x2: q.x, y2: q.y };
+		});
+		out.push({ nodeId: id, drawing: state.symmetryTarget === id, lines });
+	}
+	return out;
+}
+
+function unionBoxes(list: readonly (VectorBounds | null)[]): VectorBounds | null {
+	const ok = list.filter((b): b is VectorBounds => !!b);
+	if (!ok.length) return null;
+	const x = Math.min(...ok.map((b) => b.x));
+	const y = Math.min(...ok.map((b) => b.y));
+	return { x, y, width: Math.max(...ok.map((b) => b.x + b.width)) - x, height: Math.max(...ok.map((b) => b.y + b.height)) - y };
+}
+
+function boundsFromCorners(pts: readonly Vec2[]): VectorBounds {
+	const xs = pts.map((p) => p.x);
+	const ys = pts.map((p) => p.y);
+	return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
 }
 
 /** Connection sites under the pointer while the Connector tool is on (see `VectorOverlayRenderData.connectorSites`). */
@@ -973,6 +1125,7 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 	}
 	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
 		shading: shadingOverlay(state),
+		symmetry: symmetryOverlay(state),
 		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
 		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
 	};

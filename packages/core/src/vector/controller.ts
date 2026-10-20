@@ -156,6 +156,8 @@ import {
 	VECTOR_MESH_MAX
 } from './shading.js';
 import { parseVectorColor } from './gradient.js';
+import { isVectorSymmetryGroup, sanitizeVectorSymmetry, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
+import { VECTOR_SYMMETRY_MODES, type VectorSymmetry, type VectorSymmetryMode } from './types.js';
 import { vectorDocumentToPdf, type VectorPdfExport, type VectorPdfOptions } from './pdf.js';
 import { parseVectorLottie, vectorDocumentToLottie, type VectorLottieExport, type VectorLottieExportOptions, type VectorLottieImport, type VectorLottieImportOptions } from './lottie.js';
 import { traceVectorImage, type VectorTraceOptions, type VectorTracePixels } from './trace.js';
@@ -624,6 +626,8 @@ export interface VectorEditorState {
 	trackingPoints: readonly VectorTrackingPoint[];
 	/** A distance or coordinate being typed while the pen draws (Enter places the point), or null. */
 	typedEntry: string | null;
+	/** The symmetry group new drawn art goes into (`enterSymmetry`), or null. */
+	symmetryTarget: string | null;
 	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
 	shadingPoint: { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null;
 	canUndo: boolean;
@@ -1609,6 +1613,7 @@ export class VectorEditorController {
 			trackingPoints: this.trackingPoints,
 			typedEntry: this.typed,
 			shadingPoint: this.getShadingSelection(),
+			symmetryTarget: this.symmetryTarget && this.doc.nodes.some((n) => n.id === this.symmetryTarget) ? this.symmetryTarget : null,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -4116,6 +4121,163 @@ export class VectorEditorController {
 			this.editingId = null;
 		});
 		return { ok: true, id };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Live symmetry groups
+
+	/** The symmetry group new pen, pencil, shape and text art goes into (see `enterSymmetry`), or null. */
+	private symmetryTarget: string | null = null;
+
+	/** The symmetry group drawn art goes into, while it is entered and still a top-level, unturned symmetry group. */
+	private drawingTarget(): VectorGroupNode | null {
+		const id = this.symmetryTarget;
+		if (!id) return null;
+		const n = this.doc.nodes.find((x) => x.id === id);
+		if (!isVectorSymmetryGroup(n) || n.transform || n.locked) {
+			this.symmetryTarget = null;
+			return null;
+		}
+		return n;
+	}
+
+	/** Adds a node a drawing tool makes: into the entered symmetry group, else on top. */
+	private addDrawn(node: VectorNode) {
+		const target = this.tool === 'frame' || this.tool === 'connector' ? null : this.drawingTarget();
+		if (!target) return this.setDoc([...this.doc.nodes, node]);
+		this.setDoc(this.doc.nodes.map((n) => (n.id === target.id && n.type === 'group' ? { ...n, children: [...n.children, node] } : n)));
+	}
+
+	/**
+	 * Make Symmetry: puts objects that share a parent (default: the selection) into a live symmetry
+	 * group that draws them with their mirrored or rotated copies, the axes through `center`
+	 * (default: the objects' centre, or the artboard's when there are none, making an empty group to
+	 * draw into). One undo step; selects the group (and enters it when empty). Returns its id.
+	 */
+	makeSymmetry(input: { mode: VectorSymmetryMode; center?: Vec2; rotation?: number; copies?: number; mirror?: boolean; name?: string }, options: { ids?: readonly string[] } = {}): VectorMaskResult {
+		const symmetry = sanitizeVectorSymmetry({ ...input, center: input.center ?? { x: 0, y: 0 } });
+		if (!symmetry) return { ok: false, message: `Unknown symmetry "${input.mode}": use ${VECTOR_SYMMETRY_MODES.join(', ')}.` };
+		if (input.copies !== undefined && !(input.copies >= 2 && input.copies <= 64)) return { ok: false, message: 'copies must be from 2 to 64.' };
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+		}
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0]?.parent ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== (parent?.id ?? null))) return { ok: false, message: 'The objects must share a parent (pick objects at one level).' };
+		const b = unionBounds(ids.map((id) => vectorNodeBounds(this.getNode(id)!)));
+		const center = input.center ?? (b ? { x: b.x + b.width / 2, y: b.y + b.height / 2 } : { x: this.doc.width / 2, y: this.doc.height / 2 });
+		const id = this.newId();
+		const group: VectorGroupNode = { id, type: 'group', name: input.name ?? 'Symmetry', symmetry: { ...symmetry, center }, children: [] };
+		const order = ids.slice().sort((a, c) => locs[ids.indexOf(a)].index - locs[ids.indexOf(c)].index);
+		const set = new Set(order);
+		this.change('Make Symmetry', () => {
+			if (!order.length) this.setDoc([...this.doc.nodes, group]);
+			else {
+				const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+					const members = order.map((m) => list.find((n) => n.id === m)!);
+					const top = Math.max(...members.map((m) => list.indexOf(m)));
+					const out: VectorNode[] = [];
+					list.forEach((n, i) => {
+						if (i === top) out.push({ ...group, children: members });
+						if (!set.has(n.id)) out.push(n);
+					});
+					return out;
+				};
+				if (!parent) this.setDoc(regroup(this.doc.nodes));
+				else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent.id && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			}
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+			if (!order.length && !parent) this.symmetryTarget = id;
+		});
+		return { ok: true, id };
+	}
+
+	/** Symmetry groups among `ids` (default: the selection, or the group holding it). */
+	private symmetryTargets(ids?: readonly string[]): VectorSymmetryGroup[] {
+		const out = new Map<string, VectorSymmetryGroup>();
+		for (const id of ids ?? this.selection) {
+			const n = this.getNode(id);
+			if (isVectorSymmetryGroup(n)) out.set(n.id, n);
+			else if (!ids) {
+				const p = locateVectorNode(this.doc.nodes, id)?.parent;
+				if (isVectorSymmetryGroup(p)) out.set(p.id, p);
+			}
+		}
+		return [...out.values()];
+	}
+
+	/** Changes symmetry groups (default: the selected one, or the one holding the selection): mode, centre (the group's space), rotation, radial copies and mirroring. One undo step (merged while `merge` is the same key). */
+	setSymmetry(patch: Partial<VectorSymmetry>, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		if (options.ids) for (const id of options.ids) if (!isVectorSymmetryGroup(this.getNode(id))) return { ok: false, message: `"${id}" is not a symmetry group (make one with vector.makeSymmetry).` };
+		const groups = this.symmetryTargets(options.ids);
+		if (!groups.length) return { ok: false, message: 'Select a symmetry group (or something in one).' };
+		if (patch.mode !== undefined && !VECTOR_SYMMETRY_MODES.includes(patch.mode)) return { ok: false, message: `Unknown symmetry "${patch.mode}": use ${VECTOR_SYMMETRY_MODES.join(', ')}.` };
+		if (patch.copies !== undefined && !(patch.copies >= 2 && patch.copies <= 64)) return { ok: false, message: 'copies must be from 2 to 64.' };
+		const next = new Map(groups.map((g) => [g.id, sanitizeVectorSymmetry({ ...g.symmetry, ...patch })] as const));
+		if ([...next.values()].some((v) => !v)) return { ok: false, message: 'center must be { x, y } numbers.' };
+		this.change(
+			'Symmetry',
+			() => {
+				this.setDoc(mapTree(this.doc.nodes, (n) => (next.has(n.id) && n.type === 'group' ? { ...n, symmetry: next.get(n.id)! } : n)));
+			},
+			options.merge
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Release Symmetry: the groups stop repeating their children. With `expand`, the copies become
+	 * real objects in the group (new ids); otherwise they go. One undo step. Returns the ids of the
+	 * objects added by expanding.
+	 */
+	releaseSymmetry(options: { ids?: readonly string[]; expand?: boolean } = {}): VectorActionResult & { ids?: string[] } {
+		const groups = this.symmetryTargets(options.ids);
+		if (!groups.length) return { ok: false, message: 'Select a symmetry group (or something in one).' };
+		const added: string[] = [];
+		const next = new Map<string, VectorNode>();
+		for (const g of groups) {
+			const { symmetry: _s, ...rest } = g;
+			if (!options.expand) {
+				next.set(g.id, rest);
+				continue;
+			}
+			const drawn = vectorSymmetryDrawn(g);
+			const fresh = (n: VectorNode): VectorNode => {
+				const id = this.newId();
+				added.push(id);
+				const { locked: _l, ...plain } = n;
+				return plain.type === 'group' ? { ...plain, id, children: plain.children.map(fresh) } : ({ ...plain, id } as VectorNode);
+			};
+			next.set(g.id, { ...rest, children: [...g.children, ...drawn.children.slice(g.children.length).map(fresh)] });
+		}
+		this.change(options.expand ? 'Expand Symmetry' : 'Release Symmetry', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+			if (this.symmetryTarget && next.has(this.symmetryTarget)) this.symmetryTarget = null;
+		});
+		return { ok: true, ids: added.filter((id) => !!this.getNode(id)) };
+	}
+
+	/** Enters a top-level symmetry group: new pen, pencil, shape and text art goes into it (mirrored as it is drawn) until `exitSymmetry` or Escape. */
+	enterSymmetry(id: string): VectorActionResult {
+		const n = this.doc.nodes.find((x) => x.id === id);
+		if (!isVectorSymmetryGroup(n)) return { ok: false, message: `"${id}" is not a top-level symmetry group.` };
+		if (n.transform) return { ok: false, message: 'Drawing into a turned symmetry group is not supported; draw beside it and move the art in.' };
+		this.symmetryTarget = id;
+		this.selection = [id];
+		this.notify();
+		return { ok: true };
+	}
+
+	/** Stops drawing into the entered symmetry group. */
+	exitSymmetry(): void {
+		if (!this.symmetryTarget) return;
+		this.symmetryTarget = null;
+		this.notify();
 	}
 
 	// -----------------------------------------------------------------------------------------
@@ -6785,7 +6947,7 @@ export class VectorEditorController {
 		}
 		const pt = this.snapDrawn(p, null, input, () => this.drawingTargets(null));
 		const node: VectorPathNode = { id: this.newId(), type: 'path', name: 'Path', ...this.styleFor(true), subpaths: [{ anchors: [{ x: pt.x, y: pt.y }], closed: false }] };
-		this.setDoc([...this.doc.nodes, node]);
+		this.addDrawn(node);
 		this.pen = { nodeId: node.id, subpath: 0 };
 		this.selection = [node.id];
 		this.editingId = node.id;
@@ -6807,7 +6969,7 @@ export class VectorEditorController {
 			strokeLinejoin: this.defaults.strokeLinejoin ?? 'round',
 			subpaths: [{ anchors: [{ x: p.x, y: p.y }], closed: false }]
 		};
-		this.setDoc([...this.doc.nodes, node]);
+		this.addDrawn(node);
 		const lazy = new LazyMouse((this.editing.pencilSmoothing * VECTOR_PENCIL_STRING_PX) / this.viewport.zoom);
 		lazy.push([p.x, p.y]);
 		const mode = this.editing.pencilPressure;
@@ -6828,7 +6990,7 @@ export class VectorEditorController {
 		const kind = (this.tool === 'frame' ? 'rect' : this.tool) as VectorShapeInput['kind'];
 		const node = this.createShapeNode({ kind, x: start.x, y: start.y, width: 0, height: 0 });
 		if (this.tool === 'frame') Object.assign(node, { fill: '#ffffff', stroke: '#a3a3a3', strokeWidth: 1 / this.viewport.zoom });
-		this.setDoc([...this.doc.nodes, node]);
+		this.addDrawn(node);
 		this.drag = { kind: 'shape', tool: this.tool, start, nodeId: node.id, before, targets };
 		this.interaction = { type: 'draw', tool: this.tool, nodeId: node.id, bounds: { x: start.x, y: start.y, width: 0, height: 0 } };
 		this.notify(true);
@@ -8041,7 +8203,7 @@ export class VectorEditorController {
 		this.endTextEdit();
 		const before = this.snapshot();
 		if (replace) this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === replace ? node : n)));
-		else this.setDoc([...this.doc.nodes, node]);
+		else this.addDrawn(node);
 		this.selection = [node.id];
 		this.anchors = [];
 		this.textEdit = { nodeId: node.id, anchor: 0, focus: 0, before, key: `text-edit:${node.id}:${++this.textEditCount}`, created: true };
@@ -8635,6 +8797,7 @@ export class VectorEditorController {
 			case 'Escape':
 				if (this.drag) this.cancelDrag();
 				else if (this.trackingPoints.length) this.clearTracking();
+				else if (this.symmetryTarget && !this.pen) this.exitSymmetry();
 				else if (this.widthEdit) this.closeWidthPointEdit();
 				else if (this.tool === 'width' && this.widthPoints.length) {
 					this.widthPoints = [];

@@ -292,6 +292,36 @@ export function toMask8(plane: Uint8Array, width: number, height: number, depth:
   return out;
 }
 
+/** A 16- or 32-bit coverage plane (masks) as deep samples (`Uint16Array`, or `Float32Array` 0..1). */
+export function toMaskDeep(plane: Uint8Array, width: number, height: number, depth: 16 | 32): Uint16Array | Float32Array {
+  const n = width * height;
+  if (depth === 16) {
+    const out = new Uint16Array(n);
+    for (let i = 0; i < n; i++) out[i] = (plane[2 * i] << 8) | plane[2 * i + 1];
+    return out;
+  }
+  const s = sampler(plane, 32, width, false, 0);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = s(i);
+  return out;
+}
+
+/** A mask's deep samples as one big-endian plane (16-bit, or 32-bit float). */
+export function deepMaskPlane(data: Uint16Array | Float32Array): Uint8Array {
+  if (data instanceof Uint16Array) {
+    const out = new Uint8Array(data.length * 2);
+    for (let i = 0; i < data.length; i++) {
+      out[2 * i] = data[i] >> 8;
+      out[2 * i + 1] = data[i] & 255;
+    }
+    return out;
+  }
+  const out = new Uint8Array(data.length * 4);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < data.length; i++) view.setFloat32(4 * i, data[i], false);
+  return out;
+}
+
 /** Splits interleaved RGBA into planes `[r, g, b, a]` (8-bit). */
 export function rgbaToPlanes(data: ArrayLike<number>, n: number): [Uint8Array, Uint8Array, Uint8Array, Uint8Array] {
   const planes: [Uint8Array, Uint8Array, Uint8Array, Uint8Array] = [new Uint8Array(n), new Uint8Array(n), new Uint8Array(n), new Uint8Array(n)];

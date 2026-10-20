@@ -1,5 +1,41 @@
 # @pixerate/editor-react
 
+## 0.76.0
+
+### Minor Changes
+
+- 023d27d: Live vector symmetry groups.
+
+  - **Modes:** mirror (vertical, horizontal, four quarters or diagonal) or radial, with an optional kaleidoscope mirror. Copies follow every edit.
+  - **Draw inside:** new pen, pencil, shape and text art goes into the group and is mirrored as it is drawn.
+  - **Release or Expand:** stop repeating, or keep the copies as real objects.
+  - **New agent commands:** `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry` and `vector.exitSymmetry`.
+  - `vector.addShape` and `vector.addPath` take a `parentId`.
+  - **New components:** `VectorSymmetryPanel` for React and Svelte.
+
+### Patch Changes
+
+- 2de12be: A live Contour path effect: concentric offset steps (inside, outside or to the centre) whose colours blend toward end colours, like CorelDRAW's Contour. Effect parameters gain a `color` kind, and the effects panels edit it.
+- Updated dependencies [3e194c8]
+- Updated dependencies [9dcd2eb]
+- Updated dependencies [2de12be]
+- Updated dependencies [023d27d]
+  - @pixerate/editor@0.119.0
+
+## 0.75.1
+
+### Patch Changes
+
+- 7f8d2f4: Faster vector rendering.
+
+  - **Reuse:** `getVectorSceneRenderData` reuses render data for nodes an edit did not touch.
+  - **Culling:** with `viewportSize`, nodes off screen are left out.
+  - **Level of detail:** groups, text and instances under 2 screen pixels draw as one rectangle. The `lod` option sets the threshold.
+  - **Canvases:** both canvases pass their size and skip unchanged nodes.
+
+- Updated dependencies [7f8d2f4]
+  - @pixerate/editor@0.118.0
+
 ## 0.75.0
 
 ### Minor Changes

@@ -35,6 +35,7 @@ import {
 	puckerBloatPaths,
 	repeatPaths,
 	roundCornerPaths,
+	sweepPath,
 	trimPaths,
 	trimPathsIndividually,
 	twistPaths,
@@ -46,6 +47,8 @@ import { isVectorMaskGroup, vectorMaskedShapes } from './mask.js';
 import { vectorTextPaintSource, vectorTextPaths, vectorTextShaperGeneration } from './text.js';
 import { vectorInstanceGroup } from './symbols.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
+import { parseVectorColor } from './gradient.js';
+import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
 	VECTOR_WARP_STYLES,
@@ -57,6 +60,7 @@ import {
 	vectorIdentityMesh,
 	vectorWarpPresetMesh
 } from './warp.js';
+import type { VectorPaint } from './types.js';
 import type {
 	VectorBounds,
 	Vec2,
@@ -108,7 +112,9 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 		endOpacity: 100,
 		composite: 'below'
 	},
-	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null }
+	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null },
+	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 },
+	blockShadow: { angle: 45, distance: 20, color: '#1e293b', opacity: 100, endOpacity: 100 }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -121,7 +127,9 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	offset: 'Offset Paths',
 	merge: 'Merge Paths',
 	repeater: 'Repeater',
-	envelope: 'Envelope'
+	envelope: 'Envelope',
+	contour: 'Contour',
+	blockShadow: 'Block Shadow'
 };
 
 /** How a panel edits one effect parameter. */
@@ -129,7 +137,8 @@ export type VectorEffectParamSpec =
 	| { key: string; label: string; kind: 'number'; min?: number; max?: number; step: number; slider?: boolean }
 	| { key: string; label: string; kind: 'vec2'; step: number }
 	| { key: string; label: string; kind: 'boolean' }
-	| { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] };
+	| { key: string; label: string; kind: 'select'; options: { value: string; label: string }[] }
+	| { key: string; label: string; kind: 'color' };
 
 /** The editable parameters of each effect type, in panel order. */
 export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectParamSpec[]> = {
@@ -197,6 +206,40 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 				{ value: 'exclude', label: 'Exclude' }
 			]
 		}
+	],
+	contour: [
+		{
+			key: 'direction',
+			label: 'Direction',
+			kind: 'select',
+			options: [
+				{ value: 'inside', label: 'Inside' },
+				{ value: 'outside', label: 'Outside' },
+				{ value: 'center', label: 'To centre' }
+			]
+		},
+		{ key: 'steps', label: 'Steps', kind: 'number', min: 1, max: 200, step: 1, slider: true },
+		{ key: 'offset', label: 'Offset', kind: 'number', min: 0.1, max: 200, step: 0.5, slider: true },
+		{ key: 'fillColor', label: 'Fill to', kind: 'color' },
+		{ key: 'strokeColor', label: 'Stroke to', kind: 'color' },
+		{ key: 'acceleration', label: 'Acceleration', kind: 'number', min: -100, max: 100, step: 1, slider: true },
+		{
+			key: 'join',
+			label: 'Join',
+			kind: 'select',
+			options: [
+				{ value: 'miter', label: 'Miter' },
+				{ value: 'round', label: 'Round' },
+				{ value: 'bevel', label: 'Bevel' }
+			]
+		}
+	],
+	blockShadow: [
+		{ key: 'angle', label: 'Angle °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
+		{ key: 'distance', label: 'Distance', kind: 'number', min: 0, max: 2000, step: 1, slider: true },
+		{ key: 'color', label: 'Colour', kind: 'color' },
+		{ key: 'opacity', label: 'Opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true },
+		{ key: 'endOpacity', label: 'End opacity %', kind: 'number', min: 0, max: 100, step: 1, slider: true }
 	],
 	repeater: [
 		{ key: 'copies', label: 'Copies', kind: 'number', min: 0, max: 50, step: 0.1, slider: true },
@@ -311,6 +354,7 @@ export function normalizeVectorEffectParams<K extends VectorEffectType>(type: K,
 		else if (spec.kind === 'boolean' && typeof v === 'boolean') out[spec.key] = v;
 		else if (spec.kind === 'vec2' && isVec2(v)) out[spec.key] = { x: v.x, y: v.y };
 		else if (spec.kind === 'select' && spec.options.some((o) => o.value === v)) out[spec.key] = v;
+		else if (spec.kind === 'color' && (v === null || (typeof v === 'string' && parseVectorColor(v)))) out[spec.key] = v;
 	}
 	if (type === 'envelope') {
 		const o = out as unknown as VectorEnvelopeParams;
@@ -346,7 +390,7 @@ export function activeVectorEffects(node: VectorNode): VectorEffect[] {
  * Text always does: it draws as its glyphs.
  */
 export function hasOwnVectorAppearance(node: VectorNode): boolean {
-	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || !!node.effects?.some(isEnabled);
+	return node.type === 'text' || node.type === 'instance' || (node.type === 'group' && !!node.liveBoolean) || isVectorFrame(node) || isVectorSymmetryGroup(node) || !!node.effects?.some(isEnabled);
 }
 
 const liveCache = new WeakMap<VectorNode, boolean>();
@@ -519,6 +563,93 @@ const mapPaths = (shapes: VectorAppearanceShape[], fn: (paths: BezierPath[]) => 
 	return shapes.map((s, i) => ({ ...s, path: out[i] ?? [] }));
 };
 
+/** A paint blended toward `to` by `t` (only solid colours blend; gradients and null `to` keep it). */
+function blendPaint(from: VectorPaint | undefined, to: string | null, t: number): VectorPaint | undefined {
+	if (to === null || typeof from !== 'string') return from;
+	const a = parseVectorColor(from);
+	const b = parseVectorColor(to);
+	if (!a || !b) return from;
+	const h = (v: number) =>
+		Math.round(Math.min(1, Math.max(0, v)) * 255)
+			.toString(16)
+			.padStart(2, '0');
+	const m = a.map((v, k) => v + (b[k] - v) * t);
+	return `#${h(m[0])}${h(m[1])}${h(m[2])}`;
+}
+
+/**
+ * The contour steps of each shape (see `VectorEffectParamsMap.contour`): offset copies `offset`
+ * apart, their colours blended toward the end colours, drawn over the shape inside and under it
+ * outside. After CorelDRAW's Contour (concept); offsetting is our own `offsetPaths`.
+ */
+function contourShapes(shapes: readonly VectorAppearanceShape[], c: VectorEffectParamsMap['contour']): VectorAppearanceShape[] {
+	const out: VectorAppearanceShape[] = [];
+	const step = Math.max(0.01, c.offset);
+	const outside = c.direction === 'outside';
+	for (const s of shapes) {
+		let n = Math.min(200, Math.max(1, Math.round(c.steps)));
+		if (c.direction === 'center') {
+			const b = bezierPathBounds(s.path);
+			n = b ? Math.min(200, Math.max(1, Math.ceil(Math.min(b.maxX - b.minX, b.maxY - b.minY) / 2 / step))) : 0;
+		}
+		// The original: on top outside, at the bottom inside.
+		out.push({ ...s, order: [outside ? n : 0, ...s.order] });
+		// Colour progress per step, bunched by the acceleration.
+		const power = 2 ** (Math.min(100, Math.max(-100, c.acceleration)) / 50);
+		for (let k = 1; k <= n; k++) {
+			const [path] = offsetPaths([s.path], (outside ? 1 : -1) * step * k, c.join, c.miterLimit, 1, 0);
+			if (!path?.length) break;
+			const t = (k / n) ** power;
+			const source = { ...s.source, fill: blendPaint(s.source.fill, c.fillColor, t) ?? null, stroke: blendPaint(s.source.stroke, c.strokeColor, t) ?? null, fills: undefined, strokes: undefined };
+			out.push({ source, path, opacity: s.opacity, order: [outside ? n - k : k, ...s.order] });
+		}
+	}
+	return out;
+}
+
+/**
+ * The block shadow of each shape (see `VectorEffectParamsMap.blockShadow`): the shape swept
+ * `distance` along `angle` (`sweepPath`), filled with the shadow colour (a gradient toward
+ * `endOpacity` when it fades), drawn under every shape. After CorelDRAW's Block Shadow (concept).
+ */
+function blockShadowShapes(shapes: readonly VectorAppearanceShape[], b: VectorEffectParamsMap['blockShadow']): VectorAppearanceShape[] {
+	const rad = (b.angle * Math.PI) / 180;
+	const u = { x: Math.cos(rad), y: Math.sin(rad) };
+	const distance = Math.max(0, b.distance);
+	const shadows: VectorAppearanceShape[] = [];
+	for (const s of shapes) {
+		const color = b.color ?? (typeof s.source.fill === 'string' && s.source.fill !== 'none' ? s.source.fill : '#000000');
+		const path = sweepPath(s.path, u.x * distance, u.y * distance, s.source.fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
+		const box = bezierPathBounds(s.path);
+		if (!path.length || !box) continue;
+		let fill: VectorPaint = color;
+		const near = Math.min(100, Math.max(0, b.opacity));
+		const far = Math.min(100, Math.max(0, b.endOpacity));
+		const top = Math.max(near, far);
+		if (near !== far && distance > 0) {
+			// From the near side of the shape to the far end of the shadow.
+			const along = [box.minX * u.x + box.minY * u.y, box.maxX * u.x + box.minY * u.y, box.minX * u.x + box.maxY * u.y, box.maxX * u.x + box.maxY * u.y];
+			const t0 = Math.min(...along);
+			const t1 = Math.max(...along) + distance;
+			const c = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+			const k = c.x * u.x + c.y * u.y;
+			fill = {
+				type: 'linear',
+				units: 'userSpaceOnUse',
+				start: { x: c.x + u.x * (t0 - k), y: c.y + u.y * (t0 - k) },
+				end: { x: c.x + u.x * (t1 - k), y: c.y + u.y * (t1 - k) },
+				stops: [
+					{ offset: 0, color, opacity: near / top },
+					{ offset: 1, color, opacity: far / top }
+				]
+			};
+		}
+		const source: VectorPathNode = { ...s.source, fill, stroke: null, fills: undefined, strokes: undefined, fillRule: 'nonzero' };
+		shadows.push({ source, path, opacity: (s.opacity * top) / 100, order: [0, ...s.order] });
+	}
+	return [...shadows, ...shapes.map((s) => ({ ...s, order: [1, ...s.order] }))];
+}
+
 /** Applies an effect stack to shapes, top to bottom (disabled effects skipped). */
 export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], effects: readonly VectorEffect[] | null | undefined): VectorAppearanceShape[] {
 	let list = shapes.slice();
@@ -560,6 +691,12 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 				list = mapPaths(list, (p) => envelopePaths(p, params));
 				break;
 			}
+			case 'contour':
+				list = contourShapes(list, e.params);
+				break;
+			case 'blockShadow':
+				list = blockShadowShapes(list, e.params);
+				break;
 			case 'repeater': {
 				const r = e.params;
 				const copies = repeatPaths(
@@ -687,9 +824,10 @@ export function vectorAppearanceShapes(node: VectorNode): VectorAppearanceShape[
 		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
 		return shapes;
 	}
-	// A frame draws as its clip group (its fill and children inside its rectangle).
-	if (isVectorFrame(node)) {
-		const shapes = vectorAppearanceShapes(vectorFrameDrawn(node));
+	// A frame draws as its clip group (its fill and children inside its rectangle), a symmetry
+	// group as its children and their copies.
+	if (isVectorFrame(node) || isVectorSymmetryGroup(node)) {
+		const shapes = vectorAppearanceShapes(isVectorFrame(node) ? vectorFrameDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup));
 		shapeCache.set(node, [vectorTextShaperGeneration(), shapes]);
 		return shapes;
 	}
@@ -775,8 +913,8 @@ export function expandVectorAppearance(node: VectorNode): VectorPathNode | Vecto
 		expandCache.set(node, [vectorTextShaperGeneration(), drawn]);
 		return drawn;
 	}
-	if (isVectorFrame(node)) {
-		const drawn = vectorFrameDrawn(node);
+	if (isVectorFrame(node) || isVectorSymmetryGroup(node)) {
+		const drawn = isVectorFrame(node) ? vectorFrameDrawn(node) : vectorSymmetryDrawn(node as VectorSymmetryGroup);
 		const out = hasVectorAppearance(drawn) ? expandVectorAppearance(drawn) : drawn;
 		expandCache.set(node, [vectorTextShaperGeneration(), out]);
 		return out;

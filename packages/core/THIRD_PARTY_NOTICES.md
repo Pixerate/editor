@@ -43,6 +43,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 
 © 2026 ArtCraft Team and the DesignCraft contributors.
 
+- `crates/render/src/damage.rs` (drawing only what the view needs) → the approach of viewport culling in `getVectorSceneRenderData` (`packages/core/src/vector/render.ts`), through our spatial index; no code copied
 - `crates/tools/src/snap.rs` (`pass_dimensions`: a resized or created object's side matches another object's width or height in its own frame, nearest within the zone, when nothing else snapped on that axis) → `VectorSnapTargets.snapScale` / `matchSize` in `packages/core/src/vector/snap.ts`
 - `crates/color/src/cms/mod.rs` (`simulate_cvd`: Machado–Oliveira–Fernandes 2009 colour-vision matrices in linear RGB) → `simulateChartVision` and `checkChartColors` in `packages/core/src/chart/color.ts`
 - `crates/mcp/src/tools.rs` (`key`: keys through the real keyboard path) → `press_chart_key` in `packages/core/src/chart/tools.ts`
@@ -73,6 +74,7 @@ reproduced at the end of this file. Paths are relative to each source repository
 
 © 2026 ArtCraft Team and the FigCraft contributors.
 
+- `render/retained.rs` and `render/lod.rs` (retained per-node render state rebuilt only for changed nodes; subtrees under 2 px drawn simplified) → the approach of the render cache and level of detail in `getVectorSceneRenderData` (`packages/core/src/vector/render.ts`); no code copied; test cases our own → `packages/core/tests/vector-render-perf.test.ts`
 - `crates/geom/src/lib.rs` (`corner_profile`: a smoothed (squircle) corner reaching (1 + s) times the radius along each side, a circular arc over (1 − s) of the turn and cubic transitions whose lengths `a`, `b`, `c`, `d` come from the arc's tangent; smoothing reduced first when the corner does not fit; `append_corner`) → `smoothCut` in `packages/core/src/vector/corners.ts`, generalised from 90° to any corner angle (the transition's second handle is where the arc's tangent meets the side) and limited to round corners between straight sides; it follows the MIT-licensed figma-squircle algorithm (© 2021 Phamfoo), which figcraft does not credit; test cases our own → `packages/core/tests/vector-corners-strokes.test.ts`
 - `crates/ui-egui/src/present.rs` (`match_layers`: Smart Animate pairs layers by their name path, nested groups pairing their own layers, and fades out what has no partner) → `matchMotionNodes` in `packages/core/src/animation-editor/match.ts`
 - `crates/engine/src/distance.rs` (`between`, `inside`, `to_guide`, `label`) → `packages/core/src/canvas/measure.ts`
@@ -182,6 +184,7 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 
 © 2026 ArtCraft Team and the PhotoCraft contributors.
 
+- `crates/paint/src/symmetry.rs` (`SymmetryMode` vertical / horizontal / dual / diagonal, `PresetSymmetry` centre and rotation, `directions`, `reflected_passes`, `segments` clipping axes to a box) → `packages/core/src/vector/symmetry.ts` (live symmetry groups drawing mirrored copies of their children, plus radial and kaleidoscope modes of our own); test cases re-expressed → `packages/core/tests/vector-symmetry.test.ts`
 - `crates/ops/src/lib.rs` (`History { max_states, max_bytes }`, `trim`, `unique_bytes`) → `packages/core/src/history/HistoryManager.ts`
 - `crates/ui-egui/src/palette.rs` (`fuzzy_score`, `exact_bonus`, `push_recent`) → `packages/core/src/commands/palette.ts`
 - `crates/doc/src/adjust.rs` (`Adjustment` model, `HueRange::neutral` / `weight`, `LevelsChannel` defaults) → `packages/core/src/image-editor/types.ts`, `packages/core/src/image-editor/adjustment-layers.ts`

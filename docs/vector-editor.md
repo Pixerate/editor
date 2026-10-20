@@ -253,6 +253,24 @@ Each entry is `{ id, type, enabled?, params }` (`VectorEffect`); `createVectorEf
 
 The operators are exported for direct use on Bézier paths: `trimPaths`, `trimPathsIndividually`, `roundCornerPaths`, `puckerBloatPaths`, `twistPaths`, `zigzagPaths`, `wigglePaths`, `offsetPaths`, `mergePaths`, `vectorRepeaterCopies` / `repeatPaths`, and `applyVectorEffects(shapes, effects)` runs a stack.
 
+### Contour
+
+A `contour` path effect works like CorelDRAW's Contour.
+
+- **Steps.** Each shape gets `steps` concentric copies, `offset` apart (`offsetPaths`, with `join`). They go `inside`, `outside`, or to the `center` (inward until the shape is used up).
+- **Colour.** Each step's fill and stroke blend from the shape's own solid colours to `fillColor` / `strokeColor`; null keeps the colour. `acceleration` (−100…100) holds the change back toward the end (positive) or rushes it (negative).
+- **Draw order.** Inside steps draw over the shape and outside steps under it.
+- **Interaction with other effects.** Like the other effects, it acts on what is above it in the stack, and the effects after it act on its steps.
+- **Panels and export.** The effects panels edit end colours with the new `color` parameter kind. Lottie has no equivalent, so it gets the drawn shapes.
+
+### Block shadow
+
+A `blockShadow` path effect works like CorelDRAW's Block Shadow.
+
+- **Shape.** Each shape is swept `distance` along `angle` (degrees, 0 right, 90 down, in the node's own space) by `sweepPath`: the shape, its moved copy and the band each edge sweeps, united. The result is one solid shape drawn under all the shapes.
+- **Colour.** `color` fills it (null: the shape's own solid fill) at `opacity` percent. An `endOpacity` different from `opacity` fades it along the direction, from the near side of the shape to the far end, for a flat-design long shadow.
+- **Export.** SVG and PDF draw it as a path, with a linear gradient when it fades. PDF shadings have no stop opacity, so a fading shadow is drawn opaque there, with a note. Lottie has no equivalent, so it gets the drawn shapes.
+
 ## Distort and envelopes
 
 **Free Distort.** With `setFreeDistort(true)` (the toolbar's Distort toggle) the selection box distorts instead of scaling, Illustrator's Free Transform way:
@@ -467,6 +485,30 @@ controller.getConstraintDof(); // { dof, status: "under" | "fully" | "over", red
 - **Auto Constrain.** `inferVectorConstraints` lists what a sketch nearly satisfies (coincident points of different paths, concentric / tangent circles, a segment tangent to a circle, horizontal / vertical segments, collinear, connected perpendicular and parallel segments, equal lengths and radii); `autoConstrain` adds them one by one, skipping refused ones.
 - **UI.** `getVectorOverlayRenderData(state).constraints` places a glyph (or `name = value`) and a dimension line per constraint of the selected paths; `getVectorConstraintPanel` gives the DOF message, the constraints the selected anchors (direct tool) or round paths allow, the selection's constraints and the parameters.
 
+## Live symmetry
+
+```ts
+const { id } = controller.makeSymmetry({ mode: "radial", copies: 8, mirror: true, center: { x: 200, y: 150 } }, { ids: [] }) as { ok: true; id: string };
+controller.addShape({ kind: "ellipse", x: 205, y: 100, width: 10, height: 30 }, { parentId: id }); // repeated 16×
+controller.enterSymmetry(id); // new pen, pencil, shape and text art goes in, mirrored as it is drawn
+controller.releaseSymmetry({ ids: [id], expand: true }); // the copies become real objects
+```
+
+- **Model.** A group with `symmetry: { mode, center, rotation?, copies?, mirror? }` draws its children and their copies.
+- **Modes.** The mirror modes follow photocraft's `symmetry.rs`:
+  - `vertical`: mirror across a vertical axis;
+  - `horizontal`: mirror across a horizontal axis;
+  - `diagonal`: mirror across the diagonal;
+  - `dual`: both mirrors plus a half turn;
+  - all turned by `rotation`.
+- **Radial** gives `copies` turns. With `mirror` it also adds the `copies` reflections, the dihedral group (like a kaleidoscope).
+- **Copies are appearance.** `vectorSymmetryDrawn` adds locked copies (ids `<id>~sym<k>`) through the appearance pipeline. They draw, hit-test, bound, snap and export (SVG keeps `symmetry` in the live group's data, so it round-trips; Lottie and PDF draw them) but are never stored or edited.
+- **Transforms.** A transform baked into the group moves its centre and turns or flips its axes (`transformVectorSymmetry`).
+- **Drawing inside.** `enterSymmetry` (the panel's Draw inside) sends new pen, pencil, shape and text nodes into a top-level, unturned symmetry group until Escape or `exitSymmetry`.
+  - A new empty group starts entered.
+  - `overlay.symmetry` gives the axes to draw: dashed, solid while drawing inside.
+  - Agents add art with `parentId` on `vector.addShape` / `vector.addPath`.
+
 ## Frames and artboards
 
 ```ts
@@ -545,6 +587,15 @@ The following adds CAD-style drawing aids from cadcraft's `snap/tracking.rs`.
 ## Rendering
 
 `getVectorSceneRenderData(state)` returns the document as SVG-ready paths (with gradient defs) and a `transform` for the document layer; `getVectorOverlayRenderData(state)` returns the overlay in screen pixels: outlines, the selection box with its handles, anchors, handles, the marquee, the pen's rubber band, smart guide lines and labels (`guides`), the knife or eraser stroke being drawn (`toolStroke`), the pencil's lazy-mouse string (`pencilString`), the scissors cut point (`cutPoint`), the live corner widgets (`cornerWidgets`), the width tool's `widthPoints` and `widthSpot`, each selected blend's spine and the Blend tool's picks (`blend`), the Gradient tool's annotator (`gradient`: start, end / radius, aspect and focal handles, stop chips with ticks to the bar, midpoint diamonds and the extent outline), the Shape Builder / paint bucket highlight (`builder`: faces to fill translucent, `hatches` to stroke over them (45° lines `VECTOR_BUILDER_HATCH_GAP` pixels apart; empty strings for the paint bucket), line pieces and outline edges an erase deletes, the drag's trail; `mode` `merge`, `erase` or `fill`), and a status string. Draw the overlay outside the transformed layer so handles keep their size at any zoom. Scene nodes carry an SVG `transform` when rotated, and the selection box comes unrotated with a `transform` (`rotate(angle cx cy)`) to draw it in — handle `screen` positions are the true on-screen points. A path whose stroke is aligned or has arrowheads carries `strokeParts`: draw `d` with the fill only, then `strokeParts.d` at `strokeParts.width` with its `clip` (a `<clipPath>` of the shape for inside, a user-space `<mask>` over `clip.bounds` that hides the shape for outside), then each head filled with the stroke; a variable-width stroke has `strokeParts.outline` instead, filled with the stroke paint under the same clip. The canvases group them under the node's id as `<g data-vector-id data-vector-stroke-align>` with `data-vector-part="fill" | "stroke" | "stroke-outline" | "head"` children. The bundled React and Svelte canvases are thin renderers over these two functions.
+
+**Performance.** `getVectorSceneRenderData` caches each node's render data by node object, id prefix and text shaper generation, together with the defs and filters it made. An untouched node comes back as the same object, so `<VectorCanvas>` skips it: React through `React.memo`, Svelte through its keyed blocks. A one-node edit of a 3000-shape drawing rebuilds in about 0.2 ms instead of 12 ms.
+
+The canvases also pass their measured size (`viewportSize`):
+
+- **Culling.** Top-level nodes whose paint box is off screen are left out, found through the spatial index on large documents.
+- **Level of detail.** Groups, text and instances smaller than `lod` screen pixels (default 2) draw as one rectangle in their main colour.
+
+`scene.stats` reports the counts. Exports such as SVG, PDF and the symbol thumbnails call it without a size, so they draw everything exactly.
 
 ## SVG
 

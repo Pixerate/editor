@@ -568,6 +568,33 @@ export interface VectorGroupNode extends VectorNodeBase {
 	 * when resized. Ignored on blends, live booleans and mask groups.
 	 */
 	frame?: VectorFrame | null;
+	/**
+	 * Makes the group a live symmetry group: it draws its children and their mirrored (or rotated)
+	 * copies, regenerated whenever a child changes. Ignored on blends, live booleans, mask groups
+	 * and frames.
+	 */
+	symmetry?: VectorSymmetry | null;
+}
+
+/**
+ * How a symmetry group repeats its children: mirrored across a `vertical`, `horizontal` or
+ * `diagonal` axis, across both axes (`dual`: four quarters), or `radial`ly round the centre
+ * (`copies` turns, each mirrored too with `mirror`, like a kaleidoscope).
+ */
+export type VectorSymmetryMode = 'vertical' | 'horizontal' | 'dual' | 'diagonal' | 'radial';
+export const VECTOR_SYMMETRY_MODES: readonly VectorSymmetryMode[] = ['vertical', 'horizontal', 'dual', 'diagonal', 'radial'];
+
+/** A symmetry group's settings (`VectorGroupNode.symmetry`). */
+export interface VectorSymmetry {
+	mode: VectorSymmetryMode;
+	/** Where the axes cross (the group's own space). */
+	center: Vec2;
+	/** Turn of the axes, degrees clockwise (default 0). */
+	rotation?: number;
+	/** Radial: how many turns round the circle (2–64, default 6). */
+	copies?: number;
+	/** Radial: mirror each turn too (default false). */
+	mirror?: boolean;
 }
 
 /**
@@ -940,10 +967,12 @@ export type VectorAverageAxis = 'horizontal' | 'vertical' | 'both';
 /**
  * Live path effects (After Effects' path operators): `trim` (Trim Paths), `roundCorners`,
  * `puckerBloat`, `twist`, `zigzag`, `wiggle` (Wiggle Paths), `offset` (Offset Paths), `merge`
- * (Merge Paths), `repeater` and `envelope` (an envelope distortion: a warp preset or a mesh).
+ * (Merge Paths), `repeater`, `envelope` (an envelope distortion: a warp preset or a mesh),
+ * `contour` (CorelDRAW's Contour: concentric offset steps blending toward end colours) and
+ * `blockShadow` (CorelDRAW's Block Shadow: the shape swept along a direction, under it).
  */
-export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope';
-export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope'];
+export type VectorEffectType = 'trim' | 'roundCorners' | 'puckerBloat' | 'twist' | 'zigzag' | 'wiggle' | 'offset' | 'merge' | 'repeater' | 'envelope' | 'contour' | 'blockShadow';
+export const VECTOR_EFFECT_TYPES: readonly VectorEffectType[] = ['trim', 'roundCorners', 'puckerBloat', 'twist', 'zigzag', 'wiggle', 'offset', 'merge', 'repeater', 'envelope', 'contour', 'blockShadow'];
 
 /** Warp presets (Photoshop's fifteen, in menu order); shared with the image editor (`src/geom`). */
 export type VectorWarpStyle = WarpStyle;
@@ -1035,6 +1064,35 @@ export interface VectorEffectParamsMap {
 		endOpacity: number;
 		/** `below`: each copy draws under the one before it; `above`: over it. */
 		composite: 'below' | 'above';
+	};
+	/**
+	 * Contour: concentric copies of each shape offset `offset` apart, `steps` of them `inside`,
+	 * `outside`, or `center` (inside until the shape is used up), their fill and stroke blending
+	 * from the shape's own colours to `fillColor` / `strokeColor` (null keeps the colour).
+	 * `acceleration` (−100…100) bunches the colour change toward the end (positive) or start.
+	 */
+	contour: {
+		direction: 'inside' | 'outside' | 'center';
+		steps: number;
+		offset: number;
+		join: VectorLineJoin;
+		miterLimit: number;
+		fillColor: string | null;
+		strokeColor: string | null;
+		acceleration: number;
+	};
+	/**
+	 * Block shadow (CorelDRAW's Block Shadow; a long shadow when it fades): each shape swept
+	 * `distance` along `angle` (degrees, 0 right, 90 down, in the node's own space) as one solid
+	 * shape under the art, in `color` (null: the shape's own solid fill) at `opacity` percent,
+	 * fading to `endOpacity` percent at the far end.
+	 */
+	blockShadow: {
+		angle: number;
+		distance: number;
+		color: string | null;
+		opacity: number;
+		endOpacity: number;
 	};
 	/**
 	 * Envelope distortion: the paths above it are mapped from their combined bounds through a warp

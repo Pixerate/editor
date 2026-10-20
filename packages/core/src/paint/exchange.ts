@@ -196,12 +196,24 @@ export class PaintExchange {
   }
 }
 
+/**
+ * A brush's working tile: 8-bit bytes, or (on a 16- or 32-bit document) floats on the same
+ * 0..255 sRGB-encoded scale, which keep the fractions an 8-bit tile would round away.
+ */
+export type PaintPixels = Uint8ClampedArray | Float32Array;
+
+/** Writes `v` (0..1) into a working tile: rounded for bytes, kept exact (not below 0) for floats. */
+export function put255(px: PaintPixels, i: number, v: number): void {
+  if (px instanceof Float32Array) px[i] = v > 0 ? v * 255 : 0;
+  else px[i] = Math.round(v * 255);
+}
+
 /** The pixels a brush reads and writes (RGBA tiles in layer space). */
 export interface PaintTileTarget {
   /** The tile (TILE × TILE × 4) at (tx, ty) as it is now, or `null` when it is fully transparent. */
-  readTile(tx: number, ty: number): Uint8ClampedArray | null;
+  readTile(tx: number, ty: number): PaintPixels | null;
   /** A writable tile at (tx, ty), returned by `readTile` from then on. */
-  writeTile(tx: number, ty: number): Uint8ClampedArray;
+  writeTile(tx: number, ty: number): PaintPixels;
   /** Layer offset: layer pixel = document pixel − offset. */
   offset: { x: number; y: number };
   /** Keep alpha and paint only where the layer has pixels. */
@@ -236,7 +248,7 @@ export class TileMedium implements PaintMedium {
   // The tile last looked up by `locate` (and whether it came from `writeTile`).
   private tx = NaN;
   private ty = NaN;
-  private tile: Uint8ClampedArray | null = null;
+  private tile: PaintPixels | null = null;
   private writable = false;
   private readonly canvasPig = createPigment([0, 0, 0]);
   private readonly paintPig = createPigment([0, 0, 0]);
@@ -275,7 +287,7 @@ export class TileMedium implements PaintMedium {
   }
 
   /** The tile `locate` last found. */
-  get pixels(): Uint8ClampedArray {
+  get pixels(): PaintPixels {
     return this.tile!;
   }
 
@@ -359,10 +371,10 @@ export class TileMedium implements PaintMedium {
           src[1] = pg;
           src[2] = pb;
           const r = blendPixel(blend!, cb, src, k);
-          px[i] = Math.round(r[0] * 255);
-          px[i + 1] = Math.round(r[1] * 255);
-          px[i + 2] = Math.round(r[2] * 255);
-          if (!t.lockTransparency) px[i + 3] = Math.round(r[3] * 255);
+          put255(px, i, r[0]);
+          put255(px, i + 1, r[1]);
+          put255(px, i + 2, r[2]);
+          if (!t.lockTransparency) put255(px, i + 3, r[3]);
           continue;
         }
         const a = px[i + 3] / 255;
@@ -374,10 +386,11 @@ export class TileMedium implements PaintMedium {
           o[1] = pg;
           o[2] = pb;
         } else if (pigment && field) {
-          mixPigment8(px[i], px[i + 1], px[i + 2], Math.round(pr * 255), Math.round(pg * 255), Math.round(pb * 255), share, o);
+          mixPigment8(Math.round(px[i]), Math.round(px[i + 1]), Math.round(px[i + 2]), Math.round(pr * 255), Math.round(pg * 255), Math.round(pb * 255), share, o);
         } else if (pigment) {
-          const key = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
-          if (key !== lastKey) {
+          // Float tiles (16 / 32 bits) hold fractions the 8-bit key would merge: no cache there.
+          const key = px instanceof Float32Array ? -2 : (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+          if (key !== lastKey || key === -2) {
             setPigmentColor(this.canvasPig, px[i] / 255, px[i + 1] / 255, px[i + 2] / 255);
             lastKey = key;
           }
@@ -397,10 +410,10 @@ export class TileMedium implements PaintMedium {
           o[1] = px[i + 1] / 255 + (pg - px[i + 1] / 255) * share;
           o[2] = px[i + 2] / 255 + (pb - px[i + 2] / 255) * share;
         }
-        px[i] = Math.round(o[0] * 255);
-        px[i + 1] = Math.round(o[1] * 255);
-        px[i + 2] = Math.round(o[2] * 255);
-        px[i + 3] = Math.round(na * 255);
+        put255(px, i, o[0]);
+        put255(px, i + 1, o[1]);
+        put255(px, i + 2, o[2]);
+        put255(px, i + 3, na);
       }
     }
   }

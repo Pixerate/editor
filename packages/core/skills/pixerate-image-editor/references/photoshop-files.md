@@ -21,13 +21,15 @@
    warnings say what changed. `export_psd` writes at the document's depth, mode and profile.
    Change the depth with `set_bit_depth`: 16-bit for smooth gradients and strong grades, 32-bit
    for linear-light HDR (layers blend in linear light there). Adjustment layers, blend modes,
-   merges, the exported merged image, the brush, eraser, `fill_pixels`, `clear_pixels`, Dodge,
-   Burn and `transform_layer` (resampled at depth; whole-pixel moves exact) keep the depth (32-bit
-   paint and resampling work in linear light). The Mixer Brush, Smudge, Sponge, Clone Stamp,
-   healing, mask painting, layer filters and layer effects still compute in 8 bits: the pixels
-   they change get 8-bit precision, every pixel they leave alone keeps its deep samples. So grade,
-   paint, dodge, burn and transform a deep file freely, and keep smudging, cloning and filtering
-   to small areas when the depth matters. Afterwards work with `list_layers` as
+   merges, the exported merged image, painting (`paint_stroke` with every tool, the Mixer Brush
+   included), `fill_pixels`, `clear_pixels`, every retouching tool (Clone Stamp and the healing
+   tools sample at depth, from the layer or the float composite) and `transform_layer`
+   (resampled at depth; whole-pixel moves exact) keep the depth (32-bit paint and resampling work
+   in linear light). Layer masks keep the depth too: 16- and 32-bit masks open and save at depth,
+   blend with their full precision, and the brush, eraser, `fill_pixels` and `clear_pixels` paint
+   them at depth (retouching on a mask stays 8-bit). Layer filters and layer effects still
+   compute in 8 bits: the pixels they change get 8-bit precision, every pixel they leave alone
+   keeps its deep samples. Afterwards work with `list_layers` as
    usual: there is no Background source image, every pixel comes from the layers.
 4. **Smart objects come in live**: embedded contents (a PSB opens as a nested document you can
    edit with `edit_smart_object_contents`, a PNG as raster contents), the placement and warp, the

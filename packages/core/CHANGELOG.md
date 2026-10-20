@@ -1,5 +1,59 @@
 # @pixerate/editor
 
+## 0.120.0
+
+### Minor Changes
+
+- ee7b0c3: A live Block Shadow path effect (`blockShadow`): each shape swept along an angle and drawn under the art as one solid shadow, fading into a long shadow with `endOpacity`, like CorelDRAW's Block Shadow. `sweepPath` exposes the sweep.
+
+## 0.119.0
+
+### Minor Changes
+
+- 3e194c8: Image editor: 16- and 32-bit layer masks. Deep PSD masks open and save at depth, the compositor blends with their full precision, `set_bit_depth` converts masks with their layers, v3 JSON stores their samples (`deep` on a stored mask), and the brush, eraser, Fill and Clear paint masks at depth.
+- 9dcd2eb: Image editor at 16 and 32 bits: the Mixer Brush, Smudge, Sponge, Clone Stamp, Healing Brush and Spot Healing now keep a deep layer's precision. They run on float working tiles, and Clone and healing sample the layer's deep samples or the float composite. The paint engine's `TileMedium` and `TilePixelSource` accept float tiles (`PaintPixels`, `put255`); 8-bit behaviour is unchanged.
+- 2de12be: A live Contour path effect: concentric offset steps (inside, outside or to the centre) whose colours blend toward end colours, like CorelDRAW's Contour. Effect parameters gain a `color` kind, and the effects panels edit it.
+- 023d27d: Live vector symmetry groups.
+
+  - **Modes:** mirror (vertical, horizontal, four quarters or diagonal) or radial, with an optional kaleidoscope mirror. Copies follow every edit.
+  - **Draw inside:** new pen, pencil, shape and text art goes into the group and is mirrored as it is drawn.
+  - **Release or Expand:** stop repeating, or keep the copies as real objects.
+  - **New agent commands:** `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry` and `vector.exitSymmetry`.
+  - `vector.addShape` and `vector.addPath` take a `parentId`.
+  - **New components:** `VectorSymmetryPanel` for React and Svelte.
+
+## 0.118.0
+
+### Minor Changes
+
+- 7f8d2f4: Faster vector rendering.
+
+  - **Reuse:** `getVectorSceneRenderData` reuses render data for nodes an edit did not touch.
+  - **Culling:** with `viewportSize`, nodes off screen are left out.
+  - **Level of detail:** groups, text and instances under 2 screen pixels draw as one rectangle. The `lod` option sets the threshold.
+  - **Canvases:** both canvases pass their size and skip unchanged nodes.
+
+## 0.117.0
+
+### Minor Changes
+
+- f5971d7: Image editor at 16 and 32 bits: Free Transform, warps, flips and moves resample a deep layer's samples (16-bit sRGB, 32-bit linear light; whole-pixel moves are exact), and Dodge and Burn tone them. The tools that still compute in 8 bits (Mixer Brush, Smudge, Sponge, Clone Stamp, healing, filters, mask painting) now keep the deep samples of every pixel they leave alone instead of dropping whole tiles to 8 bits. New `keepDeepSamples` in `/raster`.
+- 416c888: Image editor: brush and eraser strokes, Edit › Fill and Clear now keep a 16- or 32-bit document's precision on the tiles they touch (16-bit in sRGB-encoded samples, 32-bit in linear light) instead of dropping them to 8 bits.
+- 9eeae92: Lottie export and import for vector documents.
+
+  - `toLottie` / `vectorDocumentToLottie` export, keeping path effects live as Lottie modifiers and gradients as gradient fills.
+  - `importLottie` / `parseVectorLottie` read one frame. Modifiers become live effects, and layers, parenting, precomps and additive masks are supported.
+  - Each direction returns notes on what was approximated.
+  - New agent commands: `vector.exportLottie` and `vector.importLottie`.
+
+- 0048753: Vector PDF export, as real paths rather than a picture.
+
+  - Gradients become PDF shadings; opacity and blend modes become graphics states.
+  - Clip masks and stroke alignment are kept.
+  - Writes one page, or one page per artboard.
+  - New API: `toPdf` and `vectorDocumentToPdf`.
+  - New agent command: `vector.exportPdf`.
+
 ## 0.116.0
 
 ### Minor Changes
