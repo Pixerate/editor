@@ -73,6 +73,8 @@ export interface WetStrokeInit {
   paperColor: readonly [number, number, number];
   seed: number;
   copies: readonly StrokeCopy[];
+  /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
+  mask?: { width: number; height: number; data: ArrayLike<number> } | null;
 }
 
 interface CopyState {
@@ -206,8 +208,14 @@ export class WetStrokeDriver {
     tip.fill(0);
     rasterizeDab({ ...d, alpha: 1 }, this.init.brush.tip.hardness, rect, tip);
     const grain = this.depth > 0 ? this.init.grain : null;
+    const mask = this.init.mask;
     for (let yy = 0, k = 0; yy < rect.height; yy++) {
       for (let xx = 0; xx < rect.width; xx++, k++) {
+        if (mask && tip[k] > 0) {
+          const mx = rect.x + xx;
+          const my = rect.y + yy;
+          tip[k] *= mx >= 0 && my >= 0 && mx < mask.width && my < mask.height ? mask.data[my * mask.width + mx] / 255 : 0;
+        }
         let v = tip[k];
         if (v > 0 && grain) v *= grainCatch(grain.at(rect.x + xx + 0.5, rect.y + yy + 0.5), this.depth, d.pressure);
         tip[k] = Math.round(tip[k] * COVERAGE_STEPS) / COVERAGE_STEPS;

@@ -16,6 +16,9 @@ import { TILE, type RasterRect } from '../raster/surface';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guides';
+import { stencilOutline, type StencilInput } from './stencils';
+import type { ParticleKind, ParticleRender } from './procedural';
+import type { StampKind } from './stickers';
 import { isPalmTouch, pointerToPenPoint, type PointerSample } from './input';
 import { MAX_ZOOM, MIN_ZOOM, screenToDocument } from './view';
 import { hsvToRgb, parseHexColor, rgbToHexColor, rgbToHsv, wheelToHue, type ColorWheel } from './color';
@@ -272,10 +275,15 @@ export class PaintCanvasPresenter {
 }
 
 /** Lines to draw over the canvas for the guides, in document pixels, with a style key. */
-export function guideOverlay(controller: PaintEditorController): Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' }> {
+export function guideOverlay(controller: PaintEditorController): Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' | 'stencil' }> {
   const s = controller.getState();
   const size = s.document.canvas;
-  const out: Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' }> = [];
+  const out: Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' | 'stencil' }> = [];
+  for (const st of s.guides.stencils) {
+    if (!st.enabled) continue;
+    const line = stencilOutline(st);
+    for (let i = 0; i + 1 < line.length; i++) out.push({ from: line[i], to: line[i + 1], kind: 'stencil' });
+  }
   for (const [from, to] of symmetryAxisSegments(s.guides.symmetry, size)) out.push({ from, to, kind: 'symmetry' });
   if (s.guides.perspective.enabled) for (const [from, to] of perspectiveGuideLines(s.guides.perspective, size, 16)) out.push({ from, to, kind: 'perspective' });
   return out;
@@ -409,6 +417,10 @@ export interface BrushEngineControls {
   wetTool?: boolean;
   /** The impasto tool menu (`impasto.tool`, `IMPASTO_TOOLS`). */
   impastoTool?: boolean;
+  /** The particle kind and render menus (`particle.kind`, `particle.render`). */
+  particleMenus?: boolean;
+  /** The sticker stamp toggles (`sticker.stamps`, `STAMP_KINDS`). */
+  stickerStamps?: boolean;
 }
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -425,6 +437,58 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  */
 export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
   switch (brush.engine) {
+    case 'particle':
+      return {
+        title: 'Particles',
+        sliders: [
+          { path: 'particle.count', label: 'Particles', min: 1, max: 64, step: 1 },
+          { path: 'particle.size', label: 'Mark size', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.spread', label: 'Spread', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.stiffness', label: 'Stiffness', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.damping', label: 'Damping', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.speed', label: 'Speed', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.gravity', label: 'Gravity', min: -1, max: 1, step: 0.01 },
+          { path: 'particle.life', label: 'Life', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.interval', label: 'Bead spacing', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+        particleMenus: true,
+      };
+    case 'bristle':
+      return {
+        title: 'Bristles',
+        sliders: [
+          { path: 'bristle.count', label: 'Bristles', min: 3, max: 128, step: 1 },
+          { path: 'bristle.stiffness', label: 'Stiffness', min: 0, max: 1, step: 0.01 },
+          { path: 'bristle.splay', label: 'Splay', min: 0, max: 1, step: 0.01 },
+          { path: 'bristle.thickness', label: 'Bristle width', min: 0, max: 1, step: 0.01 },
+          { path: 'bristle.load', label: 'Load', min: 0, max: 1, step: 0.01 },
+          { path: 'bristle.jitter', label: 'Variation', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+      };
+    case 'sticker':
+      return {
+        title: 'Stickers',
+        sliders: [
+          { path: 'sticker.density', label: 'Density', min: 0, max: 1, step: 0.01 },
+          { path: 'sticker.sizeJitter', label: 'Size jitter', min: 0, max: 1, step: 0.01 },
+          { path: 'sticker.rotationJitter', label: 'Turn jitter', min: 0, max: 1, step: 0.01 },
+          { path: 'sticker.scatter', label: 'Scatter', min: 0, max: 2, step: 0.01 },
+          { path: 'sticker.colorJitter', label: 'Colour jitter', min: 0, max: 1, step: 0.01 },
+        ],
+        mixingPath: null,
+        dirty: false,
+        multicolor: false,
+        load: false,
+        stickerStamps: true,
+      };
     case 'impasto':
       return {
         title: 'Thick paint',
@@ -621,3 +685,38 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
   { path: 'elevation', label: 'Light height', min: 5, max: 90, step: 1 },
   { path: 'relief', label: 'Relief', min: 0, max: 1, step: 0.01 },
 ];
+
+/** Labels of the particle kinds and renders. */
+export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow' };
+export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = { dot: 'Dots', line: 'Lines', sequence: 'Beads' };
+
+/** Labels of the sticker stamps. */
+export const STAMP_LABELS: Readonly<Record<StampKind, string>> = { dot: 'Dot', star: 'Star', heart: 'Heart', leaf: 'Leaf', flower: 'Flower', confetti: 'Confetti', splat: 'Splat', sparkle: 'Sparkle', ring: 'Ring' };
+
+/** Toggles one stamp in a sticker brush's set (never leaving it empty). */
+export function toggleStamp(stamps: readonly StampKind[], stamp: StampKind): StampKind[] {
+  const next = stamps.includes(stamp) ? stamps.filter((s) => s !== stamp) : [...stamps, stamp];
+  return next.length ? next : [stamp];
+}
+
+/** The sticker panel's sliders for the selected sticker. */
+export const STICKER_SLIDERS: readonly SliderControl[] = [
+  { path: 'size', label: 'Size', min: 2, max: 400, step: 1 },
+  { path: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },
+  { path: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
+];
+
+/** Stencils a toolbar can lay with one click, centred on the canvas. */
+export function quickStencil(kind: 'ruler' | 'circle' | 'ellipse-mask' | 'edge-mask', canvas: { width: number; height: number }): StencilInput {
+  const { width: w, height: h } = canvas;
+  switch (kind) {
+    case 'ruler':
+      return { kind: 'ruler', from: { x: w * 0.1, y: h / 2 }, to: { x: w * 0.9, y: h / 2 } };
+    case 'circle':
+      return { kind: 'arc', center: { x: w / 2, y: h / 2 }, radius: Math.min(w, h) * 0.3 };
+    case 'ellipse-mask':
+      return { kind: 'shape', shape: 'ellipse', rect: { x: w * 0.2, y: h * 0.2, width: w * 0.6, height: h * 0.6 } };
+    case 'edge-mask':
+      return { kind: 'line', from: { x: w / 2, y: 0 }, to: { x: w / 2, y: h } };
+  }
+}

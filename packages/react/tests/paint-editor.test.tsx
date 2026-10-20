@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -408,5 +408,46 @@ describe('React paint editor', () => {
     });
     expect(downloads).toContain('painting@2x.png');
     win.HTMLAnchorElement.prototype.click = click;
+  });
+
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    render(
+      <>
+        <PaintToolbar controller={c} tool="brush" onToolChange={() => {}} />
+        <BrushPanel controller={c} />
+        <PaintCanvas controller={c} fitOnMount={false} />
+        <StickerPanel controller={c} />
+      </>
+    );
+    act(() => {
+      c.setBrush({ id: 'hair-strands' });
+    });
+    setValue(container.querySelector('select[aria-label="Particle kind"]') as HTMLSelectElement, 'orbit');
+    expect(c.getState().brush.particle.kind).toBe('orbit');
+    setValue(container.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
+    expect(c.getState().brush.particle.render).toBe('sequence');
+    act(() => {
+      c.setBrush({ id: 'bristle-round' });
+    });
+    expect(container.querySelector('input[aria-label="Splay"]')).not.toBeNull();
+    act(() => {
+      c.setBrush({ id: 'sticker-stars' });
+    });
+    click(container.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]')!);
+    expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    click(byText('Ruler'));
+    expect(c.listStencils()[0].kind).toBe('ruler');
+    expect(container.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);
+    click(byText('Clear stencils'));
+    expect(c.listStencils()).toHaveLength(0);
+    act(() => {
+      c.paintStroke({ points: [{ x: 20, y: 100 }, { x: 280, y: 100 }] });
+    });
+    const list = container.querySelectorAll('[data-testid="sticker-panel"] [role="option"]');
+    expect(list.length).toBe(c.listStickers().length);
+    click(list[0]);
+    click(byText('Delete'));
+    expect(c.listStickers().length).toBe(list.length - 1);
   });
 });

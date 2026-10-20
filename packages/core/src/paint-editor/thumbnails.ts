@@ -105,6 +105,7 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       copies: [IDENTITY_COPY],
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
       thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
+      sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
     }
   );
   session.push(thumbnailStroke(width, height));

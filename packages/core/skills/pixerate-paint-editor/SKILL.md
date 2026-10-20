@@ -16,8 +16,9 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   (pressure, tilt, velocity, jitter), a **rotation** mode (`fixed`, `stroke`, `barrel`) and an
   engine: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
   it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
-  along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below) or `impasto`
-  (thick paint with relief and material, below).
+  along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below), `impasto`
+  (thick paint with relief and material, below), `particle` (procedural particle brushes),
+  `bristle` (a tuft of bristles) or `sticker` (sprays editable stickers).
 - **Wet media** (`engine: "wet"`, categories `watercolor` and `wet-tool`): a stroke lays water
   and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the
   stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the
@@ -186,6 +187,26 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   `get_relief` reads a layer's relief; `flatten_relief` removes it but keeps the colour.
 - **Metallic paper**: `set_paper` `metallic` 0..1 makes the grain sparkle under the light.
 
+## Procedural brushes, bristles, stickers and stencils
+
+- **Particle brushes** (category `procedural`): `hair-strands` (strings of masses dragged behind
+  the pen: hair, fur, grass), `spring-ink` (springs that overshoot: lively ink lines),
+  `orbit-curls` (particles circling the pen: curls and spirals), `flow-fur` and `sparkle-dust`
+  (particles thrown into a swirling flow), `bead-trail` (beads along a springy path). Tune with
+  `particle` (kind, render dot / line / sequence, count, stiffness, damping, speed, gravity).
+  Draw slowly and with varying direction: the particles react to movement.
+- **Bristle brushes** (category `bristle`): `bristle-round`, `bristle-flat`, `dry-brush`. Every
+  bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles
+  bend into curves at turns; a low `bristle.load` runs dry into broken streaks.
+- **Sticker spray** (category `sticker`): stamps (`star`, `leaf`, `confetti`, `flower`, `heart`,
+  `splat`, `sparkle`, `ring`, `dot`) sprayed along the stroke onto an **empty layer**, where each
+  stays an object: `list_stickers`, `update_sticker` (move, turn, resize, recolour, restamp),
+  `arrange_stickers`, `remove_stickers`. A sticker layer takes no other paint.
+- **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
+  it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
+  one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
+  removed (`remove_stencils`); masks are recorded with each stroke so replays keep them.
+
 ## Tool reference
 
 ### Canvas and paper
@@ -285,6 +306,15 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `get_relief` | Read a layer's relief (`bounds`, `maxHeight` 0..255, null when flat) and the lighting. Changes nothing. |
 | `flatten_relief` | Remove a layer's relief and material, keeping its colour. One undo step. Returns whether anything was flattened. |
 
+### Stickers
+
+| Tool | Use |
+| --- | --- |
+| `list_stickers` | Read a layer's stickers bottom first: id, stamp, x, y, size, rotation, color, opacity. |
+| `update_sticker` | Change one sticker by `id`: `stamp`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
+| `arrange_stickers` | Move stickers (`ids`) to the `front` or `back` of their layer. One undo step. |
+| `remove_stickers` | Delete stickers by `ids`, or all on the layer. One undo step. |
+
 ### Guides
 
 | Tool | Use |
@@ -299,6 +329,9 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `list_reference_images` | Read the reference images: id, name, size, placement, visibility. |
 | `update_reference_image` | Move, resize, rename, show or hide a reference panel. |
 | `remove_reference_image` | Remove a reference image. |
+| `add_stencil` | Lay a stencil: `kind` ruler (`from`, `to`) or arc (`center`, `radius`, `startAngle`, `endAngle`) to guide strokes, line (`from`, `to`) or shape (`shape` rect / ellipse with `rect`, polygon with `points`) to mask; `mode` guide or mask, `invert`, `snap`, `feather`. Returns it with its id. |
+| `update_stencil` | Move, reshape, switch or hide (`enabled`) a stencil by `id`. |
+| `remove_stencils` | Remove stencils by `ids`, or all. |
 | `pick_reference_color` | Read a reference image's colour at its own pixel `x`, `y`; `setColor` makes it the paint colour. |
 
 ### View, input and output

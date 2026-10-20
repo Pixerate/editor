@@ -9,19 +9,21 @@ import { DEFAULT_BRUSH, MAX_BRUSH_SIZE, normalizeBrush, type BrushSettings } fro
 import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, type BlenderSettings, type SmudgeSettings } from '../paint/blending';
 import type { MixingModel } from '../paint/exchange';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
+import { DEFAULT_STICKER, normalizeStickerSettings, type StickerSettings } from './stickers';
+import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, normalizeBristle, normalizeParticle, type BristleSettings, type ParticleSettings } from './procedural';
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
  * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
 
-export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'custom';
+export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'custom';
 
-export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'custom'];
+export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'procedural', 'bristle', 'sticker', 'custom'];
 
 /**
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
@@ -234,6 +236,12 @@ export interface PaintBrush {
   wet: WetBrushSettings;
   /** Impasto engine only: the tool, thickness, gloss, metallic, loading, thinner and drag. */
   impasto: ImpastoSettings;
+  /** Particle engine only: the particles' kind, how they are drawn, and their physics. */
+  particle: ParticleSettings;
+  /** Bristle engine only: the tuft. */
+  bristle: BristleSettings;
+  /** Sticker engine only: the stamps and how they are sprayed. */
+  sticker: StickerSettings;
   /** True for the built-in presets (they cannot be removed or overwritten). */
   builtin?: boolean;
 }
@@ -286,7 +294,7 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker'>> & {
   tip?: Partial<BrushSettings>;
   dynamics?: Partial<BrushDynamics>;
   mixer?: Partial<MixerSettings>;
@@ -295,6 +303,9 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   smudge?: Partial<SmudgeSettings>;
   wet?: Partial<WetBrushSettings>;
   impasto?: Partial<ImpastoSettings>;
+  particle?: Partial<ParticleSettings>;
+  bristle?: Partial<BristleSettings>;
+  sticker?: Partial<StickerSettings>;
 };
 
 /** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
@@ -350,6 +361,9 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     smudge: normalizeSmudge(raw.smudge ?? {}, b.smudge),
     wet: normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH),
     impasto: normalizeImpasto(raw.impasto ?? {}, b.impasto ?? DEFAULT_IMPASTO),
+    particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
+    bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
+    sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     ...(raw.builtin ? { builtin: true } : {}),
   };
 }
@@ -371,6 +385,9 @@ const BASE_BRUSH: PaintBrush = {
   smudge: { ...DEFAULT_SMUDGE },
   wet: { ...DEFAULT_WET_BRUSH },
   impasto: { ...DEFAULT_IMPASTO },
+  particle: { ...DEFAULT_PARTICLE },
+  bristle: { ...DEFAULT_BRISTLE },
+  sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
 };
 
 type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
@@ -563,6 +580,81 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     dynamics: { minSize: 0.5 },
     behavior: { pickup: 0.2, mix: 0.4, mixing: 'pigment' },
     impasto: { tool: 'brush', thickness: 0.45, gloss: 0.8, metallic: 1, load: 0.95, drag: 0.3 },
+  }),
+  builtin({
+    id: 'hair-strands', name: 'Hair strands', category: 'procedural', engine: 'particle',
+    tip: { size: 40, hardness: 0.8, opacity: 0.9, flow: 0.6, smoothing: 0.2, pressureSize: true, pressureOpacity: true },
+    particle: { kind: 'string', render: 'line', count: 22, size: 0.025, spread: 1, stiffness: 0.08, damping: 0.3 },
+  }),
+  builtin({
+    id: 'spring-ink', name: 'Spring ink', category: 'procedural', engine: 'particle',
+    tip: { size: 30, hardness: 0.9, opacity: 1, flow: 0.8, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'spring', render: 'line', count: 5, size: 0.08, spread: 0.6, stiffness: 0.2, damping: 0.1 },
+  }),
+  builtin({
+    id: 'orbit-curls', name: 'Orbit curls', category: 'procedural', engine: 'particle',
+    tip: { size: 36, hardness: 0.85, opacity: 0.9, flow: 0.7, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'orbit', render: 'line', count: 4, size: 0.05, spread: 0.6, speed: 0.45 },
+  }),
+  builtin({
+    id: 'flow-fur', name: 'Flow fur', category: 'procedural', engine: 'particle',
+    tip: { size: 50, hardness: 0.7, opacity: 0.8, flow: 0.5, smoothing: 0.2, pressureSize: true, pressureOpacity: true },
+    particle: { kind: 'flow', render: 'line', count: 10, size: 0.03, spread: 0.6, speed: 0.5, life: 0.25 },
+  }),
+  builtin({
+    id: 'bead-trail', name: 'Bead trail', category: 'procedural', engine: 'particle',
+    tip: { size: 34, hardness: 0.9, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'spring', render: 'sequence', count: 3, size: 0.18, spread: 0.5, stiffness: 0.3, damping: 0.3, interval: 0.4 },
+  }),
+  builtin({
+    id: 'sparkle-dust', name: 'Sparkle dust', category: 'procedural', engine: 'particle',
+    tip: { size: 60, hardness: 0.6, opacity: 1, flow: 0.9, smoothing: 0.1, pressureSize: true, pressureOpacity: true },
+    particle: { kind: 'flow', render: 'dot', count: 6, size: 0.05, spread: 0.9, speed: 0.7, life: 0.4 },
+  }),
+  builtin({
+    id: 'bristle-round', name: 'Bristle round', category: 'bristle', engine: 'bristle', rotation: 'stroke',
+    tip: { size: 30, hardness: 0.85, opacity: 1, flow: 0.9, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.4, tiltSize: 0.6, tiltRoundness: 0.6 },
+    bristle: { count: 28, stiffness: 0.45, splay: 0.6, thickness: 0.035, load: 0.7, jitter: 0.5 },
+  }),
+  builtin({
+    id: 'bristle-flat', name: 'Bristle flat', category: 'bristle', engine: 'bristle', rotation: 'stroke',
+    tip: { size: 46, hardness: 0.85, angle: 90, roundness: 0.3, opacity: 1, flow: 0.9, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5, tiltSize: 0.5 },
+    bristle: { count: 40, stiffness: 0.6, splay: 0.4, thickness: 0.025, load: 0.65, jitter: 0.45 },
+  }),
+  builtin({
+    id: 'dry-brush', name: 'Dry brush', category: 'bristle', engine: 'bristle', rotation: 'stroke',
+    tip: { size: 44, hardness: 0.9, angle: 90, roundness: 0.45, opacity: 1, flow: 0.8, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    grain: 0.6,
+    bristle: { count: 48, stiffness: 0.35, splay: 0.7, thickness: 0.05, load: 0.15, jitter: 0.8 },
+  }),
+  builtin({
+    id: 'sticker-stars', name: 'Star stickers', category: 'sticker', engine: 'sticker',
+    tip: { size: 36, opacity: 1, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    sticker: { stamps: ['star', 'sparkle'], density: 0.35, sizeJitter: 0.5, rotationJitter: 1, scatter: 0.6, colorJitter: 0.3 },
+  }),
+  builtin({
+    id: 'sticker-leaves', name: 'Leaf stickers', category: 'sticker', engine: 'sticker', rotation: 'stroke',
+    tip: { size: 40, opacity: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    sticker: { stamps: ['leaf'], density: 0.5, sizeJitter: 0.4, rotationJitter: 0.35, scatter: 0.4, colorJitter: 0.35 },
+  }),
+  builtin({
+    id: 'sticker-confetti', name: 'Confetti', category: 'sticker', engine: 'sticker',
+    tip: { size: 22, opacity: 1, smoothing: 0.1, pressureSize: false, pressureOpacity: false },
+    sticker: { stamps: ['confetti', 'dot', 'ring'], density: 0.7, sizeJitter: 0.5, rotationJitter: 1, scatter: 1.5, colorJitter: 1 },
+  }),
+  builtin({
+    id: 'sticker-flowers', name: 'Flower stickers', category: 'sticker', engine: 'sticker',
+    tip: { size: 44, opacity: 1, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
+    sticker: { stamps: ['flower', 'heart'], density: 0.3, sizeJitter: 0.5, rotationJitter: 1, scatter: 0.7, colorJitter: 0.4 },
+  }),
+  builtin({
+    id: 'sticker-splats', name: 'Paint splats', category: 'sticker', engine: 'sticker',
+    tip: { size: 50, opacity: 0.95, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
+    sticker: { stamps: ['splat'], density: 0.25, sizeJitter: 0.6, rotationJitter: 1, scatter: 0.8, colorJitter: 0.15 },
   }),
   builtin({
     id: 'add-water', name: 'Add water', category: 'wet-tool', engine: 'wet',

@@ -21,6 +21,8 @@ import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { ThickStrokeDriver, type ThickChannels } from './thick';
+import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
+import { StickerSpray, type Sticker } from './stickers';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -60,6 +62,10 @@ export interface StrokeSessionInit {
   wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
   /** Impasto brushes: the layer's thick-paint channels before the stroke. */
   thick?: { channels: ThickChannels };
+  /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
+  selection?: { width: number; height: number; data: ArrayLike<number> } | null;
+  /** Sticker brushes: the next sticker number on the layer. */
+  sticker?: { nextId: number };
 }
 
 export interface PaintStrokeResult {
@@ -104,10 +110,11 @@ export class PaintStrokeSession {
   private readonly live: Map<TileKey, Tile>;
   private readonly touched = new Set<TileKey>();
   private readonly fresh = new Set<TileKey>();
-  private readonly dry: DryStroke | null = null;
+  private readonly dry: CoverageStroke | null = null;
   private readonly wet: PaintDabStroke | null = null;
   private readonly wetDriver: WetStrokeDriver | null = null;
   private readonly thickDriver: ThickStrokeDriver | null = null;
+  private readonly stickerSpray: StickerSpray | null = null;
   /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
   private wetEndPending = false;
   private readonly apply: StrokeApply;
@@ -116,6 +123,8 @@ export class PaintStrokeSession {
   private lastRaw: PenPoint | null = null;
   private closed = false;
   result: PaintStrokeResult | null = null;
+  /** The mask stencils this stroke was painted with when they are not the editor's (replays). */
+  maskStencils: readonly import('./stencils').Stencil[] | null = null;
 
   constructor(private readonly host: StrokeSessionHost, readonly init: StrokeSessionInit) {
     this.layerId = init.layerId;
@@ -131,11 +140,13 @@ export class PaintStrokeSession {
       opacity: brush.tip.opacity,
       blend: brush.tip.blend,
       lockTransparency: init.lockTransparency,
-      selection: null,
+      selection: init.selection ?? null,
       offset: init.offset,
     };
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
+    } else if (init.sticker) {
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies });
@@ -152,7 +163,8 @@ export class PaintStrokeSession {
         copies: this.copies,
       });
     } else {
-      this.dry = new DryStroke(brush, { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies });
+      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies };
+      this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
   }
 
@@ -160,7 +172,7 @@ export class PaintStrokeSession {
     return {
       offset: this.init.offset,
       lockTransparency: this.init.lockTransparency,
-      selection: null,
+      selection: this.init.selection ?? null,
       readTile: (tx, ty) => this.live.get(tileKey(tx, ty))?.data ?? null,
       writeTile: (tx, ty) => {
         const key = tileKey(tx, ty);
@@ -190,7 +202,12 @@ export class PaintStrokeSession {
       this.wetUpdate(this.wetDriver.push(points));
       return;
     }
-    this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.wet!.push(points));
+    this.update(this.dry ? this.dry.push(points) : this.thickDriver ? this.thickDriver.push(points) : this.stickerSpray ? this.stickerSpray.push(points) : this.wet!.push(points));
+  }
+
+  /** Sticker strokes: the stickers sprayed so far. */
+  stickers(): Sticker[] | null {
+    return this.stickerSpray ? this.stickerSpray.stickers.map((s) => ({ ...s })) : null;
   }
 
   /** Impasto strokes: the layer's thick-paint channels with the stroke so far. */
@@ -268,7 +285,7 @@ export class PaintStrokeSession {
       }
       return this.result!;
     }
-    this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.wet!.finish());
+    this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
@@ -283,7 +300,7 @@ export class PaintStrokeSession {
     // An impasto stroke can change only the relief (a knife on dry colour).
     if (this.thickDriver && this.thickDriver.dabCount > 0) changed = true;
     const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
-    const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.wet!.dabCount;
+    const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.stickerSpray ? this.stickerSpray.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
     const carried = this.wet?.load ?? this.thickDriver?.load;
     if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);

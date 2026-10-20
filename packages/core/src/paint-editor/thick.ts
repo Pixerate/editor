@@ -344,6 +344,15 @@ export class ThickStrokeDriver {
     if (this.tip.length < n) this.tip = new Float32Array(n);
     const tip = this.tip.subarray(0, n);
     rasterizeDab({ ...d, alpha: 1 }, b.tip.hardness, rect, tip);
+    const sel = this.init.target.selection;
+    if (sel) {
+      for (let yy = 0, p = 0; yy < rect.height; yy++)
+        for (let xx = 0; xx < rect.width; xx++, p++) {
+          const mx = rect.x + xx;
+          const my = rect.y + yy;
+          if (tip[p] > 0) tip[p] *= mx >= 0 && my >= 0 && mx < sel.width && my < sel.height ? sel.data[my * sel.width + mx] / 255 : 0;
+        }
+    }
     const off = this.init.target.offset;
     const k = Math.min(1, d.alpha * d.opacity * b.tip.opacity) * st.amount;
     const thick = im.thickness * (1 - 0.8 * im.thinner);

@@ -14,6 +14,7 @@ import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
 import type { ThickChannels } from './thick';
+import type { Sticker } from './stickers';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -45,6 +46,8 @@ export interface PaintDocumentState {
   wetEvents?: WetEvent[];
   /** Changes besides strokes that a replay repeats (fills, clears, flattened relief), in order. */
   paintEvents?: PaintEvent[];
+  /** Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them). */
+  stickers?: Readonly<Record<string, Sticker[]>>;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
 }
@@ -52,9 +55,9 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'clear' | 'flatten';
+  kind: 'fill' | 'clear' | 'flatten' | 'stickers';
   layerId: string;
-  /** The fill's options (colour, opacity, grain, pressure, blend). */
+  /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers after an edit. */
   data?: Record<string, unknown>;
 }
 

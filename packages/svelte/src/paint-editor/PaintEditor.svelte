@@ -7,6 +7,7 @@
   import PaintToolbar from './PaintToolbar.svelte';
   import PaperPanel from './PaperPanel.svelte';
   import WetPanel from './WetPanel.svelte';
+  import StickerPanel from './StickerPanel.svelte';
   import { chip } from './paintEditorRune.svelte.js';
 
   interface Props {
@@ -43,7 +44,7 @@
       {#if tab === 'color'}<ColorPanel {controller} />{/if}
       {#if tab === 'wet'}<WetPanel {controller} />{/if}
       {#if tab === 'paper'}<PaperPanel {controller} />{/if}
-      {#if tab === 'layers'}<PaintLayersPanel {controller} />{/if}
+      {#if tab === 'layers'}<PaintLayersPanel {controller} /><StickerPanel {controller} />{/if}
     </div>
   </div>
 </div>

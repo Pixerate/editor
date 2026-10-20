@@ -16,6 +16,15 @@ import {
   WET_MEDIUM_LABELS,
   IMPASTO_TOOLS,
   IMPASTO_TOOL_LABELS,
+  PARTICLE_KINDS,
+  PARTICLE_KIND_LABELS,
+  PARTICLE_RENDERS,
+  PARTICLE_RENDER_LABELS,
+  STAMP_KINDS,
+  STAMP_LABELS,
+  toggleStamp,
+  type ParticleKind,
+  type ParticleRender,
   type ImpastoTool,
   type WetMediumKind,
   type BlendMode,
@@ -143,6 +152,45 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
                 ))}
               </select>
             </label>
+          )}
+          {engine.particleMenus && (
+            <>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Particles</span>
+                <select aria-label="Particle kind" value={brush.particle.kind} onChange={(e) => controller.setBrush({ particle: { kind: e.target.value as ParticleKind } })} className="rounded bg-slate-800 px-1 py-0.5">
+                  {PARTICLE_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {PARTICLE_KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-slate-400">Drawn as</span>
+                <select aria-label="Particle render" value={brush.particle.render} onChange={(e) => controller.setBrush({ particle: { render: e.target.value as ParticleRender } })} className="rounded bg-slate-800 px-1 py-0.5">
+                  {PARTICLE_RENDERS.map((k) => (
+                    <option key={k} value={k}>
+                      {PARTICLE_RENDER_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          {engine.stickerStamps && (
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Sticker stamps">
+              {STAMP_KINDS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={brush.sticker.stamps.includes(k)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] ${brush.sticker.stamps.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  onClick={() => controller.setBrush({ sticker: { stamps: toggleStamp(brush.sticker.stamps, k) } })}
+                >
+                  {STAMP_LABELS[k]}
+                </button>
+              ))}
+            </div>
           )}
           {engine.impastoTool && (
             <label className="flex items-center justify-between gap-2">

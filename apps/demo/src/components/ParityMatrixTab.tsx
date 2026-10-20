@@ -357,8 +357,10 @@ const FEATURES: ParityRow[] = [
   row("Wet Media", "WetWorld, PaintWetLayers, tickWet & dryPaint", "<WetPanel> & <PaintCanvas> wet clock", "<WetPanel> & <PaintCanvas> wet clock", "Watercolour and gouache on a fluid simulation (wasm SIMD in workers); dried on save; 9 wet agent tools"),
   row("Oils & Thick Paint", "ThickStrokeDriver, LitCache & setLighting", "<BrushPanel> impasto menus & <PaperPanel> light", "<BrushPanel> impasto menus & <PaperPanel> light", "Wet oil, impasto tools lit by a movable light, metallic paint and paper; 4 agent tools"),
   row("Time-lapse & High-Res Replay", "timeLapse, renderHighRes & replayPainting", "<PaintToolbar> Time-lapse / PNG 2×", "<PaintToolbar> Time-lapse / PNG 2×", "Strokes repainted exactly (wet paint flows as it did); video project + ffmpeg; 2 agent tools"),
+  row("Procedural, Bristle & Sticker Brushes", "ParticleStroke, BristleStroke & StickerSpray", "<BrushPanel> engine controls & <StickerPanel>", "<BrushPanel> engine controls & <StickerPanel>", "Particle strings, springs, orbits, flow; bristles; editable stickers; 4 agent tools"),
+  row("Stencils", "addStencil, StencilSnapper & stencilMask", "<PaintToolbar> Ruler / Circle / Mask", "<PaintToolbar> Ruler / Circle / Mask", "Ruler and arc guides, line and shape masks; 3 agent tools"),
   row("Paint Agent Cursors", "PaintDirector & PaintPresence", "usePaintDirector & <PaintEditor presence>", "createPaintDirector & <PaintEditor presence>", "Agent strokes painted live by a cursor on the canvas; one undo step per call"),
-  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "82 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
+  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "89 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
   ...PRODUCTIVITY_FEATURES,
 ];
 

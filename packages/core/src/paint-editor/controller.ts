@@ -76,6 +76,8 @@ import {
   type TracingImage,
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
+import { normalizeStencil, StencilSnapper, stencilMask, type Stencil, type StencilInput } from './stencils';
+import { normalizeStickerUpdate, STAMP_KINDS, stickerSurface, type Sticker } from './stickers';
 import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
 import { PaintWetLayers, WetStrokeDriver, type PaintWetOptions, type WetEvent, type WetLayerInfo, type WetLayerSettings } from './wet';
 import { isWetBrush } from './brushes';
@@ -201,6 +203,10 @@ export interface PaintStrokeInit {
   start?: { x: number; y: number };
   /** What the brush carries at the start (default: from the editor's brush load); replays pass the recorded one. */
   load?: MixerLoad;
+  /** Follow guide stencils and keep to mask stencils (default true; replays pass false, their points already follow them). */
+  stencils?: boolean;
+  /** Mask with these stencils instead (replays pass the ones recorded with the stroke). */
+  maskStencils?: readonly Stencil[];
 }
 
 export interface LayerUpdate {
@@ -770,7 +776,7 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)) });
+    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)) });
     return { removed: id, activeLayerId: active };
   }
 
@@ -783,14 +789,16 @@ export class PaintEditorController {
     const loc = findLayer(this.doc.layers, id);
     if (!loc) throw new PaintEditorError(`Unknown layer "${id}". Call list_layers for the ids.`);
     const thick: Record<string, ThickChannels> = { ...(this.doc.thick ?? {}) };
+    const stickers: Record<string, Sticker[]> = { ...(this.doc.stickers ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (thick[l.id]) thick[id] = thick[l.id];
+      if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
       return l.type === 'group' ? { ...l, id, children: l.children.map(copy) } : { ...l, id };
     };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}) }));
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}) }));
     return this.describeLayer(dup);
   }
 
@@ -839,7 +847,7 @@ export class PaintEditorController {
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]) }));
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]) }));
     return this.describeLayer(merged);
   }
 
@@ -852,7 +860,7 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
+    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
     return { layerId: l.id, bounds };
   }
 
@@ -862,7 +870,8 @@ export class PaintEditorController {
    */
   fillLayer(options: FillLayerOptions = {}): { layerId: string; bounds: RasterRect } {
     this.requireIdle('filling');
-    this.paintTarget(options.layerId, 'fill');
+    const fillTarget = this.paintTarget(options.layerId, 'fill');
+    if (this.doc.stickers?.[fillTarget.id]?.length) throw new PaintEditorError(`Layer "${fillTarget.name}" is a sticker layer; fill another layer (add_layer).`);
     this.dryLayersFirst([options.layerId ?? this.doc.activeLayerId ?? '']);
     const l = this.paintTarget(options.layerId, 'fill');
     const color = options.color === undefined ? this.color : parseColor(options.color);
@@ -1130,6 +1139,12 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
+    const stickerLayer = Boolean(doc.stickers?.[layer.id]?.length);
+    if (brush.engine === 'sticker') {
+      if (!stickerLayer && contentBounds(layer.surface)) throw new PaintEditorError(`Layer "${layer.name}" already has paint; spray stickers onto an empty layer (add_layer) so they stay editable.`);
+    } else if (stickerLayer) {
+      throw new PaintEditorError(`Layer "${layer.name}" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).`);
+    }
     let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
     if (isWetBrush(brush)) {
       this.requireWetIdle('painting');
@@ -1161,6 +1176,7 @@ export class PaintEditorController {
         paperColor: hexToRgb8(doc.paper.color),
         seed: seedW,
         copies: [IDENTITY_AFFINE, ...copiesW].map(affineCopy),
+        mask: init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
@@ -1175,6 +1191,10 @@ export class PaintEditorController {
     if (init.color === undefined && init.start && tracing?.visible && tracing.sampleColors) color = this.sampleTracingColor(init.start.x, init.start.y) ?? color;
     const perspective = this.guides.perspective;
     const snapper = init.snapToPerspective && perspective.enabled && perspective.snap ? new PerspectiveSnapper(perspective) : null;
+    const useStencils = init.stencils !== false;
+    const stencilSnapper = useStencils && this.guides.stencils.some((x) => x.enabled && x.mode === 'guide') ? new StencilSnapper(this.guides.stencils) : null;
+    const selection = init.maskStencils ? this.stencilSelection(init.maskStencils) : useStencils ? this.stencilSelection() : null;
+    const inputFilter = snapper || stencilSnapper ? (p: PenPoint) => (stencilSnapper ? stencilSnapper.snap(snapper ? snapper.snap(p) : p) : snapper!.snap(p)) : undefined;
     const rgba = rgbaOf(color);
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
     const copies = (init.copies ?? this.strokeCopies()).filter((m) => m.some((v, i) => v !== IDENTITY_AFFINE[i]));
@@ -1192,13 +1212,16 @@ export class PaintEditorController {
       colorHex: color,
       affineCopies: copies,
       copies: [IDENTITY_AFFINE, ...copies].map(affineCopy),
-      inputFilter: snapper ? (p) => snapper.snap(p) : undefined,
+      inputFilter,
+      selection,
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
       wet,
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
+      sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc) } : undefined,
     });
     if (wet) this.wet.driver = wet.driver;
+    if (init.maskStencils) session.maskStencils = init.maskStencils;
     return session;
   }
 
@@ -1215,6 +1238,10 @@ export class PaintEditorController {
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     if (init.wet) stroke.steps = [...init.wet.driver.steps];
+    if (init.selection) {
+      const masks = (session.maskStencils ?? this.guides.stencils).filter((x) => x.enabled && x.mode === 'mask');
+      if (masks.length) stroke.stencils = masks.map((x) => ({ ...x }));
+    }
     return stroke;
   }
 
@@ -1270,7 +1297,9 @@ export class PaintEditorController {
         const l = this.getLayer(s.layerId) as PaintPixelLayer;
         const ch = s.thickChannels();
         const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
-        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}) }), wetStroke ? before : this.doc);
+        const sprayed = s.stickers();
+        const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
+        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}) }), wetStroke ? before : this.doc);
       },
     };
     let session: PaintStrokeSession;
@@ -1302,7 +1331,14 @@ export class PaintEditorController {
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
         const ch = s.thickChannels();
-        out = { ...out, layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })), strokes: [...out.strokes, stroke], ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}) };
+        const sprayed = s.stickers();
+        out = {
+          ...out,
+          layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
+          strokes: [...out.strokes, stroke],
+          ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
+          ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
+        };
       },
     };
     const session = this.sessionFor(doc, init, host);
@@ -1403,7 +1439,7 @@ export class PaintEditorController {
           const [r, g, b] = hexToRgb8(options.color);
           load = { ...load, reservoir: [r / 255, g / 255, b / 255] };
         }
-        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
+        const run = this.runStroke(doc, { layerId, color: options.color ?? s.color, brush, seed: s.seed, copies: v.copies ?? [], stencils: false, maskStencils: [], ...(load && options.brushId === undefined ? { load } : {}) }, v.points);
         doc = run.doc;
         bounds = unionRect(bounds, run.result.bounds);
         if (run.result.strokeId) ids.push(run.result.strokeId);
@@ -1849,6 +1885,10 @@ export class PaintEditorController {
     }
     if (Object.keys(channels).length) ext.layerChannels = channels;
     else delete ext.layerChannels;
+    const stickers: Record<string, Sticker[]> = {};
+    for (const [id, list] of Object.entries(this.doc.stickers ?? {})) if (list.length && findLayer(this.doc.layers, id)) stickers[id] = list.map((x) => ({ ...x }));
+    if (Object.keys(stickers).length) ext.stickers = stickers;
+    else delete ext.stickers;
     if (this.lighting.azimuth !== DEFAULT_LIGHTING.azimuth || this.lighting.elevation !== DEFAULT_LIGHTING.elevation || this.lighting.relief !== DEFAULT_LIGHTING.relief) ext.lighting = { ...this.lighting };
     else delete ext.lighting;
     return ext;
@@ -1858,6 +1898,16 @@ export class PaintEditorController {
   private readThick(state: PaintDocumentState, ext: PaintDocumentExtensions, problems: string[]): PaintDocumentState {
     this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
     this.litCaches.clear();
+    if (ext.stickers && typeof ext.stickers === 'object') {
+      const stickers: Record<string, Sticker[]> = {};
+      for (const [id, list] of Object.entries(ext.stickers as Record<string, unknown>)) {
+        if (!findLayer(state.layers, id) || !Array.isArray(list)) continue;
+        const ok = (list as Sticker[]).filter((x) => x && typeof x.id === 'string' && STAMP_KINDS.includes(x.stamp) && Number.isFinite(x.x) && Number.isFinite(x.y) && x.size > 0);
+        if (ok.length !== list.length) problems.push(`Some stickers of layer "${id}" could not be read; they were dropped.`);
+        stickers[id] = ok.map((x) => ({ ...x }));
+      }
+      if (Object.keys(stickers).length) state = { ...state, stickers };
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -1900,6 +1950,7 @@ export class PaintEditorController {
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
     delete this.extensions.layerChannels;
     delete this.extensions.lighting;
+    delete this.extensions.stickers;
     this.viewCompositor.clear();
     this.emit();
     return loaded.problems;
@@ -2211,7 +2262,162 @@ export class PaintEditorController {
         }
       }
     }
+    if (Array.isArray(r.stencils)) {
+      guides.stencils = [];
+      (r.stencils as Stencil[]).forEach((raw, i) => {
+        try {
+          const id = typeof raw?.id === 'string' && /^stencil\d+$/.test(raw.id) ? raw.id : `stencil${this.nextStencilId}`;
+          guides.stencils.push(normalizeStencil(raw, id));
+          const n = Number(id.slice(7));
+          if (n >= this.nextStencilId) this.nextStencilId = n + 1;
+        } catch (e) {
+          problems.push(`Stencil ${i + 1}: ${(e as Error).message}`);
+        }
+      });
+    }
     this.guides = guides;
+  }
+
+  // --- Stickers --------------------------------------------------------------------
+
+  /** The document's `stickers` without these layers (as a spread: `{}` when unchanged). */
+  private stickersWithout(ids: readonly string[]): { stickers?: Record<string, Sticker[]> } {
+    const t = this.doc.stickers;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { stickers: out };
+  }
+
+  /** The next free sticker number (ids `st<n>` are unique across the document). */
+  private nextStickerNumber(doc: PaintDocumentState = this.doc): number {
+    let n = 0;
+    for (const list of Object.values(doc.stickers ?? {})) for (const st of list) n = Math.max(n, Number(/^st(\d+)$/.exec(st.id)?.[1] ?? 0));
+    return n + 1;
+  }
+
+  private stickerLayer(layerId: string | undefined): { layer: PaintPixelLayer; stickers: Sticker[] } {
+    const l = this.wetLayer(layerId, 'edit the stickers of');
+    const stickers = this.doc.stickers?.[l.id];
+    if (!stickers) throw new PaintEditorError(`Layer "${l.name}" has no stickers; spray some with a sticker brush (list_brushes category sticker).`);
+    return { layer: l, stickers };
+  }
+
+  /** A layer's stickers, bottom first. */
+  listStickers(layerId?: string): Sticker[] {
+    const id = layerId ?? this.doc.activeLayerId;
+    if (!id) return [];
+    this.requireLayer(id);
+    return (this.doc.stickers?.[id] ?? []).map((s) => ({ ...s }));
+  }
+
+  /** Replaces a layer's stickers and redraws its pixels from them (one undo step). */
+  private commitStickers(label: string, layer: PaintPixelLayer, stickers: Sticker[]): void {
+    if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
+    const surface = stickerSurface(stickers);
+    const doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => ({ ...layer, surface, offset: { x: 0, y: 0 } })), stickers: { ...(this.doc.stickers ?? {}), [layer.id]: stickers } };
+    this.commit(label, this.withPaintEvent(doc, { kind: 'stickers', layerId: layer.id, data: { stickers: stickers.map((s) => ({ ...s })) } }));
+  }
+
+  /** Moves, turns, resizes, recolours or restamps one sticker (one undo step). Returns it. */
+  updateSticker(layerId: string | undefined, id: string, update: Partial<Omit<Sticker, 'id'>>): Sticker {
+    const { layer, stickers } = this.stickerLayer(layerId);
+    const i = stickers.findIndex((s) => s.id === id);
+    if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
+    let u: Partial<Omit<Sticker, 'id'>>;
+    try {
+      u = normalizeStickerUpdate(update);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    const next = { ...stickers[i], ...u };
+    this.commitStickers('Edit sticker', layer, stickers.map((s, j) => (j === i ? next : s)));
+    return { ...next };
+  }
+
+  /** Brings stickers to the top (`front`) or bottom of their layer (one undo step). */
+  arrangeStickers(layerId: string | undefined, ids: readonly string[], to: 'front' | 'back'): string[] {
+    const { layer, stickers } = this.stickerLayer(layerId);
+    for (const id of ids) if (!stickers.some((s) => s.id === id)) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
+    const picked = stickers.filter((s) => ids.includes(s.id));
+    const rest = stickers.filter((s) => !ids.includes(s.id));
+    const next = to === 'front' ? [...rest, ...picked] : [...picked, ...rest];
+    this.commitStickers('Arrange stickers', layer, next);
+    return next.map((s) => s.id);
+  }
+
+  /** Deletes stickers (`ids`, or all of them on the layer) (one undo step). Returns the ids removed. */
+  removeStickers(layerId: string | undefined, ids?: readonly string[]): string[] {
+    const { layer, stickers } = this.stickerLayer(layerId);
+    if (ids) for (const id of ids) if (!stickers.some((s) => s.id === id)) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
+    const removed = ids ? [...ids] : stickers.map((s) => s.id);
+    this.commitStickers('Remove stickers', layer, stickers.filter((s) => !removed.includes(s.id)));
+    return removed;
+  }
+
+  /** Sets a layer's stickers (replays). */
+  replaceStickers(layerId: string, stickers: readonly Sticker[]): void {
+    const l = this.wetLayer(layerId, 'set the stickers of');
+    this.commitStickers('Stickers', l, stickers.map((s) => ({ ...s })));
+  }
+
+  // --- Stencils --------------------------------------------------------------------
+
+  private stencilCache: { key: unknown; size: string; mask: { width: number; height: number; data: Uint8Array } | null } | null = null;
+  private nextStencilId = 1;
+
+  /** The mask stencils' coverage over the canvas (cached), or `null` when none masks. */
+  private stencilSelection(stencils: readonly Stencil[] = this.guides.stencils): { width: number; height: number; data: Uint8Array } | null {
+    const { width, height } = this.doc.canvas;
+    const size = `${width}x${height}`;
+    if (this.stencilCache?.key === stencils && this.stencilCache.size === size) return this.stencilCache.mask;
+    const mask = stencilMask(stencils, width, height);
+    this.stencilCache = { key: stencils, size, mask };
+    return mask;
+  }
+
+  /** The stencils. */
+  listStencils(): Stencil[] {
+    return this.guides.stencils.map((s) => ({ ...s }));
+  }
+
+  /** Lays a stencil on the canvas (a ruler or arc to follow, a straight edge or shape to mask). Editor state saved with the document, not an undo step. */
+  addStencil(input: StencilInput): Stencil {
+    let stencil: Stencil;
+    try {
+      stencil = normalizeStencil(input, `stencil${this.nextStencilId++}`);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.setGuides({ ...this.guides, stencils: [...this.guides.stencils, stencil] });
+    return { ...stencil };
+  }
+
+  private requireStencil(id: string): Stencil {
+    const s = this.guides.stencils.find((x) => x.id === id);
+    if (!s) throw new PaintEditorError(`Unknown stencil "${id}". Call get_guides for the stencil ids.`);
+    return s;
+  }
+
+  /** Moves, reshapes, switches (guide / mask, invert) or hides a stencil. */
+  updateStencil(id: string, update: Partial<Omit<Stencil, 'id' | 'kind'>>): Stencil {
+    const base = this.requireStencil(id);
+    let next: Stencil;
+    try {
+      next = normalizeStencil({ ...update, kind: base.kind }, id, base);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.setGuides({ ...this.guides, stencils: this.guides.stencils.map((x) => (x.id === id ? next : x)) });
+    return { ...next };
+  }
+
+  /** Takes stencils away (`ids`, or all of them). Returns the ids removed. */
+  removeStencils(ids?: readonly string[]): string[] {
+    if (ids) for (const id of ids) this.requireStencil(id);
+    const removed = ids ? [...ids] : this.guides.stencils.map((s) => s.id);
+    this.setGuides({ ...this.guides, stencils: this.guides.stencils.filter((s) => !removed.includes(s.id)) });
+    return removed;
   }
 
   // --- Swatches and harmonies ------------------------------------------------------
