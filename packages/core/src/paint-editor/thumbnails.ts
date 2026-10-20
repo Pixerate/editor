@@ -15,6 +15,7 @@ import { brushLoadForStroke, PaintStrokeSession } from './stroke';
 import { WetWorld } from '../paint/wet/world';
 import { pigmentOf } from '../paint/wet/film';
 import { WetStrokeDriver, wetPaperInput } from './wet';
+import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
 let thumbWorld: WetWorld | null = null;
@@ -79,8 +80,15 @@ export function thumbnailStroke(width: number, height: number): PenPoint[] {
 function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): TiledSurface {
   const [r, g, b] = hexToRgb8(color);
   let result = surface;
+  let thick: ThickChannels | null = null;
   const session = new PaintStrokeSession(
-    { update: () => {}, commit: (_s, s) => (result = s ?? result) },
+    {
+      update: () => {},
+      commit: (sess, s) => {
+        result = s ?? result;
+        thick = sess.thickChannels();
+      },
+    },
     {
       layerId: 'thumbnail',
       surface,
@@ -96,11 +104,13 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       affineCopies: [],
       copies: [IDENTITY_COPY],
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
+      thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
     }
   );
   session.push(thumbnailStroke(width, height));
   session.end();
-  return result;
+  // Thick paint is shown lit, as on the canvas.
+  return thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
 }
 
 export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperSettings; width?: number; height?: number; color: string }): BrushThumbnail {

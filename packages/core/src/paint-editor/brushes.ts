@@ -15,13 +15,13 @@ import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixe
  * mix exchange when its behaviour asks for it), `eraser` (removes alpha), `mixer` (the Mixer
  * Brush), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint along).
  */
-export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet';
+export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge' | 'wet' | 'impasto';
 
-export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet'];
+export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto'];
 
-export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'custom';
+export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'custom';
 
-export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'custom'];
+export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'custom'];
 
 /**
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
@@ -32,6 +32,16 @@ export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 
 export type WetTool = 'paint' | 'water' | 'dry' | 'blow' | 'blend' | 'smudge' | 'blot';
 
 export const WET_TOOLS: readonly WetTool[] = ['paint', 'water', 'dry', 'blow', 'blend', 'smudge', 'blot'];
+
+/**
+ * The wet medium a wet brush paints: its layer takes the medium's wet settings the first time it
+ * holds wet paint (`watercolor`: runny, dries in seconds, granulates and darkens at edges;
+ * `gouache`: opaque, flatter; `oil`: thick, barely flows, stays wet for a long time and blends into
+ * the wet paint it meets).
+ */
+export type WetMediumKind = 'watercolor' | 'gouache' | 'oil';
+
+export const WET_MEDIA: readonly WetMediumKind[] = ['watercolor', 'gouache', 'oil'];
 
 /** Wet engine settings, each 0..1. */
 export interface WetBrushSettings {
@@ -46,9 +56,15 @@ export interface WetBrushSettings {
   strength: number;
   /** How much dried paint the water lifts again (re-wetting): 0 none (staining) .. 1. */
   rewet: number;
+  /** The medium (its layer's wet settings the first time it holds wet paint). */
+  medium: WetMediumKind;
+  /** Paint loading: 1 never runs out; lower, the brush runs dry along a long stroke (reload each stroke). */
+  load: number;
+  /** Thinner (water for watercolour, solvent for oil): thins the paint, so it is more transparent and runnier. */
+  thinner: number;
 }
 
-export const DEFAULT_WET_BRUSH: Readonly<WetBrushSettings> = { tool: 'paint', water: 0.5, pigment: 0.5, body: 0, strength: 0.5, rewet: 0 };
+export const DEFAULT_WET_BRUSH: Readonly<WetBrushSettings> = { tool: 'paint', water: 0.5, pigment: 0.5, body: 0, strength: 0.5, rewet: 0, medium: 'watercolor', load: 1, thinner: 0 };
 
 export function normalizeWetBrush(raw: Partial<WetBrushSettings> = {}, base: WetBrushSettings = DEFAULT_WET_BRUSH): WetBrushSettings {
   return {
@@ -58,6 +74,50 @@ export function normalizeWetBrush(raw: Partial<WetBrushSettings> = {}, base: Wet
     body: unit(raw.body, base.body),
     strength: unit(raw.strength, base.strength),
     rewet: unit(raw.rewet, base.rewet),
+    medium: WET_MEDIA.includes(raw.medium as WetMediumKind) ? (raw.medium as WetMediumKind) : (base.medium ?? 'watercolor'),
+    load: unit(raw.load, base.load ?? 1),
+    thinner: unit(raw.thinner, base.thinner ?? 0),
+  };
+}
+
+/**
+ * What an impasto brush does on a thick-paint layer: `brush` (paint with body: colour and relief),
+ * `tube` (squeezes blobs of paint straight from the tube), `knife` (a palette knife: scrapes the
+ * relief flat and smears the paint along), `roller` (a flat, even band with a stipple), `gloop`
+ * (a thick, glossy, rounded line).
+ */
+export type ImpastoTool = 'brush' | 'tube' | 'knife' | 'roller' | 'gloop';
+
+export const IMPASTO_TOOLS: readonly ImpastoTool[] = ['brush', 'tube', 'knife', 'roller', 'gloop'];
+
+/** Impasto engine settings, each 0..1. */
+export interface ImpastoSettings {
+  tool: ImpastoTool;
+  /** How thick the paint stands up (relief per stroke). */
+  thickness: number;
+  /** Shine of the paint when lit (0 matte .. 1 wet-looking gloss). */
+  gloss: number;
+  /** Metallic paint: highlights take the paint's colour (gold, copper, silver). */
+  metallic: number;
+  /** Paint loading: 1 never runs out; lower, the stroke thins and fades as the brush empties. */
+  load: number;
+  /** Thinner: flatter, more transparent paint that levels out. */
+  thinner: number;
+  /** Knife and brush: how much of the paint under the tool is dragged along (0..1). */
+  drag: number;
+}
+
+export const DEFAULT_IMPASTO: Readonly<ImpastoSettings> = { tool: 'brush', thickness: 0.6, gloss: 0.4, metallic: 0, load: 0.9, thinner: 0, drag: 0.4 };
+
+export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
+  return {
+    tool: IMPASTO_TOOLS.includes(raw.tool as ImpastoTool) ? (raw.tool as ImpastoTool) : base.tool,
+    thickness: unit(raw.thickness, base.thickness),
+    gloss: unit(raw.gloss, base.gloss),
+    metallic: unit(raw.metallic, base.metallic),
+    load: unit(raw.load, base.load),
+    thinner: unit(raw.thinner, base.thinner),
+    drag: unit(raw.drag, base.drag),
   };
 }
 
@@ -172,6 +232,8 @@ export interface PaintBrush {
   smudge: SmudgeSettings;
   /** Wet engine only: the wet tool, water, pigment, body and strength. */
   wet: WetBrushSettings;
+  /** Impasto engine only: the tool, thickness, gloss, metallic, loading, thinner and drag. */
+  impasto: ImpastoSettings;
   /** True for the built-in presets (they cannot be removed or overwritten). */
   builtin?: boolean;
 }
@@ -224,7 +286,7 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto'>> & {
   tip?: Partial<BrushSettings>;
   dynamics?: Partial<BrushDynamics>;
   mixer?: Partial<MixerSettings>;
@@ -232,11 +294,12 @@ export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mix
   blender?: Partial<BlenderSettings>;
   smudge?: Partial<SmudgeSettings>;
   wet?: Partial<WetBrushSettings>;
+  impasto?: Partial<ImpastoSettings>;
 };
 
 /** Whether a brush can pick paint up from the canvas (the pick-up / mix ratios apply): dab, mixer and wet brushes. */
 export function isWetCapable(brush: Pick<PaintBrush, 'engine'>): boolean {
-  return brush.engine === 'dab' || brush.engine === 'mixer' || brush.engine === 'wet';
+  return brush.engine === 'dab' || brush.engine === 'mixer' || brush.engine === 'wet' || brush.engine === 'impasto';
 }
 
 /** Whether a brush paints wet media (on the layer's wet layer). */
@@ -286,6 +349,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     blender: normalizeBlender(raw.blender ?? {}, b.blender),
     smudge: normalizeSmudge(raw.smudge ?? {}, b.smudge),
     wet: normalizeWetBrush(raw.wet ?? {}, b.wet ?? DEFAULT_WET_BRUSH),
+    impasto: normalizeImpasto(raw.impasto ?? {}, b.impasto ?? DEFAULT_IMPASTO),
     ...(raw.builtin ? { builtin: true } : {}),
   };
 }
@@ -306,6 +370,7 @@ const BASE_BRUSH: PaintBrush = {
   blender: { ...DEFAULT_BLENDER },
   smudge: { ...DEFAULT_SMUDGE },
   wet: { ...DEFAULT_WET_BRUSH },
+  impasto: { ...DEFAULT_IMPASTO },
 };
 
 type BrushInit = PaintBrushInput & { id: string; name: string; category: PaintBrushCategory };
@@ -447,7 +512,57 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     tip: { size: 26, hardness: 0.7, spacing: 0.1, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
     dynamics: { minSize: 0.5 },
     behavior: { pickup: 0.35, mix: 0.5, mixing: 'pigment' },
-    wet: { tool: 'paint', water: 0.35, pigment: 0.8, body: 1 },
+    wet: { tool: 'paint', water: 0.35, pigment: 0.8, body: 1, medium: 'gouache' },
+  }),
+  builtin({
+    id: 'oil-round', name: 'Wet oil round', category: 'oil', engine: 'wet',
+    tip: { size: 24, hardness: 0.75, spacing: 0.08, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    behavior: { pickup: 0.6, mix: 0.55, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.4, pigment: 0.9, body: 1, medium: 'oil', load: 0.97 },
+  }),
+  builtin({
+    id: 'oil-flat', name: 'Wet oil flat', category: 'oil', engine: 'wet', rotation: 'stroke',
+    tip: { size: 40, hardness: 0.85, spacing: 0.06, angle: 90, roundness: 0.35, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.6 },
+    behavior: { pickup: 0.65, mix: 0.6, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.45, pigment: 0.9, body: 1, medium: 'oil', load: 0.95 },
+  }),
+  builtin({
+    id: 'impasto-brush', name: 'Impasto brush', category: 'impasto', engine: 'impasto', rotation: 'stroke',
+    tip: { size: 36, hardness: 0.8, spacing: 0.06, angle: 90, roundness: 0.55, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.55 },
+    behavior: { pickup: 0.4, mix: 0.5, mixing: 'pigment' },
+    impasto: { tool: 'brush', thickness: 0.6, gloss: 0.45, load: 0.92, drag: 0.4 },
+  }),
+  builtin({
+    id: 'paint-tube', name: 'Paint tube', category: 'impasto', engine: 'impasto',
+    tip: { size: 22, hardness: 0.9, spacing: 0.05, opacity: 1, flow: 1, smoothing: 0.35, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.4 },
+    impasto: { tool: 'tube', thickness: 0.9, gloss: 0.5, load: 1, drag: 0.1 },
+  }),
+  builtin({
+    id: 'palette-knife', name: 'Palette knife', category: 'impasto', engine: 'impasto', rotation: 'stroke',
+    tip: { size: 48, hardness: 1, spacing: 0.05, angle: 90, roundness: 0.18, opacity: 1, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: false },
+    impasto: { tool: 'knife', thickness: 0.3, gloss: 0.55, load: 1, drag: 0.85 },
+  }),
+  builtin({
+    id: 'paint-roller', name: 'Roller', category: 'impasto', engine: 'impasto', rotation: 'stroke',
+    tip: { size: 70, hardness: 0.95, spacing: 0.04, angle: 90, roundness: 0.12, opacity: 1, flow: 1, smoothing: 0.4, pressureSize: false, pressureOpacity: false },
+    impasto: { tool: 'roller', thickness: 0.25, gloss: 0.3, load: 0.9, drag: 0.15 },
+  }),
+  builtin({
+    id: 'gloop-pen', name: 'Gloop pen', category: 'impasto', engine: 'impasto',
+    tip: { size: 14, hardness: 0.9, spacing: 0.05, opacity: 1, flow: 1, smoothing: 0.5, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    impasto: { tool: 'gloop', thickness: 1, gloss: 0.9, load: 1, drag: 0 },
+  }),
+  builtin({
+    id: 'metallic-paint', name: 'Metallic paint', category: 'impasto', engine: 'impasto', rotation: 'stroke',
+    tip: { size: 30, hardness: 0.8, spacing: 0.06, angle: 90, roundness: 0.6, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.5 },
+    behavior: { pickup: 0.2, mix: 0.4, mixing: 'pigment' },
+    impasto: { tool: 'brush', thickness: 0.45, gloss: 0.8, metallic: 1, load: 0.95, drag: 0.3 },
   }),
   builtin({
     id: 'add-water', name: 'Add water', category: 'wet-tool', engine: 'wet',

@@ -38,4 +38,14 @@ describe("paint agent scripts", () => {
     expect(sky.bounds).not.toBeNull();
     controller.dispose();
   }, 120_000);
+
+  it("paints thick oil: a blended wet ground, tube petals dragged by the knife, a metallic centre", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-impasto")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.getLighting().elevation).toBe(28);
+    const flowers = controller.listLayers().find((l) => l.name === "Flowers")!;
+    expect(controller.reliefOf(flowers.id)!.maxHeight).toBeGreaterThan(50);
+    expect(controller.getState().wet.wet).toBe(false);
+    controller.dispose();
+  }, 120_000);
 });

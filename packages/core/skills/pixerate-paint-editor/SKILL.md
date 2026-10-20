@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-editor
-description: How to paint in the Pixerate paint editor (natural media) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry-media brushes (pencil, pastel, charcoal, airbrush, marker, ink, erasers) with pressure, tilt, barrel rotation and velocity, wet media (watercolour and gouache that flow, bloom, granulate and dry), blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, replayable strokes, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, paint in watercolour, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
+description: How to paint in the Pixerate paint editor (natural media) through its agent tools - canvas and paper (generated grain, depth, families from cold pressed watercolour to canvas), layers with painterly blend modes (watercolor, tint, highlight, shadow), dry media (pencil, pastel, charcoal, airbrush, marker, ink) with pen dynamics, wet media (watercolour, gouache and oil that flow, bloom, granulate and dry), thick impasto paint lit by a movable light, blending tools (blender, smudge, Mixer Brush), brush behaviours (pick-up and mix ratios, dirty and multi-coloured brushes), the brush library, replayable strokes, symmetry and perspective guides, tracing and reference images, harmonies, swatches, a mixing pad and pigment mixing, and PNG, JPEG, WebP, PSD and JSON output. Use when asked to paint, sketch, paint in watercolour, shade, blend, smudge, glaze, mix colours, paint symmetric or in perspective, trace an image, or when paint_stroke, set_paper, replay_strokes or mix_colors are available.
 ---
 
 # Paint editor
@@ -16,7 +16,8 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   (pressure, tilt, velocity, jitter), a **rotation** mode (`fixed`, `stroke`, `barrel`) and an
   engine: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
   it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
-  along the stroke), or `wet` (watercolour, gouache and the wet tools, below).
+  along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below) or `impasto`
+  (thick paint with relief and material, below).
 - **Wet media** (`engine: "wet"`, categories `watercolor` and `wet-tool`): a stroke lays water
   and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the
   stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the
@@ -165,6 +166,26 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
   no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
 
+## Oils and thick paint
+
+- **Wet oil** (`oil-round`, `oil-flat`; any wet brush with `wet.medium: "oil"`) runs on the wet
+  simulation as a thick, slow-drying medium: it barely flows, stays wet for minutes of simulated
+  time, and the brush picks up and mixes the wet oil it meets (`behavior.pickup` / `mix`), so
+  colours blend on the canvas. A layer takes the medium's wet settings the first time it holds
+  wet paint; keep oil and watercolour on separate layers. `set_instant_dry` on makes every wet
+  stroke dry as it ends (strokes stay exactly as laid).
+- **Thick paint** (`engine: "impasto"`, category `impasto`) gives a layer relief (height) and
+  material (gloss, metallic) next to its colour, lit at render time by `set_lighting`
+  (azimuth, elevation, relief). Tools: `impasto-brush` (bristle ridges), `paint-tube` (blobs),
+  `palette-knife` (scrapes the relief flat and smears the paint), `paint-roller` (flat stippled
+  band), `gloop-pen` (glossy bead), `metallic-paint` (highlights in the paint's colour).
+- **Loading and thinner**: `wet.load` / `impasto.load` below 1 make the brush run out along a
+  long stroke (dry-brush ends); `thinner` makes paint flatter and more transparent.
+- **Light** is a view of the relief, not paint: move it (`set_lighting`) to read the texture
+  (a low elevation, 15..30°, shows brushwork best) and pick the final light before exporting.
+  `get_relief` reads a layer's relief; `flatten_relief` removes it but keeps the colour.
+- **Metallic paper**: `set_paper` `metallic` 0..1 makes the grain sparkle under the light.
+
 ## Tool reference
 
 ### Canvas and paper
@@ -254,6 +275,15 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `set_canvas_tilt` | Tilt the canvas (`angle` 0..90°, `direction` downhill clockwise from the bottom): wet paint runs downhill, very wet paint drips. Returns `tilt`, `stillWet`. |
 | `pause_wet_paint` | Stop or resume time (`paused`) and set `speed` (steps per second). Editor state. |
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
+| `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
+
+### Thick paint and light
+
+| Tool | Use |
+| --- | --- |
+| `set_lighting` | Move the light for thick paint and metallic paper: `azimuth` (degrees clockwise from the top), `elevation` (5..90), `relief` (0..1). Nothing is repainted; not an undo step. Returns the lighting. Use a low elevation to show brushwork. |
+| `get_relief` | Read a layer's relief (`bounds`, `maxHeight` 0..255, null when flat) and the lighting. Changes nothing. |
+| `flatten_relief` | Remove a layer's relief and material, keeping its colour. One undo step. Returns whether anything was flattened. |
 
 ### Guides
 
@@ -280,6 +310,8 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 | `render_preview` | See the painting (or `layerIds`) as a PNG, longest side `maxSide` (16..2048, default 512), with or without the `paper`. Render after each block of work. |
 | `export_image` | Export PNG (default), JPEG or WebP as base64, at `quality` and `scale` (≤ 1); `paper: false` gives a transparent PNG. JPEG / WebP need a browser canvas. |
 | `export_psd` | Export a PSD with every layer, the paper as a locked bottom layer, and the composite. Pigment and painterly modes are written as their nearest standard mode (`list_blend_modes` `psd`). Returns base64, size, `psb` and `warnings`. |
+| `export_time_lapse` | Repaint the painting from its recorded strokes and events as a time-lapse: `frames` (about how many), `fps`, `maxSide`, `wetStepsPerFrame` (frames while wet paint flows), `holdMs`. Returns a contact sheet image, the frame count, size, duration, a video project of the frames and the ffmpeg command that renders `timelapse.mp4`; `includeFrames` adds every frame as base64 PNG. Changes nothing. |
+| `export_high_res` | Repaint the painting from its strokes at `scale` 1..8 (brushes, grain, fills and wet events scaled): a PNG with real detail instead of upscaled pixels. Returns base64, size. Layers not painted with strokes come out empty. |
 | `save_document` | Get the document JSON (canvas, paper, layers as PNG data URLs, strokes unless `strokes: false`). |
 | `open_document` | Open a saved document JSON, replacing the painting and clearing the undo history. Returns the canvas, layers and any `problems`. |
 
@@ -319,5 +351,8 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
   the first before painting the second (glazing). At most 8 layers hold wet paint at once.
 - **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
   looked, rather than wet.
+- **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.
+  Imported pixels, merges and layer moves are not data, so `export_time_lapse` and
+  `export_high_res` start those layers empty; paint with strokes when the replay matters.
 - **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
   only the pixels matter (smaller JSON).

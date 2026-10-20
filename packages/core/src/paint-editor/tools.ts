@@ -10,7 +10,7 @@ import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
-import { BRUSH_ROTATIONS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
+import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
@@ -18,6 +18,8 @@ import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
 import { createPaintWetTools } from './wet-tools';
+import { createPaintThickTools } from './thick-tools';
+import { createPaintReplayTools } from './replay-tools';
 import type { PaintAgentCommand, PaintDirector } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
 
@@ -159,11 +161,33 @@ const WET_BRUSH = {
       description:
         'paint: water and pigment (picks up and mixes wet paint by behavior.pickup / mix); water: clear water (with rewet it lifts dried paint); dry: a hair dryer, takes water; blow: pushes the water along the stroke; blend: evens out wet pigment; smudge: drags wet paint; blot: a tissue, takes wet paint up (erase wet).',
     },
+    medium: { type: 'string', enum: [...WET_MEDIA], description: "The medium: watercolor, gouache or oil. A layer takes the medium's wet settings the first time it holds wet paint (oil: thick, barely flows, stays wet long and blends into the wet paint it meets)." },
+    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint loading: 1 never runs out; lower, the brush runs dry along a long stroke (each stroke reloads).' },
+    thinner: { type: 'number', minimum: 0, maximum: 1, description: 'Thinner (water or solvent): more transparent, runnier paint.' },
     water: { type: 'number', minimum: 0, maximum: 1, description: 'Wetness: water laid per stroke, 0.2 a damp brush .. 1 a dripping one.' },
     pigment: { type: 'number', minimum: 0, maximum: 1, description: 'Pigment concentration: 0 clear water .. 1 straight from the tube.' },
     body: { type: 'number', minimum: 0, maximum: 1, description: 'Body: 0 a transparent watercolour (glazes) .. 1 opaque gouache (hides what is under it).' },
     strength: { type: 'number', minimum: 0, maximum: 1, description: 'Strength of dry, blow, blend, smudge and blot.' },
     rewet: { type: 'number', minimum: 0, maximum: 1, description: 'How much dried paint the water lifts again: 0 none (staining) .. 1.' },
+  },
+  additionalProperties: false,
+} as const;
+
+const IMPASTO_BRUSH = {
+  type: 'object',
+  description: 'Impasto engine settings (thick paint with relief, lit by set_lighting). Missing fields keep their current values.',
+  properties: {
+    tool: {
+      type: 'string',
+      enum: [...IMPASTO_TOOLS],
+      description: 'brush: thick paint with bristle ridges along the stroke; tube: blobs squeezed from the tube; knife: a palette knife that scrapes the relief flat and smears the paint; roller: a flat stippled band; gloop: a thick, glossy, rounded bead.',
+    },
+    thickness: { type: 'number', minimum: 0, maximum: 1, description: 'How far the paint stands up.' },
+    gloss: { type: 'number', minimum: 0, maximum: 1, description: 'Shine: 0 matte .. 1 wet-looking gloss.' },
+    metallic: { type: 'number', minimum: 0, maximum: 1, description: 'Metallic paint: highlights take the paint colour (gold, copper, silver).' },
+    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint loading: 1 never runs out; lower, the stroke thins and fades as the brush empties.' },
+    thinner: { type: 'number', minimum: 0, maximum: 1, description: 'Thinner: flatter, more transparent paint.' },
+    drag: { type: 'number', minimum: 0, maximum: 1, description: 'Knife and brush: how much of the paint under the tool is dragged along.' },
   },
   additionalProperties: false,
 } as const;
@@ -174,7 +198,7 @@ const BRUSH_FIELDS = {
   engine: {
     type: 'string',
     enum: [...PAINT_BRUSH_ENGINES],
-    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke.',
+    description: 'dab: paints dabs (with behavior.pickup or multicolor it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto).',
   },
   tip: TIP,
   grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Multiplied by the paper depth.' },
@@ -187,6 +211,7 @@ const BRUSH_FIELDS = {
   blender: BLENDER,
   smudge: SMUDGE,
   wet: WET_BRUSH,
+  impasto: IMPASTO_BRUSH,
 } as const;
 
 const POINTS = {
@@ -230,7 +255,8 @@ function brushSummary(b: PaintBrush) {
     pickup: b.behavior.pickup,
     dirty: b.behavior.dirty,
     multicolor: b.behavior.multicolor.mode,
-    ...(b.engine === 'wet' ? { wetTool: b.wet.tool } : {}),
+    ...(b.engine === 'wet' ? { wetTool: b.wet.tool, medium: b.wet.medium } : {}),
+    ...(b.engine === 'impasto' ? { impastoTool: b.impasto.tool } : {}),
     builtin: Boolean(b.builtin),
   };
 }
@@ -276,6 +302,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         undo: s.undoLabel,
         redo: s.redoLabel,
         blendModes: BLEND_MODES.map((m) => m.id),
+        wet: s.wet.wet,
+        lighting: c.getLighting(),
       };
     },
   });
@@ -371,10 +399,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         tiling: { type: 'string', enum: ['repeat', 'mirror'], description: 'How the grain tile repeats (mirror hides seams).' },
         shading: { type: 'number', minimum: 0, maximum: 1, description: 'How much the grain shades the paper colour.' },
         dry: { ...tuning, description: 'Height map tuning for dry media.' },
-        wet: { ...tuning, description: 'Height map tuning for wet media (stored for later).' },
-        absorption: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how fast the paper takes water (stored for later).' },
-        permeability: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how far water spreads in the paper (stored for later).' },
-        roughness: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how much the grain catches pigment (stored for later).' },
+        wet: { ...tuning, description: 'Height map tuning for wet media (the grain water and pigment follow).' },
+        absorption: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how fast the paper soaks up water (high: washes stop spreading sooner).' },
+        permeability: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how freely water flows over the fibres (low: more ragged, slower spreading).' },
+        roughness: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how much the grain pins wet edges and catches granulating pigment.' },
+        metallic: { type: 'number', minimum: 0, maximum: 1, description: 'Metallic paper (gold or silver leaf, pearlescent card): the grain catches the light (see set_lighting). 0 by default.' },
         name: { type: 'string', minLength: 1, description: 'Display name.' },
       },
       additionalProperties: false,
@@ -751,7 +780,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first). The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet), and impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -991,6 +1020,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
 
   tools.push(...createPaintGuideTools(c));
   tools.push(...createPaintWetTools(c));
+  tools.push(...createPaintThickTools(c));
+  tools.push(...createPaintReplayTools(c));
   tools.push(...createPigmentTools());
 
   return { id: options.id ?? 'paint-editor', namespace: options.namespace, tools };

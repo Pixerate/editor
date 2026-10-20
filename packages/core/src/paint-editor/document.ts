@@ -13,6 +13,7 @@ import { emptySurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
+import type { ThickChannels } from './thick';
 
 export type PaintPixelLayer = RasterPixelLayer;
 export type PaintGroupLayer = RasterGroupLayer<PaintLayer>;
@@ -42,6 +43,19 @@ export interface PaintDocumentState {
   strokes: RecordedStroke[];
   /** Wet-media events other than strokes (drying, tilt, settings), with the clock they happened at. */
   wetEvents?: WetEvent[];
+  /** Changes besides strokes that a replay repeats (fills, clears, flattened relief), in order. */
+  paintEvents?: PaintEvent[];
+  /** Thick paint: each layer's height and material channels (layers without relief are missing). */
+  thick?: Readonly<Record<string, ThickChannels>>;
+}
+
+/** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
+export interface PaintEvent {
+  at: number;
+  kind: 'fill' | 'clear' | 'flatten';
+  layerId: string;
+  /** The fill's options (colour, opacity, grain, pressure, blend). */
+  data?: Record<string, unknown>;
 }
 
 let nextId = 1;

@@ -584,6 +584,11 @@ const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
  * Strokes, fills and replays have no target: the paint director's cursor paints them on the canvas
  * itself. Panel steps open the panel the change shows in.
  */
+/** Points around a circle (for petals and rings). */
+function ring(cx: number, cy: number, r: number, n = 48) {
+  return Array.from({ length: n + 1 }, (_, i) => ({ x: Math.round(cx + r * Math.cos((i / n) * Math.PI * 2)), y: Math.round(cy + r * Math.sin((i / n) * Math.PI * 2)), pressure: 0.9 }));
+}
+
 export const PAINT_SCRIPTS: AgentScript[] = [
   {
     id: "paint-landscape",
@@ -694,6 +699,25 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__set_canvas_tilt", args: { angle: 0 } },
       { tool: "paint__dry_paint", args: {} },
       { say: "Checking the result.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },  {
+    id: "paint-impasto",
+    prompt: "Paint thick oil sunflowers with a palette knife",
+    steps: [
+      { say: "Canvas for oils, lit low from the top left so the brushwork shows.", tool: "paint__set_paper", args: { preset: "cotton-canvas" }, open: "Paper", target: { selector: '[data-testid="light-panel"]' } },
+      { tool: "paint__set_lighting", args: { azimuth: 315, elevation: 28, relief: 0.8 } },
+      { say: "A wet oil ground: wet colours blend where they meet.", tool: "paint__add_layer", args: { name: "Ground" }, as: "ground" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ground.id, brushId: "oil-flat", brush: { tip: { size: 180 } }, color: "#2f6f9f", points: wave(160, 20) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ground.id, brushId: "oil-flat", brush: { tip: { size: 180 } }, color: "#d9b44a", points: wave(330, 20) }) },
+      { say: "Dry the ground before the thick paint goes on.", tool: "paint__dry_paint", args: {} },
+      { say: "Thick petals squeezed from the tube.", tool: "paint__add_layer", args: { name: "Flowers" }, as: "flowers" },
+      {
+        tool: "paint__paint_stroke",
+        args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "paint-tube", brush: { tip: { size: 34 } }, color: "#f4c20d", points: ring(400, 260, 90) }),
+      },
+      { say: "The palette knife drags the petals into ridges.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "palette-knife", points: ring(400, 260, 70) }) },
+      { say: "A glossy, gold-flecked centre.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flowers.id, brushId: "metallic-paint", color: "#7a4a12", points: ring(400, 260, 25) }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
 ];

@@ -42,6 +42,7 @@ import {
   type PaintDocumentState,
   type PaintLayer,
   type PaintPixelLayer,
+  type PaintEvent,
 } from './document';
 import { defaultImageEncoder, type ImageEncoder, type ImageFormat } from './encode';
 import type { PenPoint } from './engine';
@@ -82,6 +83,8 @@ import { normalizeWetParams, normalizeTilt, type WetParams, type WetTilt } from 
 import { normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { MAX_WET_LANES, type WetBackendInfo, type WetSnapshot } from '../paint/wet/world';
 import { wetSupport } from '../paint/wet/wasm';
+import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
+import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
 export class PaintEditorError extends Error {
@@ -119,6 +122,8 @@ export interface PaintWetStateInfo {
   paused: boolean;
   /** The water overlay is shown. */
   overlay: boolean;
+  /** Wet strokes dry as soon as they end. */
+  instantDry: boolean;
   /** Steps per second while time runs. */
   speed: number;
   /** Simulation steps so far. */
@@ -335,6 +340,12 @@ export class PaintEditorController {
   private readonly exportCompositor = createPaintCompositor();
   /** Wet media: the simulation, its settings and time. */
   readonly wet: PaintWetLayers;
+  private readonly wetOptions: PaintWetOptions | undefined;
+  /** Where the light comes from for thick paint (saved with the document, not undo steps). */
+  private lighting: PaintLighting = { ...DEFAULT_LIGHTING };
+  private readonly litCaches = new Map<string, LitCache>();
+  /** The live impasto stroke's channels. */
+  private liveThick: { layerId: string; channels: ThickChannels } | null = null;
   /** Set while an operation that changes wet paint runs: the simulation before it (for undo). */
   private wetOp: { before: WetSnapshot | null } | null = null;
 
@@ -348,6 +359,7 @@ export class PaintEditorController {
     this.hand = options.hand === 'left' ? 'left' : 'right';
     this.encodeImage = options.encodeImage;
     this.guides = defaultGuides(this.doc.canvas);
+    this.wetOptions = options.wet;
     this.wet = new PaintWetLayers(
       {
         canvas: () => this.doc.canvas,
@@ -413,6 +425,7 @@ export class PaintEditorController {
         wet: this.wet.isWet(),
         paused: this.wet.paused,
         overlay: this.wet.overlay,
+        instantDry: this.wet.instantDry,
         speed: this.wet.speed,
         clock: this.wet.world?.clock ?? 0,
         tilt: { ...this.wet.tilt },
@@ -500,7 +513,12 @@ export class PaintEditorController {
   private pendingWetEvents: WetEvent[] = [];
 
   private logWet(e: Omit<WetEvent, 'clock'>): void {
-    this.pendingWetEvents.push({ clock: this.wet.world?.clock ?? 0, ...e });
+    this.pendingWetEvents.push({ clock: this.wet.world?.clock ?? 0, at: this.doc.strokes.length, ...e });
+  }
+
+  /** The document with a paint event appended (for replays). */
+  private withPaintEvent(doc: PaintDocumentState, e: Omit<PaintEvent, 'at'>): PaintDocumentState {
+    return { ...doc, paintEvents: [...(doc.paintEvents ?? []), { at: doc.strokes.length, ...e }] };
   }
 
   /** The document with the pending wet events appended. */
@@ -752,7 +770,7 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active });
+    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)) });
     return { removed: id, activeLayerId: active };
   }
 
@@ -764,10 +782,15 @@ export class PaintEditorController {
     }
     const loc = findLayer(this.doc.layers, id);
     if (!loc) throw new PaintEditorError(`Unknown layer "${id}". Call list_layers for the ids.`);
-    const copy = (l: PaintLayer): PaintLayer => (l.type === 'group' ? { ...l, id: newPaintLayerId(), children: l.children.map(copy) } : { ...l, id: newPaintLayerId() });
+    const thick: Record<string, ThickChannels> = { ...(this.doc.thick ?? {}) };
+    const copy = (l: PaintLayer): PaintLayer => {
+      const id = newPaintLayerId();
+      if (thick[l.id]) thick[id] = thick[l.id];
+      return l.type === 'group' ? { ...l, id, children: l.children.map(copy) } : { ...l, id };
+    };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id }));
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}) }));
     return this.describeLayer(dup);
   }
 
@@ -809,12 +832,14 @@ export class PaintEditorController {
     let surface = emptySurface(4);
     if (rect) {
       const base: PaintPixelLayer = { ...below, opacity: 1, blend: 'normal', visible: true, clipped: undefined, mask: undefined };
-      const px = createPaintCompositor().composite([base, upper.visible ? upper : { ...upper, opacity: 0 }] as ViewLayer[], rect, this.sources());
+      // Thick paint on the upper layer merges as it is lit (its relief does not carry over).
+      const upperLit = this.litLayers([upper])[0] as PaintPixelLayer;
+      const px = createPaintCompositor().composite([base, upper.visible ? upperLit : { ...upperLit, opacity: 0 }] as ViewLayer[], rect, this.sources());
       surface = surfaceFromPixels({ width: rect.width, height: rect.height, data: px }, 4, rect.x, rect.y);
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id }));
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]) }));
     return this.describeLayer(merged);
   }
 
@@ -827,7 +852,7 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })) });
+    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
     return { layerId: l.id, bounds };
   }
 
@@ -870,7 +895,7 @@ export class PaintEditorController {
       offset: l.offset,
     };
     const surface = this.applyCoverage(l, coverage, rect, apply);
-    this.commit('Fill layer', this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }));
+    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
     return { layerId: l.id, bounds: rect };
   }
 
@@ -1119,7 +1144,7 @@ export class PaintEditorController {
         throw new PaintEditorError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one first (dry_paint).`);
       }
       this.beginWetOp();
-      const world = this.wet.ensureLane(layer.id);
+      const world = this.wet.ensureLane(layer.id, brush.wet.medium);
       const id = layer.id;
       const [r, g, b] = hexToRgb8(init.color === undefined ? this.color : parseColor(init.color));
       const load = init.load ?? brushLoadForStroke(brush, this.mixerLoad, [r / 255, g / 255, b / 255]);
@@ -1171,6 +1196,7 @@ export class PaintEditorController {
       mixerLoad: init.load ?? brushLoadForStroke(brush, this.mixerLoad, [rgba[0] / 255, rgba[1] / 255, rgba[2] / 255]),
       secondary: rgbaOf(this.secondaryColor),
       wet,
+      thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
     });
     if (wet) this.wet.driver = wet.driver;
     return session;
@@ -1207,12 +1233,15 @@ export class PaintEditorController {
           return;
         }
         this.live = { layerId, surface };
+        const ch = this.session?.thickChannels();
+        this.liveThick = ch ? { layerId, channels: ch } : null;
         this.emit(rects);
       },
       commit: (s, surface, cancelled) => {
         this.session = null;
         this.live = null;
         this.liveLayers = null;
+        this.liveThick = null;
         const wetStroke = Boolean(s.init.wet);
         if (wetStroke) this.wet.driver = null;
         const brush = s.init.brush;
@@ -1232,8 +1261,16 @@ export class PaintEditorController {
         }
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
+        if (wetStroke && this.wet.instantDry) {
+          this.wet.dry(s.layerId);
+          this.logWet({ kind: 'dry', layerId: s.layerId, at: this.doc.strokes.length + 1 });
+          surface = (this.getLayer(s.layerId) as PaintPixelLayer).surface;
+          s.result!.wet = this.wet.isWet(s.layerId);
+        }
         const l = this.getLayer(s.layerId) as PaintPixelLayer;
-        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke] }), wetStroke ? before : this.doc);
+        const ch = s.thickChannels();
+        const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
+        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}) }), wetStroke ? before : this.doc);
       },
     };
     let session: PaintStrokeSession;
@@ -1264,7 +1301,8 @@ export class PaintEditorController {
         s.result!.strokeId = stroke.id;
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
-        out = { ...out, layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })), strokes: [...out.strokes, stroke] };
+        const ch = s.thickChannels();
+        out = { ...out, layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })), strokes: [...out.strokes, stroke], ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}) };
       },
     };
     const session = this.sessionFor(doc, init, host);
@@ -1272,6 +1310,12 @@ export class PaintEditorController {
     const result = session.end();
     if (session.init.wet) {
       this.wet.driver = null;
+      if (this.wet.instantDry && result.strokeId) {
+        this.wet.dry(session.layerId);
+        this.logWet({ kind: 'dry', layerId: session.layerId, at: out.strokes.length });
+        const dried = (findLayer(this.doc.layers, session.layerId)!.layer as PaintPixelLayer).surface;
+        out = { ...out, layers: mapLayer(out.layers, session.layerId, (l) => ({ ...(l as PaintPixelLayer), surface: dried })) };
+      }
       result.wet = this.wet.isWet(session.layerId);
     }
     return { doc: out, result, brush: session.init.brush };
@@ -1368,6 +1412,108 @@ export class PaintEditorController {
     }
     if (doc !== this.doc) this.commit(strokes.length === 1 && repeat === 1 ? 'Replay stroke' : 'Replay strokes', doc);
     return { strokeIds: ids, bounds, layerIds: [...layerIds] };
+  }
+
+  // --- Thick paint and light -------------------------------------------------------
+
+  /** The document's `thick` without these layers (as a spread: `{}` when unchanged). */
+  private thickWithout(ids: readonly string[]): { thick?: Record<string, ThickChannels> } {
+    const t = this.doc.thick;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { thick: out };
+  }
+
+  /** Where the light comes from for thick paint and metallic paper. */
+  getLighting(): PaintLighting {
+    return { ...this.lighting };
+  }
+
+  /** Moves the light (thick paint and metallic paper are relit; nothing is repainted). Saved with the document, not an undo step. */
+  setLighting(update: Partial<PaintLighting>): PaintLighting {
+    if (update.elevation !== undefined && !(update.elevation >= 5 && update.elevation <= 90)) throw new PaintEditorError(`elevation ${update.elevation} is out of range; use 5..90 degrees.`);
+    if (update.relief !== undefined && !(update.relief >= 0 && update.relief <= 1)) throw new PaintEditorError(`relief ${update.relief} is out of range; use 0..1.`);
+    this.lighting = normalizeLighting(update, this.lighting);
+    this.emit('all');
+    return { ...this.lighting };
+  }
+
+  /** A layer's relief: where it is, its highest point (0..255) and its tiles; `null` when it has none. */
+  reliefOf(layerId?: string): { layerId: string; bounds: RasterRect | null; maxHeight: number } | null {
+    const id = layerId ?? this.doc.activeLayerId;
+    if (!id) return null;
+    this.requireLayer(id);
+    const ch = this.doc.thick?.[id];
+    if (!ch) return null;
+    const r = reliefInfo(ch);
+    return { layerId: id, bounds: r.bounds, maxHeight: r.maxHeight };
+  }
+
+  /** Flattens a layer's thick paint (its colour stays; the relief and material go). One undo step. */
+  flattenRelief(layerId?: string): { layerId: string; flattened: boolean } {
+    this.requireIdle('flattening');
+    const l = this.paintTarget(layerId, 'flatten');
+    const t = this.thickWithout([l.id]);
+    if (!t.thick) return { layerId: l.id, flattened: false };
+    this.commit('Flatten relief', this.withPaintEvent({ ...this.doc, ...t }, { kind: 'flatten', layerId: l.id }));
+    return { layerId: l.id, flattened: true };
+  }
+
+  // --- Replay: time-lapse and high-resolution export ------------------------------
+
+  /**
+   * A fresh, headless editor for replaying this painting at `scale` (canvas, dpi and paper grain
+   * scaled; every pixel layer empty; the same brushes, lighting and wet options). Dispose of it
+   * when done.
+   */
+  createReplayTarget(scale = 1): PaintEditorController {
+    if (!(scale >= 1 && scale <= 8)) throw new PaintEditorError(`scale ${scale} is out of range; use 1..8.`);
+    const { width, height, dpi } = this.doc.canvas;
+    const w = Math.round(width * scale);
+    const h = Math.round(height * scale);
+    if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
+    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushes: this.userBrushes, wet: this.wetOptions });
+    const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
+    target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
+    target.lighting = { ...this.lighting };
+    return target;
+  }
+
+  /**
+   * Repaints the painting from its recorded strokes and events, as a time-lapse: PNG frames (after
+   * strokes, and while wet paint flows), a `VideoProject` of the frames as stills and the ffmpeg
+   * command that renders it (the video editor's export path). Changes nothing here.
+   */
+  async timeLapse(options: TimeLapseOptions = {}): Promise<TimeLapse> {
+    const target = this.createReplayTarget(1);
+    try {
+      return await buildTimeLapse(this.doc, target, options);
+    } finally {
+      target.dispose();
+    }
+  }
+
+  /**
+   * The painting repainted from its recorded strokes at `scale` times the size (brush sizes,
+   * paper grain, fills and wet events scaled), wet paint dried: more detail instead of upscaled
+   * pixels. Layers painted without recorded strokes (imported pixels) come out empty. Changes nothing here.
+   */
+  /** `renderHighRes` as PNG bytes. */
+  async exportHighResPng(options: { scale: number; paper?: boolean }): Promise<Uint8Array> {
+    const img = await this.renderHighRes(options);
+    return encodePng(img.width, img.height, img.data);
+  }
+
+  async renderHighRes(options: { scale: number; paper?: boolean }): Promise<PixelImage> {
+    const target = this.createReplayTarget(options.scale);
+    try {
+      await replayPainting(this.doc, target, { scale: options.scale });
+      await target.wetIdle();
+      return target.compositePixels({ paper: options.paper, wet: 'dried' });
+    } finally {
+      target.dispose();
+    }
   }
 
   // --- Wet media -----------------------------------------------------------------
@@ -1482,7 +1628,7 @@ export class PaintEditorController {
 
   /** Records a settings change as a wet event (not an undo step). */
   private recordWetSetting(e: Omit<WetEvent, 'clock'>): void {
-    this.doc = { ...this.doc, wetEvents: [...(this.doc.wetEvents ?? []), { clock: this.wet.world?.clock ?? 0, ...e }] };
+    this.doc = { ...this.doc, wetEvents: [...(this.doc.wetEvents ?? []), { clock: this.wet.world?.clock ?? 0, at: this.doc.strokes.length, ...e }] };
   }
 
   /** Changes a layer's wet settings (viscosity, evaporation, granulation…). Editor settings saved with the document, not an undo step. */
@@ -1528,6 +1674,13 @@ export class PaintEditorController {
     this.wet.speed = speed;
     this.emit([]);
     return speed;
+  }
+
+  /** Wet strokes dry as soon as they end (each stroke still one undo step). Editor state. */
+  setInstantDry(on: boolean): boolean {
+    this.wet.instantDry = on;
+    this.emit([]);
+    return on;
   }
 
   /** Shows or hides the water overlay (where the water is, view only). */
@@ -1591,14 +1744,33 @@ export class PaintEditorController {
     return out;
   }
 
+  /** The layers with thick paint lit (each thick layer's pixels replaced by its lit tiles). */
+  private litLayers(layers: PaintLayer[]): PaintLayer[] {
+    const thick = this.doc.thick;
+    const live = this.liveThick;
+    if (!thick && !live) return layers;
+    let out = layers;
+    const ids = new Set([...Object.keys(thick ?? {}), ...(live ? [live.layerId] : [])]);
+    for (const id of ids) {
+      const ch = live?.layerId === id ? live.channels : thick?.[id];
+      const l = ch && findLayer(out, id)?.layer;
+      if (!ch || !isPixelLayer(l)) continue;
+      let cache = this.litCaches.get(id);
+      if (!cache) this.litCaches.set(id, (cache = new LitCache()));
+      const lit = cache.lit(l.surface, ch, this.lighting);
+      if (lit !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: lit }));
+    }
+    return out;
+  }
+
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    let layers: PaintLayer[] = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
+    let layers: PaintLayer[] = this.litLayers((options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers());
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
       layers = picked.map((l) => ({ ...l, visible: true }) as PaintLayer);
     }
-    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(this.doc.paper)];
+    const under: ViewLayer[] = options.paper === false ? [] : [paperNode(this.doc.paper, this.lighting)];
     if (view) under.push(...this.underlayLayers());
     return [...under, ...layers];
   }
@@ -1666,13 +1838,47 @@ export class PaintEditorController {
     }
   }
 
+  /** Thick paint and light as saved (`layerChannels`, `lighting`), merged into the extensions. */
+  private thickExtensions(): PaintDocumentExtensions {
+    const ext: PaintDocumentExtensions = { ...this.extensions };
+    const channels: Record<string, unknown> = {};
+    for (const [id, ch] of Object.entries(this.doc.thick ?? {})) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const saved = thickToJSON(ch);
+      if (saved) channels[id] = saved;
+    }
+    if (Object.keys(channels).length) ext.layerChannels = channels;
+    else delete ext.layerChannels;
+    if (this.lighting.azimuth !== DEFAULT_LIGHTING.azimuth || this.lighting.elevation !== DEFAULT_LIGHTING.elevation || this.lighting.relief !== DEFAULT_LIGHTING.relief) ext.lighting = { ...this.lighting };
+    else delete ext.lighting;
+    return ext;
+  }
+
+  /** Reads `layerChannels` and `lighting` from loaded extensions into the document. */
+  private readThick(state: PaintDocumentState, ext: PaintDocumentExtensions, problems: string[]): PaintDocumentState {
+    this.lighting = normalizeLighting((ext.lighting as Partial<PaintLighting>) ?? {}, DEFAULT_LIGHTING);
+    this.litCaches.clear();
+    const raw = ext.layerChannels;
+    if (!raw || typeof raw !== 'object') return state;
+    const thick: Record<string, ThickChannels> = {};
+    for (const [id, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (!findLayer(state.layers, id)) continue;
+      try {
+        thick[id] = thickFromJSON(v);
+      } catch (e) {
+        problems.push(`The thick paint of layer "${id}" could not be read (${(e as Error).message}); it loads flat.`);
+      }
+    }
+    return Object.keys(thick).length ? { ...state, thick } : state;
+  }
+
   toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
-    return serializePaintDocument(this.savedState(), { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    return serializePaintDocument(this.savedState(), { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   /** The document as JSON with each PNG stored in `store`. */
   toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
-    return serializePaintDocumentExternal(this.savedState(), store, { strokes: options.strokes, extensions: this.extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    return serializePaintDocumentExternal(this.savedState(), store, { strokes: options.strokes, extensions: this.thickExtensions(), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown; wet?: unknown }): string[] {
@@ -1691,7 +1897,9 @@ export class PaintEditorController {
     }
     this.undoStack = [];
     this.redoStack = [];
-    this.doc = loaded.state;
+    this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
+    delete this.extensions.layerChannels;
+    delete this.extensions.lighting;
     this.viewCompositor.clear();
     this.emit();
     return loaded.problems;
@@ -1755,7 +1963,7 @@ export class PaintEditorController {
    * pixels), and the composite as the merged image.
    */
   exportPsd(): PsdExportResult {
-    const dried = this.driedLayers(this.doc.layers);
+    const dried = this.litLayers(this.driedLayers(this.doc.layers));
     const { width, height, dpi } = this.doc.canvas;
     const paperPixels = this.compositePixels({ layerIds: [], paper: true });
     const paperLayer: PaintPixelLayer = {

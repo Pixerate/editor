@@ -12,6 +12,12 @@
     readPath,
     WET_TOOLS,
     WET_TOOL_LABELS,
+    WET_MEDIA,
+    WET_MEDIUM_LABELS,
+    IMPASTO_TOOLS,
+    IMPASTO_TOOL_LABELS,
+    type ImpastoTool,
+    type WetMediumKind,
     type BlendMode,
     type BrushRotation,
     type WetTool,
@@ -112,6 +118,22 @@
           <span class="text-slate-400">Wet tool</span>
           <select aria-label="Wet tool" value={brush.wet.tool} onchange={(e) => controller.setBrush({ wet: { tool: e.currentTarget.value as WetTool } })} class="rounded bg-slate-800 px-1 py-0.5">
             {#each WET_TOOLS as t (t)}<option value={t}>{WET_TOOL_LABELS[t]}</option>{/each}
+          </select>
+        </label>
+      {/if}
+      {#if engine.wetTool}
+        <label class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Medium</span>
+          <select aria-label="Wet medium" value={brush.wet.medium} onchange={(e) => controller.setBrush({ wet: { medium: e.currentTarget.value as WetMediumKind } })} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each WET_MEDIA as m (m)}<option value={m}>{WET_MEDIUM_LABELS[m]}</option>{/each}
+          </select>
+        </label>
+      {/if}
+      {#if engine.impastoTool}
+        <label class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Tool</span>
+          <select aria-label="Impasto tool" value={brush.impasto.tool} onchange={(e) => controller.setBrush({ impasto: { tool: e.currentTarget.value as ImpastoTool } })} class="rounded bg-slate-800 px-1 py-0.5">
+            {#each IMPASTO_TOOLS as t (t)}<option value={t}>{IMPASTO_TOOL_LABELS[t]}</option>{/each}
           </select>
         </label>
       {/if}

@@ -34,6 +34,7 @@
     <button type="button" class={button} disabled={!wet.layerIds.length} onclick={() => run(async () => (await controller.wetIdle(), controller.dryPaint()))}>Dry now</button>
     <button type="button" class={chip(wet.paused)} aria-pressed={wet.paused} onclick={() => controller.setWetPaused(!wet.paused)}>{wet.paused ? 'Resume' : 'Pause'}</button>
     <button type="button" class={chip(wet.overlay)} aria-pressed={wet.overlay} onclick={() => controller.setWaterOverlay(!wet.overlay)}>Water</button>
+    <button type="button" class={chip(wet.instantDry)} aria-pressed={wet.instantDry} title="Each wet stroke dries as soon as it ends" onclick={() => controller.setInstantDry(!wet.instantDry)}>Instant dry</button>
     <button type="button" class={button} disabled={!layerId} onclick={() => run(async () => (await controller.wetIdle(), controller.wetPaper({})))}>Wet paper</button>
   </div>
   <PaintSlider control={WET_SPEED_SLIDER} value={wet.speed} onchange={(v) => controller.setWetSpeed(v)} />

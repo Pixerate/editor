@@ -429,7 +429,7 @@ describe('PaintEditorController', () => {
     expect(json.format).toBe('pixerate-paint');
     expect(json.version).toBe(1);
     expect(Object.keys(json.assets).length).toBe(2);
-    const text = JSON.stringify({ ...json, layerChannels: { future: true } });
+    const text = JSON.stringify({ ...json, futureField: { future: true } });
     const d = new PaintEditorController();
     expect(d.loadJSON(JSON.parse(text))).toEqual([]);
     expect(d.document.canvas).toEqual({ width: 96, height: 64, dpi: 150 });
@@ -437,7 +437,7 @@ describe('PaintEditorController', () => {
     expect(d.listLayers().map((l) => l.name)).toEqual(c.listLayers().map((l) => l.name));
     expect(d.getStrokes()).toHaveLength(1);
     expect(Buffer.from(d.compositePixels().data).equals(Buffer.from(c.compositePixels().data))).toBe(true);
-    expect((d.toJSON() as Record<string, unknown>).layerChannels).toEqual({ future: true });
+    expect((d.toJSON() as Record<string, unknown>).futureField).toEqual({ future: true });
     expect(d.toJSON({ strokes: false }).strokes).toBeUndefined();
     // Strokes keep counting after a load.
     expect(d.paintStroke({ points: [{ x: 3, y: 3 }] }).strokeId).toBe('s2');

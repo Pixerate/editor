@@ -67,6 +67,8 @@ export interface PaperSettings {
   permeability: number;
   /** Wet media: how much the grain catches pigment, 0..1. */
   roughness: number;
+  /** Metallic paper (gold or silver leaf, pearlescent card): the grain catches the light, 0..1 (default 0). */
+  metallic?: number;
 }
 
 /** Side of the generated grain tile in pixels (at scale 1). */
@@ -163,6 +165,7 @@ export function normalizePaper(raw: Partial<PaperSettings> | Record<string, unkn
     absorption: unit(r.absorption, b.absorption),
     permeability: unit(r.permeability, b.permeability),
     roughness: unit(r.roughness, b.roughness),
+    ...(unit(r.metallic, b.metallic ?? 0) > 0 ? { metallic: unit(r.metallic, b.metallic ?? 0) } : {}),
   };
 }
 
@@ -365,17 +368,48 @@ export function hexToRgb8(hex: string): [number, number, number] {
  * The paper as opaque RGBA over `rect` (document pixels): its colour, darkened in the valleys by
  * `shading`.
  */
-export function renderPaper(paper: PaperSettings, rect: { x: number; y: number; width: number; height: number }, grain = new PaperGrain(paper)): Uint8ClampedArray {
+export function renderPaper(
+  paper: PaperSettings,
+  rect: { x: number; y: number; width: number; height: number },
+  grain = new PaperGrain(paper),
+  light?: { azimuth: number; elevation: number }
+): Uint8ClampedArray {
   const [r, g, b] = hexToRgb8(paper.color);
   const out = new Uint8ClampedArray(rect.width * rect.height * 4);
   const shade = grain.flat ? 0 : paper.shading * 0.16;
+  const metal = light ? (paper.metallic ?? 0) : 0;
+  // Metallic paper: a highlight where the grain's slope faces the half-way vector of the light.
+  let hx = 0;
+  let hy = 0;
+  let hz = 1;
+  if (metal > 0 && light) {
+    const az = (light.azimuth * Math.PI) / 180;
+    const el = (light.elevation * Math.PI) / 180;
+    const lx = Math.cos(el) * Math.sin(az);
+    const ly = -Math.cos(el) * Math.cos(az);
+    const lz = Math.sin(el) + 1;
+    const n = Math.hypot(lx, ly, lz);
+    hx = lx / n;
+    hy = ly / n;
+    hz = lz / n;
+  }
   for (let y = 0; y < rect.height; y++) {
     for (let x = 0; x < rect.width; x++) {
       const i = (y * rect.width + x) * 4;
-      const k = shade ? 1 - shade * (1 - grain.at(rect.x + x + 0.5, rect.y + y + 0.5)) : 1;
-      out[i] = r * k;
-      out[i + 1] = g * k;
-      out[i + 2] = b * k;
+      const px = rect.x + x + 0.5;
+      const py = rect.y + y + 0.5;
+      const k = shade ? 1 - shade * (1 - grain.at(px, py)) : 1;
+      let spec = 0;
+      if (metal > 0) {
+        const gx = (grain.at(px + 1, py) - grain.at(px - 1, py)) * 4;
+        const gy = (grain.at(px, py + 1) - grain.at(px, py - 1)) * 4;
+        const nl = Math.hypot(gx, gy, 1);
+        const nh = Math.max(0, (-gx * hx - gy * hy + hz) / nl);
+        spec = metal * Math.pow(nh, 24) * 0.9;
+      }
+      out[i] = Math.min(255, r * k * (1 - 0.25 * metal) + spec * (r * 0.6 + 102));
+      out[i + 1] = Math.min(255, g * k * (1 - 0.25 * metal) + spec * (g * 0.6 + 102));
+      out[i + 2] = Math.min(255, b * k * (1 - 0.25 * metal) + spec * (b * 0.6 + 102));
       out[i + 3] = 255;
     }
   }
