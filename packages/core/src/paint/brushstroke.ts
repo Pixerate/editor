@@ -17,6 +17,7 @@
 
 import { normalizeBrush, type BrushSettings } from './brush';
 import { paintPathStroke, type PathSample, type PathStrokeOptions } from './path-stroke';
+import { scalePaintGradient, type PaintSource } from './gradient-paint';
 import { emptySurface, readRegion, type RasterRect } from '../raster/surface';
 import { pngDataUrl } from '../raster/png';
 import { BRUSHSTROKE_MAX_SCALE as MAX_SCALE, BRUSHSTROKE_MIN_SCALE as MIN_SCALE } from './brushstroke-scale';
@@ -62,19 +63,21 @@ export type BrushstrokeBrush =
     };
 
 /**
- * What the stroke is painted with. A solid RGBA colour today; when the paint editor's gradient
- * paint (`PaintSource`) lands it is accepted here too, so callers already pass `paint` rather than a
- * bare colour.
+ * What the stroke is painted with: a solid RGBA colour, or a `PaintSource` (one `#rrggbb` colour,
+ * or gradient paint sampled dab by dab along the path: by distance, pressure, tilt, speed,
+ * direction, time, across the tip or at random).
  */
-export type BrushstrokePaint = { color: readonly [number, number, number, number] };
+export type BrushstrokePaint = { color: readonly [number, number, number, number] } | PaintSource;
 
 export interface BrushstrokeOptions {
   /** Image pixels per path unit (default 1). Use {@link brushstrokeScaleBucket} for a zoom. */
   scale?: number;
   /** RGBA 0..255 (default opaque black). Shorthand for `paint: { color }`. */
   color?: readonly [number, number, number, number];
-  /** What to paint with (wins over `color`). */
+  /** What to paint with (wins over `color`; with gradient paint, `color` fills `paint` stops and gives the alpha). */
   paint?: BrushstrokePaint;
+  /** Seed of gradient paint's `random` mapping (default 0). */
+  seed?: number;
   /** Join the last sample back to the first. */
   closed?: boolean;
   /**
@@ -177,7 +180,9 @@ export function renderBrushstroke(input: BrushstrokeInput, brush: BrushstrokeBru
   const strokeOptions = brushstrokeStrokeOptions(brush);
   const samples = brushstrokeSamples(input);
   for (const s of samples) if (!finite(s.x) || !finite(s.y)) throw new Error('Brushstroke samples need finite x and y.');
-  const color = options.paint?.color ?? options.color ?? [0, 0, 0, 255];
+  const solid = options.paint && !('type' in options.paint) ? options.paint.color : null;
+  const source = options.paint && 'type' in options.paint ? options.paint : null;
+  const color = solid ?? options.color ?? [0, 0, 0, 255];
   let scale = finite(options.scale) && options.scale > 0 ? Math.min(MAX_SCALE, Math.max(MIN_SCALE, options.scale)) : 1;
   if (!samples.length) return { image: { width: 0, height: 0, data: new Uint8ClampedArray(0) }, bounds: null, scale, dabs: 0 };
 
@@ -198,6 +203,8 @@ export function renderBrushstroke(input: BrushstrokeInput, brush: BrushstrokeBru
     brush: { ...tip, size: tip.size * scale },
     closed: options.closed ?? strokeOptions.closed,
     color,
+    // Gradient lengths are in path units: scale them with the image.
+    ...(source ? { paint: { paint: source.type === 'gradient' ? scalePaintGradient(source, scale) : source, seed: options.seed ?? 0 } } : {}),
   });
   if (!bounds) return { image: { width: 0, height: 0, data: new Uint8ClampedArray(0) }, bounds: null, scale, dabs };
   const rect: RasterRect = bounds;
@@ -257,7 +264,7 @@ function hashString(s: string, h = 0x811c9dc5): number {
 export function brushstrokeKey(input: BrushstrokeInput, brush: BrushstrokeBrush, options: BrushstrokeOptions = {}): string {
   const path = JSON.stringify(input);
   const { brush: tip, ...rest } = brushstrokeStrokeOptions(brush);
-  const rest2 = JSON.stringify([tip, rest, options.paint?.color ?? options.color ?? null, options.closed ?? false, options.maxPixels ?? null]);
+  const rest2 = JSON.stringify([tip, rest, options.paint ?? options.color ?? null, options.seed ?? 0, options.closed ?? false, options.maxPixels ?? null]);
   const scale = finite(options.scale) ? options.scale : 1;
   return `${hashString(path).toString(16)}:${path.length}:${hashString(rest2).toString(16)}:${scale}`;
 }

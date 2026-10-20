@@ -119,3 +119,49 @@ describe('brushstroke scale buckets and cache', () => {
     expect(cache.misses).toBe(3);
   });
 });
+
+describe('brushstrokes with gradient paint (PaintSource)', () => {
+  const line = Array.from({ length: 11 }, (_, i) => ({ x: 10 + i * 30, y: 40, t: i * 20 }));
+  const at = (s: ReturnType<typeof renderBrushstroke>, x: number, y: number) => {
+    const px = Math.round((x - s.bounds!.x) * s.scale);
+    const py = Math.round((y - s.bounds!.y) * s.scale);
+    const i = (py * s.image.width + px) * 4;
+    return [...s.image.data.subarray(i, i + 4)];
+  };
+  const blueToYellow = { type: 'gradient' as const, stops: [{ offset: 0, color: '#0000ff' }, { offset: 1, color: '#ffff00' }], space: 'srgb' as const, map: { by: 'distance' as const, length: 300, repeat: 'clamp' as const, unit: 'px' as const } };
+
+  it('samples a distance gradient dab by dab along the path, the same at any scale', () => {
+    const one = renderBrushstroke(line, { size: 12, hardness: 1 }, { paint: blueToYellow });
+    const start = at(one, 12, 40);
+    const end = at(one, 308, 40);
+    expect(start[2]).toBeGreaterThan(200);
+    expect(start[0]).toBeLessThan(40);
+    expect(end[0]).toBeGreaterThan(200);
+    expect(end[2]).toBeLessThan(40);
+    const two = renderBrushstroke(line, { size: 12, hardness: 1 }, { paint: blueToYellow, scale: 2 });
+    const mid1 = at(one, 160, 40);
+    const mid2 = at(two, 160, 40);
+    for (let c = 0; c < 3; c++) expect(Math.abs(mid1[c] - mid2[c])).toBeLessThan(16);
+    expect(Buffer.from(one.image.data).equals(Buffer.from(renderBrushstroke(line, { size: 12, hardness: 1 }, { paint: blueToYellow }).image.data))).toBe(true);
+  });
+
+  it('takes a colour source, maps by pressure, and paints across the tip', () => {
+    expect(at(renderBrushstroke(line, { size: 12 }, { paint: { type: 'color', color: '#ff0000' } }), 160, 40)).toEqual([255, 0, 0, 255]);
+    const byPressure = renderBrushstroke(
+      line.map((s, i) => ({ ...s, pressure: i < 5 ? 0.05 : 1 })),
+      { size: 12, pressureSize: false },
+      { paint: { ...blueToYellow, map: { by: 'pressure' } } }
+    );
+    expect(at(byPressure, 40, 40)[2]).toBeGreaterThan(200);
+    expect(at(byPressure, 280, 40)[0]).toBeGreaterThan(200);
+    const across = renderBrushstroke(line, { size: 20, hardness: 1 }, { paint: { ...blueToYellow, map: { by: 'across-tip' } } });
+    const top = at(across, 160, 33);
+    const bottom = at(across, 160, 47);
+    expect(top[2]).not.toBe(bottom[2]);
+  });
+
+  it('keys the cache by paint and seed', () => {
+    expect(brushstrokeKey(line, { size: 4 }, { paint: blueToYellow })).not.toBe(brushstrokeKey(line, { size: 4 }, { paint: { ...blueToYellow, space: 'pigment' } }));
+    expect(brushstrokeKey(line, { size: 4 }, { paint: blueToYellow, seed: 1 })).not.toBe(brushstrokeKey(line, { size: 4 }, { paint: blueToYellow, seed: 2 }));
+  });
+});

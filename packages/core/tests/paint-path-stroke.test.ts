@@ -33,3 +33,16 @@ describe('brushstrokes along a path', () => {
     expect(readPixel(erased.surface, 20 + 15 * 8, Math.round(100 + Math.sin(3) * 30))[3]).toBe(0);
   });
 });
+
+describe('path stroke dab params (gradient paint)', () => {
+  it('records travel, index, pressure, direction and time per dab', () => {
+    const dabs = pathStrokeDabs([{ x: 0, y: 0, t: 0, pressure: 0.5 }, { x: 100, y: 0, t: 50, pressure: 1 }], { brush: { size: 10, spacing: 0.5 } });
+    expect(dabs[0].params).toMatchObject({ travel: 0, index: 0, pressure: 0.5, time: 0 });
+    const last = dabs.at(-1)!.params!;
+    expect(last.index).toBe(dabs.length - 1);
+    expect(last.travel).toBeGreaterThan(90);
+    expect(last.speed).toBeCloseTo(2, 5);
+    expect(last.direction).toBeCloseTo(0, 5);
+    expect(last.time).toBeGreaterThan(40);
+  });
+});
