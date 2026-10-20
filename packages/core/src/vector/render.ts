@@ -1834,8 +1834,11 @@ export interface VectorAppearancePanelLayer {
 	strokeAlign?: VectorStrokeAlign;
 	/** A stroke of a kind this version cannot draw (kept, shown read-only). */
 	unknownKind?: string;
-	/** A brushstroke layer: its brush (id, name) and size (document units). */
-	brushstroke?: { brushId: string; name: string; size: number };
+	/**
+	 * A brushstroke layer: its brush (id, name), size (document units), character `seed` (none:
+	 * plain dabs) and whether it catches paper grain (a seed and a paper that is not `null`).
+	 */
+	brushstroke?: { brushId: string; name: string; size: number; seed?: number; grain: boolean };
 	/** The gradient editor and tool work on this layer. */
 	editing: boolean;
 }
@@ -1905,7 +1908,7 @@ export function getVectorAppearancePanel(state: Pick<VectorEditorState, 'documen
 			? (() => {
 					const b = (l as VectorStrokeLayer).brush!;
 					const preset = vectorBrushstrokeBrush(b.brushId)!;
-					return { brushstroke: { brushId: b.brushId, name: preset.name, size: b.size ?? preset.tip.size } };
+					return { brushstroke: { brushId: b.brushId, name: preset.name, size: b.size ?? preset.tip.size, ...(b.seed !== undefined ? { seed: b.seed } : {}), grain: b.seed !== undefined && b.paper !== null } };
 				})()
 			: (l.kind ?? 'paint') !== 'paint'
 				? { unknownKind: String(l.kind) }

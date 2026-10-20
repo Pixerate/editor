@@ -1,4 +1,4 @@
-import { sanitizeVectorBrushstroke, vectorBrushstrokeBrush, vectorBrushstrokeBrushes } from './brushstroke.js';
+import { sanitizeVectorBrushstroke, vectorBrushstrokeBrush, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
 import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, stylizeVectorImage, type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
 import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
@@ -313,7 +313,8 @@ import type {
 	VectorConstraintKind,
 	VectorGeomRef,
 	VectorParameter,
-	VectorBrushstroke
+	VectorBrushstroke,
+	VectorBrushstrokePaper
 } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -3033,12 +3034,15 @@ export class VectorEditorController {
 	 * brush `brushId` from the paint editor's library (`vectorBrushstrokeBrushes`), `size` document
 	 * units across (default the brush's own), an optional `pressure` profile along the length, in
 	 * `color` (default the top stroke's paint, else black) at `opacity`. At the top of the stroke
-	 * stack or at `index`. One undo step.
+	 * stack or at `index`. A `seed` gives it the brush's character (jitter and the grain of `paper`,
+	 * `null` for none); without one it renders plain. One undo step.
 	 */
 	addBrushstroke(brush: VectorBrushstroke, options: { ids?: readonly string[]; index?: number; color?: string; opacity?: number } = {}): VectorActionResult {
 		const clean = sanitizeVectorBrushstroke(brush);
 		if (!clean) return { ok: false, message: `Unknown brush "${brush?.brushId}": use one of ${vectorBrushstrokeBrushes().map((b) => b.id).join(', ')}.` };
 		if (brush.size !== undefined && !(brush.size > 0 && brush.size <= 500)) return { ok: false, message: 'size must be above 0 and at most 500 (document units).' };
+		const characterError = vectorBrushstrokeCharacterError(brush);
+		if (characterError) return { ok: false, message: characterError };
 		if (options.color !== undefined && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
 		if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
 		return this.editStacks('stroke', options.ids, 'Add Brushstroke', (stack, path) => {
@@ -3052,15 +3056,22 @@ export class VectorEditorController {
 
 	/**
 	 * Changes brushstroke layer `index` (in the stroke stack, 0 is the bottom) of the selected (or
-	 * given) paths: another brush, size, pressure profile (null removes it), colour or opacity.
-	 * Fails, changing nothing, when that layer is not a brushstroke. With `merge`, consecutive edits
-	 * fold into one undo step.
+	 * given) paths: another brush, size, pressure profile (null removes it), colour or opacity, the
+	 * character `seed` (null removes it: plain dabs) or the `paper` (replaced whole: `null` for no
+	 * grain, `{}` for the default paper). Fails, changing nothing, when that layer is not a
+	 * brushstroke. With `merge`, consecutive edits fold into one undo step.
 	 */
-	setBrushstroke(index: number, patch: { brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; opacity?: number }, options: { ids?: readonly string[]; merge?: boolean | string } = {}): VectorActionResult {
+	setBrushstroke(
+		index: number,
+		patch: { brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null },
+		options: { ids?: readonly string[]; merge?: boolean | string } = {}
+	): VectorActionResult {
 		if (patch.brushId !== undefined && !vectorBrushstrokeBrush(patch.brushId)) return { ok: false, message: `Unknown brush "${patch.brushId}": use one of ${vectorBrushstrokeBrushes().map((b) => b.id).join(', ')}.` };
 		if (patch.size !== undefined && patch.size !== null && !(patch.size > 0 && patch.size <= 500)) return { ok: false, message: 'size must be above 0 and at most 500 (document units).' };
 		if (patch.color !== undefined && !parseVectorColor(patch.color)) return { ok: false, message: `"${patch.color}" is not a colour.` };
 		if (patch.opacity !== undefined && !(patch.opacity >= 0 && patch.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
+		const characterError = vectorBrushstrokeCharacterError({ ...(patch.seed !== null && patch.seed !== undefined ? { seed: patch.seed } : {}), ...(patch.paper !== undefined ? { paper: patch.paper } : {}) });
+		if (characterError) return { ok: false, message: characterError };
 		const merge = options.merge === true ? `brushstroke:${index}` : options.merge || undefined;
 		return this.editStacks(
 			'stroke',
@@ -3074,6 +3085,9 @@ export class VectorEditorController {
 				else if (patch.size !== undefined) brush.size = patch.size;
 				if (patch.pressure === null) delete brush.pressure;
 				else if (patch.pressure !== undefined) brush.pressure = patch.pressure;
+				if (patch.seed === null) delete brush.seed;
+				else if (patch.seed !== undefined) brush.seed = patch.seed;
+				if (patch.paper !== undefined) brush.paper = patch.paper;
 				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush) ?? layer.brush, ...(patch.color ? { paint: patch.color } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
 				return stack.map((l, i) => (i === index ? next : l));
 			},

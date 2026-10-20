@@ -400,21 +400,24 @@ A document's pages are its top-level frames in order, numbered from 1 (`vectorPa
 
 A stroke layer of kind `brushstroke` paints its path with a natural-media brush from the paint editor's library (pencils, pastels, charcoal, markers, inks: the dry dab-engine brushes, `vectorBrushstrokeBrushes()`) instead of a geometric line.
 
-- **Layer.** `{ kind: 'brushstroke', paint, brush: { brushId, size?, pressure? } }`.
+- **Layer.** `{ kind: 'brushstroke', paint, brush: { brushId, size?, pressure?, seed?, paper? } }`.
   - The paint gives the colour (a gradient gives its middle colour).
   - `size` is the brush diameter in document units (default the brush's own).
   - `pressure` is a profile of values 0–1 spread evenly from the start to the end of the path, so `[0.2, 1, 0.2]` tapers both ends.
-- **Rendering.** The path stays the data and the pixels are a cache. Each subpath is flattened and rendered by the shared brushstroke renderer (`renderBrushstroke` through a `BrushstrokeCache`, the one the canvas uses for brushed freehand strokes) at `VECTOR_BRUSHSTROKE_SCALE` pixels per unit. `vectorBrushstrokeImages(path, layer)` returns the images, each a PNG data URL with its box in path units.
+  - `seed` (an integer 0–2147483647) turns on the brush's character: seeded size, angle, opacity and scatter jitter, and the grain of `paper`. The same seed always renders the same bytes.
+  - `paper` is `{ pattern?, seed?, scale?, depth? }` (a `GrainPattern`, default `sanded`; grain seed, default 1; scale 0.25–8, default 1; depth 0–1, default 0.5, times the brush's own grain response), or `null` for jitter without grain. It applies only with a `seed`.
+  - A layer without a seed renders plain dabs, byte for byte as before the character option, so older documents keep their look.
+- **Rendering.** The path stays the data and the pixels are a cache. Each subpath is flattened and rendered by the shared brushstroke renderer (`renderBrushstroke` through a `BrushstrokeCache`, the one the canvas uses for brushed freehand strokes) at `VECTOR_BRUSHSTROKE_SCALE` pixels per unit. A seeded layer passes `character: { seed, paper, origin: { x: 0, y: 0 }, unit: 1 }`, so the grain sits in the path's own space and moves with it. `vectorBrushstrokeImages(path, layer)` returns the images, each a PNG data URL with its box in path units.
 - **Drawing.** In the scene render data a brushstroke is a paint layer of kind `brushstroke` with `images`; both canvases draw them as `<image>` elements.
   - SVG export writes the images, and the layer data round-trips through `data-vector-strokes`.
   - PDF export embeds them as image objects with an alpha soft mask.
   - Lottie leaves them out, with a note.
   - The painted box grows by half the brush size.
 - **Editing.**
-  - `addBrushstroke({ brushId, size, pressure }, { ids, index, color, opacity })` and `setBrushstroke(index, patch, { ids })` are one undo step each.
-  - The appearance panel's stroke list shows brushstroke rows (visibility, colour, brush, size, remove) and an add-brushstroke button.
+  - `addBrushstroke({ brushId, size, pressure, seed, paper }, { ids, index, color, opacity })` and `setBrushstroke(index, patch, { ids })` are one undo step each. In a `setBrushstroke` patch, `seed: null` removes the seed and `paper` replaces the paper whole (`null`: no grain, `{}`: the default paper). Bad seeds and papers are refused with what is wrong (`vectorBrushstrokeCharacterError`).
+  - The appearance panel's stroke list shows brushstroke rows (visibility, colour, brush, size, a grain toggle, remove) and an add-brushstroke button. Layers added from the panel get a random seed (`randomVectorBrushstrokeSeed()`). The grain toggle sets `paper: null` or the default paper, and gives a seedless layer a seed. `getVectorAppearancePanel` reports each brushstroke's `seed` and `grain`.
   - Agents use `vector.listBrushes`, `vector.addBrushstroke` and `vector.setBrushstroke`, and remove a brushstroke with `vector.removeStroke`.
-- **Limits.** Only dry brushes render: wet, mixer and smudge brushes need paint under them. There is no paper grain.
+- **Limits.** Only dry brushes render: wet, mixer and smudge brushes need paint under them. The grain sits in each path's own space, so two overlapping paths do not share one sheet of paper.
 
 ## Distort and envelopes
 

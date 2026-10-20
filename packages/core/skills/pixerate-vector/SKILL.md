@@ -416,8 +416,10 @@ contents whole while you work, without losing the mask.
 | Command | Use it to |
 | --- | --- |
 | `vector.listBrushes` | List the natural-media brushes (pencils, pastels, charcoal, markers, inks) with their sizes. |
-| `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`): sketchy, hand-drawn or inked lines that stay editable. Returns the stroke stacks. |
-| `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush, size, pressure, colour, opacity. Remove it with `vector.removeStroke`. |
+| `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`): sketchy, hand-drawn or inked lines that stay editable. Pass a `seed` (any integer) so the brush gets its character, the seeded jitter and paper grain that make pencil, pastel and charcoal look real; `paper` picks the grain (`{ pattern, seed, scale, depth }`) or `null` turns it off. Returns the stroke stacks. |
+| `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush, size, pressure, colour, opacity, `seed` (a new seed is a new take on the same stroke; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default sanded paper). Remove it with `vector.removeStroke`. |
+
+Give brushstrokes a `seed` unless you want flat, even dabs: without one a charcoal or pastel line looks like a felt pen. Use different seeds on neighbouring strokes so they do not repeat each other, and `paper: null` for clean ink or marker lines that should not catch grain. The grain is laid in each path's own space, so it moves with the path.
 
 ### Editor settings
 
