@@ -55,7 +55,10 @@
 
   const store = vectorStateOf(() => controller);
   const view = $derived(store.current);
-  const scene = $derived(getVectorSceneRenderData(view, { idPrefix }));
+  // The canvas size, so the scene leaves out what is off screen and simplifies what is tiny.
+  let size: { width: number; height: number } | null = $state(null);
+  const scene = $derived(getVectorSceneRenderData(view, { idPrefix, ...(size ? { viewportSize: size } : {}) }));
+
   const overlay = $derived(getVectorOverlayRenderData(view));
   // Isolation mode: the rest of the document, dimmed behind the symbol's art.
   const host = $derived(getVectorSymbolEditBackground(view, { idPrefix: `${idPrefix}host-` }));
@@ -67,6 +70,19 @@
   const as = THEME.anchorSize;
 
   let svg: SVGSVGElement | undefined = $state();
+  $effect(() => {
+    const el = svg;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const now = untrack(() => size);
+      if (r.width > 0 && r.height > 0 && (!now || now.width !== r.width || now.height !== r.height)) size = { width: r.width, height: r.height };
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  });
   let textInput: HTMLTextAreaElement | undefined = $state();
   const editingText = $derived(view.textEdit?.nodeId ?? null);
 

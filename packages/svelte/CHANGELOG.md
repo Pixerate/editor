@@ -1,5 +1,29 @@
 # @pixerate/editor-svelte
 
+## 0.85.2
+
+### Patch Changes
+
+- 7f8d2f4: Faster vector rendering.
+
+  - **Reuse:** `getVectorSceneRenderData` reuses render data for nodes an edit did not touch.
+  - **Culling:** with `viewportSize`, nodes off screen are left out.
+  - **Level of detail:** groups, text and instances under 2 screen pixels draw as one rectangle. The `lod` option sets the threshold.
+  - **Canvases:** both canvases pass their size and skip unchanged nodes.
+
+- Updated dependencies [7f8d2f4]
+  - @pixerate/editor@0.118.0
+
+## 0.85.1
+
+### Patch Changes
+
+- Updated dependencies [f5971d7]
+- Updated dependencies [416c888]
+- Updated dependencies [9eeae92]
+- Updated dependencies [0048753]
+  - @pixerate/editor@0.117.0
+
 ## 0.85.0
 
 ### Minor Changes

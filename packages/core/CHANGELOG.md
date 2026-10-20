@@ -1,5 +1,37 @@
 # @pixerate/editor
 
+## 0.118.0
+
+### Minor Changes
+
+- 7f8d2f4: Faster vector rendering.
+
+  - **Reuse:** `getVectorSceneRenderData` reuses render data for nodes an edit did not touch.
+  - **Culling:** with `viewportSize`, nodes off screen are left out.
+  - **Level of detail:** groups, text and instances under 2 screen pixels draw as one rectangle. The `lod` option sets the threshold.
+  - **Canvases:** both canvases pass their size and skip unchanged nodes.
+
+## 0.117.0
+
+### Minor Changes
+
+- f5971d7: Image editor at 16 and 32 bits: Free Transform, warps, flips and moves resample a deep layer's samples (16-bit sRGB, 32-bit linear light; whole-pixel moves are exact), and Dodge and Burn tone them. The tools that still compute in 8 bits (Mixer Brush, Smudge, Sponge, Clone Stamp, healing, filters, mask painting) now keep the deep samples of every pixel they leave alone instead of dropping whole tiles to 8 bits. New `keepDeepSamples` in `/raster`.
+- 416c888: Image editor: brush and eraser strokes, Edit › Fill and Clear now keep a 16- or 32-bit document's precision on the tiles they touch (16-bit in sRGB-encoded samples, 32-bit in linear light) instead of dropping them to 8 bits.
+- 9eeae92: Lottie export and import for vector documents.
+
+  - `toLottie` / `vectorDocumentToLottie` export, keeping path effects live as Lottie modifiers and gradients as gradient fills.
+  - `importLottie` / `parseVectorLottie` read one frame. Modifiers become live effects, and layers, parenting, precomps and additive masks are supported.
+  - Each direction returns notes on what was approximated.
+  - New agent commands: `vector.exportLottie` and `vector.importLottie`.
+
+- 0048753: Vector PDF export, as real paths rather than a picture.
+
+  - Gradients become PDF shadings; opacity and blend modes become graphics states.
+  - Clip masks and stroke alignment are kept.
+  - Writes one page, or one page per artboard.
+  - New API: `toPdf` and `vectorDocumentToPdf`.
+  - New agent command: `vector.exportPdf`.
+
 ## 0.116.0
 
 ### Minor Changes

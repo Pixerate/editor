@@ -27,7 +27,7 @@ import { TILE, tileKey } from '../raster/surface';
 import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
-import { TileMedium, type PaintTileTarget } from './exchange';
+import { TileMedium, put255, type PaintPixels, type PaintTileTarget } from './exchange';
 import { bestOffset, dilateMask, maskBounds, membraneFill, seamlessClone } from './heal';
 
 // ---------------------------------------------------------------------------
@@ -200,12 +200,13 @@ export interface PixelSource {
  * One-channel tiles read as grey (alpha 255). Tiles are cached, so make one per stroke.
  */
 export class TilePixelSource implements PixelSource {
-  private readonly cache = new Map<number, Uint8ClampedArray | null>();
+  private readonly cache = new Map<number, PaintPixels | null>();
   private lastKey = NaN;
-  private last: Uint8ClampedArray | null = null;
+  private last: PaintPixels | null = null;
 
   constructor(
-    private readonly readTile: (tx: number, ty: number) => Uint8ClampedArray | null,
+    /** A tile's bytes, or a float working tile on the same 0..255 scale (16 / 32 bits). */
+    private readonly readTile: (tx: number, ty: number) => PaintPixels | null,
     readonly channels: 1 | 4,
     readonly offset: { x: number; y: number } = { x: 0, y: 0 }
   ) {}
@@ -319,17 +320,18 @@ export interface RetouchApply {
  * Tone paint keeps alpha; source and colour paint composite with `blend` (source-over by
  * default), keeping alpha on a locked layer.
  */
-export function applyRetouchToTile(
+export function applyRetouchToTile<T extends PaintPixels>(
   coverage: CoverageMap,
-  tileData: Uint8ClampedArray,
+  tileData: T,
   channels: 1 | 4,
   tx: number,
   ty: number,
   paint: RetouchPaint,
   s: RetouchApply,
-  options: { into?: Uint8ClampedArray; region?: RasterRect } = {}
-): Uint8ClampedArray {
-  const out = options.into ? new Uint8ClampedArray(options.into) : new Uint8ClampedArray(tileData);
+  options: { into?: T; region?: RasterRect } = {}
+): T {
+  // A float working tile (16 / 32 bits) stays float and keeps fractions; bytes round as ever.
+  const out = (options.into ?? tileData).slice() as T;
   const ox = tx * TILE + s.offset.x;
   const oy = ty * TILE + s.offset.y;
   let x0 = 0;
@@ -406,9 +408,9 @@ export function applyRetouchToTile(
         const g0 = rgb[1];
         const b0 = rgb[2];
         paint.tone(rgb);
-        out[i] = Math.round((r0 + (rgb[0] - r0) * k) * 255);
-        out[i + 1] = Math.round((g0 + (rgb[1] - g0) * k) * 255);
-        out[i + 2] = Math.round((b0 + (rgb[2] - b0) * k) * 255);
+        put255(out, i, r0 + (rgb[0] - r0) * k);
+        put255(out, i + 1, g0 + (rgb[1] - g0) * k);
+        put255(out, i + 2, b0 + (rgb[2] - b0) * k);
         continue;
       }
       if (s.lockTransparency && a === 0) continue;
@@ -424,10 +426,10 @@ export function applyRetouchToTile(
       }
       // Source-over, as a brush lays paint: cloning transparency paints nothing.
       const o = blendPixel(blend, cb, cs, k);
-      out[i] = Math.round(o[0] * 255);
-      out[i + 1] = Math.round(o[1] * 255);
-      out[i + 2] = Math.round(o[2] * 255);
-      if (!s.lockTransparency) out[i + 3] = Math.round(o[3] * 255);
+      put255(out, i, o[0]);
+      put255(out, i + 1, o[1]);
+      put255(out, i + 2, o[2]);
+      if (!s.lockTransparency) put255(out, i + 3, o[3]);
     }
   }
   return out;
@@ -716,9 +718,9 @@ export function spongeEffect(brush: BrushSettings, saturate: boolean, vibrance: 
         rgb[1] = px[i + 1] / 255;
         rgb[2] = px[i + 2] / 255;
         sponge(rgb, k, saturate, vibrance);
-        px[i] = Math.round(rgb[0] * 255);
-        px[i + 1] = Math.round(rgb[1] * 255);
-        px[i + 2] = Math.round(rgb[2] * 255);
+        put255(px, i, rgb[0]);
+        put255(px, i + 1, rgb[1]);
+        put255(px, i + 2, rgb[2]);
       }
     }
   };
@@ -749,7 +751,7 @@ export function rgbaViewOfGrey(target: PaintTileTarget): { target: PaintTileTarg
       let v = views.get(key);
       if (!v) {
         // An empty mask tile is still values (0), not transparency: always give a tile.
-        v = expand(target.readTile(tx, ty) ?? new Uint8ClampedArray(TILE * TILE));
+        v = expand((target.readTile(tx, ty) as Uint8ClampedArray | null) ?? new Uint8ClampedArray(TILE * TILE));
         views.set(key, v);
       }
       return v;
@@ -758,7 +760,7 @@ export function rgbaViewOfGrey(target: PaintTileTarget): { target: PaintTileTarg
       const key = tileKey(tx, ty);
       let v = views.get(key);
       if (!v) {
-        v = expand(target.readTile(tx, ty) ?? new Uint8ClampedArray(TILE * TILE));
+        v = expand((target.readTile(tx, ty) as Uint8ClampedArray | null) ?? new Uint8ClampedArray(TILE * TILE));
         views.set(key, v);
       }
       dirty.set(key, { tx, ty, data: v });
