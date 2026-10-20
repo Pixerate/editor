@@ -13,9 +13,9 @@
  * - the effect maps of layers with effects (built from the 8-bit shape); the effects themselves
  *   composite in float over the deep content (`runEffects`), and pixel filters run in float when
  *   the profile gives `pixelFiltersDeep`;
- * - groups with effects, filters it cannot run in float, and content layers the editor draws
- *   itself (annotations): each is rendered alone at 8 bits, converted, and blended in float with
- *   its blend mode and opacity.
+ * - filters it cannot run in float and content layers the editor draws itself (annotations):
+ *   each is rendered alone at 8 bits, converted, and blended in float with its blend mode and
+ *   opacity.
  */
 
 import { blendRgb, mixPigmentRgb, type BlendMode } from './blend';
@@ -108,7 +108,7 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     const layer = step.layer;
     if (!layer.visible) return empty;
     const clipped = step.clipped.filter((l) => l.visible);
-    if (step.kind === 'content' && this.deepEffects(layer)) return this.runEffects(layer, clipped, acc, r) ? false : empty;
+    if ((step.kind === 'content' || step.kind === 'group') && this.deepEffects(layer)) return this.runEffects(layer, clipped, acc, r, step.kind === 'group' ? step.steps : null) ? false : empty;
     const coverage = this.renderedAlone(layer) ? null : this.base.maskCoverage(layer, r, this.sources);
     if (coverage && coverage.every((v) => v <= 0)) return empty;
     if (step.kind === 'group' && !this.renderedAlone(layer)) {
@@ -149,11 +149,16 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
    * bits the effects composite in sRGB-encoded values (their colours and blends are defined
    * there) and the result is decoded back. Returns whether anything was drawn.
    */
-  private runEffects(layer: L, clipped: L[], acc: Float32Array, r: RasterRect): boolean {
+  private runEffects(layer: L, clipped: L[], acc: Float32Array, r: RasterRect, groupSteps: Step<L>[] | null = null): boolean {
     const fx = this.base.effectsInput(layer, r, this.sources);
     if (!fx) return false;
     const a = fx.rect;
-    const content = this.content(layer, a) ?? new Float32Array(a.width * a.height * 4);
+    let content: Float32Array;
+    if (groupSteps) {
+      // A group's content: its children composited alone, in float.
+      content = new Float32Array(a.width * a.height * 4);
+      this.runSteps(groupSteps, content, true, a);
+    } else content = this.content(layer, a) ?? new Float32Array(a.width * a.height * 4);
     const coverage = this.base.maskCoverage(layer, a, this.sources);
     if (coverage) for (let i = 0; i < coverage.length; i++) content[i * 4 + 3] *= coverage[i];
     if (clipped.length) this.applyClipped(clipped, content, a);
@@ -230,9 +235,9 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
   // --- Layer content ---------------------------------------------------------------
 
   /** Layers drawn by the 8-bit compositor alone (effects, pixel filters, content the editor draws). */
-  /** A pixel(-like) layer with effects: composited in float through `compositeLayerEffects`. */
+  /** A pixel(-like) layer or a group with effects: composited in float through `compositeLayerEffects`. */
   private deepEffects(layer: L): boolean {
-    return hasActiveEffects(layer.effects) && !this.isFilter(layer) && this.isPixel(layer) && !isGroup(layer);
+    return hasActiveEffects(layer.effects) && !this.isFilter(layer) && (isGroup(layer) || this.isPixel(layer));
   }
 
   private renderedAlone(layer: L): boolean {
