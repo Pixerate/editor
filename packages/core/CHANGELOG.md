@@ -1,5 +1,21 @@
 # @pixerate/editor
 
+## 0.119.0
+
+### Minor Changes
+
+- 3e194c8: Image editor: 16- and 32-bit layer masks. Deep PSD masks open and save at depth, the compositor blends with their full precision, `set_bit_depth` converts masks with their layers, v3 JSON stores their samples (`deep` on a stored mask), and the brush, eraser, Fill and Clear paint masks at depth.
+- 9dcd2eb: Image editor at 16 and 32 bits: the Mixer Brush, Smudge, Sponge, Clone Stamp, Healing Brush and Spot Healing now keep a deep layer's precision. They run on float working tiles, and Clone and healing sample the layer's deep samples or the float composite. The paint engine's `TileMedium` and `TilePixelSource` accept float tiles (`PaintPixels`, `put255`); 8-bit behaviour is unchanged.
+- 2de12be: A live Contour path effect: concentric offset steps (inside, outside or to the centre) whose colours blend toward end colours, like CorelDRAW's Contour. Effect parameters gain a `color` kind, and the effects panels edit it.
+- 023d27d: Live vector symmetry groups.
+
+  - **Modes:** mirror (vertical, horizontal, four quarters or diagonal) or radial, with an optional kaleidoscope mirror. Copies follow every edit.
+  - **Draw inside:** new pen, pencil, shape and text art goes into the group and is mirrored as it is drawn.
+  - **Release or Expand:** stop repeating, or keep the copies as real objects.
+  - **New agent commands:** `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry` and `vector.exitSymmetry`.
+  - `vector.addShape` and `vector.addPath` take a `parentId`.
+  - **New components:** `VectorSymmetryPanel` for React and Svelte.
+
 ## 0.118.0
 
 ### Minor Changes

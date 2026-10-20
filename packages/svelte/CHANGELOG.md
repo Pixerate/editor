@@ -1,5 +1,27 @@
 # @pixerate/editor-svelte
 
+## 0.86.0
+
+### Minor Changes
+
+- 023d27d: Live vector symmetry groups.
+
+  - **Modes:** mirror (vertical, horizontal, four quarters or diagonal) or radial, with an optional kaleidoscope mirror. Copies follow every edit.
+  - **Draw inside:** new pen, pencil, shape and text art goes into the group and is mirrored as it is drawn.
+  - **Release or Expand:** stop repeating, or keep the copies as real objects.
+  - **New agent commands:** `vector.makeSymmetry`, `vector.setSymmetry`, `vector.releaseSymmetry`, `vector.enterSymmetry` and `vector.exitSymmetry`.
+  - `vector.addShape` and `vector.addPath` take a `parentId`.
+  - **New components:** `VectorSymmetryPanel` for React and Svelte.
+
+### Patch Changes
+
+- 2de12be: A live Contour path effect: concentric offset steps (inside, outside or to the centre) whose colours blend toward end colours, like CorelDRAW's Contour. Effect parameters gain a `color` kind, and the effects panels edit it.
+- Updated dependencies [3e194c8]
+- Updated dependencies [9dcd2eb]
+- Updated dependencies [2de12be]
+- Updated dependencies [023d27d]
+  - @pixerate/editor@0.119.0
+
 ## 0.85.2
 
 ### Patch Changes
