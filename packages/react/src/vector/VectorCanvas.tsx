@@ -514,6 +514,29 @@ export function VectorCanvas({
       <g data-vector-scene="" transform={scene.transform}>
         <VectorSceneNodes nodes={scene.nodes} />
       </g>
+      {overlay.frames.length > 0 && (
+        <g data-vector-frame-labels="">
+          {overlay.frames.map((f) => (
+            <text
+              key={f.id}
+              data-vector-frame-label={f.id}
+              x={f.x}
+              y={f.y - 6}
+              fontSize={11}
+              fontWeight={f.selected ? 600 : 400}
+              fill={f.selected ? accentColor : '#737373'}
+              style={{ fontFamily: 'system-ui, sans-serif', cursor: 'default', userSelect: 'none' }}
+              onPointerDown={(e) => {
+                // A frame's name selects it (clicking inside a frame may pick its contents).
+                e.stopPropagation();
+                controller.select([f.id]);
+              }}
+            >
+              {f.name}
+            </text>
+          ))}
+        </g>
+      )}
       <g data-vector-overlay="" pointerEvents="none" fill="none">
         {overlay.outlines.map((o) => (
           <path key={o.id} d={o.d} stroke={accentColor} strokeWidth={o.selected ? 1 : 1.5} opacity={o.selected ? 1 : 0.7} />
@@ -708,6 +731,29 @@ export function VectorCanvas({
             )}
           </g>
         )}
+        {overlay.trackingPoints.map((t, i) => (
+          <path key={`track:${i}`} data-vector-tracking-point="" d={`M${t.x - 5} ${t.y}H${t.x + 5}M${t.x} ${t.y - 5}V${t.y + 5}`} stroke={guideColor} strokeWidth={1.5} />
+        ))}
+        {overlay.typedEntry && (
+          <g data-vector-typed-entry="" transform={`translate(${overlay.typedEntry.x + 14} ${overlay.typedEntry.y + 18})`}>
+            <rect x={-3} y={-12} width={overlay.typedEntry.text.length * 7 + 8} height={17} rx={3} fill={THEME.handleFill} stroke={accentColor} />
+            <text x={1} y={1} fontSize={11} fill={accentColor} style={{ fontFamily: 'ui-monospace, monospace' }}>
+              {overlay.typedEntry.text}
+            </text>
+          </g>
+        )}
+        {overlay.connectorSites.map((s) => (
+          <circle
+            key={`site:${s.nodeId}:${s.side}`}
+            data-vector-connection-site={s.side}
+            data-active={s.active || undefined}
+            cx={s.x}
+            cy={s.y}
+            r={s.active ? 5 : 3.5}
+            fill={s.active ? accentColor : THEME.handleFill}
+            stroke={accentColor}
+          />
+        ))}
         {overlay.constraints.map((c) => (
           <g key={`constraint:${c.id}`} data-vector-constraint-glyph={c.kind} data-satisfied={c.satisfied ? 'true' : 'false'}>
             {c.dimension && <line x1={c.dimension.x1} y1={c.dimension.y1} x2={c.dimension.x2} y2={c.dimension.y2} stroke={c.satisfied ? THEME.guide : '#dc2626'} strokeDasharray="2 2" />}

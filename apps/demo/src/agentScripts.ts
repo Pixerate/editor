@@ -370,6 +370,37 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       { say: "Checking what is still free to move.", ...command("vector.listConstraints") },
     ],
   },
+  {
+    id: "vector-frames",
+    prompt: "Make a banner that I can resize",
+    steps: [
+      { say: "A background bar and a badge for the banner…", ...command("vector.addShape", { kind: "rect", x: 440, y: 300, width: 180, height: 12, cornerRadius: 6, fill: "#38bdf8", name: "Bar" }), as: "bar", target: artboardBox(440, 300, 180, 12) },
+      { ...command("vector.addShape", { kind: "ellipse", x: 590, y: 250, width: 30, height: 30, fill: "#f43f5e", name: "Badge" }), as: "badge", target: artboardBox(590, 250, 30, 30) },
+      {
+        say: "…framed together with some padding: the frame is the banner.",
+        ...commandWith("vector.frameSelection", (r) => ({ ids: [r("bar").id, r("badge").id], padding: 16, fill: "#0f172a", name: "Banner" })),
+        as: "banner",
+        target: artboardBox(424, 234, 212, 94),
+      },
+      { say: "The bar stretches with the banner, the badge stays in its corner.", ...commandWith("vector.setResizing", (r) => ({ ids: [r("bar").id], horizontal: "leftRight", vertical: "bottom" })) },
+      { ...commandWith("vector.setResizing", (r) => ({ ids: [r("badge").id], horizontal: "right", vertical: "top" })) },
+      { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
+    ],
+  },
+  {
+    id: "vector-connectors",
+    prompt: "Connect the card to the sun and the badge",
+    steps: [
+      { say: "Where can things attach to the card? Checking its connection sites.", ...command("vector.listConnectionSites", { id: "card" }), target: { selector: '[data-vector-id="card"]' } },
+      {
+        say: "An elbow connector from the card to the sun, with rounded bends…",
+        ...command("vector.connect", { start: { nodeId: "card" }, end: { nodeId: "sun" }, route: "elbow", radius: 8, stroke: "#0369a1", strokeWidth: 2 }),
+        as: "toSun",
+      },
+      { say: "…and a curved one down to the badge.", ...command("vector.connect", { start: { nodeId: "card", side: "bottom" }, end: { nodeId: "badge" }, route: "curved", stroke: "#7e22ce", strokeWidth: 2 }), as: "toBadge" },
+      { say: "Moving the card: both connectors follow it.", ...command("vector.transform", { ids: ["card", "star"], dx: 40, dy: 30 }), target: { selector: '[data-vector-id="card"]' } },
+    ],
+  },
 ];
 
 export const ANIMATION_SCRIPTS: AgentScript[] = [

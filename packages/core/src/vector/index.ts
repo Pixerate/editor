@@ -27,6 +27,8 @@ export * from './distort.js';
 export * from './paintLayers.js';
 export * from './filters.js';
 export * from './mask.js';
+export * from './frames.js';
+export * from './connectors.js';
 export * from './text.js';
 export * from './textPanel.js';
 export * from './symbols.js';

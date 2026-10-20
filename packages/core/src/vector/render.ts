@@ -60,6 +60,8 @@ import { layoutVectorText, vectorTextPaintSource, vectorTextBoxOutline, vectorTe
 import { applyMatrix } from '../geom/affine.js';
 import { vectorConstraintGlyphs } from './constraints/glyphs.js';
 import { isVectorMaskActive, isVectorMaskGroup, vectorMaskRenderData, vectorMaskSummary, type VectorMaskRenderData, type VectorMaskSummary } from './mask.js';
+import { isVectorFrame, vectorFrameRectPath } from './frames.js';
+import { vectorConnectionSites, vectorConnectorTargetAt } from './connectors.js';
 import { vectorMeshEditPoints, vectorMeshGridCurves, VECTOR_WARP_STYLES, VECTOR_WARP_STYLE_LABELS } from './warp.js';
 import { VECTOR_EFFECT_TYPES, type VectorEffectType } from './types.js';
 import { isVectorBlendGroup, resolveVectorBlendOptions, vectorBlendRailAt, vectorBlendSpine } from './blendGroup.js';
@@ -391,6 +393,20 @@ export interface VectorOverlayRenderData {
 	 * glyph, or `name = value`), a dimension line for distances, `satisfied` false when the solve
 	 * could not meet it (draw it in a warning colour).
 	 */
+	/**
+	 * Name labels of the top-level frames (artboards), screen space: draw `name` just above (x, y),
+	 * the frame's top-left corner (bold when `selected`). Clicking a label should select the frame.
+	 */
+	frames: { id: string; name: string; x: number; y: number; selected: boolean }[];
+	/**
+	 * Connection sites, screen space, while the Connector tool is on: those of the object under the
+	 * pointer (top, right, bottom, left, centre), `active` on the one an end would glue to.
+	 */
+	connectorSites: { nodeId: string; side: string; x: number; y: number; active: boolean }[];
+	/** Points acquired for object snap tracking, screen space: draw a small `+` at each. */
+	trackingPoints: { x: number; y: number }[];
+	/** The distance or coordinate being typed while the pen draws, and where to show it (screen space, by the pointer), or null. */
+	typedEntry: { text: string; x: number; y: number } | null;
 	constraints: { id: string; kind: string; label: string; x: number; y: number; dimension: { x1: number; y1: number; x2: number; y2: number } | null; satisfied: boolean }[];
 	/** A short status, e.g. "W 120 × H 80" or "45°". */
 	status: string | null;
@@ -629,9 +645,36 @@ function outlinePaths(node: VectorNode, parent: AffineMatrix, entered: ReadonlyS
 		const g = vectorInstanceDrawn(node);
 		return [transformBezierPath(vectorAppearanceOutline(g), multiplyMatrices(nodeMatrix(g), parent))];
 	}
+	// A frame outlines as its rectangle.
+	if (isVectorFrame(node)) return [transformBezierPath(subpathsToBezier(vectorFrameRectPath(node.frame)), m)];
 	// Live and mask groups outline as drawn (masked) unless they are being edited.
 	if ((hasOwnVectorAppearance(node) || isVectorMaskActive(node)) && !entered.has(node.id)) return [transformBezierPath(vectorAppearanceOutline(node), m)];
 	return node.children.filter((c) => c.visible !== false).flatMap((c) => outlinePaths(c, m, entered));
+}
+
+/** Connection sites under the pointer while the Connector tool is on (see `VectorOverlayRenderData.connectorSites`). */
+function connectorSiteOverlay(state: VectorEditorState): VectorOverlayRenderData['connectorSites'] {
+	if (state.tool !== 'connector' || !state.pointer) return [];
+	const drawing = state.interaction?.type === 'draw' && state.interaction.tool === 'connector' ? state.interaction.nodeId : undefined;
+	const nodes = state.document.nodes;
+	const target = vectorConnectorTargetAt(nodes, state.pointer, 12 / state.viewport.zoom, drawing);
+	if (!target) return [];
+	return vectorConnectionSites(nodes, target.nodeId).map((site) => {
+		const p = toScreen(state, site);
+		return { nodeId: target.nodeId, side: site.side, x: p.x, y: p.y, active: target.site?.side === site.side };
+	});
+}
+
+/** Name labels of the top-level frames (see `VectorOverlayRenderData.frames`). */
+function frameLabels(state: VectorEditorState): VectorOverlayRenderData['frames'] {
+	const out: VectorOverlayRenderData['frames'] = [];
+	for (const n of state.document.nodes) {
+		if (!isVectorFrame(n) || n.visible === false) continue;
+		const corner = applyMatrix(nodeMatrix(n), { x: n.frame.x, y: n.frame.y });
+		const p = toScreen(state, corner);
+		out.push({ id: n.id, name: n.name ?? 'Frame', x: p.x, y: p.y, selected: state.selection.includes(n.id) });
+	}
+	return out;
 }
 
 /** Constraint glyphs of what is selected or edited (see `VectorOverlayRenderData.constraints`). */
@@ -883,7 +926,10 @@ export function getVectorOverlayRenderData(state: VectorEditorState): VectorOver
 		const tl = toScreen(state, b);
 		textBox = { x: tl.x, y: tl.y, width: b.width * z, height: b.height * z };
 	}
-	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state) };
+	return { outlines, selectionBox, distort, anchors, handles, marquee, penPreview, artboard, guides, status, toolStroke, pencilString, cutPoint, cornerWidgets, widthPoints, widthSpot, builder, blend, gradient, envelope, masks: maskOverlay(state), text: textOverlay(state), textBox, constraints: constraintOverlay(state), frames: frameLabels(state), connectorSites: connectorSiteOverlay(state),
+		trackingPoints: (state.trackingPoints ?? []).map((p) => toScreen(state, p)),
+		typedEntry: state.typedEntry ? { text: state.typedEntry, ...(state.pointer ? toScreen(state, state.pointer) : { x: 0, y: 0 }) } : null
+	};
 }
 
 /** Mask indicators of the mask groups that are selected or hold the selection (see `VectorOverlayRenderData.masks`). */

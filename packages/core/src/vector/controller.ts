@@ -131,6 +131,17 @@ import {
 import { isIdentityMatrix } from '../geom/affine.js';
 import { vectorNodesNear } from './spatial.js';
 import { isVectorMaskActive, isVectorMaskGroup, isVectorMaskType, vectorMaskedGeometry } from './mask.js';
+import {
+	isVectorConnector,
+	rerouteVectorConnectors,
+	routeVectorConnector,
+	vectorConnectionSites,
+	vectorConnectorTargetAt,
+	type VectorConnectionSite
+} from './connectors.js';
+import { VECTOR_CONNECTOR_ROUTES, VECTOR_CONNECTOR_SIDES, type VectorArrowhead, type VectorConnector, type VectorConnectorEnd, type VectorConnectorRoute, type VectorConnectorSide } from './types.js';
+import { vectorBoundsInside, isVectorFrame, vectorFrameDocument, type VectorFrameGroup } from './frames.js';
+import { VECTOR_HORIZONTAL_RESIZING, VECTOR_VERTICAL_RESIZING, type VectorFrame, type VectorHorizontalResizing, type VectorResizing, type VectorVerticalResizing } from './types.js';
 import type { TextShaper } from '../text/types.js';
 import { resolveVectorSymbols, stripVectorSymbolArt, vectorSymbolUses } from './symbols.js';
 import {
@@ -178,7 +189,7 @@ import {
 	vectorMeshOutline,
 	vectorMeshParamAt
 } from './warp.js';
-import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VectorSnapTargets, type VectorSnapGuides, type VectorSnapLeave } from './snap.js';
+import { constrainToLeave, VECTOR_CONSTRUCTION_ANGLES, VECTOR_MAX_TRACKING_POINTS, VectorSnapTargets, vectorAngleDirection, vectorTrackingPaths, type VectorSnapGuides, type VectorSnapLeave, type VectorTrackingPoint } from './snap.js';
 import {
 	bendSegment as bendSubpathSegment,
 	curvatureMoveAnchor,
@@ -288,12 +299,22 @@ export interface VectorSnapOptions {
 	guides: boolean;
 	/** How near a target pulls, in screen pixels (default 5). */
 	threshold: number;
-	/** Construction guide angles through the point a drawn point leaves from, in degrees (default 0, 45, 90, 135). */
+	/** Construction guide angles through the point a drawn point leaves from, in degrees (default 0, 45, 90, 135). Polar tracking: see `vectorPolarAngles`. */
 	angles: readonly number[];
+	/**
+	 * Object snap tracking (default true): resting the pointer on an anchor, centre or crossing
+	 * while drawing acquires it (again releases it); acquired points send alignment paths, an open
+	 * path's end its extension, and points snap where paths cross, cross the drawing or onto them.
+	 */
+	tracking?: boolean;
+	/** Acquired points send paths along every polar angle (`angles`) instead of only horizontal and vertical (default false). */
+	trackPolar?: boolean;
+	/** The pen measures polar angles from its last segment's direction instead of the page's x axis (default false). */
+	polarRelative?: boolean;
 }
 
 /** Snap options new editors start with. Hold Cmd / Ctrl (`mod`) during a drag to bypass snapping. */
-export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES };
+export const DEFAULT_VECTOR_SNAP: Readonly<VectorSnapOptions> = { grid: 0, objects: true, guides: true, threshold: 5, angles: VECTOR_CONSTRUCTION_ANGLES, tracking: true, trackPolar: false, polarRelative: false };
 
 /** How path-editing gestures and the pencil, knife and eraser behave. */
 export interface VectorPathEditOptions {
@@ -578,6 +599,10 @@ export interface VectorEditorState {
 	symbolEdit: { symbolId: string; name: string; instanceId: string | null; host: VectorDocument; hostTransform: VectorMatrix | null } | null;
 	/** Constraints the last solve could not satisfy (`conflicts`) or interpret (`skipped`), or null when all hold. */
 	constraintIssues: { conflicts: string[]; skipped: { id: string; message: string }[] } | null;
+	/** Points acquired for object snap tracking (document units), oldest first. */
+	trackingPoints: readonly VectorTrackingPoint[];
+	/** A distance or coordinate being typed while the pen draws (Enter places the point), or null. */
+	typedEntry: string | null;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -590,6 +615,32 @@ export type VectorActionResult = { ok: true } | { ok: false; message: string };
 
 /** What Make Clipping Mask / Make Opacity Mask return: the new group's id, or why not. */
 export type VectorMaskResult = { ok: true; id: string } | { ok: false; message: string };
+
+/** A connector as `getConnectors` lists it. */
+export interface VectorConnectorListing {
+	id: string;
+	name?: string;
+	route: VectorConnectorRoute;
+	radius?: number;
+	/** Each end: the glued object, its side setting and the side in use, and where the end is (document units). */
+	start: { nodeId?: string; side?: VectorConnectorSide; resolvedSide?: string | null; x?: number; y?: number };
+	end: { nodeId?: string; side?: VectorConnectorSide; resolvedSide?: string | null; x?: number; y?: number };
+}
+
+/** A frame as `getFrames` lists it. */
+export interface VectorFrameListing {
+	id: string;
+	name: string;
+	/** The group holding it (null for an artboard: a top-level frame). */
+	parentId: string | null;
+	artboard: boolean;
+	/** Its rectangle in its own space, fill and clip. */
+	frame: VectorFrame;
+	/** Its rectangle in document space (axis-aligned). */
+	bounds: VectorBounds | null;
+	/** Its children, bottom to top, with their resizing constraints. */
+	children: { id: string; type: VectorNode['type']; name?: string; horizontal: VectorHorizontalResizing; vertical: VectorVerticalResizing }[];
+}
 
 /** The shape the Blend tool blends from (its first click). */
 export interface VectorBlendStart {
@@ -1075,7 +1126,9 @@ const TOOL_LABELS: Record<VectorTool, string> = {
 	gradient: 'Gradient',
 	envelope: 'Envelope Mesh',
 	type: 'Type',
-	typePath: 'Type on a Path'
+	typePath: 'Type on a Path',
+	frame: 'Frame',
+	connector: 'Connector'
 };
 
 const TOOL_KEYS: Record<string, VectorTool> = {
@@ -1098,7 +1151,9 @@ const TOOL_KEYS: Record<string, VectorTool> = {
 	g: 'gradient',
 	u: 'envelope',
 	t: 'type',
-	q: 'typePath'
+	q: 'typePath',
+	f: 'frame',
+	x: 'connector'
 };
 
 export function vectorToolLabel(tool: VectorTool): string {
@@ -1126,7 +1181,9 @@ export const VECTOR_TOOL_SHORTCUTS: Readonly<Record<VectorTool, string>> = {
 	gradient: 'G',
 	envelope: 'U',
 	type: 'T',
-	typePath: 'Q'
+	typePath: 'Q',
+	frame: 'F',
+	connector: 'X'
 };
 
 /** Short glyphs for tool buttons (pair them with `vectorToolLabel` for the accessible name). */
@@ -1150,11 +1207,13 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	gradient: '◐',
 	envelope: '⌗',
 	type: 'T',
-	typePath: '𝒯'
+	typePath: '𝒯',
+	frame: '⬚',
+	connector: '⤳'
 };
 
 /** Tools that drag out a shape (they snap while hovering). */
-const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line']);
+const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line', 'frame']);
 
 const BOOLEAN_OPS: Record<VectorBooleanOperation, 'union' | 'difference' | 'intersection' | 'xor'> = {
 	union: 'union',
@@ -1310,6 +1369,7 @@ type Drag =
 	| { kind: 'builder'; erase: boolean; points: Vec2[]; touched: VectorBuilderTouched; map: VectorShapeBuilderMap }
 	| { kind: 'pull'; ref: VectorAnchorRef; before: Snapshot; base: VectorDocument; label: string; outOnly: boolean; closing: boolean; altBreaks: boolean }
 	| ({ kind: 'shape'; tool: VectorTool; start: Vec2; nodeId: string; before: Snapshot } & DragTargets)
+	| { kind: 'connector'; nodeId: string; start: Vec2; before: Snapshot }
 	| { kind: 'textBox'; start: Vec2; moved: boolean }
 	| { kind: 'textSelect'; nodeId: string }
 	| { kind: 'pencil'; nodeId: string; points: Point[]; before: Snapshot; lazy: LazyMouse; pressures: number[] | null; pressure: number }
@@ -1460,6 +1520,8 @@ export class VectorEditorController {
 	 * controller torn down by React StrictMode's double effect keeps working when it is reused.
 	 */
 	destroy(): void {
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = null;
 		this.cleanups.splice(0).forEach((fn) => fn());
 		this.listeners.clear();
 	}
@@ -1520,6 +1582,8 @@ export class VectorEditorController {
 			textDefaults: this.textDefaults,
 			symbolEdit: this.symbolEditState(),
 			constraintIssues: this.constraintIssues,
+			trackingPoints: this.trackingPoints,
+			typedEntry: this.typed,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -1540,7 +1604,8 @@ export class VectorEditorController {
 		}
 		// Instances draw their symbols' art.
 		out = resolveVectorSymbols(out);
-		return this.solved(out);
+		// Connectors follow what they are glued to (after the constraints have moved it).
+		return rerouteVectorConnectors(this.solved(out));
 	}
 
 	/**
@@ -1821,6 +1886,7 @@ export class VectorEditorController {
 		if (tool !== 'type' && tool !== 'typePath') this.endTextEdit();
 		this.finishPath();
 		this.cancelDrag();
+		this.clearTracking(false);
 		this.tool = tool;
 		this.hover = null;
 		this.guides = null;
@@ -1886,13 +1952,16 @@ export class VectorEditorController {
 	 */
 	private snapDrawn(p: Vec2, leave: VectorSnapLeave | null, input: VectorModifiers, targets: () => VectorSnapTargets): Vec2 {
 		this.snappedToObject = false;
+		this.lastSnap = null;
 		if (input.mod) {
 			this.setGuides(null);
 			return constrainToLeave(leave, p);
 		}
 		if (this.snap.objects) {
-			const withAngles = leave ? { ...leave, angles: this.snap.angles } : null;
-			const res = targets().snapFrom(p, withAngles, this.snapTolerance());
+			const withAngles = leave ? { ...leave, angles: leave.angles ?? this.snap.angles } : null;
+			const tracking = this.snap.tracking !== false ? vectorTrackingPaths(this.trackingPoints, this.snap.trackPolar ? this.snap.angles.flatMap((a) => [a, a + 180]) : undefined) : [];
+			const res = targets().snapFrom(p, withAngles, this.snapTolerance(), tracking);
+			this.lastSnap = res.kind ? { kind: res.kind, point: res.point } : null;
 			if (res.kind) {
 				this.snappedToObject = true;
 				this.setGuides(res);
@@ -1923,10 +1992,16 @@ export class VectorEditorController {
 				return p;
 			}
 			const last = this.pen && sp ? getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: sp.anchors.length - 1 }) : undefined;
-			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null } : null;
-			return this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
+			const leave = last ? { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null, ...this.penAngles() } : null;
+			const q = this.snapDrawn(p, leave, input, () => this.drawingTargets(this.pen?.nodeId ?? null));
+			this.dwell();
+			return q;
 		}
-		if (SHAPE_TOOLS.has(this.tool)) return this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+		if (SHAPE_TOOLS.has(this.tool)) {
+			const q = this.snapDrawn(p, null, input, () => this.drawingTargets(null));
+			this.dwell();
+			return q;
+		}
 		this.setGuides(null);
 		return p;
 	}
@@ -4009,6 +4084,624 @@ export class VectorEditorController {
 		return { ok: true, id };
 	}
 
+	// -----------------------------------------------------------------------------------------
+	// Object snap tracking and typed entry (after cadcraft's snap/tracking.rs and its direct
+	// distance entry)
+
+	private trackingPoints: VectorTrackingPoint[] = [];
+	private lastSnap: { kind: string; point: Vec2 } | null = null;
+	private dwellTimer: ReturnType<typeof setTimeout> | null = null;
+	private dwellAt: Vec2 | null = null;
+	private dwellToggled: Vec2 | null = null;
+	private typed: string | null = null;
+
+	/** How long (ms) the pointer rests on a point before it is acquired or released for tracking. */
+	static readonly TRACKING_DWELL_MS = 400;
+
+	/** The pen's polar angles: measured from its last segment with `polarRelative`, else the page's (`snap.angles`). */
+	private penAngles(): { angles?: readonly number[] } {
+		if (!this.snap.polarRelative || !this.pen) return {};
+		const node = this.getNode(this.pen.nodeId) as VectorPathNode | undefined;
+		const sp = node?.subpaths[this.pen.subpath];
+		if (!sp || sp.anchors.length < 2) return {};
+		const n = sp.anchors.length;
+		const a = getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: n - 2 })!;
+		const b = getAnchorWorld(this.doc, { nodeId: this.pen.nodeId, subpath: this.pen.subpath, index: n - 1 })!;
+		if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-9) return {};
+		const base = (Math.atan2(-(b.y - a.y), b.x - a.x) * 180) / Math.PI;
+		return { angles: this.snap.angles.map((x) => x + base) };
+	}
+
+	/** Pointer rested on the snapped anchor, centre or crossing: starts (or keeps) the dwell that acquires it. */
+	private dwell(): void {
+		const hit = this.snap.tracking !== false && this.lastSnap && (this.lastSnap.kind === 'anchor' || this.lastSnap.kind === 'centre' || this.lastSnap.kind === 'intersect') ? this.lastSnap.point : null;
+		const same = (a: Vec2 | null, b: Vec2 | null) => !!a && !!b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-9;
+		if (!hit) {
+			this.dwellAt = null;
+			this.dwellToggled = null;
+			if (this.dwellTimer) clearTimeout(this.dwellTimer);
+			this.dwellTimer = null;
+			return;
+		}
+		if (same(hit, this.dwellToggled) || same(hit, this.dwellAt)) return;
+		this.dwellToggled = null;
+		this.dwellAt = hit;
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = setTimeout(() => {
+			this.dwellTimer = null;
+			const at = this.dwellAt;
+			this.dwellAt = null;
+			if (!at) return;
+			this.toggleTracking(at);
+			this.dwellToggled = at;
+			this.notify();
+		}, VectorEditorController.TRACKING_DWELL_MS);
+	}
+
+	/** The direction an open path's end at `p` (document space) would extend in, or null when no open path ends there. */
+	private extensionAt(p: Vec2): Vec2 | null {
+		let out: Vec2 | null = null;
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (out || n.type !== 'path' || n.visible === false) return;
+			n.subpaths.forEach((sp, s) => {
+				if (out || sp.closed || sp.anchors.length < 2) return;
+				for (const end of [0, sp.anchors.length - 1]) {
+					const a = getAnchorWorld(this.doc, { nodeId: n.id, subpath: s, index: end })!;
+					if (Math.hypot(a.x - p.x, a.y - p.y) > 1e-6) continue;
+					const nextIndex = end === 0 ? 1 : end - 1;
+					const handle = end === 0 ? a.out : a.in;
+					const b = handle && Math.hypot(handle.x - a.x, handle.y - a.y) > 1e-9 ? handle : getAnchorWorld(this.doc, { nodeId: n.id, subpath: s, index: nextIndex })!;
+					const d = { x: a.x - b.x, y: a.y - b.y };
+					if (Math.hypot(d.x, d.y) > 1e-9) out = d;
+					return;
+				}
+			});
+		});
+		return out;
+	}
+
+	private toggleTracking(p: Vec2): void {
+		const i = this.trackingPoints.findIndex((t) => Math.hypot(t.x - p.x, t.y - p.y) < 1e-9);
+		if (i >= 0) this.trackingPoints = this.trackingPoints.filter((_, k) => k !== i);
+		else {
+			const ext = this.extensionAt(p);
+			this.trackingPoints = [...this.trackingPoints, { x: p.x, y: p.y, ...(ext ? { extension: ext } : {}) }].slice(-VECTOR_MAX_TRACKING_POINTS);
+		}
+	}
+
+	/**
+	 * Acquires the point at `x, y` (document units) for object snap tracking, or releases it when
+	 * it is acquired already, as resting the pointer on it does. An open path's end also sends its
+	 * extension. At most seven are kept, the oldest dropped. Returns the acquired points.
+	 */
+	acquireTrackingPoint(p: Vec2): readonly VectorTrackingPoint[] {
+		if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return this.trackingPoints;
+		this.toggleTracking(p);
+		this.notify();
+		return this.trackingPoints;
+	}
+
+	/** Releases every acquired tracking point. */
+	clearTracking(notify = true): void {
+		const had = this.trackingPoints.length > 0;
+		this.trackingPoints = [];
+		this.dwellAt = null;
+		this.dwellToggled = null;
+		if (this.dwellTimer) clearTimeout(this.dwellTimer);
+		this.dwellTimer = null;
+		if (had && notify) this.notify();
+	}
+
+	/** A key typed while the pen draws: digits and `. , < @ -` build a typed entry, Enter places it, Backspace and Escape edit or drop it. */
+	private typedKey(input: VectorKeyInput): boolean {
+		if (input.mod || this.tool !== 'pen' || !this.pen || this.drag) return false;
+		const key = input.key;
+		if (this.typed === null) {
+			if (!/^[0-9.@-]$/.test(key)) return false;
+			this.typed = key;
+			this.notify();
+			return true;
+		}
+		if (/^[0-9.,<@-]$/.test(key)) this.typed += key;
+		else if (key === 'Backspace') this.typed = this.typed.length > 1 ? this.typed.slice(0, -1) : null;
+		else if (key === 'Escape') this.typed = null;
+		else if (key === 'Enter') {
+			const text = this.typed;
+			this.typed = null;
+			const r = this.placePenPoint(text);
+			if (!r.ok) this.notify();
+			return true;
+		} else return false;
+		this.notify();
+		return true;
+	}
+
+	/**
+	 * Places the pen's next point from typed text, as CAD direct distance entry does: `120` is that
+	 * far from the last point toward the pointer (along the path it tracks), `120<30` that far at 30°
+	 * (counter-clockwise on the page, from the last segment with `snap.polarRelative`), `@40,-10`
+	 * an offset from the last point and `200,150` a position. One undo step. Fails without a path
+	 * being drawn with the pen.
+	 */
+	placePenPoint(text: string): VectorActionResult {
+		const pen = this.pen;
+		const node = pen ? (this.getNode(pen.nodeId) as VectorPathNode | undefined) : undefined;
+		const sp = pen && node ? node.subpaths[pen.subpath] : undefined;
+		if (!pen || !node || !sp?.anchors.length) return { ok: false, message: 'Start a path with the pen first: typed entry places its next point.' };
+		const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
+		const num = '(-?(?:\\d+\\.?\\d*|\\.\\d+))';
+		const t = text.replace(/\s+/g, '');
+		let target: Vec2 | null = null;
+		let m: RegExpMatchArray | null;
+		if ((m = t.match(new RegExp(`^@${num},${num}$`)))) target = { x: last.x + parseFloat(m[1]), y: last.y + parseFloat(m[2]) };
+		else if ((m = t.match(new RegExp(`^${num},${num}$`)))) target = { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+		else if ((m = t.match(new RegExp(`^${num}<${num}$`)))) {
+			const base = this.snap.polarRelative ? (this.penAngles().angles?.[0] ?? this.snap.angles[0] ?? 0) - (this.snap.angles[0] ?? 0) : 0;
+			const dir = vectorAngleDirection(parseFloat(m[2]) + base);
+			const len = parseFloat(m[1]);
+			target = { x: last.x + dir.x * len, y: last.y + dir.y * len };
+		} else if ((m = t.match(new RegExp(`^${num}$`)))) {
+			const toward = this.pointer;
+			const d = toward ? Math.hypot(toward.x - last.x, toward.y - last.y) : 0;
+			if (!toward || d < 1e-9) return { ok: false, message: 'Point the pointer the way the distance should go (or type length<angle).' };
+			const len = parseFloat(m[1]);
+			target = { x: last.x + ((toward.x - last.x) / d) * len, y: last.y + ((toward.y - last.y) / d) * len };
+		}
+		if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return { ok: false, message: `Cannot read "${text}": type a distance (120), length<angle (120<30), an offset (@40,-10) or a position (200,150).` };
+		const local = this.toLocal(pen.nodeId, target);
+		const anchors = [...sp.anchors, { x: local.x, y: local.y }];
+		this.change('Add Point', () => {
+			this.replaceNode(pen.nodeId, { ...node, subpaths: node.subpaths.map((s2, i) => (i === pen.subpath ? { ...s2, anchors } : s2)) });
+			this.anchors = [{ nodeId: pen.nodeId, subpath: pen.subpath, index: anchors.length - 1 }];
+		});
+		return { ok: true };
+	}
+
+	/**
+	 * Adds an open (or closed) path drawn by dimensions, the way a CAD user types them: from
+	 * `start`, each step goes `length` at `angle` degrees (counter-clockwise on the page), by an
+	 * offset `dx, dy`, or to a position `x, y` (document units). Default style. One undo step;
+	 * selects it. Returns its id and the anchors placed.
+	 */
+	addPathByDimensions(input: { start: Vec2; steps: readonly ({ length: number; angle: number } | { dx: number; dy: number } | { x: number; y: number })[]; closed?: boolean; name?: string }): VectorMaskResult & { anchors?: Vec2[] } {
+		if (!input.start || !Number.isFinite(input.start.x) || !Number.isFinite(input.start.y)) return { ok: false, message: 'start must be { x, y } in document units.' };
+		if (!input.steps?.length) return { ok: false, message: 'Give at least one step.' };
+		const pts: Vec2[] = [{ x: input.start.x, y: input.start.y }];
+		for (const [i, step] of input.steps.entries()) {
+			const at = pts[pts.length - 1];
+			const st = step as Record<string, number>;
+			let q: Vec2 | null = null;
+			if ('length' in st && 'angle' in st) {
+				const dir = vectorAngleDirection(st.angle);
+				q = { x: at.x + dir.x * st.length, y: at.y + dir.y * st.length };
+			} else if ('dx' in st && 'dy' in st) q = { x: at.x + st.dx, y: at.y + st.dy };
+			else if ('x' in st && 'y' in st) q = { x: st.x, y: st.y };
+			if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) return { ok: false, message: `Step ${i} must be { length, angle }, { dx, dy } or { x, y } with numbers.` };
+			pts.push(q);
+		}
+		const id = this.newId();
+		const closed = !!input.closed;
+		const node: VectorPathNode = { id, type: 'path', name: input.name ?? 'Path', ...this.styleFor(!closed), subpaths: [{ closed, anchors: pts.map((p) => ({ x: p.x, y: p.y })) }] };
+		this.change('Add Path', () => {
+			this.setDoc([...this.doc.nodes, node]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id, anchors: pts };
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Connectors
+
+	/** How near (document units) a connector end snaps to a connection site. */
+	private connectorRadius(): number {
+		return 12 / this.viewport.zoom;
+	}
+
+	private downConnector(p: Vec2) {
+		const before = this.snapshot();
+		const target = vectorConnectorTargetAt(this.doc.nodes, p, this.connectorRadius());
+		const at = target?.site ?? p;
+		const node: VectorPathNode = {
+			id: this.newId(),
+			type: 'path',
+			name: 'Connector',
+			...this.styleFor(true),
+			...(this.defaults.endArrow === undefined ? { endArrow: 'triangle' as const } : {}),
+			connector: { start: target ? { nodeId: target.nodeId, ...(target.side && target.side !== 'auto' ? { side: target.side } : {}) } : null, end: null, route: this.connectorRoute },
+			subpaths: [{ closed: false, anchors: [{ x: at.x, y: at.y }, { x: at.x, y: at.y }] }]
+		};
+		this.setDoc([...this.doc.nodes, node]);
+		this.drag = { kind: 'connector', nodeId: node.id, start: { x: at.x, y: at.y }, before };
+		this.interaction = { type: 'draw', tool: 'connector', nodeId: node.id, bounds: { x: at.x, y: at.y, width: 0, height: 0 } };
+		this.notify(true);
+	}
+
+	/** The route new connectors get (the Connector tool and `addConnector`). Default straight. */
+	private connectorRoute: VectorConnectorRoute = 'straight';
+
+	/** Sets the route the Connector tool draws with. */
+	setConnectorRoute(route: VectorConnectorRoute): VectorActionResult {
+		if (!VECTOR_CONNECTOR_ROUTES.includes(route)) return { ok: false, message: `Unknown route "${route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		this.connectorRoute = route;
+		this.notify();
+		return { ok: true };
+	}
+
+	/** The route the Connector tool draws with. */
+	getConnectorRoute(): VectorConnectorRoute {
+		return this.connectorRoute;
+	}
+
+	/** Checks a connector end given by an API caller: the object must exist and not be a connector. */
+	private checkConnectorEnd(end: VectorConnectorEnd, self?: string): string | null {
+		if (!end || typeof end.nodeId !== 'string') return 'A glued end needs a nodeId.';
+		const n = this.getNode(end.nodeId);
+		if (!n) return `There is no node "${end.nodeId}".`;
+		if (end.nodeId === self) return 'A connector cannot be glued to itself.';
+		if (isVectorConnector(n)) return `"${end.nodeId}" is a connector: glue ends to shapes, text, groups or instances.`;
+		if (end.side !== undefined && !VECTOR_CONNECTOR_SIDES.includes(end.side)) return `Unknown side "${end.side}": use ${VECTOR_CONNECTOR_SIDES.join(', ')}.`;
+		if (!vectorConnectionSites(this.doc.nodes, end.nodeId).length) return `"${end.nodeId}" has no extent (or is hidden) to connect to.`;
+		return null;
+	}
+
+	/**
+	 * Adds a connector from `start` to `end`, each glued to an object (`{ nodeId, side? }`, side
+	 * default `auto`) or a free point (`{ x, y }`, document units). It is routed now and after every
+	 * later edit, so it follows the objects. Stroked in the default stroke with an arrowhead at the
+	 * end unless given. One undo step; selects it.
+	 */
+	addConnector(input: {
+		start: VectorConnectorEnd | Vec2;
+		end: VectorConnectorEnd | Vec2;
+		route?: VectorConnectorRoute;
+		radius?: number;
+		gap?: number;
+		name?: string;
+		stroke?: VectorPaint;
+		strokeWidth?: number;
+		startArrow?: VectorArrowhead | null;
+		endArrow?: VectorArrowhead | null;
+	}): VectorMaskResult {
+		const glued = (e: VectorConnectorEnd | Vec2): e is VectorConnectorEnd => !!e && typeof (e as VectorConnectorEnd).nodeId === 'string';
+		for (const e of [input.start, input.end]) {
+			if (glued(e)) {
+				const problem = this.checkConnectorEnd(e);
+				if (problem) return { ok: false, message: problem };
+			} else if (!e || !Number.isFinite((e as Vec2).x) || !Number.isFinite((e as Vec2).y)) return { ok: false, message: 'Each end is { nodeId, side? } or a point { x, y }.' };
+		}
+		if (glued(input.start) && glued(input.end) && input.start.nodeId === input.end.nodeId) return { ok: false, message: 'Both ends are glued to the same object; connect two different objects.' };
+		const route = input.route ?? this.connectorRoute;
+		if (!VECTOR_CONNECTOR_ROUTES.includes(route)) return { ok: false, message: `Unknown route "${route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		if (input.radius !== undefined && !(Number.isFinite(input.radius) && input.radius >= 0)) return { ok: false, message: 'radius must be zero or more.' };
+		if (input.gap !== undefined && !(Number.isFinite(input.gap) && input.gap >= 0)) return { ok: false, message: 'gap must be zero or more.' };
+		const point = (e: VectorConnectorEnd | Vec2): Vec2 => (glued(e) ? { x: 0, y: 0 } : { x: (e as Vec2).x, y: (e as Vec2).y });
+		const endOf = (e: VectorConnectorEnd | Vec2) => (glued(e) ? { nodeId: e.nodeId, ...(e.side && e.side !== 'auto' ? { side: e.side } : {}) } : null);
+		const id = this.newId();
+		const style = this.styleFor(true);
+		const node: VectorPathNode = {
+			id,
+			type: 'path',
+			name: input.name ?? 'Connector',
+			...style,
+			stroke: input.stroke !== undefined ? input.stroke : (style.stroke ?? '#000000'),
+			...(input.strokeWidth !== undefined ? { strokeWidth: input.strokeWidth } : {}),
+			...(input.startArrow !== undefined ? { startArrow: input.startArrow } : {}),
+			endArrow: input.endArrow !== undefined ? input.endArrow : (style.endArrow ?? 'triangle'),
+			connector: {
+				start: endOf(input.start),
+				end: endOf(input.end),
+				...(route !== 'straight' ? { route } : {}),
+				...(input.radius ? { radius: input.radius } : {}),
+				...(input.gap !== undefined ? { gap: input.gap } : {})
+			},
+			subpaths: [{ closed: false, anchors: [point(input.start), point(input.end)] }]
+		};
+		this.change('Connect', () => {
+			this.setDoc([...this.doc.nodes, node]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Changes connectors (default: the selected ones): `start` / `end` glue an end to an object
+	 * (`{ nodeId, side? }`) or unglue it (`null`, the end staying where it is), and `route`,
+	 * `radius`, `gap` set how they run. Plain open paths given by id become connectors. One undo step.
+	 */
+	setConnector(
+		patch: { start?: VectorConnectorEnd | null; end?: VectorConnectorEnd | null; route?: VectorConnectorRoute; radius?: number; gap?: number },
+		options: { ids?: readonly string[] } = {}
+	): VectorActionResult {
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select a connector first.' };
+		if (patch.route !== undefined && !VECTOR_CONNECTOR_ROUTES.includes(patch.route)) return { ok: false, message: `Unknown route "${patch.route}": use ${VECTOR_CONNECTOR_ROUTES.join(', ')}.` };
+		if (patch.radius !== undefined && !(Number.isFinite(patch.radius) && patch.radius >= 0)) return { ok: false, message: 'radius must be zero or more.' };
+		if (patch.gap !== undefined && !(Number.isFinite(patch.gap) && patch.gap >= 0)) return { ok: false, message: 'gap must be zero or more.' };
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (!isVectorConnector(n) && !(n.type === 'path' && n.subpaths.length === 1 && !n.subpaths[0].closed && n.subpaths[0].anchors.length >= 2))
+				return { ok: false, message: `"${id}" is not a connector or an open path (draw one with vector.connect or the Connector tool).` };
+			for (const key of ['start', 'end'] as const) {
+				const e = patch[key];
+				if (e) {
+					const problem = this.checkConnectorEnd(e, id);
+					if (problem) return { ok: false, message: problem };
+				}
+			}
+		}
+		const set = new Set(ids);
+		const endOf = (e: VectorConnectorEnd | null) => (e ? { nodeId: e.nodeId, ...(e.side && e.side !== 'auto' ? { side: e.side } : {}) } : null);
+		this.change('Connector', () => {
+			this.setDoc(
+				mapTree(this.doc.nodes, (n) => {
+					if (!set.has(n.id) || n.type !== 'path') return n;
+					const c: VectorConnector = { ...(n.connector ?? {}) };
+					if (patch.start !== undefined) c.start = endOf(patch.start);
+					if (patch.end !== undefined) c.end = endOf(patch.end);
+					if (patch.route !== undefined) {
+						if (patch.route === 'straight') delete c.route;
+						else c.route = patch.route;
+					}
+					if (patch.radius !== undefined) {
+						if (patch.radius > 0) c.radius = patch.radius;
+						else delete c.radius;
+					}
+					if (patch.gap !== undefined) c.gap = patch.gap;
+					return { ...n, connector: c };
+				})
+			);
+		});
+		return { ok: true };
+	}
+
+	/** Every connector: its ends (glued object and resolved side, or the free point) and route. */
+	getConnectors(): VectorConnectorListing[] {
+		const out: VectorConnectorListing[] = [];
+		walkVectorNodes(this.doc.nodes, (n) => {
+			if (!isVectorConnector(n)) return;
+			const r = routeVectorConnector(this.doc.nodes, n.id);
+			const world = vectorWorldMatrix(this.doc.nodes, n.id) ?? IDENTITY_MATRIX;
+			const sp = n.subpaths[0];
+			const first = sp?.anchors[0];
+			const last = sp?.anchors[sp.anchors.length - 1];
+			const end = (e: VectorConnectorEnd | null | undefined, side: string | null, a: VectorAnchor | undefined) => {
+				const at = a ? applyMatrix(world, a) : null;
+				return { ...(e ? { nodeId: e.nodeId, side: e.side ?? 'auto', resolvedSide: side } : {}), ...(at ? { x: at.x, y: at.y } : {}) };
+			};
+			out.push({
+				id: n.id,
+				...(n.name ? { name: n.name } : {}),
+				route: n.connector.route ?? 'straight',
+				...(n.connector.radius ? { radius: n.connector.radius } : {}),
+				start: end(n.connector.start, r?.startSide ?? null, first),
+				end: end(n.connector.end, r?.endSide ?? null, last)
+			});
+		});
+		return out;
+	}
+
+	/** The connection sites of node `id` in document space (top, right, bottom, left, centre), or null when there is no such node. */
+	getConnectionSites(id: string): VectorConnectionSite[] | null {
+		if (!this.getNode(id)) return null;
+		return vectorConnectionSites(this.doc.nodes, id);
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Frames (artboards) and resizing constraints
+
+	/** A name for a new frame: "Frame <n>" after the frames there are. */
+	private frameName(): string {
+		let n = 0;
+		walkVectorNodes(this.doc.nodes, (x) => {
+			if (isVectorFrame(x)) n++;
+		});
+		return `Frame ${n + 1}`;
+	}
+
+	/**
+	 * Adds an empty frame (an artboard when top-level) with its rectangle at `x, y, width, height`
+	 * (document units), filled white by default and clipping its contents. With `adopt`, the
+	 * top-level objects it fully encloses move into it. One undo step; selects it.
+	 */
+	addFrame(input: { x: number; y: number; width: number; height: number; name?: string; fill?: VectorPaint; clip?: boolean; adopt?: boolean }): VectorMaskResult {
+		const { x, y, width, height } = input;
+		if (![x, y, width, height].every(Number.isFinite)) return { ok: false, message: 'x, y, width and height must be numbers.' };
+		if (!(width > 0 && height > 0)) return { ok: false, message: 'A frame needs a positive width and height.' };
+		const id = this.newId();
+		const rect: VectorBounds = { x, y, width, height };
+		const adopted = input.adopt ? this.doc.nodes.filter((n) => !n.locked && n.visible !== false && !n.blendStep && vectorBoundsInside(vectorNodeBounds(n), rect)) : [];
+		const frame: VectorFrameGroup = {
+			id,
+			type: 'group',
+			name: input.name ?? this.frameName(),
+			frame: { x, y, width, height, fill: input.fill === undefined ? '#ffffff' : input.fill, ...(input.clip === false ? { clip: false } : {}) },
+			children: adopted
+		};
+		const taken = new Set(adopted.map((n) => n.id));
+		this.change('Add Frame', () => {
+			this.setDoc([...this.doc.nodes.filter((n) => !taken.has(n.id)), frame]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/**
+	 * Frame Selection: puts the selected (or given) objects, which must share a parent, into a new
+	 * frame fitted to their bounds plus `padding` (document units, default 0), in their place in the
+	 * stacking order. No fill unless `fill` is given; clips unless `clip: false`. One undo step;
+	 * selects the frame.
+	 */
+	frameSelection(options: { ids?: readonly string[]; padding?: number; name?: string; fill?: VectorPaint; clip?: boolean } = {}): VectorMaskResult {
+		const ids = [...new Set(options.ids ?? this.selectedRoots())];
+		if (!ids.length) return { ok: false, message: 'Select the objects to frame first.' };
+		const padding = options.padding ?? 0;
+		if (!(Number.isFinite(padding) && padding >= 0)) return { ok: false, message: 'padding must be zero or more.' };
+		for (const id of ids) {
+			const n = this.getNode(id);
+			if (!n) return { ok: false, message: `There is no node "${id}".` };
+			if (n.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+			if (n.blendStep) return { ok: false, message: `"${id}" is a blend step; select its blend instead.` };
+		}
+		const locs = ids.map((id) => locateVectorNode(this.doc.nodes, id)!);
+		const parent = locs[0].parent ?? null;
+		if (locs.some((l) => (l.parent?.id ?? null) !== (parent?.id ?? null))) return { ok: false, message: 'The objects must share a parent (pick objects at one level).' };
+		const b = unionBounds(ids.map((id) => vectorNodeBounds(this.getNode(id)!)));
+		if (!b) return { ok: false, message: 'The objects have no extent to frame.' };
+		const id = this.newId();
+		const order = ids.slice().sort((a, c) => locs[ids.indexOf(a)].index - locs[ids.indexOf(c)].index);
+		const set = new Set(order);
+		const frame = {
+			x: b.x - padding,
+			y: b.y - padding,
+			width: b.width + 2 * padding,
+			height: b.height + 2 * padding,
+			...(options.fill !== undefined && options.fill !== null ? { fill: options.fill } : {}),
+			...(options.clip === false ? { clip: false } : {})
+		};
+		this.change('Frame Selection', () => {
+			const regroup = (list: readonly VectorNode[]): VectorNode[] => {
+				const members = order.map((m) => list.find((n) => n.id === m)!);
+				const top = Math.max(...members.map((m) => list.indexOf(m)));
+				const out: VectorNode[] = [];
+				list.forEach((n, i) => {
+					if (i === top) out.push({ id, type: 'group', name: options.name ?? this.frameName(), frame, children: members });
+					if (!set.has(n.id)) out.push(n);
+				});
+				return out;
+			};
+			if (!parent) this.setDoc(regroup(this.doc.nodes));
+			else this.setDoc(mapTree(this.doc.nodes, (n) => (n.id === parent.id && n.type === 'group' ? { ...n, children: regroup(n.children) } : n)));
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id };
+	}
+
+	/** Frames among `ids` (default: the selection), or holding one of them directly. */
+	private frameTargets(ids?: readonly string[]): VectorFrameGroup[] {
+		const out = new Map<string, VectorFrameGroup>();
+		for (const id of ids ?? this.selection) {
+			const n = this.getNode(id);
+			if (isVectorFrame(n)) out.set(n.id, n);
+			else if (!ids) {
+				const parent = locateVectorNode(this.doc.nodes, id)?.parent;
+				if (isVectorFrame(parent)) out.set(parent.id, parent);
+			}
+		}
+		return [...out.values()];
+	}
+
+	/**
+	 * Changes frames (default: the selected ones, or the frame holding the selection): `x`, `y`,
+	 * `width`, `height` move and resize the rectangle (in the frame's own space), and its children
+	 * follow their resizing constraints; `fill` (null for none) and `clip` set how it draws.
+	 * One undo step (merged while `merge` is the same key).
+	 */
+	setFrame(patch: { x?: number; y?: number; width?: number; height?: number; fill?: VectorPaint; clip?: boolean }, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+		for (const k of ['x', 'y', 'width', 'height'] as const) if (patch[k] !== undefined && !Number.isFinite(patch[k])) return { ok: false, message: `${k} must be a number.` };
+		if ((patch.width !== undefined && !(patch.width > 0)) || (patch.height !== undefined && !(patch.height > 0))) return { ok: false, message: 'A frame needs a positive width and height.' };
+		if (patch.clip !== undefined && typeof patch.clip !== 'boolean') return { ok: false, message: 'clip must be true or false.' };
+		if (options.ids) for (const id of options.ids) if (!isVectorFrame(this.getNode(id))) return { ok: false, message: `"${id}" is not a frame (use frameSelection or addFrame to make one).` };
+		const frames = this.frameTargets(options.ids);
+		if (!frames.length) return { ok: false, message: 'Select a frame (or something in one).' };
+		const locked = frames.find((f) => f.locked);
+		if (locked) return { ok: false, message: `"${locked.id}" is locked; unlock it first.` };
+		const next = new Map<string, VectorNode>();
+		for (const f of frames) {
+			const from = f.frame;
+			const to = { x: patch.x ?? from.x, y: patch.y ?? from.y, width: patch.width ?? from.width, height: patch.height ?? from.height };
+			let node: VectorFrameGroup = f;
+			if (to.x !== from.x || to.y !== from.y || to.width !== from.width || to.height !== from.height) {
+				// The rectangle's map in the frame's own space, carried into its parent's space.
+				const sx = from.width > 1e-9 ? to.width / from.width : 1;
+				const sy = from.height > 1e-9 ? to.height / from.height : 1;
+				const local: AffineMatrix = [sx, 0, 0, sy, to.x - sx * from.x, to.y - sy * from.y];
+				const own = nodeMatrix(f);
+				node = transformVectorNode(f, multiplyMatrices(multiplyMatrices(invertMatrix(own), local), own));
+				// Exact numbers (the map can round); the placement is unchanged.
+				node = { ...node, frame: { ...node.frame, ...to }, ...(f.transform ? { transform: f.transform } : {}) };
+			}
+			const frame = { ...node.frame };
+			if (patch.fill !== undefined) {
+				if (patch.fill === null || patch.fill === 'none') delete frame.fill;
+				else frame.fill = patch.fill;
+			}
+			if (patch.clip !== undefined) {
+				if (patch.clip) delete frame.clip;
+				else frame.clip = false;
+			}
+			next.set(f.id, { ...node, frame });
+		}
+		this.change(
+			'Frame',
+			() => {
+				this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n));
+			},
+			options.merge
+		);
+		return { ok: true };
+	}
+
+	/**
+	 * Sets the resizing constraints of the selected (or given) objects, which must be children of
+	 * frames: how each follows its frame when the frame is resized. A missing axis keeps its value.
+	 * One undo step.
+	 */
+	setResizing(resizing: VectorResizing, options: { ids?: readonly string[] } = {}): VectorActionResult {
+		if (resizing.horizontal !== undefined && !VECTOR_HORIZONTAL_RESIZING.includes(resizing.horizontal)) return { ok: false, message: `Unknown horizontal constraint "${resizing.horizontal}": use ${VECTOR_HORIZONTAL_RESIZING.join(', ')}.` };
+		if (resizing.vertical !== undefined && !VECTOR_VERTICAL_RESIZING.includes(resizing.vertical)) return { ok: false, message: `Unknown vertical constraint "${resizing.vertical}": use ${VECTOR_VERTICAL_RESIZING.join(', ')}.` };
+		if (!resizing.horizontal && !resizing.vertical) return { ok: false, message: 'Pass horizontal, vertical or both.' };
+		const ids = options.ids ?? this.selection;
+		if (!ids.length) return { ok: false, message: 'Select objects inside a frame first.' };
+		for (const id of ids) {
+			if (!this.getNode(id)) return { ok: false, message: `There is no node "${id}".` };
+			if (!isVectorFrame(locateVectorNode(this.doc.nodes, id)?.parent)) return { ok: false, message: `"${id}" is not directly inside a frame: resizing constraints only apply to a frame's children.` };
+		}
+		const set = new Set(ids);
+		this.change('Constraints', () => {
+			this.setDoc(mapTree(this.doc.nodes, (n) => (set.has(n.id) ? { ...n, resizing: { ...n.resizing, ...resizing } } : n)));
+		});
+		return { ok: true };
+	}
+
+	/** Every frame in the document (top-level ones are artboards), with its rectangle, parent and children's constraints. */
+	getFrames(): VectorFrameListing[] {
+		const out: VectorFrameListing[] = [];
+		const visit = (list: readonly VectorNode[], parent: string | null) => {
+			for (const n of list) {
+				if (isVectorFrame(n)) {
+					out.push({
+						id: n.id,
+						name: n.name ?? 'Frame',
+						parentId: parent,
+						artboard: parent === null,
+						frame: n.frame,
+						bounds: vectorNodeBounds(n, vectorParentMatrix(this.doc.nodes, n.id) ?? IDENTITY_MATRIX),
+						children: n.children.map((c) => ({ id: c.id, type: c.type, ...(c.name ? { name: c.name } : {}), horizontal: c.resizing?.horizontal ?? 'left', vertical: c.resizing?.vertical ?? 'top' }))
+					});
+				}
+				if (n.type === 'group') visit(n.children, n.id);
+			}
+		};
+		visit(this.doc.nodes, null);
+		return out;
+	}
+
+	/** One frame as an SVG document of its own size (its corner at the origin), or null when `id` is not a frame. */
+	frameToSvg(id: string, options: VectorSvgExportOptions = {}): string | null {
+		const doc = vectorFrameDocument(this.storedDocument(), id, findVectorNode);
+		return doc ? vectorDocumentToSvg(doc, options) : null;
+	}
+
 	/** Mask groups among `ids` (default: the selection), or holding one of them directly. */
 	private maskTargets(ids?: readonly string[]): VectorGroupNode[] {
 		const out = new Map<string, VectorGroupNode>();
@@ -5458,6 +6151,8 @@ export class VectorEditorController {
 				this.interaction = { type: 'stroke', tool: this.tool, points: [p], width: this.tool === 'eraser' ? this.editing.eraserSize : 0 };
 				this.notify();
 				return;
+			case 'connector':
+				return this.downConnector(p);
 			default:
 				return this.downShape(p, input);
 		}
@@ -5646,7 +6341,7 @@ export class VectorEditorController {
 				return;
 			}
 			const last = getAnchorWorld(this.doc, { nodeId: pen.nodeId, subpath: pen.subpath, index: sp.anchors.length - 1 })!;
-			const leave = { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null };
+			const leave = { at: { x: last.x, y: last.y }, constrain: input.shift ? ('angle' as const) : null, ...this.penAngles() };
 			let pt = this.snapDrawn(p, leave, input, () => this.drawingTargets(pen.nodeId));
 			pt = this.toLocal(pen.nodeId, pt);
 			const node = this.getNode(pen.nodeId) as VectorPathNode;
@@ -5719,8 +6414,10 @@ export class VectorEditorController {
 		// The targets are gathered before the new shape joins the document, and kept for the drag.
 		const targets = this.drawingTargets(null);
 		const start = this.snapDrawn(p, null, input, () => targets);
-		const kind = this.tool as VectorShapeInput['kind'];
+		// The Frame tool drags out a rectangle that becomes the frame when released.
+		const kind = (this.tool === 'frame' ? 'rect' : this.tool) as VectorShapeInput['kind'];
 		const node = this.createShapeNode({ kind, x: start.x, y: start.y, width: 0, height: 0 });
+		if (this.tool === 'frame') Object.assign(node, { fill: '#ffffff', stroke: '#a3a3a3', strokeWidth: 1 / this.viewport.zoom });
 		this.setDoc([...this.doc.nodes, node]);
 		this.drag = { kind: 'shape', tool: this.tool, start, nodeId: node.id, before, targets };
 		this.interaction = { type: 'draw', tool: this.tool, nodeId: node.id, bounds: { x: start.x, y: start.y, width: 0, height: 0 } };
@@ -5734,6 +6431,12 @@ export class VectorEditorController {
 		if (!drag && (this.tool === 'shapeBuilder' || this.tool === 'paintBucket')) {
 			this.pointer = p;
 			if (this.hoverBuilder(p, !!input.alt)) this.notify();
+			return;
+		}
+		if (!drag && this.tool === 'connector') {
+			// The sites under the pointer show while hovering (see the overlay's connectorSites).
+			this.pointer = p;
+			this.notify();
 			return;
 		}
 		if (!drag) {
@@ -5924,6 +6627,17 @@ export class VectorEditorController {
 				this.notify(true);
 				return;
 			}
+			case 'connector': {
+				const node = this.getNode(drag.nodeId);
+				if (!isVectorConnector(node)) return;
+				const target = vectorConnectorTargetAt(this.doc.nodes, p, this.connectorRadius(), drag.nodeId);
+				const startGlue = node.connector.start;
+				const end = target && target.nodeId !== startGlue?.nodeId ? { nodeId: target.nodeId, ...(target.side && target.side !== 'auto' ? { side: target.side } : {}) } : null;
+				const first = node.subpaths[0]?.anchors[0] ?? drag.start;
+				this.replaceNode(drag.nodeId, { ...node, connector: { ...node.connector, end }, subpaths: [{ closed: false, anchors: [{ x: first.x, y: first.y }, { x: p.x, y: p.y }] }] });
+				this.notify(true);
+				return;
+			}
 			case 'shape': {
 				const node = this.getNode(drag.nodeId);
 				if (node?.type !== 'path') return;
@@ -5949,7 +6663,7 @@ export class VectorEditorController {
 					const y2 = drag.start.y + h;
 					bounds = boundsFromPoints(start, { x: x2, y: y2 });
 				}
-				const shaped = this.createShapeNode({ kind: drag.tool as VectorShapeInput['kind'], ...bounds });
+				const shaped = this.createShapeNode({ kind: (drag.tool === 'frame' ? 'rect' : drag.tool) as VectorShapeInput['kind'], ...bounds });
 				this.replaceNode(drag.nodeId, { ...node, subpaths: shaped.subpaths });
 				this.interaction = { type: 'draw', tool: drag.tool, nodeId: drag.nodeId, bounds };
 				this.notify(true);
@@ -6190,6 +6904,20 @@ export class VectorEditorController {
 			case 'pull':
 				if (drag.closing) this.pen = null;
 				return this.commit(drag.label, drag.before);
+			case 'connector': {
+				const node = this.getNode(drag.nodeId);
+				const b = node ? vectorNodeBounds(node) : null;
+				const glued = isVectorConnector(node) && !!node.connector.end;
+				if (!b || (!glued && Math.hypot(b.width, b.height) < 2 / this.viewport.zoom)) {
+					this.doc = drag.before.doc;
+					this.notify(true);
+					return;
+				}
+				this.selection = [drag.nodeId];
+				this.anchors = [];
+				this.tool = 'select';
+				return this.commit('Draw Connector', drag.before);
+			}
 			case 'shape': {
 				const node = this.getNode(drag.nodeId);
 				const b = node ? vectorNodeBounds(node) : null;
@@ -6198,6 +6926,14 @@ export class VectorEditorController {
 					this.doc = drag.before.doc;
 					this.notify(true);
 					return;
+				}
+				if (drag.tool === 'frame') {
+					// The rectangle becomes a frame holding the top-level objects it encloses.
+					const rest = this.doc.nodes.filter((n) => n.id !== drag.nodeId);
+					const adopted = rest.filter((n) => !n.locked && n.visible !== false && !n.blendStep && vectorBoundsInside(vectorNodeBounds(n), b));
+					const taken = new Set(adopted.map((n) => n.id));
+					const frame: VectorFrameGroup = { id: drag.nodeId, type: 'group', name: this.frameName(), frame: { ...b, fill: '#ffffff' }, children: adopted };
+					this.setDoc([...rest.filter((n) => !taken.has(n.id)), frame]);
 				}
 				this.selection = [drag.nodeId];
 				this.anchors = [];
@@ -7429,6 +8165,7 @@ export class VectorEditorController {
 	 */
 	keyDown(input: VectorKeyInput): boolean {
 		if (this.textEdit && this.textKey(input)) return true;
+		if (this.typedKey(input)) return true;
 		const key = input.key;
 		const lower = key.length === 1 ? key.toLowerCase() : key;
 		if (key === ' ') {
@@ -7483,6 +8220,7 @@ export class VectorEditorController {
 		switch (key) {
 			case 'Escape':
 				if (this.drag) this.cancelDrag();
+				else if (this.trackingPoints.length) this.clearTracking();
 				else if (this.widthEdit) this.closeWidthPointEdit();
 				else if (this.tool === 'width' && this.widthPoints.length) {
 					this.widthPoints = [];
