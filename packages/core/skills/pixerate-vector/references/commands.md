@@ -161,3 +161,22 @@ fill; an unfilled stroked path takes part as the area its stroke paints. Pathfin
 `outline` also run on a single path; the other operations need two or more overlapping paths. Shape Builder
 `points` should come from `vector.shapeBuilderFaces` (`point` of each face) so a click lands
 inside the intended face.
+
+## Lenses
+
+`vector.setLens` types, their `amount` and `color`. Missing values take these defaults; switching type resets to them.
+
+| Type | amount (default) | color | What shows inside the lens |
+| --- | --- | --- | --- |
+| magnify | 1–20 times (2) | – | The backdrop scaled about the lens centre. |
+| fisheye | −100…100 (50) | – | Bulged (positive) or pinched (negative); the lens edge stays put. |
+| brighten | −100…100 % (40) | – | Lighter, or darker for negative amounts. |
+| invert | 0–100 % strength (100) | – | Inverted colours. |
+| tintedGrayscale | 0–100 % (100) | `#b45309` | Brightness as dark → tint → white (a duotone). |
+| colorAdd | 0–100 % (50) | `#ff0000` | The colour added. |
+| colorLimit | 0–100 % (100) | `#22c55e` | Only the colour let through. |
+| heatMap | 0–100 % palette turn (0) | – | Brightness on a cold-to-hot palette. |
+| wireframe | 0–100 % opacity (100) | `#0f172a` | Outlines only, 1 unit wide. |
+| transparency | 0–100 % see-through (50) | – | The lens's own fill, see-through. |
+
+The lens shows what is drawn before it (below it), follows edits there, and keeps its own bounds. Move it with `vector.transform` like any path. Remove it with `vector.removeLens`.

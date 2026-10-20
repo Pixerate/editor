@@ -29,6 +29,7 @@
   import VectorShadingPanel from './VectorShadingPanel.svelte';
   import VectorTracePanel from './VectorTracePanel.svelte';
   import VectorSymmetryPanel from './VectorSymmetryPanel.svelte';
+  import VectorLensPanel from './VectorLensPanel.svelte';
   import VectorGradientEditor from './VectorGradientEditor.svelte';
 
   interface Props {
@@ -258,6 +259,7 @@
   <VectorConnectorPanel {controller} />
   <VectorShadingPanel {controller} />
   <VectorSymmetryPanel {controller} />
+  <VectorLensPanel {controller} />
   <VectorTracePanel {controller} />
   <VectorConstraintsPanel {controller} />
   <VectorSymbolsPanel {controller} />
