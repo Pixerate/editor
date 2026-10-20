@@ -1,5 +1,20 @@
 # @pixerate/editor-react
 
+## 0.87.0
+
+### Minor Changes
+
+- 6971e80: Distortion brushes in the vector editor: a Distort Brush tool (D) that smudges, twirls, attracts, repels or roughens the outlines under a soft round brush, like CorelDRAW's distortion tools, with `vector.smudgeBrush` / `twirlBrush` / `attractBrush` / `repelBrush` / `roughenBrush` for agents and the brush options and circle in both bindings.
+- e48d6ad: Generative prompts in the vector editor through `@pixerate/editor/generation`: `generateVectorArt` / `regenerateVectorArt` plan a prompt against a model, call the host's generator, and add the SVG (or the traced or stylised picture) as one editable group with its provenance; agent tools `list_vector_art_models`, `generate_vector_art` and `regenerate_vector_art` (idempotency keys required); `<VectorGeneratePanel>` and `useVectorGenerationTools` in React and Svelte.
+
+### Patch Changes
+
+- 45d710e: Bitmap-to-vector stylise in the vector editor: turn a PNG into mosaic tiles, halftone dots, low-poly triangles or engraving lines (`stylizeImage`, `stylizeVectorImage` and `vector.mosaicImage` / `halftoneImage` / `lowPolyImage` / `hatchImage`); the trace panels offer the styles.
+- Updated dependencies [6971e80]
+- Updated dependencies [e48d6ad]
+- Updated dependencies [45d710e]
+  - @pixerate/editor@0.136.0
+
 ## 0.86.0
 
 ### Minor Changes
