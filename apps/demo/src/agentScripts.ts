@@ -407,6 +407,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-lottie",
+    prompt: "Export the flower as Lottie and bring it back beside it",
+    steps: [
+      { say: "Exporting the flower: its repeater and trim stay live as Lottie modifiers.", ...command("vector.exportLottie", { ids: ["flower"], frames: 60 }), as: "lottie", target: { selector: '[data-vector-id="flower"]' } },
+      { say: "Importing it again as editable shapes.", ...commandWith("vector.importLottie", (r) => ({ lottie: r("lottie").lottie })), as: "back" },
+      { say: "Moving the copy beside the original.", ...commandWith("vector.transform", (r) => ({ ids: r("back").ids, dx: 80, dy: 0 })) },
+    ],
+  },
+  {
     id: "vector-trace",
     prompt: "Trace this badge image into vectors",
     steps: [

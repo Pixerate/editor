@@ -31,6 +31,7 @@ export * from './frames.js';
 export * from './connectors.js';
 export * from './shading.js';
 export * from './trace.js';
+export * from './lottie.js';
 export * from './text.js';
 export * from './textPanel.js';
 export * from './symbols.js';

@@ -1236,6 +1236,56 @@ export function createVectorCommands(controller: VectorEditorController, options
 			issues: state.constraintIssues
 		};
 	};
+	const lottieCommands = (): CommandSpec[] => [
+		{
+			...base,
+			id: `${prefix}exportLottie`,
+			label: 'Export Lottie',
+			readOnly: true,
+			keywords: ['lottie', 'bodymovin', 'json', 'export', 'animation', 'after effects'],
+			description:
+				'Returns the document (or `ids`) as Lottie (Bodymovin v5 JSON): one shape layer whose groups mirror the nodes, path effects as live Lottie modifiers (trim, round corners, pucker & bloat, twist, zig zag, offset, merge, repeater) and gradients as gradient fills. Returns { lottie, notes } where notes lists what was approximated (filters, text without outlines, mesh gradients…).',
+			params: {
+				type: 'object',
+				properties: {
+					ids: { ...IDS, description: 'Nodes to export (default: the whole document).' },
+					fps: { type: 'number', exclusiveMinimum: 0, description: 'Frames per second (default 30).' },
+					frames: { type: 'integer', minimum: 1, description: 'Length in frames (default 1: a still).' },
+					name: { type: 'string', description: 'The animation name (default "Vector").' }
+				},
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { ids?: string[]; fps?: number; frames?: number; name?: string } | undefined) => {
+				if (params?.ids) for (const id of params.ids) if (!controller.getNode(id)) fail(`There is no node "${id}".`);
+				return controller.toLottie(params ?? {});
+			}
+		},
+		{
+			...base,
+			id: `${prefix}importLottie`,
+			label: 'Import Lottie…',
+			keywords: ['lottie', 'bodymovin', 'json', 'import', 'animation', 'after effects'],
+			description:
+				'Adds one frame of a Lottie animation (JSON object or text) as editable groups on top (or replaces the document with `replace`, taking its size). Shape modifiers become live path effects; image and text layers, mattes and expressions are left out. One undo step. Returns { ids, notes }.',
+			params: {
+				type: 'object',
+				properties: {
+					lottie: { description: 'The Lottie animation: a JSON object, or its text.', anyOf: [{ type: 'object' }, { type: 'string' }] },
+					frame: { type: 'number', description: 'Which frame to read (default the in point).' },
+					replace: { type: 'boolean', description: 'Replace the document instead of adding to it (default false).' }
+				},
+				required: ['lottie'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { lottie: unknown; frame?: number; replace?: boolean }) => {
+				const r = controller.importLottie(params.lottie, { ...(params.frame !== undefined ? { frame: params.frame } : {}), ...(params.replace ? { replace: true } : {}) });
+				check(r);
+				return { ids: r.ids, notes: r.notes };
+			}
+		}
+	];
+
 	const traceCommands = (): CommandSpec[] => [
 		{
 			...base,
@@ -2017,6 +2067,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...trackingCommands(),
 		...shadingCommands(),
 		...traceCommands(),
+		...lottieCommands(),
 		{
 			...base,
 			id: `${prefix}setCorners`,
