@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createFakeEffectProvider } from '@pixerate/editor/effects';
 import { PaintEditorController, type PaintPixelLayer } from '@pixerate/editor/paint-editor';
 import { readPixel } from '@pixerate/editor/raster';
 import { PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
+import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
 let root: any;
@@ -17,10 +18,12 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
+  stubBrushThumbnails();
 });
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
 });
 const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 0))));
 const click = async (el: Element) => {

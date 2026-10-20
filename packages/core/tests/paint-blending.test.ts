@@ -377,14 +377,27 @@ describe('paint editor brushes', () => {
     expect(back.getStrokes().find((x) => x.id === s.strokeId)!.load).toEqual(stroke.load);
   });
 
-  it('renders thumbnails for every built-in brush, quickly', () => {
+  // One test per brush, so all ~55 thumbnails (several seconds on a CI runner) don't share one timeout.
+  describe('renders a distinct thumbnail for every built-in brush, quickly', () => {
     const paper = new PaintEditorController().document.paper;
-    for (const b of BUILTIN_BRUSHES) {
-      const t0 = performance.now();
-      const t = renderBrushThumbnail(b, { paper, width: 112, height: 32, color: '#26324a' });
+    const keys = new Map<string, string>();
+    it.each(BUILTIN_BRUSHES.map((b) => [b.id, b] as const))('%s', (_id, b) => {
+      // Best of up to three, so one GC pause or descheduling on a loaded runner doesn't count.
+      let best = Infinity;
+      let t!: ReturnType<typeof renderBrushThumbnail>;
+      for (let i = 0; i < 3 && best >= 1500; i++) {
+        const t0 = performance.now();
+        t = renderBrushThumbnail(b, { paper, width: 112, height: 32, color: '#26324a' });
+        best = Math.min(best, performance.now() - t0);
+      }
       expect(t.data.length).toBe(112 * 32 * 4);
-      expect(performance.now() - t0, b.id).toBeLessThan(1500);
-    }
+      expect(best, b.id).toBeLessThan(1500);
+      keys.set(b.id, Buffer.from(t.data).toString('base64'));
+    });
+    it('no two thumbnails are the same', () => {
+      expect(keys.size).toBe(BUILTIN_BRUSHES.length);
+      expect(new Set(keys.values()).size).toBe(keys.size);
+    });
   });
 
   it('keeps the library list stable while the active brush changes, so panels do not redraw thumbnails', () => {
