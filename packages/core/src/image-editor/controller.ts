@@ -206,7 +206,7 @@ import {
   tileCoord,
   tileKey,
 } from '../raster/surface';
-import { convertSurfaceDepth, isBitDepth, surfaceFromDeepPixels, to16From8, type BitDepth } from '../raster/deep';
+import { convertSurfaceDepth, deepTile, isBitDepth, proxyOf, surfaceFromDeepPixels, tileSamples, to16From8, type BitDepth, type DeepSamples } from '../raster/deep';
 import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
@@ -249,6 +249,7 @@ import {
   StrokeCoverage,
   TilePixelSource,
   applyRetouchToTile,
+  applyStrokeToDeepTile,
   applyStrokeToTile,
   cleanMixer,
   healPixels,
@@ -641,7 +642,7 @@ export interface PaintStrokeResult {
 export type HistoryEntryHandle = { readonly __historyEntry: unique symbol };
 
 /** Composites `coverage` into the tiles of `base` under `rects` (document space), returning the new surface. */
-function paintCoverageInto(base: TiledSurface, coverage: CoverageMap, apply: StrokeApply, rects: CropBox[]): TiledSurface {
+function paintCoverageInto(base: TiledSurface, coverage: CoverageMap, apply: StrokeApply, rects: CropBox[], depth: 16 | 32 | null = null): TiledSurface {
   const tiles = new Map(base.tiles);
   const done = new Set<TileKey>();
   for (const r of rects) {
@@ -649,6 +650,13 @@ function paintCoverageInto(base: TiledSurface, coverage: CoverageMap, apply: Str
       const key = tileKey(t.tx, t.ty);
       if (done.has(key)) continue;
       done.add(key);
+      if (depth && base.channels === 4) {
+        const d = applyStrokeToDeepTile(coverage, tileSamples(base.tiles.get(key), 4, depth, base.defaultValue), t.tx, t.ty, apply);
+        const tile = deepTile(d, 4, base.defaultValue);
+        if (tile) tiles.set(key, tile);
+        else tiles.delete(key);
+        continue;
+      }
       const src = base.tiles.get(key)?.data ?? defaultTile(base);
       const data = applyStrokeToTile(coverage, src, base.channels, t.tx, t.ty, apply);
       const tile = finishTile(data, base.channels, base.defaultValue);
@@ -730,13 +738,19 @@ export class PaintStrokeSession {
   private readonly fresh = new Set<TileKey>();
   private last: StrokePoint | null = null;
   private closed = false;
+  /** Brush and eraser strokes on a 16- or 32-bit document: the deep samples of each touched tile. */
+  private readonly deep: 16 | 32 | null;
+  private readonly liveDeep = new Map<TileKey, DeepSamples>();
 
   constructor(
     private readonly controller: ImageEditorController,
     readonly target: { id: string; channel: LayerTarget; surface: TiledSurface },
     stroke: StrokeCoverage | MixerStrokeInit | RetouchStrokeInit,
-    private readonly apply: StrokeApply
+    private readonly apply: StrokeApply,
+    /** Composite brush / eraser strokes at this bit depth (layers only); `null` for 8 bits. */
+    depth: 16 | 32 | null = null
   ) {
+    this.deep = depth && stroke instanceof StrokeCoverage && target.surface.channels === 4 ? depth : null;
     this.before = controller._captureForStroke();
     this.base = target.surface;
     this.live = new Map(this.base.tiles);
@@ -827,6 +841,16 @@ export class PaintStrokeSession {
       }
     }
     for (const [key, { tx, ty, r }] of regions) {
+      if (this.deep) {
+        // At 16 or 32 bits: composite the deep samples and show their 8-bit rendering.
+        const src = tileSamples(this.base.tiles.get(key), 4, this.deep, this.base.defaultValue);
+        const prev = this.touched.has(key) ? this.liveDeep.get(key) : undefined;
+        this.touched.add(key);
+        const d = applyStrokeToDeepTile(stroke.coverage, src, tx, ty, this.apply, prev ? { into: prev, region: r } : {});
+        this.liveDeep.set(key, d);
+        this.live.set(key, { data: proxyOf(d, 4), uniform: null, deep: d });
+        continue;
+      }
       const src = this.base.tiles.get(key)?.data ?? defaultTile(this.base);
       const prev = this.touched.has(key) ? this.live.get(key)?.data : undefined;
       this.touched.add(key);
@@ -861,7 +885,8 @@ export class PaintStrokeSession {
     let changed = false;
     for (const key of this.touched) {
       const live = this.live.get(key)!;
-      const tile = finishTile(live.data, ch, this.base.defaultValue);
+      const deep = this.liveDeep.get(key);
+      const tile = deep ? deepTile(deep, 4, this.base.defaultValue) : finishTile(live.data, ch, this.base.defaultValue);
       const prev = this.base.tiles.get(key);
       if (tile) tiles.set(key, tile);
       else tiles.delete(key);
@@ -888,6 +913,11 @@ export class PaintStrokeSession {
 function sameTile(a: Tile | undefined, b: Tile | null): boolean {
   if (!a || !b) return !a && !b;
   if (a === b) return true;
+  if (a.deep || b.deep) {
+    if (!a.deep || !b.deep || a.deep.constructor !== b.deep.constructor || a.deep.length !== b.deep.length) return false;
+    for (let i = 0; i < a.deep.length; i++) if (a.deep[i] !== b.deep[i]) return false;
+    return true;
+  }
   if (a.uniform !== null || b.uniform !== null) return a.uniform === b.uniform;
   for (let i = 0; i < a.data.length; i++) if (a.data[i] !== b.data[i]) return false;
   return true;
@@ -3052,7 +3082,8 @@ export class ImageEditorController {
     };
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply);
     if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply);
-    return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply);
+    const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
+    return new PaintStrokeSession(this, target, new StrokeCoverage(brush), apply, depth);
   }
 
   /** A retouching stroke's start: its settings, what it samples and how it composites. */
@@ -3262,7 +3293,8 @@ export class ImageEditorController {
       selection: null,
       offset: target.offset,
     };
-    const surface = paintCoverageInto(target.surface, coverage, apply, [region]);
+    const depth = target.channel === 'pixels' && this.bitDepth !== 8 ? this.bitDepth : null;
+    const surface = paintCoverageInto(target.surface, coverage, apply, [region], depth);
     const next = mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, target.channel, surface));
     this.commitLayers(next);
     return { layerId: target.id, channel: target.channel, bounds: region, dabs: 0 };

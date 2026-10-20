@@ -13,7 +13,8 @@
  *   so overlapping dabs never exceed the opacity.
  */
 
-import { blendPixel, mixPigment8, type BlendMode } from '../raster/blend';
+import { blendPixel, mixPigment8, mixPigmentRgb, type BlendMode } from '../raster/blend';
+import { srgbDecode, srgbEncode } from '../raster/deep';
 import type { RasterRect as CropBox } from '../raster/surface';
 import { TILE, tileKey, tileCoord, type TileKey } from '../raster/surface';
 
@@ -548,6 +549,95 @@ export function applyStrokeToTile(
       out[i + 1] = Math.round(o[1] * 255);
       out[i + 2] = Math.round(o[2] * 255);
       if (!s.lockTransparency) out[i + 3] = Math.round(o[3] * 255);
+    }
+  }
+  return out;
+}
+
+/**
+ * `applyStrokeToTile` at high bit depth: composites the stroke's coverage over deep RGBA
+ * samples (`Uint16Array` sRGB or `Float32Array` linear light, see `raster/deep`) of the target's
+ * tile (tx, ty) as it was before the stroke, and returns new samples of the same type. Blending
+ * runs in float in the samples' own space (sRGB at 16 bits, linear light at 32 bits); the paint
+ * colours are 8-bit sRGB and converted. Layers only (masks stay 8-bit).
+ */
+export function applyStrokeToDeepTile(
+  coverage: CoverageMap,
+  samples: Uint16Array | Float32Array,
+  tx: number,
+  ty: number,
+  s: StrokeApply,
+  options: { into?: Uint16Array | Float32Array; region?: CropBox } = {}
+): Uint16Array | Float32Array {
+  const linear = samples instanceof Float32Array;
+  const scale = linear ? 1 : 65535;
+  const out = (options.into ?? samples).slice() as Uint16Array | Float32Array;
+  const ox = tx * TILE + s.offset.x;
+  const oy = ty * TILE + s.offset.y;
+  let x0 = 0;
+  let y0 = 0;
+  let x1 = TILE;
+  let y1 = TILE;
+  if (options.region) {
+    const r = options.region;
+    x0 = Math.max(0, Math.floor(r.x) - ox);
+    y0 = Math.max(0, Math.floor(r.y) - oy);
+    x1 = Math.min(TILE, Math.ceil(r.x + r.width) - ox);
+    y1 = Math.min(TILE, Math.ceil(r.y + r.height) - oy);
+    if (x1 <= x0 || y1 <= y0) return out;
+    if (options.into) for (let y = y0; y < y1; y++) out.set(samples.subarray((y * TILE + x0) * 4, (y * TILE + x1) * 4), (y * TILE + x0) * 4);
+  }
+  const colour = (c: readonly number[]) => {
+    const v = [c[0] / 255, c[1] / 255, c[2] / 255, c[3] / 255];
+    if (linear) for (let k = 0; k < 3; k++) v[k] = srgbDecode(v[k]);
+    return v;
+  };
+  const src = colour(s.mode === 'erase' ? s.background : s.color);
+  const sel = s.selection;
+  const cb = [0, 0, 0, 0];
+  const mix = [0, 0, 0];
+  const encCb = [0, 0, 0];
+  const encSrc = linear ? [srgbEncode(src[0]), srgbEncode(src[1]), srgbEncode(src[2])] : src;
+  const put = (i: number, v: number) => {
+    out[i] = linear ? v : v <= 0 ? 0 : v >= 1 ? 65535 : Math.round(v * 65535);
+  };
+  for (let y = y0; y < y1; y++) {
+    const dy = oy + y;
+    for (let x = x0; x < x1; x++) {
+      const dx = ox + x;
+      const c = coverage.get(dx, dy);
+      if (c <= 0) continue;
+      let k = c * s.opacity;
+      if (sel) {
+        if (dx < 0 || dy < 0 || dx >= sel.width || dy >= sel.height) continue;
+        k *= sel.data[dy * sel.width + dx] / 255;
+      }
+      if (k > 1) k = 1;
+      if (k <= 0) continue;
+      const i = (y * TILE + x) * 4;
+      if (s.mode === 'erase' && !s.lockTransparency) {
+        put(i + 3, (out[i + 3] / scale) * (1 - k));
+        // A fully erased pixel keeps no colour, so a cleared tile stores nothing.
+        if (out[i + 3] === 0) out[i] = out[i + 1] = out[i + 2] = 0;
+        continue;
+      }
+      if (s.lockTransparency && out[i + 3] === 0) continue;
+      for (let ch = 0; ch < 4; ch++) cb[ch] = out[i + ch] / scale;
+      if (s.blend === 'pigment') {
+        const as = src[3] * k;
+        if (!(as > 0)) continue;
+        const ao = as + cb[3] * (1 - as);
+        for (let ch = 0; ch < 3; ch++) encCb[ch] = linear ? srgbEncode(cb[ch]) : cb[ch];
+        mixPigmentRgb(encCb, encSrc, as / ao, mix);
+        for (let ch = 0; ch < 3; ch++) put(i + ch, linear ? srgbDecode(mix[ch]) : mix[ch]);
+        if (!s.lockTransparency) put(i + 3, ao);
+        continue;
+      }
+      const o = blendPixel(s.blend, cb, src, k);
+      put(i, o[0]);
+      put(i + 1, o[1]);
+      put(i + 2, o[2]);
+      if (!s.lockTransparency) put(i + 3, o[3]);
     }
   }
   return out;

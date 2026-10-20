@@ -2320,7 +2320,13 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: In a 16-bit document, a brush stroke (or a filter, transform or merge) left the tiles it touched at 8-bit precision, while the rest of the layer kept its 16-bit samples.
 - **Root Cause**: High bit depth is additive: a `Tile` may carry `deep` samples (`Uint16Array`, or `Float32Array` in linear light) and its `data` is always their 8-bit rendering. Every existing 8-bit path (compositor, viewport, brushes, the paint editor) reads and writes `data` only, and a tile it rewrites is built by `finishTile` without `deep`.
-- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. Making each editing path depth-aware is follow-up work; until then the skill tells agents to grade and export deep files rather than repaint them.
+- **Solution / Workaround**: Read at depth with `tileSamples16` / `tileSamples32` / `readDeepRegion` (a tile without `deep` converts exactly as a bit-depth change would), and write with `deepTile` / `writeDeepRegion`, which also keep `data` in step. Never build a tile by spreading another one and replacing `data`: its old `deep` would no longer match. The brush, eraser, Fill and Clear on layer pixels are depth-aware (`applyStrokeToDeepTile`, `PaintStrokeSession`'s `depth`); the Mixer Brush, retouching, masks, layer filters, effects and transforms are not yet, and the skill says so.
+
+### [core/paint] A Deep Eraser Must Zero the Colour of Pixels It Clears
+
+- **Issue / Symptom**: In a 16-bit document, Edit › Clear left full tiles of transparent pixels behind instead of removing them, so the layer kept its memory and its bounds.
+- **Root Cause**: Erasing only scales alpha, as the 8-bit eraser does. A transparent 16-bit pixel that keeps an RGB sample that isn't a multiple of 257 has no exact 8-bit equivalent, so `deepTile` keeps the tile deep instead of dropping it as empty.
+- **Solution / Workaround**: `applyStrokeToDeepTile` sets RGB to 0 when a pixel's alpha reaches 0 (the colour of a fully transparent pixel is invisible). The tile then becomes all zeros, which `deepTile` turns into no tile.
 
 ### [core/image-editor] 16- and 32-bit PSDs Keep Their Layers in an Lr16 / Lr32 Block, and 32-bit Is Linear Light
 
