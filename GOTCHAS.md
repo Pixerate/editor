@@ -2589,3 +2589,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Holes (a frame, the counter of an "O") were bevelled into the hole, and thin parts had faces poking out the other side.
 - **Root Cause**: A ring's winding alone doesn't say where the inside is: holes may wind either way under `evenodd`. And a mitred inset corner `width` deep can cross the opposite outline wherever the shape is thinner than the bevel.
 - **Solution / Workaround**: `vectorBevelFaces` finds each ring's inside by testing a point just off its longest edge against all rings with the shape's fill rule. It then cuts each corner's inset to half the distance at which it would cross any outline edge.
+
+### [core/vector] Distortion Brush Strokes Re-Apply From The Stroke's Start, Not Dab By Dab
+
+- **Issue / Symptom**: Smudging back and forth made outlines heavy with anchors and slow, and a smudge stopped working once it had pulled the outline beyond the path's first bounds.
+- **Root Cause**: Re-fitting the curves after every dab (`mapBezierPath`) adds anchors each time. A dab whose reach was tested against the path's original bounds skipped points earlier dabs had dragged out.
+- **Solution / Workaround**: The drag keeps the document from the stroke's start and every dab. Each move recomputes `distortVectorPath(base, mode, dabs)`, which composes all the dab maps into one map and re-fits once. The reach test grows the bounds by how far the earlier dabs can have moved points.

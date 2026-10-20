@@ -1185,3 +1185,23 @@ describe("corner smoothing (svelte)", () => {
     expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
   });
 });
+
+describe("Distort Brush (svelte)", () => {
+  it("shows its options for the tool and draws the brush circle while dragging", () => {
+    const c = make();
+    const el = render(VectorToolbar, { controller: c });
+    c.setTool("distort");
+    flushSync();
+    const mode = el.querySelector('select[aria-label="Distort brush"]') as HTMLSelectElement;
+    mode.value = "twirl";
+    mode.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(c.getState().editing.distortMode).toBe("twirl");
+    const canvas = render(VectorCanvas, { controller: c });
+    c.pointerDown({ x: 50, y: 50 });
+    c.pointerMove({ x: 60, y: 50 });
+    flushSync();
+    expect(canvas.querySelector("[data-vector-brush]")).not.toBeNull();
+    c.pointerUp({ x: 60, y: 50 });
+  });
+});

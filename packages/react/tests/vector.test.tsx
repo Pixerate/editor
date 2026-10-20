@@ -1250,3 +1250,30 @@ describe("corner smoothing (react)", () => {
     expect((c.getNode("a") as VectorPathNode).subpaths[0].anchors[0].corner).toEqual({ radius: 10, smoothing: 0.6 });
   });
 });
+
+describe("Distort Brush (react)", () => {
+  it("shows its options for the tool and draws the brush circle while dragging", async () => {
+    const c = new VectorEditorController({ document: doc() });
+    await act(async () =>
+      root.render(
+        <>
+          <VectorToolbar controller={c} />
+          <VectorCanvas controller={c} />
+        </>,
+      ),
+    );
+    await act(async () => c.setTool("distort"));
+    const mode = container.querySelector('select[aria-label="Distort brush"]') as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(mode, "twirl");
+      mode.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(c.getState().editing.distortMode).toBe("twirl");
+    await act(async () => {
+      c.pointerDown({ x: 50, y: 50 });
+      c.pointerMove({ x: 60, y: 50 });
+    });
+    expect(container.querySelector("[data-vector-brush]")).not.toBeNull();
+    await act(async () => c.pointerUp({ x: 60, y: 50 }));
+  });
+});
