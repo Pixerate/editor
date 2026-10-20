@@ -471,6 +471,15 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "vector-generate",
+    prompt: "Generate a rocket and a tree from a prompt",
+    steps: [
+      { say: "Checking which models can make vector art.", tool: "vectorgen__list_vector_art_models", args: {} },
+      { say: "Asking the sketcher for a rocket next to a tree, in the lower left.", tool: "vectorgen__generate_vector_art", args: () => ({ prompt: "a rocket next to a tree", model: "demo-sketcher", x: 40, y: 330, width: 220, height: 110, idempotencyKey: `demo-rocket-tree-${Date.now()}` }), as: "art" },
+      { say: "Listing what it made: ordinary paths in one group, ready to edit.", ...command("vector.list") },
+    ],
+  },
+  {
     id: "vector-pages",
     prompt: "Make this a two-page document with a numbered footer",
     steps: [
@@ -512,6 +521,14 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
         target: artboardBox(620, 360, 120, 120),
       },
       { say: "Checking what it made.", ...command("vector.list") },
+    ],
+  },
+  {
+    id: "vector-stylize",
+    prompt: "Make a halftone and a low-poly version of the badge",
+    steps: [
+      { say: "Halftone dots in the badge's own colours…", ...commandWith("vector.halftoneImage", () => ({ image: badgePng(), cell: 6, angle: 45, color: null, colors: 4, x: 620, y: 360, width: 120, name: "Badge halftone" })), target: artboardBox(620, 360, 120, 120) },
+      { say: "…and low-poly triangles beside it.", ...commandWith("vector.lowPolyImage", () => ({ image: badgePng(), cell: 12, seed: 3, colors: 8, x: 490, y: 360, width: 120, name: "Badge low poly" })), target: artboardBox(490, 360, 120, 120) },
     ],
   },
   {

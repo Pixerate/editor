@@ -1,4 +1,5 @@
 import { vectorBrushstrokeBrushes } from './brushstroke.js';
+import { type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_LENS_SPECS } from './lens.js';
 import type { CommandSpec } from '../commands/registry.js';
 import type { VectorConstraintInput, VectorEditorController, VectorShapeInput } from './controller.js';
@@ -1714,6 +1715,71 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
+	const IMAGE_PLACE = {
+		image: { type: 'string', description: 'The picture as a data:image/png;base64,… URL (up to 4 million pixels).' },
+		x: { type: 'number', description: 'Left edge in document units (default 0).' },
+		y: { type: 'number', description: 'Top edge in document units (default 0).' },
+		width: { type: 'number', exclusiveMinimum: 0, description: 'Width in document units (default: the image width in pixels).' },
+		name: { type: 'string', description: 'Group name (default: the style\'s name).' }
+	} as const;
+	const decodeImage = (image: string) => {
+		const parsed = parseDataUrl(image);
+		if (!parsed || !isPng(parsed.bytes)) fail('image must be a PNG data URL (data:image/png;base64,…).');
+		try {
+			return decodePng(parsed!.bytes, { maxPixels: VECTOR_TRACE_MAX_PIXELS });
+		} catch (e) {
+			return fail(`The PNG could not be read: ${(e as Error).message}`);
+		}
+	};
+	const stylize = (style: VectorStylizeStyle, label: string, keywords: string[], description: string, props: Record<string, unknown>): CommandSpec => ({
+		...base,
+		id: `${prefix}${style}Image`,
+		label,
+		keywords: ['stylize', 'stylise', 'bitmap to vector', 'artistic', 'png to svg', ...keywords],
+		description: `${description} Added as one group placed with its top-left at x, y and width wide; colours of one kind share a compound path. One undo step. Returns { id, paths: [{ id, name, fill, subpaths }] }.`,
+		params: { type: 'object', properties: { ...IMAGE_PLACE, ...props }, required: ['image'], additionalProperties: false },
+		undoable: true,
+		run: (_ctx: unknown, params: { image: string } & VectorStylizeOptions & { x?: number; y?: number; width?: number; name?: string }) => {
+			const { image, ...options } = params;
+			const r = controller.stylizeImage(decodeImage(image), style, options);
+			check(r);
+			return {
+				id: r.id,
+				paths: r.ids!.map((id) => {
+					const n = controller.getNode(id) as VectorPathNode;
+					return { id, name: n.name, fill: n.fill, subpaths: n.subpaths.length };
+				})
+			};
+		}
+	});
+	const CELL = (dflt: number, what: string) => ({ type: 'number', minimum: 1, description: `${what} in image pixels (default ${dflt}); larger draws fewer, bigger shapes.` });
+	const PALETTE = (dflt: number) => ({ type: 'integer', minimum: 2, maximum: 32, description: `Palette size (default ${dflt}).` });
+	const stylizeCommands = (): CommandSpec[] => [
+		stylize('mosaic', 'Mosaic from Image…', ['mosaic', 'tiles', 'pixelate', 'pixel art'], 'Turns a PNG into mosaic tiles: a square or round tile per cell in the colour under it.', {
+			cell: CELL(12, 'Tile size'),
+			shape: { type: 'string', enum: ['square', 'circle'], description: 'Tile shape (default square).' },
+			gap: { type: 'number', minimum: 0, maximum: 0.9, description: 'Grout between tiles as a fraction of the tile (default 0.1).' },
+			colors: PALETTE(12)
+		}),
+		stylize('halftone', 'Halftone from Image…', ['halftone', 'dots', 'comic', 'pop art', 'screen print'], 'Turns a PNG into halftone dots on a turned grid, each dot\'s area following how dark the picture is there.', {
+			cell: CELL(8, 'Dot spacing'),
+			angle: { type: 'number', description: 'Screen angle in degrees (default 45).' },
+			color: { type: ['string', 'null'], description: 'Ink colour (default black); null keeps the picture\'s colours, reduced to `colors`.' },
+			colors: PALETTE(12)
+		}),
+		stylize('lowPoly', 'Low Poly from Image…', ['low poly', 'triangles', 'polygon art', 'geometric', 'faceted'], 'Turns a PNG into low-poly art: a jittered grid of triangles, each in the colour under it.', {
+			cell: CELL(24, 'Triangle size'),
+			jitter: { type: 'number', minimum: 0, maximum: 0.5, description: 'How far the grid points wander, as a fraction of a cell (default 0.35).' },
+			seed: { type: 'integer', description: 'Seed of the wandering (default 1): the same seed gives the same triangles.' },
+			colors: PALETTE(16)
+		}),
+		stylize('hatch', 'Engraving from Image…', ['engraving', 'hatch', 'hatching', 'line art', 'woodcut', 'banknote'], 'Turns a PNG into an engraving: parallel lines on a turned grid that swell where the picture is dark and break where it is light.', {
+			cell: CELL(6, 'Line spacing'),
+			angle: { type: 'number', description: 'Line angle in degrees (default 45).' },
+			color: { type: 'string', description: 'Ink colour (default black).' }
+		})
+	];
+
 	const shadingResult = (id: string) => ({ id, shading: controller.getShading(id) ?? fail(`"${id}" has no mesh or freeform fill.`) });
 	const COLOR = { type: 'string', description: 'A CSS colour.' } as const;
 	const FREEFORM_POINT = {
@@ -2558,6 +2624,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		...pdfCommands(),
 		...symmetryCommands(),
 		...brushstrokeCommands(),
+		...stylizeCommands(),
 		...perspectiveCommands(),
 		...lensCommands(),
 		{

@@ -19,7 +19,7 @@ import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createFakeEffectProvider } from '../src/effects';
-import { VectorEditorController, createVectorEffectsToolProvider } from '../src/vector';
+import { VectorEditorController, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
@@ -208,6 +208,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createDiagramToolProvider(new DiagramController(), { id: 'diagram', namespace: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) }));
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));
 		registry.register(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects', namespace: 'vecfx' }));
+		registry.register(createVectorGenerationToolProvider(new VectorEditorController(), { id: 'vector-generation', namespace: 'vecgen', models: [{ id: 'm', media: 'image' }], generate: () => ({ svg: '' }) }));
 		registry.register(createAnimationEffectsToolProvider(new AnimationEditorController({ effects: createFakeEffectProvider() }), { id: 'animation-effects', namespace: 'animfx' }));
 		registry.register(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video', namespace: 'video' }));
 		registry.register(createVideoEffectsToolProvider(new VideoEditorController({ effects: createFakeEffectProvider() }), { id: 'video-effects', namespace: 'videofx' }));

@@ -346,6 +346,35 @@ A closed path with `lens` set is a lens, after CorelDRAW's Lens. Inside its outl
   - Agents use `vector.setLens` / `vector.removeLens`, and `vector.list` shows each lens.
   - SVG export writes `data-vector-lens` and imports it back.
 
+## Stylise images
+
+Besides tracing outlines (Image Trace), a picture can become stylised vector art. `stylizeVectorImage(pixels, style, options)` returns path nodes in pixel units, and `stylizeImage(pixels, style, { x, y, width, name, … })` adds them as one group in one undo step.
+
+- **Styles.** Each samples the picture on a grid of cells:
+  - `mosaic` draws a square or round tile per cell, with `gap` grout between them.
+  - `halftone` draws dots on a grid turned by `angle`. Each dot's area follows the darkness under it, in one ink `color`, or with `color: null` in the picture's colours.
+  - `lowPoly` splits a jittered grid (`jitter`, `seed`) into triangles, each in the colour under it. A hairline in the fill hides seams.
+  - `hatch` draws engraving lines along a turned grid. They swell where the picture is dark and taper off where it is light.
+- **Colours** are reduced to a `colors`-sized palette by the same median cut Image Trace uses, applied to the cells' colours. The shapes of one colour are one compound path, so a picture becomes a few dozen paths.
+- **Limits.** At most 60,000 shapes; a larger `cell` draws fewer.
+- **Panel and agents.** The trace panel's mode menu offers the four styles next to tracing. Agents use `vector.mosaicImage`, `vector.halftoneImage`, `vector.lowPolyImage` and `vector.hatchImage` with a PNG data URL.
+
+## Generative prompts
+
+The vector editor generates art from prompts through `@pixerate/editor/generation`. The host supplies its models (`ModelCapabilities`) and a generator (`VectorArtGenerator`) that sends a planned request to a model and returns `{ svg }`, `{ image }` (RGBA pixels) or `{ png }` (a data URL).
+
+- **Generating.** `generateVectorArt(controller, { prompt, model, negativePrompt, seed, x, y, width, height, as, colors, name, idempotencyKey }, { models, generate })` works in these steps:
+  1. It picks a vector-capable model (`vectorArtModels`: image models, and text models that write SVG).
+  2. It plans the request (`planGenerationRequest`, nearest). The aspect ratio comes from the box, and anything the model does not support is adjusted or dropped.
+  3. It calls the generator and turns the result into paths. SVG goes through the SVG importer. Pixels are traced (`color`, `threshold`) or stylised (`mosaic`, `halftone`, `lowPoly`, `hatch`).
+  4. It fits the art into the box (default: a square in the artboard's middle) and adds it as one group, in one undo step.
+
+  The group's `generation` holds the provenance (`createProvenance`: prompt, model, planned request, adjustments). It survives `toJSON()` and the SVG round trip.
+- **Regenerating.** `regenerateVectorArt(controller, { id, prompt, seed, idempotencyKey }, options)` makes the art again from that provenance, with a new seed (default random) or prompt. It replaces the group's children in place in one undo step (`replaceGeneratedArt`).
+- **Idempotency.** Requests cost money, so every call takes an `idempotencyKey`. A retry with the same key and input returns the first result without generating again, the same key with other input is refused, and failed calls forget their key.
+- **Agents.** `createVectorGenerationToolProvider(controller, { models, generate, readOnly })` gives `list_vector_art_models`, `generate_vector_art` and `regenerate_vector_art`. The write tools are hidden while read-only. Register it with `useVectorGenerationTools` in React or Svelte.
+- **Panel.** `<VectorGeneratePanel models generate>` has a prompt field, a model menu and (for image models) how the picture becomes vectors.
+
 ## Pages and master pages
 
 A document's pages are its top-level frames in order, numbered from 1 (`vectorPages`). This follows CorelDRAW's pages and master page.

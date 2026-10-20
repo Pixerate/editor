@@ -1,4 +1,5 @@
 import { sanitizeVectorBrushstroke, vectorBrushstrokeBrush, vectorBrushstrokeBrushes } from './brushstroke.js';
+import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, stylizeVectorImage, type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
 import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
 import { VECTOR_LENS_SPECS, resolveVectorLenses, sanitizeVectorLens, stripVectorLensViews } from './lens.js';
@@ -2251,6 +2252,24 @@ export class VectorEditorController {
 			}
 		});
 		return next.id;
+	}
+
+	/**
+	 * Replaces a generated group's art (its children) and provenance, in one undo step; used by
+	 * `regenerateVectorArt`. The group keeps its id, name, transform and place.
+	 */
+	replaceGeneratedArt(id: string, children: VectorNode[], generation: VectorGroupNode['generation']): VectorActionResult {
+		const node = this.getNode(id);
+		if (!node || node.type !== 'group' || !node.generation) return { ok: false, message: `"${id}" is not generated art.` };
+		if (node.locked) return { ok: false, message: `"${id}" is locked; unlock it first.` };
+		// The art comes in document space: bring it into the group's own space.
+		const inv = invertMatrix(this.worldOf(id));
+		const placed = children.map((c) => this.freshIds(isIdentityMatrix(inv) ? c : transformVectorNode(c, inv)));
+		this.change('Regenerate Art', () => {
+			this.replaceNode(id, { ...node, generation, children: placed });
+			this.anchors = [];
+		});
+		return { ok: true };
 	}
 
 	/** Builds a path node for a shape with the current defaults (not added). */
@@ -4642,6 +4661,39 @@ export class VectorEditorController {
 		const id = this.newId();
 		this.change('Image Trace', () => {
 			this.setDoc([...this.doc.nodes, { id, type: 'group', name: options.name ?? 'Image Trace', children }]);
+			this.selection = [id];
+			this.anchors = [];
+			this.editingId = null;
+		});
+		return { ok: true, id, ids: children.map((c) => c.id) };
+	}
+
+	/**
+	 * Bitmap-to-vector stylise: turns RGBA `pixels` into stylised vector art (see
+	 * `stylizeVectorImage`: mosaic tiles, halftone dots, low-poly triangles or engraving lines) and
+	 * adds it as one group, placed like Image Trace (top-left at `x, y`, `width` wide, default one
+	 * unit per pixel). One undo step; selects the group. Returns its id and its paths' ids.
+	 */
+	stylizeImage(pixels: VectorTracePixels, style: VectorStylizeStyle, options: VectorStylizeOptions & { x?: number; y?: number; width?: number; name?: string } = {}): VectorActionResult & { id?: string; ids?: string[] } {
+		if (!VECTOR_STYLIZE_STYLES.includes(style)) return { ok: false, message: `Unknown style "${style}": use ${VECTOR_STYLIZE_STYLES.join(', ')}.` };
+		if (options.cell !== undefined && !(options.cell >= 1)) return { ok: false, message: 'cell must be at least 1 pixel.' };
+		if (options.colors !== undefined && !(Number.isInteger(options.colors) && options.colors >= 2 && options.colors <= 32)) return { ok: false, message: 'colors must be a whole number from 2 to 32.' };
+		if (options.width !== undefined && !(options.width > 0)) return { ok: false, message: 'width must be above 0.' };
+		if (typeof options.color === 'string' && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
+		let made: VectorPathNode[];
+		try {
+			made = stylizeVectorImage(pixels, style, options);
+		} catch (e) {
+			return { ok: false, message: (e as Error).message };
+		}
+		if (!made.length) return { ok: false, message: 'Nothing to draw: the picture is empty or too light for this style (try a smaller cell, or mosaic).' };
+		const k = (options.width ?? pixels.width) / pixels.width;
+		const m: AffineMatrix = [k, 0, 0, k, options.x ?? 0, options.y ?? 0];
+		const children = made.map((n) => ({ ...transformVectorNode(n, m), id: this.newId() }));
+		const id = this.newId();
+		const label = VECTOR_STYLIZE_LABELS[style];
+		this.change(label, () => {
+			this.setDoc([...this.doc.nodes, { id, type: 'group', name: options.name ?? label, children }]);
 			this.selection = [id];
 			this.anchors = [];
 			this.editingId = null;

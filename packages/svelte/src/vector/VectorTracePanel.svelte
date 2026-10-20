@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { VectorEditorController } from '@pixerate/editor/vector';
+  import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, type VectorEditorController, type VectorStylizeStyle } from '@pixerate/editor/vector';
 
   /**
-   * Image Trace: pick an image file and trace it into paths, in one colour (dark areas) or a
-   * stacked path per colour. The traced group goes on the artboard at its width. One undo step.
+   * Image Trace and stylise: pick an image file and trace it into paths, in one colour (dark
+   * areas) or a stacked path per colour, or stylise it as mosaic tiles, halftone dots, low-poly
+   * triangles or engraving lines. The group goes on the artboard at its width. One undo step.
    */
   interface Props {
     controller: VectorEditorController;
@@ -13,7 +14,7 @@
   let { controller, class: className = '' }: Props = $props();
 
   let input: HTMLInputElement | undefined = $state();
-  let mode: 'threshold' | 'color' = $state('threshold');
+  let mode: 'threshold' | 'color' | VectorStylizeStyle = $state('threshold');
   let colors = $state(6);
   let message: string | null = $state(null);
 
@@ -36,7 +37,8 @@
       const pixels = await filePixels(file);
       const doc = controller.getState().document;
       const width = Math.min(doc.width, pixels.width);
-      const r = controller.traceImage(pixels, { mode, colors, width, name: file.name.replace(/\.[^.]+$/, '') || 'Image Trace' });
+      const name = file.name.replace(/\.[^.]+$/, '') || undefined;
+      const r = mode === 'threshold' || mode === 'color' ? controller.traceImage(pixels, { mode, colors, width, name: name ?? 'Image Trace' }) : controller.stylizeImage(pixels, mode, { width, ...(name ? { name } : {}) });
       message = r.ok ? null : r.message;
     } catch {
       message = 'That file could not be read as an image.';
@@ -55,6 +57,7 @@
     <select aria-label="Trace mode" class={selectClass} bind:value={mode}>
       <option value="threshold">Black &amp; white</option>
       <option value="color">Colours</option>
+      {#each VECTOR_STYLIZE_STYLES as s (s)}<option value={s}>{VECTOR_STYLIZE_LABELS[s]}</option>{/each}
     </select>
     {#if mode === 'color'}
       <input type="number" min="2" max="32" aria-label="Trace colours" title="Colours" class={numberClass} value={colors} oninput={(e) => (colors = Math.max(2, Math.min(32, parseInt(e.currentTarget.value, 10) || 2)))} />

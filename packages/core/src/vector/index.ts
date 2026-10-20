@@ -18,6 +18,8 @@ export * from './blendGroup.js';
 export * from './appearance.js';
 export * from './pathEffects.js';
 export * from './brushstroke.js';
+export * from './generate.js';
+export * from './stylize.js';
 export * from './distortBrush.js';
 export * from './pages.js';
 export * from './extrude.js';
