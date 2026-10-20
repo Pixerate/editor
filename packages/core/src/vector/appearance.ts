@@ -49,6 +49,7 @@ import { vectorInstanceGroup } from './symbols.js';
 import { isVectorFrame, vectorFrameDrawn } from './frames.js';
 import { parseVectorColor } from './gradient.js';
 import { shadeVectorColor, vectorExtrudeFaces, vectorPaintSolid } from './extrude.js';
+import { vectorBevelFaces } from './bevel.js';
 import { isVectorSymmetryGroup, vectorSymmetryDrawn, type VectorSymmetryGroup } from './symmetry.js';
 import { transformVectorNode } from './geometry.js';
 import {
@@ -116,7 +117,8 @@ export const VECTOR_EFFECT_DEFAULTS: { readonly [K in VectorEffectType]: VectorE
 	envelope: { style: 'arc', bend: 50, horizontal: 0, vertical: 0, orientation: 'horizontal', rows: 2, columns: 2, mesh: null },
 	contour: { direction: 'inside', steps: 4, offset: 6, join: 'round', miterLimit: 4, fillColor: '#ffffff', strokeColor: null, acceleration: 0 },
 	blockShadow: { angle: 45, distance: 20, color: '#1e293b', opacity: 100, endOpacity: 100 },
-	extrude: { mode: 'parallel', angle: 45, depth: 30, vanishingPoint: { x: 0, y: -300 }, toward: 30, color: null, lightAngle: -135, shading: 60 }
+	extrude: { mode: 'parallel', angle: 45, depth: 30, vanishingPoint: { x: 0, y: -300 }, toward: 30, color: null, lightAngle: -135, shading: 60 },
+	bevel: { width: 8, lightAngle: -135, shading: 60, color: null }
 };
 
 export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
@@ -132,7 +134,8 @@ export const VECTOR_EFFECT_LABELS: Record<VectorEffectType, string> = {
 	envelope: 'Envelope',
 	contour: 'Contour',
 	blockShadow: 'Block Shadow',
-	extrude: 'Extrude'
+	extrude: 'Extrude',
+	bevel: 'Bevel'
 };
 
 /** How a panel edits one effect parameter. */
@@ -261,6 +264,12 @@ export const VECTOR_EFFECT_PARAM_SPECS: Record<VectorEffectType, VectorEffectPar
 		{ key: 'color', label: 'Colour', kind: 'color' },
 		{ key: 'lightAngle', label: 'Light °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
 		{ key: 'shading', label: 'Shading %', kind: 'number', min: 0, max: 100, step: 1, slider: true }
+	],
+	bevel: [
+		{ key: 'width', label: 'Width', kind: 'number', min: 0, max: 500, step: 0.5, slider: true },
+		{ key: 'lightAngle', label: 'Light °', kind: 'number', min: -360, max: 360, step: 1, slider: true },
+		{ key: 'shading', label: 'Shading %', kind: 'number', min: 0, max: 100, step: 1, slider: true },
+		{ key: 'color', label: 'Colour', kind: 'color' }
 	],
 	repeater: [
 		{ key: 'copies', label: 'Copies', kind: 'number', min: 0, max: 50, step: 0.1, slider: true },
@@ -690,6 +699,36 @@ function extrudeShapes(shapes: readonly VectorAppearanceShape[], x: VectorEffect
 	return out;
 }
 
+/**
+ * Each shape bevelled (see `VectorEffectParamsMap.bevel` and `vectorBevelFaces`): the shape's
+ * fill underneath, the shaded faces, the flat middle (the shape inset by `width`) in the shape's
+ * own paint, and its stroke on top.
+ */
+function bevelShapes(shapes: readonly VectorAppearanceShape[], b: VectorEffectParamsMap['bevel']): VectorAppearanceShape[] {
+	const out: VectorAppearanceShape[] = [];
+	for (const s of shapes) {
+		const fillRule = s.source.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+		const faces = vectorBevelFaces(s.path, b, fillRule);
+		if (!faces.length) {
+			out.push(s);
+			continue;
+		}
+		const base = b.color ?? vectorPaintSolid(s.source.fill) ?? '#808080';
+		const fillOnly: VectorPathNode = { ...s.source, stroke: null, strokes: undefined };
+		out.push({ ...s, source: fillOnly, order: [...s.order, 0] });
+		faces.forEach((f, k) => {
+			const color = shadeVectorColor(base, f.shade);
+			const source: VectorPathNode = { ...s.source, fill: color, stroke: color, strokeWidth: 0.5, strokeLinejoin: 'round', strokeAlign: undefined, fills: undefined, strokes: undefined, fillRule: 'nonzero', startArrow: undefined, endArrow: undefined, strokeDasharray: undefined, strokeWidthProfile: undefined, filters: undefined };
+			out.push({ source, path: f.path, opacity: s.opacity, order: [...s.order, 1, k] });
+		});
+		const [middle] = offsetPaths([s.path], -b.width, 'miter', 4, 1, 0);
+		if (middle?.length) out.push({ ...s, source: fillOnly, path: middle, order: [...s.order, 2] });
+		const hasStroke = s.source.strokes?.length || (s.source.stroke != null && s.source.stroke !== 'none');
+		if (hasStroke) out.push({ ...s, source: { ...s.source, fill: null, fills: undefined }, order: [...s.order, 3] });
+	}
+	return out;
+}
+
 /** Applies an effect stack to shapes, top to bottom (disabled effects skipped). */
 export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], effects: readonly VectorEffect[] | null | undefined): VectorAppearanceShape[] {
 	let list = shapes.slice();
@@ -739,6 +778,9 @@ export function applyVectorEffects(shapes: readonly VectorAppearanceShape[], eff
 				break;
 			case 'extrude':
 				list = extrudeShapes(list, e.params);
+				break;
+			case 'bevel':
+				list = bevelShapes(list, e.params);
 				break;
 			case 'repeater': {
 				const r = e.params;
