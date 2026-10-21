@@ -1,5 +1,23 @@
 # @pixerate/editor
 
+## 0.140.0
+
+### Minor Changes
+
+- eba5cc6: Make agent tools easier to find in large catalogues.
+
+  - **Breaking: tool names are namespaced by default.** `ToolRegistry` now exposes every tool as `<namespace>__<name>`, using the provider's `namespace` or else its `id` (`chart__get_chart`, `image-editor__add_layer`), so names no longer change when another editor mounts. Calls by bare name still work when only one tool has that name; an ambiguous bare name fails with the full names to choose from. Pass `new ToolRegistry({ namespaces: 'on-collision' })` for the old behaviour, or `namespace: ''` on a provider to keep its bare names.
+  - **Toolsets.** Providers carry a `title`, `description` and `skill`, and every built-in provider sets them. `registry.toolsets()` groups tools by namespace.
+  - **Scoped views.** `registry.view({ toolsets, readOnly })` shows an agent only some toolsets or only read tools, refusing the rest with the reason; `setToolsets` follows the focused editor. Views are tool sources, so `createMcpServer`, `connectToolBridge` and `useToolBridge` accept them.
+  - **Discovery.** `registry.view({ discovery: { skills } })` lists only `list_toolsets`, `search_tools`, `enable_tools`, `disable_tools` and `get_skill` until the agent enables what it needs. `searchTools` ranks tools for a plain-words task.
+  - **Skills over MCP.** `createMcpServer(source, { skills, instructions: toolsetInstructions })` serves the agent skills as MCP prompts and `skill://` resources and describes the toolsets on `initialize`. The MCP bridge serves the packaged skills by default (`loadSkillFiles()` in `@pixerate/editor/bridge`).
+  - **React and Svelte:** `useToolRegistryView` in both; `useToolBridge` accepts a view.
+
+- 752aad5: Animation agent tools are about 7× smaller to list: the write tools (`edit_animation`, `write_animation`, `insert_shots`, `update_shot`, `add_commands`, `set_animation_clip`) no longer inline the full per-type command schema at every use. Each tool carries one compact, strict command shape (every field of every type listed once, prefixed with the types that take it), plus shots, cameras and easing, in its `$defs`. The `animation` toolset drops from about 827k to 123k characters of definitions, and `edit_animation` from about 303k to 24k. The per-type rules are still checked when an edit is applied, with errors naming the shot, command and field. The new read tool `describe_animation_command` returns the full JSON Schema of the command types you ask for. `MOTION_COMMAND_TYPE_SCHEMAS` (one strict schema per type) and `MOTION_COMMAND_FIELDS` (the fields each type takes) are now exported, and `MOTION_COMMAND_SCHEMA` stays the full, self-contained `oneOf`.
+- 2459a49: Agents can now format rich text. The rich text tool provider adds `format_text` (set or clear bold, italic, underline, strike, inline code, links, highlight, text colour and font size on a range or the selection), `set_block_type` (paragraph, heading with a level, bulleted, numbered and task lists, quote, code block; one call switches between kinds) and `set_text_align`. Each is listed only for what the editor's schema supports and only while it is editable, applies as one undo step even when calls follow each other quickly, keeps the user's selection, and returns the range with the formatting or blocks it now has.
+
+  Fix: `insert_text`, `replace_text`, `replace_range`, `replace_selection` and typed-out agent text are now one undo step per call. Calls that came within half a second of each other used to undo together.
+
 ## 0.139.1
 
 ### Patch Changes
