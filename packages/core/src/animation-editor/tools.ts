@@ -13,7 +13,8 @@ import { fromPptxAnimation, type PptxAnimationImport } from './pptx.js';
 import type { AnimationEditorController } from './controller.js';
 import { MOTION_EDIT_OPS, resolveMotionEditRefs, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionIssueLine, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionCommand, type MotionScene } from './types.js';
+import { MOTION_COMMAND_FIELDS } from './parse.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_IRIS_SHAPES, MOTION_REPEAT_MODES, MOTION_BLENDS, MOTION_SPLIT_ORIENTATIONS, motionFlairPrimitive, type MotionCommand, type MotionCommandType, type MotionScene } from './types.js';
 
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
@@ -100,106 +101,212 @@ const DRAW_ORDER: Record<string, JsonSchema> = {
 const command = (type: string, description: string, extra: Record<string, JsonSchema> = {}, required: string[] = []): JsonSchema =>
 	object({ type: { const: type, description }, ...BASE, ...extra }, ['type', 'targets', ...required], description);
 
-/** JSON Schema of one command (each type its own strict branch). */
+/**
+ * Full JSON Schema of each command type: every field with its range, default and meaning, self-contained.
+ * `describe_animation_command` returns these; the write tools carry the compact {@link MOTION_COMMAND_SCHEMA}.
+ */
+export const MOTION_COMMAND_TYPE_SCHEMAS: Readonly<Record<MotionCommandType, JsonSchema>> = {
+	enter: command('enter', 'Brings hidden targets in; they are hidden before this shot.', { ...DRAW_ORDER,
+		style: {
+			type: 'string',
+			enum: [...MOTION_ENTER_STYLES],
+			description:
+				'fade (default), pop (scales up past full size and settles), grow (from nothing), slide, draw (outline drawn on, then the fill fades in), zoom (settles from larger), rise (rises a short way, overshooting a touch), or a reveal through a clip over the target\'s box: wipe (behind a travelling edge), iris (from the centre outwards) or split (from a line through the middle). Reveals need a box with a width and a height (not a lone straight line).'
+		},
+		direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default up). For wipe: the way the edge travels (default right, revealing from the left).' },
+		distance: { type: 'number', description: 'For slide (default 40) and rise (default 20): document units.' },
+		scale: { type: 'number', minimum: 0, description: 'For pop (default 0.5) and zoom (default 1.6): the starting scale (1 = rest size).' },
+		shape: { type: 'string', enum: [...MOTION_IRIS_SHAPES], description: 'For iris: open through a circle (default; an ellipse on a box that is not square) or a box.' },
+		orientation: { type: 'string', enum: [...MOTION_SPLIT_ORIENTATIONS], description: 'For split: horizontal (default) opens up and down from a horizontal line through the middle; vertical opens left and right.' }
+	}),
+	exit: command('exit', 'Takes targets out.', { ...DRAW_ORDER,
+		style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide, undraw, or wipe (hides behind a travelling edge through a clip over the target\'s box: a wipe in, reversed).' },
+		direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default down). For wipe: the way the edge travels (default right, hiding from the left).' },
+		distance: { type: 'number', description: 'For slide: document units (default 40).' }
+	}),
+	draw: command('draw', 'Draws strokes on (or off) to a fraction of their length.', { ...DRAW_ORDER, comet: FRACTION('A travelling stroke this fraction of the length long: it runs along the path and off the end (leave out from and to).'), to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
+	move: command('move', 'Moves targets by an offset or so their centre lands on a point.', { via: { type: 'array', items: POINT('A point the centre passes through.'), minItems: 1, maxItems: 64, description: 'Waypoints (document units) the centre passes through on the way to "to" or "by", smoothly (velocity carries through each) and without overshooting any. Default length 700 ms + 400 per waypoint.' }, pacing: { type: 'string', enum: ['even', 'equal'], description: 'With via: even (default) keeps the speed steady along the path; equal gives each stretch the same time.' }, blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
+	rotate: command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
+	scale: command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
+	fade: command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
+	style: command('style', 'Blends solid fill / stroke colours (in OKLab) and stroke width. On a group it changes every path in it.', {
+		fill: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
+		stroke: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
+		strokeWidth: { type: 'number', minimum: 0, description: 'Document units.' }
+	}),
+	play: object(
+		{
+			type: { const: 'play', description: 'Plays a clip (set_animation_clip) on the targets: its commands, with "$" standing for each target, timed as in a shot.' },
+			targets: NODE_IDS,
+			clip: { type: 'string', minLength: 1, description: 'The clip\'s name (get_animation lists them).' },
+			speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play it this many times as fast (default 1).' },
+			delay: BASE.delay,
+			stagger: BASE.stagger,
+			with: BASE.with,
+			note: BASE.note
+		},
+		['type', 'targets', 'clip'],
+		'Plays a clip on the targets.'
+	),
+	match: command('match', 'Smart Animate: tweens a group into another group (usually hidden), part by part. Parts pair by name, then by id with the group ids taken out (card-a-title ↔ card-b-title), then by kind in order; each takes its partner\'s shape, paint and place. Unpaired parts fade out; parts of "into" with no partner do not appear (check_animation lists them).', { into: { type: 'string', minLength: 1, description: 'Id of the group to become.' } }, ['into']),
+	morph: command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
+	follow: command('follow', 'Moves targets along a path node, centre on the path.', {
+		path: { type: 'string', minLength: 1, description: 'Id of a path node (it can be hidden).' },
+		rotate: { type: 'boolean', description: 'Turn with the path (default false); moves and shakes made meanwhile turn with it too.' },
+		from: FRACTION('Where to start along the path (default 0).'),
+		to: FRACTION('Where to end along the path (default 1).')
+	}, ['path']),
+	pulse: command('pulse', 'Scales up and back to draw the eye.', { blend: BLEND('add'), amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
+	shake: command('shake', 'Shakes side to side (or up and down), settling.', { blend: BLEND('add'),
+		amount: { type: 'number', description: 'Document units (default 8).' },
+		count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' },
+		axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Default horizontal.' }
+	}),
+	teeter: command('teeter', 'Rocks about the centre either way, settling.', { blend: BLEND('add'), angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
+	wave: command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { blend: BLEND('add'), amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
+	wiggle: command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', { blend: BLEND('add'),
+		amount: { type: 'number', description: 'Up to about this far, in document units (default 6).' },
+		frequency: { type: 'number', exclusiveMinimum: 0, description: 'Wanders per second, in Hz (default 3).' },
+		octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Layers of finer detail (default 2).' },
+		rotate: { type: 'number', description: 'Also turns about the centre by up to about this many degrees (default 0).' },
+		seed: { type: 'integer', minimum: 0, description: 'Default: one picked from the target id, so each target wanders its own way.' }
+	}),
+	'color-pulse': command('color-pulse', 'Tints solid paint toward a colour and back (mixed in OKLab). On a group it tints every path in it.', {
+		color: { type: 'string', description: 'The tint, a CSS colour (default "#f59e0b").' },
+		paint: { type: 'string', enum: ['fill', 'stroke'], description: 'Which paint (default fill).' },
+		count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' }
+	}),
+	effect: command('effect', 'Tweens a numeric parameter of a live path effect on the targets (twist angle, wiggle time, zig zag size, trim offset…).', {
+		effect: { type: 'string', minLength: 1, description: 'Effect id from get_animation\'s element "effects".' },
+		param: { type: 'string', minLength: 1, description: 'A numeric parameter of that effect (listed with it).' },
+		to: { type: 'number', description: 'Value at the end.' }
+	}, ['effect', 'param', 'to']),
+	wait: object(
+		{ type: { const: 'wait', description: 'Waits.' }, duration: MS('How long'), with: BASE.with, note: BASE.note },
+		['type', 'duration'],
+		'Waits before the next command.'
+	)
+};
+
+/** JSON Schema of one command, each type its own strict branch (self-contained, for validating outside the tools). */
 export const MOTION_COMMAND_SCHEMA: JsonSchema = {
 	description: `A command (one of ${MOTION_COMMAND_TYPES.join(', ')}). Commands in a shot play one after another unless "with": "previous".`,
-	oneOf: [
-		command('enter', 'Brings hidden targets in; they are hidden before this shot.', { ...DRAW_ORDER,
-			style: {
-				type: 'string',
-				enum: [...MOTION_ENTER_STYLES],
-				description:
-					'fade (default), pop (scales up past full size and settles), grow (from nothing), slide, draw (outline drawn on, then the fill fades in), zoom (settles from larger), rise (rises a short way, overshooting a touch), or a reveal through a clip over the target\'s box: wipe (behind a travelling edge), iris (from the centre outwards) or split (from a line through the middle). Reveals need a box with a width and a height (not a lone straight line).'
-			},
-			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default up). For wipe: the way the edge travels (default right, revealing from the left).' },
-			distance: { type: 'number', description: 'For slide (default 40) and rise (default 20): document units.' },
-			scale: { type: 'number', minimum: 0, description: 'For pop (default 0.5) and zoom (default 1.6): the starting scale (1 = rest size).' },
-			shape: { type: 'string', enum: [...MOTION_IRIS_SHAPES], description: 'For iris: open through a circle (default; an ellipse on a box that is not square) or a box.' },
-			orientation: { type: 'string', enum: [...MOTION_SPLIT_ORIENTATIONS], description: 'For split: horizontal (default) opens up and down from a horizontal line through the middle; vertical opens left and right.' }
-		}),
-		command('exit', 'Takes targets out.', { ...DRAW_ORDER,
-			style: { type: 'string', enum: [...MOTION_EXIT_STYLES], description: 'fade (default), shrink, slide, undraw, or wipe (hides behind a travelling edge through a clip over the target\'s box: a wipe in, reversed).' },
-			direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'For slide: direction of travel (default down). For wipe: the way the edge travels (default right, hiding from the left).' },
-			distance: { type: 'number', description: 'For slide: document units (default 40).' }
-		}),
-		command('draw', 'Draws strokes on (or off) to a fraction of their length.', { ...DRAW_ORDER, comet: FRACTION('A travelling stroke this fraction of the length long: it runs along the path and off the end (leave out from and to).'), to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
-		command('move', 'Moves targets by an offset or so their centre lands on a point.', { via: { type: 'array', items: POINT('A point the centre passes through.'), minItems: 1, maxItems: 64, description: 'Waypoints (document units) the centre passes through on the way to "to" or "by", smoothly (velocity carries through each) and without overshooting any. Default length 700 ms + 400 per waypoint.' }, pacing: { type: 'string', enum: ['even', 'equal'], description: 'With via: even (default) keeps the speed steady along the path; equal gives each stretch the same time.' }, blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
-		command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
-		command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
-		command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
-		command('style', 'Blends solid fill / stroke colours (in OKLab) and stroke width. On a group it changes every path in it.', {
-			fill: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
-			stroke: { type: 'string', description: 'CSS colour (hex, rgb(), rgba()).' },
-			strokeWidth: { type: 'number', minimum: 0, description: 'Document units.' }
-		}),
+	oneOf: MOTION_COMMAND_TYPES.map((type) => MOTION_COMMAND_TYPE_SCHEMAS[type])
+};
+
+/** A reference to a shared shape in the tool's `$defs` (see `withDefs`). */
+type DefName = 'point' | 'ease' | 'command' | 'camera' | 'shot';
+const REF = (name: DefName, description?: string): JsonSchema => ({ $ref: `#/$defs/${name}`, ...(description ? { description } : {}) });
+
+const firstSentence = (text: string) => /^.*?[.;](?=\s|$)/.exec(text)?.[0] ?? text;
+const COMMAND_TYPE_LINES = MOTION_COMMAND_TYPES.map((type) => `${type}: ${firstSentence(MOTION_COMMAND_TYPE_SCHEMAS[type].description ?? '')}`);
+
+/** Easing as the write tools carry it: the curve kinds in one object (the per-type schemas keep a strict branch for each). */
+const EASE_COMPACT: JsonSchema = {
+	description: 'Easing: a preset, or a curve { "type": "cubic-bezier", x1, y1, x2, y2 }, { "type": "spring", stiffness, damping, mass, velocity } (spring presets are Figma\'s; with no "duration" it lasts until it settles) or { "type": "elastic", amplitude, period, mode }. Default: ease-out for entrances, ease-in-out for moves.',
+	anyOf: [
+		{ type: 'string', enum: [...ANIMATION_EASING_PRESETS] },
 		object(
 			{
-				type: { const: 'play', description: 'Plays a clip (set_animation_clip) on the targets: its commands, with "$" standing for each target, timed as in a shot.' },
-				targets: NODE_IDS,
-				clip: { type: 'string', minLength: 1, description: 'The clip\'s name (get_animation lists them).' },
-				speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play it this many times as fast (default 1).' },
-				delay: BASE.delay,
-				stagger: BASE.stagger,
-				with: BASE.with,
-				note: BASE.note
+				type: { type: 'string', enum: ['cubic-bezier', 'spring', 'elastic'], description: 'Curve kind.' },
+				x1: { type: 'number', description: 'cubic-bezier: out handle x (0–1).' },
+				y1: { type: 'number', description: 'cubic-bezier: out handle y.' },
+				x2: { type: 'number', description: 'cubic-bezier: in handle x (0–1).' },
+				y2: { type: 'number', description: 'cubic-bezier: in handle y.' },
+				stiffness: { type: 'number', exclusiveMinimum: 0, description: 'spring: default 170.' },
+				damping: { type: 'number', minimum: 0, description: 'spring: default 26, lower bounces more.' },
+				mass: { type: 'number', exclusiveMinimum: 0, description: 'spring: default 1.' },
+				velocity: { type: 'number', description: 'spring: starting speed (default 0).' },
+				amplitude: { type: 'number', minimum: 0, description: 'elastic: overshoot (default 1).' },
+				period: { type: 'number', exclusiveMinimum: 0, description: 'elastic: fraction of the length (default 0.3).' },
+				mode: { type: 'string', enum: ['out', 'in', 'in-out'], description: 'elastic: default out.' }
 			},
-			['type', 'targets', 'clip'],
-			'Plays a clip on the targets.'
-		),
-		command('match', 'Smart Animate: tweens a group into another group (usually hidden), part by part. Parts pair by name, then by id with the group ids taken out (card-a-title ↔ card-b-title), then by kind in order; each takes its partner\'s shape, paint and place. Unpaired parts fade out; parts of "into" with no partner do not appear (check_animation lists them).', { into: { type: 'string', minLength: 1, description: 'Id of the group to become.' } }, ['into']),
-		command('morph', 'Morphs each target into the shape (and paint) of another node, which usually stays hidden.', { into: { type: 'string', minLength: 1, description: 'Id of the node whose shape to take.' } }, ['into']),
-		command('follow', 'Moves targets along a path node, centre on the path.', {
-			path: { type: 'string', minLength: 1, description: 'Id of a path node (it can be hidden).' },
-			rotate: { type: 'boolean', description: 'Turn with the path (default false); moves and shakes made meanwhile turn with it too.' },
-			from: FRACTION('Where to start along the path (default 0).'),
-			to: FRACTION('Where to end along the path (default 1).')
-		}, ['path']),
-		command('pulse', 'Scales up and back to draw the eye.', { blend: BLEND('add'), amount: { type: 'number', description: 'Extra scale at the peak (default 0.15).' }, count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' } }),
-		command('shake', 'Shakes side to side (or up and down), settling.', { blend: BLEND('add'),
-			amount: { type: 'number', description: 'Document units (default 8).' },
-			count: { type: 'integer', minimum: 1, description: 'Shakes (default 3).' },
-			axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Default horizontal.' }
-		}),
-		command('teeter', 'Rocks about the centre either way, settling.', { blend: BLEND('add'), angle: { type: 'number', description: 'Degrees either way (default 8).' }, count: { type: 'integer', minimum: 1, description: 'Rocks (default 3).' } }),
-		command('wave', 'Bobs up and down without settling, like something floating (default 1000 ms).', { blend: BLEND('add'), amount: { type: 'number', description: 'Height in document units (default 6).' }, count: { type: 'integer', minimum: 1, description: 'Bobs (default 2).' } }),
-		command('wiggle', 'Wanders about its place as smooth seeded noise, easing out of and back to rest (default 1500 ms). The same seed always wanders the same way.', { blend: BLEND('add'),
-			amount: { type: 'number', description: 'Up to about this far, in document units (default 6).' },
-			frequency: { type: 'number', exclusiveMinimum: 0, description: 'Wanders per second, in Hz (default 3).' },
-			octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Layers of finer detail (default 2).' },
-			rotate: { type: 'number', description: 'Also turns about the centre by up to about this many degrees (default 0).' },
-			seed: { type: 'integer', minimum: 0, description: 'Default: one picked from the target id, so each target wanders its own way.' }
-		}),
-		command('color-pulse', 'Tints solid paint toward a colour and back (mixed in OKLab). On a group it tints every path in it.', {
-			color: { type: 'string', description: 'The tint, a CSS colour (default "#f59e0b").' },
-			paint: { type: 'string', enum: ['fill', 'stroke'], description: 'Which paint (default fill).' },
-			count: { type: 'integer', minimum: 1, description: 'Pulses (default 1).' }
-		}),
-		command('effect', 'Tweens a numeric parameter of a live path effect on the targets (twist angle, wiggle time, zig zag size, trim offset…).', {
-			effect: { type: 'string', minLength: 1, description: 'Effect id from get_animation\'s element "effects".' },
-			param: { type: 'string', minLength: 1, description: 'A numeric parameter of that effect (listed with it).' },
-			to: { type: 'number', description: 'Value at the end.' }
-		}, ['effect', 'param', 'to']),
-		object(
-			{ type: { const: 'wait', description: 'Waits.' }, duration: MS('How long'), with: BASE.with, note: BASE.note },
-			['type', 'duration'],
-			'Waits before the next command.'
+			['type']
 		)
 	]
 };
+
+/**
+ * The command shape the write tools carry: every field of every type listed once, so a tool
+ * definition stays small. The per-type rules (which fields go with which type, ranges, required
+ * fields) are checked when the edit is applied, with errors naming the shot, command and field;
+ * `describe_animation_command` returns a type's full schema.
+ */
+const COMMAND: JsonSchema = object(
+	{
+		type: {
+			type: 'string',
+			enum: [...MOTION_COMMAND_TYPES],
+			description: `${COMMAND_TYPE_LINES.join(' ')} The fields from blend on say which types take them; play takes no duration, ease, split, cascade, repeat or steps, and wait only duration, with and note. describe_animation_command gives a type's full schema.`
+		},
+		targets: { ...NODE_IDS, description: 'Node ids from get_animation\'s "elements" (a group animates as one; "$" in a clip). Required except for wait.' },
+		duration: MS('Length for each target (each type has a default; draw follows the path length)'),
+		delay: MS('Wait before starting (default 0)'),
+		stagger: MS('Start each further target this much later (default 0)'),
+		with: BASE.with,
+		ease: REF('ease', 'Easing (default ease-out for entrances, ease-in-out for moves).'),
+		note: BASE.note,
+		split: { type: 'string', enum: ['letter', 'word', 'line'], description: 'Outlined text (a group of letter paths): animate a letter, word or line at a time, staggered. get_text_layout shows the units.' },
+		cascade: { type: 'string', enum: ['forward', 'backward', 'center', 'edges', 'random'], description: 'With split: the order units go in (default forward).' },
+		repeat: { type: 'integer', minimum: 1, maximum: 1000, description: 'Play it this many times (default 1); "duration" is one cycle. Not for enter or exit.' },
+		repeatMode: { type: 'string', enum: [...MOTION_REPEAT_MODES], description: 'With repeat: loop (default), mirror (every other cycle backwards) or offset (carry on from where the last ended).' },
+		steps: { type: 'number', exclusiveMinimum: 0, maximum: 120, description: 'Stepped time, frames per second to hold on (12 = "on twos"). Default: the scene\'s steps, else smooth.' },
+		blend: { type: 'string', enum: [...MOTION_BLENDS], description: 'move, rotate, scale, emphasis: "replace" is a change the next takes over from (default for move, rotate, scale), "add" a layer over the pose (default for emphasis).' },
+		style: { type: 'string', enum: [...new Set([...MOTION_ENTER_STYLES, ...MOTION_EXIT_STYLES])], description: `enter: ${MOTION_ENTER_STYLES.join(', ')} (default fade). exit: ${MOTION_EXIT_STYLES.join(', ')} (default fade).` },
+		direction: { type: 'string', enum: [...MOTION_DIRECTIONS], description: 'enter / exit slide or wipe: the way it travels (default up for enter slide, down for exit slide, right for wipe).' },
+		distance: { type: 'number', description: 'enter / exit slide (default 40), enter rise (default 20): document units.' },
+		scale: { type: 'number', minimum: 0, description: 'enter pop (default 0.5) or zoom (default 1.6): the starting scale.' },
+		shape: { type: 'string', enum: [...MOTION_IRIS_SHAPES], description: 'enter iris: open through a circle (default) or a box.' },
+		orientation: { type: 'string', enum: [...MOTION_SPLIT_ORIENTATIONS], description: 'enter split: the line it opens from (default horizontal).' },
+		order: { type: 'string', enum: ['together', 'sequence'], description: 'draw, enter draw, exit undraw on several strokes: together (default) or sequence (one after another).' },
+		pace: { type: 'string', enum: ['time', 'speed'], description: 'With order together: every stroke takes the whole time (default) or all go at one speed.' },
+		align: { type: 'string', enum: ['start', 'end'], description: 'With pace speed: start together (default) or finish together.' },
+		sortBy: { type: 'string', enum: ['document', 'distance'], description: 'With order sequence: stacking order (default) or distance from origin.' },
+		origin: REF('point', 'With sortBy distance: where strokes are drawn out from (default the target\'s centre).'),
+		from: FRACTION('draw: fraction drawn at the start (default: what is drawn now). follow: where to start along the path (default 0).'),
+		to: { anyOf: [{ type: 'number' }, REF('point')], description: 'move: point for the centre. rotate: angle in degrees. scale: factor or { x, y } factors (required). fade: opacity 0–1 (required). draw: fraction drawn (default 1). follow: where to end on the path (default 1). effect: the value (required).' },
+		by: { anyOf: [{ type: 'number' }, REF('point')], description: 'move: offset { x, y } in document units. rotate: degrees to turn by.' },
+		comet: FRACTION('draw: a travelling stroke this fraction of the length long (leave out from and to).'),
+		via: { type: 'array', items: REF('point'), minItems: 1, maxItems: 64, description: 'move: waypoints the centre passes through smoothly on the way to "to" or "by".' },
+		pacing: { type: 'string', enum: ['even', 'equal'], description: 'move with via: steady speed (even, default) or the same time per stretch (equal).' },
+		geometric: { type: 'boolean', description: 'scale: grow by a steady factor, an even zoom (default false).' },
+		fill: { type: 'string', description: 'style: fill colour, CSS (hex, rgb(), rgba()).' },
+		stroke: { type: 'string', description: 'style: stroke colour, CSS.' },
+		strokeWidth: { type: 'number', minimum: 0, description: 'style: stroke width, document units.' },
+		clip: { type: 'string', minLength: 1, description: 'play: the clip\'s name (required).' },
+		speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'play: this many times as fast (default 1).' },
+		into: { type: 'string', minLength: 1, description: 'match: id of the group to become. morph: id of the node whose shape to take (required).' },
+		path: { type: 'string', minLength: 1, description: 'follow: id of a path node (required; it can be hidden).' },
+		rotate: { type: ['boolean', 'number'], description: 'follow: turn with the path (boolean, default false). wiggle: also turn by up to this many degrees (default 0).' },
+		amount: { type: 'number', description: 'pulse: extra scale at the peak (default 0.15). shake (8), wave (6), wiggle (6): document units.' },
+		count: { type: 'integer', minimum: 1, description: 'pulse, shake, teeter, wave, color-pulse: how many times.' },
+		axis: { type: 'string', enum: ['horizontal', 'vertical'], description: 'shake: default horizontal.' },
+		angle: { type: 'number', description: 'teeter: degrees either way (default 8).' },
+		frequency: { type: 'number', exclusiveMinimum: 0, description: 'wiggle: wanders per second, Hz (default 3).' },
+		octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'wiggle: layers of finer detail (default 2).' },
+		seed: { type: 'integer', minimum: 0, description: 'wiggle: noise seed (default: from the target id).' },
+		color: { type: 'string', description: 'color-pulse: the tint, a CSS colour (default "#f59e0b").' },
+		paint: { type: 'string', enum: ['fill', 'stroke'], description: 'color-pulse: which paint (default fill).' },
+		effect: { type: 'string', minLength: 1, description: 'effect: effect id from get_animation\'s element "effects" (required).' },
+		param: { type: 'string', minLength: 1, description: 'effect: a numeric parameter of that effect (required).' }
+	},
+	['type'],
+	'A command. Commands in a shot play one after another unless "with": "previous".'
+);
 
 const GEOMETRIC_CAMERA: JsonSchema = { type: 'boolean', description: 'Zoom at a steady rate, so a big zoom does not rush at the start (default false).' };
 const CAMERA: JsonSchema = {
 	description: 'Where the camera looks: a rectangle { x, y, width, height } in document units, or { frame: "<node id>", padding } to frame a node (fitted to the artwork\'s shape). It eases there over "ms" (default 1000); the first shot cuts.',
 	anyOf: [
-		object({ x: { type: 'number', description: 'Left.' }, y: { type: 'number', description: 'Top.' }, width: { type: 'number', exclusiveMinimum: 0, description: 'Width.' }, height: { type: 'number', exclusiveMinimum: 0, description: 'Height.' }, ease: EASE, ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['x', 'y', 'width', 'height']),
-		object({ frame: { type: 'string', minLength: 1, description: 'Node id to frame.' }, padding: { type: 'number', description: 'Margin around it (default 24).' }, ease: EASE, ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['frame'])
+		object({ x: { type: 'number', description: 'Left.' }, y: { type: 'number', description: 'Top.' }, width: { type: 'number', exclusiveMinimum: 0, description: 'Width.' }, height: { type: 'number', exclusiveMinimum: 0, description: 'Height.' }, ease: REF('ease'), ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['x', 'y', 'width', 'height']),
+		object({ frame: { type: 'string', minLength: 1, description: 'Node id to frame.' }, padding: { type: 'number', description: 'Margin around it (default 24).' }, ease: REF('ease'), ms: MS('Camera move length'), geometric: GEOMETRIC_CAMERA }, ['frame'])
 	]
 };
 
 const SHOT_FIELDS: Record<string, JsonSchema> = {
 	label: { type: 'string', description: 'What happens, in a few words.' },
-	camera: CAMERA,
-	run: { type: 'array', items: MOTION_COMMAND_SCHEMA, description: 'Commands, in order.' },
+	camera: REF('camera'),
+	run: { type: 'array', items: REF('command'), description: 'Commands, in order.' },
 	hold: MS('Hold after the commands (default 600)'),
 	speed: { type: 'number', minimum: 0.05, maximum: 20, description: 'Play the whole shot this many times as fast (default 1; 0.5 is half speed). fit_animation sets it.' },
 	at: object(
@@ -220,6 +327,30 @@ const CONTROL: JsonSchema = object(
 	'A colour parameter of the Flair effect made from the scene.'
 );
 const PRESET: JsonSchema = object({ name: { type: 'string', minLength: 1, description: 'Preset name.' }, values: { type: 'object', additionalProperties: { type: 'string' }, description: 'Control name → colour.' } }, ['name', 'values'], 'Named control values.');
+
+/** Shapes the tools share, carried once per tool as `$defs` (see `withDefs`). */
+const DEFS: Record<DefName, JsonSchema> = {
+	point: POINT('A point (or offset) in document units.'),
+	ease: EASE_COMPACT,
+	command: COMMAND,
+	camera: CAMERA,
+	shot: SHOT
+};
+
+/** Adds the `$defs` a tool's input schema refers to, directly or through other defs. */
+function withDefs<T extends JsonSchema>(schema: T): T {
+	const used = new Set<DefName>();
+	const visit = (value: unknown) => {
+		for (const [, name] of JSON.stringify(value).matchAll(/"#\/\$defs\/(\w+)"/g)) {
+			if (used.has(name as DefName)) continue;
+			used.add(name as DefName);
+			visit(DEFS[name as DefName]);
+		}
+	};
+	visit(schema);
+	if (!used.size) return schema;
+	return { ...schema, $defs: Object.fromEntries((Object.keys(DEFS) as DefName[]).filter((n) => used.has(n)).map((n) => [n, DEFS[n]])) };
+}
 
 const SETTINGS: Record<string, JsonSchema> = {
 	name: { type: 'string', minLength: 1, description: 'Short name, e.g. "logo-reveal".' },
@@ -257,11 +388,11 @@ const EDIT_OP: JsonSchema = {
 	description: `One edit (${MOTION_EDIT_OPS.filter((o) => o !== 'replace_scene' && o !== 'set_artwork').join(', ')}), shaped like the tool of the same name with an "op" field.`,
 	oneOf: [
 		object({ op: { const: 'set_settings', description: 'Like set_animation_settings.' }, ...SETTINGS }, ['op']),
-		object({ op: { const: 'insert_shots', description: 'Like insert_shots.' }, shots: { type: 'array', items: SHOT, minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position (default: the end).' } }, ['op', 'shots']),
+		object({ op: { const: 'insert_shots', description: 'Like insert_shots.' }, shots: { type: 'array', items: REF('shot'), minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position (default: the end).' } }, ['op', 'shots']),
 		object({ op: { const: 'update_shot', description: 'Like update_shot.' }, shot: SHOT_ID, set: object({ id: SHOT.properties!.id, ...SHOT_FIELDS }, [], 'Fields to replace.'), remove: { type: 'array', items: { type: 'string', enum: ['label', 'camera', 'hold', 'speed', 'at'] }, description: 'Fields to clear.' } }, ['op', 'shot']),
 		object({ op: { const: 'delete_shots', description: 'Like delete_shots.' }, shots: { type: 'array', items: SHOT_ID, minItems: 1, description: 'Shot ids.' } }, ['op', 'shots']),
 		object({ op: { const: 'move_shot', description: 'Like move_shot.' }, shot: SHOT_ID, to: { type: 'integer', minimum: 0, description: 'New position (0 = first).' } }, ['op', 'shot', 'to']),
-		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
+		object({ op: { const: 'add_commands', description: 'Like add_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: REF('command'), minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (default: the end).' } }, ['op', 'shot', 'commands']),
 		object({ op: { const: 'update_command', description: 'Like update_command.' }, shot: SHOT_ID, command: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'Index in the shot\'s run, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, set: { type: 'object', description: 'Command fields to replace.' }, remove: { type: 'array', items: { type: 'string' }, description: 'Command fields to clear.' } }, ['op', 'shot', 'command']),
 		object({ op: { const: 'move_command', description: 'Like move_command.' }, shot: SHOT_ID, command: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'Index in the shot\'s run, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, to: { type: 'integer', minimum: 0, description: 'New index in the run (0 = first).' } }, ['op', 'shot', 'command', 'to']),
 		object({ op: { const: 'delete_commands', description: 'Like delete_commands.' }, shot: SHOT_ID, commands: { type: 'array', items: { anyOf: [{ type: 'integer', minimum: 0 }, { type: 'string', pattern: '^\\$(\\d+|last)[.\\[]' }], description: 'An index, or a reference to an earlier op\'s outcome such as "$0.indexes[0]".' }, minItems: 1, description: 'Indexes in the shot\'s run.' } }, ['op', 'shot', 'commands']),
@@ -386,6 +517,23 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				issues: issueSummary(controller.getState().issues),
 				...(reason ? { readOnly: reason } : {})
 			};
+		}
+	};
+
+	const describeCommand: AgentTool = {
+		name: 'describe_animation_command',
+		title: 'Describe command types',
+		description:
+			'Returns the full JSON Schema of each given command type: every field it takes with its type, range, default and meaning, and which are required. The write tools list every field once in short; call this before writing a type you have not used yet or when a write rejects a field. Returns { commands: [{ type, schema }] }.',
+		inputSchema: object(
+			{ types: { type: 'array', items: { type: 'string', enum: [...MOTION_COMMAND_TYPES] }, minItems: 1, uniqueItems: true, description: `Command types, e.g. ["enter", "move"] (any of ${MOTION_COMMAND_TYPES.join(', ')}).` } },
+			['types']
+		),
+		annotations: { title: 'Describe command types', ...READ },
+		handler: ({ types }) => {
+			for (const type of types as string[])
+				if (!(MOTION_COMMAND_TYPES as readonly string[]).includes(type)) throw new Error(`There is no command type ${namedWithSuggestion(type, MOTION_COMMAND_TYPES)}; use one of ${MOTION_COMMAND_TYPES.join(', ')}.`);
+			return { commands: (types as MotionCommandType[]).map((type) => ({ type, schema: MOTION_COMMAND_TYPE_SCHEMAS[type] })) };
 		}
 	};
 
@@ -756,7 +904,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			{
 				name: { type: 'string', pattern: '^[A-Za-z_][\\w-]*$', description: 'Clip name, e.g. "pop-settle".' },
 				clip: {
-					anyOf: [object({ description: { type: 'string', description: 'What it does, in a few words.' }, run: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands, timed as in a shot; target "$" for the node it is played on. Clips cannot play clips.' } }, ['run']), { type: 'null' }],
+					anyOf: [object({ description: { type: 'string', description: 'What it does, in a few words.' }, run: { type: 'array', items: REF('command'), minItems: 1, description: 'Commands, timed as in a shot; target "$" for the node it is played on. Clips cannot play clips.' } }, ['run']), { type: 'null' }],
 					description: 'The clip, or null to delete it (refused while a play command uses it).'
 				}
 			},
@@ -815,7 +963,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		name: 'insert_shots',
 		title: 'Add shots',
 		description: 'Adds shots (one undo step) at a position (default: the end). Returns every shot\'s new timing and any issues.',
-		inputSchema: object({ shots: { type: 'array', items: SHOT, minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position, 0 = first (default: the end).' } }, ['shots']),
+		inputSchema: object({ shots: { type: 'array', items: REF('shot'), minItems: 1, description: 'Shots to add.' }, at: { type: 'integer', minimum: 0, description: 'Position, 0 = first (default: the end).' } }, ['shots']),
 		annotations: { title: 'Add shots', ...WRITE },
 		handler: ({ shots, at }) => apply({ op: 'insert_shots', shots, at }, 'Add shots', () => ({ added: shots.map((s: { id: string }) => s.id) }))
 	};
@@ -858,7 +1006,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		name: 'add_commands',
 		title: 'Add commands to a shot',
 		description: 'Adds commands to a shot\'s run (one undo step), at an index (default: the end). Returns the indexes they got, their timing and any issues.',
-		inputSchema: object({ shot: SHOT_ID, commands: { type: 'array', items: MOTION_COMMAND_SCHEMA, minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the run (default: the end).' } }, ['shot', 'commands']),
+		inputSchema: object({ shot: SHOT_ID, commands: { type: 'array', items: REF('command'), minItems: 1, description: 'Commands to add.' }, at: { type: 'integer', minimum: 0, description: 'Index in the run (default: the end).' } }, ['shot', 'commands']),
 		annotations: { title: 'Add commands to a shot', ...WRITE },
 		handler: ({ shot, commands, at }) => {
 			const before = scene().shots.find((s) => s.id === shot)?.run.length ?? 0;
@@ -879,7 +1027,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 			{
 				shot: SHOT_ID,
 				command: { type: 'integer', minimum: 0, description: 'Index in the shot\'s run (from get_animation).' },
-				set: { type: 'object', description: 'Command fields to replace (see add_commands for each type\'s fields).' },
+				set: { type: 'object', description: 'Command fields to replace (describe_animation_command lists each type\'s fields).' },
 				remove: { type: 'array', items: { type: 'string' }, description: 'Optional fields to clear (e.g. "delay").' }
 			},
 			['shot', 'command']
@@ -956,7 +1104,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		title: 'Replace the animation\'s shots',
 		description:
 			'Replaces every shot (and optionally the settings and controls), keeping the artwork, as one undo step. For small changes prefer the per-operation tools. Returns the timing and issues.',
-		inputSchema: object({ shots: { type: 'array', items: SHOT, description: 'All shots, in order.' }, ...SETTINGS, controls: { type: 'array', items: CONTROL, description: 'Colour controls.' }, presets: { type: 'array', items: PRESET, description: 'Presets.' } }, ['shots']),
+		inputSchema: object({ shots: { type: 'array', items: REF('shot'), description: 'All shots, in order.' }, ...SETTINGS, controls: { type: 'array', items: CONTROL, description: 'Colour controls.' }, presets: { type: 'array', items: PRESET, description: 'Presets.' } }, ['shots']),
 		annotations: { title: 'Replace the animation\'s shots', ...DESTRUCTIVE },
 		handler: ({ shots, controls, presets, ...settings }) => {
 			const current = scene();
@@ -1010,8 +1158,10 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
-	const reads = [getAnimation, getShot, findElements, getTextLayout, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation];
-	const writes = [setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo];
+	// Shared shapes (commands, shots, easing) go in each tool's $defs once instead of inline at every use.
+	const finish = (tools: AgentTool[]) => tools.map((tool) => ({ ...tool, inputSchema: withDefs(tool.inputSchema) }));
+	const reads = finish([getAnimation, getShot, describeCommand, findElements, getTextLayout, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation]);
+	const writes = finish([setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo]);
 
 	return {
 		id: options.id ?? 'animation',
