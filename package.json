@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:corpus": "pnpm --filter @pixerate/editor test:corpus",
     "typecheck": "pnpm --recursive run typecheck",
+    "check:packages": "node scripts/check-packages.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev": "pnpm --filter demo dev",

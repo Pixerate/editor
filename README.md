@@ -618,7 +618,7 @@ Every feature is available from core and from both framework packages, except wh
 - [Video editor follow-ups](docs/video-editor-follow-ups.md)
 - [Chart editor](docs/chart-editor.md)
 - [CI/CD and releases](docs/ci-cd-release.md)
-- [Build memory and package size plan](docs/build-memory-and-package-size-plan.md)
+- [Build memory and package size](docs/build-memory-and-package-size-plan.md) (done)
 - [Outstanding work](docs/outstanding.md)
 - [Known pitfalls and workarounds (GOTCHAS)](GOTCHAS.md)
 

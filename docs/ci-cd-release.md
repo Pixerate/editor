@@ -29,8 +29,11 @@ Runs on:
   2. Setup pnpm with `pnpm/action-setup@v6`
   3. Setup Node.js 24 with caching via `actions/setup-node@v7`
   4. `pnpm install --frozen-lockfile`
-  5. `pnpm test` (Runs all Vitest suites across core, react, and svelte packages)
-  6. `pnpm build` (Compiles all library packages and demo app)
+  5. On pull requests, fail if no changeset is pending
+  6. `pnpm build` (compiles all library packages and the demo app on Node's default heap, and writes the build's peak memory to the job summary)
+  7. `pnpm check:packages` (packs the three packages, type-checks a consumer of every subpath with `bundler`, `node16` ESM and `node16` CommonJS resolution, and imports every core and React subpath in Node; Release runs it too, before publishing)
+  8. `pnpm typecheck`
+  9. `pnpm test` (all Vitest suites across core, react, svelte and the demo)
 
 ---
 

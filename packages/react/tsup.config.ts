@@ -19,8 +19,10 @@ export default defineConfig({
     "effects/index": "src/effects/index.ts"
   },
   format: ["esm", "cjs"],
-  dts: true,
+  // Declarations come from `tsc -p tsconfig.build.json` (see the build script): tsup's bundled DTS worker ran out of memory.
+  dts: false,
   clean: true,
-  sourcemap: true,
+  // No source maps in the published package: see GOTCHAS "[monorepo/build] Declarations Come From `tsc`".
+  sourcemap: false,
   external: ["react", "react-dom", "@xyflow/react"],
 });
