@@ -315,7 +315,10 @@ export function createGenerationToolProvider(options: GenerationToolProviderOpti
 
 	return {
 		id: options.id ?? 'generation',
-		...(options.namespace ? { namespace: options.namespace } : {}),
+		...(options.namespace !== undefined ? { namespace: options.namespace } : {}),
+		title: 'Media generation',
+		description: 'Plan, estimate and run paid media generation (images, video, audio, vectors) with the configured models.',
+		skill: 'pixerate-generation',
 		tools,
 		...(options.subscribe ? { subscribe: options.subscribe } : {}),
 		clearIdempotencyKeys(key?: string) {

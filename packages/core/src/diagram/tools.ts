@@ -11,7 +11,7 @@ import { DIRECTIONS, type EditOp, type MermaidDocument, type Point } from './typ
 export interface DiagramToolProviderOptions {
 	/** Provider id (unique per registry). Default `diagram`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/**
 	 * The diagram cannot be edited: write tools are hidden and `get_diagram` says why. A
@@ -590,6 +590,9 @@ export function createDiagramToolProvider(controller: DiagramController, options
 	return {
 		id: options.id ?? 'diagram',
 		namespace: options.namespace,
+		title: 'Diagram editor',
+		description: 'Mermaid diagrams: nodes, edges and groups, shapes and styles, direction and layout, Mermaid import and export, rendering.',
+		skill: 'pixerate-diagram',
 		tools: () => (readOnlyReason() ? reads : [...reads, ...writes]),
 		subscribe: (notify) => {
 			let last = readOnlyReason();

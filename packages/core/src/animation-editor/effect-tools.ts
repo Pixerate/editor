@@ -13,7 +13,7 @@ import type { AppliedMotionEffect } from './effects.js';
 export interface AnimationEffectsToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation-effects`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The scene cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -36,6 +36,9 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 	return createEffectToolProvider({
 		id: options.id ?? 'animation-effects',
 		namespace: options.namespace,
+		title: 'Animation effects',
+		description: 'Provider motion effects on nodes of the animation artwork.',
+		skill: 'pixerate-animation-editor',
 		target: { noun: 'node', id: 'A node id of the artwork from get_animation (a group animates as one).' },
 		applyUses: ['motion'],
 		applyDetails:

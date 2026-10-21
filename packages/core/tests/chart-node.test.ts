@@ -18,6 +18,7 @@ import { docxToDocumentImport, insertImportedDocument } from "../src";
 import { buildDocx, p } from "./helpers/zip-writer";
 import { ToolRegistry } from "../src/tools/registry";
 import { createRichTextToolProvider } from "../src/agent/providers";
+import { baseToolName } from "../src/tools";
 
 // Editors left alive keep ProseMirror's DOMObserver timers, which can fire after jsdom is torn down.
 const created: Editor[] = [];
@@ -314,7 +315,7 @@ describe("document chart tools", () => {
     };
     return { editor, registry, ok, error };
   };
-  const names = (registry: ToolRegistry) => registry.listTools().tools.map((t) => t.name);
+  const names = (registry: ToolRegistry) => registry.listTools().tools.map((t) => baseToolName(t.name));
 
   it("are listed only when the schema has charts, and only reads while read-only", () => {
     const plain = new ToolRegistry();

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
 import { ToolRegistry } from '../src/tools';
 import { VectorEditorController, createVectorEffectsToolProvider, rectSubpath, type VectorGroupNode } from '../src/vector';
+import { baseToolName } from '../src/tools';
 
 const editor = (effects = createFakeEffectProvider() as ReturnType<typeof createFakeEffectProvider> | null) => {
 	const c = new VectorEditorController({ document: { width: 400, height: 200, background: '#ffffff', nodes: [{ id: 'box', type: 'path', fill: '#ef4444', subpaths: [rectSubpath({ x: 20, y: 20, width: 60, height: 60 })] }, { id: 'g', type: 'group', children: [] }] } });
@@ -43,7 +44,7 @@ describe('vector editor: provider vector effects', () => {
 		const c = editor();
 		const registry = new ToolRegistry();
 		registry.register(createVectorEffectsToolProvider(c));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect']);
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect']);
 		const a = await registry.callTool('apply_effect', { target: 'g', effect: 'fake.badge' });
 		expect(a.isError).toBeFalsy();
 		const id = (a.structuredContent as { group: string }).group;

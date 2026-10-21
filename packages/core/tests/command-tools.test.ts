@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { Editor } from '@tiptap/core';
@@ -24,6 +26,7 @@ import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { baseToolName } from '../src/tools';
 
 beforeAll(() => {
 	const dom = new JSDOM();
@@ -60,7 +63,7 @@ function setup() {
 describe('createCommandToolProvider', () => {
 	it('lists commands with params, shortcuts and disabled reasons', async () => {
 		const { tools } = setup();
-		expect(tools.listTools().tools.map((t) => t.name)).toEqual(['list_commands', 'run_command', 'run_commands']);
+		expect(tools.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['list_commands', 'run_command', 'run_commands']);
 		const result = await tools.callTool('list_commands', {});
 		const listed = (result.structuredContent as any).commands;
 		expect(listed.map((c: any) => c.id)).toEqual(['history.undo', 'history.redo', 'counter.set', 'counter.fail']);
@@ -240,6 +243,13 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			}
 		}
 		expect(undescribed).toEqual([]);
+		// Every toolset says what it is and which skill documents it, for list_toolsets and search_tools.
+		const skillsDir = join(__dirname, '..', 'skills');
+		for (const set of registry.toolsets()) {
+			expect(set.title, `${set.name} title`).toBeTruthy();
+			expect(set.description, `${set.name} description`).toMatch(/^[A-Z].*\.$/);
+			if (set.name !== 'dom') expect(existsSync(join(skillsDir, set.skill ?? '-', 'SKILL.md')), `${set.name} skill ${set.skill}`).toBe(true);
+		}
 		expect(allTools.map((t) => t.name)).toEqual(expect.arrayContaining(['diagram__get_diagram', 'diagram__add_diagram_node', 'diagram__render_diagram', 'animation__get_animation', 'animation__add_commands', 'animation__export_flair_effect', 'video__get_video_project', 'video__list_video_sequences', 'video__add_video_clip', 'video__export_video_ffmpeg', 'video__get_video_scopes', 'video__set_video_lut', 'video__remove_video_lut', 'video__plan_video_proxies', 'video__set_video_proxies', 'video__set_video_preview_scale', 'video__get_video_preview_cache', 'video__set_video_keyframes', 'video__remove_video_keyframes', 'video__slip_video_clip', 'video__roll_video_edit', 'video__slide_video_clip', 'video__lift_video_range', 'video__extract_video_range', 'video__split_video_at', 'videofx__search_effects', 'animfx__add_vector_effect', 'imgfx__apply_effect', 'imgfx__add_effect_layer', 'videofx__apply_effect', 'videofx__add_video_effect_clip', 'videofx__set_video_effect_transition', 'capture__capture_view', 'dom__capture_view', 'img__capture_view', 'paint__paint_stroke', 'paint__set_paper', 'paint__list_brushes', 'paint__render_preview', 'chartdoc__insert_chart', 'chartdoc__update_chart_in_document', 'chartdoc__list_document_charts', 'chartdoc__insert_sparkline']));
 		editor.destroy();
 		chartDoc.destroy();

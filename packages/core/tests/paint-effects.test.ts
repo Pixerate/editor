@@ -3,6 +3,7 @@ import { createFakeEffectProvider } from '../src/effects';
 import { PaintEditorController, createPaintEffectsToolProvider, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 import { ToolRegistry } from '../src/tools/registry';
+import { baseToolName } from '../src/tools';
 
 const W = 32;
 const H = 16;
@@ -171,7 +172,7 @@ describe('paint provider effects: agent tools', () => {
   const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
   it('lists the shared tools and the paint ones', () => {
-    const names = setup().registry.listTools().tools.map((t) => t.name);
+    const names = setup().registry.listTools().tools.map((t) => baseToolName(t.name));
     for (const n of ['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'set_paper_effect', 'add_effect_layer', 'fill_layer_with_effect']) expect(names).toContain(n);
   });
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { McpToolDefinition, McpToolResult } from "@pixerate/editor/agent";
+import type { McpToolDefinition, McpToolResult, ToolSource, ToolsetInfo } from "@pixerate/editor/agent";
 import { Bot, Play, Plug } from "lucide-react";
-import { useToolBridge } from "@pixerate/editor-react";
-import { demoToolRegistry } from "../agentTools";
+import { useToolBridge, useToolRegistryView } from "@pixerate/editor-react";
+import { demoSkillFiles, demoToolRegistry } from "../agentTools";
 
 /** Example arguments for a tool, so "Call" works without typing JSON. */
 const EXAMPLE_ARGS: Record<string, Record<string, unknown>> = {
@@ -29,11 +29,11 @@ function exampleArgsFor(tool: McpToolDefinition): string {
  * Connects the demo's registry to a local MCP bridge (`npx pixerate-mcp-bridge`), so an MCP
  * client (Claude Desktop, Claude Code) can call the tools of the open tab.
  */
-const BridgeConnect: React.FC = () => {
+const BridgeConnect: React.FC<{ source: ToolSource }> = ({ source }) => {
   const [on, setOn] = useState(false);
   const [token, setToken] = useState("");
   const options = useMemo(() => (on ? { name: "Pixerate demo", token: token || undefined } : null), [on, token]);
-  const bridge = useToolBridge(demoToolRegistry, options);
+  const bridge = useToolBridge(source, options);
   const label =
     bridge.status === "connected"
       ? `connected as ${bridge.editorId}`
@@ -75,9 +75,15 @@ const BridgeConnect: React.FC = () => {
  * `tools/call` runner.
  */
 export const AgentToolsPanel: React.FC = () => {
+  // Discovery: the agent (and the bridge) see only the discovery tools until they enable more.
+  const [discovery, setDiscovery] = useState(false);
+  const viewOptions = useMemo(() => (discovery ? { discovery: { skills: demoSkillFiles } } : {}), [discovery]);
+  const view = useToolRegistryView(demoToolRegistry, viewOptions);
+  const source: ToolSource = view ?? demoToolRegistry;
   const [tools, setTools] = useState<McpToolDefinition[]>(
     () => demoToolRegistry.listTools().tools
   );
+  const [toolsets, setToolsets] = useState<ToolsetInfo[]>(() => demoToolRegistry.toolsets());
   const [changeCount, setChangeCount] = useState(0);
   const [selected, setSelected] = useState<string>("");
   const [argsText, setArgsText] = useState("{}");
@@ -87,12 +93,28 @@ export const AgentToolsPanel: React.FC = () => {
 
   useEffect(() => {
     // Pick up registrations that happened before this effect subscribed.
-    setTools(demoToolRegistry.listTools().tools);
-    return demoToolRegistry.onListChanged((next) => {
+    setTools(source.listTools().tools);
+    setToolsets(source.toolsets());
+    return source.onListChanged((next) => {
       setTools(next);
+      setToolsets(source.toolsets());
       setChangeCount((n) => n + 1);
     });
-  }, []);
+  }, [source]);
+
+  // The listed tools grouped by toolset; discovery tools belong to none.
+  const groups = useMemo(() => {
+    const listed = new Map(tools.map((t) => [t.name, t]));
+    const inSets = new Set(toolsets.flatMap((set) => set.tools));
+    const out: { key: string; label: string; skill?: string; tools: McpToolDefinition[] }[] = [];
+    const loose = tools.filter((t) => !inSets.has(t.name));
+    if (loose.length > 0) out.push({ key: "", label: "Discovery", tools: loose });
+    for (const set of toolsets) {
+      const members = set.tools.flatMap((name) => listed.get(name) ?? []);
+      if (members.length > 0) out.push({ key: set.name, label: set.title ?? set.name, skill: set.skill, tools: members });
+    }
+    return out;
+  }, [tools, toolsets]);
 
   const selectedTool = tools.find((t) => t.name === selected);
 
@@ -122,7 +144,7 @@ export const AgentToolsPanel: React.FC = () => {
     setArgsError(null);
     setBusy(true);
     try {
-      setResult(await demoToolRegistry.callTool(selectedTool.name, args));
+      setResult(await source.callTool(selectedTool.name, args));
     } finally {
       setBusy(false);
     }
@@ -144,7 +166,12 @@ export const AgentToolsPanel: React.FC = () => {
           {tools.length} tools · {changeCount} listChanged
         </span>
       </div>
-      <BridgeConnect />
+      <BridgeConnect source={source} />
+      <label className="flex items-center gap-2 mb-3 text-xs text-slate-400">
+        <input type="checkbox" checked={discovery} onChange={(e) => setDiscovery(e.target.checked)} data-testid="tool-discovery" />
+        Discovery mode: list only <code className="text-slate-300">list_toolsets</code>, <code className="text-slate-300">search_tools</code>,{" "}
+        <code className="text-slate-300">enable_tools</code> and <code className="text-slate-300">get_skill</code> until the agent enables more
+      </label>
       <p className="text-xs text-slate-400 mb-3">
         Each mounted editor registers a tool provider with{" "}
         <code className="text-slate-300">useAgentToolProvider</code>. Switch tabs
@@ -158,30 +185,40 @@ export const AgentToolsPanel: React.FC = () => {
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <ul className="space-y-1 text-xs font-mono max-h-64 overflow-y-auto" aria-label="Registered tools">
-            {tools.map((tool) => (
-              <li key={tool.name}>
-                <button
-                  type="button"
-                  onClick={() => selectTool(tool)}
-                  className={`w-full text-left px-2 py-1.5 rounded border transition-colors ${
-                    tool.name === selected
-                      ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
-                      : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700"
-                  }`}
-                  data-tool-name={tool.name}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate">{tool.name}</span>
-                    {tool.annotations?.readOnlyHint && (
-                      <span className="text-[10px] text-emerald-400 shrink-0">read-only</span>
-                    )}
-                  </div>
-                  {tool.description && (
-                    <div className="text-[10px] text-slate-500 font-sans truncate">
-                      {tool.description}
-                    </div>
-                  )}
-                </button>
+            {groups.map((group) => (
+              <li key={group.key} data-toolset={group.key}>
+                <div className="flex items-baseline justify-between gap-2 px-1 pt-2 pb-1 font-sans text-[10px] uppercase tracking-wider text-slate-500">
+                  <span>{group.label}</span>
+                  {group.skill && <span className="normal-case tracking-normal text-slate-600">skill {group.skill}</span>}
+                </div>
+                <ul className="space-y-1">
+                  {group.tools.map((tool) => (
+                    <li key={tool.name}>
+                      <button
+                        type="button"
+                        onClick={() => selectTool(tool)}
+                        className={`w-full text-left px-2 py-1.5 rounded border transition-colors ${
+                          tool.name === selected
+                            ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200"
+                            : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700"
+                        }`}
+                        data-tool-name={tool.name}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{tool.name}</span>
+                          {tool.annotations?.readOnlyHint && (
+                            <span className="text-[10px] text-emerald-400 shrink-0">read-only</span>
+                          )}
+                        </div>
+                        {tool.description && (
+                          <div className="text-[10px] text-slate-500 font-sans truncate">
+                            {tool.description}
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

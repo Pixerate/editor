@@ -4,6 +4,7 @@ import { Editor } from '@tiptap/core';
 import {
 	ToolRegistry,
 	ToolRegistryError,
+	baseToolName,
 	createToolRegistry,
 	validateJsonSchema,
 	toToolResult,
@@ -96,9 +97,9 @@ describe('ToolRegistry', () => {
 		registry.register(provider('b', ['b1', 'b2']));
 		registry.register(provider('a', ['a1']));
 		const { tools } = registry.listTools();
-		expect(tools.map((t) => t.name)).toEqual(['b1', 'b2', 'a1']);
+		expect(tools.map((t) => t.name)).toEqual(['b__b1', 'b__b2', 'a__a1']);
 		expect(tools[0]).toEqual({
-			name: 'b1',
+			name: 'b__b1',
 			description: 'b1 tool',
 			inputSchema: { type: 'object', properties: { value: { type: 'string' } } }
 		});
@@ -107,8 +108,56 @@ describe('ToolRegistry', () => {
 		expect(registry.providerIds()).toEqual(['b', 'a']);
 	});
 
-	it('namespaces colliding tool names by provider id', async () => {
+	it('prefixes every tool with its namespace or provider id by default, so names never shift', async () => {
 		const registry = new ToolRegistry();
+		registry.register(provider('doc-1', ['get_text', 'unique']));
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['doc-1__get_text', 'doc-1__unique']);
+		registry.register(provider('doc 2', ['get_text'], { title: 'Second doc' }));
+		registry.register(provider('p', ['x'], { namespace: 'sheet' }));
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['doc-1__get_text', 'doc-1__unique', 'doc_2__get_text', 'sheet__x']);
+
+		// A bare name works when exactly one tool has it, and says which tools it could mean otherwise.
+		expect(registry.hasTool('unique')).toBe(true);
+		expect(registry.getTool('x')?.name).toBe('sheet__x');
+		expect((await registry.callTool('x', { value: 'v' })).structuredContent).toEqual({ tool: 'sheet__x', provider: 'p', value: 'v' });
+		expect(registry.hasTool('get_text')).toBe(false);
+		const ambiguous = await registry.callTool('get_text');
+		expect(ambiguous.isError).toBe(true);
+		expect((ambiguous.structuredContent as any).error.code).toBe('unknown_tool');
+		expect((ambiguous.content[0] as any).text).toBe(
+			'Tool "get_text" is ambiguous: "doc-1__get_text", "doc_2__get_text" all have that name. Call one of them by its full name.'
+		);
+	});
+
+	it("keeps bare names for namespace: '' unless they collide", () => {
+		const registry = new ToolRegistry();
+		registry.register(provider('host', ['ping'], { namespace: '' }));
+		registry.register(provider('chart', ['get_chart']));
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['ping', 'chart__get_chart']);
+		registry.register(provider('other', ['ping'], { namespace: '' }));
+		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['host__ping', 'chart__get_chart', 'other__ping']);
+	});
+
+	it('groups providers into toolsets by namespace', () => {
+		const registry = new ToolRegistry();
+		registry.register(provider('image-editor', ['add_layer'], { namespace: 'image', title: 'Image editor', description: 'Layers.', skill: 'pixerate-image-editor' }));
+		registry.register(provider('image-effects', ['apply_effect'], { namespace: 'image' }));
+		registry.register(provider('chart', ['get_chart']));
+		expect(registry.toolsets()).toEqual([
+			{
+				name: 'image',
+				title: 'Image editor',
+				description: 'Layers.',
+				skill: 'pixerate-image-editor',
+				providers: ['image-editor', 'image-effects'],
+				tools: ['image__add_layer', 'image__apply_effect']
+			},
+			{ name: 'chart', providers: ['chart'], tools: ['chart__get_chart'] }
+		]);
+	});
+
+	it("namespaces colliding tool names by provider id with namespaces: 'on-collision'", async () => {
+		const registry = new ToolRegistry({ namespaces: 'on-collision' });
 		registry.register(provider('doc-1', ['get_text', 'unique']));
 		registry.register(provider('doc 2', ['get_text']));
 		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['doc-1__get_text', 'unique', 'doc_2__get_text']);
@@ -130,7 +179,7 @@ describe('ToolRegistry', () => {
 	});
 
 	it("throws on collisions with onCollision: 'error' and leaves the registry unchanged", () => {
-		const registry = new ToolRegistry({ onCollision: 'error' });
+		const registry = new ToolRegistry({ namespaces: 'on-collision', onCollision: 'error' });
 		registry.register(provider('a', ['same']));
 		let error: unknown;
 		try {
@@ -168,7 +217,13 @@ describe('ToolRegistry', () => {
 
 		const unknown = await registry.callTool('nope');
 		expect(unknown.isError).toBe(true);
-		expect(unknown.structuredContent).toEqual({ error: { code: 'unknown_tool', message: 'Unknown tool "nope".', tool: 'nope' } });
+		expect(unknown.structuredContent).toEqual({
+			error: {
+				code: 'unknown_tool',
+				message: 'Unknown tool "nope". List the tools again; the editor that had it may have closed or become read-only.',
+				tool: 'nope'
+			}
+		});
 
 		const invalid = await registry.callTool('echo', { value: 3 });
 		expect(invalid.isError).toBe(true);
@@ -181,9 +236,10 @@ describe('ToolRegistry', () => {
 		const failed = await registry.callTool('boom', {});
 		expect((failed.structuredContent as any).error).toMatchObject({ code: 'tool_failed', message: 'kaboom' });
 
+		// Called by its bare name, the handler still sees the exposed name.
 		const ok = await registry.callTool('echo', { value: 'hi' });
 		expect(ok.isError).toBeUndefined();
-		expect(ok.content).toEqual([{ type: 'text', text: JSON.stringify({ tool: 'echo', provider: 'p', value: 'hi' }) }]);
+		expect(ok.content).toEqual([{ type: 'text', text: JSON.stringify({ tool: 'p__echo', provider: 'p', value: 'hi' }) }]);
 
 		const unchecked = new ToolRegistry({ validateArguments: false });
 		unchecked.register(provider('p', ['echo']));
@@ -210,7 +266,7 @@ describe('ToolRegistry', () => {
 		expect(listener).not.toHaveBeenCalled();
 		vi.advanceTimersByTime(10);
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(listener.mock.calls[0][0].map((t: any) => t.name)).toEqual(['a1']);
+		expect(listener.mock.calls[0][0].map((t: any) => baseToolName(t.name))).toEqual(['a1']);
 
 		// Unmount + remount (e.g. React StrictMode) produces no notification.
 		unregisterA();
@@ -244,7 +300,7 @@ describe('ToolRegistry', () => {
 		notify();
 		vi.runAllTimers();
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['one', 'two']);
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['one', 'two']);
 
 		off();
 		names = ['three'];
@@ -310,7 +366,7 @@ describe('Planner integration with tool calls', () => {
 				}
 			})
 		);
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_editor_state', 'edit_canvas', 'edit_prompt']);
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['get_editor_state', 'edit_canvas', 'edit_prompt']);
 		expect(registry.getTool('edit_canvas')?.inputSchema).toEqual(EDITOR_MCP_TOOLS[1].inputSchema);
 
 		const state = await registry.callTool('get_editor_state', { includeCanvas: false });
@@ -345,7 +401,7 @@ describe('Built-in tool providers', () => {
 		const editor = new Editor({ extensions: createRichTextPreset(), content: '<p>Hello world</p>' });
 		const registry = new ToolRegistry();
 		registry.register(createRichTextToolProvider(editor, { id: 'doc' }));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual([
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual([
 			'get_text',
 			'find_text',
 			'insert_text',
@@ -392,7 +448,7 @@ describe('Built-in tool providers', () => {
 		controller.editor.setEditable(false);
 		vi.runAllTimers();
 		expect(listener).toHaveBeenCalledTimes(1);
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['get_text', 'find_text']);
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['get_text', 'find_text']);
 
 		controller.destroy();
 		vi.runAllTimers();

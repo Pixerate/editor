@@ -14,6 +14,7 @@ import {
   planChartCommand,
   type ChartSpec,
 } from "../src/chart";
+import { baseToolName } from '../src/tools';
 
 const spec: Partial<ChartSpec> = {
   type: "bar",
@@ -39,7 +40,7 @@ describe("chart agent tools", () => {
   it("lists one strict, described, annotated tool per operation", async () => {
     const { registry, call } = setup();
     const tools = registry.listTools().tools;
-    expect(tools.map((t) => t.name)).toEqual([
+    expect(tools.map((t) => baseToolName(t.name))).toEqual([
       "get_chart", "render_chart", "check_chart_colors", "recommend_chart", "get_chart_trendline", "list_chart_presets", "export_chart_mermaid", "export_chart_ooxml",
       "update_chart", "set_chart_data", "set_chart_values", "add_chart_series", "update_chart_series", "remove_chart_series", "add_chart_category", "remove_chart_category",
       "import_chart_csv", "import_chart_mermaid", "import_chart_ooxml", "add_chart_trendline", "remove_chart_trendline", "apply_chart_preset", "transpose_chart",
@@ -166,7 +167,7 @@ describe("chart agent tools", () => {
     const result: any = await registry.callTool("render_chart", { format: "png", width: 200, height: 150 });
     expect(result.structuredContent.warnings.length).toBeGreaterThan(0);
     expect(result.content[1].text).toContain(result.structuredContent.warnings[0].message);
-    const tool = registry.listTools().tools.find((t: any) => t.name === "render_chart")!;
+    const tool = registry.listTools().tools.find((t: any) => baseToolName(t.name) === "render_chart")!;
     expect(tool.description).toMatch(/costs tokens/);
     expect(tool.description).toMatch(/overlapping/);
     expect(tool.description).toMatch(/get_chart is cheaper/);
@@ -187,7 +188,7 @@ describe("chart agent tools", () => {
     expect((await call("get_chart")).value.readOnly).toBe("The report is signed off.");
     expect((await call("set_chart_values", { cells: [] })).error).toMatch(/Unknown tool|unknown_tool/);
     locked = false;
-    expect(registry.listTools().tools.some((t) => t.name === "set_chart_values")).toBe(true);
+    expect(registry.listTools().tools.some((t) => baseToolName(t.name) === "set_chart_values")).toBe(true);
   });
 
   it("acts out value edits with a cursor when given a director, still as one undo step", async () => {

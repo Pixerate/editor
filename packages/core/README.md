@@ -193,7 +193,9 @@ registerImportAdapter({
 
 ## Agent tool registry
 
-`ToolRegistry` (`@pixerate/editor/agent`) collects MCP-shaped tools from live providers, for example one per mounted editor or spreadsheet. `listTools()` and `callTool()` return MCP `tools/list` / `tools/call` result shapes, arguments are validated against each tool's `inputSchema`, and `onListChanged` fires (coalesced) when providers come and go. Colliding names are namespaced as `<providerId>__<name>`.
+`ToolRegistry` (`@pixerate/editor/agent`) collects MCP-shaped tools from live providers, for example one per mounted editor or spreadsheet. `listTools()` and `callTool()` return MCP `tools/list` / `tools/call` result shapes, arguments are validated against each tool's `inputSchema`, and `onListChanged` fires (coalesced) when providers come and go.
+
+Each provider is a toolset. Its tools are exposed as `<namespace>__<name>`, where the namespace is the provider's `namespace` or else its `id` (`doc__get_text`, `sheet__set_range`), so a name never changes when another editor mounts. `callTool`, `hasTool` and `getTool` also take the bare name when only one tool has it. Pass `namespace: ''` on a provider for bare names (prefixed with the id only on a collision), or `new ToolRegistry({ namespaces: 'on-collision' })` for that across the registry. Providers also carry a `title`, `description` and `skill`, which `registry.toolsets()` reports.
 
 ```ts
 import { ToolRegistry, createRichTextToolProvider, createSpreadsheetToolProvider } from "@pixerate/editor/agent";
@@ -203,8 +205,27 @@ const unregister = registry.register(createRichTextToolProvider(controller, { id
 registry.register(createSpreadsheetToolProvider(sheet, { id: "sheet", namespace: "sheet" }));
 registry.onListChanged((tools) => server.sendToolListChanged());
 
-await registry.callTool("insert_text", { text: "Hello" }); // { content: [...], structuredContent }
+await registry.callTool("doc__insert_text", { text: "Hello" }); // { content: [...], structuredContent }
 ```
+
+### Large catalogues: scoped views and discovery
+
+With every editor mounted the registry holds hundreds of tools, which costs a model context and makes the right one harder to pick. `registry.view(options)` is a filtered tool source to serve instead:
+
+- `toolsets: ['chart']` (or a predicate) shows only those toolsets; call `view.setToolsets()` as the user switches editors.
+- `readOnly: true` shows only tools annotated `readOnlyHint`. Tools outside a view are refused with the reason.
+- `discovery: { skills }` lists only `list_toolsets`, `search_tools`, `enable_tools`, `disable_tools` and (with skill files) `get_skill` at first. The agent searches by task, enables the tools it needs, and the view announces each change through `onListChanged`. `searchTools(tools, toolsets, query)` is the ranking `search_tools` uses.
+
+```ts
+import { createMcpServer, toolsetInstructions } from "@pixerate/editor/tools";
+import { loadSkillFiles } from "@pixerate/editor/bridge"; // Node; in a browser import the .md files as text
+
+const skills = loadSkillFiles();
+const view = registry.view({ discovery: { skills } });
+const server = createMcpServer(view, { name: "my-app", version: "1.0.0", instructions: toolsetInstructions, skills, send });
+```
+
+`createMcpServer({ skills })` also serves the skills as MCP prompts and `skill://<name>/SKILL.md` resources. `useToolRegistryView` (React and Svelte) makes a view for a component's lifetime, and `useToolBridge` accepts one.
 
 Built-in providers:
 
@@ -221,7 +242,7 @@ Tool `inputSchema`s are validated by `validateJsonSchema`, which supports `type`
 
 ### Serving the registry over MCP
 
-`createMcpServer(registry, { name, version, send })` (in `/tools`, no dependencies) answers MCP JSON-RPC messages from any transport: stdio lines, a WebSocket, `postMessage` or an HTTP handler. It handles `initialize` (protocol version negotiation), `ping`, `tools/list`, `tools/call` and `notifications/cancelled` (aborts the call's `signal`), and sends `notifications/tools/list_changed` through `send` once the client is initialized.
+`createMcpServer(registry, { name, version, send })` (in `/tools`, no dependencies) answers MCP JSON-RPC messages from any transport: stdio lines, a WebSocket, `postMessage` or an HTTP handler. It handles `initialize` (protocol version negotiation), `ping`, `tools/list`, `tools/call`, with `skills` `resources/list` / `resources/read` / `prompts/list` / `prompts/get`, and `notifications/cancelled` (aborts the call's `signal`), and sends `notifications/tools/list_changed` through `send` once the client is initialized.
 
 ```ts
 import { createMcpServer } from "@pixerate/editor/tools";

@@ -18,7 +18,7 @@ import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EX
 export interface AnimationEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `animation`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The animation cannot be edited: write tools are hidden and `get_animation` says why. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -1016,6 +1016,9 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	return {
 		id: options.id ?? 'animation',
 		namespace: options.namespace,
+		title: 'Animation editor',
+		description: 'Vector animation: artwork, shots, animation commands and their timing, Flair and Lottie import and export, PowerPoint import.',
+		skill: 'pixerate-animation-editor',
 		tools: () => (readOnlyReason() ? reads : [...reads, ...writes]),
 		subscribe: (notify) => {
 			let last = readOnlyReason();

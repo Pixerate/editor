@@ -14,7 +14,7 @@ export interface OfficeChartFile {
 export interface OfficeChartToolProviderOptions {
 	/** Provider id (unique per registry). Default `office-charts`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/**
 	 * Files the user opened. With it, the tools take a `file` name (and `list_open_files` lists
@@ -165,7 +165,10 @@ export function createOfficeChartToolProvider(options: OfficeChartToolProviderOp
 
 	return {
 		id: options.id ?? 'office-charts',
-		...(options.namespace ? { namespace: options.namespace } : {}),
+		...(options.namespace !== undefined ? { namespace: options.namespace } : {}),
+		title: 'Office charts',
+		description: 'Charts inside Word, Excel and PowerPoint files: list and read them, and load one into the chart editor.',
+		skill: 'pixerate-chart',
 		tools: () => [...(options.files ? [listOpenFiles] : []), listCharts, getChart, ...(options.controller && !readOnlyReason() ? [loadChart] : [])]
 	};
 }

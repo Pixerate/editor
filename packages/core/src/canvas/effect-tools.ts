@@ -13,7 +13,7 @@ import type { CanvasShapeEffect } from './shapeGeometry.js';
 export interface CanvasEffectsToolProviderOptions {
 	/** Provider id (unique per registry). Default `canvas-effects`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The canvas cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -48,6 +48,9 @@ export function createCanvasEffectsToolProvider(controller: CanvasEffectsControl
 	return createEffectToolProvider({
 		id: options.id ?? 'canvas-effects',
 		namespace: options.namespace,
+		title: 'Canvas effects',
+		description: 'Provider effects on canvas shape nodes, and transitions between scenes.',
+		skill: 'pixerate-canvas',
 		target: { noun: 'node', id: 'A shape node id on the canvas (a node with data.shape).' },
 		applyUses: ['generator', 'overlay', 'title', 'interactive'],
 		applyDetails:

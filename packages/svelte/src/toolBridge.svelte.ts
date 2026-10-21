@@ -1,4 +1,4 @@
-import { connectToolBridge, type ConnectToolBridgeOptions, type ToolBridgeConnection, type ToolBridgeStatus, type ToolRegistry } from "@pixerate/editor/tools";
+import { connectToolBridge, type ConnectToolBridgeOptions, type ToolBridgeConnection, type ToolBridgeStatus, type ToolSource } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
 const read = <T>(value: MaybeGetter<T>): T => (typeof value === "function" ? (value as () => T)() : value);
@@ -13,12 +13,12 @@ export interface SvelteToolBridge {
 }
 
 /**
- * Connects a `ToolRegistry` to a local MCP bridge (`pixerate-mcp-bridge`) for the lifetime of
+ * Connects a `ToolRegistry` (or a view of one, see `useToolRegistryView`) to a local MCP bridge (`pixerate-mcp-bridge`) for the lifetime of
  * the calling component, so an MCP client can call the page's tools. Pass getters to react to
  * changes; `null` options stay disconnected. Parity with React's `useToolBridge`.
  */
 export function useToolBridge(
-  registry: MaybeGetter<ToolRegistry | null | undefined>,
+  registry: MaybeGetter<ToolSource | null | undefined>,
   options: MaybeGetter<ConnectToolBridgeOptions | null>,
 ): SvelteToolBridge {
   let status = $state<ToolBridgeStatus | "off">("off");

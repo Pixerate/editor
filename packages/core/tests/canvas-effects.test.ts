@@ -11,6 +11,7 @@ import {
 	runCanvasNodeEffect,
 	type CanvasNode
 } from '../src/canvas';
+import { baseToolName } from '../src/tools';
 
 const nodes = (): CanvasNode[] => [
 	{ id: 'a', position: { x: 0, y: 0 }, data: { shape: { kind: 'rect', fill: '#ff0000' } } },
@@ -114,7 +115,7 @@ describe('canvas effect tools', () => {
 		const { c } = setup();
 		const registry = new ToolRegistry();
 		registry.register(createCanvasEffectsToolProvider(c));
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'set_canvas_effect_mode', 'list_scene_transitions', 'set_scene_transition']);
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'set_canvas_effect_mode', 'list_scene_transitions', 'set_scene_transition']);
 		const a = await registry.callTool('apply_effect', { target: 'a', effect: 'fake.bar' });
 		expect((a.structuredContent as any).effect).toMatchObject({ id: 'effect', role: 'overlay' });
 		const m = await registry.callTool('set_canvas_effect_mode', { node: 'a', mode: 'fill' });

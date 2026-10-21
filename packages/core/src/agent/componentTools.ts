@@ -212,5 +212,12 @@ export function createCanvasComponentToolProvider(
 			)
 		);
 	}
-	return { id: options.id, namespace: options.namespace, tools };
+	return {
+		id: options.id,
+		namespace: options.namespace,
+		title: 'Canvas components',
+		description: 'Reusable canvas components: define them, place instances, manage variants and overrides.',
+		skill: 'pixerate-canvas',
+		tools
+	};
 }

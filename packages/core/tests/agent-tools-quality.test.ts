@@ -16,6 +16,7 @@ import {
 	type JsonRpcNotification
 } from '../src/agent';
 import { createRichTextPreset, SpreadsheetController } from '../src';
+import { baseToolName } from '../src/tools';
 
 beforeAll(() => {
 	const dom = new JSDOM();
@@ -180,10 +181,10 @@ describe('per-operation editor tools', () => {
 
 	it('exposes one strict tool per operation by default', () => {
 		const { registry } = setup();
-		expect(registry.listTools().tools.map((t) => t.name)).toEqual([
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual([
 			'get_editor_state',
-			...EDITOR_CANVAS_TOOLS.map((t) => t.name),
-			...EDITOR_PROMPT_TOOLS.map((t) => t.name)
+			...EDITOR_CANVAS_TOOLS.map((t) => baseToolName(t.name)),
+			...EDITOR_PROMPT_TOOLS.map((t) => baseToolName(t.name))
 		]);
 		for (const tool of [...EDITOR_CANVAS_TOOLS, ...EDITOR_PROMPT_TOOLS]) {
 			expect(tool.inputSchema.additionalProperties, tool.name).toBe(false);
@@ -409,7 +410,7 @@ describe('createMcpServer', () => {
 		expect((future?.result as any).protocolVersion).toBe('2025-06-18');
 
 		const list = await server.handle(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list' }));
-		expect((list?.result as any).tools.map((t: any) => t.name)).toEqual(['echo', 'slow']);
+		expect((list?.result as any).tools.map((t: any) => baseToolName(t.name))).toEqual(['echo', 'slow']);
 
 		const call = await server.handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'echo', arguments: { text: 'hi' } } });
 		expect(call).toEqual({ jsonrpc: '2.0', id: 4, result: { content: [{ type: 'text', text: 'hi' }] } });

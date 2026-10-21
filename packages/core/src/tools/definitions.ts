@@ -314,7 +314,8 @@ export const MCP_TOOL_CANVAS_LAYOUT = {
 	name: 'canvas_layout',
 	title: 'Lay out the canvas',
 	annotations: { title: 'Lay out the canvas', ...IDEMPOTENT_ANNOTATIONS },
-	description: 'Arranges the canvas graph automatically.',
+	description:
+		'Arranges the canvas nodes automatically in a layered graph layout that follows the edges, so nodes line up and do not overlap. Nodes that already have a position stay put unless incremental is false.',
 	inputSchema: {
 		type: 'object',
 		properties: {

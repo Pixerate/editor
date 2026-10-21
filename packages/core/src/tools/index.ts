@@ -14,3 +14,6 @@ export * from './mcp-server.js';
 export * from './bridge-client.js';
 export * from './capture.js';
 export * from './dom-capture.js';
+export * from './view.js';
+export * from './search.js';
+export * from './skills.js';

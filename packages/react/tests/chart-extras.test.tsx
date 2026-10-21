@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ChartController, ChartPresence, type ChartSpec } from "@pixerate/editor/chart";
 import { ChartCanvas, ChartEditor, ChartInspector, ChartSparkline, ChartStreamingView, useChartDirector, useChartToolProvider, useOfficeChartToolProvider } from "../src/chart";
+import { baseToolName } from "@pixerate/editor/tools";
 
 let container: HTMLDivElement;
 let root: any;
@@ -149,7 +150,7 @@ describe("chart agent hooks", () => {
       return <ChartCanvas controller={controller} responsive={false} presence={presence} sceneRef={sceneRef} />;
     }
     await render(<Host />);
-    expect(registry.listTools().tools.map((t) => t.name)).toContain("set_chart_values");
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toContain("set_chart_values");
     let result: any;
     await act(async () => {
       result = await registry.callTool("set_chart_values", { cells: [{ series: "north", category: "Q1", value: 30 }] });
@@ -169,7 +170,7 @@ describe("chart agent hooks", () => {
       return null;
     }
     await render(<Host />);
-    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
     files = [{ name: "a.xlsx", data: new Uint8Array(3) }];
     const listed: any = await registry.callTool("list_open_files", {});
     expect(listed.structuredContent).toEqual({ files: [{ name: "a.xlsx", bytes: 3 }] });

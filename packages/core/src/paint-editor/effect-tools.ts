@@ -15,7 +15,7 @@ import { PAPER_EFFECT_BLENDS, type PaintEffectSource, type PaperEffectBlend } fr
 export interface PaintEffectsToolProviderOptions {
   /** Provider id (unique per registry). Default `paint-effects`. */
   id?: string;
-  /** Always prefix tool names with `<namespace>__`. */
+  /** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
   namespace?: string;
   /** The painting cannot be edited: write tools are hidden. A string is the reason. */
   readOnly?: boolean | string | (() => boolean | string);
@@ -68,6 +68,9 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
   return createEffectToolProvider({
     id: options.id ?? 'paint-effects',
     namespace: options.namespace,
+    title: 'Paint effects',
+    description: 'Provider effects on paint layers and on the effect paper.',
+    skill: 'pixerate-paint-editor',
     target: { noun: 'layer', id: `A pixel layer id from list_layers ("${PAPER_TARGET}" is the effect paper, for list, update and remove).` },
     applyUses: ['filter'],
     applyDetails:

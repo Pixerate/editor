@@ -342,7 +342,10 @@ export function createVectorGenerationToolProvider(controller: VectorEditorContr
 	};
 	return {
 		id: options.id ?? 'vector-generation',
-		...(options.namespace ? { namespace: options.namespace } : {}),
+		...(options.namespace !== undefined ? { namespace: options.namespace } : {}),
+		title: 'Vector generation',
+		description: 'Generate vector art from a prompt with a configured model, and regenerate it.',
+		skill: 'pixerate-vector',
 		tools: () => (readOnly() ? [list] : [list, generate, regenerate]),
 		// The write tools come and go with a read-only state that can change.
 		...(typeof options.readOnly === 'function' ? { subscribe: (notify: () => void) => controller.subscribe(() => notify()) } : {})

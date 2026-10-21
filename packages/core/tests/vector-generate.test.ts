@@ -15,6 +15,7 @@ import {
 	type VectorArtGenerator,
 	type VectorGroupNode
 } from '../src/vector';
+import { baseToolName } from '../src/tools';
 
 const svgModel: ModelCapabilities = { id: 'svg-writer', media: 'text', name: 'SVG writer', seed: true };
 const imageModel: ModelCapabilities = { id: 'pictures', media: 'image', aspectRatios: { options: ['1:1', '16:9'] }, seed: true };
@@ -145,6 +146,6 @@ describe('vector generation tools', () => {
 		expect(bad.isError).toBe(true);
 		expect(bad.content[0]).toMatchObject({ text: expect.stringContaining('Unknown model') });
 		readOnly = 'The document is locked.';
-		expect(tools.listTools().tools.map((t) => t.name)).toEqual(['list_vector_art_models']);
+		expect(tools.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['list_vector_art_models']);
 	});
 });

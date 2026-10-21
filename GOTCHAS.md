@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/tools] Tool Names Are Namespaced by Default, So Bare-Name Assertions and Bridge Unions Break
+
+- **Issue / Symptom**: After a provider is registered, `listTools()` returns `chart__get_chart`, not `get_chart`. Tests that compare `t.name` with a bare name fail, a page on the MCP bridge whose provider id differs from another page's (`a__echo`, `b__echo`) no longer shares tool names with it, and code that splits on `__` sees a prefix it didn't before.
+- **Root Cause**: `ToolRegistry` defaults to `namespaces: 'always'`: each tool is exposed as `<namespace ?? id>__<name>` so names don't shift when another editor mounts (with the old collision-only prefixing, `duplicate_layer` became `image-editor__duplicate_layer` the moment the paint editor mounted, and a model's earlier calls stopped working). The bridge unions tools across pages by exact name and adds an `editor` argument, so pages only share a tool when they expose the same name.
+- **Solution / Workaround**: Compare with `baseToolName(t.name)` (or call by bare name: `callTool`, `hasTool` and `getTool` accept it when exactly one tool has it, and say which full names it could mean otherwise). Give providers of the same kind on different pages the same `namespace` (`video`) so the bridge sees one tool per name. A registry that forwards names it didn't make (the bridge's) registers its provider with `namespace: ''`, which keeps bare names and prefixes only on a collision. `new ToolRegistry({ namespaces: 'on-collision' })` restores the old behaviour for a whole registry.
+
+### [core/tools] A Discovery View Only Helps Clients That Refresh on `list_changed`
+
+- **Issue / Symptom**: In a discovery view (`registry.view({ discovery: true })`), `enable_tools` succeeds but the model still can't call the enabled tool, or calls it and the client says the tool doesn't exist.
+- **Root Cause**: MCP clients only let the model call tools from their last `tools/list`. The view announces each change with `notifications/tools/list_changed` (through `createMcpServer`'s `send`, or the bridge's `tools` message), and a client that ignores it keeps the old list. The view itself accepts calls to any allowed tool by name, enabled or not, but the client never sends them.
+- **Solution / Workaround**: Serve discovery views only to clients that support `listChanged` (Claude Code, Claude Desktop), and make sure the server has a `send` so the notification goes out. For an API host with its own loop, re-read `view.listTools()` before every model request (as `tests/evals/tool-selection.eval.ts` does). For clients that don't refresh, scope with `toolsets` instead of discovering.
+
 ### [tests] A Growth Test Must Do the Same Work at Both Sizes, and Count It Where It Can
 
 - **Issue / Symptom**: The `analyzePdfLayout` "grows near-linearly" test timed `bigPage(100)` against `bigPage(400)` and measured ~6× for 4× the input (an 8× step gave 10–18×), so it sat close to its limit of 10 and failed under load. It looked like ~n^1.3 growth in the layout code.

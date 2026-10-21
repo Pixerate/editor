@@ -14,6 +14,7 @@ import {
 } from "../src/chart";
 import { ToolRegistry } from "../src/tools";
 import { buildDocx, buildZip, p } from "./helpers/zip-writer";
+import { baseToolName } from "../src/tools";
 
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -144,7 +145,7 @@ describe("createOfficeChartToolProvider", () => {
   it("lists and gets charts from base64 data", async () => {
     const registry = new ToolRegistry();
     registry.register(createOfficeChartToolProvider());
-    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["list_file_charts", "get_file_chart"]);
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(["list_file_charts", "get_file_chart"]);
     const data = b64(await buildXlsx());
     const listed = await registry.callTool("list_file_charts", { data });
     expect(listed.isError).toBeFalsy();
@@ -179,7 +180,7 @@ describe("createOfficeChartToolProvider", () => {
     let readOnly: string | false = false;
     const registry = new ToolRegistry();
     registry.register(createOfficeChartToolProvider({ files: () => files, controller, readOnly: () => readOnly }));
-    expect(registry.listTools().tools.map((t) => t.name)).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(["list_open_files", "list_file_charts", "get_file_chart", "load_file_chart"]);
     expect((await registry.callTool("list_open_files", {})).structuredContent).toEqual({ files: [{ name: "deck.pptx", bytes: files[0].data.byteLength }] });
     const noFile = await registry.callTool("list_file_charts", { file: "nope.xlsx" });
     expect(JSON.stringify(noFile.content)).toContain('expected one of \\"deck.pptx\\"');
@@ -190,6 +191,6 @@ describe("createOfficeChartToolProvider", () => {
     controller.undo();
     expect(controller.getSpec().title).toBe(before.title);
     readOnly = "Locked";
-    expect(registry.listTools().tools.map((t) => t.name)).not.toContain("load_file_chart");
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).not.toContain("load_file_chart");
   });
 });

@@ -1,4 +1,5 @@
 import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from './schema.js';
+import { ToolRegistryView, type ToolViewOptions } from './view.js';
 
 /**
  * MCP-shaped tool definition, as returned by `tools/list`.
@@ -58,12 +59,25 @@ export interface AgentTool extends McpToolDefinition {
 
 /**
  * A source of tools, typically one per mounted editor, spreadsheet or canvas.
+ * Each provider is a toolset: its tools are exposed as `<namespace>__<name>`
+ * (see {@link ToolRegistryOptions.namespaces}) and grouped under that name by
+ * `toolsets()`, `registry.view()` and the discovery tools.
  */
 export interface AgentToolProvider {
-	/** Unique id within a registry, e.g. `doc-1`. Used as the namespace on collisions. */
+	/** Unique id within a registry, e.g. `doc-1`. The default namespace. */
 	id: string;
-	/** Always prefix this provider's tools with `<namespace>__`. */
+	/**
+	 * Prefix for this provider's tools (`<namespace>__<name>`). Defaults to the
+	 * `id`. Pass `''` to expose bare names (prefixed by `id` only on a collision).
+	 * Providers may share a namespace when their tool names differ.
+	 */
 	namespace?: string;
+	/** Short name of the toolset for agents and UIs, e.g. "Chart editor". */
+	title?: string;
+	/** What the toolset covers and when to use it, in a sentence or two. */
+	description?: string;
+	/** Name of the agent skill that documents these tools, e.g. `pixerate-chart`. */
+	skill?: string;
 	/** Tools, or a function returning the current tools (re-read on every `listTools`). */
 	tools: readonly AgentTool[] | (() => readonly AgentTool[]);
 	/** Lets the provider signal that its tool list changed; returns an unsubscribe function. */
@@ -92,7 +106,18 @@ export class ToolRegistryError extends Error {
 
 export interface ToolRegistryOptions {
 	/**
-	 * What to do when two providers contribute the same tool name:
+	 * `always` (default): every tool is exposed as `<namespace>__<name>`, where the
+	 * namespace is the provider's `namespace` or else its `id`, so names don't
+	 * change when another editor mounts. `on-collision`: only providers with an
+	 * explicit `namespace` are prefixed; other tools keep their bare name unless
+	 * two providers share it (see `onCollision`).
+	 *
+	 * Either way, `callTool`, `hasTool` and `getTool` also accept a bare name
+	 * when exactly one exposed tool has it.
+	 */
+	namespaces?: 'always' | 'on-collision';
+	/**
+	 * What to do when two unprefixed tools share a name:
 	 * `namespace` (default) exposes every colliding tool as `<providerId>__<name>`;
 	 * `error` makes `register` throw.
 	 */
@@ -109,10 +134,69 @@ export const TOOL_NAMESPACE_SEPARATOR = '__';
 const TOOL_NAME_REGEX = /^[A-Za-z0-9_.-]{1,128}$/;
 const sanitizeNamespace = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_');
 
+/** The toolset a provider belongs to: its namespace, or else its id. */
+export function toolsetName(provider: Pick<AgentToolProvider, 'id' | 'namespace'>): string {
+	return sanitizeNamespace(provider.namespace || provider.id);
+}
+
+/** The name a tool was registered under, without its namespace (`chart__get_chart` → `get_chart`). */
+export function baseToolName(name: string): string {
+	const index = name.lastIndexOf(TOOL_NAMESPACE_SEPARATOR);
+	return index === -1 ? name : name.slice(index + TOOL_NAMESPACE_SEPARATOR.length);
+}
+
+/** A group of tools from one or more providers that share a namespace. */
+export interface ToolsetInfo {
+	/** Toolset name: the providers' namespace, or the provider id. */
+	name: string;
+	title?: string;
+	description?: string;
+	/** Agent skill that documents these tools. */
+	skill?: string;
+	/** Ids of the providers in this toolset. */
+	providers: string[];
+	/** Exposed names of its tools, in listing order. */
+	tools: string[];
+}
+
+/**
+ * Anything that serves tools the way a {@link ToolRegistry} does: a registry,
+ * a {@link ToolRegistryView} of one, or the MCP bridge's registry.
+ * `createMcpServer` and `connectToolBridge` accept any of them.
+ */
+export interface ToolSource {
+	readonly capabilities: { tools: { listChanged: boolean } };
+	listTools(): McpListToolsResult;
+	hasTool(name: string): boolean;
+	getTool(name: string): McpToolDefinition | undefined;
+	callTool(name: string, args?: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<McpToolResult>;
+	onListChanged(listener: (tools: McpToolDefinition[]) => void): () => void;
+	/** The toolsets behind `listTools()`, in listing order. */
+	toolsets(): ToolsetInfo[];
+}
+
 interface ResolvedTool {
 	name: string;
 	tool: AgentTool;
 	provider: AgentToolProvider;
+}
+
+type Lookup = { found: ResolvedTool } | { found?: undefined; candidates: string[] };
+
+/** Finds a tool by exposed name, or by bare name when exactly one tool has it. */
+function lookup(tools: readonly ResolvedTool[], name: string): Lookup {
+	const exact = tools.find((t) => t.name === name);
+	if (exact) return { found: exact };
+	const candidates = tools.filter((t) => baseToolName(t.name) === name);
+	if (candidates.length === 1) return { found: candidates[0] };
+	return { candidates: candidates.map((t) => t.name) };
+}
+
+/** `unknown_tool` message, naming the tools a bare name could mean. */
+export function unknownToolMessage(name: string, candidates: readonly string[] = []): string {
+	return candidates.length > 1
+		? `Tool "${name}" is ambiguous: ${candidates.map((c) => `"${c}"`).join(', ')} all have that name. Call one of them by its full name.`
+		: `Unknown tool "${name}". List the tools again; the editor that had it may have closed or become read-only.`;
 }
 
 interface ProviderEntry {
@@ -129,7 +213,8 @@ function toDefinition(name: string, tool: AgentTool): McpToolDefinition {
 	return { name, ...rest };
 }
 
-function errorResult(error: ToolCallError): McpToolResult {
+/** An `isError` tool result carrying a {@link ToolCallError}. */
+export function errorResult(error: ToolCallError): McpToolResult {
 	const details = error.details?.length
 		? '\n' + error.details.map((d) => `- ${d.path}: ${d.message}`).join('\n')
 		: '';
@@ -167,7 +252,7 @@ export function toToolResult(value: unknown): McpToolResult {
  * tool list changes, mirroring MCP's `notifications/tools/list_changed`, so an
  * MCP server can be a thin wrapper around it.
  */
-export class ToolRegistry {
+export class ToolRegistry implements ToolSource {
 	/** MCP server capabilities this registry supports. */
 	readonly capabilities = { tools: { listChanged: true } } as const;
 
@@ -179,6 +264,7 @@ export class ToolRegistry {
 
 	constructor(options: ToolRegistryOptions = {}) {
 		this.options = {
+			namespaces: options.namespaces ?? 'always',
 			onCollision: options.onCollision ?? 'namespace',
 			listChangedDelayMs: options.listChangedDelayMs ?? 0,
 			validateArguments: options.validateArguments ?? true
@@ -249,16 +335,20 @@ export class ToolRegistry {
 	private resolve(throwOnCollision = false): ResolvedTool[] {
 		const all: ResolvedTool[] = [];
 		const counts = new Map<string, number>();
+		const fixed = (provider: AgentToolProvider) =>
+			provider.namespace ? provider.namespace : provider.namespace === undefined && this.options.namespaces === 'always' ? provider.id : undefined;
 		for (const { provider } of this.entries) {
+			const prefixed = fixed(provider) !== undefined;
 			for (const tool of readTools(provider)) {
 				all.push({ name: tool.name, tool, provider });
-				if (!provider.namespace) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+				if (!prefixed) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
 			}
 		}
 		for (const item of all) {
-			const prefix = item.provider.namespace ?? ((counts.get(item.name) ?? 0) > 1 ? item.provider.id : undefined);
+			const explicit = fixed(item.provider);
+			const prefix = explicit ?? ((counts.get(item.name) ?? 0) > 1 ? item.provider.id : undefined);
 			if (prefix !== undefined) {
-				if (throwOnCollision && !item.provider.namespace) {
+				if (throwOnCollision && explicit === undefined) {
 					throw new ToolRegistryError(
 						'name_collision',
 						`Tool "${item.name}" from provider "${item.provider.id}" collides with another provider's tool.`
@@ -275,15 +365,50 @@ export class ToolRegistry {
 		return { tools: this.resolve().map(({ name, tool }) => toDefinition(name, tool)) };
 	}
 
-	/** Whether a tool with this exposed name exists. */
+	/** Whether a tool with this exposed name (or unique bare name) exists. */
 	hasTool(name: string): boolean {
-		return this.resolve().some((t) => t.name === name);
+		return lookup(this.resolve(), name).found !== undefined;
 	}
 
-	/** Looks up a tool definition by exposed name. */
+	/** Looks up a tool definition by exposed name (or unique bare name). */
 	getTool(name: string): McpToolDefinition | undefined {
-		const found = this.resolve().find((t) => t.name === name);
+		const { found } = lookup(this.resolve(), name);
 		return found ? toDefinition(found.name, found.tool) : undefined;
+	}
+
+	/** The registered providers grouped by namespace, in listing order. */
+	toolsets(): ToolsetInfo[] {
+		const sets = new Map<string, ToolsetInfo>();
+		for (const { name, provider } of this.resolve()) {
+			const key = toolsetName(provider);
+			let set = sets.get(key);
+			if (!set) {
+				set = { name: key, providers: [], tools: [] };
+				sets.set(key, set);
+			}
+			if (!set.providers.includes(provider.id)) set.providers.push(provider.id);
+			set.title ??= provider.title;
+			set.description ??= provider.description;
+			set.skill ??= provider.skill;
+			set.tools.push(name);
+		}
+		return Array.from(sets.values(), (set) => ({
+			name: set.name,
+			...(set.title ? { title: set.title } : {}),
+			...(set.description ? { description: set.description } : {}),
+			...(set.skill ? { skill: set.skill } : {}),
+			providers: set.providers,
+			tools: set.tools
+		}));
+	}
+
+	/**
+	 * A filtered, optionally self-discovering view of this registry: serve it
+	 * with `createMcpServer` or `connectToolBridge` instead of the registry to
+	 * show an agent only some toolsets. See {@link ToolRegistryView}.
+	 */
+	view(options: ToolViewOptions = {}): ToolRegistryView {
+		return new ToolRegistryView(this, options);
 	}
 
 	/**
@@ -294,10 +419,12 @@ export class ToolRegistry {
 	 * JSON-RPC `-32602` error instead).
 	 */
 	async callTool(name: string, args: Record<string, unknown> = {}, options: { signal?: AbortSignal } = {}): Promise<McpToolResult> {
-		const found = this.resolve().find((t) => t.name === name);
+		const match = lookup(this.resolve(), name);
+		const found = match.found;
 		if (!found) {
-			return errorResult({ code: 'unknown_tool', message: `Unknown tool "${name}".`, tool: name });
+			return errorResult({ code: 'unknown_tool', message: unknownToolMessage(name, match.candidates), tool: name });
 		}
+		name = found.name;
 		const input = args ?? {};
 		if (this.options.validateArguments) {
 			const details = validateJsonSchema(input, found.tool.inputSchema);

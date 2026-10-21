@@ -30,6 +30,7 @@ import {
 } from "../src/generation";
 import { ToolRegistry } from "../src/tools/registry";
 import type { Template } from "../src/grammar";
+import { baseToolName } from "../src/tools";
 
 const imageModel: ModelCapabilities = {
   id: "img-1",
@@ -358,15 +359,15 @@ describe("createGenerationToolProvider", () => {
   it("exposes annotated tools", () => {
     const { registry } = setup({ estimate: () => ({ credits: 2 }) });
     const tools = registry.listTools().tools;
-    expect(tools.map((t) => t.name)).toEqual(["list_models", "plan_generation", "estimate_generation", "generate"]);
-    const annotations = Object.fromEntries(tools.map((t) => [t.name, t.annotations]));
+    expect(tools.map((t) => baseToolName(t.name))).toEqual(["list_models", "plan_generation", "estimate_generation", "generate"]);
+    const annotations = Object.fromEntries(tools.map((t) => [baseToolName(t.name), t.annotations]));
     for (const name of ["list_models", "plan_generation", "estimate_generation"]) {
       expect(annotations[name]).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true });
       expect(typeof annotations[name]!.openWorldHint).toBe("boolean");
       expect(annotations[name]!.title).toBeTruthy();
     }
     expect(annotations.generate).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
-    const generate = tools.find((t) => t.name === "generate")!;
+    const generate = tools.find((t) => baseToolName(t.name) === "generate")!;
     expect(generate.inputSchema.required).toEqual(["model", "request", "idempotencyKey"]);
     expect((generate.inputSchema.properties as any).model.enum).toEqual(["img-1", "txt-1"]);
   });

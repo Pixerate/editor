@@ -39,6 +39,7 @@ import {
 import { createMemoryStorage, withStorageFailures } from "../src/persistence";
 import { ToolRegistry } from "../src/tools/registry";
 import type { Template } from "../src/grammar";
+import { baseToolName } from "../src/tools";
 
 const model: ModelCapabilities = {
   id: "img-2",
@@ -518,7 +519,7 @@ describe("asset roles and capabilities", () => {
 
     const registry = new ToolRegistry();
     registry.register(createGenerationToolProvider({ models: [model], generate: () => ({ jobId: "j" }) }));
-    const plan = registry.listTools().tools.find((t) => t.name === "plan_generation")!;
+    const plan = registry.listTools().tools.find((t) => baseToolName(t.name) === "plan_generation")!;
     const roleEnum = (plan.inputSchema.properties as any).request.properties.references.items.properties.role.enum;
     expect(roleEnum).toEqual(expect.arrayContaining(["start_frame", "style_ref", "subject"]));
     const result = await registry.callTool("plan_generation", {

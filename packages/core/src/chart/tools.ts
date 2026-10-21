@@ -41,7 +41,7 @@ type ParserCtor = { new (): DOMParser };
 export interface ChartToolProviderOptions {
 	/** Provider id (unique per registry). Default `chart`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/**
 	 * The chart cannot be edited: write tools are hidden and `get_chart` says why. A string
@@ -687,6 +687,9 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	return {
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
+		title: 'Chart editor',
+		description: 'One chart: its spec, data and values, series and categories, trendlines and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;
 			return [...reads, ...writes.slice(0, 10), ...(Parser() ? [importOoxml] : []), ...writes.slice(10)];

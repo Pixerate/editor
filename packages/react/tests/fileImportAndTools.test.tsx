@@ -20,6 +20,7 @@ import {
 } from "../src";
 import { buildDocx, p as docxParagraph, r as docxRun } from "../../core/tests/helpers/zip-writer";
 import { fakeStructuredPdfjs } from "../../core/tests/helpers/fake-pdfjs";
+import { baseToolName } from '@pixerate/editor/tools';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -221,7 +222,7 @@ describe("useAgentToolProvider", () => {
     try {
       const registry = new ToolRegistry();
       const changes: string[][] = [];
-      registry.onListChanged((tools) => changes.push(tools.map((t) => t.name)));
+      registry.onListChanged((tools) => changes.push(tools.map((t) => baseToolName(t.name))));
       function DocEditor({ id }: { id: string }) {
         const editor = useEditor({ immediatelyRender: true, content: "<p>hello</p>" });
         const provider = useMemo(() => (editor ? createRichTextToolProvider(editor, { id }) : null), [editor, id]);
@@ -246,7 +247,7 @@ describe("useAgentToolProvider", () => {
         "set_selection",
         "edit_table",
       ];
-      expect(registry.listTools().tools.map((t) => t.name)).toEqual(expected);
+      expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(expected);
       expect(changes.at(-1)).toEqual(expected);
     } finally {
       vi.useRealTimers();

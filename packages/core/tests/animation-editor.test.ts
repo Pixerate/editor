@@ -47,6 +47,7 @@ import {
 import { ManualClock, SPRING_PRESETS, cubicBezierAt, springSettleMs } from '../src/animation';
 import { ToolRegistry } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
+import { baseToolName } from '../src/tools';
 
 const ARTWORK: VectorDocument = {
 	width: 400,
@@ -513,7 +514,7 @@ describe('animation editor tools', () => {
 
 	it('hides write tools while read-only', () => {
 		const { registry } = setup({ readOnly: 'Locked for review' });
-		const names = registry.listTools().tools.map((t) => t.name);
+		const names = registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(names).toContain('get_animation');
 		expect(names).not.toContain('add_commands');
 	});

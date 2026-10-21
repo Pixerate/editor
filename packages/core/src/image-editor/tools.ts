@@ -36,7 +36,7 @@ import { createImageTypeTools } from './type-tools';
 export interface ImageEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `image-editor`. */
   id?: string;
-  /** Always prefix tool names with `<namespace>__`. */
+  /** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
   namespace?: string;
 }
 
@@ -306,6 +306,9 @@ export function createImageEditorToolProvider(
   return {
     id: options.id ?? 'image-editor',
     namespace: options.namespace,
+    title: 'Image editor',
+    description: 'Layered raster image editing: layers and groups, adjustments and adjustment layers, selections and masks, retouching, painting, shapes and type, transforms, colour management, PSD import and export.',
+    skill: 'pixerate-image-editor',
     tools: [
       getAdjustments,
       listControls,

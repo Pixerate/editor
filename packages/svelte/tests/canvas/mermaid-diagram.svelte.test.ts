@@ -4,6 +4,7 @@ import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
 import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidFamilyScene, MermaidThumbnail, createDiagramDirector, createMermaidDiagram, createMermaidStream } from '../../src/canvas';
 import { useAgentToolProvider } from '../../src';
+import { baseToolName } from '@pixerate/editor/tools';
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -51,7 +52,7 @@ describe('createMermaidDiagram (Svelte)', () => {
 			useAgentToolProvider(registry, createDiagramToolProvider(controller));
 		});
 		flushSync();
-		expect(registry.listTools().tools.map((t) => t.name)).toContain('add_diagram_node');
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toContain('add_diagram_node');
 		await registry.callTool('add_diagram_node', { label: 'New', from: 'C' });
 		expect(diagram.nodes.map((n) => n.id)).toContain('N1');
 		cleanup();

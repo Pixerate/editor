@@ -8,7 +8,7 @@ import type { CommandRegistry, CommandResult } from './registry.js';
 export interface CommandToolProviderOptions<TContext = any> {
 	/** Provider id (default `commands`). */
 	id?: string;
-	/** Always prefix the tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** Context for enablement and runs (default: the registry's). */
 	context?: TContext | (() => TContext);
@@ -270,6 +270,9 @@ export function createCommandToolProvider<TContext = any>(
 	return {
 		id: options.id ?? 'commands',
 		namespace: options.namespace,
+		title: 'Commands',
+		description: 'The app\'s commands (menu and keyboard actions) with their params schemas: list them, run one, or run several as one undo step.',
+		skill: 'pixerate-agent-tools',
 		tools: () => [listCommands, runCommandTool(), runCommands],
 		subscribe: (notify) => registry.subscribe(notify)
 	};

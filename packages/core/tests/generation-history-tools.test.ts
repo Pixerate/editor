@@ -10,6 +10,7 @@ import {
 import { createMemoryStorage } from '../src/persistence';
 import { ToolRegistry } from '../src/tools/registry';
 import type { Template } from '../src/grammar';
+import { baseToolName } from '../src/tools';
 
 const model: ModelCapabilities = {
 	id: 'img-2',
@@ -53,7 +54,7 @@ describe('generation history tools', () => {
 		const registry = new ToolRegistry();
 		registry.register(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }));
 		const tools = registry.listTools().tools;
-		expect(tools.map((t) => t.name)).toEqual(['list_generations', 'get_generation', 'recreate_generation', 'vary_generation']);
+		expect(tools.map((t) => baseToolName(t.name))).toEqual(['list_generations', 'get_generation', 'recreate_generation', 'vary_generation']);
 		for (const t of tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
 	});
 

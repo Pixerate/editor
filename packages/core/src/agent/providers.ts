@@ -44,7 +44,7 @@ import {
 export interface ToolProviderOptions {
 	/** Provider id (unique per registry). */
 	id: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 }
 
@@ -544,6 +544,9 @@ export function createRichTextToolProvider(
 	return {
 		id: options.id,
 		namespace: options.namespace,
+		title: 'Document',
+		description: 'A rich text document: read and find text, insert, replace and format it, tables, and charts in the document.',
+		skill: 'pixerate-rich-text',
 		tools: () => {
 			const ed = editor();
 			if (!ed || ed.isDestroyed) return [];
@@ -945,6 +948,9 @@ export function createSpreadsheetToolProvider(
 	return {
 		id: options.id,
 		namespace: options.namespace,
+		title: 'Spreadsheet',
+		description: 'A spreadsheet: read and set cells and ranges, insert and delete rows and columns, merge and transpose.',
+		skill: 'pixerate-spreadsheet',
 		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns, mergeCells, unmergeCells, transposeRange]
 	};
 }
@@ -1065,5 +1071,12 @@ export function createEditorMcpToolProvider<
 		} as AgentTool);
 	}
 
-	return { id: options.id, namespace: options.namespace, tools };
+	return {
+		id: options.id,
+		namespace: options.namespace,
+		title: 'Canvas and prompt editor',
+		description: 'The node canvas and the prompt: editor state, nodes and edges, layout, prompt text, and a view of the editor.',
+		skill: 'pixerate-canvas',
+		tools
+	};
 }
