@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.140.4
+
+### Patch Changes
+
+- 97693e8: Support CSS stylesheet `<style>` rules and classes in `parseVectorSvg`.
+
 ## 0.140.3
 
 ### Patch Changes
