@@ -1,6 +1,6 @@
-# Build memory and package size (plan for later)
+# Build memory and package size
 
-**Status:** planned, not started. The feature tracks it waited for are finished, so it is next in line. Recorded 2026-10-20; still accurate on 2026-10-21 (`NODE_OPTIONS` is still set in `ci.yml`, `release.yml` and `demo.yml`, and `tsup` still builds declarations with `dts: true` in core and React).
+**Status:** done (October 2026). The plan below is kept as it was written; [Results](#results) says what was done and measured. See GOTCHAS.md, "[monorepo/build] Declarations Come From `tsc`".
 
 ## Why
 
@@ -38,3 +38,25 @@ tsup's `dts: true` builds declarations for every subpath entry (about 30) in a s
 - Every subpath's types resolve for consumers, with a test.
 - The published package size is measured before and after, with source maps trimmed.
 - The change is recorded in GOTCHAS.md, with a changeset if the published files change.
+
+## Results
+
+Measured on 2026-10-21 on an Apple-silicon Mac, Node 25, with `/usr/bin/time -l` (maximum resident set size of the largest process) and `npm pack --dry-run --json`. CI now writes its own peak to the job summary.
+
+| | Before | After |
+|---|---:|---:|
+| `@pixerate/editor` build: time, peak memory | 72 s, 2.94 GB (with an 8 GB heap) | 9 s, 1.17 GB (default heap) |
+| `@pixerate/editor-react` build | 10 s, 2.55 GB | 6 s, 0.58 GB |
+| `pnpm build` (all packages and the demo) | needed `--max-old-space-size=8192` on CI | 25 s, 1.22 GB |
+| `pnpm typecheck`, `pnpm --filter demo build` | | 1.20 GB, 1.16 GB |
+| `@pixerate/editor` unpacked / tarball | 52.0 MB / 13.1 MB (source maps 29.8 MB, JS 16.1 MB, declarations 5.7 MB) | 22.3 MB / 5.9 MB (JS 16.1 MB, declarations 5.7 MB) |
+| `@pixerate/editor-react` unpacked / tarball | 8.3 MB / 1.8 MB | 3.5 MB / 0.7 MB |
+| `@pixerate/editor-svelte` unpacked / tarball | 1.7 MB / 0.4 MB | 1.5 MB / 0.4 MB |
+
+What each step came to:
+
+1. **Measure.** `tsc --noEmit --extendedDiagnostics` on core: 1,179 files, 209k instantiations, about 1 GB, 7 s. `--generateTrace` with `@typescript/analyze-trace` found no hot spots (the slowest expression, in `extensions/track-changes`, takes 72 ms). The memory went to tsup's DTS worker, which rolls up a declaration bundle per entry, not to the checker.
+2. **Declarations from tsc.** Core and React run tsup for JavaScript only, then `tsc -p tsconfig.build.json` (one declaration per source file) and `scripts/finalize-declarations.mjs`, which adds the extensions `node16` needs and writes `.d.cts` twins. Each `exports` entry nests `types` under `import` and `require`, which also fixes `require` consumers on `node16`: before, they got TS1479 because `types` pointed at ESM declarations. `pnpm check:packages` (in CI and Release) checks every subpath of all three packages under `bundler`, `node16` ESM and `node16` CommonJS, and imports every core and React subpath with `import` and `require`.
+3. **Type hot spots.** None to fix (see step 1). Optional step 6 (`isolatedDeclarations`) isn't needed.
+4. **Trim.** No source maps are built or published. Maps without `sourcesContent` would still be 8.4 MB and point at `src/`, which isn't shipped; leaving them out of `files` only would leave `sourceMappingURL` comments to missing files. Svelte's declaration maps went too. CJS stays (see [outstanding.md](./outstanding.md), "Whether to drop CJS").
+5. **Heap.** `NODE_OPTIONS: --max-old-space-size=8192` is gone from `ci.yml`, `release.yml` and `demo.yml`. The largest process now peaks at about 1.2 GB against Node's default heap of about 4 GB on a 16 GB runner.

@@ -13,7 +13,7 @@ These were considered and put off on purpose. Revisit only with a real need.
 | **Direct CMYK value editing** in the image editor | CMYK and Lab are RGB-proxy modes: pixels stay RGB in the working space and are converted on proof and export. Editing real CMYK numbers needs a CMYK-plus-alpha tile format through the compositor, every paint and retouch tool, PSD and JSON. Proxy mode with soft proofing, `convert_colors` and 16-bit CMYK export covers print work. A cheap step towards it: pick paint colours by CMYK numbers (a `set_foreground_cmyk` tool and CMYK inputs in the colour UI) | L | `src/raster` tile format, `src/image-editor`, `src/cms` |
 | **Wet engine option B** (GPU as the live simulation) | Option A shipped: the CPU is the authority and the GPU mirrors it for display, so saves are identical with or without a GPU. Option B would only help very large, fully wet canvases. It needs async pick-up readback, the live picture could differ from the saved one by up to 1/255, and saving would wait for a CPU replay | L | `src/paint/wet/gpu.ts`, `world.ts` |
 | **Vector networks** | Every vector tool, effect and exporter is built on subpaths; the main benefit (filling regions between crossing strokes) is covered by Shape Builder and the paint bucket. See [vector-roadmap.md](./vector-roadmap.md#vector-networks-deferred) | L+ | `src/vector`, as an optional node type |
-| **Whether to drop CJS** | Halves the published JavaScript and type declarations, but it is a breaking change for `require` users and needs a major version. Decide separately from the build plan below | S (code), major release | `packages/*/package.json`, `tsup.config.ts` |
+| **Whether to drop CJS** | Halves the published JavaScript and type declarations, but it is a breaking change for `require` users and needs a major version. Kept out of the [build memory and package size work](./build-memory-and-package-size-plan.md), which is done | S (code), major release | `packages/*/package.json`, `tsup.config.ts` |
 | **Vector collaboration** | Only worth doing if the editor goes multi-user | L | `src/vector` (fractional indices, per-user undo) |
 
 ## Known limits
@@ -33,19 +33,8 @@ Shipped behaviour with a documented gap.
 | **PSD import gaps** | Six adjustment kinds (Brightness / Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color, Color Lookup), Dissolve, `clbl`, artboards, vector masks on pixel layers, fill layers, external linked files, multi-patch warps on export. Each has a warning. See [PSD today](./image-editor-layers.md#psd-today) | S–M each | `src/image-editor/psd` |
 | **Painterly blend modes are written to PSD as Normal without a warning** by the image editor | Its export maps through `BLEND_TO_PSD` and warns only for `pigment`. The paint editor already uses `standardBlendMode` and reports it | S | `src/image-editor` PSD export |
 | **Svelte has no prompt-editor wrapper** | README rows for `usePromptEditor` say "Via core" for Svelte (footnote ¹). A parity gap under AGENTS.md §3 | M | `packages/svelte` |
+| **`moduleResolution: "node"` (node10) consumers can't see subpath types for core**, and React and Svelte's `typesVersions` miss `effects` | `exports` is what `bundler` and `node16` read, and `pnpm check:packages` checks those for every subpath. node10 ignores `exports` and needs a `typesVersions` entry per subpath, which core never had | S | `packages/*/package.json`, `scripts/check-packages.mjs` |
 | **Canvas paint-layer helpers have no agent tool** | `raster/viewport.ts`, `paint/pointer.ts` and `WetWorld.stepRegion` are building blocks for a host's own paint layer, not an editor feature. Agents draw brushed strokes through `canvas.drawFreehand` instead | — | — |
-
-## In flight
-
-| Item | State |
-|---|---|
-| **Brush character on vector brushstrokes** (seeded jitter and paper grain) | #306 added it to the shared renderer for the canvas. The vector opt-in (a seed on `VectorBrushstroke`, passed as `character` to the cache, plus a skill update) is being built in a separate session and has not merged; until it does, vector brushstrokes have no grain or jitter |
-
-## Planned
-
-| Item | Why | Size | Where |
-|---|---|:---:|---|
-| **Build memory and package size** | The DTS build ran out of memory on CI (#280 raised the heap to 8 GB as a workaround), and source maps are about 80% of the 35 MB package. Plan: measure, emit declarations with `tsc`, fix type hot spots, trim source maps, then lower the heap limit | M | [build-memory-and-package-size-plan.md](./build-memory-and-package-size-plan.md) |
 
 ## Smaller follow-ups found in the code and PRs
 

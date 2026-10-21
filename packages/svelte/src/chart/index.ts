@@ -16,7 +16,7 @@ export { default as ChartSceneSvg } from "./ChartSceneSvg.svelte";
 export { default as ChartPresenceLayer } from "./ChartPresenceLayer.svelte";
 export { default as ChartStreamingView } from "./ChartStreamingView.svelte";
 export { default as ChartSparkline } from "./ChartSparkline.svelte";
-export type { ChartInspectorSection } from "./ChartInspector.svelte";
+export type { ChartInspectorSection } from "./types.js";
 export * from "./createChartEditor.svelte.js";
 export * from "./styles.js";
 
