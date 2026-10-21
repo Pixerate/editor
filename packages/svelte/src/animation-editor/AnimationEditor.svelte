@@ -10,6 +10,9 @@
   import type { EffectProvider } from '@pixerate/editor/effects';
   import { useEffects } from '../effects/effects.svelte.js';
   import AnimationEffectsPanel from './AnimationEffectsPanel.svelte';
+  import type { AgentPlayback } from '@pixerate/editor/tools';
+  import { createElementPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
 
   interface Props {
     controller: AnimationEditorController;
@@ -33,9 +36,32 @@
      */
     effects?: EffectProvider | null;
     class?: string;
+    /**
+     * Agent playback: act out the animation tools' calls here with the agent's cursor (default:
+     * `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `animation`, where the animation tool providers play). */
+    playbackId?: string;
+    /** Bring the editor on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
-  let { controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, class: className = '' }: Props = $props();
+  let { controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, class: className = '', playback, playbackId = 'animation', onplaybackreveal }: Props = $props();
+
+  // Agent playback: the cursor clicks shots in the timeline and visits elements on the stage
+  // (whose SVG keeps the artwork's ids, prefixed `ae-`).
+  let root: HTMLDivElement | undefined = $state();
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  const agentPresence = createElementPlaybackSurface(() => playing, () => playbackId, () => root, () => ({
+    defaultKind: 'shot',
+    selectors: {
+      shot: (id: string) => `[data-shot="${CSS.escape(id)}"]`,
+      element: (id: string) => `[data-animation-stage] [id="ae-${CSS.escape(id)}"]`
+    },
+    reveal: onplaybackreveal
+  }));
   useEffects(() => controller, () => effects);
   const view = animationEditorStateOf(() => controller);
   const editor = $derived(view.current);
@@ -84,14 +110,20 @@
   scene settings by hand. Every edit is one undo step.
 -->
 {#if !editable}
-  <div class="flex flex-col gap-2 {className}" data-animation-editor="">
+  <div bind:this={root} class="relative flex flex-col gap-2 {className}" data-animation-editor="">
+    {#if playing}
+      <PresenceLayer presence={agentPresence} />
+    {/if}
     <AnimationStage {controller} {values} onionSkin={onionSkin} {motionPaths} class="rounded-md border border-border bg-muted/40" />
     <PlayheadScrubber {controller} />
     {@render issueList()}
   </div>
 {:else}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] {className}" data-animation-editor="" {onkeydown}>
+  <div bind:this={root} class="relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] {className}" data-animation-editor="" {onkeydown}>
+    {#if playing}
+      <PresenceLayer presence={agentPresence} />
+    {/if}
     <div class="flex min-w-0 flex-col gap-2">
       <AnimationStage
         {controller}

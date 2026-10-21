@@ -4,6 +4,7 @@
  * for vector effects that bring their own picture.
  */
 
+import { withAnimationPlayback } from './playback.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult } from '../effects/tools.js';
 import type { EffectValue } from '../effects/types.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
@@ -33,7 +34,7 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 		if (!r.ok) throw new Error(r.error);
 		return { target, effect: info(r.effect), effects: controller.appliedEffects().filter((e) => e.targets.includes(target)).map(info), ...(r.notes.length ? { notes: r.notes } : {}) };
 	};
-	return createEffectToolProvider({
+	return withAnimationPlayback(createEffectToolProvider({
 		id: options.id ?? 'animation-effects',
 		namespace: options.namespace,
 		title: 'Animation effects',
@@ -102,5 +103,5 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 				}
 			}
 		]
-	});
+	}));
 }

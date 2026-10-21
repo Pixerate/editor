@@ -6,6 +6,9 @@
 
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte';
+  import type { AgentPlayback } from '@pixerate/editor/tools';
+  import { createElementPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
   import {
     isParameterGroup,
     parameterLabel,
@@ -40,6 +43,15 @@
     class?: string;
     /** Extra content after the fields. */
     children?: Snippet;
+    /**
+     * Agent playback: act out `parameters.*` commands here with the agent's cursor (default:
+     * `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `parameters`, where the parameter commands play). */
+    playbackId?: string;
+    /** Bring the panel on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
   let {
@@ -53,8 +65,21 @@
     emptyMessage = 'No parameters.',
     idPrefix = `pixerate-parameters-${++nextId}`,
     class: className = '',
-    children
+    children,
+    playback,
+    playbackId = 'parameters',
+    onplaybackreveal
   }: Props = $props();
+
+  // Agent playback: the cursor visits the controls a call changes.
+  let root: HTMLDivElement | undefined = $state();
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  const agentPresence = createElementPlaybackSurface(() => playing, () => playbackId, () => root, () => ({
+    defaultKind: 'parameter',
+    selectors: { parameter: (id: string) => `[data-parameter-id="${CSS.escape(id)}"]` },
+    reveal: onplaybackreveal
+  }));
 
   // Follows a replaced `controller` prop too.
   let view: ParametersState = $state.raw(untrack(() => controller.getState()));
@@ -164,7 +189,7 @@
   keyframe diamonds, per-field reset, presets, and undo / redo / reset / randomize. Slider
   drags and colour picks are one undo step each.
 -->
-<div class="space-y-3 text-foreground {className}" data-parameters-panel="">
+<div bind:this={root} class="relative space-y-3 text-foreground {className}" data-parameters-panel="">
   {#if heading || showToolbar}
     <div class="flex flex-wrap items-center gap-1.5">
       {#if heading}
@@ -236,4 +261,8 @@
     {@render items(view.schema.fields)}
   {/if}
   {@render children?.()}
+  <!-- Last, so it doesn't shift the stacked spacing. -->
+  {#if playing}
+    <PresenceLayer presence={agentPresence} />
+  {/if}
 </div>

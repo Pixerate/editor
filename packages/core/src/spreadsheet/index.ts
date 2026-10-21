@@ -17,3 +17,4 @@ export * from './conditional-format';
 export * from './validation';
 export * from './rule-ranges';
 export * from './viewport';
+export * from './playback';

@@ -1,8 +1,12 @@
 # Agent playback in the library: design plan
 
-Status: **phases 0 to 3 (foundation, canvas, vector, image) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
+Status: **phases 0 to 6 (foundation, canvas, vector, image, spreadsheet, video, animation, parameters) are implemented**. Phases 7 (fold in the directors) and 8 (demo clean-up) remain. Consumer guide: [agent-playback.md](agent-playback.md).
 
-As built, phases 0 to 3 differ from the proposal below in a few places:
+As built, phases 0 to 6 differ from the proposal below in a few places:
+
+- **Spreadsheet, video, animation, parameters.**
+  - Plans name only layout-free refs: cells, rows and columns (`B7`, `5:6`, `C:D`); clips, tracks and times (`t=1200;track=v1`); shots and stage elements; controls. Each component locates them in its own pixels.
+  - Plain DOM panels use `useElementPlaybackSurface` / `createElementPlaybackSurface`, driven by CSS selectors per ref kind.
 
 - **Image.**
   - A generic `open` step and `PlaybackSurface.open` let a tool's plan open the panel it belongs to. This replaces the demo's `open:` steps, since the library owns those tabs.

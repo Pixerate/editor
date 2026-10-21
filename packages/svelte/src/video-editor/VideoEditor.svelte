@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AgentPlayback } from '@pixerate/editor/tools';
   import { onDestroy } from 'svelte';
   import { VideoEditorController, type VideoEditorOptions } from '@pixerate/editor/video-editor';
   import ClipInspector from './ClipInspector.svelte';
@@ -40,9 +41,13 @@
     /** Show the effects panel (default: when a provider is given or the project has effects). */
     showEffects?: boolean;
     class?: string;
+    /** Agent playback on the timeline (see `<VideoTimeline playback>`; default: `setAgentPlayback` above). */
+    playback?: AgentPlayback | null;
+    /** Bring the editor on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
-  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, class: className = '' }: Props = $props();
+  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, class: className = '', playback, onplaybackreveal }: Props = $props();
   let owned: VideoEditorController | null = null;
   // A controller is made only when none is passed, and kept for the component's lifetime.
   const ctl = $derived(controller ?? (owned ??= new VideoEditorController(options)));
@@ -73,7 +78,7 @@
     <VideoPreview controller={ctl} class="rounded-md" />
     <VideoTransport controller={ctl} editable={false} />
     {#if showScopes}<VideoScopes controller={ctl} />{/if}
-    <VideoTimeline controller={ctl} bind:pxPerSecond editable={false} />
+    <VideoTimeline controller={ctl} bind:pxPerSecond editable={false} {playback} {onplaybackreveal} />
     {#if showTranscript}<TranscriptPanel controller={ctl} editable={false} />{/if}
     {@render issueList()}
   </div>
@@ -90,7 +95,7 @@
       {#if effectsShown}<VideoEffectsPanel controller={ctl} class="min-w-0" />{/if}
     </div>
     <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">
-      <VideoTimeline controller={ctl} bind:pxPerSecond />
+      <VideoTimeline controller={ctl} bind:pxPerSecond {playback} {onplaybackreveal} />
       {#if showTranscript}<TranscriptPanel controller={ctl} />{/if}
       {@render issueList()}
     </div>

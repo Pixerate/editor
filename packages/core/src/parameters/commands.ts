@@ -1,3 +1,4 @@
+import { withParameterPlayback } from './playback.js';
 import type { CommandSpec } from '../commands/registry.js';
 import type { ParametersController } from './controller.js';
 import { getChoiceOptions, parameterFieldToJsonSchema, parameterLabel, parameterSchemaToJsonSchema, vectorSize } from './schema.js';
@@ -209,5 +210,5 @@ export function createParameterCommands(controller: ParametersController, option
 			run: () => controller.redo()
 		}
 	];
-	return commands;
+	return withParameterPlayback(prefix, commands);
 }

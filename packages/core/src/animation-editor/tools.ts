@@ -1,3 +1,4 @@
+import { withAnimationPlayback } from './playback.js';
 import { ANIMATION_EASING_PRESETS } from '../animation/easing.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
@@ -1163,7 +1164,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	const reads = finish([getAnimation, getShot, describeCommand, findElements, getTextLayout, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation]);
 	const writes = finish([setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo]);
 
-	return {
+	return withAnimationPlayback({
 		id: options.id ?? 'animation',
 		namespace: options.namespace,
 		title: 'Animation editor',
@@ -1180,5 +1181,5 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				}
 			});
 		}
-	};
+	});
 }

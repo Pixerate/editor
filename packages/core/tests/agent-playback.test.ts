@@ -308,6 +308,19 @@ describe('AgentPlayback', () => {
 		expect(surface.presence.get('agent')?.message).toBe('Lining them up.');
 	});
 
+	it('finishes when a plan or a surface gives NaN coordinates', async () => {
+		const bad = tool('bad', {
+			plan: () => [{ type: 'move', to: { x: NaN, y: 5 } }, { type: 'type', text: 'x', ms: NaN }, { type: 'target', ref: { kind: 'node', id: 'nan' } }, { type: 'drag', to: { x: Infinity, y: 0 } }]
+		});
+		const { registry, playback } = setup([bad], { linger: 0 });
+		const surface = fakeSurface({ locate: () => ({ x: NaN, y: 0, width: 10, height: 10 }) });
+		playback.attach('canvas', surface);
+		const result = await registry.callTool('canvas__bad', {});
+		expect(result.isError).toBeFalsy();
+		const a = surface.presence.get('agent')!;
+		expect(Number.isFinite(a.x) && Number.isFinite(a.y)).toBe(true);
+	});
+
 	it('detaching a surface makes later calls instant', async () => {
 		const { registry, playback } = setup([tool('align')]);
 		const detach = playback.attach('canvas', fakeSurface());

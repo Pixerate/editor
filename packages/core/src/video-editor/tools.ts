@@ -1,4 +1,5 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
+import { withVideoPlayback } from './playback.js';
 import type { JsonSchema } from '../tools/schema.js';
 import type { VideoIssue } from './check.js';
 import type { VideoEditorController } from './controller.js';
@@ -1351,7 +1352,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	const reads = [getProject, listSequences, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
 	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
-	return {
+	return withVideoPlayback({
 		id: options.id ?? 'video',
 		namespace: options.namespace,
 		title: 'Video editor',
@@ -1368,5 +1369,5 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 				}
 			});
 		}
-	};
+	});
 }

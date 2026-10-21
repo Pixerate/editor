@@ -19,6 +19,7 @@ import { isSingleCellRange, normalizeRange, rangeContainsRange, rangesIntersect 
 import type { CellRange } from '../spreadsheet/types.js';
 import { planAgentCommand, toolCallToAgentCommand, validateAgentCommand, type planToolCall } from './planner.js';
 import { planCanvasToolPlayback } from './canvasPlayback.js';
+import { planSpreadsheetToolPlayback } from '../spreadsheet/playback.js';
 import type { NodeRectOptions } from '../canvas/arrange.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import {
@@ -619,7 +620,10 @@ const CELL_INPUT = { type: ['string', 'number', 'boolean', 'null'] } as const;
  */
 export function createSpreadsheetToolProvider(
 	controller: SpreadsheetController,
-	options: ToolProviderOptions
+	options: ToolProviderOptions & {
+		/** The agent playback surface its calls are acted out on (default `spreadsheet`, where `SpreadsheetEditor` attaches). */
+		playbackSurface?: string;
+	}
 ): AgentToolProvider {
 	const lookup = (row: number, col: number) => {
 		const rowDef = controller.document.rows[row];
@@ -959,7 +963,11 @@ export function createSpreadsheetToolProvider(
 		title: 'Spreadsheet',
 		description: 'A spreadsheet: read and set cells and ranges, insert and delete rows and columns, merge and transpose.',
 		skill: 'pixerate-spreadsheet',
-		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns, mergeCells, unmergeCells, transposeRange]
+		// Agent playback: `<SpreadsheetEditor playback>` attaches as `spreadsheet` and finds the cells.
+		playbackSurface: options.playbackSurface ?? 'spreadsheet',
+		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns, mergeCells, unmergeCells, transposeRange].map(
+			(tool): AgentTool => ({ ...tool, plan: (args) => planSpreadsheetToolPlayback(tool.name, args) })
+		)
 	};
 }
 

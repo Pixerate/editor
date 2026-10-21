@@ -69,6 +69,7 @@ with `list_commands` (query "Parameters").
 
 ## Pitfalls
 
+- With agent playback on, `parameters.set` visits each control it changes and types the value. Set related values in one call; results are unchanged.
 - `parameters.set` takes a `values` object, not top-level ids: `{ "values": { "speed": 2 } }`.
 - One out-of-range value fails the whole call (nothing changes). Read the message, fix that
   value, and resend the full set.

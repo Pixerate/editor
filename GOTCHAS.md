@@ -2721,3 +2721,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The agent's cursor has to reach both the image (document pixels, zoomed and panned on the canvas) and the editor's own tabs and sliders (plain DOM), but a playback surface has one coordinate space.
 - **Root Cause**: Plans speak document pixels, while the panels sit outside the canvas, where no document point is drawn.
 - **Solution / Workaround**: The surface stays in document pixels, and `locate` maps a panel element's client rectangle *into* document pixels with `canvasToImagePoint`. The layer maps every point back out with `imageToCanvasPoint`, relative to the editor's root, so a point outside the image still lands on the right control. Panels change the layout (the Paint tab's side panel is taller), so map at draw time from live refs, never from a cached rectangle.
+
+### [core/tools] A NaN Playback Target Hung the Tool Call Forever
+
+- **Issue / Symptom**: A tool call under agent playback never returned; the test runner sat silent until its timeout.
+- **Root Cause**: A surface's `locate` built a rectangle from a lookup that missed (`rows[undefined]`), so a coordinate was `NaN`. The glide loop stops when its progress reaches 1, and `NaN >= 1` is never true, so it waited one frame after another for ever.
+- **Solution / Workaround**: `AgentPlayback` treats a rectangle with any non-finite number as "not found", never glides toward or from a non-finite point, and skips a `type` step whose duration is not a positive finite number. Locators may return null freely; never let a missed lookup turn into `NaN`.
+
+### [demo] Editing a Skill File Mid-Run Replaces the Demo's Tool Registry
+
+- **Issue / Symptom**: A scripted agent run failed with `Unknown tool "image__render_preview"` halfway through, after a `SKILL.md` was edited.
+- **Root Cause**: `apps/demo/src/agentTools.ts` imports the skills with `import.meta.glob`, so Vite's hot reload re-evaluates that module and creates a new, empty `demoToolRegistry` while the old editors are still registered with the old one.
+- **Solution / Workaround**: Reload the page after editing skills before playing demo scripts, or run demo sweeps only after the edits.
+
+### [react|svelte/video-editor] A Collapsed Layout Makes a Playback Surface Report Itself Hidden
+
+- **Issue / Symptom**: Video scripts in a narrow demo pane ran with no agent cursor.
+- **Root Cause**: At narrow widths the editor's grid column collapses to zero width, so the timeline's box is 0 px wide and the surface's `visible()` (box has a size) is false. Playback then runs calls instantly, as designed.
+- **Solution / Workaround**: This is intended (there is nothing on screen to point at). Check playback at a desktop width; give hosts a layout where the timeline keeps a width.

@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Film } from "lucide-react";
 import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools } from "@pixerate/editor-react/video-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { VideoFrameCache } from "@pixerate/editor/video-editor";
-import { demoToolRegistry } from "../agentTools";
+import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
 import { sampleProject } from "../videoSample";
 import { AgentScriptPanel } from "./AgentScriptPanel";
@@ -76,7 +76,6 @@ export function VideoTab() {
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const agentStage = useRef<HTMLDivElement>(null);
   useEffect(() => controller.seek(1200), [controller]);
   const errors = state.issues.filter((i) => i.severity === "error").length;
 
@@ -123,14 +122,13 @@ export function VideoTab() {
           </p>
         </div>
       </div>
-      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <EffectsProviderSwitch />
-        <VideoEditor controller={controller} showScopes effects={effects} />
+        <VideoEditor controller={controller} showScopes effects={effects} playback={demoPlayback} />
       </div>
       <AgentScriptPanel
         scripts={scripts}
-        stage={agentStage}
-        hint="Plays a scripted agent turn with the video__* tools: it reads the project, then splits, ripple deletes, trims, adds titles and markers, checks and plays."
+        hint="Plays a scripted agent turn with the video__* tools: it reads the project, then splits, ripple deletes, trims, adds titles and markers, checks and plays. The timeline acts each call out with the agent's cursor."
       />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>

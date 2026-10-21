@@ -4,7 +4,7 @@ Agent playback makes an agent's tool calls visible. The agent's cursor glides to
 
 You enable it once per registry and attach a surface for each editor on screen. You don't write code per tool, and you don't pick DOM targets.
 
-> **Status.** The core, React and Svelte layers ship now, and so do the **canvas**, the **vector editor** and the **image editor**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
+> **Status.** The core, React and Svelte layers ship now, and so do the **canvas**, **vector**, **image**, **spreadsheet**, **video**, **animation** and **parameters** editors. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
 
 ## Contents
 
@@ -100,6 +100,16 @@ Before each write the cursor opens the panel the tool belongs to, by clicking it
 - other calls visit the layers they name.
 
 Surface coordinates are document pixels. The editor's own tabs, sliders and layer rows are located too, through `{ kind: 'panel' | 'control' | 'layer', id }` refs.
+
+**Spreadsheet, video, animation and parameters** work the same way. Each component takes `playback`, `playbackId` and a reveal callback:
+- `<SpreadsheetEditor>` attaches as `spreadsheet` and finds cells by `td[data-row][data-col]`.
+- `<VideoTimeline>` / `<VideoEditor>` attach as `video` and map times through their zoom.
+- `<AnimationEditor>` attaches as `animation` and finds shots in the timeline and elements on the stage.
+- `<ParametersPanel>` attaches as `parameters` and finds controls by `data-parameter-id`.
+
+Their plans name only cells, clips, tracks, times, shots, elements and controls, so the component decides where those are on screen.
+
+**A plain DOM component** of your own can use `useElementPlaybackSurface(playback, id, elementRef, { defaultKind, selectors: { kind: (id) => cssSelector } })` (Svelte: `createElementPlaybackSurface`). Coordinates are the element's pixels, and refs are found by CSS selector.
 
 **A custom surface** (your own component) uses `usePlaybackSurface(playback, id, options)` and renders `<PresenceLayer presence={…} />` inside it. All options are optional:
 

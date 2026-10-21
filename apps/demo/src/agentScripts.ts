@@ -103,7 +103,6 @@ export const SHEET_SCRIPTS: AgentScript[] = [
           start: "H1",
           values: [["Commission"], ...salesRows(ctx).map((row) => [`=F${row}*0.05`])],
         }),
-        target: { text: "Status" },
       },
       {
         say: "The total goes on the Total revenue row, beside the other totals.",
@@ -114,7 +113,6 @@ export const SHEET_SCRIPTS: AgentScript[] = [
           if (totalRow < 1) throw new Error("There is no Total revenue row to put the total on.");
           return { start: `G${totalRow}`, values: [["Total commission", `=SUM(H${rows[0]}:H${rows[rows.length - 1]})`]] };
         },
-        target: { text: "Total revenue" },
       },
       { say: "Checking what the formulas computed.", tool: "sheet__get_range", args: { range: "F1:H12" } },
     ],
@@ -128,7 +126,6 @@ export const SHEET_SCRIPTS: AgentScript[] = [
         say: "The target is $1,000 at $42 a unit: 24 units. Trying it.",
         tool: "sheet__set_cell",
         args: { cell: "D7", value: 24 },
-        target: { text: "Fay" },
       },
       { say: "The status formula should now say On target.", tool: "sheet__get_range", args: { range: "D7:G7" } },
     ],
@@ -582,7 +579,7 @@ export const ANIMATION_SCRIPTS: AgentScript[] = [
         args: { shot: "finale", command: 2, to: 0 },
       },
       { say: "Checking for problems before playing it.", tool: "animation__check_animation", args: {} },
-      { say: "Playing the finale.", tool: "animation__seek_animation", args: { shot: "finale", play: true }, target: { text: "Finale" } },
+      { say: "Playing the finale.", tool: "animation__seek_animation", args: { shot: "finale", play: true } },
     ],
   },
 ];
@@ -838,17 +835,15 @@ export const PARAMETER_SCRIPTS: AgentScript[] = [
     prompt: "Make it a fast neon ring",
     steps: [
       { say: "Listing the parameters and their ranges.", ...command("parameters.list") },
-      { say: "Rings instead of the orb.", ...command("parameters.set", { values: { shape: "rings" } }), target: { text: "Shape" } },
-      { say: "Twelve thin rings.", ...command("parameters.set", { values: { count: 12, thickness: 0.2 } }), target: { text: "Rings / bars" } },
-      { say: "Faster, with a sharper glow.", ...command("parameters.set", { values: { speed: 2.5, softness: 0.2 } }), target: { text: "Speed" } },
+      { say: "Rings instead of the orb.", ...command("parameters.set", { values: { shape: "rings" } }) },
+      { say: "Twelve thin rings.", ...command("parameters.set", { values: { count: 12, thickness: 0.2 } }) },
+      { say: "Faster, with a sharper glow.", ...command("parameters.set", { values: { speed: 2.5, softness: 0.2 } }) },
       { say: "And a caption to match.", ...command("parameters.set", { values: { caption: "Neon" } }) },
     ],
   },
 ];
 
 /** The timeline block of a clip, for the agent's cursor. */
-const clipTarget = (id: string) => ({ selector: `[data-clip="${id}"]` });
-
 export const VIDEO_SCRIPTS: AgentScript[] = [
   {
     id: "video-effects-flair",
@@ -860,19 +855,16 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         say: "Film look on the sunrise shot, warm and grainy.",
         tool: "videofx__apply_effect",
         args: { target: "shot-1", effect: "film-look", values: { uTint: "#ffd9a8", uGrain: 0.12 } },
-        target: clipTarget("shot-1"),
       },
       {
         say: "Closing the vignette in over the shot with keyframes.",
         tool: "videofx__set_video_effect_keyframes",
         args: { clip: "shot-1", effect: "fx1", control: "uVignette", keys: [{ t: 0, v: 0 }, { t: 3500, v: 0.7, ease: "ease-in" }] },
-        target: clipTarget("shot-1"),
       },
       {
         say: "A pixel dissolve into the ocean instead of the crossfade.",
         tool: "videofx__set_video_effect_transition",
         args: { clip: "shot-2", effect: "transition-pixel-dissolve", duration: 800, values: { uMaxBlock: 32 } },
-        target: clipTarget("shot-2"),
       },
       {
         say: "A lens flare over the last two seconds, on the titles track.",
@@ -880,7 +872,7 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         args: { track: "titles", effect: "lens-flare", start: 10000, duration: 2000, name: "Flare" },
       },
       { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
-      { say: "Playing the dissolve.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+      { say: "Playing the dissolve.", tool: "video__seek_video", args: { time: 3200, play: true } },
     ],
   },
   {
@@ -893,22 +885,19 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         say: "A warm tint on the sunrise shot, at a third.",
         tool: "videofx__apply_effect",
         args: { target: "shot-1", effect: "fake.tint", values: { color: "#ff7a1a", amount: 0.35 } },
-        target: clipTarget("shot-1"),
       },
       {
         say: "Easing it in over the first two seconds with keyframes.",
         tool: "videofx__set_video_effect_keyframes",
         args: { clip: "shot-1", effect: "fx1", control: "amount", keys: [{ t: 0, v: 0 }, { t: 2000, v: 0.35, ease: "ease-out" }] },
-        target: clipTarget("shot-1"),
       },
       {
         say: "Swapping the crossfade into the ocean for the provider's crossfade transition.",
         tool: "videofx__set_video_effect_transition",
         args: { clip: "shot-2", effect: "fake.crossfade", duration: 800, values: { curve: "smooth" } },
-        target: clipTarget("shot-2"),
       },
       { say: "Listing what is applied now.", tool: "videofx__list_applied_effects", args: {} },
-      { say: "Playing the transition.", tool: "video__seek_video", args: { time: 3200, play: true }, target: clipTarget("shot-2") },
+      { say: "Playing the transition.", tool: "video__seek_video", args: { time: 3200, play: true } },
     ],
   },
   {
@@ -920,13 +909,11 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         say: "The score is one bed under the whole cut, so it should stay put while the picture ripples: taking it out of sync lock.",
         tool: "video__update_video_track",
         args: { track: "a1", set: { syncLocked: false } },
-        target: clipTarget("score"),
       },
       {
         say: "Extracting 6–8 s from the picture and titles: the rest of the ocean shot goes, the lower third ends at the cut, and the forest shot moves up with its dip.",
         tool: "video__extract_video_range",
         args: { from: 6000, to: 8000, tracks: ["titles", "v1"] },
-        target: clipTarget("shot-2"),
       },
       { say: "The Forest marker is now 2 seconds late; moving it to the new cut.", tool: "video__remove_video_marker", args: { marker: "m-forest" } },
       { tool: "video__add_video_marker", args: { time: 6000, label: "Forest" } },
@@ -934,7 +921,6 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         say: "Ending the music with the picture (its fade out stays).",
         tool: "video__trim_video_clip",
         args: { clip: "score", edge: "end", to: 10000 },
-        target: clipTarget("score"),
       },
       {
         say: "An end card over the last two seconds.",
@@ -942,7 +928,7 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
         args: { track: "titles", clip: { type: "text", id: "end-card", text: "Thanks for watching", start: 8000, duration: 2000, fontSize: 64, background: "#0f172acc", fadeIn: 400 } },
       },
       { say: "Checking for problems.", tool: "video__check_video_project", args: {} },
-      { say: "Playing it from just before the new cut.", tool: "video__seek_video", args: { time: 5000, play: true }, target: clipTarget("end-card") },
+      { say: "Playing it from just before the new cut.", tool: "video__seek_video", args: { time: 5000, play: true } },
     ],
   },
   {

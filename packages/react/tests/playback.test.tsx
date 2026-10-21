@@ -175,3 +175,134 @@ describe('ImageEditor playback', () => {
 		expect(playback.surface('image')).toBeUndefined();
 	});
 });
+
+describe('SpreadsheetEditor playback', () => {
+	it('clicks the cell a call names and types its value', async () => {
+		const { SpreadsheetEditor, useSpreadsheetEditor } = await import('../src/spreadsheet');
+		const { createSpreadsheetToolProvider } = await import('@pixerate/editor/agent');
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		// jsdom has no layout: give cells a 100 × 20 grid.
+		const original = HTMLElement.prototype.getBoundingClientRect;
+		HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+			const { row, col } = this.dataset;
+			if (this.tagName === 'TD' && row !== undefined && col !== undefined) return new DOMRect(Number(col) * 100, Number(row) * 20, 100, 20);
+			return new DOMRect(0, 0, 800, 600);
+		};
+		try {
+			const Host = () => {
+				const state = useSpreadsheetEditor();
+				const provider = useMemo(() => createSpreadsheetToolProvider(state.controller, { id: 'sheet', namespace: 'sheet' }), [state.controller]);
+				useAgentToolProvider(registry, provider, { playback });
+				return <SpreadsheetEditor state={state} playback={playback} virtualize={false} />;
+			};
+			const { host, unmount } = mount(<Host />);
+			expect(playback.surface('spreadsheet')).toBeTruthy();
+			const steps = playback.record();
+			const result = await act(() => registry.callTool('sheet__set_cell', { cell: 'B2', value: 'Hi' }));
+			expect(result.isError).toBeFalsy();
+			expect(steps.map((r) => r.step.type)).toEqual(['target', 'press', 'release', 'type', 'commit']);
+			expect((host.querySelector('.pixerate-presence [data-actor="agent"]') as HTMLElement).style.transform).toBe('translate(150px, 30px)');
+			unmount();
+			expect(playback.surface('spreadsheet')).toBeUndefined();
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = original;
+		}
+	});
+});
+
+describe('VideoTimeline playback', () => {
+	it('drags a clip to its new start on the timeline', async () => {
+		const { VideoTimeline } = await import('../src/video-editor');
+		const { VideoEditorController, createVideoEditorToolProvider } = await import('@pixerate/editor/video-editor');
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		playback.install(registry);
+		const controller = new VideoEditorController();
+		registry.register(createVideoEditorToolProvider(controller));
+		await registry.callTool('video__add_video_asset', { kind: 'video', src: 'a.mp4', duration: 30000, width: 1920, height: 1080 });
+		const added = await registry.callTool('video__add_video_clip', { track: 'v1', clip: { type: 'media', asset: 'a', duration: 6000 } });
+		const clipId = (added.structuredContent as { clip: { id: string } }).clip.id;
+		// jsdom has no layout: lanes are rows under a 24 px ruler, 150 px in; clips sit at their style.left.
+		const original = HTMLElement.prototype.getBoundingClientRect;
+		HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+			if (this.dataset.trackLane !== undefined) return new DOMRect(150, 24 + 44 * [...this.parentElement!.parentElement!.children].indexOf(this.parentElement!) - 44, 1000, 44);
+			if (this.dataset.clip !== undefined) {
+				const lane = (this.closest('[data-track-lane]') as HTMLElement).getBoundingClientRect();
+				return new DOMRect(lane.left + parseFloat(this.style.left), lane.top + 4, parseFloat(this.style.width), 36);
+			}
+			if (this.dataset.ruler !== undefined) return new DOMRect(150, 0, 1000, 24);
+			return new DOMRect(0, 0, 1200, 300);
+		};
+		try {
+			const { host, unmount } = mount(<VideoTimeline controller={controller} playback={playback} pxPerSecond={100} onPxPerSecondChange={() => {}} />);
+			expect(playback.surface('video')).toBeTruthy();
+			const steps = playback.record();
+			const res = await act(() => registry.callTool('video__move_video_clip', { clip: clipId, start: 4000 }));
+			expect(res.isError).toBeFalsy();
+			expect(steps.map((r) => r.step.type)).toEqual(['target', 'press', 'target', 'release', 'commit']);
+			const cursor = host.querySelector('.pixerate-presence [data-actor="agent"]') as HTMLElement;
+			// 4000 ms at 100 px/s from the lane's left (150 px).
+			expect(cursor.style.transform).toMatch(/^translate\(550px, /);
+			unmount();
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = original;
+		}
+	});
+});
+
+describe('ParametersPanel and AnimationEditor playback', () => {
+	const withRects = async (rects: (el: HTMLElement) => DOMRect | null, run: () => Promise<void>) => {
+		const original = HTMLElement.prototype.getBoundingClientRect;
+		HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+			return rects(this) ?? new DOMRect(0, 0, 600, 400);
+		};
+		try {
+			await run();
+		} finally {
+			HTMLElement.prototype.getBoundingClientRect = original;
+		}
+	};
+
+	it('visits the control parameters.set changes', async () => {
+		const { ParametersPanel } = await import('../src/parameters');
+		const { ParametersController, createParameterCommands } = await import('@pixerate/editor/parameters');
+		const { CommandRegistry, createCommandToolProvider } = await import('@pixerate/editor/commands');
+		const params = new ParametersController({ schema: { fields: [{ id: 'speed', type: 'number', min: 0, max: 4, default: 1 }] } });
+		const commands = new CommandRegistry();
+		commands.register(createParameterCommands(params));
+		const registry = new ToolRegistry();
+		registry.register(createCommandToolProvider(commands, { id: 'commands' }));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		await withRects((el) => (el.dataset.parameterId === 'speed' ? new DOMRect(10, 40, 200, 30) : null), async () => {
+			const { host, unmount } = mount(<ParametersPanel controller={params} playback={playback} />);
+			const steps = playback.record();
+			const res = await act(() => registry.callTool('commands__run_command', { id: 'parameters.set', params: { values: { speed: 2 } } }));
+			expect(res.isError).toBeFalsy();
+			expect(steps.map((r) => r.step.type)).toEqual(['target', 'press', 'release', 'type', 'commit']);
+			expect((host.querySelector('.pixerate-presence [data-actor="agent"]') as HTMLElement).style.transform).toBe('translate(110px, 55px)');
+			unmount();
+		});
+	});
+
+	it('clicks the shot an animation call works on', async () => {
+		const { AnimationEditor } = await import('../src/animation-editor');
+		const { AnimationEditorController, createAnimationEditorToolProvider, createMotionScene } = await import('@pixerate/editor/animation-editor');
+		const controller = new AnimationEditorController({ scene: createMotionScene({ width: 320, height: 160, nodes: [] }, { name: 'task' }) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		await registry.callTool('animation__insert_shots', { shots: [{ id: 'intro', run: [] }] });
+		await withRects((el) => (el.dataset.shot === 'intro' ? new DOMRect(300, 350, 80, 20) : null), async () => {
+			const { host, unmount } = mount(<AnimationEditor controller={controller} playback={playback} />);
+			const steps = playback.record();
+			const res = await act(() => registry.callTool('animation__update_shot', { shot: 'intro', set: { label: 'Opening' } }));
+			expect(res.isError).toBeFalsy();
+			expect(steps.map((r) => r.step.type)).toEqual(['target', 'press', 'release', 'commit']);
+			expect((host.querySelector('.pixerate-presence [data-actor="agent"]') as HTMLElement).style.transform).toBe('translate(340px, 360px)');
+			unmount();
+		});
+	});
+});

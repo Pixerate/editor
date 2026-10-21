@@ -126,6 +126,7 @@ nothing to do they fail with the reason.
 
 ## Pitfalls
 
+- With agent playback on, `set_cell` is clicked and typed, `set_range` is dragged across the block it fills, and row and column edits mark their rows or columns. Results are unchanged; keep writing whole blocks with `set_range`.
 - **Raw versus computed.** `values` holds results, `raw` holds what to edit. When copying or
   moving a formula, copy from `raw`; `set_range` writes references as given (it does not
   offset relative references the way paste or fill-down does), so write each row's formula
