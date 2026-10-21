@@ -2,7 +2,10 @@
  * Tasks as a user or agent would phrase them, each with the tools (exposed names in
  * `createToolCatalogue()`) that are a right first pick. Shared by the offline search eval
  * (`tests/tool-search-eval.test.ts`) and the model eval (`tests/evals/tool-selection.eval.ts`).
- * Phrase tasks the way people talk, not in tool-name words.
+ * Phrase tasks the way people talk, not in tool-name words, and give every detail the task
+ * needs (values, names, the file or data): a model that is missing one rightly asks for it
+ * instead of calling a tool, and that would count as a miss. Where a write needs an id only a
+ * read can give (an effect id, a model id), the read is a right first pick too.
  */
 export interface ToolSelectionCase {
 	task: string;
@@ -15,7 +18,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Where does the document mention the refund policy?', expect: ['doc__find_text'] },
 	{ task: 'Add a table with three columns to the document', expect: ['doc__edit_table'] },
 	{ task: 'Put a small inline trend graph next to the revenue figure in the text', expect: ['doc__insert_sparkline'] },
-	{ task: 'Fill cells A1 to C3 of the spreadsheet with these numbers', expect: ['sheet__set_range'] },
+	{ task: 'Fill cells A1 to C3 of the spreadsheet with the numbers 1 to 9, row by row', expect: ['sheet__set_range'] },
 	{ task: 'Delete rows 4 to 6 from the sheet', expect: ['sheet__delete_rows'] },
 	{ task: 'Merge the header cells across the top of the sheet', expect: ['sheet__merge_cells'] },
 	// Canvas and components
@@ -33,7 +36,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Remove a blemish from the portrait', expect: ['image-editor__spot_heal', 'image-editor__heal_brush'] },
 	{ task: 'Add a headline in bold type to the image', expect: ['image-editor__add_text_layer'] },
 	{ task: 'Add a drop shadow to the logo layer', expect: ['image-editor__add_layer_effect'] },
-	{ task: 'Open this Photoshop file', expect: ['image-editor__import_psd', 'image-editor__inspect_psd'] },
+	{ task: 'Open this Photoshop file (base64): OEJQUwABAAAAAAAAAAMAAAABAAAAAQAIAAM=', expect: ['image-editor__import_psd', 'image-editor__inspect_psd'] },
 	{ task: 'Save the image as a PSD', expect: ['image-editor__export_psd'] },
 	{ task: 'Convert the image to CMYK for print', expect: ['image-editor__set_color_mode', 'image-editor__convert_to_profile'] },
 	{ task: 'Combine all visible layers into one', expect: ['image-editor__merge_visible', 'image-editor__flatten_image'] },
@@ -49,8 +52,8 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Mix ultramarine and yellow the way real paint mixes', expect: ['paint-editor__mix_colors', 'paint-editor__mix_on_pad', 'image-editor__mix_colors'] },
 	// Charts and diagrams
 	{ task: 'Add a linear trendline to the sales series', expect: ['chart__add_chart_trendline'] },
-	{ task: 'Change the numbers in the chart for Q3', expect: ['chart__set_chart_values'] },
-	{ task: 'Load chart data from this CSV', expect: ['chart__import_chart_csv'] },
+	{ task: 'Change the Revenue number for Q3 in the chart to 120', expect: ['chart__set_chart_values'] },
+	{ task: 'Load chart data from this CSV: Month,Sales\nJan,10\nFeb,12\nMar,15', expect: ['chart__import_chart_csv'] },
 	{ task: 'Are the chart colours accessible for colour-blind readers?', expect: ['chart__check_chart_colors'] },
 	{ task: 'Which kind of chart suits this data best?', expect: ['chart__recommend_chart'] },
 	{ task: 'Swap the rows and columns of the chart', expect: ['chart__transpose_chart'] },
@@ -79,8 +82,8 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Mark the moment the speaker starts talking', expect: ['video__add_video_marker'] },
 	// Effects and generation
 	{ task: 'Find a film grain effect for the video clip', expect: ['video-effects__search_effects'] },
-	{ task: 'Apply a glow effect to the canvas shape', expect: ['canvas-effects__apply_effect'] },
-	{ task: 'Generate an image of a red fox in the snow', expect: ['generation__generate', 'generation__plan_generation'] },
+	{ task: 'Apply the gradient effect to the canvas shape', expect: ['canvas-effects__apply_effect', 'canvas-effects__search_effects'] },
+	{ task: 'Generate an image of a red fox in the snow', expect: ['generation__generate', 'generation__plan_generation', 'generation__list_models'] },
 	{ task: 'How much will generating this video cost?', expect: ['generation__estimate_generation'] },
 	{ task: 'Make another version of the image I generated yesterday', expect: ['generation-history__vary_generation', 'generation-history__recreate_generation'] },
 	{ task: 'Draw an SVG illustration of a lighthouse from a prompt', expect: ['vector-generation__generate_vector_art'] },
@@ -100,8 +103,8 @@ export const HELD_OUT_CASES: ToolSelectionCase[] = [
 	{ task: 'Copy texture from one area of the photo to another', expect: ['image-editor__clone_stamp'] },
 	{ task: 'Trace over a reference photo while painting', expect: ['paint-editor__set_tracing_image', 'paint-editor__add_reference_image'] },
 	{ task: 'Save my current brush settings as a new brush', expect: ['paint-editor__save_brush'] },
-	{ task: 'Rename the series in the bar chart', expect: ['chart__update_chart_series'] },
-	{ task: 'Apply the dark theme style to the chart', expect: ['chart__apply_chart_preset'] },
+	{ task: 'Rename the "Series 1" series in the bar chart to Revenue', expect: ['chart__update_chart_series'] },
+	{ task: 'Apply the minimal style to the chart', expect: ['chart__apply_chart_preset', 'chart__list_chart_presets'] },
 	{ task: 'Put the payment nodes of the diagram in a group', expect: ['diagram__group_diagram_nodes'] },
 	{ task: 'Delete the arrow between Cart and Checkout in the diagram', expect: ['diagram__remove_diagram_edges'] },
 	{ task: 'Shorten the end of the second clip by one second', expect: ['video__trim_video_clip'] },

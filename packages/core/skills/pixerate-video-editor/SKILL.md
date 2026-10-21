@@ -251,7 +251,7 @@ and every write tool is refused with the reason.
 | `update_effect` | Change an applied effect: `values` merged over its own (null resets a control), `enabled`, `opacity`, `index` (reorder). For `generator` and `transition` only `values`. Returns the effect now. |
 | `remove_effect` | Take an effect off a clip (`transition` removes an effect transition; an effect clip is deleted with `delete_video_clips`). Returns what was removed and what is left. |
 | `add_video_effect_clip` | Put a generator, title or overlay effect on a video `track` as a clip filling the frame (`start`, `duration` default the effect's own length, `values`, `mode`). Transparent effects show the tracks beneath. Returns the clip id. |
-| `set_video_effect_transition` | Use a provider transition effect into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. |
+| `set_video_effect_transition` | Use a transition effect from the effects provider into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. For a cross dissolve, dip, wipe, push, slide or iris use the built-in `set_video_transition` instead. |
 | `set_video_effect_keyframes` | Animate one number `control` of a clip effect (or an effect clip's `generator`) with `keys` in clip ms, or `null` to stop animating it. |
 
 ## Pitfalls

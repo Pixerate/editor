@@ -1054,7 +1054,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'set_video_transition',
 		title: 'Set a transition',
 		description:
-			'Sets (or with null removes) the transition into a clip from the clip that ends where it starts on the same track (one undo step). Every type but dip plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
+			'Sets (or with null removes) a built-in transition into a clip from the clip that ends where it starts on the same track: crossfade (a cross dissolve), dip to a colour, wipe, push, slide or iris. One undo step. Use set_video_effect_transition only for a transition effect from the effects provider. Every type but dip plays half before and half after the cut, so both clips need that much media past the cut; when they do not, the error says the longest that fits. Returns the clip.',
 		inputSchema: object({ clip: { ...CLIP_ID, description: 'The incoming clip (the one after the cut).' }, transition: { anyOf: [TRANSITION, { type: 'null' }], description: 'The transition, or null to remove it.' } }, ['clip', 'transition']),
 		annotations: { title: 'Set a transition', ...WRITE_IDEMPOTENT },
 		handler: ({ clip, transition }) => apply({ op: 'set_transition', clip, transition }, transition ? 'Set transition' : 'Remove transition', (r) => ({ clip: clipOut(r.project, clip) }))
