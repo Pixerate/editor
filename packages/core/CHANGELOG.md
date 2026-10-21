@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.140.3
+
+### Patch Changes
+
+- 45f9e6d: Allow `postScriptName` in `patchTextStyle` so PSD type layers with PostScript font names round-trip without validation errors.
+
 ## 0.140.2
 
 ### Patch Changes
