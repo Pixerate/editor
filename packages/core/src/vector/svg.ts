@@ -886,7 +886,79 @@ interface Element {
 	content?: Array<string | Element>;
 }
 
-const TEXT_CONTENT = new Set(['text', 'tspan', 'textPath']);
+const TEXT_CONTENT = new Set(['text', 'tspan', 'textPath', 'style']);
+
+interface CssRule {
+	selector: string;
+	properties: Record<string, string>;
+}
+
+function parseCssRules(cssText: string): CssRule[] {
+	const rules: CssRule[] = [];
+	const clean = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+	const re = /([^{]+)\{([^}]+)\}/g;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(clean))) {
+		const selector = m[1].trim();
+		const body = m[2].trim();
+		const properties: Record<string, string> = {};
+		for (const decl of body.split(';')) {
+			const i = decl.indexOf(':');
+			if (i > 0) {
+				const prop = decl.slice(0, i).trim().toLowerCase();
+				const val = decl.slice(i + 1).replace(/!important/gi, '').trim();
+				if (prop && val) properties[prop] = val;
+			}
+		}
+		if (Object.keys(properties).length > 0) {
+			rules.push({ selector, properties });
+		}
+	}
+	return rules;
+}
+
+function collectStyleRules(el: Element, rules: CssRule[]) {
+	if (el.name === 'style') {
+		const rawText = (el.content ?? []).map((c) => (typeof c === 'string' ? c : '')).join('');
+		rules.push(...parseCssRules(rawText));
+	}
+	for (const child of el.children) {
+		collectStyleRules(child, rules);
+	}
+}
+
+function matchesSelector(el: Element, selector: string): boolean {
+	const sel = selector.trim();
+	if (!sel) return false;
+	// Support comma-separated selectors in a single rule: .a, .b
+	if (sel.includes(',')) {
+		return sel.split(',').some((s) => matchesSelector(el, s));
+	}
+	// Class selector e.g. .cls-1
+	if (sel.startsWith('.')) {
+		const targetClass = sel.slice(1).trim();
+		const classes = (el.attrs.class ?? '').split(/\s+/);
+		return classes.includes(targetClass);
+	}
+	// ID selector e.g. #layer1
+	if (sel.startsWith('#')) {
+		const targetId = sel.slice(1).trim();
+		return el.attrs.id === targetId;
+	}
+	// Element tag selector e.g. path, rect
+	if (/^[a-zA-Z_][\w:.-]*$/.test(sel)) {
+		return el.name.toLowerCase() === sel.toLowerCase();
+	}
+	// Tag and class e.g. path.st0
+	const match = /^([a-zA-Z_][\w:.-]*)\.([a-zA-Z0-9_-]+)$/.exec(sel);
+	if (match) {
+		const [, tag, cls] = match;
+		if (el.name.toLowerCase() !== tag.toLowerCase()) return false;
+		const classes = (el.attrs.class ?? '').split(/\s+/);
+		return classes.includes(cls);
+	}
+	return false;
+}
 
 /** A tiny non-validating XML reader: elements and attributes only. */
 function parseXml(source: string): Element | null {
@@ -1027,10 +1099,20 @@ const STYLE_KEYS: Record<string, keyof InheritedStyle> = {
 	filter: 'filter'
 };
 
-function readStyle(el: Element, parent: InheritedStyle): InheritedStyle {
+function readStyle(el: Element, parent: InheritedStyle, cssRules?: readonly CssRule[]): InheritedStyle {
 	const { mixBlendMode: _m, filter: _f, ...inherited } = parent;
 	const out: InheritedStyle = { ...inherited };
 	for (const [attr, key] of Object.entries(STYLE_KEYS)) if (el.attrs[attr] !== undefined) out[key] = el.attrs[attr].trim();
+	if (cssRules?.length) {
+		for (const rule of cssRules) {
+			if (matchesSelector(el, rule.selector)) {
+				for (const [prop, val] of Object.entries(rule.properties)) {
+					const key = STYLE_KEYS[prop];
+					if (key) out[key] = val;
+				}
+			}
+		}
+	}
 	for (const decl of (el.attrs.style ?? '').split(';')) {
 		const i = decl.indexOf(':');
 		if (i < 0) continue;
@@ -1264,6 +1346,9 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return next;
 	};
 
+	const styleRules: CssRule[] = [];
+	collectStyleRules(root, styleRules);
+
 	const rawGradients = new Map<string, Element>();
 	collectGradients(root, rawGradients);
 	const rawFilters = new Map<string, Element>();
@@ -1426,7 +1511,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		const subpaths = fillEl ? shapeOf(fillEl) : null;
 		if (!fillEl || !subpaths?.length) return null;
 		const a = g.attrs;
-		const fs = readStyle(fillEl, style);
+		const fs = readStyle(fillEl, style, styleRules);
 		const strokeEl = part('stroke');
 		const outlineEl = part('stroke-outline');
 		const ss = strokeEl ? readStyle(strokeEl, style) : null;
@@ -1448,7 +1533,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 			...meta,
 			subpaths,
 			fill: paint(fs.fill),
-			stroke: ss ? paint(ss.stroke) : outlineEl ? paint(readStyle(outlineEl, style).fill) : null,
+			stroke: ss ? paint(ss.stroke) : outlineEl ? paint(readStyle(outlineEl, style, styleRules).fill) : null,
 			...(ss ? strokeStyle(ss) : {}),
 			...(fs.fillRule === 'evenodd' ? { fillRule: 'evenodd' as VectorFillRule } : {}),
 			strokeWidth: width,
@@ -1615,7 +1700,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		let id = typeof own?.id === 'string' && own.id ? own.id : (el.attrs.id ?? createId());
 		while (usedSymbolIds.has(id)) id = `${id}-${usedSymbolIds.size}`;
 		usedSymbolIds.add(id);
-		const style = readStyle(el, rootStyle);
+		const style = readStyle(el, rootStyle, styleRules);
 		// A `<symbol>` holds its art; any other element referred to is the art itself.
 		const nodes = el.name === 'symbol' ? visit(el, style, IDENTITY_MATRIX) : visitOne({ ...el, attrs: { ...el.attrs, transform: '' } }, rootStyle, parseSvgTransform(el.attrs.transform));
 		symbols.push({ id, name: typeof own?.name === 'string' && own.name ? own.name : (el.attrs.id ?? 'Symbol'), nodes });
@@ -1656,7 +1741,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		};
 		if (drawn) {
 			// The drawn group carries the instance's own opacity, blend mode and filters.
-			const ds = readStyle(drawn, rootStyle);
+			const ds = readStyle(drawn, rootStyle, styleRules);
 			const op = drawn.attrs.opacity !== undefined ? parseFloat(drawn.attrs.opacity) : undefined;
 			if (op !== undefined && Number.isFinite(op) && op < 1) node.opacity = op;
 			const blend = vectorBlendModeFromCss(ds.mixBlendMode);
@@ -1701,7 +1786,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		resolving.add(id);
 		const isClip = el.name === 'clipPath';
 		const content = isClip ? clipRulesAsFillRules(el) : el;
-		const inner = visit(content, readStyle(content, rootStyle), multiplyMatrices(parseSvgTransform(el.attrs.transform), space));
+		const inner = visit(content, readStyle(content, rootStyle, styleRules), multiplyMatrices(parseSvgTransform(el.attrs.transform), space));
 		resolving.delete(id);
 		// A clip's paint is not drawn: imported clips are unpainted outlines.
 		const strip = (n: VectorNode): VectorNode => (n.type !== 'group' ? withVectorStrokes(withVectorFills({ ...n, fill: null, stroke: null }, []), []) : { ...n, children: n.children.map(strip) });
@@ -1798,7 +1883,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 	const visitOne = (child: Element, style: InheritedStyle, matrix: AffineMatrix): VectorNode[] => {
 		const out: VectorNode[] = [];
 		const m = multiplyMatrices(parseSvgTransform(child.attrs.transform), matrix);
-		const s = readStyle(child, style);
+		const s = readStyle(child, style, styleRules);
 		const opacity = child.attrs.opacity !== undefined ? parseFloat(child.attrs.opacity) : undefined;
 		const hidden = child.attrs.display === 'none' || child.attrs.visibility === 'hidden';
 		const blendMode = vectorBlendModeFromCss(s.mixBlendMode);
@@ -1902,7 +1987,7 @@ export function parseVectorSvg(svg: string, options: VectorSvgImportOptions = {}
 		return out;
 	};
 
-	rootStyle = readStyle(root, rootStyle);
+	rootStyle = readStyle(root, rootStyle, styleRules);
 	// Our own symbols come back whether or not an instance uses them.
 	const walkAll = (el: Element) => {
 		if (el.name === 'symbol' && el.attrs['data-vector-symbol'] !== undefined) symbolFor(el);

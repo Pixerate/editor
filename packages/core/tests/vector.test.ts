@@ -241,6 +241,46 @@ describe('vector svg', () => {
 	it('throws without an <svg> element', () => {
 		expect(() => parseVectorSvg('<div/>')).toThrow(/no <svg>/);
 	});
+
+	it('parses CSS stylesheet <style> rules with classes and handles precedence', () => {
+		const parsed = parseVectorSvg(`
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+				<style>
+					.gold { fill: #c5a059; stroke: #333333; stroke-width: 2; }
+					.outline-only { fill: none; stroke: #ff00ff; }
+					#specific { fill: #00ffff; }
+				</style>
+				<rect class="gold" x="0" y="0" width="10" height="10" />
+				<!-- inline style overrides class rule -->
+				<rect class="gold" style="fill: #ff0000" x="20" y="0" width="10" height="10" />
+				<!-- presentation attribute overrides inherited, but class rule overrides presentation attribute -->
+				<rect class="gold" fill="#000000" x="40" y="0" width="10" height="10" />
+				<circle class="outline-only" cx="60" cy="50" r="5" />
+				<rect id="specific" class="gold" x="80" y="0" width="10" height="10" />
+			</svg>
+		`);
+		expect(parsed.nodes).toHaveLength(5);
+		const [goldRect, inlineOverrideRect, classOverAttrRect, outlineCircle, specificRect] = parsed.nodes as VectorPathNode[];
+
+		// .gold class applied
+		expect(goldRect.fill).toBe('#c5a059');
+		expect(goldRect.stroke).toBe('#333333');
+		expect(goldRect.strokeWidth).toBe(2);
+
+		// inline style takes precedence over class
+		expect(inlineOverrideRect.fill).toBe('#ff0000');
+		expect(inlineOverrideRect.stroke).toBe('#333333');
+
+		// class rule takes precedence over presentation attribute
+		expect(classOverAttrRect.fill).toBe('#c5a059');
+
+		// .outline-only class applied
+		expect(outlineCircle.fill).toBeNull();
+		expect(outlineCircle.stroke).toBe('#ff00ff');
+
+		// id selector overrides class selector
+		expect(specificRect.fill).toBe('#00ffff');
+	});
 });
 
 describe('VectorEditorController', () => {
