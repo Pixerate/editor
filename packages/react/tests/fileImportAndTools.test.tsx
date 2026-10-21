@@ -245,6 +245,9 @@ describe("useAgentToolProvider", () => {
         "replace_range",
         "replace_selection",
         "set_selection",
+        "format_text",
+        "set_block_type",
+        "set_text_align",
         "edit_table",
       ];
       expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(expected);

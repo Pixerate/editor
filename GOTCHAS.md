@@ -1806,9 +1806,9 @@ All contributors and AI assistants should check this file before starting work a
 
 ### [core/agent] Quick Agent Edits Merge Into One Undo Step
 
-- **Issue / Symptom**: `insert_chart` followed by two `update_chart_in_document` calls was undone in one Mod-Z, removing the chart.
+- **Issue / Symptom**: `insert_chart` followed by two `update_chart_in_document` calls was undone in one Mod-Z, removing the chart. The text tools did the same: two quick `replace_text` calls and an `insert_text` went in one undo.
 - **Root Cause**: `prosemirror-history` groups transactions that arrive within `newGroupDelay` (500 ms), and tool calls come back to back.
-- **Solution / Workaround**: The chart tools mark their transaction with `closeHistory(tr)` (`@tiptap/pm/history`), so each call starts its own undo step.
+- **Solution / Workaround**: Every rich text tool that writes marks its transaction with `closeHistory(tr)` (`@tiptap/pm/history`), so each call starts its own undo step: the chart tools, the formatting tools (`format_text`, `set_block_type`, `set_text_align`, in the selection step of their chain), `replace_text`, the plain write behind `insert_text` / `replace_range` / `replace_selection`, and the final commit of typed-out agent text (`typeAgentText`). A new write tool must do the same; `tests/rich-text-format-tools.test.ts` checks four quick calls take four undos.
 
 ### [react|svelte/chart] A Chart Node View Keeps Its Own Controller in Step With the Document
 

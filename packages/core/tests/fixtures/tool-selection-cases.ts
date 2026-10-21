@@ -93,7 +93,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
  * ranking changes generalise rather than fit the tuning set.
  */
 export const HELD_OUT_CASES: ToolSelectionCase[] = [
-	{ task: 'Bold the second paragraph heading in the document', expect: ['doc__set_selection', 'doc__replace_range'] },
+	{ task: 'Bold the second paragraph heading in the document', expect: ['doc__format_text'] },
 	{ task: 'Add two empty columns after column B in the sheet', expect: ['sheet__insert_columns'] },
 	{ task: 'Rotate the photo 90 degrees clockwise', expect: ['image-editor__set_rotation', 'image-editor__rotate_layer_90'] },
 	{ task: 'Duplicate the background layer of the image', expect: ['image-editor__duplicate_layer'] },

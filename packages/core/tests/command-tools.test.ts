@@ -193,8 +193,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		const registry = new ToolRegistry();
 		providers.forEach((p) => registry.register(p));
 		const tools = registry.listTools().tools;
-		// rich text 8, spreadsheet 10, editor (state + 7 canvas + 4 prompt + view) 13, commands 3, components 17
-		expect(tools.length).toBe(8 + 10 + 13 + 3 + 17);
+		// rich text 11 (8 + 3 formatting), spreadsheet 10, editor (state + 7 canvas + 4 prompt + view) 13, commands 3, components 17
+		expect(tools.length).toBe(11 + 10 + 13 + 3 + 17);
 		// Hosts with their own tool sets: checked to the same standard.
 		registry.register(createImageEditorToolProvider(new ImageEditorController(), { id: 'img', namespace: 'img' }));
 		registry.register(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {}, effects: createFakeEffectProvider() }), { id: 'canvas-effects', namespace: 'canvasfx' }));

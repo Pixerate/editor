@@ -9,6 +9,8 @@ const EXAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   get_text: { format: "text" },
   insert_text: { text: " (inserted by an agent tool)" },
   replace_selection: { text: "agent text" },
+  format_text: { bold: true, highlight: "#fef08a" },
+  set_block_type: { type: "heading", level: 2 },
   edit_table: { operation: "insertTable", rows: 2, cols: 3, withHeaderRow: true },
   get_range: { range: "A1:F4" },
   set_cell: { cell: "D2", value: "200" },
