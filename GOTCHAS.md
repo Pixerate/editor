@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [monorepo/release] Two Quick Merges: The Second Release Run Versioned the First One's Changesets Again
+
+- **Issue / Symptom**: #312 and #311 merged 17 seconds apart. The first Release run published 0.140.1 and pushed its version commit; the second failed at "Refuse versions that are already on npm" (`@pixerate/editor@0.140.1 is already on npm but main is still at 0.140.0`). Nothing was published twice, but the run failed.
+- **Root Cause**: `concurrency` queued the second run behind the first, but `actions/checkout` checked out the commit that triggered it, from before the first run's version commit. That checkout still had #312's changeset, so it computed the same versions again.
+- **Solution / Workaround**: `release.yml` checks out `main` on push (`ref: ${{ github.event_name == 'push' && 'main' || github.ref }}`), so a run that waited starts from the latest release commit and only versions changesets still pending. GitHub keeps only the newest waiting run per concurrency group, and that run releases everything merged while it waited, so dropped runs lose nothing. If an old run fails this way anyway, check that `main`'s `packages/*/package.json` versions match npm; the pending changesets go out with the next release.
+
 ### [core/security] An Own `__proto__` Key From JSON Becomes a Prototype, and ProseMirror Renders Inherited Attributes (GHSA-cp6q-959q-f8rh)
 
 - **Issue / Symptom**: Document JSON such as `{"extra": {"__proto__": {"onerror": "…", "src": "x:"}}}` rendered `onerror` and `src` on a mark's `<span>`, although neither was an own key of any object we built. Dependabot flags every `@tiptap/core` 2.x for this advisory.
