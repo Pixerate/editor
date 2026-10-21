@@ -274,7 +274,7 @@ function num(v: unknown, path: string, min: number, max: number): number {
 }
 
 /** Fields of `TextStyle` an edit can set (`null` clears an optional one). */
-export const TEXT_STYLE_FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'color', 'opacity', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough'] as const;
+export const TEXT_STYLE_FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'color', 'opacity', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough', 'postScriptName'] as const;
 
 /** `base` with the given style fields changed, validated (`null` clears leading, tracking, …). */
 export function patchTextStyle(base: TextStyle, patch: Record<string, unknown>, path = 'style'): TextStyle {
@@ -283,6 +283,11 @@ export function patchTextStyle(base: TextStyle, patch: Record<string, unknown>, 
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
     switch (k) {
+      case 'postScriptName':
+        if (typeof v !== 'string' && v !== null) fail(`${path}.postScriptName must be a PostScript font name.`);
+        if (v) out.postScriptName = (v as string).trim();
+        else delete out.postScriptName;
+        break;
       case 'fontFamily':
         if (typeof v !== 'string' || !v.trim()) fail(`${path}.fontFamily must be a font family name.`);
         out.fontFamily = (v as string).trim();
