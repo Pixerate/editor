@@ -13,6 +13,7 @@ import {
   type PigmentRgb,
 } from '../src/paint';
 import { ToolRegistry } from '../src/tools';
+import { baseToolName } from '../src/tools';
 
 const hex = (h: string): PigmentRgb => {
   const n = parseInt(h.slice(1), 16);
@@ -278,7 +279,7 @@ describe('mix_colors agent tool', () => {
   });
 
   it('is read-only', () => {
-    const tool = registry.listTools().tools.find((t) => t.name === 'mix_colors')!;
+    const tool = registry.listTools().tools.find((t) => baseToolName(t.name) === 'mix_colors')!;
     expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   });
 });

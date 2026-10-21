@@ -7,7 +7,7 @@ that uses the tools can load the matching skill.
 
 | Skill | Covers |
 | --- | --- |
-| [`pixerate-agent-tools`](pixerate-agent-tools/SKILL.md) | What every editor has in common: the MCP bridge, tool naming and namespaces, `list_commands` / `run_command` / `run_commands`, errors, undo. Load it with any domain skill. |
+| [`pixerate-agent-tools`](pixerate-agent-tools/SKILL.md) | What every editor has in common: the MCP bridge, toolsets and tool naming, finding tools with `list_toolsets` / `search_tools` / `enable_tools` / `get_skill`, `list_commands` / `run_command` / `run_commands`, errors, undo. Load it with any domain skill. |
 | [`pixerate-rich-text`](pixerate-rich-text/SKILL.md) | Documents and prompts: text, tables, find and replace, charts in documents, prompt variables. |
 | [`pixerate-spreadsheet`](pixerate-spreadsheet/SKILL.md) | Cells, ranges, rows and columns, filters, merges. |
 | [`pixerate-canvas`](pixerate-canvas/SKILL.md) | Node-graph canvas, components and variants, arranging, shape booleans, keyframe animation. |
@@ -29,8 +29,13 @@ Copy or symlink the directories into your agent's skills folder, for example for
 cp -R node_modules/@pixerate/editor/skills/* .claude/skills/
 ```
 
-Skills use bare tool names (`get_chart`). A host that namespaces providers exposes them as
-`<namespace>__get_chart`.
+Skills use bare tool names (`get_chart`). Registries expose them as `<toolset>__get_chart`
+(the provider's namespace, or its id), and accept the bare name when only one toolset has it.
+
+They can also be served rather than copied: the MCP bridge (`pixerate-mcp-bridge`) serves them as
+MCP prompts and `skill://<name>/SKILL.md` resources, `createMcpServer(source, { skills })` does
+the same for your own server, and a discovery view (`registry.view({ discovery: { skills } })`)
+adds a `get_skill` tool. In Node, `loadSkillFiles()` from `@pixerate/editor/bridge` reads them.
 
 ## Maintaining them
 

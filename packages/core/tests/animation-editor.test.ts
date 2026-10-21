@@ -18,6 +18,9 @@ import {
 	toFlairSvgMotion,
 	toFlairVectorEffect,
 	MOTION_EASE_OUT,
+	MOTION_COMMAND_FIELDS,
+	MOTION_COMMAND_SCHEMA,
+	MOTION_COMMAND_TYPE_SCHEMAS,
 	motionCascade,
 	motionTextLayout,
 	motionBlurTimes,
@@ -45,8 +48,9 @@ import {
 	type MotionScene
 } from '../src/animation-editor';
 import { ManualClock, SPRING_PRESETS, cubicBezierAt, springSettleMs } from '../src/animation';
-import { ToolRegistry } from '../src/tools';
+import { ToolRegistry, validateJsonSchema } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
+import { baseToolName } from '../src/tools';
 
 const ARTWORK: VectorDocument = {
 	width: 400,
@@ -513,7 +517,7 @@ describe('animation editor tools', () => {
 
 	it('hides write tools while read-only', () => {
 		const { registry } = setup({ readOnly: 'Locked for review' });
-		const names = registry.listTools().tools.map((t) => t.name);
+		const names = registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(names).toContain('get_animation');
 		expect(names).not.toContain('add_commands');
 	});
@@ -1657,5 +1661,94 @@ describe('text by letter, word and line', () => {
 		expect(layout).toMatchObject({ group: 'title', letters: 6, lines: [{ words: [{ letters: ['h', 'i'] }, { letters: ['y', 'o2'] }] }, { words: [{ letters: ['g', 'o'] }] }] });
 		expect((await registry.callTool('get_text_layout', { group: 'h' })).isError).toBe(true);
 		expect((await registry.callTool('add_commands', { shot: 'one', commands: [{ type: 'wave', targets: ['title'], split: 'letter', cascade: 'center' }] })).isError).toBeFalsy();
+	});
+});
+
+describe('compact command schema and describe_animation_command', () => {
+	const setup = (validateArguments = true) => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK, { name: 'demo' }) });
+		const registry = new ToolRegistry({ validateArguments });
+		registry.register(createAnimationEditorToolProvider(controller));
+		return { controller, registry };
+	};
+	const json = (result: { structuredContent?: Record<string, unknown> }) => result.structuredContent as any;
+	const fields = (type: string) => MOTION_COMMAND_FIELDS[type as keyof typeof MOTION_COMMAND_FIELDS].filter((k) => k !== 'source');
+
+	it('keeps the animation tool definitions small', () => {
+		const { registry } = setup();
+		const sizes = registry.listTools().tools.map((t) => ({ name: t.name, size: JSON.stringify(t).length }));
+		// Commands, shots and easing are carried once per tool in $defs, not inline at every use (was ~827k in all, ~303k for edit_animation).
+		expect(sizes.reduce((sum, t) => sum + t.size, 0)).toBeLessThan(150_000);
+		for (const t of sizes) expect(t.size, t.name).toBeLessThan(30_000);
+	});
+
+	it('lists every field of every type once, and only those', () => {
+		const { registry } = setup();
+		const command = (registry.getTool('add_commands')!.inputSchema as any).$defs.command;
+		const all = new Set(Object.keys(MOTION_COMMAND_FIELDS).flatMap(fields));
+		expect(new Set(Object.keys(command.properties))).toEqual(all);
+		expect(command.additionalProperties).toBe(false);
+		for (const [key, prop] of Object.entries(command.properties)) expect((prop as any).description, key).toBeTruthy();
+		for (const [type, schema] of Object.entries(MOTION_COMMAND_TYPE_SCHEMAS)) expect(new Set(Object.keys(schema.properties!)), type).toEqual(new Set(fields(type)));
+		expect(MOTION_COMMAND_SCHEMA.oneOf).toHaveLength(Object.keys(MOTION_COMMAND_FIELDS).length);
+	});
+
+	it('resolves every $ref within each tool', () => {
+		const { registry } = setup();
+		for (const tool of registry.listTools().tools) {
+			const text = JSON.stringify(tool.inputSchema);
+			for (const [, name] of text.matchAll(/"#\/\$defs\/(\w+)"/g)) expect((tool.inputSchema as any).$defs?.[name], `${tool.name} → ${name}`).toBeDefined();
+		}
+		const edit = registry.getTool('edit_animation')!.inputSchema;
+		const ops = [{ op: 'insert_shots', shots: [{ id: 'a', camera: { frame: 'box', ease: 'spring-gentle' }, run: [{ type: 'move', targets: ['box'], by: { x: 10, y: 0 }, ease: { type: 'cubic-bezier', x1: 0.2, y1: 0, x2: 0, y2: 1 } }] }] }];
+		expect(validateJsonSchema({ ops }, edit)).toEqual([]);
+		expect(validateJsonSchema({ ops: [{ op: 'add_commands', shot: 'a', commands: [{ type: 'move', targets: ['box'], bye: { x: 1, y: 1 } }] }] }, edit)).not.toEqual([]);
+	});
+
+	it('returns the full schema of the types asked for', async () => {
+		const { registry } = setup();
+		const result = await registry.callTool('describe_animation_command', { types: ['enter', 'wait'] });
+		expect(result.isError).toBeFalsy();
+		const { commands } = json(result);
+		expect(commands.map((c: { type: string }) => c.type)).toEqual(['enter', 'wait']);
+		expect(commands[0].schema).toEqual(MOTION_COMMAND_TYPE_SCHEMAS.enter);
+		expect(commands[0].schema.properties.style.enum).toContain('iris');
+		expect(commands[1].schema.required).toEqual(['type', 'duration']);
+		expect(validateJsonSchema({ type: 'enter', targets: ['box'], style: 'pop' }, commands[0].schema)).toEqual([]);
+	});
+
+	it('refuses unknown types with a suggestion', async () => {
+		const bad = await setup().registry.callTool('describe_animation_command', { types: ['entr'] });
+		expect(bad.isError).toBe(true);
+		expect(json(bad).error.code).toBe('invalid_arguments');
+		expect((await setup().registry.callTool('describe_animation_command', {})).isError).toBe(true);
+		const handler = await setup(false).registry.callTool('describe_animation_command', { types: ['entr'] });
+		expect(handler.isError).toBe(true);
+		expect(json(handler).error.message).toMatch(/no command type "entr".*enter/);
+	});
+
+	it('stays readable while the animation is read-only', () => {
+		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK) });
+		const registry = new ToolRegistry();
+		registry.register(createAnimationEditorToolProvider(controller, { readOnly: 'Locked.' }));
+		const names = registry.listTools().tools.map((t) => baseToolName(t.name));
+		expect(names).toContain('describe_animation_command');
+		expect(names).not.toContain('add_commands');
+	});
+
+	it('refuses a field the type does not take, naming it, without changing anything', async () => {
+		const { registry, controller } = setup();
+		await registry.callTool('insert_shots', { shots: [{ id: 'intro', run: [{ type: 'enter', targets: ['box'] }] }] });
+		const before = controller.getScene();
+		const wrongField = await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'move', targets: ['box'], by: { x: 5, y: 0 }, clip: 'pop' }] });
+		expect(wrongField.isError).toBe(true);
+		expect(json(wrongField).error.message).toMatch(/\(move\): unknown field "clip"/);
+		const wrongShape = await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'fade', targets: ['box'], to: { x: 1, y: 1 } }] });
+		expect(json(wrongShape).error.message).toMatch(/\(fade\): "to" must be an opacity/);
+		const missing = await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'play', targets: ['box'] }] });
+		expect(json(missing).error.message).toMatch(/"clip" must be the name/);
+		expect(controller.getScene()).toBe(before);
+		const ok = await registry.callTool('add_commands', { shot: 'intro', commands: [{ type: 'rotate', targets: ['box'], by: 90, ease: 'spring-quick' }] });
+		expect(ok.isError).toBeFalsy();
 	});
 });

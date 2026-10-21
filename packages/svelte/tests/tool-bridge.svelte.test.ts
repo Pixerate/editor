@@ -69,7 +69,7 @@ describe('useToolBridge (Svelte)', () => {
 		expect(link.editorId).toBe('e7');
 		const socket = FakeBridgeSocket.last!;
 		expect(socket.url).toBe('ws://127.0.0.1:4477?token=t');
-		expect(socket.sent[0]).toMatchObject({ t: 'hello', v: 1, name: 'Svelte tab', tools: [{ name: 'ping' }] });
+		expect(socket.sent[0]).toMatchObject({ t: 'hello', v: 1, name: 'Svelte tab', tools: [{ name: 'demo__ping' }] });
 		socket.emit('message', { data: JSON.stringify({ t: 'call', id: 'c1', name: 'ping', arguments: {} }) });
 		await tick();
 		expect(socket.sent.at(-1)).toMatchObject({ t: 'result', id: 'c1', result: { content: [{ type: 'text', text: 'pong' }] } });

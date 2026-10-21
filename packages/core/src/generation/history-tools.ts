@@ -181,6 +181,9 @@ export function createGenerationHistoryToolProvider(options: GenerationHistoryTo
 	return {
 		id: options.id ?? 'generation-history',
 		namespace: options.namespace,
+		title: 'Generation history',
+		description: 'Past media generations: list and inspect them, recreate one or make variations.',
+		skill: 'pixerate-generation',
 		tools: [listGenerations, getGeneration, recreate, vary],
 		subscribe: (notify) => store.subscribe(notify)
 	};

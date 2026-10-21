@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [monorepo/build] `import.meta` Breaks the CommonJS Build, and tsup's `shims` Breaks Entry Isolation
+
+- **Issue / Symptom**: `pnpm check:packages` failed with `SyntaxError: Cannot use 'import.meta' outside a module` when requiring `@pixerate/editor/bridge` from CommonJS, although the code guarded it with `typeof __dirname === 'string' ? __dirname : …import.meta.url…`. Turning on tsup's `shims: true` fixed that but made `tests/entry-isolation.test.ts` fail: browser entries (`chart`, `canvas`, `animation`…) suddenly imported `path` and `url`.
+- **Root Cause**: `import.meta` is a parse-time syntax error in a CommonJS file, so a runtime guard can't save it, and tsup copies it into `.cjs` output unchanged. `shims` adds `import path from "path"` / `import { fileURLToPath } from "url"` for an ESM `__dirname`, and with code splitting that lands in a chunk every entry shares.
+- **Solution / Workaround**: `tsup.config.ts` defines `import.meta.url` as `undefined` for the CJS format only (`esbuildOptions`), and the code takes `__dirname` there. Use `import.meta` only behind a `typeof __dirname` check, only in Node-only modules (`src/bridge`), and run `pnpm check:packages` after a build to catch it.
+
+### [core/tools] Tool Names Are Namespaced by Default, So Bare-Name Assertions and Bridge Unions Break
+
+- **Issue / Symptom**: After a provider is registered, `listTools()` returns `chart__get_chart`, not `get_chart`. Tests that compare `t.name` with a bare name fail, a page on the MCP bridge whose provider id differs from another page's (`a__echo`, `b__echo`) no longer shares tool names with it, and code that splits on `__` sees a prefix it didn't before.
+- **Root Cause**: `ToolRegistry` defaults to `namespaces: 'always'`: each tool is exposed as `<namespace ?? id>__<name>` so names don't shift when another editor mounts (with the old collision-only prefixing, `duplicate_layer` became `image-editor__duplicate_layer` the moment the paint editor mounted, and a model's earlier calls stopped working). The bridge unions tools across pages by exact name and adds an `editor` argument, so pages only share a tool when they expose the same name.
+- **Solution / Workaround**: Compare with `baseToolName(t.name)` (or call by bare name: `callTool`, `hasTool` and `getTool` accept it when exactly one tool has it, and say which full names it could mean otherwise). Give providers of the same kind on different pages the same `namespace` (`video`) so the bridge sees one tool per name. A registry that forwards names it didn't make (the bridge's) registers its provider with `namespace: ''`, which keeps bare names and prefixes only on a collision. `new ToolRegistry({ namespaces: 'on-collision' })` restores the old behaviour for a whole registry.
+
+### [core/tools] A Discovery View Only Helps Clients That Refresh on `list_changed`
+
+- **Issue / Symptom**: In a discovery view (`registry.view({ discovery: true })`), `enable_tools` succeeds but the model still can't call the enabled tool, or calls it and the client says the tool doesn't exist.
+- **Root Cause**: MCP clients only let the model call tools from their last `tools/list`. The view announces each change with `notifications/tools/list_changed` (through `createMcpServer`'s `send`, or the bridge's `tools` message), and a client that ignores it keeps the old list. The view itself accepts calls to any allowed tool by name, enabled or not, but the client never sends them.
+- **Solution / Workaround**: Serve discovery views only to clients that support `listChanged` (Claude Code, Claude Desktop), and make sure the server has a `send` so the notification goes out. For an API host with its own loop, re-read `view.listTools()` before every model request (as `tests/evals/tool-selection.eval.ts` does). For clients that don't refresh, scope with `toolsets` instead of discovering.
+
 ### [tests] A Growth Test Must Do the Same Work at Both Sizes, and Count It Where It Can
 
 - **Issue / Symptom**: The `analyzePdfLayout` "grows near-linearly" test timed `bigPage(100)` against `bigPage(400)` and measured ~6× for 4× the input (an 8× step gave 10–18×), so it sat close to its limit of 10 and failed under load. It looked like ~n^1.3 growth in the layout code.
@@ -1794,9 +1812,9 @@ All contributors and AI assistants should check this file before starting work a
 
 ### [core/agent] Quick Agent Edits Merge Into One Undo Step
 
-- **Issue / Symptom**: `insert_chart` followed by two `update_chart_in_document` calls was undone in one Mod-Z, removing the chart.
+- **Issue / Symptom**: `insert_chart` followed by two `update_chart_in_document` calls was undone in one Mod-Z, removing the chart. The text tools did the same: two quick `replace_text` calls and an `insert_text` went in one undo.
 - **Root Cause**: `prosemirror-history` groups transactions that arrive within `newGroupDelay` (500 ms), and tool calls come back to back.
-- **Solution / Workaround**: The chart tools mark their transaction with `closeHistory(tr)` (`@tiptap/pm/history`), so each call starts its own undo step.
+- **Solution / Workaround**: Every rich text tool that writes marks its transaction with `closeHistory(tr)` (`@tiptap/pm/history`), so each call starts its own undo step: the chart tools, the formatting tools (`format_text`, `set_block_type`, `set_text_align`, in the selection step of their chain), `replace_text`, the plain write behind `insert_text` / `replace_range` / `replace_selection`, and the final commit of typed-out agent text (`typeAgentText`). A new write tool must do the same; `tests/rich-text-format-tools.test.ts` checks four quick calls take four undos.
 
 ### [react|svelte/chart] A Chart Node View Keeps Its Own Controller in Step With the Document
 
@@ -2655,3 +2673,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Under `moduleResolution: node16`, `export type { ChartInspectorSection } from "./ChartInspector.svelte"` in `@pixerate/editor-svelte/chart` failed with "Module '\"*.svelte\"' has no exported member".
 - **Root Cause**: With `bundler` resolution TypeScript finds `ChartInspector.svelte.d.ts` next to the component. With `node16` it doesn't try that file and falls back to Svelte's ambient `declare module "*.svelte"`, which has only a default export (components still type, as a generic `Component`).
 - **Solution / Workaround**: Keep types that the package exports in `.ts` files (`src/chart/types.ts`), not in a component's `<script module>`, and import them into the component. `pnpm check:packages` checks every Svelte subpath under `node16`.
+
+### [core/tools] A Shared Schema Inlined at Every Use Multiplies a Toolset's Definition Size
+
+- **Issue / Symptom**: The `animation` toolset listed about 827k characters of tool definitions (~200k tokens), and `edit_animation` alone took 303k. Every host that listed the toolset paid for it, even with scoping.
+- **Root Cause**: The full command schema (a 20-branch `oneOf`, each branch repeating the shared fields and the easing schema) was a JS constant spread into every tool that takes commands or shots. JSON serialization copies it at every reference: three times in `edit_animation` (inside `insert_shots`, `update_shot` and `add_commands` ops), and once more in each of five other tools.
+- **Solution / Workaround**: Put shared shapes in the tool's `$defs` and refer to them with `{ $ref: '#/$defs/<name>' }`. `validateJsonSchema` resolves local refs against the tool's root schema, and `withDefs` in `animation-editor/tools.ts` adds only the defs a tool uses. For a big discriminated union, carry one flattened strict object (every field once, with `additionalProperties: false` and descriptions saying which types take each field), check the per-type rules in the handler or edit layer with errors that name the field, and serve each type's full schema from a read tool (`describe_animation_command`). `tests/animation-editor.test.ts` keeps a size budget on the toolset, so measure with `JSON.stringify` of `registry.listTools().tools` before adding a large schema.

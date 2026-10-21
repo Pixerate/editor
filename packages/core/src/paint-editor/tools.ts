@@ -39,7 +39,7 @@ const LAYER_ID = { type: 'string', description: 'Layer id from list_layers (defa
 export interface PaintEditorToolProviderOptions {
   /** Provider id (unique per registry). Default `paint-editor`. */
   id?: string;
-  /** Always prefix tool names with `<namespace>__`. */
+  /** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
   namespace?: string;
   /**
    * Acts out strokes, fills and replays with an agent cursor on the canvas (see `PaintDirector`):
@@ -1103,5 +1103,12 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
 
-  return { id: options.id ?? 'paint-editor', namespace: options.namespace, tools };
+  return {
+    id: options.id ?? 'paint-editor',
+    namespace: options.namespace,
+    title: 'Paint editor',
+    description: 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.',
+    skill: 'pixerate-paint-editor',
+    tools
+  };
 }

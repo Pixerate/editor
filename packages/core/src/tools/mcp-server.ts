@@ -1,4 +1,6 @@
-import type { ToolRegistry } from './registry.js';
+import type { ToolSource } from './registry.js';
+import { listSkills, parseSkillFrontmatter, type SkillFiles } from './skills.js';
+import { summarize } from './search.js';
 
 /** MCP protocol revisions this server speaks, newest first. */
 export const MCP_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
@@ -39,8 +41,18 @@ export interface McpServerOptions {
 	name: string;
 	version: string;
 	title?: string;
-	/** Usage hints for the client's model, sent in the `initialize` result. */
-	instructions?: string;
+	/**
+	 * Usage hints for the client's model, sent in the `initialize` result. Pass
+	 * `toolsetInstructions` (or your own function) to describe the toolsets
+	 * registered when the client connects.
+	 */
+	instructions?: string | ((source: ToolSource) => string);
+	/**
+	 * Agent skill files to serve as MCP resources (`skill://<name>/SKILL.md` and
+	 * its reference files) and prompts (one per skill), so a client can load the
+	 * guide for the tools it uses. See {@link SkillFiles}.
+	 */
+	skills?: SkillFiles;
 	/**
 	 * Sends server → client messages (`notifications/tools/list_changed`).
 	 * Without it the server still answers requests but announces nothing.
@@ -68,18 +80,60 @@ const errorResponse = (id: JsonRpcId | null, code: number, message: string, data
 });
 
 /**
- * A transport-agnostic MCP server for a {@link ToolRegistry}: wire `handle`
+ * Instructions describing the toolsets of a tool source: what each covers, how
+ * tools are named, and which skill documents it. Pass it as
+ * `createMcpServer(source, { instructions: toolsetInstructions })`.
+ */
+export function toolsetInstructions(source: ToolSource): string {
+	const sets = source.toolsets();
+	const discovery = source.hasTool('list_toolsets') && source.hasTool('search_tools');
+	const lines = [
+		'Tools are grouped into toolsets, one per open editor or feature, and named `<toolset>__<tool>`.' +
+			(discovery
+				? ' Only some are listed at first: call list_toolsets to see them all, search_tools to find a tool for a task, and enable_tools to add what you need.'
+				: '')
+	];
+	if (sets.length > 0) {
+		lines.push('', 'Toolsets:');
+		for (const set of sets) {
+			const about = [set.title, summarize(set.description)].filter(Boolean).join(': ');
+			const skill = set.skill ? ` (skill: ${set.skill})` : '';
+			lines.push(`- ${set.name}${about ? ` - ${about}` : ''}${skill}, ${set.tools.length} tools`);
+		}
+	}
+	if (sets.some((s) => s.skill)) {
+		lines.push(
+			'',
+			'Read the skill a toolset names before using it' +
+				(source.hasTool('get_skill') ? ' (get_skill).' : ' (an MCP resource or prompt when the server offers skills).')
+		);
+	}
+	return lines.join('\n');
+}
+
+const skillUri = (path: string) => `skill://${path}`;
+
+/**
+ * A transport-agnostic MCP server for a {@link ToolRegistry} (or any {@link ToolSource}): wire `handle`
  * to any transport (stdio lines, a WebSocket, `postMessage`, an HTTP POST
  * handler) and pass `send` for server → client notifications.
  *
  * Supports `initialize` (with protocol version negotiation), `ping`,
- * `tools/list`, `tools/call` and `notifications/cancelled` (aborts the
+ * `tools/list`, `tools/call`, with `skills` `resources/list`, `resources/read`,
+ * `prompts/list` and `prompts/get`, and `notifications/cancelled` (aborts the
  * call's `signal`), and announces `notifications/tools/list_changed` after
  * the client sends `notifications/initialized`. An unknown tool is a
  * JSON-RPC `-32602` error, as the MCP spec asks; invalid arguments and
  * handler failures are `isError` tool results the model can read and fix.
  */
-export function createMcpServer(registry: ToolRegistry, options: McpServerOptions): McpServer {
+export function createMcpServer(registry: ToolSource, options: McpServerOptions): McpServer {
+	const skillFiles = options.skills ?? null;
+	const skills = skillFiles ? listSkills(skillFiles) : [];
+	const capabilities = {
+		...registry.capabilities,
+		...(skills.length > 0 ? { resources: {}, prompts: {} } : {})
+	};
+	const readSkillPath = (path: string) => skillFiles?.[path] ?? skillFiles?.[`./${path}`];
 	let initialized = false;
 	let unsubscribe: (() => void) | null = null;
 	const running = new Map<JsonRpcId, AbortController>();
@@ -97,6 +151,7 @@ export function createMcpServer(registry: ToolRegistry, options: McpServerOption
 
 		switch (request.method) {
 			case 'initialize': {
+				const instructions = typeof options.instructions === 'function' ? options.instructions(registry) : options.instructions;
 				const requested = String(params.protocolVersion ?? '');
 				const protocolVersion = (MCP_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
 					? requested
@@ -106,9 +161,9 @@ export function createMcpServer(registry: ToolRegistry, options: McpServerOption
 					id,
 					result: {
 						protocolVersion,
-						capabilities: registry.capabilities,
+						capabilities,
 						serverInfo: { name: options.name, version: options.version, ...(options.title ? { title: options.title } : {}) },
-						...(options.instructions ? { instructions: options.instructions } : {})
+						...(instructions ? { instructions } : {})
 					}
 				};
 			}
@@ -148,10 +203,46 @@ export function createMcpServer(registry: ToolRegistry, options: McpServerOption
 					if (!isNotification) running.delete(id as JsonRpcId);
 				}
 			}
-			default:
-				if (isNotification) return null;
-				return errorResponse(id, JSON_RPC_ERRORS.methodNotFound, `Method not found: ${request.method}`);
+			case 'resources/list':
+			case 'prompts/list':
+			case 'resources/read':
+			case 'prompts/get': {
+				if (skills.length === 0) break;
+				if (request.method === 'resources/list') {
+					const resources = skills.flatMap((skill) =>
+						['SKILL.md', ...skill.references].map((file) => ({
+							uri: skillUri(`${skill.name}/${file}`),
+							name: file === 'SKILL.md' ? skill.name : `${skill.name}/${file}`,
+							...(file === 'SKILL.md' ? { description: skill.description } : {}),
+							mimeType: 'text/markdown'
+						}))
+					);
+					return { jsonrpc: '2.0', id, result: { resources } };
+				}
+				if (request.method === 'resources/read') {
+					const uri = String(params.uri ?? '');
+					const text = uri.startsWith('skill://') ? readSkillPath(uri.slice('skill://'.length)) : undefined;
+					if (text === undefined) return errorResponse(id, JSON_RPC_ERRORS.invalidParams, `Unknown resource: ${uri}`, { uri });
+					return { jsonrpc: '2.0', id, result: { contents: [{ uri, mimeType: 'text/markdown', text }] } };
+				}
+				if (request.method === 'prompts/list') {
+					return { jsonrpc: '2.0', id, result: { prompts: skills.map((s) => ({ name: s.name, description: s.description })) } };
+				}
+				const skill = skills.find((s) => s.name === params.name);
+				const text = skill ? readSkillPath(`${skill.name}/SKILL.md`) : undefined;
+				if (!skill || text === undefined) return errorResponse(id, JSON_RPC_ERRORS.invalidParams, `Unknown prompt: ${String(params.name)}`);
+				return {
+					jsonrpc: '2.0',
+					id,
+					result: {
+						description: skill.description,
+						messages: [{ role: 'user', content: { type: 'text', text: parseSkillFrontmatter(text).body.trim() } }]
+					}
+				};
+			}
 		}
+		if (isNotification) return null;
+		return errorResponse(id, JSON_RPC_ERRORS.methodNotFound, `Method not found: ${request.method}`);
 	}
 
 	return {

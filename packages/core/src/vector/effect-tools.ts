@@ -14,7 +14,7 @@ import type { VectorGroupNode } from './types.js';
 export interface VectorEffectsToolProviderOptions {
 	/** Provider id (unique per registry). Default `vector-effects`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The document cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -49,6 +49,9 @@ export function createVectorEffectsToolProvider(controller: VectorEditorControll
 	return createEffectToolProvider({
 		id: options.id ?? 'vector-effects',
 		namespace: options.namespace,
+		title: 'Vector effects',
+		description: 'Provider effects placed in the vector document as effect groups.',
+		skill: 'pixerate-vector',
 		target: { noun: 'group', id: 'For apply_effect: "document" for the top level, or a group id to put the picture in. For update_effect and remove_effect: the effect group\'s id from list_applied_effects.' },
 		applyUses: ['title', 'overlay', 'generator', 'interactive'],
 		applyDetails:

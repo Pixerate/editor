@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/animation/clock';
 import { ToolRegistry } from '../src/tools';
 import { createVideoEditorToolProvider, VideoEditorController } from '../src/video-editor';
+import { baseToolName } from '../src/tools';
 
 const tools = (options: Parameters<typeof createVideoEditorToolProvider>[1] = {}) => {
 	const controller = new VideoEditorController({ clock: new ManualClock() });
@@ -228,7 +229,7 @@ describe('video agent tasks, through the tools only', () => {
 		const { registry, call, controller } = tools();
 		const all = registry.listTools().tools.length;
 		controller.setReadOnly(true);
-		const names = registry.listTools().tools.map((t) => t.name);
+		const names = registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(names.length).toBeLessThan(all);
 		expect(names).toContain('get_video_project');
 		expect(names).not.toContain('add_video_clip');

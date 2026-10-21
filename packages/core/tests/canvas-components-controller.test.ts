@@ -12,6 +12,7 @@ import {
 } from "../src/canvas";
 import { CommandRegistry, createCommandToolProvider, createComponentCommands } from "../src/commands";
 import { ToolRegistry, createCanvasComponentToolProvider } from "../src/agent";
+import { baseToolName } from "../src/tools";
 
 const frame = (id: string, label: string, x: number, y: number, width: number, height: number): CanvasNode => ({
   id,
@@ -166,7 +167,7 @@ describe("components controller", () => {
     controller.createComponent(["card"]);
     const tools = new ToolRegistry();
     tools.register(createCanvasComponentToolProvider(controller));
-    expect(tools.listTools().tools.map((t) => t.name)).toEqual([
+    expect(tools.listTools().tools.map((t) => baseToolName(t.name))).toEqual([
       "list_components",
       "inspect_instance",
       "create_component",

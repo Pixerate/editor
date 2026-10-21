@@ -14,8 +14,10 @@ import { JSDOM } from 'jsdom';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Editor } from '@tiptap/core';
+import { TOOL_DISCOVERY_TOOLS } from '../src/tools';
 import {
 	ToolRegistry,
+	baseToolName,
 	createRichTextToolProvider,
 	createSpreadsheetToolProvider,
 	createEditorMcpToolProvider,
@@ -65,7 +67,7 @@ const stub: any = new Proxy(() => stub, { get: () => stub, apply: () => stub });
 const toolNames = (provider: AgentToolProvider, filter: (name: string) => boolean = () => true) => {
 	const registry = new ToolRegistry();
 	registry.register(provider);
-	return registry.listTools().tools.map((t) => t.name).filter(filter);
+	return registry.listTools().tools.map((t) => baseToolName(t.name)).filter(filter);
 };
 const commandIds = (specs: CommandSpec[]) => specs.map((s) => s.id);
 
@@ -93,6 +95,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
 			// Served by the MCP bridge (`createToolBridge`), which needs a socket server to list.
 			'list_editors',
+			// Added by discovery views (`registry.view({ discovery })`), not by a provider.
+			...TOOL_DISCOVERY_TOOLS,
 			...commandIds(createHistoryCommands(stub))
 		],
 		'pixerate-rich-text': [

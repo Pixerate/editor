@@ -23,6 +23,7 @@ import {
   readAdjustmentControls,
   setControlPath,
 } from '../src/image-editor';
+import { baseToolName } from '../src/tools';
 
 describe('adjustment control table', () => {
   it('describes every numeric base adjustment with its default', () => {
@@ -110,7 +111,7 @@ describe('image editor agent tools', () => {
   it('lists the adjustment and selection tools with complete MCP annotations', () => {
     const { registry } = setup();
     const { tools } = registry.listTools();
-    expect(tools.map((t) => t.name)).toEqual([
+    expect(tools.map((t) => baseToolName(t.name))).toEqual([
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
       'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
@@ -139,7 +140,7 @@ describe('image editor agent tools', () => {
         expect(typeof t.annotations![hint], `${t.name}.${hint}`).toBe('boolean');
       }
     }
-    const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => t.name);
+    const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
     expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 

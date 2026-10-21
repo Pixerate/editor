@@ -1,4 +1,4 @@
-import { ToolRegistry } from "@pixerate/editor/agent";
+import { ToolRegistry, type SkillFiles } from "@pixerate/editor/agent";
 import { CommandRegistry, createCommandToolProvider } from "@pixerate/editor/commands";
 
 /**
@@ -16,3 +16,13 @@ export const demoToolRegistry = new ToolRegistry();
 export const demoCommandRegistry = new CommandRegistry();
 
 demoToolRegistry.register(createCommandToolProvider(demoCommandRegistry, { id: "commands", namespace: "commands" }));
+
+/**
+ * The agent skills shipped in `@pixerate/editor/skills`, keyed `pixerate-chart/SKILL.md`, for
+ * `get_skill` in the agent tools panel's discovery mode.
+ */
+export const demoSkillFiles: SkillFiles = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>("../../../packages/core/skills/*/**/*.md", { query: "?raw", import: "default", eager: true }),
+  ).map(([path, text]) => [path.replace(/^.*\/skills\//, ""), text]),
+);

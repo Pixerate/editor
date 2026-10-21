@@ -11,6 +11,7 @@ import {
   type PixelLayer,
   type SmartObjectLayer,
 } from '../src/image-editor';
+import { baseToolName } from '../src/tools';
 
 const W = 16;
 const H = 8;
@@ -185,10 +186,10 @@ describe('image provider effect tools', () => {
   const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
   it('lists the tools, read-only hides the writes', () => {
-    expect(tools().registry.listTools().tools.map((t) => t.name)).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'add_effect_layer']);
+    expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'add_effect_layer']);
     const registry = new ToolRegistry();
     registry.register(createImageEffectsToolProvider(setup(), { readOnly: 'Locked for review.' }));
-    expect(registry.listTools().tools.map((t) => t.name)).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
+    expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
   });
 
   it('applies, updates and removes through the registry, returning what changed', async () => {

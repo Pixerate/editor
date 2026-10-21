@@ -22,7 +22,7 @@ const round = (ms: number) => Math.round(ms * 10) / 10;
 export interface VideoEditorToolProviderOptions {
 	/** Provider id (unique per registry). Default `video`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The project cannot be edited: write tools are hidden and `get_video_project` says why. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -1354,6 +1354,9 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 	return {
 		id: options.id ?? 'video',
 		namespace: options.namespace,
+		title: 'Video editor',
+		description: 'Non-linear video editing: assets, tracks and clips, trims, ripples and gaps, transitions and speed, grading and LUTs, keyframes, audio, transcripts, markers, and EDL or ffmpeg export.',
+		skill: 'pixerate-video-editor',
 		tools: () => (readOnlyReason() ? reads : [...reads, ...writes]),
 		subscribe: (notify) => {
 			let last = readOnlyReason();

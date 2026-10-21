@@ -21,6 +21,7 @@ import {
 	type VideoPreviewMedia,
 	type VideoProject
 } from '../src/video-editor';
+import { baseToolName } from '../src/tools';
 
 const clipAsset: VideoAsset = {
 	id: 'clip',
@@ -195,8 +196,8 @@ describe('proxy tools', () => {
 
 	it('set the preview size, even when the project is read-only, and report it', async () => {
 		const { controller, call, registry } = setup(true);
-		expect(registry.listTools().tools.map((t) => t.name)).toContain('set_video_preview_scale');
-		expect(registry.listTools().tools.map((t) => t.name)).not.toContain('set_video_proxies');
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toContain('set_video_preview_scale');
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).not.toContain('set_video_proxies');
 		const r = await call('set_video_preview_scale', { scale: 0.25 });
 		expect(r).toEqual({ previewScale: 0.25, plays: [{ asset: 'clip', src: 'media/clip.proxy-25.mp4', proxy: true }, { asset: 'raw', src: 'raw.mp4', proxy: false }] });
 		expect((await call('set_video_preview_scale', { scale: 'auto' })).note).toMatch(/depends on the preview's size/);

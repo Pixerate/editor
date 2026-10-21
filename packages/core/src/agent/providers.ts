@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import { getEditorText } from '../serializers/plain-text.js';
 import { getEditorMarkdown } from '../serializers/markdown.js';
 import { TextSelection } from '@tiptap/pm/state';
+import { closeHistory } from '@tiptap/pm/history';
 import {
 	TABLE_ACTIONS,
 	getTableActionState,
@@ -29,6 +30,7 @@ import {
 } from '../tools/definitions.js';
 import type { AgentStep, EditorSnapshot } from './types.js';
 import { createDocumentChartTools } from './documentChartTools.js';
+import { createDocumentFormatTools } from './formatTools.js';
 import type { CanvasEdge, CanvasNode } from '../canvas/types.js';
 import {
 	DEFAULT_AGENT_CARET_COLOR,
@@ -44,7 +46,7 @@ import {
 export interface ToolProviderOptions {
 	/** Provider id (unique per registry). */
 	id: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 }
 
@@ -162,7 +164,8 @@ function createTextPresence(editor: () => Editor, providerId: string, option: Ri
 				touch();
 				return range;
 			}
-			const tr = replaceWithTextTransaction(ed.state, from, to, text);
+			// Each tool call is its own undo step, however quickly calls follow each other.
+			const tr = closeHistory(replaceWithTextTransaction(ed.state, from, to, text));
 			const end = tr.mapping.map(to, 1);
 			const range = { from: Math.min(tr.mapping.map(from, -1), end), to: end };
 			ed.view.dispatch(tr.scrollIntoView());
@@ -207,8 +210,10 @@ function findMatches(
 
 /**
  * Tools for a mounted rich-text editor: `get_text` and `find_text` (always),
- * plus `insert_text`, `replace_text`, `replace_range`, `replace_selection` and
- * `set_selection` while the editor is editable, `edit_table` when the
+ * plus `insert_text`, `replace_text`, `replace_range`, `replace_selection`,
+ * `set_selection` and the formatting tools (`format_text`, `set_block_type`,
+ * `set_text_align`, as far as the schema supports them) while the editor is
+ * editable, `edit_table` when the
  * schema has tables (`createRichTextPreset`'s `table`), and the chart tools
  * (`list_document_charts`; `insert_chart`, `update_chart_in_document` and
  * `insert_sparkline` while editable) when it has charts (`chart`).
@@ -224,6 +229,7 @@ export function createRichTextToolProvider(
 	const editor = () => toEditor(target);
 	const charts = createDocumentChartTools(editor);
 	const presence = createTextPresence(editor, options.id, options.presence);
+	const formatting = createDocumentFormatTools(editor, (ranges) => presence.changed(ranges.filter((r) => r.from < r.to)));
 
 	const getText: AgentTool = {
 		name: 'get_text',
@@ -384,7 +390,7 @@ export function createRichTextToolProvider(
 				...m,
 				replacement: String(replace).replace(/\r\n?|\n/g, '\r')
 			}));
-			const tr = ed.state.tr;
+			const tr = closeHistory(ed.state.tr);
 			const ends = applyReplacements(tr, chosen);
 			ed.view.dispatch(tr.scrollIntoView());
 			const ranges = chosen.map((m, i) => ({ from: tr.mapping.map(m.from, -1), to: ends[i] }));
@@ -544,11 +550,14 @@ export function createRichTextToolProvider(
 	return {
 		id: options.id,
 		namespace: options.namespace,
+		title: 'Document',
+		description: 'A rich text document: read and find text, insert, replace and format it, tables, and charts in the document.',
+		skill: 'pixerate-rich-text',
 		tools: () => {
 			const ed = editor();
 			if (!ed || ed.isDestroyed) return [];
 			if (!ed.isEditable) return [getText, findText, ...charts.read()];
-			const tools = [getText, findText, insertText, replaceText, replaceRange, replaceSelection, setSelection];
+			const tools = [getText, findText, insertText, replaceText, replaceRange, replaceSelection, setSelection, ...formatting.tools(ed)];
 			return [...tools, ...(isTableEnabled(ed) ? [editTable] : []), ...charts.read(), ...charts.write()];
 		},
 		subscribe: (notify) => {
@@ -945,6 +954,9 @@ export function createSpreadsheetToolProvider(
 	return {
 		id: options.id,
 		namespace: options.namespace,
+		title: 'Spreadsheet',
+		description: 'A spreadsheet: read and set cells and ranges, insert and delete rows and columns, merge and transpose.',
+		skill: 'pixerate-spreadsheet',
 		tools: [getRange, setCell, setRange, insertRows, deleteRows, insertColumns, deleteColumns, mergeCells, unmergeCells, transposeRange]
 	};
 }
@@ -1065,5 +1077,12 @@ export function createEditorMcpToolProvider<
 		} as AgentTool);
 	}
 
-	return { id: options.id, namespace: options.namespace, tools };
+	return {
+		id: options.id,
+		namespace: options.namespace,
+		title: 'Canvas and prompt editor',
+		description: 'The node canvas and the prompt: editor state, nodes and edges, layout, prompt text, and a view of the editor.',
+		skill: 'pixerate-canvas',
+		tools
+	};
 }

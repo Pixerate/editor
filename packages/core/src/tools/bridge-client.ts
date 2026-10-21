@@ -2,7 +2,7 @@
 // connects its ToolRegistry to a local MCP bridge process over a WebSocket, and the bridge's MCP
 // client can then list and call the page's tools. No imports beyond the registry types, so it
 // runs in browsers, workers and Node alike.
-import type { McpToolDefinition, McpToolResult, ToolRegistry } from './registry.js';
+import type { McpToolDefinition, McpToolResult, ToolSource } from './registry.js';
 
 /** Protocol version spoken between `connectToolBridge` and `createToolBridge`. */
 export const TOOL_BRIDGE_PROTOCOL = 1;
@@ -58,13 +58,13 @@ export interface ToolBridgeConnection {
 }
 
 /**
- * Connects a `ToolRegistry` to a local MCP bridge (`createToolBridge` /
+ * Connects a `ToolRegistry` (or a `registry.view()` of it) to a local MCP bridge (`createToolBridge` /
  * `pixerate-mcp-bridge`), so an MCP client (Claude Desktop, Claude Code, an IDE) can call
  * the page's tools: the registry's tool list is sent on connect and whenever it changes,
  * calls run through `registry.callTool` with an `AbortSignal` the bridge cancels, and the
  * connection comes back after the bridge restarts.
  */
-export function connectToolBridge(registry: ToolRegistry, options: ConnectToolBridgeOptions): ToolBridgeConnection {
+export function connectToolBridge(registry: ToolSource, options: ConnectToolBridgeOptions): ToolBridgeConnection {
 	const Ctor = options.WebSocket ?? (globalThis as { WebSocket?: new (url: string) => ToolBridgeSocket }).WebSocket;
 	if (!Ctor) throw new Error('No WebSocket implementation: pass options.WebSocket.');
 	const base = options.url ?? `ws://127.0.0.1:${TOOL_BRIDGE_DEFAULT_PORT}`;

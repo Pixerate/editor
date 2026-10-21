@@ -1,0 +1,5 @@
+---
+"@pixerate/editor": minor
+---
+
+Animation agent tools are about 7× smaller to list: the write tools (`edit_animation`, `write_animation`, `insert_shots`, `update_shot`, `add_commands`, `set_animation_clip`) no longer inline the full per-type command schema at every use. Each tool carries one compact, strict command shape (every field of every type listed once, prefixed with the types that take it), plus shots, cameras and easing, in its `$defs`. The `animation` toolset drops from about 827k to 123k characters of definitions, and `edit_animation` from about 303k to 24k. The per-type rules are still checked when an edit is applied, with errors naming the shot, command and field. The new read tool `describe_animation_command` returns the full JSON Schema of the command types you ask for. `MOTION_COMMAND_TYPE_SCHEMAS` (one strict schema per type) and `MOTION_COMMAND_FIELDS` (the fields each type takes) are now exported, and `MOTION_COMMAND_SCHEMA` stays the full, self-contained `oneOf`.

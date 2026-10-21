@@ -18,6 +18,7 @@ import {
 } from '../src/image-editor';
 import { lerpPigment } from '../src/paint';
 import { readPsd } from '../src/image-editor/psd/file';
+import { baseToolName } from '../src/tools';
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -171,7 +172,7 @@ describe('pigment blend mode through the image editor', () => {
     const { c, registry } = setup();
     const id = c.addPixelLayer({ name: 'Paint', color: '#1e3cdc' });
     for (const name of ['fill_pixels', 'paint_stroke']) {
-      const tool = (await registry.listTools()).tools.find((t) => t.name === name)!;
+      const tool = (await registry.listTools()).tools.find((t) => baseToolName(t.name) === name)!;
       const props = tool.inputSchema.properties as Record<string, { enum?: string[] } & Record<string, unknown>>;
       const blend = name === 'fill_pixels' ? props.blend : (props.brush as { properties: Record<string, { enum?: string[] }> }).properties.blend;
       expect(blend.enum).toContain('pigment');

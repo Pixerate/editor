@@ -53,8 +53,12 @@ export interface EffectChangeResult {
 export interface EffectToolHost {
 	/** Provider id (unique per registry). */
 	id: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
+	/** Toolset title, description and skill (see `AgentToolProvider`). */
+	title?: string;
+	description?: string;
+	skill?: string;
 	/** Words for the editor's targets, e.g. `{ noun: 'clip', id: 'A clip id from get_video_project (e.g. "c1").' }`. */
 	target: { noun: string; id: string };
 	/** The uses `apply_effect` takes on a target (others go through `extraTools`). */
@@ -296,7 +300,10 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 
 	return {
 		id: host.id,
-		...(host.namespace ? { namespace: host.namespace } : {}),
+		...(host.namespace !== undefined ? { namespace: host.namespace } : {}),
+		...(host.title ? { title: host.title } : {}),
+		...(host.description ? { description: host.description } : {}),
+		...(host.skill ? { skill: host.skill } : {}),
 		tools: () => {
 			const extra = host.extraTools?.(context) ?? [];
 			if (host.readOnlyReason()) return [...readTools(), ...extra.filter((t) => t.annotations?.readOnlyHint)];

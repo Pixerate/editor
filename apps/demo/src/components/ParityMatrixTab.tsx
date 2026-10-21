@@ -124,6 +124,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Dynamic Agent Tool Registry (MCP tools/list / tools/call, listChanged)", "ToolRegistry", "useAgentToolProvider", "useAgentToolProvider", "Providers register as editors mount"),
   row("Screenshot Capture for Agents (capture_view)", "createCaptureTool, createCanvasCaptureToolProvider & image capture_view", "useCanvasCapture", "createCanvasCapture", "Viewport, content, selection, nodes or a rect; returns the rect and scale"),
   row("MCP Bridge to Live Editors", "createToolBridge (/bridge) & connectToolBridge", "useToolBridge", "useToolBridge", "One stdio MCP server drives tabs over localhost; token, origins, cancellation"),
+  row("Agent Tool Discovery & Scoped Views", "registry.view({ toolsets, readOnly, discovery }) & searchTools", "useToolRegistryView", "useToolRegistryView", "list_toolsets / search_tools / enable_tools / get_skill; skills as MCP resources"),
   row("Spreadsheet Sort (multi-column, range) & Transpose", true, true, true, "Header and footer rows stay put"),
   row("Spreadsheet Filters (per-column rules, toggle)", true, true, true, "Filters live in the view model"),
   row("Spreadsheet Freeze Panes, Header & Footer Rows", true, true, true, "Sticky frozen rows and columns"),

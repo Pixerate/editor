@@ -87,8 +87,12 @@ export interface CaptureToolOptions {
 export interface CaptureToolProviderOptions extends CaptureToolOptions {
 	/** Provider id (unique per registry, default `capture`). */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
+	/** Toolset title (default "Screen capture"), description and skill (see `AgentToolProvider`). */
+	title?: string;
+	description?: string;
+	skill?: string;
 }
 
 /** Bounds of the capture: union of rects, `null` for none. */
@@ -322,5 +326,12 @@ export function createCaptureTool(surface: CaptureSurface, options: CaptureToolO
 
 /** A provider with just the `capture_view` tool for a surface. */
 export function createCaptureToolProvider(surface: CaptureSurface, options: CaptureToolProviderOptions = {}): AgentToolProvider {
-	return { id: options.id ?? 'capture', namespace: options.namespace, tools: [createCaptureTool(surface, options)] };
+	return {
+		id: options.id ?? 'capture',
+		namespace: options.namespace,
+		title: options.title ?? 'Screen capture',
+		description: options.description ?? `A screenshot of ${options.subject ?? 'the editor'}, to check what text cannot tell you: overlap, legibility, balance.`,
+		...(options.skill ? { skill: options.skill } : {}),
+		tools: [createCaptureTool(surface, options)]
+	};
 }

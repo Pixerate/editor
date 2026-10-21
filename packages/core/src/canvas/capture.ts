@@ -191,6 +191,8 @@ export function createCanvasCaptureToolProvider<TNode extends CanvasNode = Canva
 ): AgentToolProvider {
 	return createCaptureToolProvider(createCanvasCaptureSurface(options), {
 		subject: 'the canvas',
+		title: 'Canvas capture',
+		skill: 'pixerate-canvas',
 		...options,
 		id: options.id ?? 'canvas-capture'
 	});

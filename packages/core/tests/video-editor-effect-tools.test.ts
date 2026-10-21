@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
 import { createFakeEffectProvider } from '../src/effects';
 import { VideoEditorController, createVideoEffectsToolProvider, parseVideoProject } from '../src/video-editor';
+import { baseToolName } from '../src/tools';
 
 const project = () =>
 	parseVideoProject({
@@ -37,7 +38,7 @@ const text = (r: Awaited<ReturnType<ToolRegistry['callTool']>>) => (r.content[0]
 
 describe('video effect tools', () => {
 	it('lists every tool with a provider, and only read tools on a read-only project', () => {
-		expect(setup().registry.listTools().tools.map((t) => t.name)).toEqual([
+		expect(setup().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual([
 			'search_effects',
 			'describe_effect',
 			'list_applied_effects',
@@ -48,14 +49,14 @@ describe('video effect tools', () => {
 			'set_video_effect_transition',
 			'set_video_effect_keyframes'
 		]);
-		expect(setup({ readOnly: true }).registry.listTools().tools.map((t) => t.name)).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
+		expect(setup({ readOnly: true }).registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
 	});
 
 	it('lists catalog ids in the effect argument once the catalog is in', async () => {
 		const { registry } = setup();
 		registry.listTools();
 		await new Promise((r) => setTimeout(r, 0));
-		const apply = registry.listTools().tools.find((t) => t.name === 'apply_effect')!;
+		const apply = registry.listTools().tools.find((t) => baseToolName(t.name) === 'apply_effect')!;
 		expect((apply.inputSchema.properties!.effect as { enum: string[] }).enum).toEqual(['fake.invert', 'fake.tint', 'fake.bar']);
 	});
 

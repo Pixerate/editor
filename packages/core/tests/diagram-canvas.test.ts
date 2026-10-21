@@ -20,6 +20,7 @@ import {
   type DiagramLayout,
 } from "../src/canvas";
 import { expectValidMermaid, mermaidSummary, normaliseSummary, diagramSummary } from "./helpers/mermaid";
+import { baseToolName } from "../src/tools";
 
 const SOURCE = `%% Order flow, kept as written
 flowchart LR
@@ -125,7 +126,7 @@ describe("diagram agent tools", () => {
   it("lists strict, described, annotated tools and hides writes when read-only", async () => {
     const { registry } = setup();
     const tools = registry.listTools().tools;
-    expect(tools.map((t) => t.name)).toEqual([
+    expect(tools.map((t) => baseToolName(t.name))).toEqual([
       "get_diagram",
       "export_diagram_mermaid",
       "find_mermaid_diagrams",
@@ -156,7 +157,7 @@ describe("diagram agent tools", () => {
       expect(Object.keys(tool.annotations ?? {}).sort()).toEqual(["destructiveHint", "idempotentHint", "openWorldHint", "readOnlyHint", "title"]);
     }
     const locked = setup({ readOnly: "The report is locked." });
-    expect(locked.registry.listTools().tools.map((t) => t.name)).toEqual(["get_diagram", "export_diagram_mermaid", "find_mermaid_diagrams"]);
+    expect(locked.registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(["get_diagram", "export_diagram_mermaid", "find_mermaid_diagrams"]);
     expect((await locked.call("get_diagram")).value.readOnly).toBe("The report is locked.");
   });
 

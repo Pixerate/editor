@@ -16,7 +16,7 @@ import { findVideoClip } from './timeline.js';
 export interface VideoEffectsToolProviderOptions {
 	/** Provider id (unique per registry). Default `video-effects`. */
 	id?: string;
-	/** Always prefix tool names with `<namespace>__`. */
+	/** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
 	namespace?: string;
 	/** The project cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
@@ -74,6 +74,9 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 	return createEffectToolProvider({
 		id: options.id ?? 'video-effects',
 		namespace: options.namespace,
+		title: 'Video effects',
+		description: 'Provider effects on video clips, effect clips and effect transitions.',
+		skill: 'pixerate-video-editor',
 		target: { noun: 'clip', id: 'A clip id from get_video_project (e.g. "c1").' },
 		applyUses: ['filter', 'overlay'],
 		applyDetails:

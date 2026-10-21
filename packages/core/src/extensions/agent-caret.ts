@@ -1,4 +1,5 @@
 import { Extension, type Editor } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type { Slice } from "@tiptap/pm/model";
@@ -292,7 +293,8 @@ export async function typeAgentText(editor: Editor, options: TypeAgentTextOption
     tr.setMeta(agentCaretPluginKey, { set: { ...caret, from: anchor, to: head } } satisfies AgentCaretMeta);
 
   const commit = (start: number, end: number) => {
-    const tr = replaceWithTextTransaction(editor.state, start, end, text);
+    // The agent's edit is its own undo step, however soon after another one it lands.
+    const tr = closeHistory(replaceWithTextTransaction(editor.state, start, end, text));
     const insertedTo = tr.mapping.map(end, 1);
     const insertedFrom = Math.min(tr.mapping.map(start, -1), insertedTo);
     editor.view.dispatch(show(tr, insertedTo).scrollIntoView());

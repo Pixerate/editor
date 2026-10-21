@@ -28,8 +28,10 @@ const startBridge = async (options: Partial<Parameters<typeof createToolBridge>[
   return bridge;
 };
 
+// One namespace for every page, so the bridge sees the same tool names in each.
 const echoProvider = (id = "echo"): AgentToolProvider => ({
   id,
+  namespace: "echo",
   tools: [
     {
       name: "echo",
@@ -83,8 +85,8 @@ describe("createToolBridge", () => {
 
     await mcp(bridge, "initialize", { protocolVersion: "2025-06-18" });
     const { tools } = await mcp(bridge, "tools/list");
-    expect(tools.map((t: any) => t.name)).toEqual(["list_editors", "echo", "wait"]);
-    const echo = tools.find((t: any) => t.name === "echo");
+    expect(tools.map((t: any) => t.name)).toEqual(["list_editors", "echo__echo", "echo__wait"]);
+    const echo = tools.find((t: any) => t.name === "echo__echo");
     expect(Object.keys(echo.inputSchema.properties)).toEqual(["editor", "text"]);
     expect(echo.annotations.readOnlyHint).toBe(true);
 

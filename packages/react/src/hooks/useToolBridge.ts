@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { connectToolBridge, type ConnectToolBridgeOptions, type ToolBridgeConnection, type ToolBridgeStatus, type ToolRegistry } from "@pixerate/editor/tools";
+import { connectToolBridge, type ConnectToolBridgeOptions, type ToolBridgeConnection, type ToolBridgeStatus, type ToolSource } from "@pixerate/editor/tools";
 
 export interface UseToolBridgeResult {
   status: ToolBridgeStatus | "off";
@@ -10,11 +10,11 @@ export interface UseToolBridgeResult {
 }
 
 /**
- * Connects a `ToolRegistry` to a local MCP bridge (`pixerate-mcp-bridge`) while mounted, so an
+ * Connects a `ToolRegistry` (or a view of one, see `useToolRegistryView`) to a local MCP bridge (`pixerate-mcp-bridge`) while mounted, so an
  * MCP client can call the page's tools. Pass `null` options to stay disconnected. Memoize the
  * options: changing `url`, `token` or `name` reconnects.
  */
-export function useToolBridge(registry: ToolRegistry | null | undefined, options: ConnectToolBridgeOptions | null): UseToolBridgeResult {
+export function useToolBridge(registry: ToolSource | null | undefined, options: ConnectToolBridgeOptions | null): UseToolBridgeResult {
   const [state, setState] = useState<UseToolBridgeResult>({ status: "off", editorId: null });
   const key = options ? JSON.stringify([options.url, options.token, options.name, options.kind, options.reconnect]) : null;
   useEffect(() => {

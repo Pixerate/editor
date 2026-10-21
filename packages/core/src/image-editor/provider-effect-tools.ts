@@ -16,7 +16,7 @@ import { findLayer, flattenLayers, type ImageLayer } from './layers/model';
 export interface ImageEffectsToolProviderOptions {
   /** Provider id (unique per registry). Default `image-effects`. */
   id?: string;
-  /** Always prefix tool names with `<namespace>__`. */
+  /** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
   namespace?: string;
   /** The document cannot be edited: write tools are hidden. A string is the reason. */
   readOnly?: boolean | string | (() => boolean | string);
@@ -57,6 +57,9 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
   return createEffectToolProvider({
     id: options.id ?? 'image-effects',
     namespace: options.namespace,
+    title: 'Image effects',
+    description: 'Provider effects (GPU filters and generators) on image layers as smart filters: search, describe, apply, update and remove them.',
+    skill: 'pixerate-image-editor',
     target: { noun: 'layer', id: 'A layer id from list_layers.' },
     applyUses: ['filter'],
     applyDetails:

@@ -40,5 +40,11 @@ export default defineConfig({
   // No source maps in the published package: see GOTCHAS "[monorepo/build] Declarations Come From `tsc`".
   sourcemap: false,
   splitting: true,
+  // `import.meta` is a syntax error in CommonJS. The one use (the bridge's skills lookup) takes
+  // `__dirname` there, so the CJS build only needs it to parse. tsup's `shims` would add Node
+  // imports to chunks the browser entries share.
+  esbuildOptions(options, { format }) {
+    if (format === "cjs") options.define = { ...options.define, "import.meta.url": "undefined" };
+  },
   noExternal: ["tiptap-markdown"],
 });

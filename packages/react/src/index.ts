@@ -10,6 +10,7 @@ export * from "./hooks/useDocxExport";
 export * from "./components/ExportDocxButton";
 export * from "./hooks/useAgentToolProvider";
 export * from "./hooks/useToolBridge";
+export * from "./hooks/useToolRegistryView";
 export * from "./components/EditorContent";
 export * from "./components/BubbleMenu";
 export * from "./components/TemplateRenderer";

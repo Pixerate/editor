@@ -6,6 +6,7 @@ import { ToolRegistry } from '@pixerate/editor/tools';
 import { DiagramController, createDiagramToolProvider, createInstantPresenceClock } from '@pixerate/editor/diagram';
 import { DiagramPresenceLayer, MermaidDiagramNode, MermaidDiagramGroup, MermaidFamilyScene, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult, type UseMermaidStreamResult } from '../src/canvas';
 import { useAgentToolProvider } from '../src';
+import { baseToolName } from '@pixerate/editor/tools';
 
 let container: HTMLDivElement;
 let root: any;
@@ -78,7 +79,7 @@ describe('useMermaidDiagram', () => {
 			return null;
 		}
 		await act(async () => root.render(<Probe />));
-		expect(registry.listTools().tools.map((t) => t.name)).toContain('add_diagram_node');
+		expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toContain('add_diagram_node');
 		await act(async () => void (await registry.callTool('add_diagram_node', { label: 'New', from: 'C' })));
 		expect(diagram.nodes.map((n) => n.id)).toContain('N1');
 		await act(async () => root.render(<div />));

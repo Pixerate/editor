@@ -23,7 +23,11 @@ import { TOOL_BRIDGE_DEFAULT_PORT, TOOL_BRIDGE_PROTOCOL, type ToolBridgeEditorMe
 import { createMcpServer, type JsonRpcNotification, type JsonRpcResponse, type McpServer } from '../tools/mcp-server.js';
 import { ToolRegistry, type AgentTool, type McpToolDefinition, type McpToolResult } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
+import type { SkillFiles } from '../tools/skills.js';
+import { loadSkillFiles } from './skills.js';
 import { acceptWebSocket, rejectUpgrade, wrapWebSocket, type BridgeSocket } from './websocket.js';
+
+export { loadSkillFiles, defaultSkillsDir } from './skills.js';
 
 export { TOOL_BRIDGE_DEFAULT_PORT, TOOL_BRIDGE_PROTOCOL } from '../tools/bridge-client.js';
 
@@ -53,6 +57,11 @@ export interface ToolBridgeOptions {
 	stdio?: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream } | false;
 	/** Diagnostics (default: stderr, since stdout carries MCP). */
 	log?: (message: string) => void;
+	/**
+	 * Agent skills served as MCP resources and prompts (default: the skills shipped with the
+	 * package, from `loadSkillFiles()`); `false` serves none.
+	 */
+	skills?: SkillFiles | false;
 }
 
 /** An editor as `list_editors` reports it. */
@@ -112,7 +121,10 @@ const EDITOR_ARG: JsonSchema = {
 };
 
 const BRIDGE_INSTRUCTIONS =
-	'Tools come from editors open in a browser. Call list_editors to see them; when several are open, pass `editor` (an id or part of a name) to pick one, otherwise the most recently active editor that has the tool answers. If no editor is connected, ask the user to open the app and connect it to the bridge.';
+	'Tools come from editors open in a browser. Call list_editors to see them; when several are open, pass `editor` (an id or part of a name) to pick one, otherwise the most recently active editor that has the tool answers. If no editor is connected, ask the user to open the app and connect it to the bridge. Tool names are `<toolset>__<tool>`; when an editor offers list_toolsets and search_tools, use them to find tools that are not listed yet.';
+
+const SKILL_INSTRUCTIONS =
+	"Each editor's tools are documented by an agent skill (pixerate-chart, pixerate-video-editor, ...), served here as MCP prompts and as resources at skill://<skill>/SKILL.md. Read pixerate-agent-tools and the skill for the editor at hand before working with its tools.";
 
 /**
  * Starts a bridge: listens for editors on 127.0.0.1 and serves their tools, plus
@@ -213,6 +225,8 @@ export async function createToolBridge(options: ToolBridgeOptions): Promise<Tool
 
 	registry.register({
 		id: 'bridge',
+		// Forwarded tools keep the names their pages gave them.
+		namespace: '',
 		tools: () => [listEditors, ...forwardedTools()],
 		subscribe: (notify) => {
 			listeners.add(notify);
@@ -319,10 +333,13 @@ export async function createToolBridge(options: ToolBridgeOptions): Promise<Tool
 	// ------------------------------------------------------------------- MCP
 	let output: NodeJS.WritableStream | null = null;
 	const write = (message: JsonRpcResponse | JsonRpcNotification) => output?.write(`${JSON.stringify(message)}\n`);
+	const skills = options.skills === false ? {} : options.skills ?? loadSkillFiles();
+	const hasSkills = Object.keys(skills).length > 0;
 	const mcp = createMcpServer(registry, {
 		name: options.name,
 		version: options.version ?? '0.1.0',
-		instructions: [options.instructions, BRIDGE_INSTRUCTIONS].filter(Boolean).join('\n\n'),
+		instructions: [options.instructions, BRIDGE_INSTRUCTIONS, hasSkills ? SKILL_INSTRUCTIONS : ''].filter(Boolean).join('\n\n'),
+		...(hasSkills ? { skills } : {}),
 		send: write
 	});
 	let lines: ReturnType<typeof createInterface> | null = null;
