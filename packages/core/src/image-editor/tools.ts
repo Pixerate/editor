@@ -1,3 +1,4 @@
+import { withImagePlayback } from './playback';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { ImageEditorController } from './controller';
 import type { AdjustmentKind, ImageAdjustments } from './types';
@@ -303,7 +304,7 @@ export function createImageEditorToolProvider(
     },
   };
 
-  return {
+  return withImagePlayback({
     id: options.id ?? 'image-editor',
     namespace: options.namespace,
     title: 'Image editor',
@@ -330,6 +331,6 @@ export function createImageEditorToolProvider(
       ...createPigmentTools(),
       ...createImagePsdTools(controller),
     ],
-  };
+  });
 }
 

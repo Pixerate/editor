@@ -2715,3 +2715,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `<PresenceLayer>` is an absolutely positioned `div`, but `<VectorCanvas>`'s root is an `<svg>`, so the layer has nowhere to sit without wrapping the canvas (which would break layouts and tests that expect the `svg` as the root).
 - **Root Cause**: HTML can't be a child of an SVG element except through `foreignObject`.
 - **Solution / Workaround**: The canvas draws the layer in a full-size `<foreignObject data-vector-presence pointer-events="none">` as its last child, so it is on top and never takes pointer events. It is only rendered while a playback is attached. In jsdom tests the surface reports itself hidden (no layout), so override its `visible` to test playback.
+
+### [react|svelte/image-editor] Agent Playback Mixes the Canvas and the Panels in One Coordinate Space
+
+- **Issue / Symptom**: The agent's cursor has to reach both the image (document pixels, zoomed and panned on the canvas) and the editor's own tabs and sliders (plain DOM), but a playback surface has one coordinate space.
+- **Root Cause**: Plans speak document pixels, while the panels sit outside the canvas, where no document point is drawn.
+- **Solution / Workaround**: The surface stays in document pixels, and `locate` maps a panel element's client rectangle *into* document pixels with `canvasToImagePoint`. The layer maps every point back out with `imageToCanvasPoint`, relative to the editor's root, so a point outside the image still lands on the right control. Panels change the layout (the Paint tab's side panel is taller), so map at draw time from live refs, never from a cached rectangle.

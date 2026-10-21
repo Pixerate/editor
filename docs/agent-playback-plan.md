@@ -1,8 +1,13 @@
 # Agent playback in the library: design plan
 
-Status: **phases 0, 1 and 2 (foundation, canvas, vector) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
+Status: **phases 0 to 3 (foundation, canvas, vector, image) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
 
-As built, phases 0 to 2 differ from the proposal below in a few places:
+As built, phases 0 to 3 differ from the proposal below in a few places:
+
+- **Image.**
+  - A generic `open` step and `PlaybackSurface.open` let a tool's plan open the panel it belongs to. This replaces the demo's `open:` steps, since the library owns those tabs.
+  - `withImagePlayback` plans every image tool by its argument shape rather than tool by tool.
+  - `<ImageEditor playback>` locates its own tabs, sliders (`data-control-id`) and layer rows (`data-layer-id`) in document pixels.
 
 - **Vector.**
   - `<VectorCanvas>` (React and Svelte) takes a `playback` prop and draws the cursor itself, in a `foreignObject` over the canvas.

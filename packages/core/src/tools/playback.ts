@@ -40,6 +40,11 @@ export type PlaybackStep =
 	| { type: 'drag'; to: PlaybackPoint; ms?: number }
 	| { type: 'type'; text: string; ms?: number }
 	| { type: 'wait'; ms: number }
+	/**
+	 * Bring a part of the editor into view (a panel or tab): glide to what `ref` locates, click it,
+	 * and let the surface's `open(ref)` show it. Skipped when the surface has no `open`.
+	 */
+	| { type: 'open'; ref: PlaybackRef; ms?: number }
 	/** The handler runs here, exactly once (appended when a plan leaves it out). */
 	| { type: 'commit' };
 
@@ -86,6 +91,8 @@ export interface PlaybackSurface {
 	endGesture?(): void;
 	/** Bring the surface on screen (switch to its tab) before playing. */
 	reveal?(): void | Promise<void>;
+	/** Show a part of the editor (a panel or tab) for an `open` step, e.g. by clicking its tab. */
+	open?(ref: PlaybackRef): void | Promise<void>;
 	/** The kind of a bare `id` / `ids` argument on this surface (e.g. `node`, `vector`). */
 	defaultKind?: string;
 }
@@ -155,7 +162,7 @@ export function playbackRefsFromArgs(args: unknown, defaultKind = 'item'): Playb
 }
 
 /**
- * The things a write's result names: `id`, `ids`, `node.id`, `created` (a list, or `{ nodes, edges }`),
+ * The things a write's result names: `id`, `ids`, `node.id`, `layerId`, `layer.id`, `created` (a list, or `{ nodes, edges }`),
  * also inside a command result's `result`. Used to point at what a call created.
  */
 export function playbackRefsFromResult(value: unknown, defaultKind = 'item'): PlaybackRef[] {
@@ -171,6 +178,8 @@ export function playbackRefsFromResult(value: unknown, defaultKind = 'item'): Pl
 		pushRef(out, defaultKind, record.id);
 		if (Array.isArray(record.ids)) for (const id of record.ids) pushRef(out, defaultKind, id);
 		if (record.node && typeof record.node === 'object') pushRef(out, 'node', (record.node as { id?: unknown }).id);
+		pushRef(out, 'layer', record.layerId);
+		if (record.layer && typeof record.layer === 'object') pushRef(out, 'layer', (record.layer as { id?: unknown }).id);
 		const created = record.created;
 		if (Array.isArray(created)) visit(created, depth + 1);
 		else if (created && typeof created === 'object') {
@@ -432,6 +441,19 @@ export class AgentPlayback {
 						if (committed) continue;
 						committed = true;
 						result = await next();
+						continue;
+					}
+					if (step.type === 'open') {
+						if (!surface.open) continue;
+						const rect = locate(step.ref);
+						if (rect) {
+							await this.glide(presence, id, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, step.ms, instant);
+							presence.set({ id, pressed: true });
+							await wait(90);
+						}
+						await surface.open(step.ref);
+						presence.set({ id, pressed: false });
+						await wait(220);
 						continue;
 					}
 					await this.step(presence, locate, id, step, wait, instant);

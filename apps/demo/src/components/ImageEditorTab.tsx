@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ImageEditor, useAgentToolProvider, useImageEditor } from '@pixerate/editor-react';
 import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@pixerate/editor/image-editor';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
-import { demoToolRegistry } from '../agentTools';
+import { demoPlayback, demoToolRegistry } from '../agentTools';
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { IMAGE_SCRIPTS } from '../agentScripts';
 import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
@@ -47,7 +47,6 @@ export function ImageEditorTab() {
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const editor = useImageEditor();
   const [maskNote, setMaskNote] = useState<string | null>(null);
-  const agentStage = useRef<HTMLDivElement>(null);
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, provider);
@@ -154,16 +153,18 @@ export function ImageEditorTab() {
 
       {/* Editor Component */}
       <EffectsProviderSwitch />
-      <div className="relative w-full" ref={agentStage}>
+      <div className="relative w-full">
+        {/* The editor acts out every image__* / imagefx__* call (agent playback), opening each tool's panel itself. */}
         <ImageEditor
           editor={editor}
           effects={effects}
+          playback={demoPlayback}
           onSave={(dataUrl) => {
             setExportedUrl(dataUrl);
           }}
         />
       </div>
-      <AgentScriptPanel scripts={scripts} stage={agentStage} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview." />
+      <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
 
       {/* Export Preview */}
       {exportedUrl && (

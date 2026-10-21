@@ -143,3 +143,35 @@ describe('VectorCanvas playback', () => {
 		unmount();
 	});
 });
+
+describe('ImageEditor playback', () => {
+	it('opens the panel a tool belongs to and plays on the image surface', async () => {
+		window.HTMLCanvasElement.prototype.getContext = (() => null) as any;
+		const { ImageEditor, useImageEditor } = await import('../src/image-editor');
+		const { createImageEditorToolProvider } = await import('@pixerate/editor/image-editor');
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		const fake = { width: 40, height: 30, naturalWidth: 40, naturalHeight: 30 } as unknown as HTMLImageElement;
+		const Host = () => {
+			const editor = useImageEditor({ image: fake });
+			const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
+			useAgentToolProvider(registry, provider, { playback });
+			return <ImageEditor editor={editor} playback={playback} />;
+		};
+		const { host, unmount } = mount(<Host />);
+		const surface = playback.surface('image')!;
+		expect(surface).toBeTruthy();
+		(surface as { visible?: () => boolean }).visible = () => true;
+		expect(host.querySelector('[data-control-id="contrast"]')).toBeNull();
+		const steps = playback.record();
+		const result = await act(() => registry.callTool('image__set_adjustments', { values: { contrast: 20 } }));
+		expect(result.isError).toBeFalsy();
+		expect(steps.map((r) => r.step.type)).toEqual(['open', 'target', 'commit']);
+		// The cursor clicked the Adjustments tab, so its sliders are on screen.
+		expect(host.querySelector('[data-image-tab="adjust"]')!.className).toContain('bg-indigo-600');
+		expect(host.querySelector('[data-control-id="contrast"]')).toBeTruthy();
+		expect(host.querySelector('.pixerate-presence')).toBeTruthy();
+		unmount();
+		expect(playback.surface('image')).toBeUndefined();
+	});
+});

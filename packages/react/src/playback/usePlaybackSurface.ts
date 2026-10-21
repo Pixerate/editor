@@ -29,6 +29,7 @@ export function usePlaybackSurface(playback: AgentPlayback | null | undefined, i
       beginGesture: (key) => o().beginGesture?.(key),
       endGesture: () => o().endGesture?.(),
       reveal: () => o().reveal?.(),
+      open: (ref) => o().open?.(ref),
       get defaultKind() {
         return o().defaultKind;
       },

@@ -4,7 +4,7 @@ Agent playback makes an agent's tool calls visible. The agent's cursor glides to
 
 You enable it once per registry and attach a surface for each editor on screen. You don't write code per tool, and you don't pick DOM targets.
 
-> **Status.** The core, React and Svelte layers ship now, and so do the **canvas** and the **vector editor**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
+> **Status.** The core, React and Svelte layers ship now, and so do the **canvas**, the **vector editor** and the **image editor**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
 
 ## Contents
 
@@ -85,6 +85,22 @@ Another provider that acts on the same canvas plays there if it names the surfac
 
 The cursor drags new shapes out corner to corner, traces paths, clicks text in and types it, and visits the nodes that commands with `ids` name. Pass `playback={null}` to turn it off under a provider; `playbackId` changes the surface id (default `vector`).
 
+**The image editor** works the same way. Pass `playback` to `<ImageEditor>`, or put it in an `AgentPlaybackProvider`; the image tool providers play on the `image` surface:
+
+```tsx
+<ImageEditor editor={editor} playback={playback} onPlaybackReveal={() => setTab('image')} />
+```
+
+Before each write the cursor opens the panel the tool belongs to, by clicking its tab as a user would: Adjustments, Layers, Paint, Select & Mask, Annotations, or Transform & Crop. Then it acts:
+
+- strokes (`points`) are traced;
+- boxes (`x, y, width, height`, or a `shape`) are dragged out;
+- positions are clicked;
+- `set_adjustments` visits the sliders it moves;
+- other calls visit the layers they name.
+
+Surface coordinates are document pixels. The editor's own tabs, sliders and layer rows are located too, through `{ kind: 'panel' | 'control' | 'layer', id }` refs.
+
 **A custom surface** (your own component) uses `usePlaybackSurface(playback, id, options)` and renders `<PresenceLayer presence={…} />` inside it. All options are optional:
 
 | Option | Does |
@@ -96,6 +112,7 @@ The cursor drags new shapes out corner to corner, traces paths, clicks text in a
 | `defaultKind` | The kind of a bare `id` / `ids` argument |
 | `reveal()` | Bring the surface on screen before playing |
 | `beginGesture` / `endGesture` | Group a call's changes into one undo step |
+| `open(ref)` | Show a panel or tab for an `open` step (e.g. click its tab) |
 
 ## Show the cursor: Svelte
 
@@ -124,7 +141,7 @@ The cursor drags new shapes out corner to corner, traces paths, clicks text in a
 ```
 
 - `setAgentPlayback(playback)` (and `getAgentPlayback()`) is the context equivalent.
-- `<VectorCanvas playback={playback} onplaybackreveal={…} />` plays the vector commands, as in React.
+- `<VectorCanvas playback={playback} onplaybackreveal={…} />` plays the vector commands, and `<ImageEditor playback={playback} />` the image tools, as in React.
 - `createPlaybackSurface(playback, id, options)` builds a custom surface and takes the same options as React.
 - React and Svelte draw the same cursor.
 - The layer has the `.pixerate-presence` class, so snapshots, `view_editor` and `capture_view` leave it out.
@@ -251,6 +268,7 @@ The steps are:
 | `type { text, ms? }` | Type text out in the cursor's bubble |
 | `say { text, ms? }` | Show a note in the cursor's bubble |
 | `wait { ms }` | Pause |
+| `open { ref, ms? }` | Open a part of the editor (a panel or tab): glide to what `ref` locates, click it, and let the surface's `open(ref)` show it; skipped when the surface has no `open` |
 | `commit` | Run the handler. It runs exactly once and is appended if you leave it out. Steps after it play once the change is applied |
 
 Rules for planners:
@@ -278,5 +296,5 @@ Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()
 | Canvas: `createEditorMcpToolProvider` (planned moves) and the arrange commands (derived) | Now |
 | Rich text, chart, paint, diagram | Today through their own `presence` / `director`; they move onto playback later |
 | Vector: every `vector.*` command (`<VectorCanvas playback>`; shapes, paths, text, symbols, images, text ranges and mesh points planned; the rest derived from `ids`) | Now |
-| Image | Next |
+| Image: `createImageEditorToolProvider` and `createImageEffectsToolProvider` (`<ImageEditor playback>`; opens each tool's panel, traces strokes, drags boxes, visits layers and sliders) | Now |
 | Spreadsheet, video, animation, parameters | Later phases |

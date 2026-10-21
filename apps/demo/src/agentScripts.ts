@@ -598,7 +598,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "Film look on the photo as a smart filter, so it stays editable (the layer becomes a smart object in the same undo step).",
         tool: "imagefx__apply_effect",
         args: { target: "background", effect: "film-look", values: { uTint: "#ffe2c0", uGrain: 0.1, uHalation: 0.35 } },
-        open: "Layers",
       },
       {
         say: "An aurora on its own layer, soft-light at half strength, to wash the sky.",
@@ -620,7 +619,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "A sunset gradient as its own layer, soft-light at half strength, so it washes the photo without hiding it.",
         tool: "imagefx__add_effect_layer",
         args: { effect: "fake.gradient", values: { from: "#f97316", to: "#7c3aed", angle: 45 }, name: "Sunset wash", blend: "soft-light", opacity: 0.5 },
-        open: "Layers",
       },
       {
         say: "A lower-third bar on top, fully slid in.",
@@ -640,8 +638,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "Warming it up and adding contrast, as one undo step.",
         tool: "image__set_adjustments",
         args: { values: { temperature: 28, contrast: 22, exposure: 6 }, label: "Warm, punchy grade" },
-        open: "Adjustments",
-        target: { text: "Contrast" },
       },
       {
         say: "Vibrance on its own layer, so it can be dialled back later.",
@@ -655,7 +651,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-vignette",
     prompt: "Darken the edges around the centre",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" }, open: "Select & Mask" },
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "An ellipse over the centre, feathered, then inverted to get the edges.",
@@ -678,7 +674,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-transform",
     prompt: "Copy the centre onto its own layer and tilt it like a postcard",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" }, open: "Select & Mask" },
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "A rectangle over the centre.",
@@ -706,7 +702,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-color",
     prompt: "Check how this prints on a coated press and give me the CMYK of the brand blue",
     steps: [
-      { say: "Reading the document's colour profile.", tool: "image__get_color_profile", args: {}, open: "Layers" },
+      { say: "Reading the document's colour profile.", tool: "image__get_color_profile", args: {} },
       {
         say: "Soft-proofing through the coated CMYK profile, with a gamut warning on the colours the press cannot hit.",
         tool: "image__set_proof_setup",
@@ -733,7 +729,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "An empty layer for the retouching, so the photo stays untouched.",
         tool: "image__add_pixel_layer",
         args: { name: "Retouch" },
-        open: "Paint",
       },
       {
         say: "Spot Healing in the centre, sampling every layer below onto the new one.",
@@ -793,7 +788,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
           const { width, height } = imageSize(ctx.results.sel);
           return { shape: { kind: "rect", x: width * 0.08, y: height * 0.7, width: width * 0.84, height: height * 0.2, radius: height * 0.04 }, fill: "#111827cc", name: "Banner" };
         },
-        open: "Annotations",
         as: "banner",
       },
       {

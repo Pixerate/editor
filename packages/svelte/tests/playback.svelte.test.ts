@@ -103,3 +103,33 @@ describe('VectorCanvas playback (Svelte)', () => {
 		expect(target.querySelector('[data-vector-presence]')).toBeNull();
 	});
 });
+
+describe('ImageEditor playback (Svelte)', () => {
+	it('opens the panel a tool belongs to and plays on the image surface', async () => {
+		HTMLCanvasElement.prototype.getContext = (() => null) as any;
+		const { ImageEditor, createReactiveImageEditor } = await import('../src/image-editor');
+		const { createImageEditorToolProvider } = await import('@pixerate/editor/image-editor');
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		playback.install(registry);
+		const fake = { width: 40, height: 30, naturalWidth: 40, naturalHeight: 30 } as unknown as HTMLImageElement;
+		const editor = createReactiveImageEditor({ image: fake });
+		registry.register(createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }));
+		const { target, destroy } = render(ImageEditor, { editor, playback });
+		const surface = playback.surface('image')!;
+		expect(surface).toBeTruthy();
+		(surface as { visible?: () => boolean }).visible = () => true;
+		expect(target.querySelector('[data-control-id="contrast"]')).toBeNull();
+		const steps = playback.record();
+		const result = await registry.callTool('image__set_adjustments', { values: { contrast: 20 } });
+		flushSync();
+		expect(result.isError).toBeFalsy();
+		expect(steps.map((r) => r.step.type)).toEqual(['open', 'target', 'commit']);
+		expect(target.querySelector('[data-image-tab="adjust"]')!.className).toContain('bg-indigo-600');
+		expect(target.querySelector('[data-control-id="contrast"]')).toBeTruthy();
+		destroy();
+		cleanups = [];
+		target.remove();
+		expect(playback.surface('image')).toBeUndefined();
+	});
+});
