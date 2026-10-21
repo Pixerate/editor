@@ -58,6 +58,8 @@ interface CaseResult {
 	outputTokens: number;
 	toolsListed: number;
 	error?: string;
+	/** What the model said when it stopped without calling an editor tool. */
+	reply?: string;
 }
 
 /**
@@ -116,6 +118,8 @@ async function runCase(client: Anthropic, source: ToolSource, mode: Mode, c: Too
 		const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
 		if (uses.length === 0) {
 			result.error = 'no tool call';
+			const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim();
+			if (text) result.reply = text.slice(0, 600);
 			return result;
 		}
 		const editorCall = uses.find((u) => !DISCOVERY.has(u.name));
@@ -197,7 +201,7 @@ describe('tool selection by a model', () => {
 			});
 			console.table(summary);
 			for (const r of results.filter((r) => !r.pass)) {
-				console.log(`[${r.mode}] ${r.task}\n    picked ${r.picked ?? '-'}${r.error ? ` (${r.error})` : ''}; want ${r.expect.join(' | ')}`);
+				console.log(`[${r.mode}] ${r.task}\n    picked ${r.picked ?? '-'}${r.error ? ` (${r.error})` : ''}; want ${r.expect.join(' | ')}${r.reply ? `\n    said: ${r.reply.replace(/\s+/g, ' ').slice(0, 200)}` : ''}`);
 			}
 			if (process.env.EVAL_OUT) writeFileSync(process.env.EVAL_OUT, JSON.stringify({ model: MODEL, summary, results }, null, 2));
 			expect(results.length).toBe(MODES.length * CASES.length);
