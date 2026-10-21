@@ -5,6 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# One release at a time. GitHub keeps only the newest waiting run, which is enough: it checks
+# out the tip of main, so it releases every changeset merged while it waited.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -24,6 +26,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          # The tip of main, not the commit that triggered the run. Runs queue (see `concurrency`),
+          # and one that waited while another released must start from that release's version
+          # commit, or it versions the same changesets again and stops at "Refuse versions that
+          # are already on npm". A manual run releases the ref it was started on.
+          ref: ${{ github.event_name == 'push' && 'main' || github.ref }}
           token: ${{ secrets.GH_PAT || secrets.GH_TOKEN_FOR_PACKAGES || secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
