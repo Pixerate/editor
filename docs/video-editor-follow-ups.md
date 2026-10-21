@@ -24,6 +24,7 @@ For context, so the follow-ups below make sense:
 | #198 | Speed ramps and freeze frames |
 | #201, #202, #204 | Colour scopes, 3D LUTs, proxies and a preview frame cache (proxies landed with #204) |
 | #205 | Nested sequences (compound clips), phase 1: model, checks, evaluation, renderers, sound, read-only tools |
+| #276 | Provider effects (later): clip effect stacks, effect transitions and effect clips through `@pixerate/editor/effects` (see [effects.md](./effects.md)) |
 
 ## 1. Nested sequences, later phases
 
