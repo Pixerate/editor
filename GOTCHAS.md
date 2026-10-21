@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [monorepo/build] `import.meta` Breaks the CommonJS Build, and tsup's `shims` Breaks Entry Isolation
+
+- **Issue / Symptom**: `pnpm check:packages` failed with `SyntaxError: Cannot use 'import.meta' outside a module` when requiring `@pixerate/editor/bridge` from CommonJS, although the code guarded it with `typeof __dirname === 'string' ? __dirname : …import.meta.url…`. Turning on tsup's `shims: true` fixed that but made `tests/entry-isolation.test.ts` fail: browser entries (`chart`, `canvas`, `animation`…) suddenly imported `path` and `url`.
+- **Root Cause**: `import.meta` is a parse-time syntax error in a CommonJS file, so a runtime guard can't save it, and tsup copies it into `.cjs` output unchanged. `shims` adds `import path from "path"` / `import { fileURLToPath } from "url"` for an ESM `__dirname`, and with code splitting that lands in a chunk every entry shares.
+- **Solution / Workaround**: `tsup.config.ts` defines `import.meta.url` as `undefined` for the CJS format only (`esbuildOptions`), and the code takes `__dirname` there. Use `import.meta` only behind a `typeof __dirname` check, only in Node-only modules (`src/bridge`), and run `pnpm check:packages` after a build to catch it.
+
 ### [core/tools] Tool Names Are Namespaced by Default, So Bare-Name Assertions and Bridge Unions Break
 
 - **Issue / Symptom**: After a provider is registered, `listTools()` returns `chart__get_chart`, not `get_chart`. Tests that compare `t.name` with a bare name fail, a page on the MCP bridge whose provider id differs from another page's (`a__echo`, `b__echo`) no longer shares tool names with it, and code that splits on `__` sees a prefix it didn't before.
