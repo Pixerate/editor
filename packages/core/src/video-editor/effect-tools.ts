@@ -150,7 +150,7 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 				name: 'set_video_effect_transition',
 				title: 'Set an effect transition',
 				description:
-					'Sets a provider transition effect (search_effects with use transition) into a clip from the clip that ends where it starts on the same track, centred on the cut; like a crossfade it needs half its length in media past the cut on both sides. Replaces any transition there. One undo step. Returns the clip\'s effects. Remove it with remove_effect (effect "transition") or set_video_transition null.',
+					'Sets a transition effect from the effects provider (search_effects with use transition) into a clip from the clip that ends where it starts on the same track, centred on the cut. For the built-in crossfade (cross dissolve), dip, wipe, push, slide and iris use set_video_transition instead. It needs half its length in media past the cut on both sides. Replaces any transition there. One undo step. Returns the clip\'s effects. Remove it with remove_effect (effect "transition") or set_video_transition null.',
 				inputSchema: {
 					type: 'object',
 					properties: {
