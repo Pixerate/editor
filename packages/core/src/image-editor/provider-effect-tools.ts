@@ -10,6 +10,7 @@ import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResu
 import type { EffectValue } from '../effects/types.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { BLEND_MODES } from './blend';
+import { withImagePlayback } from './playback';
 import type { ImageEditorController } from './controller';
 import { findLayer, flattenLayers, type ImageLayer } from './layers/model';
 
@@ -54,7 +55,7 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
   };
   const plainValues = (v: Record<string, unknown> | undefined) => v as Record<string, EffectValue> | undefined;
 
-  return createEffectToolProvider({
+  return withImagePlayback(createEffectToolProvider({
     id: options.id ?? 'image-effects',
     namespace: options.namespace,
     title: 'Image effects',
@@ -126,5 +127,5 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         }
       }
     ]
-  });
+  }));
 }

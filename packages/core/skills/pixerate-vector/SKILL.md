@@ -459,6 +459,11 @@ the animation editor.
 
 The most common ones are below. Read [references/pitfalls.md](references/pitfalls.md) before working with connectors, frames, masks, filters, text, symbols, constraints, blends, gradient meshes or live corners.
 
+- With agent playback on, `vector.addShape` is dragged out from (x, y) to (x + width, y + height),
+  `vector.addPath` is traced through its anchors, and text is clicked in and typed out. So give
+  shapes their real place and size in the first call rather than adding them at 0, 0 and moving
+  them after: the user watches the cursor go where the shape lands. Commands with `ids` visit those
+  nodes; nothing else about the calls changes.
 - `d` and anchor positions are in the node's own space; `bounds` are in document space. For
   rotated nodes (`rotation` not 0), `vector.moveAnchor` and `vector.bendSegment` take document
   coordinates, so compute them from the drawn position, not from `d`.

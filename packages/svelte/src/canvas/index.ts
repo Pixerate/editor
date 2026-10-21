@@ -105,7 +105,8 @@ export {
 // Viewport floating scrollbar component
 export { default as FloatingHorizontalScrollbar } from './FloatingHorizontalScrollbar.svelte';
 
-// Agent presence visual layer
+// Agent presence visual layer. Deprecated: use `PresenceLayer` with `createCanvasPlaybackSurface`
+// (agent playback), which plays every canvas tool call.
 export { default as AgentPresenceLayer } from './AgentPresenceLayer.svelte';
 export { default as AgentCursorPresence } from './AgentCursorPresence.svelte';
 
@@ -129,6 +130,8 @@ export {
 	type CreateCanvasScenesOptions
 } from './createCanvasScenes.svelte.js';
 export { createCanvasCapture, type CreateCanvasCaptureOptions } from './createCanvasCapture.js';
+export { createCanvasPlaybackSurface, type CreateCanvasPlaybackSurfaceOptions } from './createCanvasPlaybackSurface.svelte.js';
+export { default as PresenceLayer } from '../playback/PresenceLayer.svelte';
 export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';
 
 // Freehand drawing tools (pen, highlighter, eraser)

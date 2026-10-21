@@ -271,6 +271,9 @@ effects provider (for example Flair); without one the read tools say so and the 
   `get_editor_state` again, not guess.
 - `canvas_add_node` with `nearNodeId` also adds an edge from that node. Pass an explicit
   `position` (and no `nearNodeId`) for a free-standing design element.
+- With agent playback on, the cursor clicks where `canvas_add_node` will place the node, drags
+  `canvas_connect` from source to target, and rings the nodes a layout or arrange command moved.
+  Nothing about the calls changes: still read ids with `get_editor_state` and pass them back.
 - `canvas_update_node` changes `data` only. Move nodes with layout, align or distribute commands,
   or by the host's own means; do not expect `position` inside `data` to move anything.
 - Align needs at least two nodes and distribute at least three; locked nodes never move. Shape

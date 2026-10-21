@@ -214,16 +214,25 @@ function seriesId(result: any, name: string): string {
 export const CANVAS_SCRIPTS: AgentScript[] = [
   {
     id: "canvas-align",
-    prompt: "Line up the main workflow steps",
+    prompt: "Line up the main workflow steps and add a QA step",
     steps: [
-      { say: "Listing the nodes on the board.", tool: "canvas__list_nodes", args: {}, as: "nodes" },
+      { say: "Reading the board.", tool: "canvas__get_editor_state", args: { includeDocument: false }, as: "state" },
       {
         say: "Brief, Research, Review and Ship it are the main path; centring them on one line.",
-        tool: "canvas__align_nodes",
-        args: { edge: "middle", ids: ["brief", "research", "review", "ship"] },
-        target: { selector: '.react-flow__node[data-id="research"]' },
+        ...command("canvas.alignMiddle", { ids: ["brief", "research", "review", "ship"] }),
       },
-      { say: "Done. The sticky note and sketches stay where they were.", tool: "canvas__list_nodes", args: {} },
+      {
+        say: "Adding a QA step after Review; it connects from Review on its own.",
+        tool: "canvas__canvas_add_node",
+        args: { node: { id: "qa", type: "box", data: { label: "QA", color: "#22d3ee" } }, nearNodeId: "review", side: "bottom" },
+        as: "qa",
+      },
+      {
+        say: "QA passes work on to Ship it.",
+        tool: "canvas__canvas_connect",
+        args: (ctx) => ({ source: ctx.results.qa.created.nodes[0].id, target: "ship", label: "pass" }),
+      },
+      { say: "Done. The sticky note and sketches stay where they were.", tool: "canvas__canvas_select", args: { nodeIds: ["brief", "research", "review", "ship", "qa"] } },
     ],
   },
 ];
@@ -264,21 +273,6 @@ export const DIAGRAM_SCRIPTS: AgentScript[] = [
   },
 ];
 
-/**
- * A box in artwork coordinates, on screen: the artboard is drawn at the document's size, so its
- * rectangle maps document units to the viewport (for shapes that don't exist until the call).
- */
-function artboardBox(x: number, y: number, width: number, height: number) {
-  return (stage: HTMLElement, ctx: AgentScriptContext) => {
-    const board = stage.querySelector("[data-vector-artboard]")?.getBoundingClientRect();
-    const doc = ctx.results.doc?.result;
-    if (!board || !(doc?.width > 0 && doc?.height > 0)) return null;
-    const sx = board.width / doc.width;
-    const sy = board.height / doc.height;
-    return new DOMRect(board.left + x * sx, board.top + y * sy, width * sx, height * sy);
-  };
-}
-
 /** A small two-colour "P" badge as a PNG data URL, for the tracing script. */
 function badgePng(): string {
   const w = 96;
@@ -302,7 +296,7 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-night",
     prompt: "Turn the scene into night",
     steps: [
-      { say: "Listing the artwork's shapes.", ...command("vector.list"), as: "doc", target: { selector: "[data-vector-artboard]" } },
+      { say: "Listing the artwork's shapes.", ...command("vector.list"), as: "doc" },
       {
         say: "The sun becomes a pale moon: same radial gradient, cooler stops.",
         ...command("vector.setGradient", {
@@ -315,33 +309,32 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
             { offset: 1, color: "#64748b" },
           ],
         }),
-        target: { selector: '[data-vector-id="sun"]' },
       },
-      { say: "Darkening the hill.", ...command("vector.setStyle", { ids: ["hill"], fill: "#14532d", stroke: "#052e16" }), target: { selector: '[data-vector-id="hill"]' } },
-      { say: "A few stars in the sky.", ...command("vector.addShape", { kind: "star", x: 360, y: 40, width: 26, height: 26, points: 5, innerRatio: 0.45, fill: "#fde68a", name: "Star" }), target: artboardBox(360, 40, 26, 26) },
-      { ...command("vector.addShape", { kind: "star", x: 440, y: 120, width: 18, height: 18, points: 5, innerRatio: 0.45, fill: "#fef3c7", name: "Star" }), target: artboardBox(440, 120, 18, 18) },
-      { ...command("vector.addShape", { kind: "star", x: 520, y: 30, width: 14, height: 14, points: 5, innerRatio: 0.45, fill: "#fef9c3", name: "Star" }), target: artboardBox(520, 30, 14, 14) },
+      { say: "Darkening the hill.", ...command("vector.setStyle", { ids: ["hill"], fill: "#14532d", stroke: "#052e16" }) },
+      { say: "A few stars in the sky.", ...command("vector.addShape", { kind: "star", x: 360, y: 40, width: 26, height: 26, points: 5, innerRatio: 0.45, fill: "#fde68a", name: "Star" }) },
+      { ...command("vector.addShape", { kind: "star", x: 440, y: 120, width: 18, height: 18, points: 5, innerRatio: 0.45, fill: "#fef3c7", name: "Star" }) },
+      { ...command("vector.addShape", { kind: "star", x: 520, y: 30, width: 14, height: 14, points: 5, innerRatio: 0.45, fill: "#fef9c3", name: "Star" }) },
     ],
   },
   {
     id: "vector-appearance",
     prompt: "Make the yellow star pop",
     steps: [
-      { say: "Reading the star's appearance.", ...command("vector.getAppearance", { id: "star" }), target: { selector: '[data-vector-id="star"]' } },
-      { say: "A warm glow fill multiplied over the yellow.", ...command("vector.addFill", { ids: ["star"], paint: "#fb923c", opacity: 0.6, blendMode: "multiply" }), target: { selector: '[data-vector-id="star"]' } },
-      { say: "A dark outline outside the shape…", ...command("vector.addStroke", { ids: ["star"], paint: "#78350f", strokeWidth: 4, strokeAlign: "outside", strokeLinejoin: "round" }), target: { selector: '[data-vector-id="star"]' } },
-      { say: "…and a thin white one inside it.", ...command("vector.addStroke", { ids: ["star"], paint: "#ffffff", strokeWidth: 1.5, strokeAlign: "inside" }), target: { selector: '[data-vector-id="star"]' } },
-      { say: "A soft drop shadow, lit from above.", ...command("vector.addFilter", { ids: ["star"], type: "dropShadow", params: { opacity: 0.35, offsetY: 3, blur: 6 } }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "Reading the star's appearance.", ...command("vector.getAppearance", { id: "star" }) },
+      { say: "A warm glow fill multiplied over the yellow.", ...command("vector.addFill", { ids: ["star"], paint: "#fb923c", opacity: 0.6, blendMode: "multiply" }) },
+      { say: "A dark outline outside the shape…", ...command("vector.addStroke", { ids: ["star"], paint: "#78350f", strokeWidth: 4, strokeAlign: "outside", strokeLinejoin: "round" }) },
+      { say: "…and a thin white one inside it.", ...command("vector.addStroke", { ids: ["star"], paint: "#ffffff", strokeWidth: 1.5, strokeAlign: "inside" }) },
+      { say: "A soft drop shadow, lit from above.", ...command("vector.addFilter", { ids: ["star"], type: "dropShadow", params: { opacity: 0.35, offsetY: 3, blur: 6 } }) },
     ],
   },
   {
     id: "vector-mask",
     prompt: "Frame the colour wheel in a rounded window",
     steps: [
-      { say: "Drawing the window over the wheel: it becomes the mask, so its colour won't show.", ...command("vector.addShape", { kind: "rect", x: 724, y: 314, width: 44, height: 44, cornerRadius: 10, name: "Window" }), as: "win", target: artboardBox(724, 314, 44, 44) },
-      { say: "Clipping the wheel to it: the topmost object masks the ones below.", ...commandWith("vector.makeClippingMask", (r) => ({ ids: ["wheel", r("win").id] })), as: "clip", target: { selector: '[data-vector-id="wheel"]' } },
-      { say: "Turning it into a soft opacity mask instead: a radial fade from white to black.", ...commandWith("vector.setGradient", (r) => ({ ids: [r("win").id], target: "fill", type: "radial", stops: [{ offset: 0.5, color: "#ffffff" }, { offset: 1, color: "#000000" }] })), target: artboardBox(724, 314, 44, 44) },
-      { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })), target: artboardBox(716, 306, 60, 60) },
+      { say: "Drawing the window over the wheel: it becomes the mask, so its colour won't show.", ...command("vector.addShape", { kind: "rect", x: 724, y: 314, width: 44, height: 44, cornerRadius: 10, name: "Window" }), as: "win" },
+      { say: "Clipping the wheel to it: the topmost object masks the ones below.", ...commandWith("vector.makeClippingMask", (r) => ({ ids: ["wheel", r("win").id] })), as: "clip" },
+      { say: "Turning it into a soft opacity mask instead: a radial fade from white to black.", ...commandWith("vector.setGradient", (r) => ({ ids: [r("win").id], target: "fill", type: "radial", stops: [{ offset: 0.5, color: "#ffffff" }, { offset: 1, color: "#000000" }] })) },
+      { ...commandWith("vector.setMaskOptions", (r) => ({ ids: [r("clip").id], type: "luminance" })) },
     ],
   },
   {
@@ -353,14 +346,12 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
         say: "A bold title, centred over the card.",
         ...command("vector.addText", { text: "Hello, hills", x: 190, y: 250, font: { fontFamily: "sans-serif", fontWeight: 700, fontSize: 36 }, paragraph: { align: "center" }, fill: "#0f172a", name: "Title" }),
         as: "title",
-        target: artboardBox(80, 215, 220, 45),
       },
-      { say: "Colouring the second word.", ...commandWith("vector.setTextStyle", (r) => ({ id: r("title").id, start: 7, end: 12, fill: "#16a34a" })), target: artboardBox(80, 215, 220, 45) },
-      { say: "An arc for the caption to follow…", ...command("vector.addPath", { d: "M440 470 C520 400 640 400 720 470", name: "Caption path" }), as: "arc", target: artboardBox(440, 400, 280, 70) },
+      { say: "Colouring the second word.", ...commandWith("vector.setTextStyle", (r) => ({ id: r("title").id, start: 7, end: 12, fill: "#16a34a" })) },
+      { say: "An arc for the caption to follow…", ...command("vector.addPath", { d: "M440 470 C520 400 640 400 720 470", name: "Caption path" }), as: "arc" },
       {
         say: "…and the caption set along it, centred.",
         ...commandWith("vector.typeOnPath", (r) => ({ pathId: r("arc").id, text: "rolling green since forever", font: { fontSize: 18, italic: true }, paragraph: { align: "center" }, fill: "#14532d" })),
-        target: artboardBox(440, 400, 280, 70),
       },
     ],
   },
@@ -369,23 +360,23 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     prompt: "Plant a row of trees and make them autumn",
     steps: [
       { say: "Reading the document's symbols.", ...command("vector.listSymbols") },
-      { say: "Placing three more trees along the hill.", ...command("vector.placeSymbol", { symbolId: "tree", x: 470, y: 330, name: "Tree" }), target: artboardBox(455, 300, 30, 50) },
-      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [1.2, 0, 0, 1.2, 520, 322], name: "Tree" }), target: artboardBox(500, 290, 36, 56) },
-      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [0.9, 0, 0.1, 0.9, 565, 316], name: "Tree" }), target: artboardBox(550, 290, 30, 46) },
+      { say: "Placing three more trees along the hill.", ...command("vector.placeSymbol", { symbolId: "tree", x: 470, y: 330, name: "Tree" }) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [1.2, 0, 0, 1.2, 520, 322], name: "Tree" }) },
+      { ...command("vector.placeSymbol", { symbolId: "tree", transform: [0.9, 0, 0.1, 0.9, 565, 316], name: "Tree" }) },
       { say: "Editing the symbol once turns every tree orange.", ...command("vector.editSymbol", { id: "tree" }) },
       { ...command("vector.setStyle", { ids: ["crown"], fill: "#ea580c", stroke: "#7c2d12" }) },
-      { say: "Back to the whole drawing.", ...command("vector.exitSymbolEdit"), target: artboardBox(455, 260, 300, 90) },
+      { say: "Back to the whole drawing.", ...command("vector.exitSymbolEdit") },
     ],
   },
   {
     id: "vector-constraints",
     prompt: "Make the card a parametric 2:1 rectangle",
     steps: [
-      { say: "Constraining what the card already nearly is: level and upright sides.", ...command("vector.autoConstrain", { ids: ["card"] }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Constraining what the card already nearly is: level and upright sides.", ...command("vector.autoConstrain", { ids: ["card"] }) },
       { say: "A named width…", ...command("vector.setConstraintValue", { key: "cardW", value: 240 }) },
-      { ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 0, segment: true }], value: "cardW", name: "width" }), target: { selector: '[data-vector-id="card"]' } },
-      { say: "…and a height that follows it: half the width.", ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 1, segment: true }], value: "cardW / 2", name: "height" }), target: { selector: '[data-vector-id="card"]' } },
-      { say: "Changing the width now resizes both.", ...command("vector.setConstraintValue", { key: "cardW", value: 200 }), target: { selector: '[data-vector-id="card"]' } },
+      { ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 0, segment: true }], value: "cardW", name: "width" }) },
+      { say: "…and a height that follows it: half the width.", ...command("vector.addConstraint", { kind: "distance", refs: [{ nodeId: "card", subpath: 0, index: 1, segment: true }], value: "cardW / 2", name: "height" }) },
+      { say: "Changing the width now resizes both.", ...command("vector.setConstraintValue", { key: "cardW", value: 200 }) },
       { say: "Checking what is still free to move.", ...command("vector.listConstraints") },
     ],
   },
@@ -393,24 +384,23 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-frames",
     prompt: "Make a banner that I can resize",
     steps: [
-      { say: "A background bar and a badge for the banner…", ...command("vector.addShape", { kind: "rect", x: 440, y: 300, width: 180, height: 12, cornerRadius: 6, fill: "#38bdf8", name: "Bar" }), as: "bar", target: artboardBox(440, 300, 180, 12) },
-      { ...command("vector.addShape", { kind: "ellipse", x: 590, y: 250, width: 30, height: 30, fill: "#f43f5e", name: "Badge" }), as: "badge", target: artboardBox(590, 250, 30, 30) },
+      { say: "A background bar and a badge for the banner…", ...command("vector.addShape", { kind: "rect", x: 440, y: 300, width: 180, height: 12, cornerRadius: 6, fill: "#38bdf8", name: "Bar" }), as: "bar" },
+      { ...command("vector.addShape", { kind: "ellipse", x: 590, y: 250, width: 30, height: 30, fill: "#f43f5e", name: "Badge" }), as: "badge" },
       {
         say: "…framed together with some padding: the frame is the banner.",
         ...commandWith("vector.frameSelection", (r) => ({ ids: [r("bar").id, r("badge").id], padding: 16, fill: "#0f172a", name: "Banner" })),
         as: "banner",
-        target: artboardBox(424, 234, 212, 94),
       },
       { say: "The bar stretches with the banner, the badge stays in its corner.", ...commandWith("vector.setResizing", (r) => ({ ids: [r("bar").id], horizontal: "leftRight", vertical: "bottom" })) },
       { ...commandWith("vector.setResizing", (r) => ({ ids: [r("badge").id], horizontal: "right", vertical: "top" })) },
-      { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })), target: artboardBox(424, 234, 340, 120) },
+      { say: "Now a wider banner: the contents follow their constraints.", ...commandWith("vector.setFrame", (r) => ({ ids: [r("banner").id], width: 340, height: 120 })) },
     ],
   },
   {
     id: "vector-lottie",
     prompt: "Export the flower as Lottie and bring it back beside it",
     steps: [
-      { say: "Exporting the flower: its repeater and trim stay live as Lottie modifiers.", ...command("vector.exportLottie", { ids: ["flower"], frames: 60 }), as: "lottie", target: { selector: '[data-vector-id="flower"]' } },
+      { say: "Exporting the flower: its repeater and trim stay live as Lottie modifiers.", ...command("vector.exportLottie", { ids: ["flower"], frames: 60 }), as: "lottie" },
       { say: "Importing it again as editable shapes.", ...commandWith("vector.importLottie", (r) => ({ lottie: r("lottie").lottie })), as: "back" },
       { say: "Moving the copy beside the original.", ...commandWith("vector.transform", (r) => ({ ids: r("back").ids, dx: 80, dy: 0 })) },
     ],
@@ -419,21 +409,21 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-contour",
     prompt: "Give the star a contour glow",
     steps: [
-      { say: "Four contour steps outside the star, fading to the sky colour.", ...command("vector.addEffect", { ids: ["star"], type: "contour", params: { direction: "outside", steps: 4, offset: 4, fillColor: "#e0f2fe", strokeColor: "#e0f2fe" } }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "Four contour steps outside the star, fading to the sky colour.", ...command("vector.addEffect", { ids: ["star"], type: "contour", params: { direction: "outside", steps: 4, offset: 4, fillColor: "#e0f2fe", strokeColor: "#e0f2fe" } }) },
     ],
   },
   {
     id: "vector-block-shadow",
     prompt: "Give the star a long shadow",
     steps: [
-      { say: "A block shadow swept down-right from the star, fading out along its length.", ...command("vector.addEffect", { ids: ["star"], type: "blockShadow", params: { angle: 45, distance: 120, color: "#0f172a", opacity: 60, endOpacity: 0 } }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "A block shadow swept down-right from the star, fading out along its length.", ...command("vector.addEffect", { ids: ["star"], type: "blockShadow", params: { angle: 45, distance: 120, color: "#0f172a", opacity: 60, endOpacity: 0 } }) },
     ],
   },
   {
     id: "vector-extrude",
     prompt: "Make the card a 3D block",
     steps: [
-      { say: "Extruding the card back and down-right, lit from the top left.", ...command("vector.addEffect", { ids: ["card"], type: "extrude", params: { mode: "parallel", angle: 45, depth: 24, lightAngle: -135, shading: 60 } }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Extruding the card back and down-right, lit from the top left.", ...command("vector.addEffect", { ids: ["card"], type: "extrude", params: { mode: "parallel", angle: 45, depth: 24, lightAngle: -135, shading: 60 } }) },
     ],
   },
   {
@@ -449,14 +439,14 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-bevel",
     prompt: "Bevel the star like a badge",
     steps: [
-      { say: "A 4-unit bevel round the star, lit from the top left.", ...command("vector.addEffect", { ids: ["star"], type: "bevel", params: { width: 4, lightAngle: -135, shading: 70 } }), target: { selector: '[data-vector-id="star"]' } },
+      { say: "A 4-unit bevel round the star, lit from the top left.", ...command("vector.addEffect", { ids: ["star"], type: "bevel", params: { width: 4, lightAngle: -135, shading: 70 } }) },
     ],
   },
   {
     id: "vector-distort-brush",
     prompt: "Make the sun look hand-made with the distortion brushes",
     steps: [
-      { say: "Twirling the sun's top edge…", ...command("vector.twirlBrush", { ids: ["sun"], points: [[630, 72]], radius: 40, strength: 0.8, angle: 30 }), target: { selector: '[data-vector-id="sun"]' } },
+      { say: "Twirling the sun's top edge…", ...command("vector.twirlBrush", { ids: ["sun"], points: [[630, 72]], radius: 40, strength: 0.8, angle: 30 }) },
       { say: "…pulling a drip down from its bottom…", ...command("vector.smudgeBrush", { ids: ["sun"], points: [[630, 205], [630, 222], [633, 240]], radius: 18, strength: 0.9 }) },
       { say: "…and roughening its left side.", ...command("vector.roughenBrush", { ids: ["sun"], points: [[562, 140]], radius: 25, strength: 0.7, seed: 7 }) },
     ],
@@ -465,7 +455,7 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-lens",
     prompt: "Hold a magnifying glass over the scene",
     steps: [
-      { say: "A round glass over the middle of the scene…", ...command("vector.addShape", { kind: "ellipse", x: 230, y: 150, width: 140, height: 140, fill: "#ffffff", stroke: "#0f172a", strokeWidth: 4, name: "Magnifier" }), as: "glass", target: artboardBox(230, 150, 140, 140) },
+      { say: "A round glass over the middle of the scene…", ...command("vector.addShape", { kind: "ellipse", x: 230, y: 150, width: 140, height: 140, fill: "#ffffff", stroke: "#0f172a", strokeWidth: 4, name: "Magnifier" }), as: "glass" },
       { say: "…made a 2× magnifying lens: what is below it shows enlarged, and follows when it moves.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "magnify", amount: 2 })) },
       { say: "Switching it to a heat map lens.", ...commandWith("vector.setLens", (r) => ({ ids: [r("glass").id], type: "heatMap" })) },
     ],
@@ -496,16 +486,16 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     prompt: "Ink the arrow and sketch the flag outline with real brushes",
     steps: [
       { say: "Which brushes can paint along a path?", ...command("vector.listBrushes") },
-      { say: "An ink pen along the arrow, tapering at both ends.", ...command("vector.addBrushstroke", { ids: ["arrow"], brushId: "ink-pen", size: 5, pressure: [0.15, 1, 0.15], color: "#0f172a" }), target: { selector: '[data-vector-id="arrow"]' } },
-      { say: "A charcoal outline round the flag; the stripes stay editable vectors.", ...command("vector.addBrushstroke", { ids: ["flag-top", "flag-mid", "flag-low"], brushId: "charcoal-stick", size: 6, color: "#1e293b" }), target: { selector: '[data-vector-id="flag"]' } },
+      { say: "An ink pen along the arrow, tapering at both ends.", ...command("vector.addBrushstroke", { ids: ["arrow"], brushId: "ink-pen", size: 5, pressure: [0.15, 1, 0.15], color: "#0f172a" }) },
+      { say: "A charcoal outline round the flag; the stripes stay editable vectors.", ...command("vector.addBrushstroke", { ids: ["flag-top", "flag-mid", "flag-low"], brushId: "charcoal-stick", size: 6, color: "#1e293b" }) },
     ],
   },
   {
     id: "vector-symmetry",
     prompt: "Draw a mandala in the sky with live symmetry",
     steps: [
-      { say: "An empty radial symmetry group with 8 mirrored wedges, centred in the sky…", ...command("vector.makeSymmetry", { ids: [], mode: "radial", copies: 8, mirror: true, center: { x: 470, y: 130 }, name: "Mandala" }), as: "m", target: artboardBox(420, 80, 100, 100) },
-      { say: "…one petal in a wedge…", ...commandWith("vector.addShape", (r) => ({ kind: "ellipse", x: 478, y: 92, width: 10, height: 26, fill: "#f472b6", name: "Petal", parentId: r("m").id })), target: artboardBox(470, 90, 20, 30) },
+      { say: "An empty radial symmetry group with 8 mirrored wedges, centred in the sky…", ...command("vector.makeSymmetry", { ids: [], mode: "radial", copies: 8, mirror: true, center: { x: 470, y: 130 }, name: "Mandala" }), as: "m" },
+      { say: "…one petal in a wedge…", ...commandWith("vector.addShape", (r) => ({ kind: "ellipse", x: 478, y: 92, width: 10, height: 26, fill: "#f472b6", name: "Petal", parentId: r("m").id })) },
       { say: "…and a dot: every wedge gets them, mirrored.", ...commandWith("vector.addShape", (r) => ({ kind: "ellipse", x: 488, y: 86, width: 6, height: 6, fill: "#a78bfa", name: "Dot", parentId: r("m").id })) },
       { say: "Changing the symmetry to 12 copies: the drawing follows.", ...commandWith("vector.setSymmetry", (r) => ({ ids: [r("m").id], copies: 12 })) },
     ],
@@ -518,7 +508,6 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
         say: "Tracing the badge in colour: a stacked path per colour, smooth curves.",
         ...commandWith("vector.traceImage", () => ({ image: badgePng(), mode: "color", colors: 3, cornerRoundness: 0.8, x: 620, y: 360, width: 120, name: "Badge trace" })),
         as: "trace",
-        target: artboardBox(620, 360, 120, 120),
       },
       { say: "Checking what it made.", ...command("vector.list") },
     ],
@@ -527,8 +516,8 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-stylize",
     prompt: "Make a halftone and a low-poly version of the badge",
     steps: [
-      { say: "Halftone dots in the badge's own colours…", ...commandWith("vector.halftoneImage", () => ({ image: badgePng(), cell: 6, angle: 45, color: null, colors: 4, x: 620, y: 360, width: 120, name: "Badge halftone" })), target: artboardBox(620, 360, 120, 120) },
-      { say: "…and low-poly triangles beside it.", ...commandWith("vector.lowPolyImage", () => ({ image: badgePng(), cell: 12, seed: 3, colors: 8, x: 490, y: 360, width: 120, name: "Badge low poly" })), target: artboardBox(490, 360, 120, 120) },
+      { say: "Halftone dots in the badge's own colours…", ...commandWith("vector.halftoneImage", () => ({ image: badgePng(), cell: 6, angle: 45, color: null, colors: 4, x: 620, y: 360, width: 120, name: "Badge halftone" })) },
+      { say: "…and low-poly triangles beside it.", ...commandWith("vector.lowPolyImage", () => ({ image: badgePng(), cell: 12, seed: 3, colors: 8, x: 490, y: 360, width: 120, name: "Badge low poly" })) },
     ],
   },
   {
@@ -538,10 +527,9 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
       {
         say: "A 2 × 2 gradient mesh on the card, blue at the top fading to white…",
         ...command("vector.setMeshGradient", { ids: ["card"], rows: 2, columns: 2, corners: ["#bae6fd", "#38bdf8", "#e0f2fe", "#ffffff"] }),
-        target: { selector: '[data-vector-id="card"]' },
       },
-      { say: "…with its middle point pulled toward the star and brightened.", ...command("vector.setMeshPoint", { id: "card", index: 4, x: 200, y: 120, color: "#fef9c3" }), target: { selector: '[data-vector-id="card"]' } },
-      { say: "Freeform colour points across the hill, darker in the dips.", ...command("vector.setFreeformGradient", { ids: ["hill"], colors: ["#15803d", "#4ade80", "#166534", "#86efac"] }), target: { selector: '[data-vector-id="hill"]' } },
+      { say: "…with its middle point pulled toward the star and brightened.", ...command("vector.setMeshPoint", { id: "card", index: 4, x: 200, y: 120, color: "#fef9c3" }) },
+      { say: "Freeform colour points across the hill, darker in the dips.", ...command("vector.setFreeformGradient", { ids: ["hill"], colors: ["#15803d", "#4ade80", "#166534", "#86efac"] }) },
       { say: "Checking the points to fine-tune.", ...command("vector.getShading", { id: "hill" }) },
     ],
   },
@@ -549,14 +537,14 @@ export const VECTOR_SCRIPTS: AgentScript[] = [
     id: "vector-connectors",
     prompt: "Connect the card to the sun and the badge",
     steps: [
-      { say: "Where can things attach to the card? Checking its connection sites.", ...command("vector.listConnectionSites", { id: "card" }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Where can things attach to the card? Checking its connection sites.", ...command("vector.listConnectionSites", { id: "card" }) },
       {
         say: "An elbow connector from the card to the sun, with rounded bends…",
         ...command("vector.connect", { start: { nodeId: "card" }, end: { nodeId: "sun" }, route: "elbow", radius: 8, stroke: "#0369a1", strokeWidth: 2 }),
         as: "toSun",
       },
       { say: "…and a curved one down to the badge.", ...command("vector.connect", { start: { nodeId: "card", side: "bottom" }, end: { nodeId: "badge" }, route: "curved", stroke: "#7e22ce", strokeWidth: 2 }), as: "toBadge" },
-      { say: "Moving the card: both connectors follow it.", ...command("vector.transform", { ids: ["card", "star"], dx: 40, dy: 30 }), target: { selector: '[data-vector-id="card"]' } },
+      { say: "Moving the card: both connectors follow it.", ...command("vector.transform", { ids: ["card", "star"], dx: 40, dy: 30 }) },
     ],
   },
 ];
@@ -610,7 +598,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "Film look on the photo as a smart filter, so it stays editable (the layer becomes a smart object in the same undo step).",
         tool: "imagefx__apply_effect",
         args: { target: "background", effect: "film-look", values: { uTint: "#ffe2c0", uGrain: 0.1, uHalation: 0.35 } },
-        open: "Layers",
       },
       {
         say: "An aurora on its own layer, soft-light at half strength, to wash the sky.",
@@ -632,7 +619,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "A sunset gradient as its own layer, soft-light at half strength, so it washes the photo without hiding it.",
         tool: "imagefx__add_effect_layer",
         args: { effect: "fake.gradient", values: { from: "#f97316", to: "#7c3aed", angle: 45 }, name: "Sunset wash", blend: "soft-light", opacity: 0.5 },
-        open: "Layers",
       },
       {
         say: "A lower-third bar on top, fully slid in.",
@@ -652,8 +638,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "Warming it up and adding contrast, as one undo step.",
         tool: "image__set_adjustments",
         args: { values: { temperature: 28, contrast: 22, exposure: 6 }, label: "Warm, punchy grade" },
-        open: "Adjustments",
-        target: { text: "Contrast" },
       },
       {
         say: "Vibrance on its own layer, so it can be dialled back later.",
@@ -667,7 +651,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-vignette",
     prompt: "Darken the edges around the centre",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" }, open: "Select & Mask" },
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "An ellipse over the centre, feathered, then inverted to get the edges.",
@@ -690,7 +674,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-transform",
     prompt: "Copy the centre onto its own layer and tilt it like a postcard",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" }, open: "Select & Mask" },
+      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "A rectangle over the centre.",
@@ -718,7 +702,7 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-color",
     prompt: "Check how this prints on a coated press and give me the CMYK of the brand blue",
     steps: [
-      { say: "Reading the document's colour profile.", tool: "image__get_color_profile", args: {}, open: "Layers" },
+      { say: "Reading the document's colour profile.", tool: "image__get_color_profile", args: {} },
       {
         say: "Soft-proofing through the coated CMYK profile, with a gamut warning on the colours the press cannot hit.",
         tool: "image__set_proof_setup",
@@ -745,7 +729,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
         say: "An empty layer for the retouching, so the photo stays untouched.",
         tool: "image__add_pixel_layer",
         args: { name: "Retouch" },
-        open: "Paint",
       },
       {
         say: "Spot Healing in the centre, sampling every layer below onto the new one.",
@@ -805,7 +788,6 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
           const { width, height } = imageSize(ctx.results.sel);
           return { shape: { kind: "rect", x: width * 0.08, y: height * 0.7, width: width * 0.84, height: height * 0.2, radius: height * 0.04 }, fill: "#111827cc", name: "Banner" };
         },
-        open: "Annotations",
         as: "banner",
       },
       {

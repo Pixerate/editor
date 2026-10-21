@@ -2691,3 +2691,33 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The `animation` toolset listed about 827k characters of tool definitions (~200k tokens), and `edit_animation` alone took 303k. Every host that listed the toolset paid for it, even with scoping.
 - **Root Cause**: The full command schema (a 20-branch `oneOf`, each branch repeating the shared fields and the easing schema) was a JS constant spread into every tool that takes commands or shots. JSON serialization copies it at every reference: three times in `edit_animation` (inside `insert_shots`, `update_shot` and `add_commands` ops), and once more in each of five other tools.
 - **Solution / Workaround**: Put shared shapes in the tool's `$defs` and refer to them with `{ $ref: '#/$defs/<name>' }`. `validateJsonSchema` resolves local refs against the tool's root schema, and `withDefs` in `animation-editor/tools.ts` adds only the defs a tool uses. For a big discriminated union, carry one flattened strict object (every field once, with `additionalProperties: false` and descriptions saying which types take each field), check the per-type rules in the handler or edit layer with errors that name the field, and serve each type's full schema from a read tool (`describe_animation_command`). `tests/animation-editor.test.ts` keeps a size budget on the toolset, so measure with `JSON.stringify` of `registry.listTools().tools` before adding a large schema.
+
+### [core/tools] Agent Playback Plans See the State Before the Call
+
+- **Issue / Symptom**: A tool's `plan` that looks up the id the call is about to create finds nothing, so the cursor goes nowhere; or the post-roll ring sits where a node used to be.
+- **Root Cause**: `AgentPlayback` runs `plan(args, state)` before the handler (the call has not happened yet), and the post-roll locates result ids right after the handler returns. A host that updates React state asynchronously still has the old nodes in `getNodes()` at that moment.
+- **Solution / Workaround**: Plan toward where the change will land (the canvas planner already computes a new node's position; `planCanvasToolPlayback` uses it) and leave created ids to the post-roll, which reads them from the result. Give the surface's `getNodes` a live copy that `applySteps` updates synchronously (the demo's `live` ref in `CanvasTab.tsx`), not React state that renders later.
+
+### [core/tools] `run_command` Plays on the Surface Named by the Command, Not the Provider
+
+- **Issue / Symptom**: `commands__run_command { id: 'canvas.alignMiddle' }` ran instantly even though the canvas surface was attached.
+- **Root Cause**: The command tools belong to the `commands` provider, which has no surface. Playback looks a surface up by the plan's `surface`, then the provider's `playbackSurface`, id and namespace.
+- **Solution / Workaround**: The command tool's plan names the surface from the command: `CommandSpec.playbackSurface`, else its `scope`, else the id's prefix (`canvas.` → `canvas`). Attach the surface under that name (the canvas demo attaches `canvas`, which is also the canvas tool provider's id), or set `playbackSurface` on the command.
+
+### [core/tools] Playback Waits Must Be Timed by the Clock, Not Counted in Frames
+
+- **Issue / Symptom**: In a background tab, a glide of 50 frames took 50 seconds and blocked the tool call.
+- **Root Cause**: Browsers throttle `setTimeout` in hidden tabs to about once a second, and suspend `requestAnimationFrame`.
+- **Solution / Workaround**: `AgentPlayback` tweens by elapsed `clock.now()` (a throttled tab just draws fewer frames, never takes longer), and the canvas surfaces report `visible() === false` while `document.visibilityState` is `hidden`, so calls then run instantly. Never make a tool call wait on animation frames.
+
+### [react|svelte/vector] The Agent Cursor Is an HTML Layer Inside the Vector Canvas's SVG
+
+- **Issue / Symptom**: `<PresenceLayer>` is an absolutely positioned `div`, but `<VectorCanvas>`'s root is an `<svg>`, so the layer has nowhere to sit without wrapping the canvas (which would break layouts and tests that expect the `svg` as the root).
+- **Root Cause**: HTML can't be a child of an SVG element except through `foreignObject`.
+- **Solution / Workaround**: The canvas draws the layer in a full-size `<foreignObject data-vector-presence pointer-events="none">` as its last child, so it is on top and never takes pointer events. It is only rendered while a playback is attached. In jsdom tests the surface reports itself hidden (no layout), so override its `visible` to test playback.
+
+### [react|svelte/image-editor] Agent Playback Mixes the Canvas and the Panels in One Coordinate Space
+
+- **Issue / Symptom**: The agent's cursor has to reach both the image (document pixels, zoomed and panned on the canvas) and the editor's own tabs and sliders (plain DOM), but a playback surface has one coordinate space.
+- **Root Cause**: Plans speak document pixels, while the panels sit outside the canvas, where no document point is drawn.
+- **Solution / Workaround**: The surface stays in document pixels, and `locate` maps a panel element's client rectangle *into* document pixels with `canvasToImagePoint`. The layer maps every point back out with `imageToCanvasPoint`, relative to the editor's root, so a point outside the image still lands on the right control. Panels change the layout (the Paint tab's side panel is taller), so map at draw time from live refs, never from a cached rectangle.

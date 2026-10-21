@@ -415,8 +415,8 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 
 ## Pitfalls
 
-- Effects need a shape: on an empty layer they draw nothing. They cannot go on adjustment
-  layers. A clipped layer's effects stay inside the layer it is clipped to.
+- Agent playback (if on) opens each write's panel, then traces `points`, drags boxes or visits the layers and sliders named; results are unchanged.
+- Effects need a shape: on an empty layer they draw nothing. They cannot go on adjustment layers. A clipped layer's effects stay inside the layer it is clipped to.
 - `bevel-emboss` has no `blend` / `opacity`: it uses `highlightBlend`, `highlightOpacity`,
   `shadowBlend` and `shadowOpacity`. Inner shadows and inner glows use `choke`, not `spread`.
 - Glows paint a colour or a gradient, never a pattern; strokes take all three. Pattern effects

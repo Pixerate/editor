@@ -31,6 +31,7 @@ export * from './brushstroke.js';
 export * from './gradient.js';
 export * from './mermaid/index.js';
 export * from './agent-presence.js';
+export * from './playback.js';
 export * from './capture.js';
 export * from './effects.js';
 export * from './effect-player.js';

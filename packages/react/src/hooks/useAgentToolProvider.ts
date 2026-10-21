@@ -1,5 +1,10 @@
 import { useEffect } from "react";
-import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
+import type { AgentPlayback, AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
+
+export interface UseAgentToolProviderOptions {
+  /** Plays the registry's calls with this playback (installed once per registry). */
+  playback?: AgentPlayback | null;
+}
 
 /**
  * Registers a tool provider with a `ToolRegistry` while the component is
@@ -13,7 +18,12 @@ import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
 export function useAgentToolProvider(
   registry: ToolRegistry | null | undefined,
   provider: AgentToolProvider | null | undefined,
+  options: UseAgentToolProviderOptions = {},
 ): void {
+  const { playback } = options;
+  useEffect(() => {
+    if (registry && playback) playback.install(registry);
+  }, [registry, playback]);
   useEffect(() => {
     if (!registry || !provider) return;
     return registry.register(provider);

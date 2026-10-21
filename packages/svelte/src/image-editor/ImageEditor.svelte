@@ -11,8 +11,13 @@
     ImageEditorAIHooks,
     ImageEditorFit,
   } from '@pixerate/editor/image-editor';
+  import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+  import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
   import {
     canvasToImagePoint,
+    imageToCanvasPoint,
+    createImagePlaybackLocator,
     hitTestCrop,
     getCropCursor,
     calculateCropDrag,
@@ -71,6 +76,15 @@
      * with an Effects section in the Layers tab. Optional: without one the editor is as before.
      */
     effects?: EffectProvider | null;
+    /**
+     * Agent playback: act out the image tools' calls here with the agent's cursor, opening the
+     * panel each tool belongs to (default: `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `image`, where the image tool providers play). */
+    playbackId?: string;
+    /** Bring the editor on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
   let {
@@ -85,6 +99,9 @@
     aiHooks,
     fit,
     effects,
+    playback,
+    playbackId = 'image',
+    onplaybackreveal,
   }: Props = $props();
 
   const internalEditor = createReactiveImageEditor();
@@ -101,6 +118,67 @@
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
   let activeTab = $state<'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
+  let rootEl = $state<HTMLDivElement | null>(null);
+
+  // Agent playback: the agent's cursor in document pixels, over the whole editor (canvas and panels).
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  /** Document pixels → pixels in the editor's root element, through the canvas projection. */
+  const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
+    if (!canvasEl || !rootEl || !canvasEl.width) return p;
+    const r = canvasEl.getBoundingClientRect();
+    const box = rootEl.getBoundingClientRect();
+    const c = imageToCanvasPoint(p, editor.controller.getState(), canvasEl.width, canvasEl.height, activeTab === 'crop');
+    return { x: r.left - box.left + (c.x * r.width) / canvasEl.width, y: r.top - box.top + (c.y * r.height) / canvasEl.height };
+  };
+  /** Viewport (client) pixels → document pixels. */
+  const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
+    if (!canvasEl || !canvasEl.width) return p;
+    const r = canvasEl.getBoundingClientRect();
+    const sx = r.width > 0 ? canvasEl.width / r.width : 1;
+    const sy = r.height > 0 ? canvasEl.height / r.height : 1;
+    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, editor.controller.getState(), canvasEl.width, canvasEl.height, activeTab === 'crop');
+  };
+  /** An element of the editor (a tab, slider or layer row) as a rectangle in document pixels. */
+  const elementRect = (selector: string): PlaybackRect | null => {
+    const r = rootEl?.querySelector(selector)?.getBoundingClientRect();
+    if (!r || r.width <= 0) return null;
+    const a = clientToDoc({ x: r.left, y: r.top });
+    const b = clientToDoc({ x: r.right, y: r.bottom });
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+  };
+  const agentPresence = createPlaybackSurface(() => playing, () => playbackId, () => ({
+    defaultKind: 'layer',
+    locate: (ref: PlaybackRef) => {
+      if (ref.kind === 'panel') return elementRect(`[data-image-tab="${CSS.escape(ref.id)}"]`);
+      if (ref.kind === 'control') return elementRect(`[data-control-id="${CSS.escape(ref.id)}"]`);
+      return createImagePlaybackLocator(editor.controller)(ref) ?? (ref.kind === 'layer' || ref.kind === 'item' ? elementRect(`[data-layer-id="${CSS.escape(ref.id)}"]`) : null);
+    },
+    open: async (ref: PlaybackRef) => {
+      if (ref.kind !== 'panel' || activeTab === ref.id) return;
+      rootEl?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
+      // Let the panel render before the cursor looks for its controls.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    },
+    bounds: () => {
+      const r = canvasEl?.getBoundingClientRect();
+      if (!r || r.width <= 0) return null;
+      const a = clientToDoc({ x: r.left, y: r.top });
+      const b = clientToDoc({ x: r.right, y: r.bottom });
+      return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+    },
+    visible: () => {
+      const r = rootEl?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p: PlaybackPoint) => {
+      const box = rootEl?.getBoundingClientRect();
+      const q = docToRoot(p);
+      return { x: (box?.left ?? 0) + q.x, y: (box?.top ?? 0) + q.y };
+    },
+    fromViewport: clientToDoc,
+    reveal: () => onplaybackreveal?.()
+  }));
 
   // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
   let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
@@ -883,15 +961,20 @@
 </script>
 
 <div
-  class="flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 {className}"
+  bind:this={rootEl}
+  class="relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 {className}"
   {style}
 >
+  {#if playing}
+    <PresenceLayer presence={agentPresence} viewport={docToRoot} />
+  {/if}
   <!-- Top Action Header -->
   <div class="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
     <!-- Navigation Tabs -->
     <div class="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
       <button
         type="button"
+        data-image-tab="crop"
         onclick={() => {
           activeTab = 'crop';
           editor.setTool('crop');
@@ -904,6 +987,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="adjust"
         onclick={() => {
           activeTab = 'adjust';
           editor.setTool('select');
@@ -916,6 +1000,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="layers"
         onclick={() => {
           activeTab = 'layers';
           editor.setTool('select');
@@ -928,6 +1013,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="paint"
         onclick={() => {
           activeTab = 'paint';
           editor.setTool('brush');
@@ -940,6 +1026,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="select"
         onclick={() => {
           activeTab = 'select';
           editor.setTool('select');
@@ -952,6 +1039,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="annotate"
         onclick={() => {
           activeTab = 'annotate';
           editor.setTool('pen');
@@ -964,6 +1052,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="depth"
         onclick={() => {
           activeTab = 'depth';
           editor.setTool('select');
@@ -976,6 +1065,7 @@
       </button>
       <button
         type="button"
+        data-image-tab="ai"
         onclick={() => {
           activeTab = 'ai';
           editor.setTool('select');

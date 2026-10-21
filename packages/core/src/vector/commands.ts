@@ -1,3 +1,4 @@
+import { withVectorPlayback } from './playback.js';
 import { VECTOR_BRUSHSTROKE_MAX_SEED, vectorBrushstrokeBrushes } from './brushstroke.js';
 import { GRAIN_PATTERNS } from '../paint/grain.js';
 import { type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
@@ -2522,7 +2523,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 		}
 	];
 
-	return [
+	return withVectorPlayback(controller, prefix, [
 		{
 			...base,
 			id: `${prefix}list`,
@@ -3466,5 +3467,5 @@ export function createVectorCommands(controller: VectorEditorController, options
 				return { nodes: controller.getState().document.nodes.length, selection: controller.getState().selection };
 			}
 		}
-	];
+	]);
 }

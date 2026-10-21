@@ -1,4 +1,5 @@
 // Portions ported from filmcraft-main/crates/engine/src/commands.rs and crates/engine/src/lib.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+import type { PlaybackPlan } from '../tools/playback.js';
 import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from '../tools/schema.js';
 import type { KeyboardEventLike, Platform } from './chords.js';
 import {
@@ -47,6 +48,16 @@ export interface CommandSpec<TContext = any, TParams = any, TResult = unknown> {
 	readOnly?: boolean;
 	/** Hide from the palette and `list()` unless `includeHidden` (still runnable by id). */
 	hidden?: boolean;
+	/**
+	 * Pure planner for agent playback: the cursor steps (surface coordinates) that act out a run
+	 * with these params. Without one, playback visits the ids the params name (`ids`, `layerId`, …).
+	 */
+	plan?: (context: TContext, params: TParams) => PlaybackPlan;
+	/**
+	 * The playback surface the command acts on (default: its `scope`, else the id's prefix,
+	 * `canvas` for `canvas.alignLeft`).
+	 */
+	playbackSurface?: string;
 }
 
 export type CommandErrorCode = 'unknown_command' | 'disabled' | 'invalid_params' | 'failed';

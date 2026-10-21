@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { McpToolResult } from "@pixerate/editor/agent";
 import { Bot, FastForward, Play, Square, User } from "lucide-react";
-import { demoToolRegistry } from "../agentTools";
+import { demoPlayback, demoToolRegistry } from "../agentTools";
 import {
   demoAgentSpeed,
   resultValue,
@@ -232,6 +232,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
     if (running) return;
     clearTimeout(idleTimer.current);
     const run: AgentRunControl = { speed: demoAgentSpeed(), stopped: false };
+    demoPlayback.speed = run.speed;
     control.current = run;
     setRunning(script.id);
     setEntries([{ kind: "user", text: script.prompt }]);
@@ -242,6 +243,8 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
         switch (event.type) {
           case "say":
             push({ kind: "say", text: event.text });
+            // The library's cursor (agent playback) shows the note where the agent last worked.
+            demoPlayback.say(event.text);
             if (stage?.current) patchCursor({ bubble: event.text, visible: placed.current });
             break;
           case "call":
@@ -274,6 +277,7 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
     });
     if (ok) push({ kind: "done", text: "Done. Each tool call above is one undo step in the editor." });
     control.current = null;
+    demoPlayback.speed = demoAgentSpeed();
     setRunning(null);
     patchCursor({ bubble: undefined, focus: undefined });
     idleTimer.current = setTimeout(() => {
@@ -304,10 +308,17 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
         ))}
         {running && (
           <span className="flex items-center gap-1.5 ml-auto">
-            <button type="button" className={`${button} border-slate-700 text-slate-300 hover:bg-slate-800`} onClick={() => control.current && (control.current.speed = Infinity)}>
+            <button type="button" className={`${button} border-slate-700 text-slate-300 hover:bg-slate-800`} onClick={() => {
+                if (control.current) control.current.speed = Infinity;
+                demoPlayback.speed = Infinity;
+                demoPlayback.stop();
+              }}>
               <FastForward className="w-3 h-3" /> Skip
             </button>
-            <button type="button" className={`${button} border-slate-700 text-slate-300 hover:bg-slate-800`} onClick={() => control.current && (control.current.stopped = true)}>
+            <button type="button" className={`${button} border-slate-700 text-slate-300 hover:bg-slate-800`} onClick={() => {
+                if (control.current) control.current.stopped = true;
+                demoPlayback.stop();
+              }}>
               <Square className="w-3 h-3" /> Stop
             </button>
           </span>

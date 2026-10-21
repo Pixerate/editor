@@ -1,6 +1,8 @@
 import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from './schema.js';
 import { ToolRegistryView, type ToolViewOptions } from './view.js';
 import { stripPrototypeKeys } from './safe-json.js';
+import type { ToolPlanner } from './playback.js';
+import type { PresenceActorInfo } from './presence.js';
 
 /**
  * MCP-shaped tool definition, as returned by `tools/list`.
@@ -44,6 +46,15 @@ export interface ToolCallContext {
 	/** Id of the provider that owns the tool. */
 	providerId: string;
 	signal?: AbortSignal;
+	/** Who is calling (an MCP client, a scripted agent), for agent playback's cursors and queues. */
+	actor?: PresenceActorInfo;
+}
+
+/** Options for `callTool`. */
+export interface ToolCallOptions {
+	signal?: AbortSignal;
+	/** Who is calling; agent playback gives each actor its own cursor and queue. */
+	actor?: PresenceActorInfo;
 }
 
 /**
@@ -56,6 +67,17 @@ export type AgentToolHandler = (args: Record<string, any>, context: ToolCallCont
 
 export interface AgentTool extends McpToolDefinition {
 	handler: AgentToolHandler;
+	/**
+	 * How agent playback acts this tool out (see `createAgentPlayback`): `'self'` when the
+	 * handler drives its own cursor (a director), `false` to never play it. Default: play it
+	 * from `plan`, or from the ids in its arguments and result.
+	 */
+	playback?: 'self' | false;
+	/**
+	 * Pure planner for agent playback: the cursor steps (surface coordinates) that act out a
+	 * call with these arguments, given the state before the call. Not sent to clients.
+	 */
+	plan?: ToolPlanner;
 }
 
 /**
@@ -83,7 +105,25 @@ export interface AgentToolProvider {
 	tools: readonly AgentTool[] | (() => readonly AgentTool[]);
 	/** Lets the provider signal that its tool list changed; returns an unsubscribe function. */
 	subscribe?: (notify: () => void) => () => void;
+	/** The playback surface its calls are acted out on (default: the provider id). */
+	playbackSurface?: string;
 }
+
+/** A tool call as a {@link ToolMiddleware} sees it (arguments already validated). */
+export interface ToolMiddlewareCall {
+	/** The exposed (possibly namespaced) name. */
+	name: string;
+	tool: AgentTool;
+	provider: AgentToolProvider;
+	args: Record<string, any>;
+	context: ToolCallContext;
+}
+
+/**
+ * Wraps every tool call of a registry (`registry.use`): call `next()` to run the handler (or
+ * the next middleware) and return its value. A throw becomes an `isError` result.
+ */
+export type ToolMiddleware = (call: ToolMiddlewareCall, next: () => Promise<unknown>) => Promise<unknown>;
 
 export type ToolErrorCode = 'unknown_tool' | 'invalid_arguments' | 'tool_failed';
 
@@ -170,7 +210,7 @@ export interface ToolSource {
 	listTools(): McpListToolsResult;
 	hasTool(name: string): boolean;
 	getTool(name: string): McpToolDefinition | undefined;
-	callTool(name: string, args?: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<McpToolResult>;
+	callTool(name: string, args?: Record<string, unknown>, options?: ToolCallOptions): Promise<McpToolResult>;
 	onListChanged(listener: (tools: McpToolDefinition[]) => void): () => void;
 	/** The toolsets behind `listTools()`, in listing order. */
 	toolsets(): ToolsetInfo[];
@@ -210,7 +250,7 @@ function readTools(provider: AgentToolProvider): readonly AgentTool[] {
 }
 
 function toDefinition(name: string, tool: AgentTool): McpToolDefinition {
-	const { handler: _handler, name: _name, ...rest } = tool;
+	const { handler: _handler, name: _name, plan: _plan, playback: _playback, ...rest } = tool;
 	return { name, ...rest };
 }
 
@@ -259,6 +299,7 @@ export class ToolRegistry implements ToolSource {
 
 	private readonly entries: ProviderEntry[] = [];
 	private readonly listeners = new Set<(tools: McpToolDefinition[]) => void>();
+	private readonly middleware: ToolMiddleware[] = [];
 	private readonly options: Required<ToolRegistryOptions>;
 	private timer: ReturnType<typeof setTimeout> | null = null;
 	private lastSignature: string;
@@ -322,6 +363,18 @@ export class ToolRegistry implements ToolSource {
 		entry.unsubscribe?.();
 		this.notifyListChanged();
 		return true;
+	}
+
+	/**
+	 * Adds a middleware that wraps every tool call (first added runs outermost), e.g. agent
+	 * playback's `playback.middleware`. Returns a function that removes it.
+	 */
+	use(middleware: ToolMiddleware): () => void {
+		this.middleware.push(middleware);
+		return () => {
+			const index = this.middleware.indexOf(middleware);
+			if (index !== -1) this.middleware.splice(index, 1);
+		};
 	}
 
 	/** Registered provider ids in registration order. */
@@ -419,7 +472,7 @@ export class ToolRegistry implements ToolSource {
 	 * `structuredContent.error` (MCP transports may map `unknown_tool` to a
 	 * JSON-RPC `-32602` error instead).
 	 */
-	async callTool(name: string, args: Record<string, unknown> = {}, options: { signal?: AbortSignal } = {}): Promise<McpToolResult> {
+	async callTool(name: string, args: Record<string, unknown> = {}, options: ToolCallOptions = {}): Promise<McpToolResult> {
 		const match = lookup(this.resolve(), name);
 		const found = match.found;
 		if (!found) {
@@ -441,11 +494,17 @@ export class ToolRegistry implements ToolSource {
 			}
 		}
 		try {
-			const value = await found.tool.handler(input as Record<string, any>, {
+			const context: ToolCallContext = {
 				name,
 				providerId: found.provider.id,
-				signal: options.signal
-			});
+				signal: options.signal,
+				...(options.actor ? { actor: options.actor } : {})
+			};
+			const call: ToolMiddlewareCall = { name, tool: found.tool, provider: found.provider, args: input as Record<string, any>, context };
+			const chain = [...this.middleware];
+			const run = async (i: number): Promise<unknown> =>
+				i < chain.length ? chain[i]!(call, () => run(i + 1)) : found.tool.handler(call.args, context);
+			const value = await run(0);
 			return toToolResult(value);
 		} catch (error) {
 			return errorResult({

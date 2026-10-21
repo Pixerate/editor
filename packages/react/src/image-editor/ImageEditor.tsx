@@ -1,4 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 import type {
   Annotation,
   CropBox,
@@ -12,6 +16,8 @@ import type {
 } from '@pixerate/editor/image-editor';
 import {
   canvasToImagePoint,
+  imageToCanvasPoint,
+  createImagePlaybackLocator,
   hitTestCrop,
   getCropCursor,
   calculateCropDrag,
@@ -68,6 +74,15 @@ export interface ImageEditorProps {
    * with an Effects section in the Layers tab. Optional: without one the editor is as before.
    */
   effects?: EffectProvider | null;
+  /**
+   * Agent playback: act out the image tools' calls here with the agent's cursor, opening the panel
+   * each tool belongs to (default: the nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `image`, where the image tool providers play). */
+  playbackId?: string;
+  /** Bring the editor on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 type TabType = 'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai';
@@ -83,6 +98,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   onRemoveBackground,
   aiHooks,
   effects,
+  playback,
+  playbackId = 'image',
+  onPlaybackReveal,
 }) => {
   const internalEditor = useImageEditor({ image: src });
   const editor = externalEditor || internalEditor;
@@ -96,6 +114,74 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabType>('crop');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  // Agent playback: the agent's cursor in document pixels, over the whole editor (canvas and panels).
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const [locateLayer] = useState(() => createImagePlaybackLocator(controller));
+  /** Document pixels → pixels in the editor's root element, through the canvas projection. */
+  const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
+    const canvas = canvasRef.current;
+    const root = rootRef.current;
+    if (!canvas || !root || !canvas.width) return p;
+    const r = canvas.getBoundingClientRect();
+    const box = root.getBoundingClientRect();
+    const c = imageToCanvasPoint(p, controller.getState(), canvas.width, canvas.height, activeTabRef.current === 'crop');
+    return { x: r.left - box.left + (c.x * r.width) / canvas.width, y: r.top - box.top + (c.y * r.height) / canvas.height };
+  };
+  /** Viewport (client) pixels → document pixels. */
+  const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
+    const canvas = canvasRef.current;
+    if (!canvas || !canvas.width) return p;
+    const r = canvas.getBoundingClientRect();
+    const sx = r.width > 0 ? canvas.width / r.width : 1;
+    const sy = r.height > 0 ? canvas.height / r.height : 1;
+    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, controller.getState(), canvas.width, canvas.height, activeTabRef.current === 'crop');
+  };
+  /** An element of the editor (a tab, slider or layer row) as a rectangle in document pixels. */
+  const elementRect = (selector: string): PlaybackRect | null => {
+    const el = rootRef.current?.querySelector(selector);
+    const r = el?.getBoundingClientRect();
+    if (!r || r.width <= 0) return null;
+    const a = clientToDoc({ x: r.left, y: r.top });
+    const b = clientToDoc({ x: r.right, y: r.bottom });
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+  };
+  const agentPresence = usePlaybackSurface(playing, playbackId, {
+    defaultKind: 'layer',
+    locate: (ref: PlaybackRef) => {
+      if (ref.kind === 'panel') return elementRect(`[data-image-tab="${CSS.escape(ref.id)}"]`);
+      if (ref.kind === 'control') return elementRect(`[data-control-id="${CSS.escape(ref.id)}"]`);
+      return locateLayer(ref) ?? (ref.kind === 'layer' || ref.kind === 'item' ? elementRect(`[data-layer-id="${CSS.escape(ref.id)}"]`) : null);
+    },
+    open: async (ref: PlaybackRef) => {
+      if (ref.kind !== 'panel' || activeTabRef.current === ref.id) return;
+      rootRef.current?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
+      // Let the panel render before the cursor looks for its controls.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    },
+    bounds: () => {
+      const r = canvasRef.current?.getBoundingClientRect();
+      if (!r || r.width <= 0) return null;
+      const a = clientToDoc({ x: r.left, y: r.top });
+      const b = clientToDoc({ x: r.right, y: r.bottom });
+      return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+    },
+    visible: () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const box = rootRef.current?.getBoundingClientRect();
+      const q = docToRoot(p);
+      return { x: (box?.left ?? 0) + q.x, y: (box?.top ?? 0) + q.y };
+    },
+    fromViewport: clientToDoc,
+    reveal: () => onPlaybackReveal?.(),
+  });
   const [activeCropRatio, setActiveCropRatio] = useState<number | null>(null);
 
   // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
@@ -916,15 +1002,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
   return (
     <div
-      className={`flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 ${className}`}
+      ref={rootRef}
+      className={`relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 ${className}`}
       style={style}
     >
+      {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} />}
       {/* Top Action Header */}
       <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
           <button
             type="button"
+            data-image-tab="crop"
             onClick={() => {
               setActiveTab('crop');
               editor.setTool('crop');
@@ -937,6 +1026,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="adjust"
             onClick={() => {
               setActiveTab('adjust');
               editor.setTool('select');
@@ -949,6 +1039,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="layers"
             onClick={() => {
               setActiveTab('layers');
               editor.setTool('select');
@@ -961,6 +1052,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="paint"
             onClick={() => {
               setActiveTab('paint');
               editor.setTool('brush');
@@ -973,6 +1065,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="select"
             onClick={() => {
               setActiveTab('select');
               editor.setTool('select');
@@ -985,6 +1078,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="annotate"
             onClick={() => {
               setActiveTab('annotate');
               editor.setTool('pen');
@@ -997,6 +1091,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="depth"
             onClick={() => {
               setActiveTab('depth');
               editor.setTool('select');
@@ -1009,6 +1104,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </button>
           <button
             type="button"
+            data-image-tab="ai"
             onClick={() => {
               setActiveTab('ai');
               editor.setTool('select');

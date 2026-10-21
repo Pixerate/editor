@@ -18,6 +18,8 @@ import { colNameToIndex, indexToColName, isFormulaError } from '../spreadsheet/f
 import { isSingleCellRange, normalizeRange, rangeContainsRange, rangesIntersect } from '../spreadsheet/table.js';
 import type { CellRange } from '../spreadsheet/types.js';
 import { planAgentCommand, toolCallToAgentCommand, validateAgentCommand, type planToolCall } from './planner.js';
+import { planCanvasToolPlayback } from './canvasPlayback.js';
+import type { NodeRectOptions } from '../canvas/arrange.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import {
 	EDIT_OPERATION_REQUIRED_ARGUMENTS,
@@ -987,6 +989,13 @@ export interface EditorMcpToolProviderOptions<
 	toolStyle?: 'split' | 'combined';
 	/** Which edit tools to expose (default both). */
 	surfaces?: { canvas?: boolean; prompt?: boolean };
+	/**
+	 * The agent playback surface the canvas edits are acted out on (default: the provider id).
+	 * Attach it with `useCanvasPlaybackSurface` / `createCanvasPlaybackSurface`.
+	 */
+	playbackSurface?: string;
+	/** Node size resolution for the cursor's targets (match the canvas' own). */
+	rectOptions?: NodeRectOptions;
 }
 
 /** Describes which arguments a combined `edit_*` call is missing. */
@@ -1063,7 +1072,13 @@ export function createEditorMcpToolProvider<
 				};
 			}
 		},
-		...editTools.map((definition) => ({ ...definition, handler: edit(definition.name) }))
+		...editTools.map((definition) => ({
+			...definition,
+			handler: edit(definition.name),
+			// The cursor goes where the planner puts the change (see `planCanvasToolPlayback`).
+			plan: (args: Record<string, any>) =>
+				planCanvasToolPlayback<TNode, TEdge>(definition.name, args, options.getSnapshot(), options.plannerOptions, options.rectOptions)
+		}))
 	] as AgentTool[];
 
 	if (options.captureView) {
@@ -1083,6 +1098,7 @@ export function createEditorMcpToolProvider<
 		title: 'Canvas and prompt editor',
 		description: 'The node canvas and the prompt: editor state, nodes and edges, layout, prompt text, and a view of the editor.',
 		skill: 'pixerate-canvas',
+		...(options.playbackSurface ? { playbackSurface: options.playbackSurface } : {}),
 		tools
 	};
 }

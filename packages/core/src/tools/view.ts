@@ -1,4 +1,4 @@
-import type { AgentTool, McpListToolsResult, McpToolDefinition, McpToolResult, ToolSource, ToolsetInfo } from './registry.js';
+import type { AgentTool, McpListToolsResult, McpToolDefinition, McpToolResult, ToolCallOptions, ToolSource, ToolsetInfo } from './registry.js';
 import { baseToolName, errorResult, toToolResult, unknownToolMessage } from './registry.js';
 import { validateJsonSchema } from './schema.js';
 import { searchTools } from './search.js';
@@ -157,7 +157,7 @@ export class ToolRegistryView implements ToolSource {
 		return this.find(this.catalogue(), name).found;
 	}
 
-	async callTool(name: string, args: Record<string, unknown> = {}, options: { signal?: AbortSignal } = {}): Promise<McpToolResult> {
+	async callTool(name: string, args: Record<string, unknown> = {}, options: ToolCallOptions = {}): Promise<McpToolResult> {
 		const meta = this.meta.find((t) => t.name === name);
 		if (meta) {
 			const details = validateJsonSchema(args ?? {}, meta.inputSchema);

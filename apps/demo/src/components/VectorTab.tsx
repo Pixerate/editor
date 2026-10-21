@@ -1,11 +1,11 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
 import { VectorEditor, VectorGeneratePanel, useVectorCommands, useVectorEditorController, useVectorEditorState, useVectorEffectsTools, useVectorGenerationTools } from "@pixerate/editor-react/vector";
 import { DEMO_VECTOR_MODELS, demoVectorGenerate } from "../vectorGeneration";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { PenTool } from "lucide-react";
-import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { VECTOR_SCRIPTS } from "../agentScripts";
 
@@ -322,7 +322,6 @@ export function VectorTab() {
   // Generative prompts through a pretend offline backend (a host sends them to its models).
   useVectorGenerationTools(demoToolRegistry, controller, { id: "vector-generation", namespace: "vectorgen", models: DEMO_VECTOR_MODELS, generate: demoVectorGenerate });
   const [svg, setSvg] = useState<string | null>(null);
-  const agentStage = useRef<HTMLDivElement>(null);
   // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).
   const [fonts, setFonts] = useState<OpenTypeFont[]>([]);
   const [fontError, setFontError] = useState<string | null>(null);
@@ -355,11 +354,12 @@ export function VectorTab() {
         </div>
       </div>
       <EffectsProviderSwitch />
-      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <VectorEditor controller={controller} height={520} effects={effects} />
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+        {/* The vector canvas acts out every vector.* call (agent playback): no targets in the scripts. */}
+        <VectorEditor controller={controller} height={520} effects={effects} canvasProps={{ playback: demoPlayback }} />
       </div>
       <VectorGeneratePanel controller={controller} models={DEMO_VECTOR_MODELS} generate={demoVectorGenerate} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3" />
-      <AgentScriptPanel scripts={VECTOR_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette)." />
+      <AgentScriptPanel scripts={VECTOR_SCRIPTS} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette). The vector canvas acts each call out with the agent's cursor." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>
           {state.document.nodes.length} nodes · {state.selection.length} selected · {Math.round(state.viewport.zoom * 100)}%
