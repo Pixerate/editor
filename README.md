@@ -610,6 +610,7 @@ Every feature is available from core and from both framework packages, except wh
 - [Canvas](docs/canvas.md)
 - [Mermaid diagrams](docs/mermaid-diagrams.md)
 - [MCP bridge](docs/mcp-bridge.md)
+- [Agent playback](docs/agent-playback.md) (draft: agent cursors for every tool call) and its [plan](docs/agent-playback-plan.md)
 - [Parameters editor](docs/parameters.md)
 - [Vector editor](docs/vector-editor.md)
 - [Vector editor roadmap](docs/vector-roadmap.md)

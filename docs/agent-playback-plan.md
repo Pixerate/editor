@@ -1,6 +1,6 @@
 # Agent playback in the library: design plan
 
-Status: proposal for review. No code yet.
+Status: proposal for review. No code yet. Consumer-facing guide (draft): [agent-playback.md](agent-playback.md).
 
 ## Goal
 
@@ -29,7 +29,33 @@ Only a few targets point at the consumer's own UI (the demo's tabs, via `open`).
 Two details change the design:
 
 - Vector, chart and parameters commands reach agents through `createCommandToolProvider`, so the tool name is `run_command` or `run_commands` and the operation is `args.id`. Planning has to work per command, not only per tool.
-- There is a second, older presence model, `AgentPresence` in `agent/types.ts`, drawn by `AgentPresenceLayer` and used by canvas. The plan merges it into `PresenceStore`.
+- Canvas already has two older cursor models (see the next section). The plan merges both into `PresenceStore`.
+
+### Canvas today (the first domain)
+
+Canvas has more cursor code than any domain without a director, but none of it is connected to tool calls:
+
+| Piece | Where | State |
+| --- | --- | --- |
+| `AgentPresence` type (`cursorPosition`, `selectedNodeIds`, `statusMessage`, `note`) | `core/src/agent/types.ts` | Only consumed by the React layer below |
+| `AgentPresenceLayer` (takes a `presences[]` prop) | `react/src/canvas/AgentPresenceLayer.tsx`, `svelte/src/canvas/AgentPresenceLayer.svelte` | Exported, but nothing in the packages or the demo renders it. Only the parity matrix mentions it. Positions are raw pixels, with no flow-to-screen mapping. |
+| `CanvasAgentCursor` plus motion math: `calculateCurvedPath`, `getNaturalMovementTiming`, `getCursorTransitionDuration`, `getAgentCardAnchor` (header, action, body and footer anchors on a card) | `core/src/canvas/agent-presence.ts` | Pure and reusable |
+| `AgentCursorPresence` (takes `flowToScreenPosition`) | `svelte/src/canvas/AgentCursorPresence.svelte` | Svelte only: **no React twin**, so parity is already broken. Not fed by any tool. |
+| `planAgentCommand` / `planToolCall` | `core/src/agent/planner.ts` | Plans *model* steps (`step:canvas_add_node` with a computed position, edges, layout), but no cursor steps |
+
+The canvas tools reach agents through four providers, none of which plays:
+
+- `createEditorMcpToolProvider` (`canvas_add_node`, `canvas_connect`, `canvas_update_node`, `canvas_remove_nodes`, `canvas_layout`, `canvas_select`, `canvas_highlight`). Edits go through the planner and the consumer's `applySteps`.
+- `createCanvasComponentToolProvider`.
+- `createCanvasEffectsToolProvider`.
+- `createCanvasCaptureToolProvider`.
+
+The arrange commands (`canvas.alignLeft` and the rest, in `commands/builtins.ts`) exist, but the demo's canvas tab defines its own `list_nodes` and `align_nodes` tools in `CanvasTab.tsx`. Its only script, `canvas-align`, targets `.react-flow__node[data-id="research"]` by hand. So the canvas problem is less about deleting targets and more that **no canvas call plays at all**, with three half-finished cursors to choose from.
+
+Two things make canvas a good first domain:
+
+- The planner already knows the outcome before the call runs: where a new node will go, and which nodes a layout moves. Tier 2 plans can point the cursor at the new node's position before it exists, with no post-roll guesswork.
+- xyflow gives a reliable geometry source. Node position and measured size come from the flow store, so `locate` can work without querying the DOM. A `ViewportPortal` (React Flow and Svelte Flow) draws the layer in flow coordinates, so zoom and pan come for free.
 
 ## Design
 
@@ -114,6 +140,7 @@ playback.attach(providerIdOrSurfaceId, surface): () => void;    // called by the
 playback.say(text, { actor? })                                    // a bubble on the actor's current surface
 playback.speed = Infinity; playback.stop();                       // skip / stop, as the demo panel does
 playback.textPresence(): RichTextAgentPresence                    // speed and colour for the text tools
+playback.active: boolean; playback.record(): PlaybackStep[]        // a performance is running; collect played steps (tests)
 ```
 
 Per call, the middleware does this:
@@ -163,25 +190,56 @@ Recommended: yes, as `runToolScript(registry, script, { playback?, onEvent?, con
 ### 5. Migration order and deleting the demo's `target`s
 
 **Phase 0: foundation (one PR, no domain behaviour change)**
+- Publish [agent-playback.md](agent-playback.md) with the API as built, and keep it current in every later phase.
 - `ToolMiddleware` / `registry.use`; `tools/presence.ts` (moved, re-exported); `PlaybackStep`, `PlaybackRef` and `createAgentPlayback` with tiers 0 and 1; `ToolCallContext.actor`; `createMcpServer` passing `clientInfo.name`.
 - `PresenceLayer` and `usePlaybackSurface` / `createPlaybackSurface` (React and Svelte); `AgentPlaybackProvider`.
 - Demo: one `demoPlayback` object, `registry.use(demoPlayback.middleware)`, `?agentSpeed` mapped to `playback.speed`. The demo's DOM cursor keeps running only for steps that still have a `target`.
 
-**Phase 1: vector (recommended first domain)**
-- Why vector: about half of all demo targets are vector. `data-vector-id` already exists on every drawn object. Its operations come through `createCommandToolProvider`, so it proves the `CommandSpec.plan` path that chart and parameters reuse. `artboardBox` shows the document-to-surface mapping is one `viewBox` transform. It needs no live-preview machinery, so tiers 1 and 2 are enough.
+The order follows the user's priority: **canvas, then vector, then image**. The other domains follow.
+
+**Phase 1: canvas (first domain, the user's priority)**
+- Surface: `useCanvasPlaybackSurface` (React) / `createCanvasPlaybackSurface` (Svelte), mounted inside the flow. It draws `PresenceLayer` in a `ViewportPortal` so steps use flow coordinates. `locate({ kind: 'node', id })` reads the node's position and measured size from the flow store, and `locate({ kind: 'edge', id })` reads the edge's midpoint. Card anchors come from `getAgentCardAnchor`. `toViewport` / `fromViewport` use `flowToScreenPosition` / `screenToFlowPosition`.
+- Motion: the controller's default glide adopts `calculateCurvedPath` + `getNaturalMovementTiming` from `canvas/agent-presence.ts`, so every domain moves like the canvas cursor was designed to.
+- Tier 2 plans on `createEditorMcpToolProvider`, built from `planAgentCommand`'s output, so the cursor goes where the change will land:
+
+  | Tool | Plan |
+  | --- | --- |
+  | `canvas_add_node` | Click the planned position, type the label, commit |
+  | `canvas_connect` | Press on the source, drag to the target, release, type the label |
+  | `canvas_update_node` | Click the node's header anchor, type |
+  | `canvas_remove_nodes` | Click each node, commit |
+  | `canvas_layout` | Commit, then a ring on the moved nodes |
+  | `canvas_select` | Shift-click each node |
+  | `canvas_highlight` | Point at the nodes |
+
+- Arrange: add a library `createCanvasArrangeToolProvider` (or expose the `builtins` canvas commands through `createCommandToolProvider` with `ids` params), with `align_nodes`, `distribute_nodes` and `list_nodes`. The demo's hand-written tools in `CanvasTab.tsx` go away. That is a new provider, so it also needs skill rows in `pixerate-canvas/SKILL.md` and `agent-skills.test.ts` mapping.
+- Tier 1 covers the component, effects and capture providers by node `ids` (capture is read-only, so it glances).
+- Consolidation:
+  - `AgentPresence` and the two `AgentPresenceLayer`s become a deprecated adapter over `PresenceStore` for one minor release, then go.
+  - `AgentCursorPresence.svelte` either becomes the Svelte `PresenceLayer`'s cursor or gets a React twin. Either way the parity gap closes.
+  - `CanvasAgentCursor` stays as the motion helpers' input type.
+- Delete the `canvas-align` target.
+
+**Phase 2: vector**
+- Why vector comes next: about half of all demo targets are vector. `data-vector-id` already exists on every drawn object. Its operations come through `createCommandToolProvider`, so it proves the `CommandSpec.plan` path that chart and parameters reuse. `artboardBox` shows the document-to-surface mapping is one `viewBox` transform. It needs no live-preview machinery, so tiers 1 and 2 are enough.
 - Tier 1 covers `setStyle`, `addFill`, `addStroke`, `addFilter`, `makeClippingMask`, `getAppearance` and so on, by locating `ids`.
 - Tier 2 `plan` for `addShape` / `addPath` / `addText` / `placeSymbol` (rubber-band or click at the args' rectangle or point, type the text), `setTextStyle` (select the range), and `setMeshPoint` / `setGradient` (drag a handle).
 - Delete every `target:` in the vector scripts and the `artboardBox` helper.
 
-**Phase 2: spreadsheet.** `locate({ kind: 'cell' })` for A1 refs and ranges, a `type` plan for `set_range` and `set_cell`. Remove the `{ text: "Fay" }` / `"Status"` / `"Total revenue"` targets.
+**Phase 3: image editor**
+- Surface: the image canvas in document pixels, plus the layers panel as a second locate root (`data-layer-id` already exists in React and Svelte `LayersPanel`). `locate({ kind: 'layer' })` gives the layer's bounds on the canvas, or its row when the bounds are empty.
+- Tier 1 covers `createImageEditorToolProvider` and `createImageEffectsToolProvider` writes that take a `layerId` or `target`.
+- Tier 2 plans:
+  - Shape and type layers: rubber-band the args' rectangle, then type.
+  - Transforms: drag a corner handle.
+  - Adjustments and effects: press the layer row, then `focus` the canvas.
+  - Effect controls are `{ kind: 'control' }` refs inside the library's own panels, which replaces the demo's `{ text: "Contrast" }` target.
 
-**Phase 3: image editor.** Layer refs (`data-layer-id` on the layer row and the layer's bounds on the canvas). Adjustments and effects plan a press on the layer, then a `focus` on the canvas.
+**Phase 4: spreadsheet.** `locate({ kind: 'cell' })` for A1 refs and ranges, a `type` plan for `set_range` and `set_cell`. Remove the `{ text: "Fay" }` / `"Status"` / `"Total revenue"` targets.
 
-**Phase 4: video editor.** Add `data-clip-id`, `data-track-id` and a playhead control. Clip moves and trims plan a timeline drag from the args' times. Phases 3 and 4 can run in parallel.
+**Phase 5: video editor.** Add `data-clip-id`, `data-track-id` and a playhead control. Clip moves and trims plan a timeline drag from the args' times. Phases 4 and 5 can run in parallel.
 
-**Phase 5: animation editor and parameters.** `data-keyframe`, `data-parameter-id`; slider drags for parameter values.
-
-**Phase 6: canvas.** Port the old `AgentPresence` / `planAgentCommand` model onto `PresenceStore` and tier 2 plans. Deprecate `AgentPresenceLayer`.
+**Phase 6: animation editor and parameters.** `data-keyframe`, `data-parameter-id`; slider drags for parameter values.
 
 **Phase 7: fold in the directors.** Chart, paint and diagram tools get `playback: 'self'`, and their factories build the director from the attached surface. Their inspector controls become locatable refs (`{ kind: 'control', name: 'title' }` → `[data-option="title"]`), which removes the chart `inspectorControl` targets. Rich text reads its `presence` defaults from `playback.textPresence()`.
 
@@ -226,4 +284,6 @@ Recommended: yes, as `runToolScript(registry, script, { playback?, onEvent?, con
 
 ## Recommendation
 
-Start with phase 0 plus vector (phase 1) as two consecutive PRs. Vector removes about half of the demo's targets and proves both the generic locator and `CommandSpec.plan`. Every later domain reuses that pattern.
+Start with phase 0, then canvas (phase 1), as two consecutive PRs, then vector and image. Canvas is the domain the user finds most jarring. Its planner already knows where each change lands, and it settles the three competing cursor models before other domains copy one of them. Vector then proves `CommandSpec.plan` and removes about half of the demo's targets. Image reuses the document-pixel surface that vector establishes.
+
+Consumers will read [agent-playback.md](agent-playback.md), which describes this API and is drafted alongside the plan. It is linked from the README's Documentation section. Each phase updates it as the API lands.
