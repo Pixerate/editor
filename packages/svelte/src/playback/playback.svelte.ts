@@ -28,10 +28,12 @@ export type PlaybackSurfaceOptions = Omit<PlaybackSurface, 'presence'>;
 export function createPlaybackSurface(
 	playback: MaybeGetter<AgentPlayback | null | undefined>,
 	id: MaybeGetter<string | null | undefined>,
-	options: MaybeGetter<PlaybackSurfaceOptions> = {}
+	options: MaybeGetter<PlaybackSurfaceOptions> = {},
+	/** Use this presence store (e.g. a director's, so its cursor and playback's are one) instead of a new one. */
+	sharedPresence?: PresenceStore | null
 ): PresenceStore {
 	const ambient = getAgentPlayback();
-	const presence = new PresenceStore();
+	const presence = sharedPresence ?? new PresenceStore();
 	const o = () => read(options);
 	$effect(() => {
 		const explicit = read(playback);

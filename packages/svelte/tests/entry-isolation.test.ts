@@ -34,6 +34,7 @@ const EXTRA: Record<string, readonly string[]> = {
   "paint-editor": ["effects", "parameters", "tools"],
   effects: ["parameters"],
   spreadsheet: ["tools"],
+  chart: ["tools"],
   parameters: ["tools"],
 };
 

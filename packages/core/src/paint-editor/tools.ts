@@ -5,6 +5,7 @@
  * `list_papers`, `list_strokes`).
  */
 
+import { withPaintPlayback } from './playback';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
@@ -1103,12 +1104,12 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
 
-  return {
+  return withPaintPlayback({
     id: options.id ?? 'paint-editor',
     namespace: options.namespace,
     title: 'Paint editor',
     description: 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.',
     skill: 'pixerate-paint-editor',
     tools
-  };
+  }, { director: !!options.director });
 }

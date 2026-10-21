@@ -1,8 +1,16 @@
 # Agent playback in the library: design plan
 
-Status: **phases 0 to 6 (foundation, canvas, vector, image, spreadsheet, video, animation, parameters) are implemented**. Phases 7 (fold in the directors) and 8 (demo clean-up) remain. Consumer guide: [agent-playback.md](agent-playback.md).
+Status: **all phases (0 to 8) are implemented.** Consumer guide: [agent-playback.md](agent-playback.md).
 
-As built, phases 0 to 6 differ from the proposal below in a few places:
+As built, the phases differ from the proposal below in a few places:
+
+- **Directors (phase 7).**
+  - Chart and paint editors share one presence store between their director and the playback surface, so there is one cursor. Their providers mark the director's tools `playback: 'self'` and plan everything else on the editor's own controls.
+  - The surfaces use the director's coordinates (chart scene units, paint document pixels) and map DOM controls into them.
+  - The diagram director and the rich-text caret stay as they were. Rich text's `insert_chart` now shows the caret at the insertion point.
+- **Demo and scripts (phase 8).**
+  - `runToolScript` is in core (`@pixerate/editor/tools`).
+  - The demo's `AgentScriptPanel` no longer draws a cursor, finds targets or opens tabs, and its scripts carry no `target` or `open` fields.
 
 - **Spreadsheet, video, animation, parameters.**
   - Plans name only layout-free refs: cells, rows and columns (`B7`, `5:6`, `C:D`); clips, tracks and times (`t=1200;track=v1`); shots and stage elements; controls. Each component locates them in its own pixels.

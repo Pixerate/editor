@@ -4,7 +4,7 @@ Agent playback makes an agent's tool calls visible. The agent's cursor glides to
 
 You enable it once per registry and attach a surface for each editor on screen. You don't write code per tool, and you don't pick DOM targets.
 
-> **Status.** The core, React and Svelte layers ship now, and so do the **canvas**, **vector**, **image**, **spreadsheet**, **video**, **animation** and **parameters** editors. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
+> **Status.** Every editor plays: canvas, vector, image, spreadsheet, video, animation, parameters, chart and paint through `playback`. Diagram and rich text keep their own director and inline caret. Chart and paint directors share the playback cursor. See the [plan](agent-playback-plan.md).
 
 ## Contents
 
@@ -15,6 +15,7 @@ You enable it once per registry and attach a surface for each editor on screen. 
 - [Headless, servers and tests](#headless-servers-and-tests)
 - [Several agents](#several-agents)
 - [Editors in tabs or panels](#editors-in-tabs-or-panels)
+- [Scripted agent turns](#scripted-agent-turns)
 - [For tool authors: how a call is played](#for-tool-authors-how-a-call-is-played)
 - [Supported editors](#supported-editors)
 
@@ -110,6 +111,20 @@ Surface coordinates are document pixels. The editor's own tabs, sliders and laye
 Their plans name only cells, clips, tracks, times, shots, elements and controls, so the component decides where those are on screen.
 
 **A plain DOM component** of your own can use `useElementPlaybackSurface(playback, id, elementRef, { defaultKind, selectors: { kind: (id) => cssSelector } })` (Svelte: `createElementPlaybackSurface`). Coordinates are the element's pixels, and refs are found by CSS selector.
+
+**Editors with a director (chart, paint)** share one cursor between the director and playback. Pass the director's presence and `playback` to the editor, and the director to the tool provider:
+
+```tsx
+const { presence, director, sceneRef } = useChartDirector(controller);
+useChartToolProvider(registry, controller, { id: 'chart', director });
+<ChartEditor controller={controller} canvasProps={{ presence, sceneRef }} playback={playback} />
+```
+
+The provider marks the director's tools `playback: 'self'`, so value drags (chart) and strokes, fills and replays (paint) play through the director. Every other call plays on the editor's own controls:
+- **Chart:** the inspector options a change sets, the data grid for data edits, the toolbar for rendering and undo.
+- **Paint:** the side panel a write belongs to, opened by clicking its tab.
+
+`usePlaybackSurface` / `createPlaybackSurface` take an optional shared presence store for the same purpose in your own components.
 
 **A custom surface** (your own component) uses `usePlaybackSurface(playback, id, options)` and renders `<PresenceLayer presence={…} />` inside it. All options are optional:
 
@@ -212,6 +227,27 @@ useCanvasPlaybackSurface(playback, 'canvas', { …, reveal: () => setTab('canvas
 
 Without `reveal`, a hidden editor's calls run instantly.
 
+## Scripted agent turns
+
+`runToolScript` (in `@pixerate/editor/tools`) plays a list of notes and tool calls at reading speed. Use it for tours, demos and end-to-end tests of a skill.
+- Later steps can build their arguments from earlier results.
+- With `playback`, each note shows in the cursor's bubble.
+- Steps have no cursor targets: each tool's own playback decides where the cursor goes.
+
+```ts
+import { runToolScript } from '@pixerate/editor/tools';
+
+const control = { speed: 1, stopped: false };   // set speed = Infinity to skip, stopped = true to stop
+await runToolScript(registry, {
+  id: 'align',
+  prompt: 'Line up the main workflow steps',
+  steps: [
+    { say: 'Reading the board.', tool: 'canvas__get_editor_state', args: { includeDocument: false }, as: 'state' },
+    { say: 'Centring the main path.', tool: 'commands__run_command', args: (ctx) => ({ id: 'canvas.alignMiddle', params: { ids: ctx.results.state.canvas.nodes.map((n) => n.id) } }) },
+  ],
+}, { playback, actor: { id: 'tour', name: 'Tour' }, control, onEvent: (e) => console.log(e) });
+```
+
 ## For tool authors: how a call is played
 
 Every call plays at the richest tier the tool supports:
@@ -304,7 +340,9 @@ Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()
 | Editor | Playback |
 | --- | --- |
 | Canvas: `createEditorMcpToolProvider` (planned moves) and the arrange commands (derived) | Now |
-| Rich text, chart, paint, diagram | Today through their own `presence` / `director`; they move onto playback later |
+| Chart: `createChartToolProvider` (`<ChartEditor playback>`; with a director, value drags and selections play through it, sharing the cursor; other changes are clicked on the inspector, data grid or toolbar) | Now |
+| Paint: both paint tool providers (`<PaintEditor playback>`; with a director, strokes, fills and replays paint live; other writes open their panel and point at the control) | Now |
+| Rich text and diagram | Their own inline caret (`presence`) and `DiagramDirector`, as before; `insert_chart` now shows the caret where the chart goes in |
 | Vector: every `vector.*` command (`<VectorCanvas playback>`; shapes, paths, text, symbols, images, text ranges and mesh points planned; the rest derived from `ids`) | Now |
 | Image: `createImageEditorToolProvider` and `createImageEffectsToolProvider` (`<ImageEditor playback>`; opens each tool's panel, traces strokes, drags boxes, visits layers and sliders) | Now |
 | Spreadsheet, video, animation, parameters | Later phases |

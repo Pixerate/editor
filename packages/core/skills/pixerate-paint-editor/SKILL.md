@@ -417,6 +417,7 @@ for the controls and presets.
 
 ## Pitfalls
 
+- With agent playback on, strokes, fills and replays are painted live by the director, and other writes open their panel (Colour, Wet, Paper, Layers, Effects) and point at the control. Results are unchanged.
 - **Stroke-by-stroke drawing is slow and expensive.** Do not draw a detailed picture point by
   point. Block in with fills and big strokes, then replay and vary a few good strokes.
 - **A hidden or locked layer refuses paint**: show it (`update_layer visible true`) or unlock it.

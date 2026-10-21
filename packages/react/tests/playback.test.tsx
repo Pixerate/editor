@@ -306,3 +306,62 @@ describe('ParametersPanel and AnimationEditor playback', () => {
 		});
 	});
 });
+
+describe('ChartEditor playback', () => {
+	it('plays inspector changes on the chart surface, sharing the director presence store', async () => {
+		const { ChartEditor } = await import('../src/chart');
+		const { ChartController, ChartDirector, ChartPresence, createChartToolProvider, layoutChart } = await import('@pixerate/editor/chart');
+		const controller = new ChartController({ spec: { type: 'bar', categories: ['Q1'], series: [{ id: 'a', name: 'A', values: [1] }] } });
+		const presence = new ChartPresence();
+		const director = new ChartDirector(controller, presence, { scene: () => layoutChart(controller.getSpec(), { width: 400, height: 300 }), clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		registry.register(createChartToolProvider(controller, { id: 'chart', namespace: 'chart', director }));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		const { host, unmount } = mount(<ChartEditor controller={controller} playback={playback} canvasProps={{ presence }} />);
+		const surface = playback.surface('chart')!;
+		expect(surface.presence).toBe(presence);
+		(surface as { visible?: () => boolean }).visible = () => true;
+		const steps = playback.record();
+		const res = await act(() => registry.callTool('chart__update_chart', { title: 'Revenue' }));
+		expect(res.isError).toBeFalsy();
+		expect(steps.map((r) => r.step.type)).toEqual(['target', 'press', 'release', 'commit']);
+		expect(controller.getSpec().title).toBe('Revenue');
+		// The editor draws the cursor layer; the canvas's own SVG layer is off.
+		expect(host.querySelector('[data-chart-presence]')).toBeNull();
+		unmount();
+	});
+});
+
+describe('PaintEditor playback', () => {
+	it('opens the panel a paint write belongs to, sharing the director presence store', async () => {
+		window.HTMLCanvasElement.prototype.getContext = (() => null) as any;
+		const { stubBrushThumbnails } = await import('./paint-thumbnails');
+		const thumbs = stubBrushThumbnails();
+		const { PaintEditor } = await import('../src/paint-editor');
+		const { PaintEditorController, PaintDirector, PaintPresence, createPaintEditorToolProvider } = await import('@pixerate/editor/paint-editor');
+		const controller = new PaintEditorController({ width: 64, height: 64 });
+		const presence = new PaintPresence();
+		const director = new PaintDirector(controller, presence, { clock: createInstantPresenceClock(), linger: 0 });
+		const registry = new ToolRegistry();
+		registry.register(createPaintEditorToolProvider(controller, { id: 'paint', namespace: 'paint', director }));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		try {
+			const { host, unmount } = mount(<PaintEditor controller={controller} presence={presence} playback={playback} />);
+			const surface = playback.surface('paint')!;
+			expect(surface.presence).toBe(presence);
+			(surface as { visible?: () => boolean }).visible = () => true;
+			expect(host.querySelector('[data-paint-tab="layers"]')!.getAttribute('aria-selected')).toBe('false');
+			const steps = playback.record();
+			const res = await act(() => registry.callTool('paint__add_layer', { name: 'Sky' }));
+			expect(res.isError).toBeFalsy();
+			expect(steps.map((r) => r.step.type)).toEqual(['open', 'target', 'press', 'release', 'commit']);
+			expect(host.querySelector('[data-paint-tab="layers"]')!.getAttribute('aria-selected')).toBe('true');
+			expect(host.querySelector('[data-paint-presence]')).toBeNull();
+			unmount();
+		} finally {
+			thumbs.mockRestore();
+		}
+	});
+});

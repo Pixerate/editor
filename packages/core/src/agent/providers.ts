@@ -231,6 +231,17 @@ export function createRichTextToolProvider(
 ): AgentToolProvider {
 	const editor = () => toEditor(target);
 	const charts = createDocumentChartTools(editor);
+	// The agent's caret shows where a chart goes in before it is inserted, like a text edit.
+	const withCaret = (tool: AgentTool): AgentTool =>
+		tool.name !== 'insert_chart'
+			? tool
+			: {
+					...tool,
+					handler: (args, context) => {
+						if (typeof args.at === 'number') presence.show(args.at);
+						return tool.handler(args, context);
+					}
+				};
 	const presence = createTextPresence(editor, options.id, options.presence);
 	const formatting = createDocumentFormatTools(editor, (ranges) => presence.changed(ranges.filter((r) => r.from < r.to)));
 
@@ -561,7 +572,7 @@ export function createRichTextToolProvider(
 			if (!ed || ed.isDestroyed) return [];
 			if (!ed.isEditable) return [getText, findText, ...charts.read()];
 			const tools = [getText, findText, insertText, replaceText, replaceRange, replaceSelection, setSelection, ...formatting.tools(ed)];
-			return [...tools, ...(isTableEnabled(ed) ? [editTable] : []), ...charts.read(), ...charts.write()];
+			return [...tools, ...(isTableEnabled(ed) ? [editTable] : []), ...charts.read(), ...charts.write().map(withCaret)];
 		},
 		subscribe: (notify) => {
 			const ed = editor();

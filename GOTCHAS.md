@@ -2739,3 +2739,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Video scripts in a narrow demo pane ran with no agent cursor.
 - **Root Cause**: At narrow widths the editor's grid column collapses to zero width, so the timeline's box is 0 px wide and the surface's `visible()` (box has a size) is false. Playback then runs calls instantly, as designed.
 - **Solution / Workaround**: This is intended (there is nothing on screen to point at). Check playback at a desktop width; give hosts a layout where the timeline keeps a width.
+
+### [react|svelte/chart|paint] A Director and Playback Must Share One Presence Store
+
+- **Issue / Symptom**: With a `ChartDirector` (or `PaintDirector`) and agent playback both on, two agent cursors could show: the director's in the chart SVG while it dragged a value, and playback's over the inspector for the next call.
+- **Root Cause**: Each kept its own `PresenceStore`, in different coordinates, so neither knew where the other's cursor was.
+- **Solution / Workaround**: Pass the director's presence to the editor (`canvasProps.presence` / `presence`). The editor's playback surface then uses that same store (the shared-presence argument of `usePlaybackSurface` / `createPlaybackSurface`) in the director's coordinates: chart scene units or paint document pixels. DOM controls are mapped into those coordinates. The editor draws the one cursor layer and turns the canvas's own layer off. The tool providers mark the director's tools `playback: 'self'`.

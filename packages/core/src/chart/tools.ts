@@ -1,6 +1,7 @@
 // The render-preview, pointer-gesture and key tools follow the conventions of the craft apps' MCP servers
 // (vectorcraft-main/crates/mcp/src/tools.rs `render_preview`, lightcraft-main `pointer_gesture`,
 // designcraft-main `key`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
+import { withChartPlayback } from './playback.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { parseCsv } from '../spreadsheet/csv.js';
@@ -684,7 +685,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, listPresets, exportMermaid, exportOoxml];
 	const writes = [updateChart, setData, setValues, addSeries, updateSeries, removeSeries, addCategory, removeCategory, importCsv, importMermaid, addTrendline, removeTrendline, applyPreset, transpose, select, drag, key, undo, redo];
 
-	return {
+	return withChartPlayback({
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
@@ -705,5 +706,5 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				}
 			});
 		}
-	};
+	}, { director: !!options.director });
 }

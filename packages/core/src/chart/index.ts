@@ -25,3 +25,4 @@ export * from './stream.js';
 export * from './presence.js';
 export * from './office-files.js';
 export * from './file-tools.js';
+export * from './playback.js';

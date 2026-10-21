@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   usePromptEditor,
   EditorContent,
@@ -143,7 +143,6 @@ export const PromptStudioTab: React.FC = () => {
     }
   };
 
-  const agentStage = useRef<HTMLDivElement>(null);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Left Column: Editor & Controls */}
@@ -161,7 +160,7 @@ export const PromptStudioTab: React.FC = () => {
             </span>
           </div>
 
-          <div className="relative" ref={agentStage}>
+          <div className="relative">
             <EditorContent editor={editor} />
 
             {/* Slash Command Floating Menu */}
@@ -222,7 +221,7 @@ export const PromptStudioTab: React.FC = () => {
             </button>
           </div>
         </div>
-        <AgentScriptPanel scripts={PROMPT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the prompt__* tools: find_text returns positions, replace_range and insert_text edit there." />
+        <AgentScriptPanel scripts={PROMPT_SCRIPTS} hint="Plays a scripted agent turn with the prompt__* tools: find_text returns positions, replace_range and insert_text edit there." />
 
         {/* Read-Only AST Renderer (Zero TipTap Dependency) */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">

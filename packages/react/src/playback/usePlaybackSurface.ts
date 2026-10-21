@@ -10,10 +10,17 @@ export type PlaybackSurfaceOptions = Omit<PlaybackSurface, "presence">;
  * mounted, and returns its cursors to draw with `<PresenceLayer>`. `playback` defaults to the
  * nearest `AgentPlaybackProvider`; with none, nothing is attached and calls run instantly.
  */
-export function usePlaybackSurface(playback: AgentPlayback | null | undefined, id: string | null | undefined, options: PlaybackSurfaceOptions = {}): PresenceStore {
+export function usePlaybackSurface(
+  playback: AgentPlayback | null | undefined,
+  id: string | null | undefined,
+  options: PlaybackSurfaceOptions = {},
+  /** Use this presence store (e.g. a director's, so its cursor and playback's are one) instead of a new one. */
+  sharedPresence?: PresenceStore | null,
+): PresenceStore {
   const ambient = useAgentPlayback();
   const target = playback === undefined ? ambient : playback;
-  const [presence] = useState(() => new PresenceStore());
+  const [ownPresence] = useState(() => new PresenceStore());
+  const presence = sharedPresence ?? ownPresence;
   const latest = useRef(options);
   latest.current = options;
   useEffect(() => {

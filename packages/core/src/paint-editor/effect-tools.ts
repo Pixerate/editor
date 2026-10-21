@@ -5,6 +5,7 @@
  * `fill_layer_with_effect`.
  */
 
+import { withPaintPlayback } from './playback';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult, type EffectTargetEffects } from '../effects/tools.js';
 import type { EffectValue } from '../effects/types.js';
 import { BLEND_MODES } from '../raster/blend';
@@ -65,7 +66,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
   };
   const values = (v: Record<string, unknown> | undefined) => v as Record<string, EffectValue> | undefined;
 
-  return createEffectToolProvider({
+  return withPaintPlayback(createEffectToolProvider({
     id: options.id ?? 'paint-effects',
     namespace: options.namespace,
     title: 'Paint effects',
@@ -199,5 +200,5 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
         },
       },
     ],
-  });
+  }), { director: false });
 }

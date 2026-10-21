@@ -74,7 +74,6 @@ export const DOCUMENT_SCRIPTS: AgentScript[] = [
             ],
           },
         }),
-        target: { text: "Charts are live document nodes" },
       },
       { say: "Confirming the chart is in the document.", tool: "doc__list_document_charts", args: {} },
     ],
@@ -132,18 +131,7 @@ export const SHEET_SCRIPTS: AgentScript[] = [
   },
 ];
 
-/**
- * A control in the chart inspector, scrolled into view first: the inspector scrolls on its own, so
- * the control may be outside it. Value drags have no target, since the chart's director draws them.
- */
-function inspectorControl(selector: string) {
-  return (stage: HTMLElement) => {
-    const el = stage.querySelector(`[data-chart-inspector] ${selector}`);
-    el?.scrollIntoView({ block: "nearest" });
-    return el;
-  };
-}
-
+/** Chart scripts: value drags go through the chart's director, everything else is played on the editor's controls. */
 export const CHART_SCRIPTS: AgentScript[] = [
   {
     id: "chart-compose",
@@ -160,17 +148,15 @@ export const CHART_SCRIPTS: AgentScript[] = [
           ],
         },
         as: "data",
-        target: { selector: "[data-chart-grid]" },
       },
-      { say: "A grouped bar chart with titles.", tool: "chart__update_chart", args: { type: "bar", title: "Revenue by quarter", subtitle: "$k, 2026" }, target: inspectorControl('[data-chart-type="bar"]') },
+      { say: "A grouped bar chart with titles.", tool: "chart__update_chart", args: { type: "bar", title: "Revenue by quarter", subtitle: "$k, 2026" } },
       {
         say: "Online is the growth story, so it gets a linear trend.",
         tool: "chart__add_chart_trendline",
         args: (ctx) => ({ series: seriesId(ctx.results.data, "Online"), type: "linear", showR2: true }),
-        target: { selector: "[data-chart-canvas]" },
       },
-      { say: "Colour-blind safe palette, presentation layout.", tool: "chart__apply_chart_preset", args: { layout: "presentation", colors: "okabe-ito" }, target: inspectorControl('[data-option="preset.colors"]') },
-      { say: "Rendering it to check how it reads.", tool: "chart__render_chart", args: { format: "png" }, target: { selector: '[data-action="download-png"]' } },
+      { say: "Colour-blind safe palette, presentation layout.", tool: "chart__apply_chart_preset", args: { layout: "presentation", colors: "okabe-ito" } },
+      { say: "Rendering it to check how it reads.", tool: "chart__render_chart", args: { format: "png" } },
     ],
   },
   {
@@ -194,7 +180,6 @@ export const CHART_SCRIPTS: AgentScript[] = [
         say: "Saying so in the title.",
         tool: "chart__update_chart",
         args: (ctx) => ({ title: `${(ctx.results.chart.spec ?? ctx.results.chart).title || "Chart"} (+15%)` }),
-        target: inspectorControl('[data-option="title"]'),
       },
     ],
   },
@@ -982,16 +967,14 @@ export const PAINT_SCRIPTS: AgentScript[] = [
         say: "A grainy gradient as effect paper at 60%: multiplied, so the paper's own grain still shows.",
         tool: "paintfx__set_paper_effect",
         args: { effect: "grainy-gradient", opacity: 0.6 },
-        open: "Effects",
       },
-      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
       { say: "Looking for light that suits dried pastel.", tool: "paintfx__search_effects", args: { query: "light", use: "filter" } },
       {
         say: "A rim light baked onto the dried pastel at 70%.",
         tool: "paintfx__apply_effect",
         args: (ctx) => ({ target: ctx.results.hills.id, effect: "rim-light", opacity: 0.7 }),
-        open: "Effects",
       },
       { say: "Film grain and a vignette on their own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "vignette-grain", name: "Vignette" } },
       { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
@@ -1007,15 +990,13 @@ export const PAINT_SCRIPTS: AgentScript[] = [
         say: "A pale sunset gradient as effect paper: multiplied over the sheet, so the paper's grain still shows.",
         tool: "paintfx__set_paper_effect",
         args: { effect: "fake.gradient", values: { from: "#fde68a", to: "#fbcfe8", angle: 90 } },
-        open: "Effects",
       },
-      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers" },
+      { say: "Hills in pastel, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.hills.id, color: "#1e3a8a", grain: 0.6, pressure: 0.5 }) },
       {
         say: "Warm evening light baked onto the dried pastel.",
         tool: "paintfx__apply_effect",
         args: (ctx) => ({ target: ctx.results.hills.id, effect: "fake.tint", values: { color: "#f59e0b", amount: 0.5 }, opacity: 0.8 }),
-        open: "Effects",
       },
       { say: "A caption bar on its own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "fake.bar", values: { color: "#0ea5e9", height: 0.08 }, time: 2000, name: "Caption" } },
       { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
@@ -1026,11 +1007,11 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     id: "paint-landscape",
     prompt: "Block in a sunset landscape in pastel",
     steps: [
-      { say: "Rough watercolour paper with plenty of tooth for pastel.", tool: "paint__set_paper", args: { preset: "cold-pressed", depth: 0.7 }, open: "Paper", target: { selector: '[data-testid="paper-panel"] [aria-selected="true"]' } },
-      { say: "A warm sky first, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Sky" }, as: "sky", open: "Layers", target: { selector: '[aria-label="Layers"]' } },
+      { say: "Rough watercolour paper with plenty of tooth for pastel.", tool: "paint__set_paper", args: { preset: "cold-pressed", depth: 0.7 } },
+      { say: "A warm sky first, rubbed into the grain.", tool: "paint__add_layer", args: { name: "Sky" }, as: "sky" },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.sky.id, color: "#f2a65a", grain: 0.5, pressure: 0.7 }) },
-      { say: "Mixing a muted blue-grey for the far hills, as paint would mix.", tool: "paint__mix_colors", args: { colors: [{ color: "#2f3f9e", weight: 2 }, { color: "#d23a2a", weight: 1 }, { color: "#f7f5ee", weight: 1 }] }, as: "mix", open: "Colour", target: { selector: '[data-testid="mixing-pad"]' } },
-      { say: "The first range of hills with a soft pastel.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills", open: "Layers", target: { selector: '[aria-label="Layers"]' } },
+      { say: "Mixing a muted blue-grey for the far hills, as paint would mix.", tool: "paint__mix_colors", args: { colors: [{ color: "#2f3f9e", weight: 2 }, { color: "#d23a2a", weight: 1 }, { color: "#f7f5ee", weight: 1 }] }, as: "mix" },
+      { say: "The first range of hills with a soft pastel.", tool: "paint__add_layer", args: { name: "Hills" }, as: "hills" },
       {
         tool: "paint__paint_stroke",
         args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "soft-pastel", brush: { tip: { size: 90 } }, color: ctx.results.mix.mixed, points: wave(520, 50) }),
@@ -1048,8 +1029,8 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     id: "paint-kaleidoscope",
     prompt: "Draw a kaleidoscope ornament",
     steps: [
-      { say: "Eight mirrored segments about the centre: one stroke paints all sixteen copies.", tool: "paint__set_symmetry", args: { mode: "kaleidoscope", segments: 8, center: { x: 600, y: 400 } }, target: { selector: '[aria-label="Symmetry"]' } },
-      { tool: "paint__add_layer", args: { name: "Ornament" }, open: "Layers", target: { selector: '[aria-label="Layers"]' } },
+      { say: "Eight mirrored segments about the centre: one stroke paints all sixteen copies.", tool: "paint__set_symmetry", args: { mode: "kaleidoscope", segments: 8, center: { x: 600, y: 400 } } },
+      { tool: "paint__add_layer", args: { name: "Ornament" } },
       {
         say: "One petal with the ink pen.",
         tool: "paint__paint_stroke",
@@ -1063,7 +1044,7 @@ export const PAINT_SCRIPTS: AgentScript[] = [
           }),
         },
       },
-      { say: "Symmetry off again, so later strokes are single.", tool: "paint__set_symmetry", args: { mode: "off" }, target: { selector: '[aria-label="Symmetry"]' } },
+      { say: "Symmetry off again, so later strokes are single.", tool: "paint__set_symmetry", args: { mode: "off" } },
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
@@ -1104,8 +1085,8 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     id: "paint-watercolor",
     prompt: "Paint a watercolour sky over hills",
     steps: [
-      { say: "Watercolour wants rough paper: its grain pins the edges and catches granulating pigment.", tool: "paint__set_paper", args: { preset: "rough-watercolor" }, open: "Paper", target: { selector: '[data-testid="paper-panel"] [aria-selected="true"]' } },
-      { say: "Sky first, wet-in-wet: soak the top of the sheet with clear water.", tool: "paint__add_layer", args: { name: "Sky wash" }, as: "sky", open: "Wet", target: { selector: '[data-testid="wet-panel"]' } },
+      { say: "Watercolour wants rough paper: its grain pins the edges and catches granulating pigment.", tool: "paint__set_paper", args: { preset: "rough-watercolor" } },
+      { say: "Sky first, wet-in-wet: soak the top of the sheet with clear water.", tool: "paint__add_layer", args: { name: "Sky wash" }, as: "sky" },
       { tool: "paint__wet_paper", args: (ctx) => ({ layerId: ctx.results.sky.id, rect: { x: 0, y: 0, width: 1200, height: 430 } }) },
       {
         say: "A broad wash of blue into the wet paper: it spreads softly, with no hard edge.",
@@ -1136,7 +1117,7 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     id: "paint-impasto",
     prompt: "Paint thick oil sunflowers with a palette knife",
     steps: [
-      { say: "Canvas for oils, lit low from the top left so the brushwork shows.", tool: "paint__set_paper", args: { preset: "cotton-canvas" }, open: "Paper", target: { selector: '[data-testid="light-panel"]' } },
+      { say: "Canvas for oils, lit low from the top left so the brushwork shows.", tool: "paint__set_paper", args: { preset: "cotton-canvas" } },
       { tool: "paint__set_lighting", args: { azimuth: 315, elevation: 28, relief: 0.8 } },
       { say: "A wet oil ground: wet colours blend where they meet.", tool: "paint__add_layer", args: { name: "Ground" }, as: "ground" },
       { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ground.id, brushId: "oil-flat", brush: { tip: { size: 180 } }, color: "#2f6f9f", points: wave(160, 20) }) },
