@@ -1,6 +1,14 @@
 # Agent playback in the library: design plan
 
-Status: proposal for review. No code yet. Consumer-facing guide (draft): [agent-playback.md](agent-playback.md).
+Status: **phases 0 and 1 (foundation and canvas) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
+
+As built, phases 0 and 1 differ from the proposal below in a few places:
+
+- **Canvas arrange.** There is no new `createCanvasArrangeToolProvider`. The arrange commands (`createArrangeCommands`) already take `ids`, so they play through the command tools on the `canvas` surface, picked from the id prefix. The demo's hand-written `list_nodes` / `align_nodes` tools were replaced by `createEditorMcpToolProvider` and those commands.
+- **No `playback` prop yet.** Editor components don't take one. Surfaces attach through hooks: `usePlaybackSurface` / `useCanvasPlaybackSurface` in React, `createPlaybackSurface` / `createCanvasPlaybackSurface` in Svelte. The canvas is rendered by the consumer's own React Flow / Svelte Flow anyway.
+- **Not done yet.** The motion helpers in `canvas/agent-presence.ts` are not used yet: playback glides along the demo's arc. `AgentCursorPresence.svelte` is not ported. `AgentPresence` and the two `AgentPresenceLayer`s are only marked deprecated.
+- **Phase 8 work still pending.** `runToolScript` hasn't moved to core. The demo panel calls `demoPlayback.say` for notes and maps Skip and Stop onto `playback.speed` / `stop()`.
+- **Other canvas providers.** The component, effects and capture providers play on the canvas only when they name it with `playbackSurface` or use the `canvas` namespace. Capture does; the demo's effects tools (`canvasfx`) don't yet.
 
 ## Goal
 

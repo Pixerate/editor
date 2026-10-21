@@ -2,6 +2,9 @@ import type { CanvasEdge, CanvasNode, Side, XYPosition } from '../canvas/types.j
 
 /**
  * Agent presence state for visual multiplayer/agent choreography.
+ *
+ * @deprecated Agent playback (`createAgentPlayback` in `@pixerate/editor/tools`) keeps cursors in a
+ * `PresenceStore` per surface and plays every tool call; draw them with `PresenceLayer`.
  */
 export interface AgentPresence {
 	agentId: string;

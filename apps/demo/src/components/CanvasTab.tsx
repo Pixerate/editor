@@ -34,15 +34,18 @@ import {
   useCanvasEffectsTools,
   ShapeNodeZoomProvider,
   useCanvasBrushes,
+  useCanvasPlaybackSurface,
+  PresenceLayer,
   type CanvasBrushPaint,
   DEFAULT_ARRANGE_SHORTCUTS,
   type AlignEdge,
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
+import type { CanvasEdge } from "@pixerate/editor/canvas";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
-import type { AgentTool, AgentToolProvider } from "@pixerate/editor/agent";
+import { createEditorMcpToolProvider, type AgentStep } from "@pixerate/editor/agent";
 import {
   AlignStartVertical,
   AlignCenterVertical,
@@ -82,7 +85,7 @@ import {
   CANVAS_GRADIENT_PRESETS,
   type CanvasGradientDef,
 } from "@pixerate/editor-react/canvas";
-import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { CanvasPaintLayerRecipe } from "./CanvasPaintLayerRecipe";
@@ -441,42 +444,44 @@ const CanvasDemo: React.FC = () => {
 
   const selectedCount = nodes.filter((n) => n.selected).length;
 
-  // A tiny custom provider so agents can inspect and align the canvas.
-  const provider = useMemo<AgentToolProvider>(() => {
-    const listNodes: AgentTool = {
-      name: "list_nodes",
-      description: "Lists canvas nodes with their positions and lock state.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
-      annotations: { readOnlyHint: true },
-      handler: () => ({
-        nodes: flow.getNodes().map((n) => ({
-          id: n.id,
-          label: n.data.label,
-          position: n.position,
-          locked: !!n.data.locked,
-        })),
-      }),
-    };
-    const alignNodesTool: AgentTool = {
-      name: "align_nodes",
-      description: "Aligns nodes to an edge of their combined bounds.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          edge: { type: "string", enum: ["left", "center", "right", "top", "middle", "bottom"] },
-          ids: { type: "array", items: { type: "string" } },
+  // The canvas edit tools (canvas__get_editor_state, canvas__canvas_add_node, ...). Each call
+  // applies as one undo step; the arrange commands (commands__run_command canvas.alignMiddle, ...)
+  // come from the command registry above. Both play on the canvas surface below.
+  const live = useRef({ nodes, edges });
+  live.current = { nodes, edges };
+  const provider = useMemo(
+    () =>
+      createEditorMcpToolProvider<BoxNode>({
+        id: "canvas",
+        namespace: "canvas",
+        surfaces: { canvas: true, prompt: false },
+        getSnapshot: () => ({ canvas: { nodes: live.current.nodes, edges: live.current.edges as CanvasEdge[], selectedNodeIds: live.current.nodes.filter((n) => n.selected).map((n) => n.id) } }),
+        applySteps: (steps: AgentStep<BoxNode>[]) => {
+          const before = live.current;
+          let next = before;
+          for (const step of steps) {
+            if (step.type === "step:canvas_add_node") next = { ...next, nodes: [...next.nodes, { ...step.node, type: step.node.type ?? "box" } as BoxNode] };
+            else if (step.type === "step:canvas_add_edge") next = { ...next, edges: [...next.edges, step.edge as Edge] };
+            else if (step.type === "step:canvas_remove_nodes") {
+              const gone = new Set(step.nodeIds);
+              next = { nodes: next.nodes.filter((n) => !gone.has(n.id)), edges: next.edges.filter((e) => !gone.has(e.source) && !gone.has(e.target)) };
+            } else if (step.type === "step:canvas_update_node") next = { ...next, nodes: next.nodes.map((n) => (n.id === step.id ? { ...n, data: { ...n.data, ...step.data } } : n)) };
+            else if (step.type === "step:canvas_move_nodes") next = { ...next, nodes: next.nodes.map((n) => (step.positions[n.id] ? { ...n, position: step.positions[n.id]! } : n)) };
+            else if (step.type === "step:canvas_select") next = { ...next, nodes: next.nodes.map((n) => ({ ...n, selected: step.nodeIds.includes(n.id) })) };
+          }
+          if (next === before) return;
+          const apply = (state: typeof before) => {
+            // Update the live copy at once, so the agent's cursor finds what it just made.
+            live.current = state;
+            setNodes(state.nodes);
+            setEdges(state.edges);
+          };
+          history.manager.execute({ name: "Agent edit", execute: () => apply(next), undo: () => apply(before) });
         },
-        required: ["edge", "ids"],
-        additionalProperties: false,
-      },
-      handler: ({ edge, ids }) => {
-        arrange.align(edge as AlignEdge, ids as string[]);
-        return `Aligned ${(ids as string[]).length} nodes (${edge}).`;
-      },
-    };
-    return { id: "canvas", namespace: "canvas", tools: [listNodes, alignNodesTool] };
-  }, [arrange, flow]);
-  useAgentToolProvider(demoToolRegistry, provider);
+      }),
+    [history.manager]
+  );
+  useAgentToolProvider(demoToolRegistry, provider, { playback: demoPlayback });
 
   const agentStage = useRef<HTMLDivElement>(null);
   // canvas__capture_view: screenshots of the viewport, all nodes, the selection, nodes by id or a rect.
@@ -488,6 +493,13 @@ const CanvasDemo: React.FC = () => {
     getNodes: flow.getNodes,
   });
   useAgentToolProvider(demoToolRegistry, capture);
+  // The agent's cursor on the canvas: every canvas__* and canvas.* call is acted out here.
+  const agentPresence = useCanvasPlaybackSurface(demoPlayback, "canvas", {
+    getNodes: () => live.current.nodes,
+    getEdges: () => live.current.edges as CanvasEdge[],
+    viewport,
+    container: agentStage,
+  });
   const btn =
     "p-2 rounded hover:bg-slate-800 transition-colors text-slate-300 disabled:opacity-40 disabled:hover:bg-transparent";
   const needs = (min: number) => selectedCount < min;
@@ -759,6 +771,7 @@ const CanvasDemo: React.FC = () => {
         </ReactFlow>
         </ShapeNodeZoomProvider>
         </CanvasEffectsProvider>
+        <PresenceLayer presence={agentPresence} viewport={viewport} />
       </div>
       <EffectsProviderSwitch />
       {(() => {
@@ -773,7 +786,7 @@ const CanvasDemo: React.FC = () => {
           />
         );
       })()}
-      <AgentScriptPanel scripts={CANVAS_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the canvas__* tools: list_nodes returns the ids that align_nodes takes." />
+      <AgentScriptPanel scripts={CANVAS_SCRIPTS} hint="Plays a scripted agent turn: get_editor_state returns the ids that the arrange commands and canvas_connect take. The library acts every call out on the canvas (agent playback), with no targets in the script." />
       {showPaintRecipe ? (
         <CanvasPaintLayerRecipe />
       ) : (

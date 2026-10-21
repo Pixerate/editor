@@ -3,6 +3,13 @@ export {
 	type AgentPresenceLayerProps
 } from './AgentPresenceLayer.js';
 
+export { PresenceLayer, type PresenceLayerProps } from '../playback/PresenceLayer.js';
+
+export {
+	useCanvasPlaybackSurface,
+	type UseCanvasPlaybackSurfaceOptions
+} from './useCanvasPlaybackSurface.js';
+
 export {
 	useStreamingCanvas,
 	type UseStreamingCanvasOptions

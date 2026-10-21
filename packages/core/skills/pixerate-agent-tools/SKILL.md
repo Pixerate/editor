@@ -61,6 +61,19 @@ editor's, or (in discovery mode) only `list_toolsets`, `search_tools`, `enable_t
 6. **Undo your own mistakes** with the domain's `undo_*` tool or the `history.undo` command, not
    by hand-reverting with more edits.
 
+## Playback
+
+The host may act your calls out on screen (agent playback): your cursor glides to what a call
+names, presses, drags or types, and the change lands as one undo step. Results are the same with
+or without it, and calls simply take a little longer while it plays.
+
+- Do not add waits or poll for the animation; each call returns once its change is applied.
+- Name your targets with the ids read tools return (`ids`, `nodeId`, `layerId`, a range). They are
+  also what the cursor heads for, so the user can follow along.
+- A batch (`run_commands`) plays its steps' moves first, then applies once as one undo step.
+- If you connect over MCP, your client's name labels your cursor; several agents get separate
+  cursors.
+
 ## Errors
 
 A failed call comes back as an `isError` result whose text says what was wrong and how to fix

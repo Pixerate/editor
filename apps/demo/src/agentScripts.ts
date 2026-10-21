@@ -214,16 +214,25 @@ function seriesId(result: any, name: string): string {
 export const CANVAS_SCRIPTS: AgentScript[] = [
   {
     id: "canvas-align",
-    prompt: "Line up the main workflow steps",
+    prompt: "Line up the main workflow steps and add a QA step",
     steps: [
-      { say: "Listing the nodes on the board.", tool: "canvas__list_nodes", args: {}, as: "nodes" },
+      { say: "Reading the board.", tool: "canvas__get_editor_state", args: { includeDocument: false }, as: "state" },
       {
         say: "Brief, Research, Review and Ship it are the main path; centring them on one line.",
-        tool: "canvas__align_nodes",
-        args: { edge: "middle", ids: ["brief", "research", "review", "ship"] },
-        target: { selector: '.react-flow__node[data-id="research"]' },
+        ...command("canvas.alignMiddle", { ids: ["brief", "research", "review", "ship"] }),
       },
-      { say: "Done. The sticky note and sketches stay where they were.", tool: "canvas__list_nodes", args: {} },
+      {
+        say: "Adding a QA step after Review; it connects from Review on its own.",
+        tool: "canvas__canvas_add_node",
+        args: { node: { id: "qa", type: "box", data: { label: "QA", color: "#22d3ee" } }, nearNodeId: "review", side: "bottom" },
+        as: "qa",
+      },
+      {
+        say: "QA passes work on to Ship it.",
+        tool: "canvas__canvas_connect",
+        args: (ctx) => ({ source: ctx.results.qa.created.nodes[0].id, target: "ship", label: "pass" }),
+      },
+      { say: "Done. The sticky note and sketches stay where they were.", tool: "canvas__canvas_select", args: { nodeIds: ["brief", "research", "review", "ship", "qa"] } },
     ],
   },
 ];

@@ -1,10 +1,10 @@
 # Agent playback
 
-> **Draft: this API is planned, not released.** It describes the design in [agent-playback-plan.md](agent-playback-plan.md). Names may change before phase 0 ships, and this page will be updated as each phase lands. Today, only the chart, paint, diagram and rich-text tools play, through their `director` / `presence` options.
+Agent playback makes an agent's tool calls visible. The agent's cursor glides to what it is working on, presses, drags or types, and each call lands as one undo step. It works the same for every caller: a model connected over MCP (`createMcpServer`, `connectToolBridge`), a scripted run or your own `registry.callTool(...)`.
 
-Agent playback makes an agent's tool calls visible. The agent's cursor glides to what it is working on, presses, drags or types, and each call lands as one undo step. It works the same for every caller: a model connected over MCP (`createMcpServer`, `connectToolBridge`), a scripted run (`runToolScript`) or your own `registry.callTool(...)`.
+You enable it once per registry and attach a surface for each editor on screen. You don't write code per tool, and you don't pick DOM targets.
 
-You enable it once per registry. You don't write code per tool, and you don't pick DOM targets.
+> **Status.** The core, React and Svelte layers ship now, and so does the **canvas**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
 
 ## Contents
 
@@ -15,7 +15,6 @@ You enable it once per registry. You don't write code per tool, and you don't pi
 - [Headless, servers and tests](#headless-servers-and-tests)
 - [Several agents](#several-agents)
 - [Editors in tabs or panels](#editors-in-tabs-or-panels)
-- [Scripted agent turns](#scripted-agent-turns)
 - [For tool authors: how a call is played](#for-tool-authors-how-a-call-is-played)
 - [Supported editors](#supported-editors)
 
@@ -31,118 +30,151 @@ const playback = createAgentPlayback({
   linger: 1500,             // ms the cursor stays after the agent's last call (0 keeps it)
   actor: { id: 'agent', name: 'Agent', color: '#7c3aed' },
 });
-registry.use(playback.middleware);
+playback.install(registry);  // same as registry.use(playback.middleware), but only once per registry
 ```
 
 Register tool providers as usual. Playback changes how a call looks on screen, never what it returns. A call returns the same result, or the same error, with or without playback.
 
 ## Show the cursor: React
 
-Pass the playback object once through context. Every editor inside it then registers its surface and draws the agent's cursor.
+Each editor surface attaches itself under its tool provider's id and draws the cursors with `<PresenceLayer>`. For the node canvas (React Flow):
 
 ```tsx
-import { AgentPlaybackProvider, useAgentToolProvider } from '@pixerate/editor-react';
+import { useMemo, useRef } from 'react';
+import { ReactFlow, useReactFlow, useViewport } from '@xyflow/react';
+import { createEditorMcpToolProvider } from '@pixerate/editor/agent';
+import { useAgentToolProvider } from '@pixerate/editor-react';
+import { useCanvasPlaybackSurface, PresenceLayer } from '@pixerate/editor-react/canvas';
 
-<AgentPlaybackProvider playback={playback}>
-  <CanvasEditor … />
-  <VectorEditor … />
-</AgentPlaybackProvider>
+function Board() {
+  const flow = useReactFlow();
+  const viewport = useViewport();
+  const container = useRef<HTMLDivElement>(null);
 
-// Inside a component: the provider's surface is attached for you.
-useAgentToolProvider(registry, provider, { playback });
+  const provider = useMemo(() => createEditorMcpToolProvider({ id: 'canvas', getSnapshot, applySteps }), []);
+  useAgentToolProvider(registry, provider, { playback });   // also installs the playback on the registry
+
+  // Attach the canvas under the provider's id ('canvas').
+  const presence = useCanvasPlaybackSurface(playback, 'canvas', {
+    getNodes: flow.getNodes,
+    getEdges: flow.getEdges,
+    viewport,
+    container,
+  });
+
+  return (
+    <div ref={container} style={{ position: 'relative', height: 520 }}>
+      <ReactFlow … />
+      <PresenceLayer presence={presence} viewport={viewport} />
+    </div>
+  );
+}
 ```
 
-Editors also accept a `playback` prop directly. Editors that already had a `director` (chart, paint, diagram) build it from `playback`, so you no longer create directors yourself. Passing `director` explicitly still works.
+`<AgentPlaybackProvider playback={playback}>` makes a playback the default for every surface below it. Surfaces then take `undefined` for the playback argument and use the context.
 
-For a custom surface (your own component), use `usePlaybackSurface(playback, providerId, { root, locate?, toViewport?, reveal? })` and render `<PresenceLayer store={surface.presence} />` inside it.
+Arrange commands registered with `createArrangeCommands` (`canvas.alignLeft`, …) play on the same surface. A command plays on the surface named by its `scope`, or by its id prefix (`canvas.`).
+
+Another provider that acts on the same canvas plays there if it names the surface. Spread the provider and add `playbackSurface: 'canvas'`, as with `createCanvasComponentToolProvider`. Providers whose namespace is the surface id (`canvas`) find it on their own.
+
+**A custom surface** (your own component) uses `usePlaybackSurface(playback, id, options)` and renders `<PresenceLayer presence={…} />` inside it. All options are optional:
+
+| Option | Does |
+| --- | --- |
+| `locate(ref)` | Returns a rectangle in your surface's coordinates for `{ kind, id }` |
+| `bounds()` | Where a cursor enters the surface |
+| `visible()` | Whether the surface is on screen. Hidden surfaces run calls instantly |
+| `toViewport` / `fromViewport` | Map to and from client pixels, so the cursor can move between surfaces |
+| `defaultKind` | The kind of a bare `id` / `ids` argument |
+| `reveal()` | Bring the surface on screen before playing |
+| `beginGesture` / `endGesture` | Group a call's changes into one undo step |
 
 ## Show the cursor: Svelte
 
 ```svelte
 <script lang="ts">
-  import { setAgentPlayback, useAgentToolProvider } from '@pixerate/editor-svelte';
-  setAgentPlayback(playback);              // context for every editor below
-  useAgentToolProvider(registry, provider, { playback });
+  import { useSvelteFlow } from '@xyflow/svelte';
+  import { useAgentToolProvider } from '@pixerate/editor-svelte';
+  import { createCanvasPlaybackSurface, PresenceLayer } from '@pixerate/editor-svelte/canvas';
+
+  const flow = useSvelteFlow();
+  let container: HTMLDivElement | undefined = $state();
+
+  useAgentToolProvider(() => registry, () => provider, { playback: () => playback });
+  const presence = createCanvasPlaybackSurface(playback, 'canvas', {
+    getNodes: () => nodes,
+    getEdges: () => edges,
+    getViewport: flow.getViewport,
+    container: () => container,
+  });
 </script>
 
-<CanvasEditor … />
-<VectorEditor … />
+<div bind:this={container} style="position: relative; height: 520px;">
+  <SvelteFlow bind:nodes bind:edges … />
+  <PresenceLayer {presence} viewport={flow.getViewport()} />
+</div>
 ```
 
-The custom surface equivalents are `createPlaybackSurface(playback, providerId, options)` and `<PresenceLayer store={surface.presence} />`. React and Svelte take the same options and draw the same cursor.
-
-The cursor uses the `.pixerate-presence` class. Snapshots, `view_editor` and `capture_view` leave it out of their images.
+- `setAgentPlayback(playback)` (and `getAgentPlayback()`) is the context equivalent.
+- `createPlaybackSurface(playback, id, options)` builds a custom surface and takes the same options as React.
+- React and Svelte draw the same cursor.
+- The layer has the `.pixerate-presence` class, so snapshots, `view_editor` and `capture_view` leave it out.
 
 ## Speed, skip and stop
 
 ```ts
 playback.speed = 2;          // takes effect on the next step
-playback.speed = Infinity;   // "Skip": finish what's queued with no animation
-playback.stop();             // stop playing; the calls still run and their results are kept
-playback.say('Checking the layout…');   // a note in the cursor's bubble on the current surface
+playback.speed = Infinity;   // "Skip": no animation from now on; calls run instantly
+playback.stop();             // finish the running performances at once (the calls still run)
+playback.say('Checking the layout…');   // a note in the cursor's bubble on its current surface
+playback.active;             // a performance is playing; playback.subscribe(fn) tells you when it changes
 ```
 
 Each tool call is one undo step, so the user can undo an agent call by call. If the user drags something while the agent is acting, both edits apply, but the agent's call may split into two undo steps. To prevent that, set the editor read-only while `playback.active` is true.
 
 ## Headless, servers and tests
 
-Playback only animates when a surface for the called provider is mounted and visible. Calls run instantly, with identical results, in these cases:
+Playback only animates when a surface for the called provider is attached and visible. Calls run instantly, with identical results, in these cases:
 
-- no editor is mounted (Node, an MCP server with no UI, workers);
-- the editor is hidden and has no `reveal` (see below);
+- no surface is attached (Node, an MCP server with no UI, workers);
+- the surface is hidden and has no `reveal` (see below);
 - `speed` is `Infinity`;
-- the browser tab is in the background. Waits use timers, never animation frames, so a hidden tab never stalls a call.
+- the browser tab is in the background. The canvas surfaces report themselves hidden then, and waits are timed by the clock, never by animation frames, so a call never stalls.
 
 In tests, use the instant clock to run full performances in virtual time and check what was played:
 
 ```ts
-import { createAgentPlayback, createInstantPresenceClock } from '@pixerate/editor/tools';
+import { createAgentPlayback, createInstantPresenceClock, PresenceStore } from '@pixerate/editor/tools';
+import { createCanvasPlaybackLocator } from '@pixerate/editor/canvas';
 
-const clock = createInstantPresenceClock();
-const playback = createAgentPlayback({ clock });
-const steps = playback.record();               // collects every step played
-await registry.callTool('canvas__canvas_add_node', { node: { data: { label: 'Ship' } } });
-expect(steps.map((s) => s.type)).toEqual(['move', 'press', 'release', 'type', 'commit', 'focus']);
+const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+playback.install(registry);
+playback.attach('canvas', { presence: new PresenceStore(), defaultKind: 'node', locate: createCanvasPlaybackLocator({ getNodes: () => nodes }) });
+
+const played = playback.record();              // every step played from now on
+await registry.callTool('canvas__canvas_select', { nodeIds: ['a'] });
+expect(played.map((r) => r.step.type)).toEqual(['move', 'focus', 'press', 'release', 'commit']);
 ```
 
 ## Several agents
 
-Each caller can have its own cursor and queue. `createMcpServer` names the actor after the client's `clientInfo.name`. In your own calls, pass it yourself:
+Each caller can have its own cursor and queue. `createMcpServer` names the actor after the client's `clientInfo`. In your own calls, pass it yourself:
 
 ```ts
-await registry.callTool('vector__run_command', args, { actor: { id: 'reviewer', name: 'Reviewer' } });
+await registry.callTool('commands__run_command', args, { actor: { id: 'reviewer', name: 'Reviewer' } });
 ```
 
-One actor's calls play one after another. Different actors play side by side.
+One actor's calls play one after another. Different actors play side by side, in their own colours.
 
 ## Editors in tabs or panels
 
-If the agent calls a tool for an editor that is mounted but not visible, playback asks the surface to `reveal()` itself before playing. Give the surface a `reveal` that switches to it:
+If the agent calls a tool for an editor that is attached but not visible, playback calls the surface's `reveal()` before playing. Pass one that switches to the editor:
 
 ```tsx
-<VectorEditor playbackReveal={() => setTab('vector')} … />
+useCanvasPlaybackSurface(playback, 'canvas', { …, reveal: () => setTab('canvas') });
 ```
 
 Without `reveal`, a hidden editor's calls run instantly.
-
-## Scripted agent turns
-
-`runToolScript` plays a list of notes and tool calls at reading speed. Use it for tours, demos and end-to-end tests of a skill. Later steps can use earlier results.
-
-```ts
-import { runToolScript } from '@pixerate/editor/tools';
-
-await runToolScript(registry, {
-  id: 'align',
-  prompt: 'Line up the main workflow steps',
-  steps: [
-    { say: 'Listing the nodes.', tool: 'canvas__list_nodes', as: 'nodes' },
-    { say: 'Centring the main path.', tool: 'canvas__align_nodes', args: (ctx) => ({ edge: 'middle', ids: ctx.results.nodes.nodes.map((n) => n.id) }) },
-  ],
-}, { playback, onEvent: (e) => console.log(e) });
-```
-
-Steps have no cursor targets: each tool's own playback decides where the cursor goes.
 
 ## For tool authors: how a call is played
 
@@ -153,20 +185,32 @@ Every call plays at the richest tier the tool supports:
 | Director | `playback: 'self'` on the tool, and the handler drives a director | Live drags, strokes, typing (chart, paint, diagram, rich text) |
 | Plan | `plan(args, state)` on the tool, or `plan(context, params)` on a `CommandSpec` | Exactly the steps you return |
 | Derived | nothing | Glide to the ids in the args, press, run; then a ring on new ids in the result |
-| Instant | (no surface mounted) | The handler runs unchanged |
+| Instant | (no surface attached, or `playback: false`) | The handler runs unchanged |
 
 ### Get the derived tier for free
 
 Use the conventional argument and result names. Playback finds targets by reading them:
 
-- **Arguments:** `id`, `ids`, `layerId`, `clipId`, `trackId`, `nodeId`, `seriesId`, `parameterId`, `range` / `cell` (A1).
-- **Results:** `id`, `ids`, `created[].id`.
+- **Arguments**, also inside a command's `params`:
+  - `id` / `ids`, which take the surface's `defaultKind`;
+  - `nodeId(s)`, `edgeId(s)`, `layerId(s)`, `clipId(s)`, `trackId(s)`, `seriesId`, `parameterId`, `keyframeId`, `shapeId`;
+  - `range` / `cell` (A1), which become kind `cell`.
+- **Results:** `id`, `ids`, `node.id`, `created` (a list, or `{ nodes, edges }`), and the same inside a command's `result`.
 
-Then make sure the surface can locate those ids. Either render `data-<kind>-id="…"` on the element (`data-vector-id`, `data-layer-id`, …), or give the surface a `locate(ref)` that returns a rectangle in surface coordinates.
+Then make sure the surface's `locate` can find those refs.
+
+Playback picks the surface in this order:
+
+1. the plan's `surface`;
+2. the provider's `playbackSurface`;
+3. the provider's id;
+4. the provider's namespace.
+
+For commands it uses `CommandSpec.playbackSurface`, else the command's `scope`, else its id prefix.
 
 ### Add a planner
 
-A planner is a pure function. It gets the validated arguments and the current state (before the call) and returns steps in surface coordinates (the editor's own document or canvas units, never screen pixels):
+A planner is a pure function. It gets the validated arguments and the state before the call, and returns steps in surface coordinates (the editor's own document or canvas units, never screen pixels):
 
 ```ts
 import type { PlaybackStep } from '@pixerate/editor/tools';
@@ -184,44 +228,46 @@ const addShape: CommandSpec<VectorContext, AddShapeParams> = {
 };
 ```
 
+A tool's `plan(args, state)` gets `state.locate(ref)` (the provider's surface) and `state.surfaceId`. A plan can also return `{ steps, surface, readOnly }` to play on another surface, or to be treated as a read.
+
 The steps are:
 
 | Step | Does |
 | --- | --- |
 | `move { to, ms? }` | Glide the cursor to a point |
-| `target { ref }` | Glide to whatever `ref` locates (`{ kind: 'node', id }`, `{ kind: 'control', name }`, `{ kind: 'cell', ref }`) |
-| `focus { rect }` | Draw a highlight ring around a rectangle |
+| `target { ref, ms? }` | Glide to whatever `ref` locates and ring it (`{ kind: 'node', id }`, `{ kind: 'cell', id: 'B2:C4' }`, `{ kind: 'control', id: 'title' }`); skipped when nothing is found |
+| `focus { rect }` | Draw a highlight ring around a rectangle (`null` clears it) |
 | `press` / `release` | Press or release the cursor's button |
 | `drag { to, ms? }` | Move with the button down (cursor only; the change applies at `commit`) |
-| `type { text, ms? }` | Show text being typed at the cursor |
+| `type { text, ms? }` | Type text out in the cursor's bubble |
 | `say { text, ms? }` | Show a note in the cursor's bubble |
-| `commit` | Run the handler. It runs exactly once, and is appended to the plan if you leave it out |
+| `wait { ms }` | Pause |
+| `commit` | Run the handler. It runs exactly once and is appended if you leave it out. Steps after it play once the change is applied |
 
 Rules for planners:
 
 - **Pure.** Read state, never change it. The same arguments and state give the same steps.
-- **Pre-call state.** Ids that the call will create don't exist yet. Plan toward the position where the change will land; the derived post-roll points at new ids from the result.
+- **Pre-call state.** Ids the call will create don't exist yet. Plan toward the position where the change will land; the derived post-roll rings new ids from the result. `planCanvasToolPlayback` shows the pattern: the canvas planner already knows where a new node goes.
+- **Live state for the post-roll.** The post-roll locates new ids right after the handler returns. Make `locate` read a copy you update synchronously, not state that renders later.
 - **Never block a call.** If a planner throws or returns nothing, the call falls back to the derived tier.
 - **Durations are optional.** Leave `ms` out and the cursor moves at the shared natural pace, scaled by `speed`.
 - **Live previews need a director.** If the change should update step by step as the cursor moves (a value following a drag, paint landing along a stroke), write a director and mark the tool `playback: 'self'`. Use `PresenceStore`, `PerformanceQueue` and `tweenPresenceCursor` from `@pixerate/editor/tools`.
 
 ### Test it
 
-Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()` and a fake surface. Assert two things:
+Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()` and a surface (a `PresenceStore` and a `locate`), as in [Headless, servers and tests](#headless-servers-and-tests). Assert two things:
 
-- The recorded steps are what you planned.
-- The result matches a call made without playback.
+- `playback.record()` holds the steps you planned.
+- The result matches a call made at `speed: Infinity`.
 
-The conformance test in `tests/command-tools.test.ts` fails when a write tool on a playback-ready provider has no `plan`, no `playback: 'self'` and nothing the derived tier can locate.
+`packages/core/tests/agent-playback.test.ts` and `canvas-playback.test.ts` are worked examples.
 
 ## Supported editors
 
-Planned in this order (see the [plan](agent-playback-plan.md)):
-
 | Editor | Playback |
 | --- | --- |
-| Rich text, chart, paint, diagram | Today, through `presence` / `director`; moves to `playback` in phase 7 |
-| Canvas | Phase 1 |
-| Vector | Phase 2 |
-| Image | Phase 3 |
-| Spreadsheet, video, animation, parameters | Phases 4–6 |
+| Canvas: `createEditorMcpToolProvider` (planned moves) and the arrange commands (derived) | Now |
+| Rich text, chart, paint, diagram | Today through their own `presence` / `director`; they move onto playback later |
+| Vector | Next |
+| Image | After vector |
+| Spreadsheet, video, animation, parameters | Later phases |

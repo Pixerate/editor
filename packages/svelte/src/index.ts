@@ -16,6 +16,7 @@ export * from "./history/index.js";
 export * from "./fileImport.svelte.js";
 export * from "./docxExport.svelte.js";
 export * from "./agentTools.svelte.js";
+export * from "./playback/index.js";
 export * from "./toolBridge.svelte.js";
 export * from "./toolRegistryView.svelte.js";
 export * from "./outline.svelte.js";

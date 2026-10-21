@@ -1,4 +1,4 @@
-import { ToolRegistry, type SkillFiles } from "@pixerate/editor/agent";
+import { ToolRegistry, createAgentPlayback, type SkillFiles } from "@pixerate/editor/agent";
 import { CommandRegistry, createCommandToolProvider } from "@pixerate/editor/commands";
 
 /**
@@ -7,6 +7,18 @@ import { CommandRegistry, createCommandToolProvider } from "@pixerate/editor/com
  * with `useAgentToolProvider`, so the tool list changes as you switch tabs.
  */
 export const demoToolRegistry = new ToolRegistry();
+
+/**
+ * Agent playback for the demo: every call through `demoToolRegistry` (the scripted agents, the
+ * agent tools panel, or an MCP client on the bridge) is acted out by the agent's cursor on the
+ * editor surface it targets, at `?agentSpeed=` (Infinity for none). Editors without a surface yet
+ * run their calls instantly.
+ */
+export const demoPlayback = createAgentPlayback({
+  speed: Number(new URLSearchParams(window.location.search).get("agentSpeed") ?? 1) || 1,
+  actor: { id: "agent", name: "Agent", color: "#7c3aed" },
+});
+demoPlayback.install(demoToolRegistry);
 
 /**
  * One command registry for the whole demo: the command palette (Mod+K) and the

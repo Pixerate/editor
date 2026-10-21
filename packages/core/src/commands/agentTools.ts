@@ -2,6 +2,7 @@
 // atomic batches from vectorcraft-main/crates/mcp/src/tools.rs (`command_batch`) (MIT OR Apache-2.0, © ArtCraft
 // Team and contributors). See THIRD_PARTY_NOTICES.md.
 import type { AgentTool, AgentToolProvider, McpToolResult } from '../tools/registry.js';
+import { derivePlaybackSteps, type PlaybackPlanResult, type PlaybackStep } from '../tools/playback.js';
 import { rankCommands } from './palette.js';
 import type { CommandRegistry, CommandResult } from './registry.js';
 
@@ -91,6 +92,25 @@ export function createCommandToolProvider<TContext = any>(
 		return registry.executeAsync(id, params ?? {}, context());
 	}
 
+	/** Agent playback for one command: its own plan, else a visit to the ids its params name. */
+	function planOne(id: string, params: unknown): PlaybackPlanResult | null {
+		const spec = registry.get(id);
+		if (!spec) return null;
+		const surface = spec.playbackSurface ?? spec.scope ?? (id.includes('.') ? id.slice(0, id.indexOf('.')) : undefined);
+		const planned = spec.plan?.(context(), (params ?? {}) as never);
+		const own = !planned ? [] : Array.isArray(planned) ? planned : planned.steps;
+		const steps = own.length ? own : derivePlaybackSteps(params);
+		return {
+			steps,
+			...(surface ? { surface } : {}),
+			...(planned && !Array.isArray(planned) && planned.surface ? { surface: planned.surface } : {}),
+			...(spec.readOnly ? { readOnly: true } : {})
+		};
+	}
+
+	const hasRefs = (value: unknown): boolean =>
+		typeof value === 'string' ? value.startsWith('$') : Array.isArray(value) ? value.some(hasRefs) : !!value && typeof value === 'object' && Object.values(value).some(hasRefs);
+
 	const listCommands: AgentTool = {
 		name: 'list_commands',
 		title: 'List commands',
@@ -142,6 +162,7 @@ export function createCommandToolProvider<TContext = any>(
 				additionalProperties: false
 			},
 			annotations: { title: 'Run a command', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+			plan: ({ id, params }) => planOne(String(id), params),
 			handler: async ({ id, params }) => {
 				const result = await runOne(String(id), params);
 				return result.ok ? { id: result.id, ok: true, result: toJson(result.result) } : errorResult(result);
@@ -185,6 +206,22 @@ export function createCommandToolProvider<TContext = any>(
 			destructiveHint: true,
 			idempotentHint: false,
 			openWorldHint: false
+		},
+		// Plays the steps' own plans one after another, then runs the batch once. Steps whose
+		// params refer to earlier results can't be planned before the batch runs and are skipped.
+		plan: ({ steps }) => {
+			const list = (steps ?? []) as Array<{ id: string; params?: unknown }>;
+			let surface: string | undefined;
+			const out: PlaybackStep[] = [];
+			for (const s of list) {
+				if (hasRefs(s.params)) continue;
+				const planned = planOne(s.id, s.params);
+				if (!planned) continue;
+				surface ??= planned.surface;
+				if (planned.surface && planned.surface !== surface) continue;
+				out.push(...planned.steps.filter((step) => step.type !== 'commit'));
+			}
+			return out.length || surface ? { steps: out.length ? [...out, { type: 'commit' }] : [], ...(surface ? { surface } : {}) } : null;
 		},
 		handler: async ({ steps, stopOnError = true, atomic = false, label = 'Run commands' }) => {
 			let completed = 0;

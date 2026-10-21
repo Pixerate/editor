@@ -2691,3 +2691,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The `animation` toolset listed about 827k characters of tool definitions (~200k tokens), and `edit_animation` alone took 303k. Every host that listed the toolset paid for it, even with scoping.
 - **Root Cause**: The full command schema (a 20-branch `oneOf`, each branch repeating the shared fields and the easing schema) was a JS constant spread into every tool that takes commands or shots. JSON serialization copies it at every reference: three times in `edit_animation` (inside `insert_shots`, `update_shot` and `add_commands` ops), and once more in each of five other tools.
 - **Solution / Workaround**: Put shared shapes in the tool's `$defs` and refer to them with `{ $ref: '#/$defs/<name>' }`. `validateJsonSchema` resolves local refs against the tool's root schema, and `withDefs` in `animation-editor/tools.ts` adds only the defs a tool uses. For a big discriminated union, carry one flattened strict object (every field once, with `additionalProperties: false` and descriptions saying which types take each field), check the per-type rules in the handler or edit layer with errors that name the field, and serve each type's full schema from a read tool (`describe_animation_command`). `tests/animation-editor.test.ts` keeps a size budget on the toolset, so measure with `JSON.stringify` of `registry.listTools().tools` before adding a large schema.
+
+### [core/tools] Agent Playback Plans See the State Before the Call
+
+- **Issue / Symptom**: A tool's `plan` that looks up the id the call is about to create finds nothing, so the cursor goes nowhere; or the post-roll ring sits where a node used to be.
+- **Root Cause**: `AgentPlayback` runs `plan(args, state)` before the handler (the call has not happened yet), and the post-roll locates result ids right after the handler returns. A host that updates React state asynchronously still has the old nodes in `getNodes()` at that moment.
+- **Solution / Workaround**: Plan toward where the change will land (the canvas planner already computes a new node's position; `planCanvasToolPlayback` uses it) and leave created ids to the post-roll, which reads them from the result. Give the surface's `getNodes` a live copy that `applySteps` updates synchronously (the demo's `live` ref in `CanvasTab.tsx`), not React state that renders later.
+
+### [core/tools] `run_command` Plays on the Surface Named by the Command, Not the Provider
+
+- **Issue / Symptom**: `commands__run_command { id: 'canvas.alignMiddle' }` ran instantly even though the canvas surface was attached.
+- **Root Cause**: The command tools belong to the `commands` provider, which has no surface. Playback looks a surface up by the plan's `surface`, then the provider's `playbackSurface`, id and namespace.
+- **Solution / Workaround**: The command tool's plan names the surface from the command: `CommandSpec.playbackSurface`, else its `scope`, else the id's prefix (`canvas.` → `canvas`). Attach the surface under that name (the canvas demo attaches `canvas`, which is also the canvas tool provider's id), or set `playbackSurface` on the command.
+
+### [core/tools] Playback Waits Must Be Timed by the Clock, Not Counted in Frames
+
+- **Issue / Symptom**: In a background tab, a glide of 50 frames took 50 seconds and blocked the tool call.
+- **Root Cause**: Browsers throttle `setTimeout` in hidden tabs to about once a second, and suspend `requestAnimationFrame`.
+- **Solution / Workaround**: `AgentPlayback` tweens by elapsed `clock.now()` (a throttled tab just draws fewer frames, never takes longer), and the canvas surfaces report `visible() === false` while `document.visibilityState` is `hidden`, so calls then run instantly. Never make a tool call wait on animation frames.

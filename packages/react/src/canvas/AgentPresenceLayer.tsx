@@ -7,6 +7,9 @@ export interface AgentPresenceLayerProps {
 }
 
 /**
+ * @deprecated Use `<PresenceLayer>` with `useCanvasPlaybackSurface` (agent playback), which
+ * plays every tool call; this layer only draws `AgentPresence` objects you place yourself.
+ *
  * Visual multiplayer and agent choreography presence layer for React Canvas.
  * Renders floating cursor indicators, agent name tags, and active status tooltips.
  */

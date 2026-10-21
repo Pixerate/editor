@@ -135,6 +135,8 @@ export function createMcpServer(registry: ToolSource, options: McpServerOptions)
 	};
 	const readSkillPath = (path: string) => skillFiles?.[path] ?? skillFiles?.[`./${path}`];
 	let initialized = false;
+	// The client's name, so agent playback gives each connected client its own cursor.
+	let actor: { id: string; name: string } | undefined;
 	let unsubscribe: (() => void) | null = null;
 	const running = new Map<JsonRpcId, AbortController>();
 
@@ -151,6 +153,10 @@ export function createMcpServer(registry: ToolSource, options: McpServerOptions)
 
 		switch (request.method) {
 			case 'initialize': {
+				const client = params.clientInfo as { name?: unknown; title?: unknown } | undefined;
+				if (client && typeof client.name === 'string' && client.name) {
+					actor = { id: `mcp:${client.name}`, name: typeof client.title === 'string' && client.title ? client.title : client.name };
+				}
 				const instructions = typeof options.instructions === 'function' ? options.instructions(registry) : options.instructions;
 				const requested = String(params.protocolVersion ?? '');
 				const protocolVersion = (MCP_PROTOCOL_VERSIONS as readonly string[]).includes(requested)
@@ -195,7 +201,7 @@ export function createMcpServer(registry: ToolSource, options: McpServerOptions)
 				const controller = new AbortController();
 				if (!isNotification) running.set(id as JsonRpcId, controller);
 				try {
-					const result = await registry.callTool(name, args ?? {}, { signal: controller.signal });
+					const result = await registry.callTool(name, args ?? {}, { signal: controller.signal, ...(actor ? { actor } : {}) });
 					// A cancelled request gets no response (MCP cancellation semantics).
 					if (controller.signal.aborted) return null;
 					return { jsonrpc: '2.0', id, result };

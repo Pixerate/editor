@@ -1,4 +1,4 @@
-import type { AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
+import type { AgentPlayback, AgentToolProvider, ToolRegistry } from "@pixerate/editor/tools";
 
 type MaybeGetter<T> = T | (() => T);
 
@@ -15,7 +15,14 @@ const read = <T>(value: MaybeGetter<T>): T =>
 export function useAgentToolProvider(
   registry: MaybeGetter<ToolRegistry | null | undefined>,
   provider: MaybeGetter<AgentToolProvider | null | undefined>,
+  options: { playback?: MaybeGetter<AgentPlayback | null | undefined> } = {},
 ): void {
+  $effect(() => {
+    const currentRegistry = read(registry);
+    const playback = options.playback === undefined ? undefined : read(options.playback);
+    // Plays the registry's calls with this playback (installed once per registry).
+    if (currentRegistry && playback) playback.install(currentRegistry);
+  });
   $effect(() => {
     const currentRegistry = read(registry);
     const currentProvider = read(provider);
