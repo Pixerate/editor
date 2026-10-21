@@ -1,5 +1,6 @@
 import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from './schema.js';
 import { ToolRegistryView, type ToolViewOptions } from './view.js';
+import { stripPrototypeKeys } from './safe-json.js';
 
 /**
  * MCP-shaped tool definition, as returned by `tools/list`.
@@ -425,7 +426,9 @@ export class ToolRegistry implements ToolSource {
 			return errorResult({ code: 'unknown_tool', message: unknownToolMessage(name, match.candidates), tool: name });
 		}
 		name = found.name;
-		const input = args ?? {};
+		// Arguments are untrusted model output: drop `__proto__` / `constructor` /
+		// `prototype` keys before any handler copies them (GHSA-cp6q-959q-f8rh).
+		const input = stripPrototypeKeys(args ?? {});
 		if (this.options.validateArguments) {
 			const details = validateJsonSchema(input, found.tool.inputSchema);
 			if (details.length > 0) {

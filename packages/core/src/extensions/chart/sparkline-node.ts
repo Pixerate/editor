@@ -1,4 +1,5 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import type { Node as ProsemirrorNode } from "@tiptap/pm/model";
 import { layoutSparkline, type ChartSparklineKind } from "../../chart/sparkline";
 import { chartSceneToDomSpec } from "../../chart/svg";
@@ -139,7 +140,7 @@ export const Sparkline = Node.create<SparklineNodeOptions>({
     });
     return [
       "span",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         "data-type": "sparkline",
         class: "pixerate-sparkline",
       }),

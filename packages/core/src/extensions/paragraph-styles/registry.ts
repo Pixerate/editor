@@ -1,3 +1,4 @@
+import { isUnsafeJsonKey } from "../../tools/safe-json";
 // Portions ported from wordcraft/crates/doc/src/styles.rs and wordcraft/crates/doc/src/resolve.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
 /** Paragraph styles format whole blocks; character styles format runs of text. */
@@ -281,7 +282,7 @@ function overlay<T extends object>(base: T, patch: T | undefined | null): T {
   if (!patch) return base;
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   Object.entries(patch).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) out[key] = value;
+    if (value !== undefined && value !== null && !isUnsafeJsonKey(key)) out[key] = value;
   });
   return out as T;
 }

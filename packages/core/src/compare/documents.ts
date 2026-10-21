@@ -24,6 +24,7 @@ import {
 } from "../extensions/track-changes";
 import { createReviewId, type ReviewAuthor } from "../extensions/comment-store";
 import { diffSequences } from "./diff";
+import { stripPrototypeKeys } from "../tools/safe-json";
 
 /** A document to compare: a ProseMirror node, its JSON, or HTML (needs a DOM). */
 export type CompareSource = ProsemirrorNode | Record<string, any> | string;
@@ -157,7 +158,7 @@ function toNode(source: CompareSource, schema: Schema): ProsemirrorNode {
     const node = source as ProsemirrorNode;
     return node.type.schema === schema ? node : schema.nodeFromJSON(node.toJSON());
   }
-  return schema.nodeFromJSON(source);
+  return schema.nodeFromJSON(stripPrototypeKeys(source));
 }
 
 function newAttributes(ctx: Context): TrackedChangeAttributes {

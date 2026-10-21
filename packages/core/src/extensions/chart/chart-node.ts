@@ -1,4 +1,5 @@
-import { Node, mergeAttributes, type Editor } from "@tiptap/core";
+import { Node, type Editor } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import type { Node as ProsemirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { chartFromMermaid, chartToMermaid } from "../../chart/mermaid";
@@ -233,7 +234,7 @@ export const Chart = Node.create<ChartNodeOptions>({
     const svg = staticChartSvg(node, this.options);
     return [
       "div",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         "data-type": "chart",
         class: "pixerate-chart",
       }),

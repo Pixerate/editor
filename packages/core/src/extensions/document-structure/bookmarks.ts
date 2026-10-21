@@ -1,4 +1,5 @@
-import { Mark, mergeAttributes } from "@tiptap/core";
+import { Mark } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import type { Node as ProsemirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import { generateStructureId, scrollDomAtPos } from "./utils";
@@ -138,7 +139,7 @@ export const Bookmark = Mark.create<BookmarkOptions>({
   renderHTML({ HTMLAttributes }) {
     return [
       "span",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         class: "pixerate-bookmark",
       }),
       0,

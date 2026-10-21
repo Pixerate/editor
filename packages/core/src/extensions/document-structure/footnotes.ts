@@ -1,4 +1,5 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import type { Node as ProsemirrorNode, Schema } from "@tiptap/pm/model";
 import {
   NodeSelection,
@@ -291,7 +292,7 @@ export const FootnoteReference = Node.create<FootnotesOptions>({
     const id = node.attrs.id;
     return [
       "sup",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         "data-type": "footnote-reference",
         class: "pixerate-footnote-ref",
         ...(id ? { id: `fnref-${id}` } : {}),
@@ -468,7 +469,7 @@ export const Footnotes = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "section",
-      mergeAttributes(HTMLAttributes, {
+      safeMergeAttributes(HTMLAttributes, {
         "data-type": "footnotes",
         class: "pixerate-footnotes",
         role: "doc-endnotes",
@@ -530,7 +531,7 @@ export const Footnote = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "li",
-      mergeAttributes(HTMLAttributes, {
+      safeMergeAttributes(HTMLAttributes, {
         "data-type": "footnote",
         class: "pixerate-footnote",
       }),

@@ -12,6 +12,7 @@ export * from "./slots";
 export * from "./import";
 export * from "./compare";
 export * from "./export";
+export { stripPrototypeKeys, isUnsafeJsonKey, UNSAFE_JSON_KEYS } from "./tools/safe-json";
 
 // Re-export common tiptap types for convenience
 export type { Editor, Content, Extensions, EditorOptions } from "@tiptap/core";

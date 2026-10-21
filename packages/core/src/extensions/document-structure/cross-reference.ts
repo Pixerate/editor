@@ -1,4 +1,5 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import type { Node as ProsemirrorNode } from "@tiptap/pm/model";
 import {
   Plugin,
@@ -203,7 +204,7 @@ export const CrossReference = Node.create<CrossReferenceOptions>({
       !broken && targetType === "heading" && targetId ? { href: `#${targetId}` } : {};
     return [
       "a",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, href, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, href, {
         "data-type": "cross-reference",
         class: broken ? "pixerate-cross-reference is-broken" : "pixerate-cross-reference",
       }),

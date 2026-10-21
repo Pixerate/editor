@@ -1,4 +1,5 @@
-import { Mark, mergeAttributes, type Editor } from "@tiptap/core";
+import { Mark, type Editor } from "@tiptap/core";
+import { safeMergeAttributes } from "./safe-merge-attributes";
 import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as ProsemirrorNode, Mark as ProsemirrorMark } from "@tiptap/pm/model";
@@ -190,7 +191,7 @@ export const Comments = Mark.create<CommentsOptions, CommentsStorage>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["span", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
+    return ["span", safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
   },
 
   addCommands() {
