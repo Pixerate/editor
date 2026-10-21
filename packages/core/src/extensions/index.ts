@@ -11,6 +11,7 @@ export * from "./markdown";
 export * from "./image";
 export * from "./comment-store";
 export * from "./comments";
+export * from "./safe-merge-attributes";
 export * from "./track-changes";
 export * from "./document-compare";
 export * from "./file-import";

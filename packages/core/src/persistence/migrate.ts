@@ -1,6 +1,8 @@
 // Portions ported from craft-libs-main/crates/settings/src/migrate.rs, src/document.rs and
 // src/error.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
+import { isUnsafeJsonKey, stripPrototypeKeys } from "../tools/safe-json";
+
 /** A section whose stored value did not fit; its defaults were used instead. */
 export interface SectionProblem {
   /** Top-level key of the section. */
@@ -91,7 +93,7 @@ function toObject(json: unknown): JsonObject | undefined {
       return undefined;
     }
   }
-  return isObject(value) ? deepClone(value) : undefined;
+  return isObject(value) ? stripPrototypeKeys(deepClone(value)) : undefined;
 }
 
 /**
@@ -227,7 +229,7 @@ export function loadSections<T>(
   }
   const unknown: JsonObject = {};
   for (const key of Object.keys(source)) {
-    if (!(key in sections) && !ignore.has(key)) unknown[key] = source[key];
+    if (!(key in sections) && !ignore.has(key) && !isUnsafeJsonKey(key)) unknown[key] = source[key];
   }
   return { value, problems, unknown };
 }

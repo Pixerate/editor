@@ -1,4 +1,5 @@
-import { Extension, Mark, mergeAttributes, type Editor } from "@tiptap/core";
+import { Extension, Mark, type Editor } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { Node as ProsemirrorNode, Mark as ProsemirrorMark } from "@tiptap/pm/model";
 import {
@@ -303,7 +304,7 @@ export const CharacterStyle = Mark.create({
     return [{ tag: "span[data-char-style]" }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ["span", mergeAttributes(HTMLAttributes), 0];
+    return ["span", safeMergeAttributes(HTMLAttributes), 0];
   },
 });
 

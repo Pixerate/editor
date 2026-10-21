@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/security] An Own `__proto__` Key From JSON Becomes a Prototype, and ProseMirror Renders Inherited Attributes (GHSA-cp6q-959q-f8rh)
+
+- **Issue / Symptom**: Document JSON such as `{"extra": {"__proto__": {"onerror": "…", "src": "x:"}}}` rendered `onerror` and `src` on a mark's `<span>`, although neither was an own key of any object we built. Dependabot flags every `@tiptap/core` 2.x for this advisory.
+- **Root Cause**: `JSON.parse` makes `__proto__` an *own* key. Code that copies keys with bracket assignment (`out[key] = value`, `Object.assign`) turns it into the copy's prototype instead, and `DOMSerializer.renderSpec()` walks attributes with `for…in`, so inherited keys reach `setAttribute`. TipTap's `mergeAttributes()` did this until `@tiptap/core` 2.27.3 (backported quietly; the advisory still lists only 3.30.4 as patched). Standard schemas are safe, since ProseMirror's `computeAttrs` reads only declared attribute names. The risk needs an attribute whose `renderHTML` returns an object from content, `HTMLAttributes` from untrusted config, or our own key-by-key merges (agent tool handlers, the style registry).
+- **Solution / Workaround**: In `renderHTML`, use `safeMergeAttributes` (from `@pixerate/editor`), never TipTap's `mergeAttributes`. Run untrusted JSON through `stripPrototypeKeys` before `setContent`, `Node.fromJSON` or `Slice.fromJSON`; `EditorController`, the rich clipboard, `compareDocuments`, `CommentStore.parse`, the persistence loaders and `ToolRegistry.callTool` already do. In merges of your own, skip `isUnsafeJsonKey(key)`. Keep the TipTap floor at `^2.27.3`. `tests/prototype-pollution.test.ts` mocks the unpatched `mergeAttributes`, so the regression shows even though the installed TipTap is fixed.
+
 ### [monorepo/build] `import.meta` Breaks the CommonJS Build, and tsup's `shims` Breaks Entry Isolation
 
 - **Issue / Symptom**: `pnpm check:packages` failed with `SyntaxError: Cannot use 'import.meta' outside a module` when requiring `@pixerate/editor/bridge` from CommonJS, although the code guarded it with `typeof __dirname === 'string' ? __dirname : …import.meta.url…`. Turning on tsup's `shims: true` fixed that but made `tests/entry-isolation.test.ts` fail: browser entries (`chart`, `canvas`, `animation`…) suddenly imported `path` and `url`.

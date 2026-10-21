@@ -1,3 +1,4 @@
+import { stripPrototypeKeys } from "../tools/safe-json";
 /**
  * Who made a comment, reply or tracked change.
  */
@@ -143,7 +144,7 @@ export class CommentStore {
 
   /** Parses `toJSON()` output (or a plain thread array). */
   static parse(json: string | CommentThread[] | SerializedComments): CommentThread[] {
-    const value = typeof json === "string" ? JSON.parse(json) : json;
+    const value = stripPrototypeKeys(typeof json === "string" ? JSON.parse(json) : json);
     const list = Array.isArray(value) ? value : value?.threads;
     if (!Array.isArray(list)) return [];
     return list.filter((t: any) => t && t.id != null).map(normalizeThread);

@@ -17,3 +17,4 @@ export * from './dom-capture.js';
 export * from './view.js';
 export * from './search.js';
 export * from './skills.js';
+export * from './safe-json.js';

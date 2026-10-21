@@ -1,4 +1,5 @@
 import { Slice, type Schema } from "@tiptap/pm/model";
+import { stripPrototypeKeys } from "../tools/safe-json";
 
 /**
  * Custom clipboard MIME type for content copied from a @pixerate/editor
@@ -75,7 +76,8 @@ export function parseRichClipboardPayload(data: string | null | undefined, schem
     if (!payload || payload.version !== 1) return null;
     if (payload.schema !== getSchemaSignature(schema)) return null;
     if (!payload.slice) return null;
-    return Slice.fromJSON(schema, payload.slice as any);
+    // Clipboard data is untrusted: drop `__proto__` keys before ProseMirror reads it.
+    return Slice.fromJSON(schema, stripPrototypeKeys(payload.slice) as any);
   } catch {
     return null;
   }

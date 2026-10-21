@@ -8,6 +8,7 @@ import {
   markdownToTipTapHtml,
   getEditorMarkdown,
 } from "./serializers";
+import { stripPrototypeKeys } from "./tools/safe-json";
 
 export interface EditorControllerOptions extends Partial<
   Omit<EditorOptions, "element" | "content">
@@ -65,7 +66,8 @@ export class EditorController {
         ? plainTextToTipTapHtml(content)
         : markdownMode && typeof content === "string"
           ? markdownToTipTapHtml(content)
-          : content;
+          : // JSON content may come from storage or the network: drop `__proto__` keys.
+            stripPrototypeKeys(content);
 
     this.editor = new Editor({
       element: element || undefined,

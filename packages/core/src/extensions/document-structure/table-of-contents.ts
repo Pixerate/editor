@@ -1,4 +1,5 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node } from "@tiptap/core";
+import { safeMergeAttributes } from "../safe-merge-attributes";
 import {
   Plugin,
   PluginKey,
@@ -198,7 +199,7 @@ export const TableOfContents = Node.create<TableOfContentsOptions>({
 
     return [
       "nav",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         "data-type": "table-of-contents",
         "aria-label": node.attrs.title || "Table of contents",
         class: "pixerate-toc",

@@ -1,4 +1,5 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node } from "@tiptap/core";
+import { safeMergeAttributes } from "./safe-merge-attributes";
 
 export const LoadingNode = Node.create({
   name: "loadingNode",
@@ -31,7 +32,7 @@ export const LoadingNode = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "span",
-      mergeAttributes(HTMLAttributes, {
+      safeMergeAttributes(HTMLAttributes, {
         "data-type": "loading",
         class: "inline-flex items-center px-1.5 py-0.5 text-xs text-muted-foreground animate-pulse",
       }),

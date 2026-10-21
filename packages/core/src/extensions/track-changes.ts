@@ -1,5 +1,6 @@
 // Portions ported from wordcraft/crates/engine/src/cmd/moves.rs and wordcraft/crates/engine/src/cmd/review.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
-import { Extension, Mark, mergeAttributes, type Editor } from "@tiptap/core";
+import { Extension, Mark, type Editor } from "@tiptap/core";
+import { safeMergeAttributes } from "./safe-merge-attributes";
 import {
   Plugin,
   PluginKey,
@@ -401,7 +402,7 @@ export const TrackedInsertion = Mark.create<TrackedMarkOptions>({
       : this.options.HTMLAttributes;
     return [
       "ins",
-      mergeAttributes(base, HTMLAttributes, {
+      safeMergeAttributes(base, HTMLAttributes, {
         "data-change-type": "insertion",
       }),
       0,
@@ -447,7 +448,7 @@ export const TrackedDeletion = Mark.create<TrackedMarkOptions>({
       : this.options.HTMLAttributes;
     return [
       "del",
-      mergeAttributes(base, HTMLAttributes, {
+      safeMergeAttributes(base, HTMLAttributes, {
         "data-change-type": "deletion",
       }),
       0,
@@ -495,7 +496,7 @@ export const TrackedFormatChange = Mark.create<{ HTMLAttributes: Record<string, 
   renderHTML({ HTMLAttributes }) {
     return [
       "span",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      safeMergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         "data-change-type": "format",
       }),
       0,

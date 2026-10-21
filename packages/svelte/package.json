@@ -147,14 +147,14 @@
   },
   "dependencies": {
     "@pixerate/editor": "workspace:*",
-    "@tiptap/extension-bubble-menu": "^2.11.5",
-    "@tiptap/extension-placeholder": "^2.11.5",
-    "@tiptap/starter-kit": "^2.11.5"
+    "@tiptap/extension-bubble-menu": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3"
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.4",
-    "@tiptap/core": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
+    "@tiptap/core": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
     "@xyflow/svelte": "^1.6.0",
     "svelte": "^5.57.2"
   },
@@ -170,8 +170,8 @@
     "@dagrejs/dagre": "^1.1.4",
     "@sveltejs/package": "^3.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@tiptap/core": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
+    "@tiptap/core": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
     "@types/dagre": "^0.7.52",
     "@xyflow/svelte": "^1.7.0",
     "svelte": "^5.57.2",
