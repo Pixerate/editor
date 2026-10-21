@@ -3,7 +3,8 @@
   // between server and client renders.
   let nextId = 0;
 
-  export type ChartInspectorSection = 'type' | 'style' | 'titles' | 'options' | 'legend' | 'axes' | 'series';
+  import type { ChartInspectorSection } from './types.js';
+  export type { ChartInspectorSection };
 </script>
 
 <script lang="ts">

@@ -1,10 +1,10 @@
-# Image editor layers (design proposal)
+# Image editor layers
 
-**Status:** decisions recorded (see [Decisions](#decisions)). Phase 1 is implemented; where it differs from this proposal, [Implementation notes](#implementation-notes) says how and why. The PSD work depends on it.
+**Status:** implemented. All five phases shipped (ending with PSD in #206), and so did every follow-up the design listed: layer effects, Free Transform, smart objects, shape and type layers, retouch tools, 16- and 32-bit layers and colour management, plus provider effects. [Built since v1](#built-since-v1) summarises each. The design below is kept as written, with [Implementation notes](#implementation-notes) saying where the code differs and why. What is still open is in [outstanding.md](./outstanding.md#image-editor).
 
-Today `@pixerate/editor/image-editor` edits one image. This proposal adds a real layer stack (pixel, adjustment and group layers with masks, blend modes, clipping and opacity) and painting on tiled, copy-on-write pixel storage. Once that exists, Photoshop PSD read and write maps almost one to one.
+Before this work `@pixerate/editor/image-editor` edited one image. The design adds a real layer stack (pixel, adjustment and group layers with masks, blend modes, clipping and opacity) and painting on tiled, copy-on-write pixel storage. Once that exists, Photoshop PSD read and write maps almost one to one.
 
-## Today
+## Before layers
 
 | Part | Where | Notes |
 |---|---|---|
@@ -28,7 +28,7 @@ Two limits rule out "just add pixel layers on top". First, adjustments run as on
 - Old documents (schema v1 / v2) open and render exactly as before. Existing APIs, components and agent tools keep working.
 - Every capability is reachable by agents (AGENTS.md §4), with parity across core, React and Svelte (§3).
 
-**Not in v1:** layer effects (drop shadow, stroke …; since added as a follow-up, see `raster/effects` and the README's Image Layer Effects row), type, shape and smart-object layers, free transform of layers (moving is in), clone / heal / smudge / mixer tools, 16-bit or float layers, colour management. Each is planned as a follow-up under [Follow-ups after v1](#follow-ups-after-v1).
+**Not in v1:** layer effects, type, shape and smart-object layers, free transform of layers (moving is in), clone / heal / smudge / mixer tools, 16-bit or float layers, colour management. All of them shipped later; see [Built since v1](#built-since-v1).
 
 ## Document model
 
@@ -111,7 +111,7 @@ activeTarget: 'pixels' | 'mask';
 
 ## Module layout
 
-The surfaces, the generic layer stack and the compositor are shared with the planned paint editor (`docs/paint-editor.md`), so they live outside the image editor, in modules with no DOM or framework imports (typed arrays only, so they run in Node and Workers):
+The surfaces, the generic layer stack and the compositor are shared with the paint editor ([paint-editor.md](./paint-editor.md)), so they live outside the image editor, in modules with no DOM or framework imports (typed arrays only, so they run in Node and Workers):
 
 | Module | Subpath | Holds |
 |---|---|---|
@@ -271,7 +271,7 @@ The plan is to port the needed subset to TypeScript, as earlier photocraft ports
 
 **Mapping.** Pixel layers, groups (including pass-through), adjustment layers, user masks (rect + default colour → `RasterMask`), clipping, opacity, fill, visibility and 26 of the 27 blend modes map directly.
 
-**Import gaps.** Each of these produces a warning listing the affected layers:
+**Import gaps (as planned for v1; most were closed later, see [PSD today](#psd-today)).** Each of these produces a warning listing the affected layers:
 - Type, smart-object, fill and shape layers come in as pixel layers, using the raster Photoshop stores in their channels.
 - Layer effects (`lfx2`) are not rendered.
 - Dissolve becomes Normal.
@@ -293,7 +293,7 @@ The plan is to port the needed subset to TypeScript, as earlier photocraft ports
 - **Compositing speed in JS** at 12 MP or more with many layers. Mitigations: prefix cache, dirty tiles, visible tiles only, mips. A Worker is the next step if the phase 1 benchmarks miss the budget (target: under 16 ms per pointer event for a 100 px brush on a 4000 × 3000, 10-layer document).
 - **Memory** of full-resolution layers in a browser tab. Mitigations: sparse and uniform tiles, `maxHistoryBytes`.
 - **The history refactor** touches every controller method that records history today, so it needs careful tests.
-- **8-bit only:** heavy adjustment stacks over painted layers can band. 16-bit tiles are a later format option.
+- **8-bit only:** heavy adjustment stacks over painted layers can band. 16- and 32-bit tiles shipped later (#248 onwards).
 
 ## Implementation notes
 
@@ -408,19 +408,37 @@ Every other document, single-layer or not, renders through the tiled compositor.
 - Blender's `tests/files/imbuf_io/reference/psd-*.psd` exist locally in the photocraft download folder, but Blender's test-file licence is unclear, so they are not used.
 - Local search found PSDs in `~/Documents` (client and personal work). They are not used, and nothing from them goes into the repo.
 
-## Follow-ups after v1
+## Built since v1
 
-Each follow-up is its own design note and change, built on the v1 layer stack and tiled surfaces, with agent tools, React / Svelte parity, PSD mapping and tests like v1. Photocraft modules to port from are listed for each.
+Each follow-up shipped with agent tools, React / Svelte parity, PSD mapping and tests, as v1 did. The image editor skill (`packages/core/skills/pixerate-image-editor/`) and the README matrix describe how to use them; this section records what each is and where it lives.
 
-| Follow-up | Scope | Builds on | photocraft source | PSD |
-|---|---|---|---|---|
-| **Layer effects** | Drop shadow, inner shadow, outer / inner glow, bevel & emboss, satin, colour / gradient / pattern overlay, stroke. Live, per layer, scaled with the layer; fill opacity excludes effects | Compositor (effects render between layer content and blend) | `doc/src/effects.rs`, `io/src/effects_map.rs` | `lfx2` / `lmfx` read and write |
-| **Shape layers** ([design](./image-editor-shape-type-layers.md)) | Vector fill and stroke layers, replacing rect / circle / line / arrow / pen annotation layers. Path editing reuses `@pixerate/editor/vector` | Annotation layers (migrated) | `doc/src/vector.rs`, `io/src/vector_map.rs` | `vscg`, `vsms`, `vogk`, `vstk` |
-| **Type layers** ([design](./image-editor-shape-type-layers.md)) | Editable point and paragraph text with character and paragraph styles, replacing text annotation layers | Annotation layers (migrated) | `crates/text`, `io/src/text_import.rs`, `io/src/text_styles_map.rs` | `TySh` and EngineData |
-| **Smart objects and smart filters** | Embedded or linked contents, non-destructive transform, a smart-filter stack (the v1 `develop` / `blur` filters move here; Camera Raw mapping) | Free transform; layer filters | `io/src/smart_map.rs`, `io/src/linked.rs`, `io/src/camera_raw_map.rs` | `PlLd`, `SoLd`, `SoLE`, `lnk2` / `lnk3` |
-| **Free transform** | Scale, rotate, skew, distort, perspective and warp of pixel layers and selections, with resampling and a live preview | Tiled surfaces | `crates/geom` (transform, `warp.rs`, already partly ported for vector envelopes) | Baked into pixels, or into the smart-object transform |
-| **Retouch tools** | Clone stamp, healing brush, spot healing, smudge, mixer brush, dodge / burn / sponge | Brush engine from v1 | `paint/src/retouch.rs`, `mixer.rs`, `replace.rs` | Pixels only |
-| **16-bit and float layers** | `Uint16` / `Float32` tile formats, adjustments without banding, high-bit PSD in and out | Tile format field in v1 | `color` (`PixelFormat`, `SampleType`), `io/src/pixels.rs` | 16 / 32-bit channels |
-| **Colour management** | Embedded ICC profiles, working space, soft proof, convert to profile, CMYK and Lab documents | 16-bit layers | `crates/cms`, `color/` | ICC resource 1039, colour modes |
+| Follow-up | PRs | What it is |
+|---|---|---|
+| **Layer effects** | #209, #212, #213, #214 | Drop shadow, inner shadow, outer / inner glow, bevel & emboss, satin, colour / gradient / pattern overlay and stroke, live per layer, in `raster/effects`. The compositor builds each effect map once per layer region and crops it per tile, so tiled and whole-image renders match byte for byte, and patches maps around a change instead of rebuilding them. PSD `lfx2` / `lmfx` / `lfxs` (and legacy `lrFX`) read and write, with patterns and global light. A `pigment`-blended layer refuses effects |
+| **Free Transform** | #216, #217, #218 | Scale, rotate, skew, distort, perspective and warp of pixel, shape, type and smart object layers, masks and selections. Shared maths in `src/geom` (affine, homography, warp meshes); resampling in `raster/transform.ts` (`transformSurface`, `warpSurface`: inverse map per tile, premultiplied, Keys bicubic, box pre-reduction when shrinking); sessions in `image-editor/free-transform.ts`, committed as one undo step. `RasterMask.linked` maps to the PSD mask flag. Groups are refused, and type layers take affine changes only |
+| **Smart objects and smart filters** | #219, #223, #225 | `SmartObjectLayer` keeps its `contents` (raster or a nested layer document, shared by id across linked copies), a `placement` (the Free Transform corners and warp) and a smart-filter stack (`develop`, `blur`, kept `psd` filters, and provider `effect` filters) with one filter mask. Only `layers/smart.ts` re-renders the cached `surface`. Edit Contents swaps the whole controller state onto a stack. PSD `PlLd` / `SoLd` / `SoLE`, `lnk2` / `lnk3` / `lnkD` and `filterFX`; unchanged blocks are written back verbatim |
+| **Shape and type layers** | #231, #234, #235, #237 | Live vector shapes and editable text, replacing annotation layers (which migrate while unchanged, so v1 / v2 stay byte-exact). Text layout is in the shared `src/text` module with pluggable shapers. PSD `vscg` / `vsms` / `vogk` / `vstk` and `TySh` with EngineData. See [image-editor-shape-type-layers.md](./image-editor-shape-type-layers.md) |
+| **Retouch tools** | #211, #239, #290, #291, #295, #298 | Mixer Brush (RGB or pigment mixing), Clone Stamp, Healing Brush, Spot Healing (proximity match, content-aware, smooth), Smudge, Dodge, Burn, Sponge, Blur, Sharpen and History Brush, with an on-canvas clone source marker and Clone Source transforms (scale, flip, rotate). Shared code in `paint/retouch.ts`, `paint/heal.ts` and `paint/mixer.ts` |
+| **16- and 32-bit layers** | #248, #249, #257, #260, #263, #266, #270, #299 | Tiles carry `deep` samples (Uint16 sRGB or Float32 linear) next to their 8-bit `data`, which stays the rendering for the viewport. `DeepCompositor` merges, adjusts, filters and applies effects in float. Painting, fills, transforms, the Mixer Brush and every retouch tool, masks, groups with effects and legacy develop filters all work at depth, and 8-bit tools only lose precision on the pixels they change (`keepDeepSamples`). 16 / 32-bit PSD in and out. `set_bit_depth` |
+| **Colour management** | #252, #254, #286, #287 | `@pixerate/editor/cms`, a TypeScript ICC v2 / v4 engine (all four intents, black point compensation, soft proofing and gamut warning, built-in sRGB, Display P3, Adobe RGB, ProPhoto, Rec. 2020, grey, Lab and a synthetic coated CMYK). Working space, Assign and Convert to Profile (which also converts shape, text, effect and annotation colours), Proof Setup, embedded ICC in PSD. CMYK and Lab document modes are RGB-proxy modes: pixels stay RGB in the working space, CMYK soft-proofs in the viewport, and PSD export writes CMYK or Lab channels at 8 or 16 bits |
+| **Gradient paint** | #273 | Brush strokes can paint a `PaintSource` gradient (`set_paint`, `get_paint`) |
+| **Provider effects** | #279 | With an effects provider registered, filter effects become `effect` smart filters (rendered asynchronously by `ImageEffectsEngine`) and generator, overlay and title effects become effect layers (`PixelLayer.generator`) at the document's bit depth. See [effects.md](./effects.md) |
 
-**Suggested order.** Layer effects first: they are the most common PSD content lost in v1. Then free transform, which smart objects need. Shape and type layers can run in parallel with free transform. Retouch tools come after that, and 16-bit layers before colour management.
+### PSD today
+
+Opening a PSD now keeps shape, type and smart object layers, layer effects, 16- and 32-bit samples, CMYK and Lab (converted through the embedded or default profile, and remembered for write-back) and the ICC profile. These gaps remain, each with a warning:
+
+- Brightness / Contrast, Exposure, Channel Mixer, Gradient Map, Selective Color and Color Lookup adjustments are left out (the ten kinds in `psd/adjust.ts` are supported).
+- Dissolve becomes Normal. `clbl` (blend clipped layers as a group) is not read.
+- Artboards come in as plain groups, and vector masks on pixel layers are ignored.
+- Fill layers come in as pixels.
+- Linked smart objects with external files come in as their embedded preview. Unmodelled smart filters are kept but not drawn.
+- Multi-patch warps are exported without their warp.
+- Grayscale, indexed and bitmap files open as 8-bit RGB.
+- Painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) are written as Normal without a warning; `pigment` is written as Normal with one.
+
+### Still 8-bit
+
+By design, `data` and the viewport are 8-bit. Smart object contents and smart filters render at 8 bits, annotation layers are drawn at 8 bits, retouching on a mask is 8-bit on the pixels it changes, and effect maps come from the 8-bit shape.
+
+The remaining follow-ups (Content-Aware Scale, Puppet Warp, text on a path in type layers, direct CMYK editing and others) are listed in [outstanding.md](./outstanding.md#image-editor).

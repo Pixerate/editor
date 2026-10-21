@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.138.0",
+  "version": "0.139.1",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -15,149 +15,294 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./grammar": {
-      "types": "./dist/grammar/index.d.ts",
-      "import": "./dist/grammar/index.js",
-      "require": "./dist/grammar/index.cjs"
+      "import": {
+        "types": "./dist/grammar/index.d.ts",
+        "default": "./dist/grammar/index.js"
+      },
+      "require": {
+        "types": "./dist/grammar/index.d.cts",
+        "default": "./dist/grammar/index.cjs"
+      }
     },
     "./extensions": {
-      "types": "./dist/extensions/index.d.ts",
-      "import": "./dist/extensions/index.js",
-      "require": "./dist/extensions/index.cjs"
+      "import": {
+        "types": "./dist/extensions/index.d.ts",
+        "default": "./dist/extensions/index.js"
+      },
+      "require": {
+        "types": "./dist/extensions/index.d.cts",
+        "default": "./dist/extensions/index.cjs"
+      }
     },
     "./serializers": {
-      "types": "./dist/serializers/index.d.ts",
-      "import": "./dist/serializers/index.js",
-      "require": "./dist/serializers/index.cjs"
+      "import": {
+        "types": "./dist/serializers/index.d.ts",
+        "default": "./dist/serializers/index.js"
+      },
+      "require": {
+        "types": "./dist/serializers/index.d.cts",
+        "default": "./dist/serializers/index.cjs"
+      }
     },
     "./spreadsheet": {
-      "types": "./dist/spreadsheet/index.d.ts",
-      "import": "./dist/spreadsheet/index.js",
-      "require": "./dist/spreadsheet/index.cjs"
+      "import": {
+        "types": "./dist/spreadsheet/index.d.ts",
+        "default": "./dist/spreadsheet/index.js"
+      },
+      "require": {
+        "types": "./dist/spreadsheet/index.d.cts",
+        "default": "./dist/spreadsheet/index.cjs"
+      }
     },
     "./history": {
-      "types": "./dist/history/index.d.ts",
-      "import": "./dist/history/index.js",
-      "require": "./dist/history/index.cjs"
+      "import": {
+        "types": "./dist/history/index.d.ts",
+        "default": "./dist/history/index.js"
+      },
+      "require": {
+        "types": "./dist/history/index.d.cts",
+        "default": "./dist/history/index.cjs"
+      }
     },
     "./animation": {
-      "types": "./dist/animation/index.d.ts",
-      "import": "./dist/animation/index.js",
-      "require": "./dist/animation/index.cjs"
+      "import": {
+        "types": "./dist/animation/index.d.ts",
+        "default": "./dist/animation/index.js"
+      },
+      "require": {
+        "types": "./dist/animation/index.d.cts",
+        "default": "./dist/animation/index.cjs"
+      }
     },
     "./animation-editor": {
-      "types": "./dist/animation-editor/index.d.ts",
-      "import": "./dist/animation-editor/index.js",
-      "require": "./dist/animation-editor/index.cjs"
+      "import": {
+        "types": "./dist/animation-editor/index.d.ts",
+        "default": "./dist/animation-editor/index.js"
+      },
+      "require": {
+        "types": "./dist/animation-editor/index.d.cts",
+        "default": "./dist/animation-editor/index.cjs"
+      }
     },
     "./video-editor": {
-      "types": "./dist/video-editor/index.d.ts",
-      "import": "./dist/video-editor/index.js",
-      "require": "./dist/video-editor/index.cjs"
+      "import": {
+        "types": "./dist/video-editor/index.d.ts",
+        "default": "./dist/video-editor/index.js"
+      },
+      "require": {
+        "types": "./dist/video-editor/index.d.cts",
+        "default": "./dist/video-editor/index.cjs"
+      }
     },
     "./canvas": {
-      "types": "./dist/canvas/index.d.ts",
-      "import": "./dist/canvas/index.js",
-      "require": "./dist/canvas/index.cjs"
+      "import": {
+        "types": "./dist/canvas/index.d.ts",
+        "default": "./dist/canvas/index.js"
+      },
+      "require": {
+        "types": "./dist/canvas/index.d.cts",
+        "default": "./dist/canvas/index.cjs"
+      }
     },
     "./agent": {
-      "types": "./dist/agent/index.d.ts",
-      "import": "./dist/agent/index.js",
-      "require": "./dist/agent/index.cjs"
+      "import": {
+        "types": "./dist/agent/index.d.ts",
+        "default": "./dist/agent/index.js"
+      },
+      "require": {
+        "types": "./dist/agent/index.d.cts",
+        "default": "./dist/agent/index.cjs"
+      }
     },
     "./tools": {
-      "types": "./dist/tools/index.d.ts",
-      "import": "./dist/tools/index.js",
-      "require": "./dist/tools/index.cjs"
+      "import": {
+        "types": "./dist/tools/index.d.ts",
+        "default": "./dist/tools/index.js"
+      },
+      "require": {
+        "types": "./dist/tools/index.d.cts",
+        "default": "./dist/tools/index.cjs"
+      }
     },
     "./raster": {
-      "types": "./dist/raster/index.d.ts",
-      "import": "./dist/raster/index.js",
-      "require": "./dist/raster/index.cjs"
+      "import": {
+        "types": "./dist/raster/index.d.ts",
+        "default": "./dist/raster/index.js"
+      },
+      "require": {
+        "types": "./dist/raster/index.d.cts",
+        "default": "./dist/raster/index.cjs"
+      }
     },
     "./cms": {
-      "types": "./dist/cms/index.d.ts",
-      "import": "./dist/cms/index.js",
-      "require": "./dist/cms/index.cjs"
+      "import": {
+        "types": "./dist/cms/index.d.ts",
+        "default": "./dist/cms/index.js"
+      },
+      "require": {
+        "types": "./dist/cms/index.d.cts",
+        "default": "./dist/cms/index.cjs"
+      }
     },
     "./paint": {
-      "types": "./dist/paint/index.d.ts",
-      "import": "./dist/paint/index.js",
-      "require": "./dist/paint/index.cjs"
+      "import": {
+        "types": "./dist/paint/index.d.ts",
+        "default": "./dist/paint/index.js"
+      },
+      "require": {
+        "types": "./dist/paint/index.d.cts",
+        "default": "./dist/paint/index.cjs"
+      }
     },
     "./image-editor": {
-      "types": "./dist/image-editor/index.d.ts",
-      "import": "./dist/image-editor/index.js",
-      "require": "./dist/image-editor/index.cjs"
+      "import": {
+        "types": "./dist/image-editor/index.d.ts",
+        "default": "./dist/image-editor/index.js"
+      },
+      "require": {
+        "types": "./dist/image-editor/index.d.cts",
+        "default": "./dist/image-editor/index.cjs"
+      }
     },
     "./paint-editor": {
-      "types": "./dist/paint-editor/index.d.ts",
-      "import": "./dist/paint-editor/index.js",
-      "require": "./dist/paint-editor/index.cjs"
+      "import": {
+        "types": "./dist/paint-editor/index.d.ts",
+        "default": "./dist/paint-editor/index.js"
+      },
+      "require": {
+        "types": "./dist/paint-editor/index.d.cts",
+        "default": "./dist/paint-editor/index.cjs"
+      }
     },
     "./commands": {
-      "types": "./dist/commands/index.d.ts",
-      "import": "./dist/commands/index.js",
-      "require": "./dist/commands/index.cjs"
+      "import": {
+        "types": "./dist/commands/index.d.ts",
+        "default": "./dist/commands/index.js"
+      },
+      "require": {
+        "types": "./dist/commands/index.d.cts",
+        "default": "./dist/commands/index.cjs"
+      }
     },
     "./persistence": {
-      "types": "./dist/persistence/index.d.ts",
-      "import": "./dist/persistence/index.js",
-      "require": "./dist/persistence/index.cjs"
+      "import": {
+        "types": "./dist/persistence/index.d.ts",
+        "default": "./dist/persistence/index.js"
+      },
+      "require": {
+        "types": "./dist/persistence/index.d.cts",
+        "default": "./dist/persistence/index.cjs"
+      }
     },
     "./generation": {
-      "types": "./dist/generation/index.d.ts",
-      "import": "./dist/generation/index.js",
-      "require": "./dist/generation/index.cjs"
+      "import": {
+        "types": "./dist/generation/index.d.ts",
+        "default": "./dist/generation/index.js"
+      },
+      "require": {
+        "types": "./dist/generation/index.d.cts",
+        "default": "./dist/generation/index.cjs"
+      }
     },
     "./compare": {
-      "types": "./dist/compare/index.d.ts",
-      "import": "./dist/compare/index.js",
-      "require": "./dist/compare/index.cjs"
+      "import": {
+        "types": "./dist/compare/index.d.ts",
+        "default": "./dist/compare/index.js"
+      },
+      "require": {
+        "types": "./dist/compare/index.d.cts",
+        "default": "./dist/compare/index.cjs"
+      }
     },
     "./tokens": {
-      "types": "./dist/tokens/index.d.ts",
-      "import": "./dist/tokens/index.js",
-      "require": "./dist/tokens/index.cjs"
+      "import": {
+        "types": "./dist/tokens/index.d.ts",
+        "default": "./dist/tokens/index.js"
+      },
+      "require": {
+        "types": "./dist/tokens/index.d.cts",
+        "default": "./dist/tokens/index.cjs"
+      }
     },
     "./export": {
-      "types": "./dist/export/index.d.ts",
-      "import": "./dist/export/index.js",
-      "require": "./dist/export/index.cjs"
+      "import": {
+        "types": "./dist/export/index.d.ts",
+        "default": "./dist/export/index.js"
+      },
+      "require": {
+        "types": "./dist/export/index.d.cts",
+        "default": "./dist/export/index.cjs"
+      }
     },
     "./parameters": {
-      "types": "./dist/parameters/index.d.ts",
-      "import": "./dist/parameters/index.js",
-      "require": "./dist/parameters/index.cjs"
+      "import": {
+        "types": "./dist/parameters/index.d.ts",
+        "default": "./dist/parameters/index.js"
+      },
+      "require": {
+        "types": "./dist/parameters/index.d.cts",
+        "default": "./dist/parameters/index.cjs"
+      }
     },
     "./vector": {
-      "types": "./dist/vector/index.d.ts",
-      "import": "./dist/vector/index.js",
-      "require": "./dist/vector/index.cjs"
+      "import": {
+        "types": "./dist/vector/index.d.ts",
+        "default": "./dist/vector/index.js"
+      },
+      "require": {
+        "types": "./dist/vector/index.d.cts",
+        "default": "./dist/vector/index.cjs"
+      }
     },
     "./chart": {
-      "types": "./dist/chart/index.d.ts",
-      "import": "./dist/chart/index.js",
-      "require": "./dist/chart/index.cjs"
+      "import": {
+        "types": "./dist/chart/index.d.ts",
+        "default": "./dist/chart/index.js"
+      },
+      "require": {
+        "types": "./dist/chart/index.d.cts",
+        "default": "./dist/chart/index.cjs"
+      }
     },
     "./effects": {
-      "types": "./dist/effects/index.d.ts",
-      "import": "./dist/effects/index.js",
-      "require": "./dist/effects/index.cjs"
+      "import": {
+        "types": "./dist/effects/index.d.ts",
+        "default": "./dist/effects/index.js"
+      },
+      "require": {
+        "types": "./dist/effects/index.d.cts",
+        "default": "./dist/effects/index.cjs"
+      }
     },
     "./diagram": {
-      "types": "./dist/diagram/index.d.ts",
-      "import": "./dist/diagram/index.js",
-      "require": "./dist/diagram/index.cjs"
+      "import": {
+        "types": "./dist/diagram/index.d.ts",
+        "default": "./dist/diagram/index.js"
+      },
+      "require": {
+        "types": "./dist/diagram/index.d.cts",
+        "default": "./dist/diagram/index.cjs"
+      }
     },
     "./bridge": {
-      "types": "./dist/bridge/index.d.ts",
-      "import": "./dist/bridge/index.js",
-      "require": "./dist/bridge/index.cjs"
+      "import": {
+        "types": "./dist/bridge/index.d.ts",
+        "default": "./dist/bridge/index.js"
+      },
+      "require": {
+        "types": "./dist/bridge/index.d.cts",
+        "default": "./dist/bridge/index.cjs"
+      }
     }
   },
   "bin": {
@@ -170,7 +315,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc -p tsconfig.build.json && node ../../scripts/finalize-declarations.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts",

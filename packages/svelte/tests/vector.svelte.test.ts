@@ -1321,5 +1321,17 @@ describe("Brushstrokes (svelte)", () => {
     expect(el.querySelector("[data-vector-brushstroke]")).not.toBeNull();
     const canvas = render(VectorCanvas, { controller: c });
     expect(canvas.querySelector('[data-vector-layer^="brushstroke-"] image')).not.toBeNull();
+    // New layers get a random seed (the brush's character); the grain toggle turns the paper off and on.
+    const index = (c.getNode("a") as VectorPathNode).strokes!.length - 1;
+    const brush = () => (c.getNode("a") as VectorPathNode).strokes![index].brush!;
+    expect(Number.isInteger(brush().seed)).toBe(true);
+    const grain = () => el.querySelector("[data-vector-brushstroke-grain]") as HTMLInputElement;
+    expect(grain().checked).toBe(true);
+    click(grain());
+    expect(brush().paper).toBeNull();
+    expect(grain().checked).toBe(false);
+    click(grain());
+    expect(brush().paper).toBeUndefined();
+    expect(grain().checked).toBe(true);
   });
 });

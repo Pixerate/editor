@@ -35,6 +35,7 @@ Commands
 Working method
 1. get_animation to learn the element ids (set_animation_artwork_svg first if there is no artwork: give every element you will animate an id; or import_flair_effect / import_pptx_animation to start from a Flair effect or a PowerPoint slide).
 2. Plan a few shots, each one idea. Add them with insert_shots (add_commands, update_command, move_command and delete_commands refine a shot), or edit_animation to make several edits as one step (dry_run first when unsure).
+- The write tools list each command field once, saying which types take it; describe_animation_command gives a type's exact fields before you write one you have not used.
 - In edit_animation, a later op can use what an earlier one made: "$0.indexes[0]" (the first command op 1 added), "$last.shot".
 3. To hit a length, fit_animation (keep the shots whose pace matters). check_animation and fix every error and warning; render_animation_frame (shot + "end") to look at the result, or with "times" for a contact sheet of several moments; add onion_skin or motion_paths to see the motion in one picture, or get_motion_path for the numbers.
 - For something the viewer plays (a button, a toggle, a step-by-step explainer), set "trigger" with set_animation_settings: click plays the next shot on each click and then starts over (make the last shot put things back for a toggle), hover or press plays and rewinds, scroll scrubs.

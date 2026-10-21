@@ -18,10 +18,6 @@ jobs:
     name: Build, Release & Publish (OIDC)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      # The core build's type-declaration worker outgrew Node's default heap (ERR_WORKER_OUT_OF_MEMORY).
-      # ubuntu-latest runners for public repos have 16 GB.
-      NODE_OPTIONS: --max-old-space-size=8192
     if: github.repository_owner == 'Pixerate' || github.event_name == 'workflow_dispatch'
 
     steps:
@@ -76,6 +72,10 @@ jobs:
       - name: Run unit tests
         if: steps.changeset_check.outputs.should_release == 'true'
         run: pnpm test
+
+      - name: Check the packed packages (types for every subpath, Node import and require)
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: pnpm check:packages
 
       - name: Refuse versions that are already on npm
         if: steps.changeset_check.outputs.should_release == 'true'

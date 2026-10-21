@@ -1,6 +1,7 @@
 import type { GenerationProvenance } from '../generation/provenance.js';
 import type { CanvasGradientDef } from '../canvas/gradient.js';
 import type { WarpMesh, WarpStyle } from '../geom/types.js';
+import type { GrainPattern } from '../paint/grain.js';
 
 /** An affine matrix `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (SVG order). */
 export type VectorMatrix = readonly [number, number, number, number, number, number];
@@ -321,14 +322,34 @@ export type VectorStrokeSettings = Pick<
 export type VectorStrokeLayerKind = 'paint' | 'brushstroke';
 
 /**
+ * The paper a seeded brushstroke's grain comes from (`VectorBrushstroke.paper`, all optional): a
+ * grain pattern (default `sanded`), its seed (default 1), scale (1 is the pattern's natural size,
+ * 0.25–8) and depth 0–1 (default 0.5, times the brush's own grain response).
+ */
+export interface VectorBrushstrokePaper {
+	pattern?: GrainPattern;
+	seed?: number;
+	scale?: number;
+	depth?: number;
+}
+
+/**
  * A brushstroke stroke layer's brush (`VectorStrokeLayer.brush`): a brush from the paint editor's
  * library by id, its size in document units (default the brush's own), and an optional pressure
  * profile along the path's length (values 0–1 spread evenly from start to end).
+ *
+ * With a `seed` the brush renders with its character: seeded size, angle, opacity and scatter
+ * jitter, and the grain of `paper` (default the sanded grain; `null` for none). Without a seed it
+ * renders plain dabs, as before, and `paper` is ignored.
  */
 export interface VectorBrushstroke {
 	brushId: string;
 	size?: number;
 	pressure?: number[];
+	/** Jitter seed, an integer 0–2147483647. Turns the brush's character on. */
+	seed?: number;
+	/** The paper the grain comes from (with `seed`); `null` for no grain. */
+	paper?: VectorBrushstrokePaper | null;
 }
 
 /** One stroke of a path's stroke stack (`VectorStyle.strokes`): a paint plus its own stroke settings. */

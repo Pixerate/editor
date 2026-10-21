@@ -11,6 +11,7 @@ import {
   type VectorFilterType,
   type VectorFiltersPanelItem,
   type VectorStrokeAlign,
+  randomVectorBrushstrokeSeed,
   vectorBrushstrokeBrushes,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
@@ -71,6 +72,16 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
               }}
               onBlur={end}
             />
+            <label className="flex items-center gap-0.5 text-[11px]" title="Brush character: seeded jitter and paper grain">
+              <input
+                type="checkbox"
+                aria-label={`${name} grain`}
+                data-vector-brushstroke-grain=""
+                checked={l.brushstroke.grain}
+                onChange={(e) => controller.setBrushstroke(l.index, e.target.checked ? { paper: {}, ...(l.brushstroke!.seed === undefined ? { seed: randomVectorBrushstrokeSeed() } : {}) } : { paper: null }, { ids })}
+              />
+              Grain
+            </label>
             <button type="button" className={buttonClass} title="Remove" aria-label={`Remove ${name}`} onClick={() => controller.removePaintLayer('stroke', l.index, { ids })}>
               ×
             </button>
@@ -189,7 +200,7 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
           +
         </button>
         {kind === 'stroke' && (
-          <button type="button" className={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onClick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id }, { ids })}>
+          <button type="button" className={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onClick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>
             ✎+
           </button>
         )}

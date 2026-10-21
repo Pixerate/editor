@@ -1,6 +1,6 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
-import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_TEXT_UNITS, MOTION_CASCADES, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionScene, type MotionShot } from './types.js';
+import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_TEXT_UNITS, MOTION_CASCADES, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionCommandType, type MotionScene, type MotionShot } from './types.js';
 
 /**
  * Shape checking: whether a value is a well-formed scene, listing every problem at once.
@@ -43,6 +43,8 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	effect: [...BASE_KEYS, 'effect', 'param', 'to'],
 	wait: ['type', 'duration', 'with', 'note']
 };
+/** The fields each command type takes (`source` is set by applied effects, not written by hand). */
+export const MOTION_COMMAND_FIELDS: Readonly<Record<MotionCommandType, readonly string[]>> = COMMAND_KEYS as Record<MotionCommandType, string[]>;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

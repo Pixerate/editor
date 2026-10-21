@@ -1,5 +1,30 @@
 # @pixerate/editor-svelte
 
+## 0.100.1
+
+### Patch Changes
+
+- c691641: Smaller packages with type declarations that resolve for every consumer. Declarations are now written by `tsc`, one file per module, instead of tsup's bundler, which ran out of memory. Every `exports` entry gives `require` its own `.d.cts` types, so CommonJS projects on `moduleResolution: "node16"` no longer get TS1479 when they import a subpath. Source maps are no longer published, which shrinks `@pixerate/editor` from 52 MB to 22 MB unpacked. `@pixerate/editor-svelte/chart` exports `ChartInspectorSection` from a `.ts` module, so `node16` consumers can import it. The exported names and types are unchanged.
+- Updated dependencies [c691641]
+  - @pixerate/editor@0.139.1
+
+## 0.100.0
+
+### Minor Changes
+
+- 242f8f7: Vector brushstrokes can now have their brush's character: seeded size, angle, opacity and scatter jitter, and a procedural paper grain.
+
+  - `VectorBrushstroke` gains an optional `seed` (an integer) and `paper` (`{ pattern, seed, scale, depth }`, or `null` for no grain). Only a layer with a seed renders with character, through `renderBrushstroke`'s `character` option with the grain in the path's own space. Layers without a seed render exactly as before, so existing documents keep their look.
+  - `sanitizeVectorBrushstroke` keeps the new fields, and they round-trip through SVG. New exports: `sanitizeVectorBrushstrokePaper`, `vectorBrushstrokeCharacterError`, `randomVectorBrushstrokeSeed` and `VECTOR_BRUSHSTROKE_MAX_SEED`.
+  - `addBrushstroke` and `setBrushstroke` take `seed` and `paper`. In a `setBrushstroke` patch, `seed: null` removes the seed and `paper: {}` restores the default paper. `getVectorAppearancePanel` reports each brushstroke's `seed` and `grain`.
+  - React and Svelte: brushstrokes added from `VectorAppearancePanel` get a random seed, and each brushstroke row has a grain toggle.
+  - Agents: `vector.addBrushstroke` and `vector.setBrushstroke` take described `seed` and `paper` arguments.
+
+### Patch Changes
+
+- Updated dependencies [242f8f7]
+  - @pixerate/editor@0.139.0
+
 ## 0.99.0
 
 ### Minor Changes

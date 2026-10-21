@@ -1423,5 +1423,17 @@ describe("Brushstrokes (react)", () => {
     expect((c.getNode("a") as VectorPathNode).strokes?.at(-1)?.kind).toBe("brushstroke");
     expect(container.querySelector("[data-vector-brushstroke]")).not.toBeNull();
     expect(container.querySelector('[data-vector-layer^="brushstroke-"] image')).not.toBeNull();
+    // New layers get a random seed (the brush's character); the grain toggle turns the paper off and on.
+    const index = (c.getNode("a") as VectorPathNode).strokes!.length - 1;
+    const brush = () => (c.getNode("a") as VectorPathNode).strokes![index].brush!;
+    expect(Number.isInteger(brush().seed)).toBe(true);
+    const grain = () => container.querySelector("[data-vector-brushstroke-grain]") as HTMLInputElement;
+    expect(grain().checked).toBe(true);
+    await act(async () => grain().click());
+    expect(brush().paper).toBeNull();
+    expect(grain().checked).toBe(false);
+    await act(async () => grain().click());
+    expect(brush().paper).toBeUndefined();
+    expect(grain().checked).toBe(true);
   });
 });

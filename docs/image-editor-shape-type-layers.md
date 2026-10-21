@@ -1,6 +1,6 @@
 # Image editor shape and type layers (design)
 
-**Status:** implemented. Core in #231 (shapes) and #234 (type), PSD mapping in #235, React / Svelte UI and the demo in #237. This note was written after the code, so it records what was built and why. It is a follow-up of [Image editor layers](./image-editor-layers.md#follow-ups-after-v1).
+**Status:** implemented. Core in #231 (shapes) and #234 (type), PSD mapping in #235, React / Svelte UI and the demo in #237. This note was written after the code, so it records what was built and why. It is a follow-up of [Image editor layers](./image-editor-layers.md#built-since-v1).
 
 Before this work, drawn objects were annotation layers: one `Annotation` per layer, drawn by the old annotation renderer, and written to PSD as pixels. Shape and type layers replace them with real vector and text layers. They can be edited after they are drawn, render sharp after any number of moves or transforms, and map to Photoshop's shape and type layers.
 

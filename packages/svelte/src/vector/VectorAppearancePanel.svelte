@@ -10,6 +10,7 @@
     type VectorFilterType,
     type VectorFiltersPanelItem,
     type VectorStrokeAlign,
+    randomVectorBrushstrokeSeed,
     vectorBrushstrokeBrushes
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
@@ -77,6 +78,10 @@
           const n = parseFloat(e.currentTarget.value);
           if (Number.isFinite(n) && n > 0) controller.setBrushstroke(l.index, { size: Math.min(500, n) }, { ids, merge: true });
         }} onblur={() => controller.endMergedEdit()} />
+        <label class="flex items-center gap-0.5 text-[11px]" title="Brush character: seeded jitter and paper grain">
+          <input type="checkbox" aria-label="{name} grain" data-vector-brushstroke-grain="" checked={bs.grain} onchange={(e) => controller.setBrushstroke(l.index, e.currentTarget.checked ? { paper: {}, ...(bs.seed === undefined ? { seed: randomVectorBrushstrokeSeed() } : {}) } : { paper: null }, { ids })} />
+          Grain
+        </label>
         <button type="button" class={buttonClass} title="Remove" aria-label="Remove {name}" onclick={() => controller.removePaintLayer('stroke', l.index, { ids })}>×</button>
       </div>
     </div>
@@ -164,7 +169,7 @@
         onclick={() => controller.addPaintLayer(kind, {}, { ids })}>+</button
       >
       {#if kind === 'stroke'}
-        <button type="button" class={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onclick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id }, { ids })}>✎+</button>
+        <button type="button" class={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onclick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>✎+</button>
       {/if}
     </div>
     <!-- Top layer first, as it draws. -->

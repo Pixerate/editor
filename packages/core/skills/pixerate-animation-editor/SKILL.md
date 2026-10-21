@@ -34,6 +34,8 @@ The full command vocabulary (every type, option and default) is in
    edits as one undo step (`dry_run: true` first when unsure; `"$0.indexes[0]"` and
    `"$last.shot"` refer to earlier ops). Refine with `add_commands`, `update_command`,
    `move_command`, `delete_commands`. Use `write_animation` only to replace every shot.
+   For a command type you have not written before, `describe_animation_command` returns its
+   exact fields first.
 4. **Fit and cue.** `fit_animation` to hit a length (keep shots whose pace matters). For music
    or voiceover, `set_animation_settings` with `beat` or `narration`, read cues with
    `get_timing_grid`, and give shots `"at": { "beat": n }` or `{ "word": i }`.
@@ -88,6 +90,7 @@ The full command vocabulary (every type, option and default) is in
 | --- | --- |
 | `get_animation` | Start here. Returns name, artwork size, length (ms), loop, elements (id, type, name, parent, bounds, solid paints, live effects with numeric params), every shot with each command's index, start, end and `flairPrimitive`, clips, drivers, controls and an issue summary, plus `readOnly` when edits are refused. `includeElements: false` (default true) skips the element list on large artwork. |
 | `get_shot` | Read one shot as stored (`shot` id) with its start/end and each command's start/end in ms; cheaper than `get_animation` while refining one shot. |
+| `describe_animation_command` | Before writing a command type you have not used yet, or when a write rejects a field: returns the full JSON Schema of each of `types` (e.g. `["enter", "move"]`), with every field's type, range, default and meaning and which are required. The write tools list every command field once in short, prefixed with the types that take it. |
 | `find_animation_elements` | Find elements whose id or name contains `query` (case-insensitive; `limit` default 20, max 200) when the artwork is large. Returns id, type, name, parent, bounds, paints, effects. |
 | `get_text_layout` | Before animating outlined text with `split`: returns the `group`'s lines, words and letter ids in reading order. Errors if the element is not a group of paths (convert text to outlines, one path a letter, and group it). |
 | `get_motion_path` | Check spacing, arcs and landing points as numbers: samples a `node`'s centre (document units) from `from` to `to` ms every `step` ms (default 33, at most 400 samples), with where each moving change starts and ends. |
@@ -150,6 +153,10 @@ refuse.
 - **Some provider motion cannot be carried over.** Counting, writing text and similar changes are
   skipped. The result's `notes` say what was left out.
 
+- **Fields belong to types.** The write tools' command schema lists every field of every type
+  once; a field the type does not take (`clip` on a `move`, `to` as a point on a `fade`) is
+  refused when the edit is applied, naming the shot, command and field. Call
+  `describe_animation_command` for the exact fields of a type rather than guessing.
 - **Unknown ids are refused** with a "did you mean" suggestion. Take ids from `get_animation` or
   the elements `set_animation_artwork_svg` returns; never guess them.
 - **`enter-visible`**: an element that enters while already showing blinks out first. Give an
