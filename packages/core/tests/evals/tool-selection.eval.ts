@@ -60,6 +60,20 @@ interface CaseResult {
 	error?: string;
 }
 
+/**
+ * The SDK refuses to run where it sees a browser (`window`), and the rich text editor in the
+ * catalogue needs jsdom's. This is Node, so hide jsdom's `window` while the client is made.
+ */
+function createClient(): Anthropic {
+	const win = (globalThis as any).window;
+	delete (globalThis as any).window;
+	try {
+		return new Anthropic();
+	} finally {
+		(globalThis as any).window = win;
+	}
+}
+
 const toApiTool = (def: McpToolDefinition): Anthropic.Beta.BetaTool => ({
 	name: def.name,
 	description: def.description ?? def.title ?? def.name,
@@ -142,7 +156,7 @@ describe('tool selection by a model', () => {
 	it(
 		'picks the right tool with each way of exposing the catalogue',
 		async () => {
-			const client = new Anthropic();
+			const client = createClient();
 			const { registry, dispose } = createToolCatalogue();
 			const setOf = (name: string) => registry.toolsets().find((s) => s.tools.includes(name))!.name;
 			const results: CaseResult[] = [];
@@ -187,6 +201,8 @@ describe('tool selection by a model', () => {
 			}
 			if (process.env.EVAL_OUT) writeFileSync(process.env.EVAL_OUT, JSON.stringify({ model: MODEL, summary, results }, null, 2));
 			expect(results.length).toBe(MODES.length * CASES.length);
+			// A run where every call failed (bad key, no credits) measured nothing.
+			for (const row of summary) expect(row.errors, `${row.mode}: every task errored`).toBeLessThan(CASES.length);
 		},
 		60 * 60 * 1000
 	);
