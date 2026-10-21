@@ -1731,7 +1731,7 @@ describe('compact command schema and describe_animation_command', () => {
 		const controller = new AnimationEditorController({ scene: createMotionScene(ARTWORK) });
 		const registry = new ToolRegistry();
 		registry.register(createAnimationEditorToolProvider(controller, { readOnly: 'Locked.' }));
-		const names = registry.listTools().tools.map((t) => t.name);
+		const names = registry.listTools().tools.map((t) => baseToolName(t.name));
 		expect(names).toContain('describe_animation_command');
 		expect(names).not.toContain('add_commands');
 	});
