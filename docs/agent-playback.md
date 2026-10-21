@@ -4,7 +4,7 @@ Agent playback makes an agent's tool calls visible. The agent's cursor glides to
 
 You enable it once per registry and attach a surface for each editor on screen. You don't write code per tool, and you don't pick DOM targets.
 
-> **Status.** The core, React and Svelte layers ship now, and so does the **canvas**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
+> **Status.** The core, React and Svelte layers ship now, and so do the **canvas** and the **vector editor**. Other editors keep their calls instant until their phase lands. Chart, paint, diagram and rich text still play through their own `director` / `presence` options. See the [plan](agent-playback-plan.md) for the order.
 
 ## Contents
 
@@ -77,6 +77,14 @@ Arrange commands registered with `createArrangeCommands` (`canvas.alignLeft`, �
 
 Another provider that acts on the same canvas plays there if it names the surface. Spread the provider and add `playbackSurface: 'canvas'`, as with `createCanvasComponentToolProvider`. Providers whose namespace is the surface id (`canvas`) find it on their own.
 
+**The vector editor** draws the cursor itself. Pass `playback` to `<VectorCanvas>` (or through `<VectorEditor canvasProps={{ playback }}>`), or put it in an `AgentPlaybackProvider`. Register the vector commands with `createVectorCommands` and `createCommandToolProvider` as usual; they play on the `vector` surface, whatever their prefix:
+
+```tsx
+<VectorEditor controller={controller} canvasProps={{ playback, onPlaybackReveal: () => setTab('vector') }} />
+```
+
+The cursor drags new shapes out corner to corner, traces paths, clicks text in and types it, and visits the nodes that commands with `ids` name. Pass `playback={null}` to turn it off under a provider; `playbackId` changes the surface id (default `vector`).
+
 **A custom surface** (your own component) uses `usePlaybackSurface(playback, id, options)` and renders `<PresenceLayer presence={…} />` inside it. All options are optional:
 
 | Option | Does |
@@ -116,6 +124,7 @@ Another provider that acts on the same canvas plays there if it names the surfac
 ```
 
 - `setAgentPlayback(playback)` (and `getAgentPlayback()`) is the context equivalent.
+- `<VectorCanvas playback={playback} onplaybackreveal={…} />` plays the vector commands, as in React.
 - `createPlaybackSurface(playback, id, options)` builds a custom surface and takes the same options as React.
 - React and Svelte draw the same cursor.
 - The layer has the `.pixerate-presence` class, so snapshots, `view_editor` and `capture_view` leave it out.
@@ -268,6 +277,6 @@ Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()
 | --- | --- |
 | Canvas: `createEditorMcpToolProvider` (planned moves) and the arrange commands (derived) | Now |
 | Rich text, chart, paint, diagram | Today through their own `presence` / `director`; they move onto playback later |
-| Vector | Next |
-| Image | After vector |
+| Vector: every `vector.*` command (`<VectorCanvas playback>`; shapes, paths, text, symbols, images, text ranges and mesh points planned; the rest derived from `ids`) | Now |
+| Image | Next |
 | Spreadsheet, video, animation, parameters | Later phases |

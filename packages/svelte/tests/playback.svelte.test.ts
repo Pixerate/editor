@@ -67,3 +67,39 @@ describe('createCanvasPlaybackSurface', () => {
 		expect(playback.surface('canvas')).toBeUndefined();
 	});
 });
+
+describe('VectorCanvas playback (Svelte)', () => {
+	it('plays vector commands with the cursor in document units through the viewport', async () => {
+		const { VectorCanvas } = await import('../src/vector');
+		const { VectorEditorController, createVectorCommands } = await import('@pixerate/editor/vector');
+		const { CommandRegistry, createCommandToolProvider } = await import('@pixerate/editor/commands');
+		const controller = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] } });
+		controller.setViewport({ x: 10, y: 20, zoom: 2 });
+		const commands = new CommandRegistry();
+		commands.register(createVectorCommands(controller));
+		const registry = new ToolRegistry();
+		registry.register(createCommandToolProvider(commands, { id: 'commands' }));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		const { target } = render(VectorCanvas, { controller, fitOnMount: false, playback });
+		const surface = playback.surface('vector')!;
+		expect(surface).toBeTruthy();
+		// jsdom has no layout: report the canvas as visible.
+		(surface as { visible?: () => boolean }).visible = () => true;
+		const steps = playback.record();
+		const result = await registry.callTool('commands__run_command', { id: 'vector.addShape', params: { kind: 'rect', x: 50, y: 40, width: 20, height: 10 } });
+		flushSync();
+		expect(result.isError).toBeFalsy();
+		expect(steps.map((r) => r.step.type)).toEqual(['move', 'press', 'drag', 'release', 'commit', 'focus']);
+		const v = controller.getState().viewport;
+		const cursor = target.querySelector('[data-vector-presence] [data-actor="agent"]') as HTMLElement;
+		expect(cursor.style.transform).toBe(`translate(${70 * v.zoom + v.x}px, ${50 * v.zoom + v.y}px)`);
+	});
+
+	it('draws nothing and attaches nothing without a playback', async () => {
+		const { VectorCanvas } = await import('../src/vector');
+		const { VectorEditorController } = await import('@pixerate/editor/vector');
+		const { target } = render(VectorCanvas, { controller: new VectorEditorController(), fitOnMount: false });
+		expect(target.querySelector('[data-vector-presence]')).toBeNull();
+	});
+});

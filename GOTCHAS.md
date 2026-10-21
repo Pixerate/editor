@@ -2709,3 +2709,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In a background tab, a glide of 50 frames took 50 seconds and blocked the tool call.
 - **Root Cause**: Browsers throttle `setTimeout` in hidden tabs to about once a second, and suspend `requestAnimationFrame`.
 - **Solution / Workaround**: `AgentPlayback` tweens by elapsed `clock.now()` (a throttled tab just draws fewer frames, never takes longer), and the canvas surfaces report `visible() === false` while `document.visibilityState` is `hidden`, so calls then run instantly. Never make a tool call wait on animation frames.
+
+### [react|svelte/vector] The Agent Cursor Is an HTML Layer Inside the Vector Canvas's SVG
+
+- **Issue / Symptom**: `<PresenceLayer>` is an absolutely positioned `div`, but `<VectorCanvas>`'s root is an `<svg>`, so the layer has nowhere to sit without wrapping the canvas (which would break layouts and tests that expect the `svg` as the root).
+- **Root Cause**: HTML can't be a child of an SVG element except through `foreignObject`.
+- **Solution / Workaround**: The canvas draws the layer in a full-size `<foreignObject data-vector-presence pointer-events="none">` as its last child, so it is on top and never takes pointer events. It is only rendered while a playback is attached. In jsdom tests the surface reports itself hidden (no layout), so override its `visible` to test playback.

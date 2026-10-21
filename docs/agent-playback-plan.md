@@ -1,8 +1,13 @@
 # Agent playback in the library: design plan
 
-Status: **phases 0 and 1 (foundation and canvas) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
+Status: **phases 0, 1 and 2 (foundation, canvas, vector) are implemented**; later phases are proposals. Consumer guide: [agent-playback.md](agent-playback.md).
 
-As built, phases 0 and 1 differ from the proposal below in a few places:
+As built, phases 0 to 2 differ from the proposal below in a few places:
+
+- **Vector.**
+  - `<VectorCanvas>` (React and Svelte) takes a `playback` prop and draws the cursor itself, in a `foreignObject` over the canvas.
+  - `withVectorPlayback` adds the plans inside `createVectorCommands`, so they need no consumer code.
+  - The demo's vector scripts have no `target` fields, and `artboardBox` is gone.
 
 - **Canvas arrange.** There is no new `createCanvasArrangeToolProvider`. The arrange commands (`createArrangeCommands`) already take `ids`, so they play through the command tools on the `canvas` surface, picked from the id prefix. The demo's hand-written `list_nodes` / `align_nodes` tools were replaced by `createEditorMcpToolProvider` and those commands.
 - **No `playback` prop yet.** Editor components don't take one. Surfaces attach through hooks: `usePlaybackSurface` / `useCanvasPlaybackSurface` in React, `createPlaybackSurface` / `createCanvasPlaybackSurface` in Svelte. The canvas is rendered by the consumer's own React Flow / Svelte Flow anyway.

@@ -19,8 +19,13 @@ import {
   type VectorPaintDef,
   type VectorRenderGradientAnnotator,
   type VectorRenderText,
+  createVectorPlaybackLocator,
 } from '@pixerate/editor/vector';
+import type { AgentPlayback } from '@pixerate/editor/tools';
 import { useVectorEditorState } from './useVectorEditor';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 import { VectorWidthPointEditor } from './VectorWidthPointEditor';
 
 export interface VectorCanvasProps {
@@ -37,6 +42,15 @@ export interface VectorCanvasProps {
   style?: React.CSSProperties;
   /** Accessible label (default "Vector canvas"). */
   'aria-label'?: string;
+  /**
+   * Agent playback: act out the vector commands' calls here with the agent's cursor (default: the
+   * nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `vector`, where the vector commands play). */
+  playbackId?: string;
+  /** Bring the canvas on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 function GradientElement({ def }: { def: SvgGradientDef }) {
@@ -373,6 +387,9 @@ export function VectorCanvas({
   className,
   style,
   'aria-label': ariaLabel = 'Vector canvas',
+  playback,
+  playbackId = 'vector',
+  onPlaybackReveal,
 }: VectorCanvasProps) {
   const state = useVectorEditorState(controller);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -434,6 +451,36 @@ export function VectorCanvas({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [controller]);
+
+  // Agent playback: the agent's cursor in document units, drawn through the viewport.
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const [locate] = useState(() => createVectorPlaybackLocator(controller));
+  const svgBox = () => svgRef.current?.getBoundingClientRect() ?? null;
+  const presence = usePlaybackSurface(playing, playbackId, {
+    defaultKind: 'vector',
+    locate,
+    bounds: () => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return r && r.width > 0 ? { x: -v.x / v.zoom, y: -v.y / v.zoom, width: r.width / v.zoom, height: r.height / v.zoom } : null;
+    },
+    visible: () => {
+      const r = svgBox();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return { x: (r?.left ?? 0) + p.x * v.zoom + v.x, y: (r?.top ?? 0) + p.y * v.zoom + v.y };
+    },
+    fromViewport: (p) => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return { x: (p.x - (r?.left ?? 0) - v.x) / v.zoom, y: (p.y - (r?.top ?? 0) - v.y) / v.zoom };
+    },
+    reveal: () => onPlaybackReveal?.(),
+  });
 
   const local = (e: { clientX: number; clientY: number }) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -921,6 +968,14 @@ export function VectorCanvas({
         // Width Point Edit (double-click with the width tool), beside the point.
         <foreignObject data-vector-width-point-edit="" x={editAt.x + 12} y={editAt.y + 12} width={180} height={140} style={{ overflow: 'visible' }}>
           <VectorWidthPointEditor key={`${edit.nodeId}:${edit.index}:${edit.t}`} controller={controller} edit={edit} accentColor={accentColor} />
+        </foreignObject>
+      )}
+      {playing && (
+        // The agent's cursor (agent playback), over everything and never in the way.
+        <foreignObject data-vector-presence="" x={0} y={0} width="100%" height="100%" pointerEvents="none" style={{ overflow: 'visible', pointerEvents: 'none' }}>
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <PresenceLayer presence={presence} viewport={state.viewport} />
+          </div>
         </foreignObject>
       )}
     </svg>

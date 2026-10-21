@@ -14,8 +14,12 @@
     toVectorKeyInput,
     toVectorPointerInput,
     vectorDiamondPath,
+    createVectorPlaybackLocator,
     type VectorEditorController
   } from '@pixerate/editor/vector';
+  import type { AgentPlayback } from '@pixerate/editor/tools';
+  import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
   import VectorGradientDefs from './VectorGradientDefs.svelte';
   import VectorFilterDefs from './VectorFilterDefs.svelte';
   import VectorGradientAnnotator from './VectorGradientAnnotator.svelte';
@@ -39,6 +43,15 @@
     style?: string;
     /** Accessible label (default "Vector canvas"). */
     'aria-label'?: string;
+    /**
+     * Agent playback: act out the vector commands' calls here with the agent's cursor (default:
+     * `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `vector`, where the vector commands play). */
+    playbackId?: string;
+    /** Bring the canvas on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
   let {
@@ -50,7 +63,10 @@
     idPrefix = `ve${++nextId}-`,
     class: className = '',
     style = '',
-    'aria-label': ariaLabel = 'Vector canvas'
+    'aria-label': ariaLabel = 'Vector canvas',
+    playback,
+    playbackId = 'vector',
+    onplaybackreveal
   }: Props = $props();
 
   const store = vectorStateOf(() => controller);
@@ -70,6 +86,35 @@
   const as = THEME.anchorSize;
 
   let svg: SVGSVGElement | undefined = $state();
+
+  // Agent playback: the agent's cursor in document units, drawn through the viewport.
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  const svgBox = () => svg?.getBoundingClientRect() ?? null;
+  const presence = createPlaybackSurface(() => playing, () => playbackId, () => ({
+    defaultKind: 'vector',
+    locate: createVectorPlaybackLocator(controller),
+    bounds: () => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return r && r.width > 0 ? { x: -v.x / v.zoom, y: -v.y / v.zoom, width: r.width / v.zoom, height: r.height / v.zoom } : null;
+    },
+    visible: () => {
+      const r = svgBox();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return { x: (r?.left ?? 0) + p.x * v.zoom + v.x, y: (r?.top ?? 0) + p.y * v.zoom + v.y };
+    },
+    fromViewport: (p) => {
+      const r = svgBox();
+      const v = controller.getState().viewport;
+      return { x: (p.x - (r?.left ?? 0) - v.x) / v.zoom, y: (p.y - (r?.top ?? 0) - v.y) / v.zoom };
+    },
+    reveal: () => onplaybackreveal?.()
+  }));
   $effect(() => {
     const el = svg;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -609,6 +654,14 @@
       {#key `${edit.nodeId}:${edit.index}:${edit.t}`}
         <VectorWidthPointEditor {controller} {edit} {accentColor} />
       {/key}
+    </foreignObject>
+  {/if}
+  {#if playing}
+    <!-- The agent's cursor (agent playback), over everything and never in the way. -->
+    <foreignObject data-vector-presence="" x="0" y="0" width="100%" height="100%" pointer-events="none" style="overflow:visible;pointer-events:none">
+      <div style="position:relative;width:100%;height:100%">
+        <PresenceLayer {presence} viewport={view.viewport} />
+      </div>
     </foreignObject>
   {/if}
 </svg>

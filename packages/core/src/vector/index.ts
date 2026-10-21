@@ -53,3 +53,4 @@ export { createCanvasTextShaper, createMetricTextShaper, createOutlineTextShaper
 export { loadOpenTypeFont, parseOpenTypeFont, type OpenTypeFont } from '../text/opentype.js';
 export type { TextFont, TextShaper } from '../text/types.js';
 export * from './effect-tools.js';
+export * from './playback.js';
