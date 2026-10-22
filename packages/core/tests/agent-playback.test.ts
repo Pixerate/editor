@@ -4,6 +4,7 @@ import {
 	PresenceStore,
 	createAgentPlayback,
 	createInstantPresenceClock,
+	createPlaybackToolProvider,
 	createMcpServer,
 	derivePlaybackSteps,
 	playbackRefsFromArgs,
@@ -192,9 +193,21 @@ describe('AgentPlayback', () => {
 		expect(surface.gestures).toEqual(['begin agent:agent:1', 'end']);
 	});
 
-	it('glances at reads without pressing or opening an undo step', async () => {
+	it('shows only changes by default: reads are not played', async () => {
 		const read = tool('inspect', { annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } });
-		const { registry, playback } = setup([read]);
+		const { registry, playback } = setup([read, tool('align')]);
+		expect(playback.reads).toBe('skip');
+		playback.attach('canvas', fakeSurface());
+		const steps = playback.record();
+		await registry.callTool('canvas__inspect', { ids: ['a'] });
+		expect(steps).toEqual([]);
+		await registry.callTool('canvas__align', { ids: ['a'] });
+		expect(steps.length).toBeGreaterThan(0);
+	});
+
+	it('glances at reads without pressing or opening an undo step when reads is glance', async () => {
+		const read = tool('inspect', { annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } });
+		const { registry, playback } = setup([read], { reads: 'glance' });
 		const surface = fakeSurface();
 		playback.attach('canvas', surface);
 		const steps = playback.record();
@@ -304,8 +317,9 @@ describe('AgentPlayback', () => {
 		await registry.callTool('canvas__align', { ids: ['a'] });
 		expect(during).toBe(true);
 		expect(playback.active).toBe(false);
-		playback.say('Lining them up.');
+		expect(playback.say('Lining them up.')).toBe('canvas');
 		expect(surface.presence.get('agent')?.message).toBe('Lining them up.');
+		expect(playback.say('Nobody here.', { actor: { id: 'other' } })).toBeNull();
 	});
 
 	it('finishes when a plan or a surface gives NaN coordinates', async () => {
@@ -409,5 +423,55 @@ describe('createMcpServer actor', () => {
 		await server.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code', title: 'Claude Code' } } });
 		await server.handle({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'p__echo', arguments: {} } });
 		expect(actor).toEqual({ id: 'mcp:claude-code', name: 'Claude Code' });
+	});
+});
+
+describe('createPlaybackToolProvider (playback__say)', () => {
+	function sayRegistry() {
+		const { registry, playback } = setup([tool('align')], { linger: 0 });
+		registry.register(createPlaybackToolProvider(playback));
+		const surface = fakeSurface();
+		playback.attach('canvas', surface);
+		return { registry, playback, surface };
+	}
+
+	it('is complete for a model: strict schema, title, all four hints, described arguments', () => {
+		const { registry } = sayRegistry();
+		const say = registry.listTools().tools.find((t) => t.name === 'playback__say')!;
+		expect(say.title).toBeTruthy();
+		expect(say.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+		expect(say.inputSchema).toMatchObject({ required: ['text'], additionalProperties: false });
+		expect((say.inputSchema.properties as any).text.description).toBeTruthy();
+	});
+
+	it("shows the note in the calling actor's bubble and returns the surface", async () => {
+		const { registry, playback, surface } = sayRegistry();
+		const steps = playback.record();
+		await registry.callTool('canvas__align', { ids: ['a'] }, { actor: { id: 'claude', name: 'Claude' } });
+		const result = await registry.callTool('playback__say', { text: 'Lining up the cards.' }, { actor: { id: 'claude', name: 'Claude' } });
+		expect(result.isError).toBeFalsy();
+		expect(result.structuredContent).toEqual({ shown: true, surface: 'canvas' });
+		expect(surface.presence.get('claude')?.message).toBe('Lining up the cards.');
+		// The note is not played itself.
+		expect(steps.every((r) => r.tool !== 'say')).toBe(true);
+	});
+
+	it('shows nothing, without failing, when the agent has no cursor on screen', async () => {
+		const { registry, surface } = sayRegistry();
+		const result = await registry.callTool('playback__say', { text: 'Starting.' });
+		expect(result.isError).toBeFalsy();
+		expect(result.structuredContent).toEqual({ shown: false, surface: null });
+		expect(surface.presence.getState().actors).toEqual([]);
+	});
+
+	it('rejects missing, empty, overlong and unknown arguments with a useful error', async () => {
+		const { registry } = sayRegistry();
+		for (const args of [{}, { text: '' }, { text: 'x'.repeat(201) }, { text: 'Hi', ms: 500 }]) {
+			const result = await registry.callTool('playback__say', args);
+			expect(result.isError, JSON.stringify(args)).toBe(true);
+		}
+		const blank = await registry.callTool('playback__say', { text: '   ' });
+		expect(blank.isError).toBe(true);
+		expect((blank.content[0] as { text: string }).text).toMatch(/text is empty/);
 	});
 });

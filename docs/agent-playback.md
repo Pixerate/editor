@@ -15,6 +15,7 @@ You enable it once per registry and attach a surface for each editor on screen. 
 - [Headless, servers and tests](#headless-servers-and-tests)
 - [Several agents](#several-agents)
 - [Editors in tabs or panels](#editors-in-tabs-or-panels)
+- [Agent notes: `playback__say` (optional)](#agent-notes-playback__say-optional)
 - [Scripted agent turns](#scripted-agent-turns)
 - [For tool authors: how a call is played](#for-tool-authors-how-a-call-is-played)
 - [Supported editors](#supported-editors)
@@ -27,7 +28,7 @@ import { createToolRegistry, createAgentPlayback } from '@pixerate/editor/tools'
 const registry = createToolRegistry();
 const playback = createAgentPlayback({
   speed: 1,                 // 1 = natural pace, 2 = twice as fast, Infinity = no animation
-  reads: 'glance',          // read-only tools: 'glance' (move only), 'skip' or 'play'
+  reads: 'skip',            // read-only tools: 'skip' (default: only changes play), 'glance' (move only) or 'play'
   linger: 1500,             // ms the cursor stays after the agent's last call (0 keeps it)
   actor: { id: 'agent', name: 'Agent', color: '#7c3aed' },
 });
@@ -35,6 +36,10 @@ playback.install(registry);  // same as registry.use(playback.middleware), but o
 ```
 
 Register tool providers as usual. Playback changes how a call looks on screen, never what it returns. A call returns the same result, or the same error, with or without playback.
+
+Playback is always explicit: an editor plays only when you give it a `playback` object (as a prop, or through the playback context). Giving an editor a registry alone never turns it on.
+
+By default only changes play. Read-only tools (`readOnlyHint: true`) return at once without moving the cursor, so a model that reads a lot doesn't keep the user waiting. Demos and tours that want reads to show can pass `reads: 'glance'` (a quick move to the target, no press, no undo step) or `reads: 'play'`.
 
 ## Show the cursor: React
 
@@ -227,6 +232,18 @@ useCanvasPlaybackSurface(playback, 'canvas', { …, reveal: () => setTab('canvas
 
 Without `reveal`, a hidden editor's calls run instantly.
 
+## Agent notes: `playback__say` (optional)
+
+An agent can put a short note in its cursor's bubble with the `say` tool. It is strictly optional: nothing registers it for you, and nothing breaks without it. It is UI-agnostic: it only writes the note to the playback's presence store, which whatever presence layer you draw (the packaged one or your own) shows.
+
+```ts
+import { createPlaybackToolProvider } from '@pixerate/editor/tools';
+
+registry.register(createPlaybackToolProvider(playback));   // adds playback__say
+```
+
+`say { text }` shows `text` (at most 200 characters) beside the calling actor's cursor on the editor it last worked on, until its next call. It returns `{ shown, surface }`. When the actor has no cursor on screen (a headless server, or before its first write) it shows nothing and returns `{ shown: false, surface: null }`, which is not an error. It changes no document and is never played itself. Register it only where a UI shows the cursors, so models without one don't see a tool they can't use. From your own code, `playback.say(text, { actor })` does the same.
+
 ## Scripted agent turns
 
 `runToolScript` (in `@pixerate/editor/tools`) plays a list of notes and tool calls at reading speed. Use it for tours, demos and end-to-end tests of a skill.
@@ -345,4 +362,4 @@ Call the tool through `ToolRegistry.callTool` with `createInstantPresenceClock()
 | Rich text and diagram | Their own inline caret (`presence`) and `DiagramDirector`, as before; `insert_chart` now shows the caret where the chart goes in |
 | Vector: every `vector.*` command (`<VectorCanvas playback>`; shapes, paths, text, symbols, images, text ranges and mesh points planned; the rest derived from `ids`) | Now |
 | Image: `createImageEditorToolProvider` and `createImageEffectsToolProvider` (`<ImageEditor playback>`; opens each tool's panel, traces strokes, drags boxes, visits layers and sliders) | Now |
-| Spreadsheet, video, animation, parameters | Later phases |
+| Spreadsheet, video, animation, parameters (`<SpreadsheetEditor>`, `<VideoTimeline>`, `<AnimationEditor>`, `<ParametersPanel>` take `playback`) | Now |

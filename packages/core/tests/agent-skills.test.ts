@@ -14,7 +14,7 @@ import { JSDOM } from 'jsdom';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Editor } from '@tiptap/core';
-import { TOOL_DISCOVERY_TOOLS } from '../src/tools';
+import { TOOL_DISCOVERY_TOOLS, createAgentPlayback, createPlaybackToolProvider } from '../src/tools';
 import {
 	ToolRegistry,
 	baseToolName,
@@ -97,7 +97,8 @@ function expectedBySkill(): Record<string, string[]> {
 			'list_editors',
 			// Added by discovery views (`registry.view({ discovery })`), not by a provider.
 			...TOOL_DISCOVERY_TOOLS,
-			...commandIds(createHistoryCommands(stub))
+			...commandIds(createHistoryCommands(stub)),
+			...toolNames(createPlaybackToolProvider(createAgentPlayback()))
 		],
 		'pixerate-rich-text': [
 			...toolNames(createRichTextToolProvider(doc, { id: 'doc' })),
@@ -159,6 +160,7 @@ function expectedBySkill(): Record<string, string[]> {
 const FACTORIES: Record<string, string> = {
 	createCommandToolProvider: 'pixerate-agent-tools',
 	createHistoryCommands: 'pixerate-agent-tools',
+	createPlaybackToolProvider: 'pixerate-agent-tools',
 	createRichTextToolProvider: 'pixerate-rich-text',
 	createEditorMcpToolProvider: 'pixerate-rich-text, pixerate-canvas',
 	createFindReplaceCommands: 'pixerate-rich-text',

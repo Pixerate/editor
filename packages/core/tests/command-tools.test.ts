@@ -23,7 +23,7 @@ import { VideoEditorController, createVideoEditorToolProvider, createVideoEffect
 import { createFakeEffectProvider } from '../src/effects';
 import { VectorEditorController, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
 import { createRichTextPreset, SpreadsheetController } from '../src';
-import { createCaptureToolProvider, createElementCaptureSurface } from '../src/tools';
+import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { baseToolName } from '../src/tools';
@@ -207,6 +207,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		}
 		registry.register(createCanvasCaptureToolProvider({ id: 'capture', namespace: 'capture', element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] }));
 		registry.register(createCaptureToolProvider(createElementCaptureSurface({ element: null }), { id: 'dom-capture', namespace: 'dom' }));
+		registry.register(createPlaybackToolProvider(createAgentPlayback()));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
 		registry.register(createDiagramToolProvider(new DiagramController(), { id: 'diagram', namespace: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) }));
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));

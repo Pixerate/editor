@@ -305,12 +305,14 @@ The order follows the user's priority: **canvas, then vector, then image**. The 
 
 **Dependency isolation.** Everything in phase 0 that lives in `src/tools` imports only `src/tools` itself. DOM lookup lives in the UI packages, or receives `root` by injection. Domain `plan`s live next to their commands (`vector/commands.ts` and so on), not in `src/tools`. `entry-isolation.test.ts` needs no change beyond the new export assertion.
 
-## Open questions for review
+## Decisions
 
-1. Default `reads`: is `'glance'` right for real MCP agents, or should playback default to writes only and leave `'glance'` to demos?
-2. Should playback be on by default when an editor is given a registry, or always need an explicit `playback` object? This plan says explicit.
-3. Should the demo transcript become a packaged `AgentTranscript` (React and Svelte) after phase 8, or stay demo-only?
-4. Ship `playback__say` for real MCP clients in phase 1 (recommended) or later?
+Answered after phase 8 (2026-10-22):
+
+1. **Default `reads`: `'skip'`.** Playback shows only changes by default. `'glance'` and `'play'` stay as options for demos and tours (the demo passes `reads: 'glance'`).
+2. **Explicit.** An editor plays only when it is given a `playback` object; a registry alone never turns it on.
+3. **No packaged transcript.** The demo's transcript stays demo-only; `runToolScript` events are enough for consumers to build their own.
+4. **`playback__say` ships as strictly optional and UI-agnostic.** `createPlaybackToolProvider(playback)` adds it; nothing registers it by default. It only writes to the presence store and returns `{ shown, surface }`, showing nothing (without an error) when no cursor is on screen.
 
 ## Recommendation
 
