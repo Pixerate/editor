@@ -65,7 +65,8 @@ editor's, or (in discovery mode) only `list_toolsets`, `search_tools`, `enable_t
 
 The host may act your calls out on screen (agent playback): your cursor glides to what a call
 names, presses, drags or types, and the change lands as one undo step. Results are the same with
-or without it, and calls simply take a little longer while it plays.
+or without it, and calls simply take a little longer while it plays. Only changes play by
+default: reads return at once and do not move your cursor.
 
 - Do not add waits or poll for the animation; each call returns once its change is applied.
 - Name your targets with the ids read tools return (`ids`, `nodeId`, `layerId`, a range). They are
@@ -73,6 +74,10 @@ or without it, and calls simply take a little longer while it plays.
 - A batch (`run_commands`) plays its steps' moves first, then applies once as one undo step.
 - If you connect over MCP, your client's name labels your cursor; several agents get separate
   cursors.
+- If the host registers `say`, use it sparingly to tell the user why, before a change that
+  is not obvious from the cursor alone (one short sentence). It shows beside your cursor on the
+  editor you last changed, so call it after your first write there; `shown: false` means no
+  cursor was on screen, which is fine: carry on. Never call it instead of doing the work.
 
 ## Errors
 
@@ -102,6 +107,7 @@ Never repeat an identical failing call. Never work around a read-only refusal; t
 | `list_commands` | Discover the commands an editor registers: id, label, group, params JSON Schema, shortcuts, and whether each is enabled now (with the reason when it is not). Filter with `query`; pass `enabledOnly: true` to see only what you can run now. |
 | `run_command` | Run one command by `id` with `params` matching its schema. Disabled commands and unknown params fail with a reason; read it before retrying. |
 | `run_commands` | Run several commands in order as `steps`. A param string `"$0.id"` or `"$last.id"` is replaced by that path of an earlier step's result, so a step can use an id an earlier step created. Pass `atomic: true` and a `label` to make the batch one undo step that rolls back entirely on failure; without it, steps before a failure stay applied. |
+| `say` | Optional; only where the host shows your cursor. Put one short sentence (`text`, at most 200 characters) in the bubble beside your cursor so the user can follow why you are about to change something. Returns `shown` and the `surface` it appeared on (`shown: false`, `surface: null` when no cursor is on screen, which is not an error). Call it after a write on that editor, before the next one. Changes nothing. |
 
 ## Commands
 

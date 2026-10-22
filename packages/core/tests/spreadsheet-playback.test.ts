@@ -79,8 +79,9 @@ describe('spreadsheet tools through playback', () => {
 		expect(await b.registry.callTool('sheet__set_cell', { cell: 'B3', value: 'Hello' })).toEqual(res);
 	});
 
-	it('glances at a read range', async () => {
+	it('glances at a read range when reads is glance', async () => {
 		const { registry, playback } = setup();
+		playback.reads = 'glance';
 		const steps = playback.record();
 		await registry.callTool('sheet__get_range', { range: 'A1:C3' });
 		expect(steps.map((r) => r.step)).toEqual([{ type: 'target', ref: { kind: 'cell', id: 'A1:C3' } }, { type: 'commit' }]);

@@ -103,7 +103,7 @@ export interface AgentPlaybackOptions {
 	clock?: PresenceClock;
 	/** 1 = natural pace, 2 = twice as fast, `Infinity` = no animation (default 1). */
 	speed?: number;
-	/** Read-only tools: `glance` moves to their target only (default), `skip` doesn't, `play` plays them like writes. */
+	/** Read-only tools: `skip` shows only changes (default), `glance` moves to their target only, `play` plays them like writes. */
 	reads?: PlaybackReads;
 	/** Hide a cursor this long after its actor's last call (ms, default 1500; 0 keeps it). */
 	linger?: number;
@@ -265,7 +265,7 @@ export class AgentPlayback {
 	constructor(options: AgentPlaybackOptions = {}) {
 		this.clock = options.clock ?? realPresenceClock;
 		this.speed = options.speed ?? 1;
-		this.reads = options.reads ?? 'glance';
+		this.reads = options.reads ?? 'skip';
 		this.linger = options.linger ?? 1500;
 		this.defaultActor = options.actor ?? { id: 'agent', name: 'Agent' };
 	}
@@ -308,11 +308,16 @@ export class AgentPlayback {
 		return this.surfaces.get(id);
 	}
 
-	/** Shows `text` in the actor's bubble on the surface it last worked on (until its next step). */
-	say(text: string, options: { actor?: PresenceActorInfo } = {}): void {
+	/**
+	 * Shows `text` in the actor's bubble on the surface it last worked on (until its next step).
+	 * Returns that surface's id, or null when the actor has no cursor on screen (nothing shown).
+	 */
+	say(text: string, options: { actor?: PresenceActorInfo } = {}): string | null {
 		const actor = this.actorState(options.actor);
 		const surface = actor.surface ? this.surfaces.get(actor.surface) : undefined;
-		if (surface?.presence.get(actor.info.id)) surface.presence.set({ id: actor.info.id, message: text });
+		if (!surface?.presence.get(actor.info.id)) return null;
+		surface.presence.set({ id: actor.info.id, message: text });
+		return actor.surface!;
 	}
 
 	/** Finishes every running performance at once (the calls still run and keep their results). */
@@ -599,4 +604,50 @@ export class AgentPlayback {
 /** An {@link AgentPlayback}: install it on a registry and attach editor surfaces to see calls played. */
 export function createAgentPlayback(options: AgentPlaybackOptions = {}): AgentPlayback {
 	return new AgentPlayback(options);
+}
+
+export interface PlaybackToolProviderOptions {
+	/** Provider id and default namespace (default `playback`, so the tool is `playback__say`). */
+	id?: string;
+	namespace?: string;
+}
+
+/**
+ * The optional `say` tool: lets an agent put a short note in its cursor's bubble, through
+ * {@link AgentPlayback.say}. Register it only where a UI shows the cursors; it changes no document
+ * and is never played itself. Without a cursor on screen it shows nothing and says so.
+ */
+export function createPlaybackToolProvider(playback: AgentPlayback, options: PlaybackToolProviderOptions = {}): AgentToolProvider {
+	const title = 'Say a note by your cursor';
+	return {
+		id: options.id ?? 'playback',
+		namespace: options.namespace,
+		title: 'Agent playback',
+		description: 'Notes shown beside your cursor while the host plays your calls on screen.',
+		skill: 'pixerate-agent-tools',
+		tools: [
+			{
+				name: 'say',
+				title,
+				description:
+					'Shows a short note in the bubble beside your cursor on the editor you last worked on, so the user can follow what you are doing; it stays until your next call. Changes no document. Returns shown (whether a cursor was on screen to show it) and surface (that editor, or null).',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						text: { type: 'string', minLength: 1, maxLength: 200, description: 'The note: one short sentence, at most 200 characters.' }
+					},
+					required: ['text'],
+					additionalProperties: false
+				},
+				annotations: { title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+				playback: false,
+				handler: ({ text }, context) => {
+					const note = String(text).trim();
+					if (!note) throw new Error('text is empty; pass the note to show, e.g. "Aligning the cards."');
+					const surface = playback.say(note, { actor: context.actor });
+					return { shown: surface !== null, surface };
+				}
+			}
+		]
+	};
 }
