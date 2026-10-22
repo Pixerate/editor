@@ -128,3 +128,9 @@ jobs:
       - name: Push release tags
         if: steps.changeset_check.outputs.should_release == 'true'
         run: git push origin --tags
+
+      - name: Create GitHub Releases
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: node scripts/create-github-releases.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
