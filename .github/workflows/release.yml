@@ -69,7 +69,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Version packages & update CHANGELOG.md files
-        if: steps.changeset_check.outputs.should_release == 'true'
+        # A manual run with no pending changesets only publishes what npm is missing (e.g. after
+        # the publish step failed: the version commit is already on main). `changeset version`
+        # exits 1 when there is nothing to version, so skip it then.
+        if: steps.changeset_check.outputs.should_release == 'true' && steps.changeset_check.outputs.count != '0'
         run: pnpm version-packages
 
       - name: Build packages
