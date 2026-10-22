@@ -147,6 +147,7 @@ refuse.
 
 ## Pitfalls
 
+- With agent playback on, the cursor clicks the shot a call names in the timeline and visits the stage elements its commands target. Results are unchanged.
 - **Effect commands are ordinary commands.** You can retime or edit them with `edit_animation` like
   any command, but `update_effect` replaces all of an effect's commands. Change values through the
   effect, and timing through the commands.

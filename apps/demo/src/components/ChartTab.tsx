@@ -25,7 +25,7 @@ import {
   useOfficeChartToolProvider,
 } from "@pixerate/editor-react/chart";
 import { BarChart3 } from "lucide-react";
-import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
+import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { CHART_SCRIPTS } from "../agentScripts";
 
@@ -167,7 +167,6 @@ const STREAM_SOURCE = `xychart-beta
 
 export function ChartTab() {
   const controller = useChartController({ spec: SAMPLES.Revenue });
-  const agentStage = useRef<HTMLDivElement>(null);
   const state = useChartState(controller);
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
@@ -262,10 +261,11 @@ export function ChartTab() {
         ))}
       </div>
 
-      <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3" ref={agentStage}>
-        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} />
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3">
+        {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
+        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} playback={demoPlayback} />
       </div>
-      <AgentScriptPanel scripts={CHART_SCRIPTS} stage={agentStage} presence={presence} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place." />
+      <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place; every other call is acted out on the inspector, data grid and toolbar." />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
         <p>{summary.description}</p>

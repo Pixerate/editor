@@ -228,6 +228,9 @@ const isErrorResult = (value: unknown): value is { isError: true; content?: Arra
 
 const center = (r: PlaybackRect): PlaybackPoint => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
 
+const finiteRect = (r: PlaybackRect | null): PlaybackRect | null =>
+	r && [r.x, r.y, r.width, r.height].every(Number.isFinite) ? r : null;
+
 const GLANCE_STEPS = new Set<PlaybackStep['type']>(['move', 'target', 'focus', 'say', 'wait', 'commit']);
 
 interface ActorState {
@@ -405,7 +408,8 @@ export class AgentPlayback {
 		const pace = () => Math.max(0.1, this.speed) * (run.glance ? 1.6 : 1);
 		const wait = (ms: number) => (instant() || ms <= 0 ? Promise.resolve() : this.clock.wait(ms / pace()));
 		const presence = surface.presence;
-		const locate = (ref: PlaybackRef) => surface.locate?.(ref.kind === 'item' ? { kind: surface.defaultKind ?? 'item', id: ref.id } : ref) ?? null;
+		// A surface's locate is host code: a rectangle with a NaN or infinite number counts as not found.
+		const locate = (ref: PlaybackRef) => finiteRect(surface.locate?.(ref.kind === 'item' ? { kind: surface.defaultKind ?? 'item', id: ref.id } : ref) ?? null);
 		const record = (step: PlaybackStep) => {
 			for (const list of this.recordings) list.push({ actor: id, surface: surfaceId, tool: call.name, step });
 		};
@@ -543,7 +547,7 @@ export class AgentPlayback {
 				return wait(60);
 			case 'type': {
 				const total = step.ms ?? Math.min(900, 40 * step.text.length + 150);
-				if (instant() || total <= 0) {
+				if (instant() || !(total > 0) || !Number.isFinite(total)) {
 					presence.set({ id, message: step.text });
 					return;
 				}
@@ -564,11 +568,13 @@ export class AgentPlayback {
 
 	/** Glides along a slight arc with ease-out, by elapsed time (fewer frames in a throttled tab, never longer). */
 	private async glide(presence: PresenceStore, id: string, to: PlaybackPoint, ms: number | undefined, instant: () => boolean) {
+		// A plan's point may come from bad arguments: never glide toward (or from) NaN, which would never arrive.
+		if (!Number.isFinite(to.x) || !Number.isFinite(to.y)) return;
 		const a = presence.get(id);
-		const from = a ? { x: a.x, y: a.y } : to;
+		const from = a && Number.isFinite(a.x) && Number.isFinite(a.y) ? { x: a.x, y: a.y } : to;
 		const dist = Math.hypot(to.x - from.x, to.y - from.y);
 		const duration = (ms ?? Math.min(900, 260 + dist * 0.5)) / Math.max(0.1, this.speed);
-		if (instant() || dist < 1 || duration <= 0) {
+		if (instant() || dist < 1 || !(duration > 0) || !Number.isFinite(duration)) {
 			presence.set({ id, x: to.x, y: to.y });
 			return;
 		}

@@ -32,3 +32,4 @@ export * from './controller.js';
 export * from './tools.js';
 export * from './effect-tools.js';
 export * from './ui.js';
+export * from './playback.js';

@@ -331,6 +331,13 @@ describe("document chart tools", () => {
     expect(names(noSparkline.registry)).not.toContain("insert_sparkline");
   });
 
+  it("insert_chart shows the agent's caret where the chart goes in", async () => {
+    const { editor, ok } = setup();
+    const { getAgentCarets } = await import("../src/extensions");
+    await ok("insert_chart", { at: 7, spec: { categories: ["Jan"], series: [{ name: "A", values: [1] }] } });
+    expect(getAgentCarets(editor.state).length).toBeGreaterThan(0);
+  });
+
   it("insert_chart → list_document_charts → update_chart_in_document closes the loop", async () => {
     const { editor, ok } = setup();
     const inserted = await ok("insert_chart", {

@@ -1,4 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 import { indexMotionNodes, motionIssueLine, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin } from '@pixerate/editor/animation-editor';
 import { AnimationStage } from './AnimationStage';
 import { CommandInspector } from './CommandInspector';
@@ -33,6 +37,15 @@ export interface AnimationEditorProps {
    */
   effects?: EffectProvider | null;
   className?: string;
+  /**
+   * Agent playback: act out the animation tools' calls here with the agent's cursor (default: the
+   * nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `animation`, where the animation tool providers play). */
+  playbackId?: string;
+  /** Bring the editor on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 const ONION: MotionOnionSkin = { before: 3, after: 1 };
@@ -44,8 +57,47 @@ const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-4
  * playhead scrubber, and panels to edit commands, shots and scene settings by hand. Every edit
  * is one undo step.
  */
-export function AnimationEditor({ controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, className = '' }: AnimationEditorProps) {
+export function AnimationEditor({ controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, className = '', playback, playbackId = 'animation', onPlaybackReveal }: AnimationEditorProps) {
   const state = useAnimationEditorState(controller);
+
+  // Agent playback: the agent's cursor in pixels of the editor's box, finding shots in the
+  // timeline and elements on the stage (whose SVG keeps the artwork's ids, prefixed `ae-`).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const rectIn = (el: Element | null | undefined): PlaybackRect | null => {
+    const box = rootRef.current?.getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    return box && r && r.width > 0 ? { x: r.left - box.left, y: r.top - box.top, width: r.width, height: r.height } : null;
+  };
+  const agentPresence = usePlaybackSurface(playing, playbackId, {
+    defaultKind: 'shot',
+    locate: (ref: PlaybackRef) => {
+      const root = rootRef.current;
+      if (!root) return null;
+      if (ref.kind === 'shot') return rectIn(root.querySelector(`[data-shot="${CSS.escape(ref.id)}"]`));
+      if (ref.kind === 'element') return rectIn(root.querySelector(`[data-animation-stage] [id="ae-${CSS.escape(ref.id)}"]`));
+      return null;
+    },
+    bounds: () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return r && r.width > 0 ? { x: 0, y: 0, width: r.width, height: r.height } : null;
+    },
+    visible: () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
+    },
+    fromViewport: (p) => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+    },
+    reveal: () => onPlaybackReveal?.(),
+  });
+  const presenceLayer = playing ? <PresenceLayer presence={agentPresence} /> : null;
   useEffects(controller, effects);
   const { issues, scene, selection, readOnly } = state;
   const [picked, setPicked] = useState<string | null>(null);
@@ -85,7 +137,8 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
   );
   if (!editable)
     return (
-      <div className={`flex flex-col gap-2 ${className}`} data-animation-editor="">
+      <div ref={rootRef} className={`relative flex flex-col gap-2 ${className}`} data-animation-editor="">
+        {presenceLayer}
         {stage}
         <PlayheadScrubber controller={controller} />
         {issueList}
@@ -94,7 +147,8 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
 
   return (
     <div
-      className={`grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] ${className}`}
+      ref={rootRef}
+      className={`relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem] ${className}`}
       data-animation-editor=""
       onKeyDown={(e) => {
         const el = e.target as HTMLElement;
@@ -104,6 +158,7 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
         else controller.undo();
       }}
     >
+      {presenceLayer}
       <div className="flex min-w-0 flex-col gap-2">
         {stage}
         <PlayheadScrubber controller={controller} />

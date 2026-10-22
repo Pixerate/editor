@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   useEditor,
   EditorContent,
@@ -205,7 +205,6 @@ export const RichDocumentTab: React.FC = () => {
       active ? "bg-rose-500/20 text-rose-300" : "text-slate-400"
     }`;
 
-  const agentStage = useRef<HTMLDivElement>(null);
   return (
     <div className="space-y-4">
       <RichDocumentAutosave editor={editor} />
@@ -472,7 +471,7 @@ export const RichDocumentTab: React.FC = () => {
         </aside>
 
         {/* Editor Content Area */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-xl relative min-w-0" ref={agentStage}>
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-xl relative min-w-0">
           <BubbleMenu editor={editor} className="bg-slate-800 text-slate-100 border border-slate-700 shadow-xl rounded-md p-1 flex items-center gap-1">
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
@@ -512,7 +511,7 @@ export const RichDocumentTab: React.FC = () => {
           <EditorContent editor={editor} />
         </div>
       </div>
-      <AgentScriptPanel scripts={DOCUMENT_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the doc__* tools: it edits a sentence by position and inserts a live chart block." />
+      <AgentScriptPanel scripts={DOCUMENT_SCRIPTS} hint="Plays a scripted agent turn with the doc__* tools: it edits a sentence by position and inserts a live chart block." />
     </div>
   );
 };

@@ -20,8 +20,12 @@
     getDataBarCss,
     conditionalFormatStyleString,
     type SpreadsheetPanelId,
-    type SpreadsheetValidationAction
+    type SpreadsheetValidationAction,
+    parseSpreadsheetPlaybackRef
   } from '@pixerate/editor/spreadsheet';
+  import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+  import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
   import FormulaBar from './FormulaBar.svelte';
   import SpreadsheetValidationDialog from './SpreadsheetValidationDialog.svelte';
   import SpreadsheetConditionalFormatPanel from './SpreadsheetConditionalFormatPanel.svelte';
@@ -54,6 +58,15 @@
      * `true` / `false` force it.
      */
     virtualize?: boolean | 'auto';
+    /**
+     * Agent playback: act out the spreadsheet tools' calls here with the agent's cursor (default:
+     * `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `spreadsheet`, where `createSpreadsheetToolProvider` plays). */
+    playbackId?: string;
+    /** Bring the grid on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
   let {
@@ -67,7 +80,10 @@
     onColumnHeaderClick,
     onColumnResize,
     showSheetTabs = false,
-    virtualize = 'auto'
+    virtualize = 'auto',
+    playback,
+    playbackId = 'spreadsheet',
+    onplaybackreveal
   }: Props = $props();
 
   // Virtualised rendering: frozen rows/columns, a spacer, the rows and
@@ -120,6 +136,47 @@
   let isReadOnly = $derived(readOnly || readonly);
 
   let gridContainer = $state<HTMLDivElement | null>(null);
+
+  // Agent playback: the agent's cursor in pixels of the grid's box, finding cells by data-row / data-col.
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  const agentPresence = createPlaybackSurface(() => playing, () => playbackId, () => ({
+    defaultKind: 'cell',
+    locate: (ref: PlaybackRef): PlaybackRect | null => {
+      const grid = gridContainer;
+      const range = parseSpreadsheetPlaybackRef(ref);
+      if (!grid || !range) return null;
+      const box = grid.getBoundingClientRect();
+      const inside = (v: number, a: number | null, b: number | null) => (a === null || v >= a) && (b === null || v <= b);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const td of grid.querySelectorAll<HTMLElement>('td[data-row][data-col]')) {
+        if (!inside(Number(td.dataset.row), range.startRow, range.endRow) || !inside(Number(td.dataset.col), range.startCol, range.endCol)) continue;
+        const r = td.getBoundingClientRect();
+        minX = Math.min(minX, r.left - box.left);
+        minY = Math.min(minY, r.top - box.top);
+        maxX = Math.max(maxX, r.right - box.left);
+        maxY = Math.max(maxY, r.bottom - box.top);
+      }
+      return minX < maxX ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY } : null;
+    },
+    bounds: () => {
+      const r = gridContainer?.getBoundingClientRect();
+      return r && r.width > 0 ? { x: 0, y: 0, width: r.width, height: r.height } : null;
+    },
+    visible: () => {
+      const r = gridContainer?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p: { x: number; y: number }) => {
+      const r = gridContainer?.getBoundingClientRect();
+      return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
+    },
+    fromViewport: (p: { x: number; y: number }) => {
+      const r = gridContainer?.getBoundingClientRect();
+      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+    },
+    reveal: () => onplaybackreveal?.()
+  }));
   let cellInput = $state<HTMLInputElement | null>(null);
 
   // Focus the cell editor when it opens, with the caret after the draft
@@ -586,7 +643,7 @@
 {#snippet grid()}
 <div
   bind:this={gridContainer}
-  class="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs {className}"
+  class="relative flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs {className}"
   tabindex="0"
   onkeydown={handleKeyDown}
   role="grid"
@@ -878,6 +935,9 @@
   {/if}
   {#if sheetState.validationPrompt}
     <SpreadsheetValidationDialog prompt={sheetState.validationPrompt} onResolve={resolveValidation} />
+  {/if}
+  {#if playing}
+    <PresenceLayer presence={agentPresence} />
   {/if}
 </div>
 {/snippet}

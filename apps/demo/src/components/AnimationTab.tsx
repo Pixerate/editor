@@ -6,7 +6,7 @@ import { AnimationEditor, useAnimationEditorController, useAnimationEditorState,
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
-import { demoToolRegistry } from "../agentTools";
+import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { ANIMATION_SCRIPTS } from "../agentScripts";
 import bookmark from "../flair-samples/bookmark.json";
@@ -151,7 +151,6 @@ export function AnimationTab() {
   const [message, setMessage] = useState<{ title: string; lines: string[] } | null>(null);
   const [editing, setEditing] = useState(false);
   const vector = useVectorEditorController({ document: ARTWORK });
-  const agentStage = useRef<HTMLDivElement>(null);
   const errors = state.issues.filter((i) => i.severity === "error").length;
   const accentControl = state.scene.controls?.find((c) => c.name === "accent");
   // Everything enters later, so a stage at 0 s is empty: open on the badge once it has popped in.
@@ -195,10 +194,10 @@ export function AnimationTab() {
         </div>
       </div>
       <EffectsProviderSwitch />
-      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3" ref={agentStage}>
-        <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} effects={effects} />
+      <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+        <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} effects={effects} playback={demoPlayback} />
       </div>
-      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} stage={agentStage} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a reorder, a check, then playback." />
+      <AgentScriptPanel scripts={ANIMATION_SCRIPTS} hint="Plays a scripted agent turn with the animation__* tools: a new shot, its commands, a reorder, a check, then playback. The editor acts each call out with the agent's cursor." />
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <span>
           {state.shots.length} shots · {(state.duration / 1000).toFixed(1)} s · {errors} errors · {state.issues.length - errors} warnings and notes

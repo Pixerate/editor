@@ -20,8 +20,13 @@ import {
   type VideoProject,
   type VideoTrack,
   type VideoWaveformMode,
+  parseVideoTimeRef,
 } from '@pixerate/editor/video-editor';
+import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
 import { useVideoEditorState } from './useVideoEditor';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 
 export interface VideoTimelineProps {
   controller: VideoEditorController;
@@ -34,6 +39,15 @@ export interface VideoTimelineProps {
   /** Draw waveforms in audio clips (default), in every clip with sound (`all`), or not at all. Sound is decoded once per asset through `controller.audioPeaks`. */
   waveforms?: VideoWaveformMode;
   className?: string;
+  /**
+   * Agent playback: act out the video tools' calls here with the agent's cursor (default: the
+   * nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `video`, where the video tool providers play). */
+  playbackId?: string;
+  /** Bring the timeline on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 const HEADER = 150;
@@ -111,7 +125,7 @@ function useCachedRanges(controller: VideoEditorController, project: VideoProjec
   return ranges;
 }
 
-export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, waveforms = 'audio', className = '' }: VideoTimelineProps) {
+export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, editable = true, waveforms = 'audio', className = '', playback, playbackId = 'video', onPlaybackReveal }: VideoTimelineProps) {
   const state = useVideoEditorState(controller);
   const { project, duration, time, selection, readOnly, error } = state;
   const [ownZoom, setOwnZoom] = useState(pxPerSecond ?? 100);
@@ -124,6 +138,54 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
   const assets = videoAssetMap(project);
   const sequences = videoSequenceMap(project);
   const msToPx = (ms: number) => (ms * px) / 1000;
+
+  // Agent playback: the agent's cursor in pixels of the timeline's box, finding clips, tracks and times.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const pxRef = useRef(px);
+  pxRef.current = px;
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const rectIn = (el: Element | null | undefined): PlaybackRect | null => {
+    const box = wrapperRef.current?.getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    return box && r && r.width > 0 ? { x: r.left - box.left, y: r.top - box.top, width: r.width, height: r.height } : null;
+  };
+  const q = (selector: string) => wrapperRef.current?.querySelector(selector);
+  const agentPresence = usePlaybackSurface(playing, playbackId, {
+    defaultKind: 'clip',
+    locate: (ref: PlaybackRef) => {
+      if (ref.kind === 'clip') return rectIn(q(`[data-clip="${CSS.escape(ref.id)}"]`));
+      if (ref.kind === 'track') return rectIn(q(`[data-track-lane="${CSS.escape(ref.id)}"]`));
+      if (ref.kind === 'marker') return rectIn(q(`[data-marker="${CSS.escape(ref.id)}"]`));
+      const at = parseVideoTimeRef(ref);
+      if (!at) return null;
+      // The row: the named track, the row of the named clip, else the ruler.
+      const lane = at.track
+        ? q(`[data-track-lane="${CSS.escape(at.track)}"]`)
+        : at.clip
+          ? q(`[data-clip="${CSS.escape(at.clip)}"]`)?.closest('[data-track-lane]')
+          : ruler.current;
+      const row = rectIn(lane);
+      return row ? { x: row.x + (at.time * pxRef.current) / 1000 - 3, y: row.y, width: 6, height: row.height } : null;
+    },
+    bounds: () => {
+      const r = wrapperRef.current?.getBoundingClientRect();
+      return r && r.width > 0 ? { x: 0, y: 0, width: r.width, height: r.height } : null;
+    },
+    visible: () => {
+      const r = wrapperRef.current?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const r = wrapperRef.current?.getBoundingClientRect();
+      return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
+    },
+    fromViewport: (p) => {
+      const r = wrapperRef.current?.getBoundingClientRect();
+      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+    },
+    reveal: () => onPlaybackReveal?.(),
+  });
   const span = Math.max(duration + 5000, 10000);
   const width = msToPx(span);
   const ticks = videoRulerTicks(span, px, project.fps);
@@ -266,7 +328,8 @@ export function VideoTimeline({ controller, pxPerSecond, onPxPerSecondChange, ed
   );
 
   return (
-    <div className={`flex flex-col gap-1 ${className}`} data-video-timeline-wrapper="">
+    <div ref={wrapperRef} className={`relative flex flex-col gap-1 ${className}`} data-video-timeline-wrapper="">
+      {playing && <PresenceLayer presence={agentPresence} />}
       {!onPxPerSecondChange && (
         <label className="flex items-center gap-2 self-end text-xs text-muted-foreground">
           Zoom

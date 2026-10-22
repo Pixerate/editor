@@ -168,6 +168,7 @@ several charts may register them with another prefix.
 
 ## Pitfalls
 
+- With agent playback on, value changes and selections are dragged by the chart's director, and other changes are clicked on the inspector option, data grid or toolbar they belong to. Results are unchanged.
 - Series values are positional: one value per category, in category order. After
   `add_chart_category` or `remove_chart_category`, every series shifts with it.
 - `set_chart_data` with only `series` keeps the categories; with only `categories` it keeps

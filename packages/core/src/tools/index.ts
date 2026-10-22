@@ -20,3 +20,4 @@ export * from './skills.js';
 export * from './safe-json.js';
 export * from './presence.js';
 export * from './playback.js';
+export * from './script.js';

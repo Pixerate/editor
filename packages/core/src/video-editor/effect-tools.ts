@@ -7,6 +7,7 @@
 
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult, type EffectTargetEffects } from '../effects/tools.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
+import { withVideoPlayback } from './playback.js';
 import type { EffectValue } from '../effects/types.js';
 import type { VideoEditorController, VideoEffectEditResult } from './controller.js';
 import { isVideoKeyframes, VIDEO_EASE_NAMES, type VideoKey } from './keyframes.js';
@@ -71,7 +72,7 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 		return { target, effect: effect!, effects, ...extra };
 	};
 
-	return createEffectToolProvider({
+	return withVideoPlayback(createEffectToolProvider({
 		id: options.id ?? 'video-effects',
 		namespace: options.namespace,
 		title: 'Video effects',
@@ -204,5 +205,5 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 				}
 			}
 		]
-	});
+	}));
 }

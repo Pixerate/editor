@@ -256,6 +256,7 @@ and every write tool is refused with the reason.
 
 ## Pitfalls
 
+- With agent playback on, the cursor drags a moved or trimmed clip to its new time, clicks a track where a clip goes in, and clicks the ruler where a split, seek or marker lands. Give real `start` / `at` times in ms; results are unchanged.
 - **Effects need rendered frames to export.** ffmpeg cannot draw provider effects, so
   `export_video_ffmpeg` refuses a project with enabled effects unless the host renders the
   picture frame by frame (`renderVideoFrameExact`) and passes `frames`. Tell the user, or turn

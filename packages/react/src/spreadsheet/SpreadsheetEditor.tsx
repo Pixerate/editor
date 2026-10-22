@@ -17,8 +17,13 @@ import {
   getConditionalFormatIcon,
   getDataBarCss,
   type ConditionalCellFormat,
-  type SpreadsheetPanelId
+  type SpreadsheetPanelId,
+  parseSpreadsheetPlaybackRef,
 } from '@pixerate/editor/spreadsheet';
+import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 import { useSpreadsheetEditor } from './useSpreadsheetEditor';
 import { SpreadsheetContextMenu } from './SpreadsheetContextMenu';
 import { SpreadsheetGroupRow } from './SpreadsheetGroupRow';
@@ -129,6 +134,15 @@ export interface SpreadsheetEditorProps {
    * `true` / `false` force it.
    */
   virtualize?: boolean | 'auto';
+  /**
+   * Agent playback: act out the spreadsheet tools' calls here with the agent's cursor (default:
+   * the nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `spreadsheet`, where `createSpreadsheetToolProvider` plays). */
+  playbackId?: string;
+  /** Bring the grid on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 /** A rendered column, or the space standing for the columns left out. */
@@ -144,11 +158,55 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   onColumnHeaderClick,
   onColumnResize,
   showSheetTabs = false,
-  virtualize = 'auto'
+  virtualize = 'auto',
+  playback,
+  playbackId = 'spreadsheet',
+  onPlaybackReveal,
 }) => {
   const defaultState = useSpreadsheetEditor();
   const state = externalState || defaultState;
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Agent playback: the agent's cursor in pixels of the grid's box, finding cells by data-row / data-col.
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const agentPresence = usePlaybackSurface(playing, playbackId, {
+    defaultKind: 'cell',
+    locate: (ref: PlaybackRef): PlaybackRect | null => {
+      const grid = gridRef.current;
+      const range = parseSpreadsheetPlaybackRef(ref);
+      if (!grid || !range) return null;
+      const box = grid.getBoundingClientRect();
+      const inside = (v: number, a: number | null, b: number | null) => (a === null || v >= a) && (b === null || v <= b);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const td of grid.querySelectorAll<HTMLElement>('td[data-row][data-col]')) {
+        if (!inside(Number(td.dataset.row), range.startRow, range.endRow) || !inside(Number(td.dataset.col), range.startCol, range.endCol)) continue;
+        const r = td.getBoundingClientRect();
+        minX = Math.min(minX, r.left - box.left);
+        minY = Math.min(minY, r.top - box.top);
+        maxX = Math.max(maxX, r.right - box.left);
+        maxY = Math.max(maxY, r.bottom - box.top);
+      }
+      return minX < maxX ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY } : null;
+    },
+    bounds: () => {
+      const r = gridRef.current?.getBoundingClientRect();
+      return r && r.width > 0 ? { x: 0, y: 0, width: r.width, height: r.height } : null;
+    },
+    visible: () => {
+      const r = gridRef.current?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p) => {
+      const r = gridRef.current?.getBoundingClientRect();
+      return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
+    },
+    fromViewport: (p) => {
+      const r = gridRef.current?.getBoundingClientRect();
+      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+    },
+    reveal: () => onPlaybackReveal?.(),
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const formulaBarRef = useRef<HTMLInputElement>(null);
   const cellInputRef = useRef<HTMLInputElement>(null);
@@ -620,7 +678,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
   const grid = (
     <div
       ref={gridRef}
-      className="flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs"
+      className="relative flex flex-col h-full w-full overflow-hidden border border-border bg-background select-none outline-none text-foreground font-sans text-xs"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       role="grid"
@@ -976,6 +1034,7 @@ export const SpreadsheetEditor: React.FC<SpreadsheetEditorProps> = ({
         </div>
       )}
       {state.validationPrompt && <SpreadsheetValidationDialog prompt={state.validationPrompt} onResolve={resolveValidation} />}
+      {playing && <PresenceLayer presence={agentPresence} />}
       <style>{`
         .col-resize-handle:hover .col-resize-handle-line {
           background-color: var(--primary, #6366f1);

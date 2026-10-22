@@ -1,17 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { McpToolResult } from "@pixerate/editor/agent";
 import { Bot, FastForward, Play, Square, User } from "lucide-react";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
-import {
-  demoAgentSpeed,
-  resultValue,
-  runAgentScript,
-  type AgentRunControl,
-  type AgentScript,
-  type AgentScriptContext,
-  type AgentTarget,
-} from "../agentScript";
+import { demoAgentSpeed, resultValue, runAgentScript, type AgentRunControl, type AgentScript } from "../agentScript";
 
 type Entry =
   | { kind: "user"; text: string }
@@ -21,165 +12,30 @@ type Entry =
   | { kind: "error"; text: string }
   | { kind: "done"; text: string };
 
-interface CursorState {
-  x: number;
-  y: number;
-  visible: boolean;
-  pressed: boolean;
-  bubble?: string;
-  /** The target being worked on, relative to the stage. */
-  focus?: { x: number; y: number; width: number; height: number };
-}
-
-/** The visible element or text range showing `text` inside `stage` (the first match). */
-function findTextRect(stage: HTMLElement, text: string): DOMRect | null {
-  const walker = document.createTreeWalker(stage, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const at = node.textContent?.indexOf(text) ?? -1;
-    if (at < 0) continue;
-    const range = document.createRange();
-    range.setStart(node, at);
-    range.setEnd(node, at + text.length);
-    const rect = range.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) return rect;
-  }
-  // Form fields keep their text in `value`.
-  for (const input of stage.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")) {
-    if (input.value.includes(text)) return input.getBoundingClientRect();
-  }
-  return null;
-}
-
-/** The clickable element (button, tab, link or label) showing `text` inside `stage`. */
-function findControl(stage: HTMLElement, text: string): HTMLElement | null {
-  for (const el of stage.querySelectorAll<HTMLElement>("button, [role=tab], a, label")) {
-    if (el.textContent?.trim() === text && el.getClientRects().length) return el;
-  }
-  return null;
-}
-
-function resolveTarget(target: AgentTarget, stage: HTMLElement, ctx: AgentScriptContext): DOMRect | null {
-  if (typeof target === "function") {
-    const found = target(stage, ctx);
-    if (!found) return null;
-    return found instanceof DOMRect ? found : found.getBoundingClientRect();
-  }
-  if ("text" in target) return findTextRect(stage, target.text);
-  return stage.querySelector(target.selector)?.getBoundingClientRect() ?? null;
-}
-
 function summarize(value: unknown, max = 220): string {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (!text) return "done";
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-const realWait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-/** An agent's cursor with a name tag and speech bubble, drawn over the stage (after Ursula's PresenceLayer). */
-const AgentCursor: React.FC<{ cursor: CursorState; name: string }> = ({ cursor, name }) => (
-  <div className="pointer-events-none absolute inset-0 z-30 overflow-visible" aria-hidden="true" data-testid="agent-cursor">
-    {cursor.focus && (
-      <div
-        className="absolute rounded-md ring-2 ring-violet-400/80 bg-violet-400/10 transition-all duration-200"
-        style={{ left: cursor.focus.x - 3, top: cursor.focus.y - 3, width: cursor.focus.width + 6, height: cursor.focus.height + 6 }}
-      />
-    )}
-    <div
-      className="absolute transition-opacity duration-500"
-      style={{ left: cursor.x, top: cursor.y, opacity: cursor.visible ? 1 : 0 }}
-    >
-      <svg
-        width="18"
-        height="20"
-        viewBox="0 0 18 20"
-        className="drop-shadow-md transition-transform duration-75"
-        style={{ transform: cursor.pressed ? "scale(0.85)" : undefined, transformOrigin: "2px 2px" }}
-      >
-        <path d="M2 2 L2 17 L6.5 12.8 L9.6 19 L12.2 17.8 L9.2 11.7 L15.5 11.4 Z" fill="#7c3aed" stroke="white" strokeWidth="1.4" strokeLinejoin="round" />
-      </svg>
-      <div className="absolute left-4 top-4 flex flex-col items-start gap-1">
-        <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow whitespace-nowrap">{name}</span>
-        {cursor.bubble && (
-          <span className="w-max max-w-[240px] rounded-lg rounded-tl-none bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-lg ring-1 ring-slate-900/15">{cursor.bubble}</span>
-        )}
-      </div>
-    </div>
-  </div>
-);
-
-/**
- * An editor's own agent cursors (a director's presence store, e.g. `PaintPresence` or
- * `ChartPresence`), drawn inside the stage with `[data-actor]` elements.
- */
-export interface AgentPresenceSource {
-  getState(): { actors: readonly { id: string }[] };
-  subscribe(listener: () => void): () => void;
-  remove(id: string): void;
-}
-
 export interface AgentScriptPanelProps {
   /** The requests the user can pick; each plays as a scripted agent turn. */
   scripts: AgentScript[];
-  /**
-   * The editor the agent works in. Its element should be `position: relative`; the cursor is drawn
-   * inside it. Leave it out for editors that draw their own agent cursor (diagrams). Text editors
-   * draw an inline caret (`createRichTextToolProvider`'s `presence`), so their text steps have no target.
-   */
-  stage?: React.RefObject<HTMLElement | null>;
-  /**
-   * The editor's own agent cursor (its director's presence). The panel shows one cursor: its own
-   * hides while the editor's is on screen, and the next panel step takes over from where the
-   * editor's cursor is, removing it.
-   */
-  presence?: AgentPresenceSource;
-  /** The agent's name on its cursor. */
-  actor?: string;
   /** One line about what the agent does here. */
   hint?: React.ReactNode;
 }
 
 /**
  * Plays scripted agent turns in an editor: the user's request, the agent's notes, and each MCP
- * tool call with its result, while a cursor glides to what the agent works on. Calls go through the
- * demo's `ToolRegistry`, exactly as an agent connected over MCP would make them.
+ * tool call with its result. Calls go through the demo's `ToolRegistry`, exactly as an agent
+ * connected over MCP would make them, and the library's agent playback acts each one out with the
+ * agent's cursor on the editor it targets (notes show in the cursor's bubble).
  */
-export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, stage, presence, actor = "Agent", hint }) => {
+export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, hint }) => {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [running, setRunning] = useState<string | null>(null);
-  const [cursor, setCursor] = useState<CursorState>({ x: 0, y: 0, visible: false, pressed: false });
-  const cursorRef = useRef(cursor);
-  cursorRef.current = cursor;
   const control = useRef<AgentRunControl | null>(null);
   const log = useRef<HTMLOListElement>(null);
-  const placed = useRef(false);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const patchCursor = (patch: Partial<CursorState>) => setCursor((c) => ({ ...c, ...patch }));
-
-  // While the editor's own cursor is on screen, it is the agent's cursor: hide the panel's.
-  const [handedOff, setHandedOff] = useState(false);
-  useEffect(() => {
-    if (!presence) return;
-    const sync = () => setHandedOff(presence.getState().actors.length > 0);
-    sync();
-    return presence.subscribe(sync);
-  }, [presence]);
-
-  /** Takes the cursor back from the editor: starts from where its cursor is, then removes it. */
-  const takeBack = () => {
-    const host = stage?.current;
-    const actors = presence?.getState().actors ?? [];
-    if (!host || !actors.length) return;
-    const el = host.querySelector(`[data-actor="${actors[0]!.id}"]`);
-    if (el) {
-      const r = el.getBoundingClientRect();
-      const box = host.getBoundingClientRect();
-      patchCursor({ x: r.left - box.left, y: r.top - box.top, focus: undefined });
-      placed.current = true;
-    }
-    for (const a of actors) presence!.remove(a.id);
-  };
 
   useEffect(() => {
     const el = log.current;
@@ -189,63 +45,23 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
   // Stop a run when the tab unmounts.
   useEffect(() => () => {
     if (control.current) control.current.stopped = true;
-    clearTimeout(idleTimer.current);
   }, []);
-
-  /** Glides the cursor to `rect` (viewport coordinates) along a slight arc, then clicks. */
-  const glideTo = async (rect: DOMRect, run: AgentRunControl) => {
-    const host = stage?.current;
-    if (!host) return;
-    takeBack();
-    const box = host.getBoundingClientRect();
-    const focus = { x: rect.left - box.left, y: rect.top - box.top, width: rect.width, height: rect.height };
-    const to = { x: focus.x + Math.min(rect.width / 2, 40), y: focus.y + rect.height / 2 };
-    const from = placed.current ? { x: cursorRef.current.x, y: cursorRef.current.y } : { x: box.width - 60, y: 24 };
-    placed.current = true;
-    patchCursor({ x: from.x, y: from.y, visible: true, focus: undefined });
-    const dist = Math.hypot(to.x - from.x, to.y - from.y);
-    const ms = Number.isFinite(run.speed) ? Math.min(900, 260 + dist * 0.5) / run.speed : 0;
-    // A hidden tab gets no animation frames: jump instead of waiting for them.
-    if (ms > 0 && dist > 1 && !document.hidden) {
-      const bend = Math.min(60, dist * 0.12);
-      const ctrl = { x: (from.x + to.x) / 2 - ((to.y - from.y) / dist) * bend, y: (from.y + to.y) / 2 + ((to.x - from.x) / dist) * bend };
-      await new Promise<void>((resolve) => {
-        const start = performance.now();
-        const frame = (now: number) => {
-          const t = Math.min(1, (now - start) / ms);
-          const e = 1 - Math.pow(1 - t, 3);
-          const u = 1 - e;
-          patchCursor({ x: u * u * from.x + 2 * u * e * ctrl.x + e * e * to.x, y: u * u * from.y + 2 * u * e * ctrl.y + e * e * to.y });
-          if (t < 1 && !run.stopped) requestAnimationFrame(frame);
-          else resolve();
-        };
-        requestAnimationFrame(frame);
-        setTimeout(resolve, ms + 200);
-      });
-    }
-    patchCursor({ x: to.x, y: to.y, focus, pressed: true });
-    if (Number.isFinite(run.speed)) await realWait(110 / run.speed);
-    patchCursor({ pressed: false });
-  };
 
   const play = async (script: AgentScript) => {
     if (running) return;
-    clearTimeout(idleTimer.current);
     const run: AgentRunControl = { speed: demoAgentSpeed(), stopped: false };
-    demoPlayback.speed = run.speed;
     control.current = run;
+    demoPlayback.speed = run.speed;
     setRunning(script.id);
     setEntries([{ kind: "user", text: script.prompt }]);
     const push = (entry: Entry) => setEntries((list) => [...list, entry]);
     const { ok } = await runAgentScript(demoToolRegistry, script, {
       control: run,
+      playback: demoPlayback,
       onEvent: (event) => {
         switch (event.type) {
           case "say":
             push({ kind: "say", text: event.text });
-            // The library's cursor (agent playback) shows the note where the agent last worked.
-            demoPlayback.say(event.text);
-            if (stage?.current) patchCursor({ bubble: event.text, visible: placed.current });
             break;
           case "call":
             push({ kind: "call", tool: event.tool, args: event.args });
@@ -261,33 +77,14 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
             break;
         }
       },
-      beforeCall: async (step, ctx, c) => {
-        const host = stage?.current;
-        if (!host) return;
-        const opener = step.open ? findControl(host, step.open) : null;
-        if (opener) {
-          await glideTo(opener.getBoundingClientRect(), c);
-          opener.click();
-          // Let the opened panel render before looking for the target in it.
-          await realWait(Number.isFinite(c.speed) ? 250 / c.speed : 50);
-        }
-        const rect = step.target ? resolveTarget(step.target, host, ctx) : null;
-        if (rect) await glideTo(rect, c);
-      },
     });
     if (ok) push({ kind: "done", text: "Done. Each tool call above is one undo step in the editor." });
     control.current = null;
     demoPlayback.speed = demoAgentSpeed();
     setRunning(null);
-    patchCursor({ bubble: undefined, focus: undefined });
-    idleTimer.current = setTimeout(() => {
-      patchCursor({ visible: false });
-      placed.current = false;
-    }, 2500);
   };
 
   const button = "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border transition-colors disabled:opacity-40";
-  const host = stage?.current;
   return (
     <section className="rounded-xl border border-violet-500/30 bg-violet-950/10 p-3 space-y-2" data-testid="agent-script-panel">
       <div className="flex flex-wrap items-center gap-2">
@@ -368,7 +165,6 @@ export const AgentScriptPanel: React.FC<AgentScriptPanelProps> = ({ scripts, sta
           ))}
         </ol>
       )}
-      {host && createPortal(<AgentCursor cursor={handedOff ? { ...cursor, visible: false, focus: undefined } : cursor} name={actor} />, host)}
     </section>
   );
 };

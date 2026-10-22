@@ -10,6 +10,7 @@ import { useVideoEditor } from './useVideoEditor';
 import { VideoPreview } from './VideoPreview';
 import { VideoScopes } from './VideoScopes';
 import { VideoTimeline } from './VideoTimeline';
+import type { AgentPlayback } from '@pixerate/editor/tools';
 import { VideoTransport } from './VideoTransport';
 
 export interface VideoEditorProps {
@@ -43,6 +44,10 @@ export interface VideoEditorProps {
   /** Show the effects panel (default: when a provider is given or the project has effects). */
   showEffects?: boolean;
   className?: string;
+  /** Agent playback on the timeline (see `<VideoTimeline playback>`; default: the nearest `AgentPlaybackProvider`). */
+  playback?: AgentPlayback | null;
+  /** Bring the editor on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 /**
@@ -50,7 +55,7 @@ export interface VideoEditorProps {
  * transport, the timeline and the clip inspector, with the project's issues listed under the
  * timeline. Every edit is one undo step; the controller's agent tools edit the same project.
  */
-export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, className = '' }: VideoEditorProps) {
+export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, className = '', playback, onPlaybackReveal }: VideoEditorProps) {
   const { controller, state } = useVideoEditor(given ?? options ?? {});
   useEffects(controller, effects);
   const effectsShown = showEffects ?? !!(state.effectsProvider || state.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.effects?.length || c.transition?.type === 'effect')));
@@ -86,7 +91,7 @@ export function VideoEditor({ controller: given, options, editable = true, pxPer
           </div>
         )}
       </div>
-      <VideoTimeline controller={controller} editable={editable} pxPerSecond={pxPerSecond} onPxPerSecondChange={onPxPerSecondChange} />
+      <VideoTimeline controller={controller} editable={editable} pxPerSecond={pxPerSecond} onPxPerSecondChange={onPxPerSecondChange} playback={playback} onPlaybackReveal={onPlaybackReveal} />
       {showTranscript && <TranscriptPanel controller={controller} editable={editable} />}
       {issueList}
     </div>

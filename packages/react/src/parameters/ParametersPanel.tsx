@@ -1,4 +1,8 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
+import type { AgentPlayback } from '@pixerate/editor/tools';
+import { useAgentPlayback } from '../playback/AgentPlaybackContext';
+import { useElementPlaybackSurface } from '../playback/useElementPlaybackSurface';
+import { PresenceLayer } from '../playback/PresenceLayer';
 import {
   isParameterGroup,
   parameterLabel,
@@ -29,6 +33,15 @@ export interface ParametersPanelProps {
   /** Shown when the schema has no fields. */
   emptyMessage?: React.ReactNode;
   className?: string;
+  /**
+   * Agent playback: act out `parameters.*` commands here with the agent's cursor (default: the
+   * nearest `AgentPlaybackProvider`; `null` turns it off).
+   */
+  playback?: AgentPlayback | null;
+  /** The playback surface id (default `parameters`, where the parameter commands play). */
+  playbackId?: string;
+  /** Bring the panel on screen (switch to its tab) before the agent acts. */
+  onPlaybackReveal?: () => void | Promise<void>;
 }
 
 function FieldRow({
@@ -171,8 +184,20 @@ export function ParametersPanel({
   resolveFile,
   emptyMessage = 'No parameters.',
   className = '',
+  playback,
+  playbackId = 'parameters',
+  onPlaybackReveal,
 }: ParametersPanelProps) {
   const state = useParametersState(controller);
+  // Agent playback: the cursor visits the controls a call changes.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const ambientPlayback = useAgentPlayback();
+  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
+  const agentPresence = useElementPlaybackSurface(playing, playbackId, rootRef, {
+    defaultKind: 'parameter',
+    selectors: { parameter: (id) => `[data-parameter-id="${CSS.escape(id)}"]` },
+    reveal: onPlaybackReveal,
+  });
   const idBase = useId();
   const keys = showKeyframes ?? state.keyframesEnabled;
   const heading = title === undefined ? state.schema.title : title;
@@ -223,7 +248,7 @@ export function ParametersPanel({
   };
 
   return (
-    <div className={`space-y-3 text-foreground ${className}`} data-parameters-panel="">
+    <div ref={rootRef} className={`relative space-y-3 text-foreground ${className}`} data-parameters-panel="">
       {(heading || showToolbar) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {heading && <h3 className="mr-auto text-sm font-semibold">{heading}</h3>}
@@ -259,6 +284,8 @@ export function ParametersPanel({
       )}
       {showPresets && <PresetBar controller={controller} state={state} />}
       {state.fields.length === 0 ? <p className="text-xs text-muted-foreground">{emptyMessage}</p> : renderItems(state.schema.fields)}
+      {/* Last, so it doesn't shift the stacked spacing. */}
+      {playing && <PresenceLayer presence={agentPresence} />}
     </div>
   );
 }

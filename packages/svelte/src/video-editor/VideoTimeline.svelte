@@ -20,7 +20,11 @@
     type VideoMediaClip,
     type VideoTrack,
     type VideoWaveformMode,
+    parseVideoTimeRef,
   } from '@pixerate/editor/video-editor';
+  import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+  import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
+  import PresenceLayer from '../playback/PresenceLayer.svelte';
   import { onDestroy, untrack } from 'svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
@@ -35,9 +39,18 @@
     /** Draw waveforms in audio clips (default), in every clip with sound (`all`), or not at all. Sound is decoded once per asset through `controller.audioPeaks`. */
     waveforms?: VideoWaveformMode;
     class?: string;
+    /**
+     * Agent playback: act out the video tools' calls here with the agent's cursor (default:
+     * `setAgentPlayback` above; `null` turns it off).
+     */
+    playback?: AgentPlayback | null;
+    /** The playback surface id (default `video`, where the video tool providers play). */
+    playbackId?: string;
+    /** Bring the timeline on screen (switch to its tab) before the agent acts. */
+    onplaybackreveal?: () => void | Promise<void>;
   }
 
-  let { controller, pxPerSecond = $bindable(100), onpxpersecondchange, editable = true, waveforms = 'audio', class: className = '' }: Props = $props();
+  let { controller, pxPerSecond = $bindable(100), onpxpersecondchange, editable = true, waveforms = 'audio', class: className = '', playback, playbackId = 'video', onplaybackreveal }: Props = $props();
   /** Bumped when more sound peaks have loaded, so waveforms redraw. */
   let peaksVersion = $state(0);
   $effect(() => controller.audioPeaks.subscribe(() => peaksVersion++));
@@ -90,6 +103,51 @@
   const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-40';
 
   let container: HTMLDivElement | undefined = $state();
+
+  // Agent playback: the agent's cursor in pixels of the timeline's box, finding clips, tracks and times.
+  const ambientPlayback = getAgentPlayback();
+  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
+  const rectIn = (el: Element | null | undefined): PlaybackRect | null => {
+    const box = container?.getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    return box && r && r.width > 0 ? { x: r.left - box.left, y: r.top - box.top, width: r.width, height: r.height } : null;
+  };
+  const q = (selector: string) => container?.querySelector(selector);
+  const agentPresence = createPlaybackSurface(() => playing, () => playbackId, () => ({
+    defaultKind: 'clip',
+    locate: (ref: PlaybackRef) => {
+      if (ref.kind === 'clip') return rectIn(q(`[data-clip="${CSS.escape(ref.id)}"]`));
+      if (ref.kind === 'track') return rectIn(q(`[data-track-lane="${CSS.escape(ref.id)}"]`));
+      if (ref.kind === 'marker') return rectIn(q(`[data-marker="${CSS.escape(ref.id)}"]`));
+      const at = parseVideoTimeRef(ref);
+      if (!at) return null;
+      // The row: the named track, the row of the named clip, else the ruler.
+      const lane = at.track
+        ? q(`[data-track-lane="${CSS.escape(at.track)}"]`)
+        : at.clip
+          ? q(`[data-clip="${CSS.escape(at.clip)}"]`)?.closest('[data-track-lane]')
+          : ruler;
+      const row = rectIn(lane);
+      return row ? { x: row.x + (at.time * px) / 1000 - 3, y: row.y, width: 6, height: row.height } : null;
+    },
+    bounds: () => {
+      const r = container?.getBoundingClientRect();
+      return r && r.width > 0 ? { x: 0, y: 0, width: r.width, height: r.height } : null;
+    },
+    visible: () => {
+      const r = container?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
+    },
+    toViewport: (p: { x: number; y: number }) => {
+      const r = container?.getBoundingClientRect();
+      return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
+    },
+    fromViewport: (p: { x: number; y: number }) => {
+      const r = container?.getBoundingClientRect();
+      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+    },
+    reveal: () => onplaybackreveal?.()
+  }));
   let ruler: HTMLDivElement | undefined = $state();
 
   interface Drag {
@@ -262,7 +320,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
   bind:this={container}
-  class="flex flex-col gap-1 text-xs outline-none focus-visible:ring-1 focus-visible:ring-rose-500 {className}"
+  class="relative flex flex-col gap-1 text-xs outline-none focus-visible:ring-1 focus-visible:ring-rose-500 {className}"
   tabindex="0"
   role="group"
   aria-label="Timeline"
@@ -346,6 +404,7 @@
             class="relative shrink-0 {track.locked ? 'bg-muted/60' : ''} {track.hidden || track.muted ? 'opacity-60' : ''}"
             style="width:{width}px"
             data-lane={track.id}
+            data-track-lane={track.id}
             onpointerdown={(e) => {
               if (e.button === 0 && !(e.shiftKey || e.metaKey || e.ctrlKey)) controller.select(null);
             }}
@@ -393,5 +452,8 @@
   </div>
   {#if editor.error}
     <p class="text-red-500" role="alert" data-edit-error="">{editor.error}</p>
+  {/if}
+  {#if playing}
+    <PresenceLayer presence={agentPresence} />
   {/if}
 </div>
