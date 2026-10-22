@@ -1,5 +1,52 @@
 # @pixerate/editor-svelte
 
+## 0.103.0
+
+### Minor Changes
+
+- 12bcbb1: Agent playback for the chart and paint editors, sharing one cursor with their directors, and `runToolScript` in core.
+
+  - **Chart:**
+    - `createChartToolProvider` plans its calls (`withChartPlayback`, `planChartToolPlayback`). Inspector options, the data grid and the toolbar are clicked.
+    - With a director, `set_chart_values` and `select_chart_element` play through it (`playback: 'self'`).
+    - `chartPointRef` and `locateChartPoint` find points.
+  - **Paint:**
+    - Both paint tool providers plan their writes (`withPaintPlayback`, `planPaintToolPlayback`, `paintPlaybackPanel`). Each write opens its side panel and points at the control.
+    - With a director, strokes, fills and replays play through it.
+  - **React and Svelte:**
+    - `ChartEditor` and `PaintEditor` take `playback`, `playbackId` and a reveal callback.
+    - Given the director's presence, they share it with playback (one cursor) and draw it over their panels.
+    - `usePlaybackSurface` / `createPlaybackSurface` accept a shared presence store.
+    - Paint panels carry `data-paint-tab` and `data-paint-panel`.
+  - **Rich text:** `insert_chart` shows the agent's caret where the chart goes in.
+  - **Scripts:** `runToolScript` (with `toolResultValue` and `toolResultError`) plays scripted agent turns (notes and tool calls) through any `ToolSource`. With `playback`, notes show on the cursor.
+
+- c3277af: Agent playback for the spreadsheet, video, animation and parameters editors.
+
+  - **Spreadsheet:**
+    - `createSpreadsheetToolProvider` plans its writes (`planSpreadsheetToolPlayback`). `set_cell` is clicked and typed, `set_range` dragged across its block, and row or column edits mark their rows or columns.
+    - It plays on the `spreadsheet` surface (option `playbackSurface`). `parseSpreadsheetPlaybackRef` reads cell, row and column refs.
+  - **Video:**
+    - Both video tool providers plan every write (`withVideoPlayback`, `planVideoToolPlayback`). The cursor drags clips to new times or tracks, pulls trims, clicks tracks where clips go in, and clicks the ruler for splits, seeks and markers.
+    - Times are `videoTimeRef` / `parseVideoTimeRef` refs.
+  - **Animation:**
+    - Both animation tool providers (`withAnimationPlayback`, `planAnimationToolPlayback`) play on the `animation` surface.
+    - The cursor clicks the shot a call names and visits the stage elements its commands target.
+  - **Parameters:**
+    - `parameters.set` visits each control it changes and types the value (`planParameterSetPlayback`, `withParameterPlayback`).
+    - Every parameter command plays on the `parameters` surface.
+  - **Robustness:** a surface rectangle or plan point with a non-finite number is treated as not found, so a bad lookup can no longer hang a tool call.
+  - **React and Svelte:**
+    - `SpreadsheetEditor`, `VideoTimeline` / `VideoEditor`, `AnimationEditor` and `ParametersPanel` take `playback` (default: the playback context), `playbackId`, and a reveal callback (`onPlaybackReveal` / `onplaybackreveal`).
+    - New `useElementPlaybackSurface` (React) and `createElementPlaybackSurface` (Svelte) for plain DOM components.
+    - The Svelte timeline's lanes also carry `data-track-lane`, as in React.
+
+### Patch Changes
+
+- Updated dependencies [12bcbb1]
+- Updated dependencies [c3277af]
+  - @pixerate/editor@0.142.0
+
 ## 0.102.0
 
 ### Minor Changes
