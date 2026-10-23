@@ -19,6 +19,7 @@ export * from './onion.js';
 export * from './check.js';
 export * from './edit.js';
 export * from './fit.js';
+export * from './record.js';
 export * from './flair.js';
 export * from './flair-import.js';
 export * from './lottie.js';

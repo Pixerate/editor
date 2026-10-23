@@ -914,7 +914,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 					const y0 = num('y');
 					const add = command.blend === 'add';
 					const offsets = [{ x: 0, y: 0 }, ...command.via.map((p) => applyMatrix(inv, p)).map((p) => ({ x: p.x - entry.center.x - x0, y: p.y - entry.center.y - y0 })), { x: dx, y: dy }];
-					const times = smoothMotionTimes(offsets, start, end - start, command.pacing ?? 'even');
+					const times = command.times?.length === command.via.length ? [start, ...command.times.map((f) => start + f * (end - start)), end] : smoothMotionTimes(offsets, start, end - start, command.pacing ?? 'even');
 					for (const axis of ['x', 'y'] as const) {
 						const base = add ? 0 : axis === 'x' ? x0 : y0;
 						for (const leg of smoothMotionLegs(times, offsets.map((o) => o[axis])))

@@ -6,8 +6,8 @@ import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
 import type { VectorDocument } from '../vector/types.js';
 import { checkMotionScene } from './check.js';
-import { compileMotionScene, motionShotAt, type MotionShotTiming } from './compile.js';
-import { applyMotionEdits, createMotionScene, type MotionEdit, type MotionEditResult } from './edit.js';
+import { compileMotionScene, indexMotionNodes, motionShotAt, type MotionShotTiming } from './compile.js';
+import { applyMotionEdits, createMotionScene, freshShotId, type MotionEdit, type MotionEditResult } from './edit.js';
 import { motionFrameAt, motionFrameToSvg, type MotionFrame, type MotionFrameOptions, type MotionSvgOptions } from './evaluate.js';
 import { toFlairEffectDocument, toFlairSvgMotion, toFlairVectorEffect, type FlairEffectOptions, type FlairExportOptions } from './flair.js';
 import type { MotionIssue } from './issues.js';
@@ -16,6 +16,7 @@ import type { MotionEffectSource, MotionScene } from './types.js';
 import { EffectsSlot, resolveEffectValues } from '../effects/helpers.js';
 import { EffectUnsupportedError, isEffectError } from '../effects/errors.js';
 import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
+import { motionClientToDocument, motionNodePose, motionTakeProblems, motionTakeShot, type MotionNodePose, type MotionTake, type MotionTakeOptions, type MotionTakeResult, type MotionTakeSample } from './record.js';
 import { motionArtworkSvg, motionCommandsFromEffect, motionPartsFromVectorEffect, motionSceneEffects, nextMotionEffectInstance, withoutMotionEffect, type AppliedMotionEffect } from './effects.js';
 
 export interface AnimationEditorOptions {
@@ -45,6 +46,32 @@ export interface AnimationEditorSelection {
 	command?: number;
 }
 
+/** What a stage drag does to a node while recording: move it, scale it about its centre or turn it. */
+export type MotionRecordGestureMode = 'move' | 'scale' | 'rotate';
+export const MOTION_RECORD_GESTURE_MODES: readonly MotionRecordGestureMode[] = ['move', 'scale', 'rotate'];
+
+/** A take being recorded (see `startRecording`). */
+export interface AnimationEditorRecording {
+	/** The id the take's shot will get. */
+	shot: string;
+	/** Where the shot will go among the shots. */
+	at: number;
+	/** When the take starts in the scene, ms. */
+	start: number;
+	/** How long it has run, ms. */
+	elapsed: number;
+	/** Samples recorded so far. */
+	samples: number;
+	/** The node a stage drag is changing now, and how. */
+	gesture: { node: string; mode: MotionRecordGestureMode } | null;
+}
+
+/** What `stopRecording` and `recordTake` return. */
+export type MotionRecordResult = ({ ok: true } & MotionTakeResult & { issues: readonly MotionIssue[] }) | { ok: false; error: string };
+
+/** The longest take, ms. */
+export const MOTION_MAX_TAKE_MS = 10 * 60_000;
+
 /** A snapshot of the editor. The same object is returned until something changes. */
 export interface AnimationEditorState {
 	scene: MotionScene;
@@ -72,6 +99,17 @@ export interface AnimationEditorState {
 	revision: number;
 	/** The registered effects provider, or `null`. */
 	effectsProvider: EffectProvider | null;
+	/** The take being recorded, or `null`. While recording, frames show the take so far. */
+	recording: AnimationEditorRecording | null;
+}
+
+interface RecordingSession {
+	options: MotionTakeOptions & { id: string; at: number };
+	start: number;
+	samples: MotionTakeSample[];
+	gesture: { node: string; mode: MotionRecordGestureMode; from: { x: number; y: number }; pose: MotionNodePose } | null;
+	preview: { count: number; scene: MotionScene } | null;
+	restore: { loop: AnimationLoopMode };
 }
 
 const BLANK: VectorDocument = { width: 800, height: 450, background: '#ffffff', nodes: [] };
@@ -99,6 +137,7 @@ export class AnimationEditorController {
 	private readonly listeners = new Set<(state: AnimationEditorState) => void>();
 	private readonly unsubscribers: (() => void)[] = [];
 	private state!: AnimationEditorState;
+	private recording: RecordingSession | null = null;
 
 	constructor(options: AnimationEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
@@ -128,6 +167,7 @@ export class AnimationEditorController {
 	 * controller survives React StrictMode's unmount / remount.
 	 */
 	destroy(): void {
+		this.cancelRecording();
 		this.player.pause();
 		this.unsubscribers.splice(0).forEach((u) => u());
 	}
@@ -168,7 +208,17 @@ export class AnimationEditorController {
 			undoLabel: h.undoName,
 			redoLabel: h.redoName,
 			revision: this.revision,
-			effectsProvider: this.effects.provider
+			effectsProvider: this.effects.provider,
+			recording: this.recording
+				? {
+						shot: this.recording.options.id,
+						at: this.recording.options.at,
+						start: this.recording.start,
+						elapsed: Math.max(0, p.time - this.recording.start),
+						samples: this.recording.samples.length,
+						gesture: this.recording.gesture ? { node: this.recording.gesture.node, mode: this.recording.gesture.mode } : null
+					}
+				: null
 		};
 	}
 
@@ -238,7 +288,7 @@ export class AnimationEditorController {
 	 * `dryRun` it reports what would happen and changes nothing.
 	 */
 	apply(edits: MotionEdit | readonly MotionEdit[], label = 'Edit animation', options: { dryRun?: boolean; merge?: string } = {}): MotionEditResult {
-		const reason = this.readOnlyReason();
+		const reason = this.readOnlyReason() ?? (this.recording ? 'A take is being recorded; stop or cancel the recording first.' : null);
 		if (reason) return this.refuse(reason);
 		const result = applyMotionEdits(this.scene, edits);
 		if (!result.ok) return options.dryRun ? result : this.refuse(result.error);
@@ -408,6 +458,7 @@ export class AnimationEditorController {
 
 	/** Opens a scene (JSON or object). `clearHistory` drops the undo stack (opening a file); otherwise it is one undo step. */
 	load(scene: MotionScene | string, options: { clearHistory?: boolean } = {}): MotionEditResult {
+		if (options.clearHistory) this.cancelRecording();
 		let parsed: MotionScene;
 		try {
 			parsed = parseMotionScene(scene);
@@ -428,6 +479,7 @@ export class AnimationEditorController {
 	setReadOnly(readOnly: boolean): void {
 		if (this.readOnly === readOnly) return;
 		this.readOnly = readOnly;
+		if (readOnly) this.cancelRecording();
 		this.notify();
 	}
 
@@ -452,35 +504,207 @@ export class AnimationEditorController {
 		this.player.toggle();
 	}
 
-	/** Moves the playhead (ms). */
+	/** Moves the playhead (ms). Ignored while recording: a take runs on from where it started. */
 	seek(time: number): void {
+		if (this.recording) return;
 		this.player.seek(time);
 	}
 
 	/** Moves the playhead to the start or end of a shot. Returns false for an unknown shot. */
 	seekShot(id: string, at: 'start' | 'end' = 'start'): boolean {
 		const shot = compileMotionScene(this.scene).shots.find((s) => s.id === id);
-		if (!shot) return false;
+		if (!shot || this.recording) return false;
 		this.player.seek(at === 'start' ? shot.start : shot.end);
 		return true;
 	}
 
 	undo(): boolean {
-		return this.history.undo();
+		return this.recording ? false : this.history.undo();
 	}
 
 	redo(): boolean {
-		return this.history.redo();
+		return this.recording ? false : this.history.redo();
+	}
+
+	/** The scene as shown: while recording, with the take so far as its shot. */
+	viewScene(): MotionScene {
+		const r = this.recording;
+		if (!r) return this.scene;
+		if (r.preview?.count === r.samples.length) return r.preview.scene;
+		let scene = this.scene;
+		if (r.samples.length) {
+			try {
+				const { shot, at } = motionTakeShot(this.scene, { samples: r.samples, length: Math.max(0, this.player.currentTime - r.start) }, r.options);
+				scene = { ...this.scene, shots: [...this.scene.shots.slice(0, at), shot, ...this.scene.shots.slice(at)] };
+			} catch {
+				// Samples are checked as they come in; a take that still fails shows the scene as it was.
+			}
+		}
+		r.preview = { count: r.samples.length, scene };
+		return scene;
 	}
 
 	/** The scene at `time` (default: the playhead). */
 	frame(time = this.player.currentTime, options: MotionFrameOptions = {}): MotionFrame {
-		return motionFrameAt(this.scene, time, options);
+		return motionFrameAt(this.viewScene(), time, options);
 	}
 
 	/** The scene at `time` (default: the playhead) as SVG. */
 	toSvg(time = this.player.currentTime, options: MotionSvgOptions & MotionOverlayOptions = {}): string {
-		return motionStageSvg(this.scene, time, options);
+		return motionStageSvg(this.viewScene(), time, options);
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// Recording
+	// ---------------------------------------------------------------------------------------
+
+	/**
+	 * Starts recording a take: the playhead goes to where the take's shot will start (default:
+	 * the end of the scene) and plays on, and every `recordSample` (or stage gesture) is a value
+	 * at that moment. Frames show the take so far. `stopRecording` turns it into one shot, one
+	 * undo step. Edits, seeks and undo wait until the recording stops; `pause` pauses the take.
+	 */
+	startRecording(options: MotionTakeOptions = {}): { ok: true; recording: AnimationEditorRecording } | { ok: false; error: string } {
+		const reason = this.readOnlyReason() ?? (this.recording ? 'A take is already being recorded.' : null);
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		const at = options.at ?? this.scene.shots.length;
+		if (!Number.isInteger(at) || at < 0 || at > this.scene.shots.length) return this.refuse(`"at" must be a whole number from 0 to ${this.scene.shots.length} (got ${at}).`) as { ok: false; error: string };
+		const id = options.id ?? freshShotId(this.scene, 'take');
+		if (this.scene.shots.some((s) => s.id === id)) return this.refuse(`Shot id "${id}" is already used; choose another (e.g. "${freshShotId(this.scene, id)}").`) as { ok: false; error: string };
+		const timeline = compileMotionScene(this.scene);
+		const start = at < timeline.shots.length ? timeline.shots[at].start : timeline.duration;
+		this.error = null;
+		this.recording = { options: { ...options, id, at }, start, samples: [], gesture: null, preview: null, restore: { loop: this.player.getState().loop } };
+		this.player.pause();
+		this.player.setPlaybackRate(1);
+		this.player.setLoop('none');
+		this.player.setDuration(start + MOTION_MAX_TAKE_MS);
+		this.player.seek(start);
+		this.player.play();
+		return { ok: true, recording: this.state.recording! };
+	}
+
+	/**
+	 * Records `values` for `node` at `t` (ms into the take; default now). Returns why a sample was
+	 * refused (an unknown node, a value out of range), or null.
+	 */
+	recordSample(node: string, values: Omit<MotionTakeSample, 'node' | 't'>, t?: number): string | null {
+		const r = this.recording;
+		if (!r) return 'Nothing is being recorded; startRecording first.';
+		const sample: MotionTakeSample = { ...values, node, t: Math.max(0, t ?? this.player.liveTime - r.start) };
+		const problems = motionTakeProblems(this.scene, { samples: [sample] });
+		if (problems.length) return problems.join(' ').replace('Sample 1', 'The sample');
+		r.samples.push(sample);
+		this.notify();
+		return null;
+	}
+
+	/** Where `node` is and how it looks now (while recording: in the take so far), or at `time`. */
+	pose(node: string, time = this.player.currentTime): MotionNodePose {
+		return motionNodePose(this.viewScene(), node, time);
+	}
+
+	/** A point on a stage element (client pixels, e.g. a pointer event) in document units, through the camera now. */
+	clientToDocument(box: { left: number; top: number; width: number; height: number }, clientX: number, clientY: number): { x: number; y: number } {
+		return motionClientToDocument(this.frame().camera, box, clientX, clientY);
+	}
+
+	/**
+	 * Starts a stage drag while recording: from `point` (document units), `move` drags the node,
+	 * `scale` scales it about its centre by how much nearer or farther the pointer is, and
+	 * `rotate` turns it with the pointer. Returns false when not recording or `node` is unknown.
+	 */
+	beginRecordGesture(node: string, mode: MotionRecordGestureMode, point: { x: number; y: number }): boolean {
+		const r = this.recording;
+		if (!r || !indexMotionNodes(this.scene.artwork.nodes).has(node)) return false;
+		const pose = this.pose(node);
+		r.gesture = { node, mode, from: point, pose };
+		this.recordGesture(pose, point);
+		return true;
+	}
+
+	/** Records the drag's pose with the pointer at `point` (document units). */
+	updateRecordGesture(point: { x: number; y: number }): void {
+		const g = this.recording?.gesture;
+		if (g) this.recordGesture(g.pose, point);
+	}
+
+	/** Ends the stage drag (the take keeps recording). */
+	endRecordGesture(): void {
+		const r = this.recording;
+		if (!r?.gesture) return;
+		r.gesture = null;
+		this.notify();
+	}
+
+	private recordGesture(pose: MotionNodePose, point: { x: number; y: number }) {
+		const g = this.recording!.gesture!;
+		const c = { x: pose.x, y: pose.y };
+		if (g.mode === 'move') {
+			this.recordSample(g.node, { x: pose.x + point.x - g.from.x, y: pose.y + point.y - g.from.y });
+		} else if (g.mode === 'scale') {
+			const f = Math.hypot(point.x - c.x, point.y - c.y) / Math.max(1e-6, Math.hypot(g.from.x - c.x, g.from.y - c.y));
+			this.recordSample(g.node, { scaleX: Math.max(0.01, pose.scaleX * f), scaleY: Math.max(0.01, pose.scaleY * f) });
+		} else {
+			const turn = (Math.atan2(point.y - c.y, point.x - c.x) - Math.atan2(g.from.y - c.y, g.from.x - c.x)) * (180 / Math.PI);
+			// The shortest way round from the turn before, so a drag past ±180° keeps going.
+			const was = this.recording!.samples.filter((s) => s.node === g.node && s.rotation !== undefined).at(-1)?.rotation ?? pose.rotation;
+			let next = pose.rotation + turn;
+			next += 360 * Math.round((was - next) / 360);
+			this.recordSample(g.node, { rotation: next });
+		}
+	}
+
+	private endRecording(): RecordingSession | null {
+		const r = this.recording;
+		if (!r) return null;
+		this.player.pause();
+		this.recording = null;
+		this.player.setLoop(r.restore.loop);
+		this.player.setDuration(() => compileMotionScene(this.scene).duration);
+		return r;
+	}
+
+	/**
+	 * Stops recording and adds the take as a shot (one undo step), selected, with the playhead at
+	 * its start. Returns the shot, or why nothing was added (nothing recorded).
+	 */
+	stopRecording(): MotionRecordResult {
+		const length = this.recording ? this.player.liveTime - this.recording.start : 0;
+		const r = this.endRecording();
+		if (!r) return this.refuse('Nothing is being recorded.') as { ok: false; error: string };
+		if (!r.samples.length) {
+			this.player.seek(r.start);
+			return this.refuse('Nothing was recorded, so no shot was added: drag an element on the stage (or change its paint) while recording.') as { ok: false; error: string };
+		}
+		const result = this.recordTake({ samples: r.samples, length }, r.options);
+		this.player.seek(r.start);
+		return result;
+	}
+
+	/** Stops recording and throws the take away. */
+	cancelRecording(): void {
+		const r = this.endRecording();
+		if (!r) return;
+		this.player.seek(r.start);
+		this.notify();
+	}
+
+	/**
+	 * Adds a take given as samples (an agent's performance, or one recorded elsewhere) as a shot,
+	 * one undo step, selected. With `dryRun` it returns the shot and changes nothing.
+	 */
+	recordTake(take: MotionTake, options: MotionTakeOptions & { dryRun?: boolean } = {}): MotionRecordResult {
+		let made: MotionTakeResult;
+		try {
+			made = motionTakeShot(this.scene, take, options);
+		} catch (error) {
+			return options.dryRun ? { ok: false, error: (error as Error).message } : (this.refuse((error as Error).message) as { ok: false; error: string });
+		}
+		const result = this.apply({ op: 'insert_shots', shots: [made.shot], at: made.at }, 'Record take', { dryRun: options.dryRun });
+		if (!result.ok) return result;
+		if (!options.dryRun) this.select({ shot: made.shot.id });
+		return { ok: true, ...made, issues: result.issues };
 	}
 
 	/** The scene as a Flair `SvgMotion`. */

@@ -36,6 +36,9 @@ The full command vocabulary (every type, option and default) is in
    `move_command`, `delete_commands`. Use `write_animation` only to replace every shot.
    For a command type you have not written before, `describe_animation_command` returns its
    exact fields first.
+   For motion that should feel performed rather than keyed (a hand-drawn swoop, a jittery
+   drag, a colour picked mid-move), `record_animation_take` with timed samples records it as
+   one shot, the way a person records live on the stage.
 4. **Fit and cue.** `fit_animation` to hit a length (keep shots whose pace matters). For music
    or voiceover, `set_animation_settings` with `beat` or `narration`, read cues with
    `get_timing_grid`, and give shots `"at": { "beat": n }` or `{ "word": i }`.
@@ -68,6 +71,12 @@ The full command vocabulary (every type, option and default) is in
   `"with": "previous"` plus a small `delay` so it trails the lead.
 - **Arcs.** Natural movement curves: use `move` with `via` waypoints (one smooth path) instead
   of chained moves that stop at each point, or `follow` a path node.
+- **Recorded takes.** Sample a performance at 30-60 per second; the recorder keeps only the
+  points that matter (raise `tolerance` for fewer, cleaner commands). Begin each moving
+  element with a sample at its current pose (`get_motion_path`'s last point, or its bounds'
+  centre at rest) or it jumps there at its first sample. A take is a new shot after the others
+  (or at `at`); it cannot be layered over an existing shot. Refine it like any shot: it is
+  ordinary `move` (with `via` and `times`), `scale`, `rotate`, `fade` and `style` commands.
 - **Hold long enough to read.** Leave each result on screen (shot `hold`, default 600 ms);
   roughly 250 ms per word for text that must be read, longer for the final frame or logo.
 - **Exaggeration with restraint.** Emphasis (`pulse`, `shake`, `teeter`, `color-pulse`) is for
@@ -111,6 +120,7 @@ The full command vocabulary (every type, option and default) is in
 | `set_animation_drivers` | Replace all drivers (empty list clears): a target's `x`, `y`, `rotation`, `scaleX`, `scaleY` or `opacity` follows a source node's property as change · `factor` + `offset`, optionally `clamp`ed. For parallax, wheels that turn as they roll, shadows that fade as something rises. |
 | `set_animation_clip` | Define, replace or (with `clip: null`) delete a named reusable clip whose `run` targets `"$"`; play it with a `play` command on any nodes. Prefer a clip over repeated identical commands. |
 | `copy_animation` | Give the nodes in `to` every command that animates `from` (all shots or `shots`), each copy starting with its original, optionally `stagger`ed (ms). Quick for one-off duplication; use a clip for motion you will reuse. |
+| `record_animation_take` | Record performed motion as a new shot (one undo step): `samples` of `{ node, t (ms into the take), x, y (centre), scaleX, scaleY, rotation, opacity, fill, stroke, strokeWidth }` become a `move` through waypoints at the recorded `times` and a few eased `scale` / `rotate` / `fade` / `style` commands, each starting when it happened. Optional `length`, `id`, `label`, `at`, `tolerance`; `dry_run: true` returns the run first. Returns the shot id, its start and each command's index, type, start and end; `check_animation` and `render_animation_frame` after. |
 | `fit_animation` | Make the scene last `seconds` by setting shot `speed`, keeping proportions; shots in `keep` play as written. `dry_run: true` reports the new length and speeds first. |
 | `import_flair_effect` | Replace the whole scene with a Flair vector `effect` or SvgMotion `motion` (give exactly one; optional `name`). Placeholders become colour controls; each Flair step becomes a shot. Use `dry_run: true` first. |
 | `insert_shots` | Add one or more complete shots (`id`, `run`, optional `label`, `camera`, `hold`, `speed`, `at`) at position `at` (default the end). Returns every shot's timing and issues. |

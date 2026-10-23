@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { highlightMotionSvg, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin } from '@pixerate/editor/animation-editor';
+import React, { useMemo, useRef } from 'react';
+import { highlightMotionSvg, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
 import { useAnimationEditorState } from './useAnimationEditor';
 
 export interface AnimationStageProps {
@@ -17,6 +17,12 @@ export interface AnimationStageProps {
   onPick?: (id: string | null, event: React.MouseEvent<HTMLDivElement>) => void;
   /** Node ids to outline (e.g. the picked element and the selected command's targets). */
   highlight?: readonly string[];
+  /**
+   * While the controller records a take (`startRecording`), what dragging an element does:
+   * `move` it, `scale` it about its centre or `rotate` it (default `move`). Each pointer move
+   * is a sample of the take.
+   */
+  recordMode?: MotionRecordGestureMode;
   className?: string;
 }
 
@@ -24,9 +30,12 @@ export interface AnimationStageProps {
  * The animation's frame at the playhead, drawn as inline SVG scaled to the stage's width. The
  * SVG keeps the artwork's node ids, so `onPick` can say which element was clicked.
  */
-export function AnimationStage({ controller, values, onionSkin, motionPaths, onPick, highlight, className = '' }: AnimationStageProps) {
+export function AnimationStage({ controller, values, onionSkin, motionPaths, onPick, highlight, recordMode = 'move', className = '' }: AnimationStageProps) {
   const state = useAnimationEditorState(controller);
-  const { scene, time } = state;
+  const { scene, time, recording } = state;
+  const samples = recording?.samples ?? -1;
+  const dragging = useRef<number | null>(null);
+  const point = (e: React.PointerEvent<HTMLDivElement>) => controller.clientToDocument(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY);
   const key = highlight?.join('\u0000') ?? '';
   const svg = useMemo(
     () =>
@@ -34,16 +43,39 @@ export function AnimationStage({ controller, values, onionSkin, motionPaths, onP
         controller.toSvg(time, { pretty: false, idPrefix: 'ae-', values, onionSkin, motionPaths }).replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1width="100%" height="100%"'),
         highlight ?? [],
       ),
-    [controller, scene, time, values, onionSkin, motionPaths, key],
+    [controller, scene, time, samples, values, onionSkin, motionPaths, key],
   );
   return (
     <div
-      className={`relative overflow-hidden ${onPick ? 'cursor-crosshair' : ''} ${className}`}
+      className={`relative overflow-hidden ${recording ? 'cursor-grab touch-none' : onPick ? 'cursor-crosshair' : ''} ${className}`}
       style={{ aspectRatio: `${scene.artwork.width} / ${scene.artwork.height}` }}
       data-animation-stage=""
+      data-recording={recording ? '' : undefined}
       role="img"
       aria-label={`${scene.name} at ${(time / 1000).toFixed(2)} s`}
       onClick={onPick ? (e) => onPick(motionNodeAtElement(scene, e.target as Element, e.currentTarget), e) : undefined}
+      onPointerDown={
+        recording
+          ? (e) => {
+              const id = motionNodeAtElement(scene, e.target as Element, e.currentTarget);
+              if (!id || !controller.beginRecordGesture(id, recordMode, point(e))) return;
+              dragging.current = e.pointerId;
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              e.preventDefault();
+            }
+          : undefined
+      }
+      onPointerMove={recording ? (e) => dragging.current === e.pointerId && controller.updateRecordGesture(point(e)) : undefined}
+      onPointerUp={
+        recording
+          ? (e) => {
+              if (dragging.current !== e.pointerId) return;
+              dragging.current = null;
+              controller.endRecordGesture();
+            }
+          : undefined
+      }
+      onPointerCancel={recording ? () => ((dragging.current = null), controller.endRecordGesture()) : undefined}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

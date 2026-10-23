@@ -9,3 +9,4 @@ export * from './EasePicker';
 export * from './ShotInspector';
 export * from './SceneSettings';
 export * from './AnimationEffectsPanel';
+export * from './AnimationRecordPanel';

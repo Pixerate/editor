@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { indexMotionNodes, motionIssueLine, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin } from '@pixerate/editor/animation-editor';
+  import { indexMotionNodes, motionIssueLine, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
+  import AnimationRecordPanel from './AnimationRecordPanel.svelte';
   import AnimationStage from './AnimationStage.svelte';
   import CommandInspector from './CommandInspector.svelte';
   import CommandList from './CommandList.svelte';
@@ -70,6 +71,7 @@
   let picked: string | null = $state(null);
   let onion = $state(false);
   let paths = $state(false);
+  let recordMode: MotionRecordGestureMode = $state('move');
   const nodes = $derived(indexMotionNodes(editor.scene.artwork.nodes));
   const pickedValid = $derived(picked && nodes.has(picked) ? picked : null);
   const command = $derived(editor.selection?.command !== undefined ? editor.scene.shots.find((s) => s.id === editor.selection!.shot)?.run[editor.selection.command] : undefined);
@@ -106,8 +108,9 @@
 
 <!--
   A whole animation editor: the stage (click to pick an element, shift-click to toggle it as a
-  target of the selected command), the playhead scrubber, and panels to edit commands, shots and
-  scene settings by hand. Every edit is one undo step.
+  target of the selected command), the playhead scrubber, a Record button to perform changes live
+  on the stage and keep them as a shot, and panels to edit commands, shots and scene settings by
+  hand. Every edit is one undo step.
 -->
 {#if !editable}
   <div bind:this={root} class="relative flex flex-col gap-2 {className}" data-animation-editor="">
@@ -132,6 +135,7 @@
         motionPaths={motionPaths ?? paths}
         {onpick}
         {highlight}
+        {recordMode}
         class="rounded-md border border-border bg-muted/40"
       />
       <PlayheadScrubber {controller} />
@@ -153,6 +157,9 @@
           {/if}
         </span>
       </div>
+      {#if !editor.readOnly}
+        <AnimationRecordPanel {controller} node={pickedValid} mode={recordMode} onmodechange={(m) => (recordMode = m)} class="border-t border-border pt-2" />
+      {/if}
       {@render issueList()}
     </div>
     <div class="flex min-w-0 flex-col gap-3">

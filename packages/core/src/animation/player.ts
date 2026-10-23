@@ -75,6 +75,16 @@ export class AnimationPlayer {
 		return this.time;
 	}
 
+	/**
+	 * The playhead at this moment of the clock, between frames too (`currentTime` is the last
+	 * frame's): what input arriving between frames, like a recorded pointer move, happened at.
+	 */
+	get liveTime(): number {
+		if (!this.playing) return this.time;
+		const d = this.duration;
+		return this.loop === 'none' || d <= 0 ? this.clamp(this.rawNow()) : wrapAnimationTime(this.rawNow(), d, this.loop);
+	}
+
 	get isPlaying(): boolean {
 		return this.playing;
 	}

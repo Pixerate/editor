@@ -56,7 +56,9 @@ camera move 1000.
 
 - `move`: `by` { x, y } offset or `to` { x, y } for the centre. `via`: up to 64 waypoints the
   centre passes through smoothly without overshoot; `pacing` `even` (default, steady speed)
-  or `equal` (same time per stretch). `blend` default replace.
+  or `equal` (same time per stretch). `times`: one rising fraction of the duration (0-1) per
+  waypoint, when the centre passes it; overrides `pacing` (recorded takes set it).
+  `blend` default replace.
 - `rotate`: `by` degrees or `to` degrees from rest. `blend` default replace.
 - `scale`: `to` a factor or { x, y } (required); `geometric: true` for an even-rate zoom.
 - `fade`: `to` opacity 0-1 (required).

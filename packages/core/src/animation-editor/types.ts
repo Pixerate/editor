@@ -296,6 +296,12 @@ export interface MotionMoveCommand extends MotionCommandBase {
 	via?: { x: number; y: number }[];
 	/** With `via`: `even` (default) keeps the speed steady along the path, `equal` gives each leg the same time. */
 	pacing?: 'even' | 'equal';
+	/**
+	 * With `via`: when the centre passes each waypoint, as fractions of the duration (0–1,
+	 * rising), one per waypoint. Overrides `pacing`. A recorded take sets it, so playback keeps
+	 * the performance's timing.
+	 */
+	times?: number[];
 }
 
 /** Turns targets about their centre, by or to an angle in degrees (clockwise). */

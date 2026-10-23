@@ -8,6 +8,7 @@ import type CommandInspectorComponent from "./CommandInspector.svelte";
 import type EasePickerComponent from "./EasePicker.svelte";
 import type ShotInspectorComponent from "./ShotInspector.svelte";
 import type SceneSettingsComponent from "./SceneSettings.svelte";
+import type AnimationRecordPanelComponent from "./AnimationRecordPanel.svelte";
 
 export { default as AnimationEditor } from "./AnimationEditor.svelte";
 export { default as AnimationStage } from "./AnimationStage.svelte";
@@ -19,6 +20,7 @@ export { default as EasePicker } from "./EasePicker.svelte";
 export { default as ShotInspector } from "./ShotInspector.svelte";
 export { default as SceneSettings } from "./SceneSettings.svelte";
 export { default as AnimationEffectsPanel } from "./AnimationEffectsPanel.svelte";
+export { default as AnimationRecordPanel } from "./AnimationRecordPanel.svelte";
 export * from "./createAnimationEditor.svelte.js";
 
 export type AnimationEditorProps = ComponentProps<typeof AnimationEditorComponent>;
@@ -30,3 +32,4 @@ export type CommandInspectorProps = ComponentProps<typeof CommandInspectorCompon
 export type EasePickerProps = ComponentProps<typeof EasePickerComponent>;
 export type ShotInspectorProps = ComponentProps<typeof ShotInspectorComponent>;
 export type SceneSettingsProps = ComponentProps<typeof SceneSettingsComponent>;
+export type AnimationRecordPanelProps = ComponentProps<typeof AnimationRecordPanelComponent>;
