@@ -111,6 +111,19 @@ text-only families.
 | `undo_diagram` | Undo the last diagram edit; returns its label. |
 | `redo_diagram` | Redo the last undone diagram edit. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A diagram document is
+`{ source }`: the Mermaid text with its `%% @pixerate` layout comment.
+
+| Tool | Use |
+| --- | --- |
+| `get_diagram_document` | Take a copy of the whole diagram as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it to another session. To read the diagram, use `get_diagram`. |
+| `load_diagram_document` | Put back a copy from `get_diagram_document` (its `document`, or the whole result). Checked first; one undo step (`undo_diagram` brings the previous diagram back). For new Mermaid text use `load_diagram_mermaid`. |
+| `save_diagram_document` | Save the diagram under a `name` in the host's storage (same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_diagram_documents` | List saved diagrams (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_diagram_document` | Replace the diagram with a saved one by `key` from the list. One undo step. Ask before opening over unsaved work the user has not saved. |
+
 ## Pitfalls
 
 - Ids are Mermaid ids, not labels. Always take them from `get_diagram` or from what a write
