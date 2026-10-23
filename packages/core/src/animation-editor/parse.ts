@@ -25,7 +25,7 @@ const COMMAND_KEYS: Record<string, string[]> = {
 	enter: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance', 'scale', 'shape', 'orientation'],
 	exit: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'style', 'direction', 'distance'],
 	draw: [...BASE_KEYS, ...DRAW_ORDER_KEYS, 'from', 'to', 'comet'],
-	move: [...BASE_KEYS, 'by', 'to', 'via', 'pacing', 'blend'],
+	move: [...BASE_KEYS, 'by', 'to', 'via', 'pacing', 'times', 'blend'],
 	rotate: [...BASE_KEYS, 'by', 'to', 'blend'],
 	scale: [...BASE_KEYS, 'to', 'geometric', 'blend'],
 	fade: [...BASE_KEYS, 'to'],
@@ -134,6 +134,13 @@ export function commandShapeProblems(command: unknown, where: string): string[] 
 			if (command.via !== undefined && !(Array.isArray(command.via) && command.via.length > 0 && command.via.length <= 64 && command.via.every(isPoint))) p(`"via" must be a list of 1 to 64 points { "x": number, "y": number } (document units).`);
 			if (command.pacing !== undefined && command.pacing !== 'even' && command.pacing !== 'equal') p(`"pacing" must be "even" (steady speed) or "equal" (each leg the same time).`);
 			if (command.pacing !== undefined && command.via === undefined) p(`"pacing" goes with "via".`);
+			if (command.times !== undefined) {
+				const times = command.times as unknown;
+				const via = Array.isArray(command.via) ? command.via.length : null;
+				if (command.via === undefined) p(`"times" goes with "via".`);
+				else if (!(Array.isArray(times) && times.length === via && times.every((t, i) => isNum(t) && t > 0 && t < 1 && (i === 0 || t > times[i - 1]))))
+					p(`"times" must be ${via ?? 'one per waypoint'} rising fractions of the duration between 0 and 1 (one per "via" point).`);
+			}
 			break;
 		case 'rotate':
 			if (command.by === undefined && command.to === undefined) p(`give "by" or "to" (degrees).`);

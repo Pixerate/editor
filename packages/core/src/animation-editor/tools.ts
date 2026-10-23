@@ -126,7 +126,7 @@ export const MOTION_COMMAND_TYPE_SCHEMAS: Readonly<Record<MotionCommandType, Jso
 		distance: { type: 'number', description: 'For slide: document units (default 40).' }
 	}),
 	draw: command('draw', 'Draws strokes on (or off) to a fraction of their length.', { ...DRAW_ORDER, comet: FRACTION('A travelling stroke this fraction of the length long: it runs along the path and off the end (leave out from and to).'), to: FRACTION('Fraction drawn at the end (default 1).'), from: FRACTION('Fraction drawn at the start (default: what is drawn now).') }),
-	move: command('move', 'Moves targets by an offset or so their centre lands on a point.', { via: { type: 'array', items: POINT('A point the centre passes through.'), minItems: 1, maxItems: 64, description: 'Waypoints (document units) the centre passes through on the way to "to" or "by", smoothly (velocity carries through each) and without overshooting any. Default length 700 ms + 400 per waypoint.' }, pacing: { type: 'string', enum: ['even', 'equal'], description: 'With via: even (default) keeps the speed steady along the path; equal gives each stretch the same time.' }, blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
+	move: command('move', 'Moves targets by an offset or so their centre lands on a point.', { via: { type: 'array', items: POINT('A point the centre passes through.'), minItems: 1, maxItems: 64, description: 'Waypoints (document units) the centre passes through on the way to "to" or "by", smoothly (velocity carries through each) and without overshooting any. Default length 700 ms + 400 per waypoint.' }, pacing: { type: 'string', enum: ['even', 'equal'], description: 'With via: even (default) keeps the speed steady along the path; equal gives each stretch the same time.' }, times: { type: 'array', items: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, minItems: 1, maxItems: 64, description: 'With via: when the centre passes each waypoint, as rising fractions of the duration (0–1), one per waypoint; overrides pacing. Recorded takes set it.' }, blend: BLEND('replace'), by: POINT('Offset in document units.'), to: POINT('Point (document coordinates) for the centre.') }),
 	rotate: command('rotate', 'Turns targets about their centre (degrees, clockwise).', { blend: BLEND('replace'), by: { type: 'number', description: 'Degrees to turn by.' }, to: { type: 'number', description: 'Angle to turn to, in degrees from rest.' } }),
 	scale: command('scale', 'Scales targets about their centre (1 = rest size).', { blend: BLEND('replace'), to: { description: 'A factor, or { x, y } factors.', anyOf: [{ type: 'number' }, POINT('Factors per axis.')] }, geometric: { type: 'boolean', description: 'Grow by a steady factor, which reads as an even zoom (default false).' } }, ['to']),
 	fade: command('fade', 'Changes opacity.', { to: FRACTION('Opacity at the end (0–1).') }, ['to']),
@@ -270,6 +270,7 @@ const COMMAND: JsonSchema = object(
 		comet: FRACTION('draw: a travelling stroke this fraction of the length long (leave out from and to).'),
 		via: { type: 'array', items: REF('point'), minItems: 1, maxItems: 64, description: 'move: waypoints the centre passes through smoothly on the way to "to" or "by".' },
 		pacing: { type: 'string', enum: ['even', 'equal'], description: 'move with via: steady speed (even, default) or the same time per stretch (equal).' },
+		times: { type: 'array', items: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 }, description: 'move with via: rising fractions of the duration (0–1) at which each waypoint is passed; overrides pacing.' },
 		geometric: { type: 'boolean', description: 'scale: grow by a steady factor, an even zoom (default false).' },
 		fill: { type: 'string', description: 'style: fill colour, CSS (hex, rgb(), rgba()).' },
 		stroke: { type: 'string', description: 'style: stroke colour, CSS.' },
@@ -864,6 +865,62 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 		}
 	};
 
+	const recordTake: AgentTool = {
+		name: 'record_animation_take',
+		title: 'Record a performed take',
+		description:
+			'Performs changes live and keeps them as a new shot (one undo step), the way a person records by dragging, resizing, turning and recolouring on the stage: give timed samples of where elements are and how they look, and they become smooth commands that play the performance back (a path is one move through waypoints at the recorded times; scales, turns, fades and stroke widths a few eased commands; paints change as picked). Returns the shot id, where it starts, its commands with their start and end times, and how many samples were kept. With dry_run it returns the shot without adding it.',
+		inputSchema: object(
+			{
+				samples: {
+					type: 'array',
+					minItems: 1,
+					maxItems: 5000,
+					description: 'Values at moments of the take, in any order. Before an element\'s first sample a property keeps its pose and the change into the first sample is instant, so start a movement with a sample at the element\'s current pose (get_motion_path\'s last point) to have it travel from there.',
+					items: object(
+						{
+							node: { type: 'string', minLength: 1, description: 'Element id from get_animation.' },
+							t: MS('Time from the start of the take'),
+							x: { type: 'number', description: 'Centre x, document units (with y).' },
+							y: { type: 'number', description: 'Centre y, document units (with x).' },
+							scaleX: { type: 'number', exclusiveMinimum: 0, description: 'Horizontal scale from rest (1 = rest size; give scaleX alone for a uniform scale).' },
+							scaleY: { type: 'number', exclusiveMinimum: 0, description: 'Vertical scale from rest (1 = rest size).' },
+							rotation: { type: 'number', description: 'Turn from rest, degrees clockwise (keep counting past 360 for more turns).' },
+							opacity: FRACTION('Opacity, 0–1.'),
+							fill: { type: 'string', description: 'Fill colour, e.g. "#0ea5e9".' },
+							stroke: { type: 'string', description: 'Stroke colour, e.g. "#0f172a".' },
+							strokeWidth: { type: 'number', minimum: 0, description: 'Stroke width, document units.' }
+						},
+						['node', 't']
+					)
+				},
+				length: MS('How long the take ran (default: the last sample); the shot holds after its last change until then'),
+				id: { ...SHOT_ID, description: 'Id for the new shot (default "take", "take-2"…).' },
+				label: { type: 'string', description: 'Label for the new shot (default "Recorded take").' },
+				at: { type: 'integer', minimum: 0, description: 'Position among the shots, 0 = first (default: the end); the take starts where that shot starts.' },
+				tolerance: { type: 'number', exclusiveMinimum: 0, description: 'How closely commands follow the samples, as a multiple of 1 document unit, 0.01 of scale or opacity, 0.5° and 0.25 of stroke width (default 1; lower keeps more points).' },
+				dry_run: { type: 'boolean', description: 'Return the shot without adding it (default false).' }
+			},
+			['samples']
+		),
+		annotations: { title: 'Record a performed take', ...WRITE },
+		handler: ({ samples, length, id, label, at, tolerance, dry_run = false }) => {
+			const result = controller.recordTake({ samples, length }, { id, label, at, tolerance, dryRun: dry_run });
+			if (!result.ok) throw new Error(result.error);
+			const s = dry_run ? scene() : controller.getScene();
+			const report = { shot: result.shot.id, at: result.at, start: Math.round(result.start), samples: result.samples };
+			if (dry_run) return { dry_run: true, ...report, run: result.shot.run, hold: result.shot.hold, hint: 'Nothing was changed; call again without dry_run to add the shot.' };
+			const timeline = compileMotionScene(s);
+			const described = describeMotionShots(s).find((x) => x.id === result.shot.id)!;
+			return {
+				...report,
+				commands: described.commands.map((c) => ({ index: c.index, type: c.type, targets: 'targets' in c ? c.targets : [], start: c.start, end: c.end })),
+				duration: timeline.duration,
+				issues: issueSummary(result.issues)
+			};
+		}
+	};
+
 	const PROP: JsonSchema = { type: 'string', enum: ['x', 'y', 'rotation', 'scaleX', 'scaleY', 'opacity'], description: 'x / y (offset, document units), rotation (degrees), scaleX / scaleY or opacity (1 = rest).' };
 	const setDrivers: AgentTool = {
 		name: 'set_animation_drivers',
@@ -1162,7 +1219,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 	// Shared shapes (commands, shots, easing) go in each tool's $defs once instead of inline at every use.
 	const finish = (tools: AgentTool[]) => tools.map((tool) => ({ ...tool, inputSchema: withDefs(tool.inputSchema) }));
 	const reads = finish([getAnimation, getShot, describeCommand, findElements, getTextLayout, getMotionPath, getTimingGrid, checkAnimation, renderFrame, exportFlairMotion, exportFlairEffect, exportLottie, seekAnimation]);
-	const writes = finish([setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo]);
+	const writes = finish([setArtworkSvg, importPptx, setDrivers, setClip, copyAnimation, fitAnimation, recordTake, importFlairEffect, insertShots, updateShot, deleteShots, moveShot, addCommands, updateCommand, deleteCommands, moveCommand, setSettings, setControls, editAnimation, writeAnimation, undo, redo]);
 
 	return withAnimationPlayback({
 		id: options.id ?? 'animation',

@@ -2751,3 +2751,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The Release run for #317 failed at "Publish changed packages to npm" with `E503 Service Unavailable` from npm. Re-running the failed job succeeded but published nothing. A manual `workflow_dispatch` run then failed at "Version packages" with `No unreleased changesets found`. npm stayed one version behind `main`.
 - **Root Cause**: The workflow pushes its version commit before publishing, so `main` already had the new versions and no pending changesets. A re-run checks out the tip of `main` and skips ("No pending changesets found"). A manual run forces the release path, but `changeset version` exits 1 when there is nothing to version.
 - **Solution / Workaround**: The version step now runs only when changesets are pending. To publish a release whose publish step failed, start the workflow by hand: `gh workflow run release.yml --ref main`. It builds, tests and runs `changeset publish`, which publishes the versions npm is missing. Then compare `npm view @pixerate/editor version` with `main`.
+
+### [core/animation] Pointer Input Between Frames Reads a Stale Playhead
+
+- **Issue / Symptom**: Recorded takes came out with drags quantised to frame times, and with a `ManualClock` every sample recorded since the last frame landed on the same time (a whole drag became an instant jump).
+- **Root Cause**: `AnimationPlayer.currentTime` is the time at the last frame it ticked. Pointer events arrive between frames, and a `ManualClock` only ticks the player when `advance` resolves its frame promises, so the clock had moved on but the playhead had not.
+- **Solution / Workaround**: Read `player.liveTime` (the playhead at the clock's time now) for input timestamps. `currentTime` stays the right value for drawing. In tests, `await clock.advance(ms)`: it is async and ticks frames only after it settles.

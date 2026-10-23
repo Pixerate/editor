@@ -3,7 +3,8 @@ import type { AgentPlayback, PlaybackRect, PlaybackRef } from '@pixerate/editor/
 import { useAgentPlayback } from '../playback/AgentPlaybackContext';
 import { usePlaybackSurface } from '../playback/usePlaybackSurface';
 import { PresenceLayer } from '../playback/PresenceLayer';
-import { indexMotionNodes, motionIssueLine, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin } from '@pixerate/editor/animation-editor';
+import { indexMotionNodes, motionIssueLine, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
+import { AnimationRecordPanel } from './AnimationRecordPanel';
 import { AnimationStage } from './AnimationStage';
 import { CommandInspector } from './CommandInspector';
 import { CommandList } from './CommandList';
@@ -54,8 +55,9 @@ const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-4
 /**
  * A whole animation editor for an `AnimationEditorController`: the stage (click an element to
  * pick it, shift-click to add it to or remove it from the selected command's targets), the
- * playhead scrubber, and panels to edit commands, shots and scene settings by hand. Every edit
- * is one undo step.
+ * playhead scrubber, a Record button to perform changes live on the stage and keep them as a
+ * shot, and panels to edit commands, shots and scene settings by hand. Every edit is one undo
+ * step.
  */
 export function AnimationEditor({ controller, values, onionSkin, motionPaths, showIssues = true, editable = true, effects, className = '', playback, playbackId = 'animation', onPlaybackReveal }: AnimationEditorProps) {
   const state = useAnimationEditorState(controller);
@@ -103,6 +105,7 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
   const [picked, setPicked] = useState<string | null>(null);
   const [onion, setOnion] = useState(false);
   const [paths, setPaths] = useState(false);
+  const [recordMode, setRecordMode] = useState<MotionRecordGestureMode>('move');
   const command = selection?.command !== undefined ? scene.shots.find((s) => s.id === selection.shot)?.run[selection.command] : undefined;
   const targets = command && 'targets' in command ? command.targets : [];
   const nodes = useMemo(() => indexMotionNodes(scene.artwork.nodes), [scene.artwork]);
@@ -123,6 +126,7 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
       motionPaths={motionPaths ?? paths}
       onPick={editable ? onPick : undefined}
       highlight={editable ? [...(pickedValid ? [pickedValid] : []), ...targets] : undefined}
+      recordMode={recordMode}
       className="rounded-md border border-border bg-muted/40"
     />
   );
@@ -192,6 +196,7 @@ export function AnimationEditor({ controller, values, onionSkin, motionPaths, sh
             )}
           </span>
         </div>
+        {!readOnly && <AnimationRecordPanel controller={controller} node={pickedValid} mode={recordMode} onModeChange={setRecordMode} className="border-t border-border pt-2" />}
         {issueList}
       </div>
       <div className="flex min-w-0 flex-col gap-3">
