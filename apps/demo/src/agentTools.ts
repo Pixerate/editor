@@ -1,5 +1,6 @@
 import { ToolRegistry, createAgentPlayback, createPlaybackToolProvider, type SkillFiles } from "@pixerate/editor/agent";
 import { CommandRegistry, createCommandToolProvider } from "@pixerate/editor/commands";
+import { createEditorDocumentStore, createIndexedDbAdapter, createMemoryStorage, isIndexedDbAvailable } from "@pixerate/editor/persistence";
 
 /**
  * One MCP-style tool registry for the whole demo. Each mounted editor
@@ -22,6 +23,15 @@ export const demoPlayback = createAgentPlayback({
 });
 demoPlayback.install(demoToolRegistry);
 demoToolRegistry.register(createPlaybackToolProvider(demoPlayback));
+
+/** Where the demo keeps autosave snapshots and saved documents (IndexedDB, or memory when it is missing). */
+export const demoDocumentStorage = isIndexedDbAvailable() ? createIndexedDbAdapter("pixerate-demo") : createMemoryStorage();
+
+/**
+ * Saved documents for every editor tab: the `save_<kind>_document`, `list_saved_<kind>_documents`
+ * and `open_saved_<kind>_document` agent tools read and write it.
+ */
+export const demoDocumentStore = createEditorDocumentStore({ storage: demoDocumentStorage, namespace: "pixerate-demo.documents" });
 
 /**
  * One command registry for the whole demo: the command palette (Mod+K) and the

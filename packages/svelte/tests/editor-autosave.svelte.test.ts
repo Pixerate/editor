@@ -1,0 +1,53 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
+import { createMemoryStorage, toEditorDocumentFile } from "@pixerate/editor/persistence";
+import { createEditorAutosave } from "../src/persistence";
+import { createMermaidDiagram } from "../src/canvas";
+
+let cleanup: Array<() => void> = [];
+afterEach(() => {
+  cleanup.forEach((fn) => fn());
+  cleanup = [];
+});
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const source = "flowchart TD\n  A --> B\n";
+
+describe("createEditorAutosave", () => {
+  it("snapshots an editor document and restores it into a new editor", async () => {
+    const storage = createMemoryStorage();
+    const first = new DiagramController({ source });
+    const doc = createDiagramEditorDocument(first);
+    const autosave = createEditorAutosave(doc, { storage, debounceMs: 5, interval: 20 });
+    cleanup.push(() => autosave.destroy());
+    await autosave.checked;
+    first.load("flowchart LR\n  X --> Y\n");
+    await wait(40);
+    expect(JSON.parse(storage.entries.get("diagram")!)).toEqual(toEditorDocumentFile(doc));
+    expect(autosave.status.status).toBe("saved");
+    autosave.destroy();
+
+    const second = new DiagramController({ source });
+    const again = createEditorAutosave(createDiagramEditorDocument(second), { storage });
+    cleanup.push(() => again.destroy());
+    await again.checked;
+    expect(again.pendingRecovery).toBe(true);
+    expect(again.recovery?.snapshot?.kind).toBe("diagram");
+    const report = again.restore();
+    expect(report?.readOnly).toBeNull();
+    expect(second.getSource()).toBe("flowchart LR\n  X --> Y\n");
+    expect(again.pendingRecovery).toBe(false);
+  });
+});
+
+describe("createMermaidDiagram().editorDocument", () => {
+  it("is the diagram's document contract", () => {
+    const diagram = createMermaidDiagram({ source });
+    cleanup.push(() => diagram.destroy());
+    expect(diagram.editorDocument.kind).toBe("diagram");
+    diagram.editorDocument.loadDocument({ source: "flowchart LR\n  Q\n" }, { history: "record" });
+    expect(diagram.source).toBe("flowchart LR\n  Q\n");
+    diagram.undo();
+    expect(diagram.source).toBe(source);
+  });
+});

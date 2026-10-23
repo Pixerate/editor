@@ -15,9 +15,9 @@ import { CommandRegistry, createCommandToolProvider, createHistoryCommands } fro
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
-import { createMemoryStorage } from '../src/persistence';
+import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
-import { DiagramController, createDiagramToolProvider } from '../src/diagram';
+import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createFakeEffectProvider } from '../src/effects';
@@ -210,6 +210,13 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createPlaybackToolProvider(createAgentPlayback()));
 		registry.register(createChartToolProvider(new ChartController(), { id: 'chart', namespace: 'chart' }));
 		registry.register(createDiagramToolProvider(new DiagramController(), { id: 'diagram', namespace: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) }));
+		registry.register(
+			createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), {
+				namespace: 'diagramdoc',
+				skill: 'pixerate-diagram',
+				store: createEditorDocumentStore({ storage: createMemoryStorage() })
+			})
+		);
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));
 		registry.register(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects', namespace: 'vecfx' }));
 		registry.register(createVectorGenerationToolProvider(new VectorEditorController(), { id: 'vector-generation', namespace: 'vecgen', models: [{ id: 'm', media: 'image' }], generate: () => ({ svg: '' }) }));
