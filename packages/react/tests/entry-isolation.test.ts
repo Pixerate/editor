@@ -27,15 +27,15 @@ function reachablePackages(entry: string): Set<string> {
 
 /** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI. */
 const EXTRA: Record<string, readonly string[]> = {
-  "video-editor": ["effects", "parameters", "tools"],
-  "image-editor": ["effects", "parameters", "tools"],
-  vector: ["effects", "parameters", "tools"],
-  "animation-editor": ["effects", "parameters", "tools"],
-  "paint-editor": ["effects", "parameters", "tools"],
-  effects: ["parameters"],
+  "video-editor": ["effects", "parameters", "tools", "color"],
+  "image-editor": ["effects", "parameters", "tools", "color"],
+  vector: ["effects", "parameters", "tools", "color"],
+  "animation-editor": ["effects", "parameters", "tools", "color"],
+  "paint-editor": ["effects", "parameters", "tools", "color"],
+  effects: ["parameters", "color"],
   spreadsheet: ["tools"],
   chart: ["tools"],
-  parameters: ["tools"],
+  parameters: ["tools", "color"],
 };
 
 // Allowed: the framework itself and the matching narrow core subpath (plus its EXTRA ones).

@@ -549,6 +549,7 @@
           <button
             type="button"
             data-testid="color-picker-swatch"
+            title={color}
             {disabled}
             aria-label="Color {color}"
             onclick={() => {

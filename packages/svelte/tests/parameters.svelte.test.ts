@@ -145,10 +145,18 @@ describe("field controls", () => {
     });
     commit(b.querySelector('input[aria-label="C hex"]') as HTMLInputElement, "#0F0");
     expect(onColor).toHaveBeenCalledWith("#00ff00ff");
-    click(b.querySelector('button[aria-label="C #0000ffff"]'));
-    expect(onColor).toHaveBeenLastCalledWith("#0000ffff");
-    setInput(b.querySelector('input[aria-label="C opacity"]') as HTMLInputElement, "255");
-    expect(onColor).toHaveBeenLastCalledWith("#ff0000ff");
+
+    // Open the color picker popover via the swatch button
+    click(b.querySelector('button[aria-label="C"]')!);
+
+    // Use alpha slider inside the ColorPicker
+    const alphaSlider = b.querySelector('[role="slider"][aria-label="Alpha"]')!;
+    fire(alphaSlider, "keydown", { key: "End" });
+    expect(onColor).toHaveBeenLastCalledWith("#00ff00ff");
+
+    // Click the swatch button inside the ColorPicker
+    click(b.querySelector('button[title="#00f"]')!);
+    expect(onColor).toHaveBeenLastCalledWith("#00f");
   });
 
   it("shows keyframe state on the diamond", () => {

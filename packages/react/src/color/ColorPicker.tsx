@@ -683,6 +683,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                 key={`${color}-${idx}`}
                 type="button"
                 data-testid="color-picker-swatch"
+                title={color}
                 disabled={disabled}
                 aria-label={`Color ${color}`}
                 onClick={() => {

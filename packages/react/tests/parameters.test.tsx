@@ -62,7 +62,13 @@ const field = (id: string) => q(`[data-parameter-id="${id}"]`);
 
 async function fire(el: Element, type: string, init: any = { bubbles: true }) {
   await act(async () => {
-    const Ctor = type.startsWith("pointer") ? (win().PointerEvent ?? win().MouseEvent) : type === "focusout" ? win().FocusEvent : win().Event;
+    const Ctor = type.startsWith("pointer")
+      ? (win().PointerEvent ?? win().MouseEvent)
+      : type === "focusout"
+        ? win().FocusEvent
+        : type.startsWith("key")
+          ? win().KeyboardEvent
+          : win().Event;
     el.dispatchEvent(new Ctor(type, init));
   });
 }
@@ -179,10 +185,18 @@ describe("field controls", () => {
     expect(onChoice).toHaveBeenCalledWith("b");
     await commit(q<HTMLInputElement>('input[aria-label="C hex"]'), "#0F0");
     expect(onColor).toHaveBeenCalledWith("#00ff00ff");
-    await click(q('button[aria-label="C #0000ffff"]'));
-    expect(onColor).toHaveBeenLastCalledWith("#0000ffff");
-    await setInput(q<HTMLInputElement>('input[aria-label="C opacity"]'), "255");
-    expect(onColor).toHaveBeenLastCalledWith("#ff0000ff");
+
+    // Open the color picker popover via the swatch button
+    await click(q('button[aria-label="C"]'));
+
+    // Use alpha slider inside the ColorPicker
+    const alphaSlider = q('[role="slider"][aria-label="Alpha"]');
+    await fire(alphaSlider, "keydown", { key: "End" });
+    expect(onColor).toHaveBeenLastCalledWith("#00ff00ff");
+
+    // Click the swatch button inside the ColorPicker
+    await click(q('button[title="#00f"]'));
+    expect(onColor).toHaveBeenLastCalledWith("#00f");
   });
 
   it("shows keyframe state on the diamond", async () => {

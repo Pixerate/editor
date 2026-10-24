@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   choiceOptionLabel,
   formatParameterNumber,
@@ -22,6 +22,7 @@ import {
   type TextParameterField,
   type VectorParameterField,
 } from '@pixerate/editor/parameters';
+import { ColorPicker } from '../color/index.js';
 
 /** Props every field control takes. Controls are controller-free: wire them to anything. */
 export interface ParameterControlProps<F extends ParameterField, V extends ParameterValue> {
@@ -228,46 +229,65 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
   );
 }
 
-/** A colour picker with a hex box, an alpha slider (with `alpha`) and swatches. */
+/** A colour picker with a hex box and a popup ColorPicker. */
 export function ParameterColor({ field, value, onChange, onGestureStart, onGestureEnd, disabled, id }: ParameterControlProps<ColorParameterField, string>) {
-  const picking = useRef(false);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
   const alpha = !!field.alpha;
   const hex = normalizeHexColor(value, true) ?? '#000000ff';
   const rgb = hex.slice(0, 7);
-  const a = hex.slice(7);
+  const shown = alpha ? hex : rgb;
   const off = disabled || field.readOnly;
-  const start = () => {
-    if (picking.current) return;
-    picking.current = true;
-    onGestureStart?.();
-  };
-  const end = () => {
-    if (!picking.current) return;
-    picking.current = false;
-    onGestureEnd?.();
-  };
+  const name = parameterLabel(field);
+
+  // Close on outside click or Escape
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [open]);
+
   return (
-    <div className="space-y-1.5">
+    <div ref={containerRef} className="relative space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="relative h-7 w-9 shrink-0 overflow-hidden rounded-md border border-input bg-[repeating-conic-gradient(#d4d4d8_0_25%,#fff_0_50%)] bg-[length:8px_8px]">
-          <span className="absolute inset-0" style={{ background: alpha ? hex : rgb }} />
-          <input
-            type="color"
-            aria-label={parameterLabel(field)}
-            value={rgb}
-            disabled={off}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-            onChange={(e) => {
-              start();
-              onChange(alpha ? `${e.target.value}${a}` : e.target.value);
-            }}
-            onBlur={end}
-          />
-        </span>
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label={name}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          disabled={off}
+          onClick={() => setOpen((prev) => !prev)}
+          className="relative h-7 w-9 shrink-0 overflow-hidden rounded-md border border-input bg-[repeating-conic-gradient(#d4d4d8_0_25%,#fff_0_50%)] bg-[length:8px_8px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="absolute inset-0" style={{ background: shown }} />
+        </button>
         <ParameterCommitInput
           id={id}
-          aria-label={`${parameterLabel(field)} hex`}
-          value={alpha ? hex : rgb}
+          aria-label={`${name} hex`}
+          value={shown}
           disabled={off}
           spellCheck={false}
           className={`${parameterInputClass} font-mono`}
@@ -277,42 +297,29 @@ export function ParameterColor({ field, value, onChange, onGestureStart, onGestu
           }}
         />
       </div>
-      {alpha && (
-        <input
-          type="range"
-          aria-label={`${parameterLabel(field)} opacity`}
-          min={0}
-          max={255}
-          step={1}
-          value={parseInt(a, 16)}
-          disabled={off}
-          className={rangeClass}
-          onPointerDown={start}
-          onPointerUp={end}
-          onPointerCancel={end}
-          onBlur={end}
-          onChange={(e) => onChange(`${rgb}${Number(e.target.value).toString(16).padStart(2, '0')}`)}
-        />
-      )}
-      {field.swatches && field.swatches.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {field.swatches.map((s) => {
-            const swatch = normalizeHexColor(s, alpha);
-            if (!swatch) return null;
-            return (
-              <button
-                key={s}
-                type="button"
-                title={swatch}
-                aria-label={`${parameterLabel(field)} ${swatch}`}
-                aria-pressed={swatch === (alpha ? hex : rgb)}
-                disabled={off}
-                onClick={() => onChange(swatch)}
-                className="h-5 w-5 rounded border border-input aria-pressed:ring-1 aria-pressed:ring-primary"
-                style={{ background: swatch }}
-              />
-            );
-          })}
+      {open && (
+        <div
+          ref={popoverRef}
+          role="dialog"
+          aria-label={name}
+          tabIndex={-1}
+          onBlur={(e) => {
+            if (popoverRef.current && !popoverRef.current.contains(e.relatedTarget as Node)) {
+              setOpen(false);
+            }
+          }}
+          className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-xl"
+          style={{ background: 'var(--popover, var(--background, #fff))' }}
+        >
+          <ColorPicker
+            value={shown}
+            alpha={alpha}
+            swatches={field.swatches}
+            disabled={off}
+            onChange={onChange}
+            onGestureStart={onGestureStart}
+            onGestureEnd={onGestureEnd}
+          />
         </div>
       )}
     </div>
