@@ -3,7 +3,7 @@ import { ToolRegistry } from '../src/agent';
 import { createColorToolProvider } from '../src/color';
 
 describe('createColorToolProvider', () => {
-	it('registers with ToolRegistry and exposes all 5 tools with complete annotations', () => {
+	it('registers with ToolRegistry and exposes all 8 tools with complete annotations', () => {
 		const registry = new ToolRegistry();
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
 		const tools = registry.listTools().tools;
@@ -11,6 +11,9 @@ describe('createColorToolProvider', () => {
 			'color__blend_colors',
 			'color__check_color_contrast',
 			'color__check_color_palette',
+			'color__check_dual_color_contrast',
+			'color__derive_dual_color',
+			'color__export_dual_colors_css',
 			'color__inspect_color',
 			'color__suggest_color_harmony'
 		]);
@@ -53,6 +56,17 @@ describe('createColorToolProvider', () => {
 			const res = await registry.callTool('inspect_color', { color: 'not-a-color-xyz' });
 			expect(res.isError).toBe(true);
 			expect(res.content?.[0]?.text).toContain('not a colour I can read');
+		});
+
+		it('gives specific error when passed a light-dark() dual colour', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('inspect_color', { color: 'light-dark(#ffffff, #000000)' });
+			expect(res.isError).toBe(true);
+			expect(res.content?.[0]?.text).toContain(
+				'This is a dual colour (light-dark); use check_dual_color_contrast, or pass one half.'
+			);
 		});
 	});
 
@@ -98,6 +112,20 @@ describe('createColorToolProvider', () => {
 			});
 			expect(res.isError).toBe(true);
 			expect(res.content?.[0]?.text).toContain('not a colour I can read');
+		});
+
+		it('gives specific error when passed a light-dark() dual colour', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('check_color_contrast', {
+				foreground: 'light-dark(#111, #eee)',
+				background: '#ffffff'
+			});
+			expect(res.isError).toBe(true);
+			expect(res.content?.[0]?.text).toContain(
+				'This is a dual colour (light-dark); use check_dual_color_contrast, or pass one half.'
+			);
 		});
 	});
 
@@ -203,6 +231,107 @@ describe('createColorToolProvider', () => {
 				from: '#ff0000',
 				to: '#0000ff',
 				steps: 1
+			});
+			expect(res.isError).toBe(true);
+		});
+	});
+
+	describe('derive_dual_color', () => {
+		it('derives dual colour preserving contrast against surfaces', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('derive_dual_color', {
+				color: '#1d4ed8',
+				from: 'light'
+			});
+			expect(res.isError).toBeUndefined();
+			const data = res.structuredContent as any;
+			expect(data.light).toBe('#1d4ed8');
+			expect(data.dark).toBeDefined();
+			expect(data.css).toContain('light-dark(#1d4ed8, ');
+			expect(data.contrast.light).toBeGreaterThan(1);
+			expect(data.contrast.dark).toBeGreaterThan(1);
+		});
+
+		it('returns error for invalid color input', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('derive_dual_color', {
+				color: 'invalid-color'
+			});
+			expect(res.isError).toBe(true);
+		});
+	});
+
+	describe('check_dual_color_contrast', () => {
+		it('checks contrast across both light and dark schemes', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('check_dual_color_contrast', {
+				foreground: { light: '#000000', dark: '#ffffff' },
+				background: { light: '#ffffff', dark: '#000000' }
+			});
+			expect(res.isError).toBeUndefined();
+			const data = res.structuredContent as any;
+			expect(data.light.ratio).toBe(21);
+			expect(data.dark.ratio).toBe(21);
+			expect(data.issues.length).toBe(0);
+		});
+
+		it('provides suggestion for failing scheme', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('check_dual_color_contrast', {
+				foreground: '#111111',
+				background: { light: '#ffffff', dark: '#0b0b0f' }
+			});
+			expect(res.isError).toBeUndefined();
+			const data = res.structuredContent as any;
+			expect(data.dark.level).toBe('fail');
+			expect(data.suggestion?.dark).toBeDefined();
+		});
+
+		it('returns error for invalid dual colours', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('check_dual_color_contrast', {
+				foreground: 'bad-fg',
+				background: '#fff'
+			});
+			expect(res.isError).toBe(true);
+		});
+	});
+
+	describe('export_dual_colors_css', () => {
+		it('exports CSS custom properties', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('export_dual_colors_css', {
+				colors: {
+					bg: { light: '#ffffff', dark: '#0b0b0f' },
+					text: 'light-dark(#000000, #ffffff)'
+				},
+				strategy: 'light-dark'
+			});
+			expect(res.isError).toBeUndefined();
+			const data = res.structuredContent as any;
+			expect(data.css).toContain('color-scheme: light dark;');
+			expect(data.css).toContain('--bg: light-dark(#ffffff, #0b0b0f);');
+			expect(data.css).toContain('--text: light-dark(#000000, #ffffff);');
+		});
+
+		it('returns error if colors object is empty or invalid', async () => {
+			const registry = new ToolRegistry();
+			registry.register(createColorToolProvider());
+
+			const res = await registry.callTool('export_dual_colors_css', {
+				colors: {}
 			});
 			expect(res.isError).toBe(true);
 		});

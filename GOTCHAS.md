@@ -21,6 +21,13 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [color/dual] CSS `light-dark()` Requires `color-scheme: light dark;` on an Ancestor
+
+- **Issue / Symptom**: Exported `light-dark(#ffffff, #000000)` tokens always render the light colour in the browser, even when the user or operating system is in dark mode (`prefers-color-scheme: dark`).
+- **Root Cause**: The CSS Color 4 `light-dark()` function strictly requires the element or an ancestor (typically `:root`) to declare `color-scheme: light dark;` (or `color-scheme: dark;`). Without an active `color-scheme` context, browsers default to `light` regardless of media queries.
+- **Solution / Workaround**: `dualColorsToCss()` with strategy `'light-dark'` automatically includes `:root { color-scheme: light dark; ... }`. When applying `light-dark()` variables manually or targeting scoped components, ensure `color-scheme: light dark;` is applied to the root or wrapper element. Use `dualColorsToCss` with strategy `'media'` or `'class'` if targeting older browsers or environments that use CSS class toggling (e.g. `.dark`) instead of native `color-scheme`.
+
+
 ### [monorepo/release] Two Quick Merges: The Second Release Run Versioned the First One's Changesets Again
 
 - **Issue / Symptom**: #312 and #311 merged 17 seconds apart. The first Release run published 0.140.1 and pushed its version commit; the second failed at "Refuse versions that are already on npm" (`@pixerate/editor@0.140.1 is already on npm but main is still at 0.140.0`). Nothing was published twice, but the run failed.

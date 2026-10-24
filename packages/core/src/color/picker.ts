@@ -1,12 +1,13 @@
 /**
-2:  * Pure, headless colour picker state and interaction model.
-3:  * DOM-free: shared across React and Svelte bindings.
-4:  */
+ * Pure, headless colour picker state and interaction model.
+ * DOM-free: shared across React and Svelte bindings.
+ */
 
 import { parseColor } from './parse.js';
 import { rgbToHsv, hsvToRgb } from './convert.js';
 import { formatHex } from './format.js';
 import { toSrgbGamut } from './gamut.js';
+import { normalizeDualColor, type ColorValue, type ColorScheme } from './dual.js';
 
 export interface ColorPickerState {
 	/** Hue angle: 0 <= h < 360 */
@@ -201,3 +202,21 @@ export function pickerAlphaBackground(state: ColorPickerState): string {
 /** CSS background gradient through all hues across the 360° spectrum. */
 export const PICKER_HUE_BACKGROUND: string =
 	'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)';
+
+/**
+ * Computes the view information for editing a dual colour in a picker for the given scheme.
+ * Returns the colour for the active scheme, whether both halves are identical ('linked'),
+ * and the other scheme's colour.
+ */
+export function dualPickerView(
+	value: ColorValue,
+	scheme: ColorScheme
+): { color: string; linked: boolean; other: string } {
+	const norm = normalizeDualColor(value) ?? { light: '#000000', dark: '#000000' };
+	const otherScheme: ColorScheme = scheme === 'light' ? 'dark' : 'light';
+	return {
+		color: norm[scheme],
+		linked: norm.light === norm.dark,
+		other: norm[otherScheme]
+	};
+}
