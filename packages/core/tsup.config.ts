@@ -24,6 +24,7 @@ export default defineConfig({
     "generation/index": "src/generation/index.ts",
     "compare/index": "src/compare/index.ts",
     "tokens/index": "src/tokens/index.ts",
+    "color/index": "src/color/index.ts",
     "export/index": "src/export/index.ts",
     "parameters/index": "src/parameters/index.ts",
     "vector/index": "src/vector/index.ts",
