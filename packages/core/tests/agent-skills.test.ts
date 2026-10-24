@@ -47,6 +47,7 @@ import { AnimationEditorController, createAnimationEditorToolProvider, createAni
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
+import { createColorToolProvider } from '../src/color';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
 const ROOT = join(__dirname, '..');
@@ -155,7 +156,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
-		'pixerate-parameters': commandIds(createParameterCommands(stub))
+		'pixerate-parameters': commandIds(createParameterCommands(stub)),
+		'pixerate-color': toolNames(createColorToolProvider())
 	};
 	doc.destroy();
 	return result;
@@ -200,6 +202,7 @@ const FACTORIES: Record<string, string> = {
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
+	createColorToolProvider: 'pixerate-color',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',

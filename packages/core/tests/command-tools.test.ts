@@ -26,6 +26,7 @@ import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { createColorToolProvider } from '../src/color';
 import { baseToolName } from '../src/tools';
 
 beforeAll(() => {
@@ -233,6 +234,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(
 			createGenerationHistoryToolProvider({ namespace: 'genhistory', store: createGenerationRecordStore({ storage: createMemoryStorage() }) })
 		);
+		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
 		const allTools = registry.listTools().tools;
 		expect(allTools.length).toBeGreaterThan(tools.length);
 		const undescribed: string[] = [];

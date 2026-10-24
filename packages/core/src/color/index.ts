@@ -14,3 +14,4 @@ export * from './vision.js';
 export * from './harmony.js';
 export * from './mix.js';
 export * from './recent.js';
+export * from './tools.js';
