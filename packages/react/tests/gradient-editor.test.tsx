@@ -197,3 +197,93 @@ describe("React FillPicker", () => {
     expect(currentValue).toContain("linear-gradient(");
   });
 });
+
+describe("React FillPicker as a controlled component", () => {
+  function Host({ initial, calls, gestures }: { initial: string; calls: string[]; gestures?: string[] }) {
+    const [value, setValue] = React.useState(initial);
+    return (
+      <FillPicker
+        value={value}
+        onChange={(v) => {
+          calls.push(v);
+          setValue(v);
+        }}
+        onGestureStart={() => gestures?.push("start")}
+        onGestureEnd={() => gestures?.push("end")}
+      />
+    );
+  }
+  const stops = () => [...container.querySelectorAll<HTMLButtonElement>('[data-testid^="gradient-stop-"]')];
+
+  it("reports gradient edits after switching from solid to gradient", async () => {
+    const calls: string[] = [];
+    await act(async () => root.render(<Host initial="#ff0000" calls={calls} />));
+    const gradientButton = [...container.querySelectorAll("button")].find((b) => b.textContent === "Gradient")!;
+    await act(async () => gradientButton.click());
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatch(/^linear-gradient\(/);
+
+    const reverse = container.querySelector('button[aria-label="Reverse stops"]') as HTMLButtonElement;
+    await act(async () => reverse.click());
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).not.toBe(calls[0]);
+  });
+
+  it("keeps the selected stop while its edits round-trip through the parent", async () => {
+    const calls: string[] = [];
+    await act(async () =>
+      root.render(<Host initial="linear-gradient(90deg, #ff0000 0%, #00ff00 50%, #0000ff 100%)" calls={calls} />)
+    );
+    await act(async () => stops()[1].click());
+    expect(stops()[1].getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () => {
+      stops()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await act(async () => {
+      stops()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("#00ff00 52%");
+    expect(stops()[1].getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("follows a new value from the parent", async () => {
+    const calls: string[] = [];
+    let setOuter: (v: string) => void = () => {};
+    function Outer() {
+      const [value, setValue] = React.useState("linear-gradient(90deg, #ff0000 0%, #0000ff 100%)");
+      setOuter = setValue;
+      return <FillPicker value={value} onChange={(v) => calls.push(v)} />;
+    }
+    await act(async () => root.render(<Outer />));
+    await act(async () => setOuter("linear-gradient(90deg, #000000 0%, #888888 50%, #ffffff 100%)"));
+    expect(stops()).toHaveLength(3);
+    // Loading the parent's value is not an edit of ours, so nothing is reported back.
+    expect(calls).toHaveLength(0);
+  });
+
+  it("forwards gradient drag gestures to the host", async () => {
+    const calls: string[] = [];
+    const gestures: string[] = [];
+    await act(async () =>
+      root.render(<Host initial="linear-gradient(90deg, #ff0000 0%, #0000ff 100%)" calls={calls} gestures={gestures} />)
+    );
+    await act(async () => {
+      stops()[0].dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
+    });
+    expect(gestures).toEqual(["start"]);
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    });
+    expect(gestures).toEqual(["start", "end"]);
+  });
+
+  it("passes showCss through to the gradient editor", async () => {
+    await act(async () =>
+      root.render(<FillPicker value="linear-gradient(90deg, #ff0000 0%, #0000ff 100%)" onChange={() => {}} showCss />)
+    );
+    expect(container.textContent).toContain("linear-gradient(");
+    expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Copy")).toBe(true);
+  });
+});

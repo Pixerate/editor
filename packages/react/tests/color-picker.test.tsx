@@ -241,3 +241,26 @@ describe("React ColorPicker", () => {
     expect(input.disabled).toBe(true);
   });
 });
+
+describe("React ColorPicker drags", () => {
+  it("ends the host's gesture and stops listening when unmounted mid-drag", async () => {
+    const onChange = vi.fn();
+    const onGestureStart = vi.fn();
+    const onGestureEnd = vi.fn();
+    await act(async () =>
+      root.render(<ColorPicker value="#ff0000" onChange={onChange} onGestureStart={onGestureStart} onGestureEnd={onGestureEnd} />)
+    );
+    const hue = container.querySelector('[aria-label="Hue"]') as HTMLElement;
+    await act(async () => {
+      hue.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 0 }));
+    });
+    expect(onGestureStart).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(<div />));
+    expect(onGestureEnd).toHaveBeenCalledTimes(1);
+    const calls = onChange.mock.calls.length;
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 10 }));
+    window.dispatchEvent(new MouseEvent("pointerup"));
+    expect(onChange).toHaveBeenCalledTimes(calls);
+    expect(onGestureEnd).toHaveBeenCalledTimes(1);
+  });
+});

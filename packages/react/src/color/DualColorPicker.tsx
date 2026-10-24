@@ -87,7 +87,11 @@ export function DualColorPicker({
 		if (disabled) return;
 		onGestureStart?.();
 		const currentActive = activeScheme === 'dark' ? dual.dark : dual.light;
-		const derived = deriveDualColor(currentActive, { from: activeScheme, surfaces });
+		const derived = deriveDualColor(currentActive, {
+			from: activeScheme,
+			// An unreadable surfaces prop falls back to the defaults rather than throwing.
+			surfaces: normalizeDualColor(surfaces) ?? DEFAULT_SCHEME_SURFACES
+		});
 		onChange(derived);
 		onGestureEnd?.();
 	};
@@ -107,7 +111,8 @@ export function DualColorPicker({
 		: undefined;
 
 	// Contrast evaluations for both modes
-	const dualContrast = contrastAgainst
+	// An unreadable contrastAgainst shows no badges rather than throwing during render.
+	const dualContrast = contrastAgainst && normalizeDualColor(contrastAgainst)
 		? checkDualColorContrast(dual, contrastAgainst)
 		: null;
 

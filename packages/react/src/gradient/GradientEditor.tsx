@@ -27,6 +27,10 @@ export interface GradientEditorProps {
 	showCss?: boolean;
 	/** Whether stops support dual light/dark colour definitions (default: false or auto-detected). */
 	dual?: boolean;
+	/** Called when a continuous edit (stop drag, angle drag, colour drag) starts. */
+	onGestureStart?: () => void;
+	/** Called when that edit ends. */
+	onGestureEnd?: () => void;
 	/** Additional CSS class name. */
 	className?: string;
 }
@@ -47,9 +51,20 @@ export function GradientEditor({
 	showPresets = true,
 	showCss = false,
 	dual: controlledDual,
+	onGestureStart,
+	onGestureEnd,
 	className
 }: GradientEditorProps) {
 	const state = useGradientState(controller);
+	// A gesture is one undo step in the controller and is reported to the host.
+	const beginGesture = (label: string) => {
+		controller.beginGesture(label);
+		onGestureStart?.();
+	};
+	const endGesture = () => {
+		controller.endGesture();
+		onGestureEnd?.();
+	};
 	const gradient = state.gradient;
 	const selectedStopId = state.selectedStopId;
 
@@ -83,7 +98,7 @@ export function GradientEditor({
 		if (controller.isReadOnly) return;
 		e.stopPropagation();
 		controller.selectStop(stopId);
-		controller.beginGesture('Move Stop');
+		beginGesture('Move Stop');
 
 		const startY = e.clientY;
 		const track = trackRef.current;
@@ -96,7 +111,7 @@ export function GradientEditor({
 				// Dragged down off track
 				cleanup();
 				controller.removeStop(stopId);
-				controller.endGesture();
+				endGesture();
 				return;
 			}
 			const nextOffset = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width));
@@ -111,7 +126,7 @@ export function GradientEditor({
 
 		const onPointerUp = () => {
 			cleanup();
-			controller.endGesture();
+			endGesture();
 		};
 
 		window.addEventListener('pointermove', onPointerMove);
@@ -139,7 +154,7 @@ export function GradientEditor({
 		if (controller.isReadOnly) return;
 		const dial = angleDialRef.current;
 		if (!dial) return;
-		controller.beginGesture('Change Angle');
+		beginGesture('Change Angle');
 		const rect = dial.getBoundingClientRect();
 		const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 
@@ -158,7 +173,7 @@ export function GradientEditor({
 		const onPointerMove = (pe: PointerEvent) => update(pe);
 		const onPointerUp = () => {
 			cleanup();
-			controller.endGesture();
+			endGesture();
 		};
 
 		window.addEventListener('pointermove', onPointerMove);
@@ -403,8 +418,8 @@ export function GradientEditor({
 									color: formatDualColor(dualColor)
 								});
 							}}
-							onGestureStart={() => controller.beginGesture('Change Stop Color')}
-							onGestureEnd={() => controller.endGesture()}
+							onGestureStart={() => beginGesture('Change Stop Color')}
+							onGestureEnd={() => endGesture()}
 							disabled={controller.isReadOnly}
 						/>
 					) : (
@@ -414,8 +429,8 @@ export function GradientEditor({
 							onChange={(color) => {
 								controller.updateStop(selectedStop.id, { color });
 							}}
-							onGestureStart={() => controller.beginGesture('Change Stop Color')}
-							onGestureEnd={() => controller.endGesture()}
+							onGestureStart={() => beginGesture('Change Stop Color')}
+							onGestureEnd={() => endGesture()}
 							disabled={controller.isReadOnly}
 						/>
 					)}

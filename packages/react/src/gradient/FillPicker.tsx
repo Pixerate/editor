@@ -5,9 +5,13 @@ import {
 	gradientToCss,
 	parseCssGradient
 } from '@pixerate/editor/gradient';
-import { formatHex, mixColors, parseColor } from '@pixerate/editor/color';
+import { formatHex, mixColors, parseColor, resolveColor } from '@pixerate/editor/color';
 import { ColorPicker } from '../color/ColorPicker';
 import { GradientEditor } from './GradientEditor';
+
+export type FillMode = 'solid' | 'gradient';
+
+const DEFAULT_MODES: readonly FillMode[] = ['solid', 'gradient'];
 
 export interface FillPickerProps {
 	/** Active CSS colour (hex/rgb/hsl etc.) or CSS gradient string. */
@@ -19,11 +23,15 @@ export interface FillPickerProps {
 	/** Called when a continuous pointer drag ends. */
 	onGestureEnd?: () => void;
 	/** Allowed fill modes. Default: ['solid', 'gradient']. */
-	modes?: readonly ('solid' | 'gradient')[];
+	modes?: readonly FillMode[];
 	/** Whether the alpha channel slider is shown on ColorPicker. Default: false. */
 	alpha?: boolean;
 	/** Preset swatches for ColorPicker. */
 	swatches?: readonly string[];
+	/** Whether the gradient editor shows preset buttons. Default: true. */
+	showPresets?: boolean;
+	/** Whether the gradient editor shows the CSS output with a copy button. Default: false. */
+	showCss?: boolean;
 	/** Additional CSS class names. */
 	className?: string;
 	/** Whether the picker is disabled. */
@@ -49,55 +57,68 @@ export function FillPicker({
 	onChange,
 	onGestureStart,
 	onGestureEnd,
-	modes = ['solid', 'gradient'],
+	modes = DEFAULT_MODES,
 	alpha = false,
 	swatches,
+	showPresets = true,
+	showCss = false,
 	className,
 	disabled = false
 }: FillPickerProps) {
-	// Check whether incoming value is a gradient
-	const parsedGrad = parseCssGradient(value);
-	const initialMode: 'solid' | 'gradient' =
-		parsedGrad && modes.includes('gradient')
-			? 'gradient'
-			: modes.includes('solid')
-				? 'solid'
-				: 'gradient';
+	const allowsSolid = modes.includes('solid');
+	const allowsGradient = modes.includes('gradient');
+	const modeFor = (v: string): FillMode =>
+		parseCssGradient(v) && allowsGradient ? 'gradient' : allowsSolid ? 'solid' : 'gradient';
 
-	const [mode, setMode] = useState<'solid' | 'gradient'>(initialMode);
+	const [mode, setModeState] = useState<FillMode>(() => modeFor(value));
+	// The controller is created once; its callbacks read the latest props through refs.
+	const latest = useRef({ onChange, mode, disabled });
+	latest.current.onChange = onChange;
+	latest.current.disabled = disabled;
+	const setMode = (next: FillMode) => {
+		latest.current.mode = next;
+		setModeState(next);
+	};
 	const isDraggingRef = useRef(false);
+	// The last CSS this picker emitted, so the echo of our own change isn't loaded back in.
+	const emittedRef = useRef<string | null>(null);
+	const loadingRef = useRef(false);
 
-	// Internal gradient controller
 	const controllerRef = useRef<GradientController | null>(null);
 	if (!controllerRef.current) {
-		const initialGradient = parsedGrad ?? createDefaultGradientFromColor(value);
 		controllerRef.current = new GradientController({
-			value: initialGradient,
-			readOnly: disabled,
+			value: parseCssGradient(value) ?? createDefaultGradientFromColor(value),
+			readOnly: () => latest.current.disabled,
 			onChange: (g) => {
-				if (mode === 'gradient') {
-					onChange(gradientToCss(g));
-				}
+				if (loadingRef.current || latest.current.mode !== 'gradient') return;
+				const css = gradientToCss(g);
+				emittedRef.current = css;
+				latest.current.onChange(css);
 			}
 		});
 	}
 	const controller = controllerRef.current;
 
-	// Synchronise with incoming value when not dragging
+	// Follow the incoming value, without an undo step, unless it is our own change coming back.
+	const modesKey = modes.join(',');
 	useEffect(() => {
 		if (isDraggingRef.current) return;
-		const incomingGradient = parseCssGradient(value);
-		if (incomingGradient) {
-			if (modes.includes('gradient')) {
-				setMode('gradient');
-				controller.setGradient(incomingGradient);
+		const incoming = parseCssGradient(value);
+		if (incoming && allowsGradient) {
+			setMode('gradient');
+			if (value !== emittedRef.current) {
+				loadingRef.current = true;
+				try {
+					controller.load(incoming);
+				} finally {
+					loadingRef.current = false;
+				}
 			}
-		} else {
-			if (modes.includes('solid')) {
-				setMode('solid');
-			}
+		} else if (!incoming && allowsSolid) {
+			setMode('solid');
 		}
-	}, [value, modes, controller]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [value, modesKey, controller]);
 
 	const handleGestureStart = () => {
 		isDraggingRef.current = true;
@@ -109,19 +130,41 @@ export function FillPicker({
 		onGestureEnd?.();
 	};
 
+	const emit = (next: string) => {
+		emittedRef.current = next;
+		onChange(next);
+	};
+
 	const switchToSolid = () => {
+		if (latest.current.mode === 'solid') return;
 		setMode('solid');
-		const stops = controller.getGradient().stops;
-		const solidColor = stops[0]?.color ?? '#000000';
-		onChange(solidColor);
+		const first = controller.getGradient().stops[0]?.color ?? '#000000';
+		// A dual stop has no single solid equivalent; keep its light half.
+		emit(resolveColor(first, 'light') ?? '#000000');
 	};
 
 	const switchToGradient = () => {
+		if (latest.current.mode === 'gradient') return;
 		setMode('gradient');
-		const newGrad = createDefaultGradientFromColor(value);
-		controller.setGradient(newGrad);
-		onChange(gradientToCss(newGrad));
+		const next = createDefaultGradientFromColor(value);
+		loadingRef.current = true;
+		try {
+			controller.load(next);
+		} finally {
+			loadingRef.current = false;
+		}
+		emit(gradientToCss(controller.getGradient()));
 	};
+
+	const gradientEditor = (
+		<GradientEditor
+			controller={controller}
+			showPresets={showPresets}
+			showCss={showCss}
+			onGestureStart={handleGestureStart}
+			onGestureEnd={handleGestureEnd}
+		/>
+	);
 
 	// If only solid is allowed
 	if (modes.length === 1 && modes[0] === 'solid') {
@@ -144,7 +187,7 @@ export function FillPicker({
 	if (modes.length === 1 && modes[0] === 'gradient') {
 		return (
 			<div className={className} data-testid="fill-picker">
-				<GradientEditor controller={controller} />
+				{gradientEditor}
 			</div>
 		);
 	}
@@ -184,7 +227,7 @@ export function FillPicker({
 					disabled={disabled}
 				/>
 			) : (
-				<GradientEditor controller={controller} />
+				gradientEditor
 			)}
 		</div>
 	);

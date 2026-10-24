@@ -69,8 +69,9 @@ function writeLocalRecents(list: readonly string[]): void {
   } catch {}
 }
 
+/** Transparency checkerboard; themeable through `--pixerate-checker-a` / `--pixerate-checker-b`. */
 const CHECKERBOARD_BG =
-  "linear-gradient(45deg, #333842 25%, transparent 25%), linear-gradient(-45deg, #333842 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333842 75%), linear-gradient(-45deg, transparent 75%, #333842 75%)";
+  "repeating-conic-gradient(var(--pixerate-checker-a, #d4d4d8) 0 25%, var(--pixerate-checker-b, #ffffff) 0 50%)";
 
 const DEFAULT_PICKER_STATE: ColorPickerState = { h: 0, s: 1, v: 1, alpha: 1 };
 
@@ -155,96 +156,54 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
     [alpha, onChange],
   );
 
-  // 2D Area Pointer Interactions
-  const handleAreaPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+  // Pointer drags: listeners live on window and are removed on pointerup, or on unmount,
+  // which also ends the host's gesture so it never stays open.
+  const latest = useRef({ emitColorChange, recordRecent, onGestureEnd, alpha });
+  latest.current = { emitColorChange, recordRecent, onGestureEnd, alpha };
+  const endDragRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => endDragRef.current?.(), []);
+
+  const startDrag = (
+    e: React.PointerEvent<HTMLDivElement>,
+    next: (state: ColorPickerState, x: number, y: number) => ColorPickerState,
+  ) => {
     if (disabled) return;
     e.preventDefault();
+    endDragRef.current?.();
     onGestureStart?.();
 
-    const target = e.currentTarget;
-    const rect = target.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     const update = (clientX: number, clientY: number) => {
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      const next = pickerStateFromArea(stateRef.current, x, y);
-      emitColorChange(next);
+      latest.current.emitColorChange(next(stateRef.current, x, y));
     };
     update(e.clientX, e.clientY);
 
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX, ev.clientY);
-    };
-    const onPointerUp = () => {
+    const onPointerMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY);
+    const end = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
-      onGestureEnd?.();
-      recordRecent(pickerStateToHex(stateRef.current, alpha));
+      endDragRef.current = null;
+      latest.current.onGestureEnd?.();
     };
+    const onPointerUp = () => {
+      end();
+      latest.current.recordRecent(pickerStateToHex(stateRef.current, latest.current.alpha));
+    };
+    endDragRef.current = end;
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
   };
 
-  // Hue Slider Pointer Interactions
-  const handleHuePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (disabled) return;
-    e.preventDefault();
-    onGestureStart?.();
-
-    const target = e.currentTarget;
-    const rect = target.getBoundingClientRect();
-    const update = (clientX: number) => {
-      const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const next = pickerStateFromHue(stateRef.current, t);
-      emitColorChange(next);
-    };
-    update(e.clientX);
-
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX);
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      onGestureEnd?.();
-      recordRecent(pickerStateToHex(stateRef.current, alpha));
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
-  };
-
-  // Alpha Slider Pointer Interactions
-  const handleAlphaPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (disabled) return;
-    e.preventDefault();
-    onGestureStart?.();
-
-    const target = e.currentTarget;
-    const rect = target.getBoundingClientRect();
-    const update = (clientX: number) => {
-      const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const next = pickerStateFromAlpha(stateRef.current, t);
-      emitColorChange(next);
-    };
-    update(e.clientX);
-
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX);
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      onGestureEnd?.();
-      recordRecent(pickerStateToHex(stateRef.current, alpha));
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
-  };
+  const handleAreaPointerDown = (e: React.PointerEvent<HTMLDivElement>) =>
+    startDrag(e, (state, x, y) => pickerStateFromArea(state, x, y));
+  const handleHuePointerDown = (e: React.PointerEvent<HTMLDivElement>) =>
+    startDrag(e, (state, x) => pickerStateFromHue(state, x));
+  const handleAlphaPointerDown = (e: React.PointerEvent<HTMLDivElement>) =>
+    startDrag(e, (state, x) => pickerStateFromAlpha(state, x));
 
   // Keyboard navigation
   const handleAreaKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
