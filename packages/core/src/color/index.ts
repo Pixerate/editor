@@ -15,3 +15,4 @@ export * from './harmony.js';
 export * from './mix.js';
 export * from './recent.js';
 export * from './tools.js';
+export * from './picker.js';
