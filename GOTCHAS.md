@@ -2788,3 +2788,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Recorded takes came out with drags quantised to frame times, and with a `ManualClock` every sample recorded since the last frame landed on the same time (a whole drag became an instant jump).
 - **Root Cause**: `AnimationPlayer.currentTime` is the time at the last frame it ticked. Pointer events arrive between frames, and a `ManualClock` only ticks the player when `advance` resolves its frame promises, so the clock had moved on but the playhead had not.
 - **Solution / Workaround**: Read `player.liveTime` (the playhead at the clock's time now) for input timestamps. `currentTime` stays the right value for drawing. In tests, `await clock.advance(ms)`: it is async and ticks frames only after it settles.
+
+### [react/gradient] Controlled Pickers Built on a Long-Lived Controller
+
+- **Issue / Symptom**: React `FillPicker` stopped reporting gradient edits after switching from solid to gradient. Bound to a parent's value, every edit also added a "Set Gradient" undo step and moved the selection back to the first stop.
+- **Root Cause**: The `GradientController` is created once, so the `onChange` passed to it kept the `mode` and `onChange` values from the first render. Each value the parent passed back was loaded with `setGradient`, which records an undo step and resets the selection, even when it was only the picker's own change returning.
+- **Solution / Workaround**: Read the latest props through a ref inside controller callbacks (pass `readOnly` as a function for the same reason). Load host values with `controller.load()`, which adds no undo step and keeps the selection, and skip a value equal to the CSS the picker just emitted. Svelte's `$state` avoids the stale `mode`, but the echo and undo problems apply there too.
+
+### [demo] `vite build` Does Not Typecheck the Demo
+
+- **Issue / Symptom**: `pnpm --filter demo build` passed while the demo passed an options object where `createGradientToolProvider` expects a controller, so every gradient tool failed at runtime.
+- **Root Cause**: Vite strips types without checking them. Only `pnpm typecheck` (run in CI) checks the demo, and it also runs `svelte-check` on the Svelte package.
+- **Solution / Workaround**: Run `pnpm typecheck` before pushing, as well as `pnpm build`, `pnpm test` and the demo build.
