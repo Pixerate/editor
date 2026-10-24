@@ -163,6 +163,16 @@
         "types": "./dist/video-editor/index.d.cts",
         "default": "./dist/video-editor/index.cjs"
       }
+    },
+    "./color": {
+      "import": {
+        "types": "./dist/color/index.d.ts",
+        "default": "./dist/color/index.js"
+      },
+      "require": {
+        "types": "./dist/color/index.d.cts",
+        "default": "./dist/color/index.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -205,6 +215,9 @@
       ],
       "video-editor": [
         "./dist/video-editor/index.d.ts"
+      ],
+      "color": [
+        "./dist/color/index.d.ts"
       ]
     }
   },

@@ -22,6 +22,7 @@ export * from "./hooks/useOutline";
 export * from "./components/OutlinePanel";
 export * from "./hooks/useParagraphStyles";
 export * from "./components/StylesGallery";
+export * from "./color/ColorPicker";
 
 // Re-export core types for easy consumer access
 export {

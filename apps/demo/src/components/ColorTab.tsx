@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useAgentToolProvider } from "@pixerate/editor-react";
+import { useAgentToolProvider, ColorPicker } from "@pixerate/editor-react";
 import {
   createColorToolProvider,
   parseColor,
@@ -97,21 +97,15 @@ export function ColorTab() {
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
           <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
             <Sliders className="w-4 h-4 text-indigo-400" />
-            Inspector &amp; Metrics
+            Interactive Colour Picker
           </h3>
-          <div className="flex items-center gap-4">
-            <input
-              type="color"
-              value={hexColor.startsWith("#") && hexColor.length === 7 ? hexColor : "#3b82f6"}
-              onChange={(e) => setHexColor(e.target.value)}
-              className="w-12 h-12 rounded-lg cursor-pointer border border-slate-700 bg-transparent p-0"
-            />
-            <input
-              type="text"
+          <div className="flex justify-center py-2">
+            <ColorPicker
               value={hexColor}
-              onChange={(e) => setHexColor(e.target.value)}
-              className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm font-mono text-slate-100 focus:outline-none focus:border-indigo-500"
-              placeholder="#3b82f6 or blue"
+              onChange={setHexColor}
+              alpha={true}
+              contrastAgainst={surfaceColor}
+              swatches={["#ef4444", "#f97316", "#eab308", "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899"]}
             />
           </div>
 

@@ -69,14 +69,18 @@ export function pickerStateFromColor(input: unknown, previous?: ColorPickerState
 }
 
 /** Formats current picker state as a hex string (#rrggbb or #rrggbbaa). */
-export function pickerStateToHex(state: ColorPickerState): string {
+export function pickerStateToHex(state: ColorPickerState, forceAlpha = false): string {
 	const rgba = hsvToRgb({
 		h: state.h,
 		s: state.s,
 		v: state.v,
 		alpha: state.alpha
 	});
-	return formatHex(rgba);
+	const hex = formatHex(rgba);
+	if (forceAlpha && hex.length === 7) {
+		return hex + 'ff';
+	}
+	return hex;
 }
 
 /** Updates saturation (x) and value (y) from normalized coordinates (0..1). */
