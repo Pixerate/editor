@@ -15,6 +15,7 @@ const VectorTab = lazy(() => import("./components/VectorTab").then((m) => ({ def
 const AnimationTab = lazy(() => import("./components/AnimationTab").then((m) => ({ default: m.AnimationTab })));
 const VideoTab = lazy(() => import("./components/VideoTab").then((m) => ({ default: m.VideoTab })));
 const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ default: m.ChartTab })));
+const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ default: m.ColorTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
@@ -30,9 +31,10 @@ import {
   Clapperboard,
   Film,
   Brush,
+  Palette,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "params" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -72,6 +74,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
   {
     label: "Reference",
     tabs: [
+      { id: "color", label: "Colour & A11y", icon: Palette, hint: "Perceptual spaces, WCAG, CVD" },
       { id: "params", label: "Parameters", icon: SlidersHorizontal, hint: "Typed controls from a schema" },
       { id: "parity", label: "Feature parity", icon: CheckCircle2, hint: "Core, React and Svelte" },
     ],
@@ -226,6 +229,7 @@ export default function App() {
           {activeTab === "animation" && <AnimationTab />}
           {activeTab === "video" && <VideoTab />}
           {activeTab === "chart" && <ChartTab />}
+          {activeTab === "color" && <ColorTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
         {activeTab !== "parity" && (
