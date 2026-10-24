@@ -1,5 +1,5 @@
 import { hexToRgba, normalizeTokenColor, rgbaToHex } from '../tokens/color.js';
-import { rgbToOklab as coreRgbToOklab, oklabToRgb as coreOklabToRgb, mixColors } from '../color/index.js';
+import { rgbToOklab as coreRgbToOklab, oklabToRgb as coreOklabToRgb } from '../color/index.js';
 
 /**
  * Colour interpolation in OKLab (Björn Ottosson's perceptual space, as CSS Color 4 uses for
@@ -53,5 +53,11 @@ export function formatOklab(color: OklabColor): string {
  * Returns `null` when either is not a readable colour.
  */
 export function mixColorsOklab(from: unknown, to: unknown, t: number): string | null {
-	return mixColors(from, to, t, { space: 'oklab' });
+	const a = parseOklab(from);
+	const b = parseOklab(to);
+	if (!a || !b) return null;
+	const alpha = a.alpha + (b.alpha - a.alpha) * t;
+	const premul = (k: 'l' | 'a' | 'b') => a[k] * a.alpha + (b[k] * b.alpha - a[k] * a.alpha) * t;
+	if (alpha <= 1e-9) return formatOklab({ l: a.l + (b.l - a.l) * t, a: 0, b: 0, alpha: 0 });
+	return formatOklab({ l: premul('l') / alpha, a: premul('a') / alpha, b: premul('b') / alpha, alpha });
 }

@@ -135,6 +135,11 @@ export class GradientController {
 
 	subscribe(fn: (state: GradientState) => void): () => void {
 		this._listeners.add(fn);
+		try {
+			fn(this.state);
+		} catch (err) {
+			console.error('GradientController subscriber error', err);
+		}
 		return () => {
 			this._listeners.delete(fn);
 		};
