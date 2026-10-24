@@ -20,6 +20,11 @@ The colour module provides DOM-free colour tools for inspection, WCAG accessibil
    - Run `check_dual_color_contrast` for each text and background pair across both modes.
    - Fix whichever mode fails using the suggested lightness.
    - Run `export_dual_colors_css` to output clean CSS custom properties using `light-dark()`, `@media (prefers-color-scheme: dark)`, or `.dark` class rules.
+7. **Inspect and edit gradients.**
+   - Run `get_gradient` to inspect the active gradient model, CSS output, SVG def markup, and dual-colour status.
+   - Run `check_gradient` to audit for crowded stops, banding risk, out-of-gamut colours, and text contrast along the ramp.
+   - Run `list_gradient_presets` and `apply_gradient_preset` to quickly set tested gradient compositions.
+   - Modify gradient structure using `set_gradient`, `set_gradient_geometry`, `add_gradient_stop`, `update_gradient_stop`, `remove_gradient_stop`, `reverse_gradient`, or `distribute_gradient_stops`.
 
 ## Best practices
 
@@ -42,6 +47,17 @@ The colour module provides DOM-free colour tools for inspection, WCAG accessibil
 | `derive_dual_color` | Automatically derives the opposing scheme colour (light or dark) from a base colour, optionally preserving contrast against background surfaces | `{ light, dark, css, contrast: { light, dark } }` |
 | `check_dual_color_contrast` | Evaluates WCAG contrast compliance for a foreground and background dual colour across both light and dark modes, with suggestions | `{ light: { ratio, level }, dark: { ratio, level }, issues, suggestion? }` |
 | `export_dual_colors_css` | Generates CSS custom properties for dual colours using light-dark(), media queries, or darkSelector class | `{ css }` |
+| `get_gradient` | Returns the current gradient model, CSS string, SVG def, and dual status | `{ gradient, css, svgDef, isDual, selectedStopId, readOnly }` |
+| `check_gradient` | Audits gradient for crowded stops, banding risk, out-of-gamut colours, and text contrast | `{ pass, issueCount, issues }` |
+| `list_gradient_presets` | Returns the collection of built-in gradient presets | `{ presets: [{ id, name, category, css, gradient }] }` |
+| `set_gradient` | Replaces the entire gradient with a new gradient object or CSS string | `{ gradient, css }` |
+| `set_gradient_geometry` | Updates geometric parameters (type, angle, center, shape, interpolation, repeating) | `{ gradient, css }` |
+| `add_gradient_stop` | Adds a new color stop to the gradient ramp | `{ stop, gradient, css }` |
+| `update_gradient_stop` | Updates an existing stop's color, offset, or midpoint | `{ stop, gradient, css }` |
+| `remove_gradient_stop` | Removes a color stop by ID | `{ gradient, css }` |
+| `reverse_gradient` | Reverses the order and offsets of all stops | `{ gradient, css }` |
+| `distribute_gradient_stops` | Evenly distributes all color stops between 0 and 1 | `{ gradient, css }` |
+| `apply_gradient_preset` | Applies a built-in gradient preset by ID | `{ preset, gradient, css }` |
 
 ## Pitfalls
 

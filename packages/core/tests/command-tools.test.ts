@@ -27,6 +27,7 @@ import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSur
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
+import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
 
 beforeAll(() => {
@@ -235,6 +236,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			createGenerationHistoryToolProvider({ namespace: 'genhistory', store: createGenerationRecordStore({ storage: createMemoryStorage() }) })
 		);
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
+		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
 		const allTools = registry.listTools().tools;
 		expect(allTools.length).toBeGreaterThan(tools.length);
 		const undescribed: string[] = [];

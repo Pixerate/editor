@@ -244,6 +244,16 @@
         "default": "./dist/color/index.cjs"
       }
     },
+    "./gradient": {
+      "import": {
+        "types": "./dist/gradient/index.d.ts",
+        "default": "./dist/gradient/index.js"
+      },
+      "require": {
+        "types": "./dist/gradient/index.d.cts",
+        "default": "./dist/gradient/index.cjs"
+      }
+    },
     "./export": {
       "import": {
         "types": "./dist/export/index.d.ts",

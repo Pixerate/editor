@@ -48,6 +48,7 @@ import { VideoEditorController, createVideoEditorToolProvider, createVideoEffect
 import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
 import { createParameterCommands } from '../src/parameters';
 import { createColorToolProvider } from '../src/color';
+import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
 const ROOT = join(__dirname, '..');
@@ -157,7 +158,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
 		'pixerate-parameters': commandIds(createParameterCommands(stub)),
-		'pixerate-color': toolNames(createColorToolProvider())
+		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))]
 	};
 	doc.destroy();
 	return result;
@@ -203,6 +204,7 @@ const FACTORIES: Record<string, string> = {
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
 	createColorToolProvider: 'pixerate-color',
+	createGradientToolProvider: 'pixerate-color',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',
