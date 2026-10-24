@@ -30,7 +30,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "raster/index.js", "cms/index.js", "paint/index.js", "image-editor/index.js", "paint-editor/index.js", "history/index.js", "animation/index.js", "animation-editor/index.js", "video-editor/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js", "diagram/index.js", "effects/index.js"])(
+  it.each(["spreadsheet/index.js", "raster/index.js", "cms/index.js", "paint/index.js", "image-editor/index.js", "paint-editor/index.js", "history/index.js", "animation/index.js", "animation-editor/index.js", "video-editor/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "color/index.js", "gradient/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js", "diagram/index.js", "effects/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);
@@ -62,6 +62,22 @@ describe("subpath entry isolation", () => {
     };
     visitAll(path.join(dist, "canvas/index.js"));
     expect([...all].some((f) => /function renderBrushstroke\b/.test(readFileSync(f, "utf8")))).toBe(true);
+  });
+
+  it("color/index.js does not pull in gradient", () => {
+    // color is foundational and must not depend on gradient
+    const seen = new Set<string>();
+    const visit = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const source = readFileSync(file, "utf8");
+      for (const m of source.matchAll(/(?<![\w$."'])(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"](\.[^'"]+)['"]/g)) {
+        visit(path.resolve(path.dirname(file), m[1]));
+      }
+    };
+    visit(path.join(dist, "color/index.js"));
+    const gradient = [...seen].filter((f) => /gradientToCss|createGradient|GradientController/.test(readFileSync(f, "utf8")));
+    expect(gradient).toEqual([]);
   });
 
   it("compare/index.js only pulls in TipTap / ProseMirror", () => {

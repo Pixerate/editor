@@ -3,6 +3,16 @@
 // (`simulate_cvd`, Machado–Oliveira–Fernandes 2009 matrices) (MIT OR Apache-2.0, © ArtCraft Team and contributors).
 // See THIRD_PARTY_NOTICES.md.
 
+import {
+	rgbToOklab as coreRgbToOklab,
+	deltaEOK,
+	simulateColorVision as coreSimulateColorVision,
+	relativeLuminance,
+	contrastRatio as coreContrastRatio,
+	srgbToLinear,
+	linearToSrgb
+} from '../color/index.js';
+
 /** An sRGB colour with channels from 0 to 1. */
 export type ChartRgb = [number, number, number];
 
@@ -108,51 +118,25 @@ export function chartTextOn(fill: string, fallback: string, dark = '#0f172a', li
 
 /** OKLab (Ottosson) from sRGB. */
 export function chartRgbToOklab(rgb: ChartRgb): [number, number, number] {
-	const [r, g, b] = rgb.map(toLinear);
-	const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-	const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-	const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-	return [
-		0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-		1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-		0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
-	];
+	const lab = coreRgbToOklab({ r: rgb[0], g: rgb[1], b: rgb[2], a: 1 });
+	return [lab.l, lab.a, lab.b];
 }
 
 /** Perceptual distance between two colours (Euclidean in OKLab; ≈0.02 is just noticeable). */
 export function chartColorDistance(a: ChartRgb, b: ChartRgb): number {
-	const p = chartRgbToOklab(a);
-	const q = chartRgbToOklab(b);
-	return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+	return deltaEOK(
+		{ r: a[0], g: a[1], b: a[2], a: 1 },
+		{ r: b[0], g: b[1], b: b[2], a: 1 }
+	);
 }
 
 export type ChartVision = 'normal' | 'protanopia' | 'deuteranopia' | 'tritanopia';
 
-// Machado, Oliveira & Fernandes (2009), severity 1.0, applied in linear RGB.
-const CVD: Record<Exclude<ChartVision, 'normal'>, number[][]> = {
-	protanopia: [
-		[0.152286, 1.052583, -0.204868],
-		[0.114503, 0.786281, 0.099216],
-		[-0.003882, -0.048116, 1.051998]
-	],
-	deuteranopia: [
-		[0.367322, 0.860646, -0.227968],
-		[0.280085, 0.672501, 0.047413],
-		[-0.01182, 0.04294, 0.968881]
-	],
-	tritanopia: [
-		[1.255528, -0.076749, -0.178779],
-		[-0.078411, 0.930809, 0.147602],
-		[0.004733, 0.691367, 0.3039]
-	]
-};
-
 /** How a colour looks with a colour-vision deficiency (Machado et al. 2009, full severity). */
 export function simulateChartVision(rgb: ChartRgb, vision: ChartVision): ChartRgb {
 	if (vision === 'normal') return rgb;
-	const lin = rgb.map(toLinear);
-	const m = CVD[vision];
-	return m.map((row) => fromLinear(Math.max(0, Math.min(1, row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2])))) as ChartRgb;
+	const c = coreSimulateColorVision({ r: rgb[0], g: rgb[1], b: rgb[2], a: 1 }, vision);
+	return [c.r, c.g, c.b];
 }
 
 export interface ChartColorPair {

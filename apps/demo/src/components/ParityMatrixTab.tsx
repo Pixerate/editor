@@ -141,6 +141,14 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Spreadsheet Formula Function Registry (86 functions, registerFormulaFunction)", true, "Via core", "Via core", "Argument metadata and indexed error messages"),
   row("Formula Error Diagnostics (CellData.errorMessage, error cell tooltips)", true, true, true, "Explains why a formula failed"),
   row("Formula Autocomplete & Argument Hints (<FormulaHints />)", "Headless (getFormulaHints)", "Component", "Component", "Function list and active-argument hint"),
+  row("Colour Conversion, Gamut Mapping & Contrast (OKLab, OKLCH, P3, WCAG 2)", "parseColor, formatColor, toSrgbGamut, contrastRatio (/color)", "Via core", "Via core", "CSS Color 4 gamut mapping; Machado CVD simulation (protanopia, deuteranopia, tritanopia)"),
+  row("Colour Harmonies & Mixing (complementary, split, analogous, triadic, tetradic, square, monochromatic)", "colorHarmony, mixColors (/color)", "Via core", "Via core", "RYB or RGB wheel; mixing in OKLab, OKLCH, sRGB or linear sRGB"),
+  row("Dual Light/Dark Colours & CSS Export (light-dark(), @media, class)", "parseDualColor, resolveColor, deriveDualColor, dualColorsToCss (/color)", "useColorScheme, useResolvedColor", "createColorScheme, resolvedColor", "Contrast checked in both schemes"),
+  row("Interactive Colour Picker (HSV area, hue, alpha, text entry, swatches, eyedropper, recents)", "pickerStateFromColor, pickerKeyStep, pushRecentColor (/color)", "<ColorPicker />", "<ColorPicker />", "Keyboard sliders; one gesture per drag"),
+  row("Dual Colour Picker", "dualPickerView, setDualColorSide (/color)", "<DualColorPicker />", "<DualColorPicker />", "Light/Dark switch, same-in-both toggle, derive button"),
+  row("Gradient Data Model & Controller (linear, radial, conic, stops, midpoints, interpolation)", "GradientController, createGradient, gradientToCss (/gradient)", "useGradientController", "createGradientController", "Undoable edits, validated geometry, dual stops"),
+  row("Interactive Gradient Editor & Fill Picker", "stopFromTrackPosition, gradientKeyStep, angleFromPointer (/gradient)", "<GradientEditor />, <FillPicker />", "<GradientEditor />, <FillPicker />", "Stops bar with drag and keyboard, angle dial, presets, reverse, distribute"),
+  row("Colour & Gradient Agent Tools (inspect, contrast, palette, harmony, blend, dual colours, gradient edits)", "createColorToolProvider, createGradientToolProvider", "useAgentToolProvider", "useAgentToolProvider", "8 colour tools and 11 gradient tools with strict schemas"),
 ];
 
 const FEATURES: ParityRow[] = [

@@ -27,15 +27,16 @@ function reachablePackages(entry: string): Set<string> {
 
 /** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI. */
 const EXTRA: Record<string, readonly string[]> = {
-  "video-editor": ["effects", "parameters", "tools"],
-  "image-editor": ["effects", "parameters", "tools"],
-  vector: ["effects", "parameters", "tools"],
-  "animation-editor": ["effects", "parameters", "tools"],
-  "paint-editor": ["effects", "parameters", "tools"],
-  effects: ["parameters"],
+  "video-editor": ["effects", "parameters", "tools", "color"],
+  "image-editor": ["effects", "parameters", "tools", "color"],
+  vector: ["effects", "parameters", "tools", "color"],
+  "animation-editor": ["effects", "parameters", "tools", "color"],
+  "paint-editor": ["effects", "parameters", "tools", "color"],
+  effects: ["parameters", "color"],
   spreadsheet: ["tools"],
   chart: ["tools"],
-  parameters: ["tools"],
+  parameters: ["tools", "color"],
+  gradient: ["color", "tools", "history"],
 };
 
 // Allowed: the framework itself and the matching narrow core subpath (plus its EXTRA ones).
@@ -61,10 +62,17 @@ describe("subpath entry isolation", () => {
     ["animation-editor/index.js", "animation-editor"],
     ["video-editor/index.js", "video-editor"],
     ["effects/index.js", "effects"],
+    ["color/index.js", "color"],
+    ["gradient/index.js", "gradient"],
   ])("%s pulls in nothing beyond React and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);
     expect(packages.filter((p) => !isAllowed(p, coreSubpath))).toEqual([]);
+  });
+
+  it("color/index.js does not pull in gradient", () => {
+    const packages = [...reachablePackages("color/index.js")];
+    expect(packages).not.toContain("@pixerate/editor/gradient");
   });
 
   it("root entry pulls in no canvas or agent code at runtime", () => {

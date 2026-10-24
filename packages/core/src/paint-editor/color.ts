@@ -5,6 +5,18 @@
  */
 
 import { paintSourceColor, readPaintSource, type PaintGradientSource } from '../paint/gradient-paint';
+import {
+  wheelToHue,
+  hueToWheel,
+  colorHarmony as coreColorHarmony,
+  type ColorWheel,
+  type HarmonyKind,
+  type HarmonyColor,
+  HARMONY_KINDS
+} from '../color/index.js';
+
+export type { ColorWheel, HarmonyKind, HarmonyColor };
+export { HARMONY_KINDS, wheelToHue, hueToWheel };
 
 export type Rgb255 = [number, number, number];
 
@@ -64,84 +76,13 @@ export function hslToRgb(h: number, s: number, l: number): Rgb255 {
   return hsvToRgb(h, v === 0 ? 0 : c / v, v);
 }
 
-/** Which wheel hues live on: `ryb` (painter's: red ↔ green complements) or `rgb` (red ↔ cyan). */
-export type ColorWheel = 'ryb' | 'rgb';
-
-// RYB wheel angle → RGB hue (a piecewise-linear map through red, orange, yellow, green, blue, violet).
-const RYB_STOPS: ReadonlyArray<[number, number]> = [
-  [0, 0],
-  [60, 30],
-  [120, 60],
-  [180, 120],
-  [240, 240],
-  [300, 280],
-  [360, 360],
-];
-
-function piecewise(v: number, from: 0 | 1): number {
-  const x = ((v % 360) + 360) % 360;
-  const to = from === 0 ? 1 : 0;
-  for (let i = 1; i < RYB_STOPS.length; i++) {
-    const a = RYB_STOPS[i - 1];
-    const b = RYB_STOPS[i];
-    if (x <= b[from]) return a[to] + ((x - a[from]) / (b[from] - a[from])) * (b[to] - a[to]);
-  }
-  return x;
-}
-
-/** A wheel angle (degrees) → an RGB hue. */
-export function wheelToHue(angle: number, wheel: ColorWheel): number {
-  return wheel === 'rgb' ? ((angle % 360) + 360) % 360 : piecewise(angle, 0);
-}
-
-/** An RGB hue → its wheel angle (degrees). */
-export function hueToWheel(hue: number, wheel: ColorWheel): number {
-  return wheel === 'rgb' ? ((hue % 360) + 360) % 360 : piecewise(hue, 1);
-}
-
-export type HarmonyKind = 'complementary' | 'split-complementary' | 'analogous' | 'triadic' | 'tetradic' | 'square' | 'monochromatic';
-
-export const HARMONY_KINDS: readonly HarmonyKind[] = ['complementary', 'split-complementary', 'analogous', 'triadic', 'tetradic', 'square', 'monochromatic'];
-
-export interface HarmonyColor {
-  color: string;
-  /** Position on the wheel, degrees. */
-  angle: number;
-}
-
 /**
  * The colours of a harmony around `base`, the base first. Hue-based harmonies keep the base's
  * saturation and value and turn it around the wheel; `analogous` spreads by `spread` degrees
  * (default 30); `monochromatic` keeps the hue and steps the lightness.
  */
 export function colorHarmony(base: string, kind: HarmonyKind, options: { wheel?: ColorWheel; spread?: number } = {}): HarmonyColor[] {
-  const wheel = options.wheel ?? 'ryb';
-  const [r, g, b] = parseHexColor(base, 'base');
-  const hsv = rgbToHsv(r, g, b);
-  const start = hueToWheel(hsv.h, wheel);
-  const at = (angle: number): HarmonyColor => {
-    const a = ((angle % 360) + 360) % 360;
-    const [rr, gg, bb] = hsvToRgb(wheelToHue(a, wheel), hsv.s, hsv.v);
-    return { color: rgbToHexColor(rr, gg, bb), angle: Math.round(a * 10) / 10 };
-  };
-  const spread = options.spread ?? 30;
-  const offsets: Record<Exclude<HarmonyKind, 'monochromatic'>, number[]> = {
-    complementary: [0, 180],
-    'split-complementary': [0, 180 - spread, 180 + spread],
-    analogous: [0, -spread, spread],
-    triadic: [0, 120, 240],
-    tetradic: [0, 60, 180, 240],
-    square: [0, 90, 180, 270],
-  };
-  if (kind === 'monochromatic') {
-    const hsl = rgbToHsl(r, g, b);
-    const steps = [0, -0.3, -0.15, 0.15, 0.3];
-    return steps.map((d) => {
-      const [rr, gg, bb] = d === 0 ? [r, g, b] : hslToRgb(hsl.h, hsl.s, Math.min(0.97, Math.max(0.03, hsl.l + d)));
-      return { color: rgbToHexColor(rr, gg, bb), angle: Math.round(start * 10) / 10 };
-    });
-  }
-  return offsets[kind].map((o, i) => (i === 0 ? { color: rgbToHexColor(r, g, b), angle: Math.round(start * 10) / 10 } : at(start + o)));
+  return coreColorHarmony(base, kind, options);
 }
 
 export interface Swatch {

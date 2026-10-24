@@ -21,6 +21,25 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [color/gradient] Svelte 5 Effect vs Controller Subscription Initial State
+
+- **Issue / Symptom**: In Svelte 5 with runes, subscribing to `GradientController` inside `$effect` with an initial `$state<GradientState>(controller.state)` can trigger reactive dependency cycle warnings or stale reads if the parent re-passes a new controller instance.
+- **Root Cause**: Reading `controller.state` in field initializers captures the instance once, but reading it inside `$effect` subscribes asynchronously after the first DOM render pass.
+- **Solution / Workaround**: Initialize state with `$state.raw<GradientState | null>(null)`, manage `controller.subscribe` within `$effect` (unsubscribing on cleanup), and use a derived `$derived safeState = gradientState ?? controller.state` for immediate first-render stability.
+
+### [color/gradient] Entry Isolation: Color Module Must Never Import Gradient Module
+
+- **Issue / Symptom**: `tests/entry-isolation.test.ts` fails when `@pixerate/editor/color` imports from `@pixerate/editor/gradient`.
+- **Root Cause**: Architectural layering requires `@pixerate/editor/color` to be a lightweight foundation (color models, conversions, contrast) usable independently by charts, animations, tokens, and canvases without bundling gradient controller or parser trees.
+- **Solution / Workaround**: The dependency graph is strictly one-way: `gradient` imports from `color`, never `color` from `gradient`. Enforce via `tests/entry-isolation.test.ts`.
+
+### [color/dual] CSS `light-dark()` Requires `color-scheme: light dark;` on an Ancestor
+
+- **Issue / Symptom**: Exported `light-dark(#ffffff, #000000)` tokens always render the light colour in the browser, even when the user or operating system is in dark mode (`prefers-color-scheme: dark`).
+- **Root Cause**: The CSS Color 4 `light-dark()` function strictly requires the element or an ancestor (typically `:root`) to declare `color-scheme: light dark;` (or `color-scheme: dark;`). Without an active `color-scheme` context, browsers default to `light` regardless of media queries.
+- **Solution / Workaround**: `dualColorsToCss()` with strategy `'light-dark'` automatically includes `:root { color-scheme: light dark; ... }`. When applying `light-dark()` variables manually or targeting scoped components, ensure `color-scheme: light dark;` is applied to the root or wrapper element. Use `dualColorsToCss` with strategy `'media'` or `'class'` if targeting older browsers or environments that use CSS class toggling (e.g. `.dark`) instead of native `color-scheme`.
+
+
 ### [monorepo/release] Two Quick Merges: The Second Release Run Versioned the First One's Changesets Again
 
 - **Issue / Symptom**: #312 and #311 merged 17 seconds apart. The first Release run published 0.140.1 and pushed its version commit; the second failed at "Refuse versions that are already on npm" (`@pixerate/editor@0.140.1 is already on npm but main is still at 0.140.0`). Nothing was published twice, but the run failed.
@@ -2769,3 +2788,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Recorded takes came out with drags quantised to frame times, and with a `ManualClock` every sample recorded since the last frame landed on the same time (a whole drag became an instant jump).
 - **Root Cause**: `AnimationPlayer.currentTime` is the time at the last frame it ticked. Pointer events arrive between frames, and a `ManualClock` only ticks the player when `advance` resolves its frame promises, so the clock had moved on but the playhead had not.
 - **Solution / Workaround**: Read `player.liveTime` (the playhead at the clock's time now) for input timestamps. `currentTime` stays the right value for drawing. In tests, `await clock.advance(ms)`: it is async and ticks frames only after it settles.
+
+### [react/gradient] Controlled Pickers Built on a Long-Lived Controller
+
+- **Issue / Symptom**: React `FillPicker` stopped reporting gradient edits after switching from solid to gradient. Bound to a parent's value, every edit also added a "Set Gradient" undo step and moved the selection back to the first stop.
+- **Root Cause**: The `GradientController` is created once, so the `onChange` passed to it kept the `mode` and `onChange` values from the first render. Each value the parent passed back was loaded with `setGradient`, which records an undo step and resets the selection, even when it was only the picker's own change returning.
+- **Solution / Workaround**: Read the latest props through a ref inside controller callbacks (pass `readOnly` as a function for the same reason). Load host values with `controller.load()`, which adds no undo step and keeps the selection, and skip a value equal to the CSS the picker just emitted. Svelte's `$state` avoids the stale `mode`, but the echo and undo problems apply there too.
+
+### [demo] `vite build` Does Not Typecheck the Demo
+
+- **Issue / Symptom**: `pnpm --filter demo build` passed while the demo passed an options object where `createGradientToolProvider` expects a controller, so every gradient tool failed at runtime.
+- **Root Cause**: Vite strips types without checking them. Only `pnpm typecheck` (run in CI) checks the demo, and it also runs `svelte-check` on the Svelte package.
+- **Solution / Workaround**: Run `pnpm typecheck` before pushing, as well as `pnpm build`, `pnpm test` and the demo build.
+
+### [svelte] Types Exported From a `.svelte` Module Script Break node16 Resolution
+
+- **Issue / Symptom**: `pnpm check:packages` failed under node16 (ESM) with `Module '"*.svelte"' has no exported member 'FillMode'`, while `svelte-check`, the build and the bundler check all passed.
+- **Root Cause**: The published `index.d.ts` re-exported the type from `./FillPicker.svelte`. Consumers with `moduleResolution: node16` see `.svelte` imports through the ambient `*.svelte` declaration, which only has a default export.
+- **Solution / Workaround**: Put types that a package entry re-exports in a `.ts` file (e.g. `gradient/types.ts`) and import them into the component from there. Run `pnpm check:packages` after changing a Svelte entry's exports.
