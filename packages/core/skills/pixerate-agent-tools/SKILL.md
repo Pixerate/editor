@@ -61,6 +61,27 @@ editor's, or (in discovery mode) only `list_toolsets`, `search_tools`, `enable_t
 6. **Undo your own mistakes** with the domain's `undo_*` tool or the `history.undo` command, not
    by hand-reverting with more edits.
 
+## Saving, loading and undo
+
+Every editor can share the same document tools, named after its kind (`diagram`, `chart`,
+`spreadsheet`...). The editor's skill lists the ones it has.
+
+- `get_<kind>_document` returns the whole document as plain JSON
+  (`{ kind, formatVersion, revision, document }`). Use it to keep a copy before a risky change
+  or to hand the document on, not to read it: the editor's own read tools are smaller and more
+  precise. It refuses very large documents and says so.
+- `load_<kind>_document` puts such a copy back. The document is checked first and nothing
+  changes when it does not fit. It is one undo step when the result says `undoable: true`.
+- `undo_<kind>` / `redo_<kind>` step through the editor's history. They fail with
+  "Nothing to undo." / "Nothing to redo." when there is nothing to step over.
+- With host storage: `save_<kind>_document` (by `name`; the same name replaces that copy),
+  `list_saved_<kind>_documents`, then `open_saved_<kind>_document` with a `key` from either.
+  Save when the user asks. Opening replaces the current document, so ask first when it has
+  changes the user has not saved.
+
+A read-only document keeps its read tools; its write tools fail with the reason. `revision`
+goes up on every change, so comparing two results tells you whether the document changed.
+
 ## Playback
 
 The host may act your calls out on screen (agent playback): your cursor glides to what a call

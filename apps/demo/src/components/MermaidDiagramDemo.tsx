@@ -18,6 +18,8 @@ import {
 } from "@xyflow/react";
 import { DiagramPresenceLayer, MermaidDiagramGroup, MermaidDiagramNode, MermaidFamilyScene, MermaidThumbnail, useDiagramDirector, useMermaidDiagram, useMermaidStream, type UseMermaidDiagramResult } from "@pixerate/editor-react/canvas";
 import { useAgentToolProvider } from "@pixerate/editor-react";
+import { createDocumentToolProvider } from "@pixerate/editor/persistence";
+import { EditorDocumentAutosave } from "./EditorDocumentAutosave";
 import {
   DIAGRAM_SCENE_DARK_THEME,
   DIAGRAM_SVG_DARK_THEME,
@@ -33,7 +35,7 @@ import {
 } from "@pixerate/editor/canvas";
 import { DiagramController, FAMILY_TEMPLATES, FAMILY_TITLES, createDiagramToolProvider, familyUI, findMermaidSources, type DiagramFamily, type FieldSpec } from "@pixerate/editor/diagram";
 import { Download, GitBranch, Play, Redo2, Undo2 } from "lucide-react";
-import { demoToolRegistry } from "../agentTools";
+import { demoDocumentStore, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { DIAGRAM_SCRIPTS } from "../agentScripts";
 
@@ -223,6 +225,20 @@ const MermaidEditorPane: React.FC = () => {
   );
   const viewport = useViewport();
   useAgentToolProvider(demoToolRegistry, provider);
+  // Save / load tools; undo and redo come from the diagram provider above.
+  const documentTools = useMemo(
+    () =>
+      createDocumentToolProvider(diagram.editorDocument, {
+        id: "diagram-document",
+        namespace: "diagram",
+        skill: "pixerate-diagram",
+        history: false,
+        store: demoDocumentStore,
+        name: () => controller.getDocument().graph.title ?? "Diagram",
+      }),
+    [diagram.editorDocument, controller],
+  );
+  useAgentToolProvider(demoToolRegistry, documentTools);
 
   // React Flow moves nodes while dragging; the diagram only hears about the drop.
   const [nodes, setNodes] = useState<Node[]>(diagram.nodes as Node[]);
@@ -341,6 +357,7 @@ const MermaidEditorPane: React.FC = () => {
             {diagram.state.family} · {diagram.document.graph.nodes.length} nodes · {diagram.document.graph.edges.length} edges
           </span>
         </div>
+        <EditorDocumentAutosave doc={diagram.editorDocument} name="Mermaid diagram" />
         {diagram.scene ? (
           <div className="h-[420px] rounded-xl overflow-auto border border-slate-800 bg-slate-950 p-2 flex items-center justify-center" data-testid="mermaid-pane">
             <MermaidFamilyScene

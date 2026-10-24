@@ -1122,6 +1122,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `HistoryManager` notifies listeners in subscription order. If the autosave's listener runs first, the binding's `dirty` flag is still stale when it is read.
 - **Solution / Workaround**: `createRevisionTracker` reads the dirty flag lazily in `savedRevision()`, and `AutosaveController.notify()` never ticks synchronously (it schedules a timer), so every history listener has run before the policy looks at the revisions. A stale clean read heals itself: when the binding then flips to dirty, the tracker bumps the revision.
 
+### [core/persistence] An `EditorDocument` Must Count Document Changes, Not Controller Notifications
+
+- **Issue / Symptom**: Autosave wrote a snapshot every time the user clicked a node, and an agent comparing `revision` from two `get_<kind>_document` calls saw a change when nothing in the document had changed.
+- **Root Cause**: Controllers notify their `subscribe` listeners on every state change, including selection, hover, issues and read-only flips. Passing `controller.subscribe` straight to `defineEditorDocument` counted all of them as document revisions.
+- **Solution / Workaround**: An editor's `subscribe` in `defineEditorDocument({ subscribe })` must call the listener only when the saved document changed. `createDiagramEditorDocument` keeps the last `source` and skips notifications where it is unchanged. Do the same in every adapter (compare the snapshot's identity or a cheap key, not a deep copy).
+
+### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
+
+- **Issue / Symptom**: Under `<React.StrictMode>`, `useMermaidDiagram().editorDocument` stopped counting changes after mount, so autosave never wrote a snapshot.
+- **Root Cause**: StrictMode runs every effect's cleanup once and then runs the effect again, but keeps `useMemo` values. A cleanup that disconnects the document from its controller leaves the memoised document disconnected for good.
+- **Solution / Workaround**: `EditorDocument.destroy()` only disconnects; the next `subscribe()` or `revision()` reconnects, and the reconnect counts as one revision, because changes in the gap were not seen. Bindings call `destroy()` in their cleanup and need nothing else.
+
 ### [core/persistence] OPFS Writes: `createWritable` and `move` Are Not Everywhere
 
 - **Issue / Symptom**: An OPFS adapter that works in Chromium rejects every write in some Safari versions, or a crash mid-write leaves a truncated file.

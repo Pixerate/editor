@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
 	DiagramController,
+	createDiagramEditorDocument,
 	type DiagramActionResult,
 	type DiagramControllerOptions,
 	type DiagramState,
 	type EditOp,
+	type DiagramEditorDocument,
 	type MermaidDocument
 } from '@pixerate/editor/diagram';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import {
 	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
@@ -35,6 +38,11 @@ type Placed = { id: string; position: { x: number; y: number }; parentId?: strin
 
 export interface UseMermaidDiagramResult {
 	controller: DiagramController;
+	/**
+	 * The save / load / undo contract for this diagram: pass it to `useEditorAutosave`
+	 * (`@pixerate/editor-react/persistence`) or `createDocumentToolProvider`.
+	 */
+	editorDocument: EditorDocument<DiagramEditorDocument>;
 	state: DiagramState;
 	document: MermaidDocument;
 	/** The Mermaid text (with the `%% @pixerate` layout comment). */
@@ -90,6 +98,9 @@ export function useMermaidDiagram(
 	const layoutOptions = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.layoutOptions) ?? view.layoutOptions;
 	const sceneTheme = (controllerOrOptions instanceof DiagramController ? undefined : controllerOrOptions.sceneTheme) ?? view.sceneTheme;
 	const state = useDiagramState(controller);
+	const editorDocument = useMemo(() => createDiagramEditorDocument(controller), [controller]);
+	// Subscribing again reconnects it, so a StrictMode remount keeps working.
+	useEffect(() => () => editorDocument.destroy(), [editorDocument]);
 	const canvas = useMemo(
 		() => mermaidToCanvas(state.document, { ...layoutOptions, editable: state.editable }),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +152,7 @@ export function useMermaidDiagram(
 		}),
 		[controller]
 	);
-	return { controller, state, document: state.document, source: state.source, ...canvas, scene, ...actions };
+	return { controller, editorDocument, state, document: state.document, source: state.source, ...canvas, scene, ...actions };
 }
 
 export interface UseMermaidStreamOptions extends DiagramLayoutOptions {

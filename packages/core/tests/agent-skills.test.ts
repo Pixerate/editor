@@ -39,9 +39,9 @@ import {
 import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
-import { createMemoryStorage } from '../src/persistence';
+import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
-import { DiagramController, createDiagramToolProvider } from '../src/diagram';
+import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
@@ -75,6 +75,9 @@ const commandIds = (specs: CommandSpec[]) => specs.map((s) => s.id);
  * Which tools and command ids each skill documents. Add a new provider or command set to the
  * skill for its domain (or a new skill), and list its factory in `FACTORIES` below.
  */
+/** A store, so the document tools list their save / open tools too. */
+const documentStore = () => createEditorDocumentStore({ storage: createMemoryStorage() });
+
 function expectedBySkill(): Record<string, string[]> {
 	const doc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: '<p>x</p>' });
 	const sheet = new SpreadsheetController({
@@ -127,9 +130,11 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
 			...commandIds(createChartCommands(new ChartController()))
 		],
-		'pixerate-diagram': toolNames(
-			createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })
-		),
+		'pixerate-diagram': [
+			...toolNames(createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })),
+			// The diagram's own provider has undo_diagram / redo_diagram, so its document tools leave them out.
+			...toolNames(createDocumentToolProvider(createDiagramEditorDocument(new DiagramController()), { history: false, store: documentStore() }))
+		],
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' }))
@@ -180,6 +185,8 @@ const FACTORIES: Record<string, string> = {
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',
 	createDiagramToolProvider: 'pixerate-diagram',
+	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
+	createDocumentToolProvider: 'pixerate-diagram',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',

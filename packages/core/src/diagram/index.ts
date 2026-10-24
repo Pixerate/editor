@@ -11,6 +11,7 @@
  * Ported from Ursula.
  */
 export * from './types.js';
+export { createDiagramEditorDocument, type DiagramEditorDocument } from './editorDocument.js';
 export { parseMermaid, serializeMermaid, applyEdit, applyEdits, detectFamily, type ParseOptions } from './document.js';
 export { registerDiagramAdapter, getDiagramAdapter, supportTierOf } from './registry.js';
 export { splitSource, detectFamilyFromHeader, splitStatements, type SplitSource } from './source/lines.js';

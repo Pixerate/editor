@@ -1,11 +1,14 @@
 import {
 	DiagramController,
+	createDiagramEditorDocument,
 	type DiagramActionResult,
 	type DiagramControllerOptions,
 	type DiagramState,
 	type EditOp,
+	type DiagramEditorDocument,
 	type MermaidDocument
 } from '@pixerate/editor/diagram';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import {
 	CSS_VARIABLE_DIAGRAM_SCENE_THEME,
 	DiagramStream,
@@ -34,6 +37,11 @@ type Placed = { id: string; position: { x: number; y: number }; parentId?: strin
 
 export interface SvelteMermaidDiagram {
 	readonly controller: DiagramController;
+	/**
+	 * The save / load / undo contract for this diagram: pass it to `createEditorAutosave`
+	 * (`@pixerate/editor-svelte/persistence`) or `createDocumentToolProvider`.
+	 */
+	readonly editorDocument: EditorDocument<DiagramEditorDocument>;
 	/** The controller's state (reactive). */
 	readonly state: DiagramState;
 	readonly document: MermaidDocument;
@@ -90,8 +98,10 @@ export function createMermaidDiagram(
 	const unsubscribe = controller.subscribe((next) => {
 		state = next;
 	});
+	const editorDocument = createDiagramEditorDocument(controller);
 	return {
 		controller,
+		editorDocument,
 		get state() {
 			return state;
 		},
@@ -141,7 +151,10 @@ export function createMermaidDiagram(
 		select: (ids) => controller.select(ids),
 		undo: () => void controller.undo(),
 		redo: () => void controller.redo(),
-		destroy: unsubscribe
+		destroy: () => {
+			unsubscribe();
+			editorDocument.destroy();
+		}
 	};
 }
 

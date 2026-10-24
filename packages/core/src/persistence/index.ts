@@ -3,3 +3,7 @@ export * from "./storage";
 export * from "./autosave";
 export * from "./migrate";
 export * from "./revisions";
+export * from "./editorDocument";
+export * from "./editorAutosave";
+export * from "./documentStore";
+export * from "./documentTools";
