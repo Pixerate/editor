@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { useAgentToolProvider, ColorPicker, DualColorPicker, useColorScheme, GradientEditor, FillPicker } from "@pixerate/editor-react";
+import { useAgentToolProvider } from "@pixerate/editor-react";
+import { ColorPicker, DualColorPicker, useColorScheme } from "@pixerate/editor-react/color";
+import { GradientEditor, FillPicker } from "@pixerate/editor-react/gradient";
 import {
   createColorToolProvider,
   parseColor,
@@ -32,8 +34,6 @@ export function ColorTab() {
   const colorProvider = useMemo(() => createColorToolProvider({ id: "color", namespace: "color" }), []);
   useAgentToolProvider(demoToolRegistry, colorProvider);
 
-  const gradientProvider = useMemo(() => createGradientToolProvider({ id: "gradient", namespace: "gradient" }), []);
-  useAgentToolProvider(demoToolRegistry, gradientProvider);
 
   const [hexColor, setHexColor] = useState("#3b82f6");
   const [surfaceColor, setSurfaceColor] = useState("#ffffff");
@@ -51,9 +51,15 @@ export function ColorTab() {
       value: createGradient(["#3b82f6", "#8b5cf6", "#ec4899"], { type: "linear", angle: 90 })
     });
   }, []);
+  // The gradient tools edit the same controller as the GradientEditor below.
+  const gradientProvider = useMemo(
+    () => createGradientToolProvider(gradientController, { id: "gradient", namespace: "gradient" }),
+    [gradientController]
+  );
+  useAgentToolProvider(demoToolRegistry, gradientProvider);
 
   const generatedCss = useMemo(() => {
-    return dualColorsToCss({ "--brand-color": dualColor }, { strategy: "light-dark" });
+    return dualColorsToCss({ "brand-color": dualColor }, { strategy: "light-dark" });
   }, [dualColor]);
 
   const parsed = useMemo(() => parseColor(hexColor), [hexColor]);

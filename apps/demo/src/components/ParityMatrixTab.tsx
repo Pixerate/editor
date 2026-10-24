@@ -141,14 +141,14 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Spreadsheet Formula Function Registry (86 functions, registerFormulaFunction)", true, "Via core", "Via core", "Argument metadata and indexed error messages"),
   row("Formula Error Diagnostics (CellData.errorMessage, error cell tooltips)", true, true, true, "Explains why a formula failed"),
   row("Formula Autocomplete & Argument Hints (<FormulaHints />)", "Headless (getFormulaHints)", "Component", "Component", "Function list and active-argument hint"),
-  row("Colour Conversion, Gamut Mapping & Contrast (OKLab, OKLCH, P3, WCAG 2.1, APCA)", "parseColor, formatColor, clampToGamut, contrastRatio, apcaContrast (/color)", "Via core", "Via core", "CSS Color 4 & Machado CVD simulation (protanopia, deuteranopia, tritanopia, achromatopsia)"),
-  row("Colour Harmonies (analogous, complementary, triadic, tetradic, split-comp, monochromatic)", "colorHarmony (/color)", "Via core", "Via core", "Calculated on perceptual OKLCH wheel or traditional RYB wheel"),
-  row("Dual Light/Dark Colours & CSS Export (light-dark(), @media, .dark)", "dualColorsToCss, createDualColor (/color)", "useColorScheme", "createColorScheme", "Generates standard CSS Color 4 tokens for theme toggle"),
-  row("Interactive Colour Picker (HSV, OKLCH, hex, alpha, swatches, eyedropper, recents)", "createColorPicker, createRecentColors (/color)", "<ColorPicker />", "<ColorPicker />", "Accessible keyboard slider & eyedropper support"),
-  row("Dual Colour Picker with Live Theme Preview", "Headless (/color)", "<DualColorPicker />", "<DualColorPicker />", "Side-by-side light and dark swatches with theme switcher"),
-  row("Gradient Data Model & Controller (linear, radial, conic, stops, midpoints, interpolation)", "GradientController, gradientToCss (/gradient)", "useGradientController", "createGradientController", "Undoable stops, sRGB / linear / OKLab interpolation, angle dial"),
-  row("Interactive Gradient Editor & Fill Picker", "computeGradientStopHandlePositions (/gradient)", "<GradientEditor />, <FillPicker />", "<GradientEditor />, <FillPicker />", "Stops bar with drag & midpoint handles, presets, flip, reverse"),
-  row("Colour & Gradient Agent Tools (read, format, convert, contrast, harmony, simulate, gradient stops, presets)", "createColorToolProvider, createGradientToolProvider", "useAgentToolProvider", "useAgentToolProvider", "Strict MCP tool definitions with parameter schemas"),
+  row("Colour Conversion, Gamut Mapping & Contrast (OKLab, OKLCH, P3, WCAG 2)", "parseColor, formatColor, toSrgbGamut, contrastRatio (/color)", "Via core", "Via core", "CSS Color 4 gamut mapping; Machado CVD simulation (protanopia, deuteranopia, tritanopia)"),
+  row("Colour Harmonies & Mixing (complementary, split, analogous, triadic, tetradic, square, monochromatic)", "colorHarmony, mixColors (/color)", "Via core", "Via core", "RYB or RGB wheel; mixing in OKLab, OKLCH, sRGB or linear sRGB"),
+  row("Dual Light/Dark Colours & CSS Export (light-dark(), @media, class)", "parseDualColor, resolveColor, deriveDualColor, dualColorsToCss (/color)", "useColorScheme, useResolvedColor", "createColorScheme, resolvedColor", "Contrast checked in both schemes"),
+  row("Interactive Colour Picker (HSV area, hue, alpha, text entry, swatches, eyedropper, recents)", "pickerStateFromColor, pickerKeyStep, pushRecentColor (/color)", "<ColorPicker />", "<ColorPicker />", "Keyboard sliders; one gesture per drag"),
+  row("Dual Colour Picker", "dualPickerView, setDualColorSide (/color)", "<DualColorPicker />", "<DualColorPicker />", "Light/Dark switch, same-in-both toggle, derive button"),
+  row("Gradient Data Model & Controller (linear, radial, conic, stops, midpoints, interpolation)", "GradientController, createGradient, gradientToCss (/gradient)", "useGradientController", "createGradientController", "Undoable edits, validated geometry, dual stops"),
+  row("Interactive Gradient Editor & Fill Picker", "stopFromTrackPosition, gradientKeyStep, angleFromPointer (/gradient)", "<GradientEditor />, <FillPicker />", "<GradientEditor />, <FillPicker />", "Stops bar with drag and keyboard, angle dial, presets, reverse, distribute"),
+  row("Colour & Gradient Agent Tools (inspect, contrast, palette, harmony, blend, dual colours, gradient edits)", "createColorToolProvider, createGradientToolProvider", "useAgentToolProvider", "useAgentToolProvider", "8 colour tools and 11 gradient tools with strict schemas"),
 ];
 
 const FEATURES: ParityRow[] = [
