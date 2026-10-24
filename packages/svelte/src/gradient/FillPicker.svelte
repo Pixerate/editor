@@ -1,9 +1,6 @@
-<script lang="ts" module>
-	export type FillMode = 'solid' | 'gradient';
-</script>
-
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import type { FillMode } from './types.js';
 	import {
 		GradientController,
 		createGradient,

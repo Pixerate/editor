@@ -4,7 +4,7 @@ import type FillPickerComponent from './FillPicker.svelte';
 
 export { default as GradientEditor } from './GradientEditor.svelte';
 export { default as FillPicker } from './FillPicker.svelte';
-export type { FillMode } from './FillPicker.svelte';
+export type { FillMode } from './types.js';
 
 export type GradientEditorProps = ComponentProps<typeof GradientEditorComponent>;
 export type FillPickerProps = ComponentProps<typeof FillPickerComponent>;

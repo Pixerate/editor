@@ -2800,3 +2800,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `pnpm --filter demo build` passed while the demo passed an options object where `createGradientToolProvider` expects a controller, so every gradient tool failed at runtime.
 - **Root Cause**: Vite strips types without checking them. Only `pnpm typecheck` (run in CI) checks the demo, and it also runs `svelte-check` on the Svelte package.
 - **Solution / Workaround**: Run `pnpm typecheck` before pushing, as well as `pnpm build`, `pnpm test` and the demo build.
+
+### [svelte] Types Exported From a `.svelte` Module Script Break node16 Resolution
+
+- **Issue / Symptom**: `pnpm check:packages` failed under node16 (ESM) with `Module '"*.svelte"' has no exported member 'FillMode'`, while `svelte-check`, the build and the bundler check all passed.
+- **Root Cause**: The published `index.d.ts` re-exported the type from `./FillPicker.svelte`. Consumers with `moduleResolution: node16` see `.svelte` imports through the ambient `*.svelte` declaration, which only has a default export.
+- **Solution / Workaround**: Put types that a package entry re-exports in a `.ts` file (e.g. `gradient/types.ts`) and import them into the component from there. Run `pnpm check:packages` after changing a Svelte entry's exports.
