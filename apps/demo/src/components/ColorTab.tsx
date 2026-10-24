@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useAgentToolProvider, ColorPicker } from "@pixerate/editor-react";
+import { useAgentToolProvider, ColorPicker, DualColorPicker, useColorScheme } from "@pixerate/editor-react";
 import {
   createColorToolProvider,
   parseColor,
@@ -13,11 +13,14 @@ import {
   simulateColorVision,
   colorHarmony,
   mixColors,
+  dualColorsToCss,
   type ColorVision,
   type HarmonyKind,
+  type DualColor,
+  type ColorScheme,
 } from "@pixerate/editor/color";
 import { demoToolRegistry } from "../agentTools";
-import { Palette, CheckCircle2, XCircle, Sliders, Eye } from "lucide-react";
+import { Palette, CheckCircle2, XCircle, Sliders, Eye, SunMoon } from "lucide-react";
 
 export function ColorTab() {
   // Register the agent colour toolset while mounted
@@ -29,6 +32,14 @@ export function ColorTab() {
   const [harmonyKind, setHarmonyKind] = useState<HarmonyKind>("complementary");
   const [blendTarget, setBlendTarget] = useState("#f43f5e");
   const [blendFactor, setBlendFactor] = useState(0.5);
+
+  const [themeOverride, setThemeOverride] = useState<ColorScheme | null>(null);
+  const activeScheme = useColorScheme({ override: themeOverride });
+  const [dualColor, setDualColor] = useState<DualColor>({ light: "#1e40af", dark: "#60a5fa" });
+
+  const generatedCss = useMemo(() => {
+    return dualColorsToCss({ "--brand-color": dualColor }, { strategy: "light-dark" });
+  }, [dualColor]);
 
   const parsed = useMemo(() => parseColor(hexColor), [hexColor]);
   const surfaceParsed = useMemo(() => parseColor(surfaceColor), [surfaceColor]);
@@ -261,6 +272,105 @@ export function ColorTab() {
               {blended}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Dual Colours & Theme Adaptive Styles */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <SunMoon className="w-4 h-4 text-indigo-400" />
+              Dual Colours (Light/Dark Mode &amp; light-dark())
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Edit paired colours with independent light and dark values, auto-derivation, and CSS generation.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+            <span className="text-[11px] text-slate-500 px-2">Theme:</span>
+            <button
+              type="button"
+              onClick={() => setThemeOverride("light")}
+              className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                themeOverride === "light"
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              onClick={() => setThemeOverride("dark")}
+              className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                themeOverride === "dark"
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Dark
+            </button>
+            <button
+              type="button"
+              onClick={() => setThemeOverride(null)}
+              className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                themeOverride === null
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              System ({activeScheme})
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <div className="flex justify-center sm:justify-start">
+            <DualColorPicker
+              value={dualColor}
+              onChange={setDualColor}
+              scheme={activeScheme}
+              contrastAgainst={{ light: "#ffffff", dark: "#0b0b0f" }}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg p-4 border border-slate-200 bg-white text-slate-900 shadow-sm space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Light Surface Preview</span>
+                <p className="text-sm font-medium" style={{ color: dualColor.light }}>
+                  Brand text in light scheme
+                </p>
+                <div
+                  className="h-8 rounded flex items-center justify-center font-mono text-xs text-white shadow-inner"
+                  style={{ backgroundColor: dualColor.light }}
+                >
+                  {dualColor.light}
+                </div>
+              </div>
+
+              <div className="rounded-lg p-4 border border-slate-800 bg-[#0b0b0f] text-slate-100 shadow-sm space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">Dark Surface Preview</span>
+                <p className="text-sm font-medium" style={{ color: dualColor.dark }}>
+                  Brand text in dark scheme
+                </p>
+                <div
+                  className="h-8 rounded flex items-center justify-center font-mono text-xs text-white shadow-inner"
+                  style={{ backgroundColor: dualColor.dark }}
+                >
+                  {dualColor.dark}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-slate-950 p-3 border border-slate-800 space-y-1.5">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Generated CSS Token</span>
+              <pre className="text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+                {generatedCss}
+              </pre>
+            </div>
+          </div>
         </div>
       </div>
     </div>
