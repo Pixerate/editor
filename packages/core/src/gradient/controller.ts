@@ -65,6 +65,7 @@ export class GradientController {
 	private _gestureKey: string | null = null;
 	private _gestureCount = 0;
 	private _revision = 0;
+	private _cachedState: GradientState | null = null;
 
 	constructor(options: GradientControllerOptions = {}) {
 		if (options.value !== undefined) {
@@ -83,8 +84,21 @@ export class GradientController {
 	}
 
 	get state(): GradientState {
+		if (this._cachedState && this._cachedState.revision === this._revision) {
+			const hState = this._history.getState();
+			if (
+				this._cachedState.canUndo === hState.canUndo &&
+				this._cachedState.canRedo === hState.canRedo &&
+				this._cachedState.undoLabel === hState.undoName &&
+				this._cachedState.redoLabel === hState.redoName &&
+				this._cachedState.selectedStopId === this._selectedStopId &&
+				this._cachedState.gradient === this._gradient
+			) {
+				return this._cachedState;
+			}
+		}
 		const hState = this._history.getState();
-		return {
+		this._cachedState = {
 			gradient: this._gradient,
 			selectedStopId: this._selectedStopId,
 			canUndo: hState.canUndo,
@@ -93,6 +107,7 @@ export class GradientController {
 			redoLabel: hState.redoName,
 			revision: this._revision
 		};
+		return this._cachedState;
 	}
 
 	get readOnlyReason(): string | null {
@@ -120,7 +135,6 @@ export class GradientController {
 
 	subscribe(fn: (state: GradientState) => void): () => void {
 		this._listeners.add(fn);
-		fn(this.state);
 		return () => {
 			this._listeners.delete(fn);
 		};

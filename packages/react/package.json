@@ -173,6 +173,16 @@
         "types": "./dist/color/index.d.cts",
         "default": "./dist/color/index.cjs"
       }
+    },
+    "./gradient": {
+      "import": {
+        "types": "./dist/gradient/index.d.ts",
+        "default": "./dist/gradient/index.js"
+      },
+      "require": {
+        "types": "./dist/gradient/index.d.cts",
+        "default": "./dist/gradient/index.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -218,6 +228,9 @@
       ],
       "color": [
         "./dist/color/index.d.ts"
+      ],
+      "gradient": [
+        "./dist/gradient/index.d.ts"
       ]
     }
   },

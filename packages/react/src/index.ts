@@ -23,6 +23,7 @@ export * from "./components/OutlinePanel";
 export * from "./hooks/useParagraphStyles";
 export * from "./components/StylesGallery";
 export * from "./color";
+export * from "./gradient";
 
 // Re-export core types for easy consumer access
 export {

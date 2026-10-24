@@ -17,7 +17,8 @@ export default defineConfig({
     "chart/index": "src/chart/index.ts",
     "video-editor/index": "src/video-editor/index.ts",
     "effects/index": "src/effects/index.ts",
-    "color/index": "src/color/index.ts"
+    "color/index": "src/color/index.ts",
+    "gradient/index": "src/gradient/index.ts"
   },
   format: ["esm", "cjs"],
   // Declarations come from `tsc -p tsconfig.build.json` (see the build script): tsup's bundled DTS worker ran out of memory.
