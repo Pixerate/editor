@@ -34,6 +34,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Brush engine** | Shared by the image and paint editors: round computed tip with hardness, angle, roundness and spacing, opacity versus flow build-up, smoothing, pen pressure, the stroke coverage buffer applied to raster tiles, the Mixer Brush (a reservoir that picks up and blends canvas colour per dab, RGB or pigment mixing) on the shared pick-up / mix exchange that wet media will reuse, a pigment blender and a patch-carrying smudge, pigment-like colour mixing (Kubelka-Munk over reflectance spectra, so blue and yellow make green), brushstrokes along polyline paths with pressure and tilt profiles (`paintPathStroke`, for vector paths), standalone dry brushstrokes with seeded jitter and a procedural paper grain (`renderBrushstroke` with `character`, shared by the canvas and vector editors), the retouching tools (Clone Stamp, Healing Brush and Spot Healing with Poisson blending, Smudge, Dodge, Burn, Sponge), and wet media: a lattice Boltzmann water and pigment simulation on sparse 256 px tiles in WebAssembly SIMD (Web Workers when cross-origin isolated, one thread otherwise, a TypeScript kernel with the same bits for Node), deterministic across browsers and thread counts; no DOM | `@pixerate/editor/paint` |
 | **Effects providers** | Optional effects from another package without depending on it: a provider contract (`EffectProvider`: catalog search, strict control schemas, presets, frame-exact renderers at 8, 16 or 32 bits, masks, vector motion, typed errors, capability flags), a conformance check providers run in their own tests, and a deterministic fake provider for tests and demos | `@pixerate/editor/effects` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
+| **Colour & Gradients** | Colour maths, parsing (hex, rgb, hsl, oklab, oklch, color(srgb/p3)), OKLCH gamut mapping, WCAG / APCA contrast, Machado colour-vision deficiency simulation, harmonies, dual light/dark CSS tokens, headless picker and gradient models (`GradientController`), React & Svelte `ColorPicker`, `DualColorPicker`, `GradientEditor`, `FillPicker`, and agent tools | `@pixerate/editor/color`, `/gradient` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`), and an MCP bridge so Claude Desktop, Claude Code or an IDE can drive editors open in a browser | `@pixerate/editor/commands`, `/agent` |
 | **History and saving** | Undo/redo with gesture merging, dirty-vs-saved tracking, autosave with crash recovery, storage adapters (localStorage, IndexedDB, OPFS), one save / load / undo contract and agent tools per editor | `@pixerate/editor/history`, `/persistence` |
 | **AI generation** | Model capabilities and request planning, settings forms, job progress, generation records with Recreate, asset mentions with roles | `@pixerate/editor/generation` |
@@ -551,6 +552,25 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
+<summary><strong>Colour and gradients</strong> (11)</summary>
+
+| Feature | Core | React | Svelte |
+| :--- | :---: | :---: | :---: |
+| OKLab, OKLCH, Display P3 & CSS Color 4 conversions (`parseColor`, `formatColor`, `toRgb`, `toOklab`, `toOklch`, `toDisplayP3`) | `parseColor`, `formatColor`, `convertColor` (`/color`) | Via core | Via core |
+| Perceptual Gamut Mapping (`clampToGamut`, OKLCH binary chroma search) | `clampToGamut`, `inGamut` (`/color`) | Via core | Via core |
+| WCAG 2.1 & APCA Contrast Calculation (`contrastRatio`, `apcaContrast`, `meetsWcag`) | `contrastRatio`, `apcaContrast`, `meetsWcag` (`/color`) | Via core | Via core |
+| Machado Colour-Vision Deficiency Simulation (protanopia, deuteranopia, tritanopia, achromatopsia) | `simulateColorVision` (`/color`) | Via core | Via core |
+| Perceptual Colour Harmonies on OKLCH & RYB Wheels | `colorHarmony`, `HARMONY_KINDS` (`/color`) | Via core | Via core |
+| Dual Light/Dark Color Mode Tokens (`light-dark()`, `@media`, `.dark` CSS export) | `dualColorsToCss`, `createDualColor`, `resolveDualColor` (`/color`) | `useColorScheme` (`/color`) | `createColorScheme` (`/color`) |
+| Headless Color Picker Model (HSV/OKLCH modes, alpha, presets, recent history) | `createColorPicker`, `createRecentColors` (`/color`) | `<ColorPicker />` (`/color`) | `<ColorPicker />` (`/color`) |
+| Dual Color Picker with Light/Dark Theme Switching | Headless (`/color`) | `<DualColorPicker />` (`/color`) | `<DualColorPicker />` (`/color`) |
+| Gradient Data Model & Controller (linear, radial, conic, stops, midpoints, interpolation, CSS generation) | `GradientController`, `createDefaultGradient`, `gradientToCss` (`/gradient`) | `useGradientController` (`/gradient`) | `createGradientController` (`/gradient`) |
+| Interactive Gradient Editor & Fill Picker (stops bar, drag, midpoints, reverse, flip, angle dial, presets) | `computeGradientStopHandlePositions`, `sampleGradientCss` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) |
+| Color & Gradient Agent Tools (read, format, convert, contrast, harmony, simulate, gradient stops, presets) | `createColorToolProvider`, `createGradientToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` |
+
+</details>
+
+<details>
 <summary><strong>Commands and agent tools</strong> (13)</summary>
 
 | Feature | Core | React | Svelte |
@@ -616,6 +636,7 @@ Every feature is available from core and from both framework packages, except wh
 - [MCP bridge](docs/mcp-bridge.md)
 - [Agent playback](docs/agent-playback.md): agent cursors for every tool call (canvas now, other editors in progress), and its [plan](docs/agent-playback-plan.md)
 - [Parameters editor](docs/parameters.md)
+- [Colour and gradients](docs/color.md)
 - [Vector editor](docs/vector-editor.md)
 - [Vector editor roadmap](docs/vector-roadmap.md)
 - [Image editor layers](docs/image-editor-layers.md) and [shape and type layers](docs/image-editor-shape-type-layers.md)

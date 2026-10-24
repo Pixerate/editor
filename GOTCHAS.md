@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [color/gradient] Svelte 5 Effect vs Controller Subscription Initial State
+
+- **Issue / Symptom**: In Svelte 5 with runes, subscribing to `GradientController` inside `$effect` with an initial `$state<GradientState>(controller.state)` can trigger reactive dependency cycle warnings or stale reads if the parent re-passes a new controller instance.
+- **Root Cause**: Reading `controller.state` in field initializers captures the instance once, but reading it inside `$effect` subscribes asynchronously after the first DOM render pass.
+- **Solution / Workaround**: Initialize state with `$state.raw<GradientState | null>(null)`, manage `controller.subscribe` within `$effect` (unsubscribing on cleanup), and use a derived `$derived safeState = gradientState ?? controller.state` for immediate first-render stability.
+
+### [color/gradient] Entry Isolation: Color Module Must Never Import Gradient Module
+
+- **Issue / Symptom**: `tests/entry-isolation.test.ts` fails when `@pixerate/editor/color` imports from `@pixerate/editor/gradient`.
+- **Root Cause**: Architectural layering requires `@pixerate/editor/color` to be a lightweight foundation (color models, conversions, contrast) usable independently by charts, animations, tokens, and canvases without bundling gradient controller or parser trees.
+- **Solution / Workaround**: The dependency graph is strictly one-way: `gradient` imports from `color`, never `color` from `gradient`. Enforce via `tests/entry-isolation.test.ts`.
+
 ### [color/dual] CSS `light-dark()` Requires `color-scheme: light dark;` on an Ancestor
 
 - **Issue / Symptom**: Exported `light-dark(#ffffff, #000000)` tokens always render the light colour in the browser, even when the user or operating system is in dark mode (`prefers-color-scheme: dark`).
