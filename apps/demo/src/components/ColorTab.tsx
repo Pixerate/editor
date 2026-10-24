@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useAgentToolProvider, ColorPicker, DualColorPicker, useColorScheme } from "@pixerate/editor-react";
+import { useAgentToolProvider, ColorPicker, DualColorPicker, useColorScheme, GradientEditor, FillPicker } from "@pixerate/editor-react";
 import {
   createColorToolProvider,
   parseColor,
@@ -19,13 +19,21 @@ import {
   type DualColor,
   type ColorScheme,
 } from "@pixerate/editor/color";
+import {
+  createGradientToolProvider,
+  createGradient,
+  GradientController
+} from "@pixerate/editor/gradient";
 import { demoToolRegistry } from "../agentTools";
-import { Palette, CheckCircle2, XCircle, Sliders, Eye, SunMoon } from "lucide-react";
+import { Palette, CheckCircle2, XCircle, Sliders, Eye, SunMoon, Sparkles } from "lucide-react";
 
 export function ColorTab() {
-  // Register the agent colour toolset while mounted
-  const provider = useMemo(() => createColorToolProvider({ id: "color", namespace: "color" }), []);
-  useAgentToolProvider(demoToolRegistry, provider);
+  // Register the agent colour and gradient toolsets while mounted
+  const colorProvider = useMemo(() => createColorToolProvider({ id: "color", namespace: "color" }), []);
+  useAgentToolProvider(demoToolRegistry, colorProvider);
+
+  const gradientProvider = useMemo(() => createGradientToolProvider({ id: "gradient", namespace: "gradient" }), []);
+  useAgentToolProvider(demoToolRegistry, gradientProvider);
 
   const [hexColor, setHexColor] = useState("#3b82f6");
   const [surfaceColor, setSurfaceColor] = useState("#ffffff");
@@ -36,6 +44,13 @@ export function ColorTab() {
   const [themeOverride, setThemeOverride] = useState<ColorScheme | null>(null);
   const activeScheme = useColorScheme({ override: themeOverride });
   const [dualColor, setDualColor] = useState<DualColor>({ light: "#1e40af", dark: "#60a5fa" });
+
+  const [fillValue, setFillValue] = useState("linear-gradient(90deg, #3b82f6 0%, #ec4899 100%)");
+  const gradientController = useMemo(() => {
+    return new GradientController({
+      value: createGradient(["#3b82f6", "#8b5cf6", "#ec4899"], { type: "linear", angle: 90 })
+    });
+  }, []);
 
   const generatedCss = useMemo(() => {
     return dualColorsToCss({ "--brand-color": dualColor }, { strategy: "light-dark" });
@@ -369,6 +384,57 @@ export function ColorTab() {
               <pre className="text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
                 {generatedCss}
               </pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Gradients and FillPicker */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-400" />
+            Gradients &amp; Fill Picker
+          </h3>
+          <p className="text-sm text-slate-400">
+            Multi-stop linear, radial, and conic gradients with position-accurate stops, angle controls, dual-mode presets, and CSS output.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          <div className="space-y-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Interactive Gradient Editor
+            </h4>
+            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950 flex justify-center">
+              <GradientEditor
+                controller={gradientController}
+                showCss
+                showPresets
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Unified Fill Picker (Solid + Gradient)
+            </h4>
+            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950 flex flex-col items-center gap-4">
+              <FillPicker
+                value={fillValue}
+                onChange={setFillValue}
+                showCss
+              />
+              <div className="w-full space-y-2">
+                <span className="text-xs text-slate-400 font-medium">Selected Fill Preview:</span>
+                <div
+                  className="w-full h-12 rounded-lg border border-slate-800 shadow-inner"
+                  style={{ background: fillValue }}
+                />
+                <pre className="text-xs font-mono text-purple-300 bg-slate-900 p-2 rounded border border-slate-800 overflow-x-auto">
+                  {fillValue}
+                </pre>
+              </div>
             </div>
           </div>
         </div>
