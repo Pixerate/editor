@@ -36,6 +36,7 @@ const EXTRA: Record<string, readonly string[]> = {
   spreadsheet: ["tools"],
   chart: ["tools"],
   parameters: ["tools", "color"],
+  gradient: ["color", "tools", "history"],
 };
 
 // Allowed: the framework itself and the matching narrow core subpath (plus its EXTRA ones).
@@ -61,10 +62,16 @@ describe("subpath entry isolation", () => {
     ["video-editor/index.js", "video-editor"],
     ["effects/index.js", "effects"],
     ["color/index.js", "color"],
+    ["gradient/index.js", "gradient"],
   ])("%s pulls in nothing beyond Svelte and @pixerate/editor/%s", (entry, coreSubpath) => {
     const packages = [...reachablePackages(entry)];
     expect(packages).toContain(`@pixerate/editor/${coreSubpath}`);
     expect(packages.filter((p) => !isAllowed(p, coreSubpath))).toEqual([]);
+  });
+
+  it("color/index.js does not pull in gradient", () => {
+    const packages = [...reachablePackages("color/index.js")];
+    expect(packages).not.toContain("@pixerate/editor/gradient");
   });
 
   it("root entry pulls in no canvas or agent code at runtime", () => {

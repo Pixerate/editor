@@ -93,6 +93,11 @@
       "svelte": "./dist/color/index.js",
       "default": "./dist/color/index.js"
     },
+    "./gradient": {
+      "types": "./dist/gradient/index.d.ts",
+      "svelte": "./dist/gradient/index.js",
+      "default": "./dist/gradient/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -138,6 +143,9 @@
       ],
       "color": [
         "./dist/color/index.d.ts"
+      ],
+      "gradient": [
+        "./dist/gradient/index.d.ts"
       ]
     }
   },
