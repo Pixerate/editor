@@ -186,3 +186,26 @@ describe("Svelte ColorPicker", () => {
     expect(input.disabled).toBe(true);
   });
 });
+
+describe("Svelte ColorPicker drags", () => {
+  it("ends the host's gesture and stops listening when unmounted mid-drag", () => {
+    const onchange = vi.fn();
+    const ongesturestart = vi.fn();
+    const ongestureend = vi.fn();
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const instance = mount(ColorPicker, { target, props: { value: "#ff0000", onchange, ongesturestart, ongestureend } });
+    flushSync();
+    const hue = target.querySelector('[aria-label="Hue"]') as HTMLElement;
+    hue.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 0 }));
+    expect(ongesturestart).toHaveBeenCalledTimes(1);
+    unmount(instance);
+    target.remove();
+    expect(ongestureend).toHaveBeenCalledTimes(1);
+    const calls = onchange.mock.calls.length;
+    window.dispatchEvent(new MouseEvent("pointermove", { clientX: 10 }));
+    window.dispatchEvent(new MouseEvent("pointerup"));
+    expect(onchange).toHaveBeenCalledTimes(calls);
+    expect(ongestureend).toHaveBeenCalledTimes(1);
+  });
+});

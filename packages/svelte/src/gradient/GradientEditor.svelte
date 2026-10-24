@@ -4,6 +4,7 @@
 		GRADIENT_PRESETS,
 		type GradientController,
 		type GradientInterpolation,
+		type GradientState,
 		type GradientType,
 		angleFromPointer,
 		gradientKeyStep,
@@ -27,6 +28,10 @@
 		showCss?: boolean;
 		/** Whether stops support dual light/dark colour definitions (default: false or auto-detected). */
 		dual?: boolean;
+		/** Called when a continuous edit (stop drag, angle drag, colour drag) starts. */
+		ongesturestart?: () => void;
+		/** Called when that edit ends. */
+		ongestureend?: () => void;
 		/** Additional CSS class name. */
 		class?: string;
 		className?: string;
@@ -39,8 +44,21 @@
 		showCss = false,
 		dual: controlledDual = undefined,
 		class: klass = '',
+		ongesturestart,
+		ongestureend,
 		className = ''
 	}: Props = $props();
+
+	// A gesture is one undo step in the controller and is reported to the host.
+	function beginGesture(label: string) {
+		controller.beginGesture(label);
+		ongesturestart?.();
+	}
+
+	function endGesture() {
+		controller.endGesture();
+		ongestureend?.();
+	}
 
 	let gradientState = $state.raw<GradientState | null>(null);
 	$effect(() => {
@@ -91,7 +109,7 @@
 		if (controller.isReadOnly) return;
 		e.stopPropagation();
 		controller.selectStop(stopId);
-		controller.beginGesture('Move Stop');
+		beginGesture('Move Stop');
 
 		const startY = e.clientY;
 		const rect = trackEl?.getBoundingClientRect();
@@ -101,7 +119,7 @@
 			if (moveEvent.clientY - startY > 32 && controller.getGradient().stops.length > 2) {
 				cleanup();
 				controller.removeStop(stopId);
-				controller.endGesture();
+				endGesture();
 				return;
 			}
 			const nextOffset = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width));
@@ -116,7 +134,7 @@
 
 		const onPointerUp = () => {
 			cleanup();
-			controller.endGesture();
+			endGesture();
 		};
 
 		window.addEventListener('pointermove', onPointerMove);
@@ -140,7 +158,7 @@
 
 	function handleAngleDialPointerDown(e: PointerEvent) {
 		if (controller.isReadOnly || !dialEl) return;
-		controller.beginGesture('Change Angle');
+		beginGesture('Change Angle');
 		const rect = dialEl.getBoundingClientRect();
 		const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 
@@ -159,7 +177,7 @@
 		const onPointerMove = (pe: PointerEvent) => update(pe);
 		const onPointerUp = () => {
 			cleanup();
-			controller.endGesture();
+			endGesture();
 		};
 
 		window.addEventListener('pointermove', onPointerMove);
@@ -397,8 +415,8 @@
 							color: formatDualColor(dualColor)
 						});
 					}}
-					ongesturestart={() => controller.beginGesture('Change Stop Color')}
-					ongestureend={() => controller.endGesture()}
+					ongesturestart={() => beginGesture('Change Stop Color')}
+					ongestureend={() => endGesture()}
 					disabled={controller.isReadOnly}
 				/>
 			{:else}
@@ -408,8 +426,8 @@
 					onchange={(color) => {
 						controller.updateStop(selectedStop.id, { color });
 					}}
-					ongesturestart={() => controller.beginGesture('Change Stop Color')}
-					ongestureend={() => controller.endGesture()}
+					ongesturestart={() => beginGesture('Change Stop Color')}
+					ongestureend={() => endGesture()}
 					disabled={controller.isReadOnly}
 				/>
 			{/if}

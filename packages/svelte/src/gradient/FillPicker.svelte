@@ -1,12 +1,16 @@
+<script lang="ts" module>
+	export type FillMode = 'solid' | 'gradient';
+</script>
+
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { untrack } from 'svelte';
 	import {
 		GradientController,
 		createGradient,
 		gradientToCss,
 		parseCssGradient
 	} from '@pixerate/editor/gradient';
-	import { formatHex, mixColors, parseColor } from '@pixerate/editor/color';
+	import { formatHex, mixColors, parseColor, resolveColor } from '@pixerate/editor/color';
 	import ColorPicker from '../color/ColorPicker.svelte';
 	import GradientEditor from './GradientEditor.svelte';
 
@@ -23,11 +27,15 @@
 		ongestureend?: () => void;
 		onGestureEnd?: () => void;
 		/** Allowed fill modes. Default: ['solid', 'gradient']. */
-		modes?: readonly ('solid' | 'gradient')[];
+		modes?: readonly FillMode[];
 		/** Whether the alpha channel slider is shown on ColorPicker. Default: false. */
 		alpha?: boolean;
 		/** Preset swatches for ColorPicker. */
 		swatches?: readonly string[];
+		/** Whether the gradient editor shows preset buttons. Default: true. */
+		showPresets?: boolean;
+		/** Whether the gradient editor shows the CSS output with a copy button. Default: false. */
+		showCss?: boolean;
 		/** Additional CSS class names. */
 		class?: string;
 		className?: string;
@@ -46,6 +54,8 @@
 		modes = ['solid', 'gradient'],
 		alpha = false,
 		swatches,
+		showPresets = true,
+		showCss = false,
 		class: klass = '',
 		className = '',
 		disabled = false
@@ -73,54 +83,81 @@
 		return createGradient([baseHex, lighterHex]);
 	}
 
-	const parsedGrad = parseCssGradient(value);
-	const initialMode: 'solid' | 'gradient' =
-		parsedGrad && modes.includes('gradient')
-			? 'gradient'
-			: modes.includes('solid')
-				? 'solid'
-				: 'gradient';
+	// The controller and mode start from the first value; the effect below follows later ones.
+	const initialValue = untrack(() => value);
+	const initialGradient = parseCssGradient(initialValue);
+	const allows = (m: FillMode) => untrack(() => modes).includes(m);
 
-	let mode = $state<'solid' | 'gradient'>(initialMode);
+	let mode = $state<FillMode>(
+		initialGradient && allows('gradient') ? 'gradient' : allows('solid') ? 'solid' : 'gradient'
+	);
 	let isDragging = false;
+	// The last CSS this picker emitted, so the echo of our own change isn't loaded back in.
+	let emitted: string | null = null;
+	let loading = false;
 
 	const controller = new GradientController({
-		value: parsedGrad ?? createDefaultGradientFromColor(value),
-		readOnly: disabled,
+		value: initialGradient ?? createDefaultGradientFromColor(initialValue),
+		readOnly: () => disabled,
 		onChange: (g) => {
-			if (mode === 'gradient') {
-				emitChange(gradientToCss(g));
-			}
+			if (loading || mode !== 'gradient') return;
+			emit(gradientToCss(g));
 		}
 	});
 
+	function emit(v: string) {
+		emitted = v;
+		emitChange(v);
+	}
+
+	function loadQuietly(next: unknown) {
+		loading = true;
+		try {
+			controller.load(next);
+		} finally {
+			loading = false;
+		}
+	}
+
+	// Follow the incoming value, without an undo step, unless it is our own change coming back.
 	$effect(() => {
-		if (isDragging) return;
-		const incomingGrad = parseCssGradient(value);
-		if (incomingGrad) {
-			if (modes.includes('gradient')) {
+		const incoming = parseCssGradient(value);
+		const allowsGradient = modes.includes('gradient');
+		const allowsSolid = modes.includes('solid');
+		untrack(() => {
+			if (isDragging) return;
+			if (incoming && allowsGradient) {
 				mode = 'gradient';
-				controller.setGradient(incomingGrad);
-			}
-		} else {
-			if (modes.includes('solid')) {
+				if (value !== emitted) loadQuietly(incoming);
+			} else if (!incoming && allowsSolid) {
 				mode = 'solid';
 			}
-		}
+		});
 	});
 
 	function switchToSolid() {
+		if (mode === 'solid') return;
 		mode = 'solid';
-		const stops = controller.getGradient().stops;
-		const solidColor = stops[0]?.color ?? '#000000';
-		emitChange(solidColor);
+		const first = controller.getGradient().stops[0]?.color ?? '#000000';
+		// A dual stop has no single solid equivalent; keep its light half.
+		emit(resolveColor(first, 'light') ?? '#000000');
 	}
 
 	function switchToGradient() {
+		if (mode === 'gradient') return;
 		mode = 'gradient';
-		const newGrad = createDefaultGradientFromColor(value);
-		controller.setGradient(newGrad);
-		emitChange(gradientToCss(newGrad));
+		loadQuietly(createDefaultGradientFromColor(value));
+		emit(gradientToCss(controller.getGradient()));
+	}
+
+	function gradientGestureStart() {
+		isDragging = true;
+		emitGestureStart();
+	}
+
+	function gradientGestureEnd() {
+		isDragging = false;
+		emitGestureEnd();
 	}
 
 	const buttonClass =
@@ -141,7 +178,13 @@
 	</div>
 {:else if modes.length === 1 && modes[0] === 'gradient'}
 	<div class="{klass} {className}" data-testid="fill-picker">
-		<GradientEditor {controller} />
+		<GradientEditor
+			{controller}
+			{showPresets}
+			{showCss}
+			ongesturestart={gradientGestureStart}
+			ongestureend={gradientGestureEnd}
+		/>
 	</div>
 {:else}
 	<div class="flex flex-col gap-2.5 {klass} {className}" data-testid="fill-picker">
@@ -184,7 +227,13 @@
 				{disabled}
 			/>
 		{:else}
-			<GradientEditor {controller} />
+			<GradientEditor
+			{controller}
+			{showPresets}
+			{showCss}
+			ongesturestart={gradientGestureStart}
+			ongestureend={gradientGestureEnd}
+		/>
 		{/if}
 	</div>
 {/if}

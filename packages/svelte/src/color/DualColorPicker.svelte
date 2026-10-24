@@ -127,7 +127,11 @@
     if (disabled) return;
     triggerGestureStart();
     const currentActive = activeScheme === 'dark' ? dual.dark : dual.light;
-    const derived = deriveDualColor(currentActive, { from: activeScheme, surfaces });
+    const derived = deriveDualColor(currentActive, {
+      from: activeScheme,
+      // An unreadable surfaces prop falls back to the defaults rather than throwing.
+      surfaces: normalizeDualColor(surfaces) ?? DEFAULT_SCHEME_SURFACES
+    });
     triggerChange(derived);
     triggerGestureEnd();
   };
@@ -147,7 +151,10 @@
   );
 
   const dualContrast = $derived(
-    contrastAgainst ? checkDualColorContrast(dual, contrastAgainst) : null
+    // An unreadable contrastAgainst shows no badges rather than throwing during render.
+    contrastAgainst && normalizeDualColor(contrastAgainst)
+      ? checkDualColorContrast(dual, contrastAgainst)
+      : null
   );
 
   const CHECKERBOARD_BG =

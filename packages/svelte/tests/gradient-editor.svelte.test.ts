@@ -183,3 +183,75 @@ describe("Svelte FillPicker", () => {
     expect(currentValue).toContain("linear-gradient(");
   });
 });
+
+describe("Svelte FillPicker as a controlled component", () => {
+  function host(initial: string) {
+    const calls: string[] = [];
+    const gestures: string[] = [];
+    const props = $state({
+      value: initial,
+      onchange: (v: string) => {
+        calls.push(v);
+        props.value = v;
+      },
+      ongesturestart: () => gestures.push("start"),
+      ongestureend: () => gestures.push("end")
+    });
+    const { target } = render(FillPicker, props);
+    const stops = () => [...target.querySelectorAll<HTMLButtonElement>('[data-testid^="gradient-stop-"]')];
+    return { calls, gestures, props, target, stops };
+  }
+
+  it("reports gradient edits after switching from solid to gradient", () => {
+    const { calls, target } = host("#ff0000");
+    const gradientButton = [...target.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Gradient")!;
+    gradientButton.click();
+    flushSync();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatch(/^linear-gradient\(/);
+
+    (target.querySelector('button[aria-label="Reverse stops"]') as HTMLButtonElement).click();
+    flushSync();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).not.toBe(calls[0]);
+  });
+
+  it("keeps the selected stop while its edits round-trip through the parent", () => {
+    const { calls, stops } = host("linear-gradient(90deg, #ff0000 0%, #00ff00 50%, #0000ff 100%)");
+    stops()[1].click();
+    flushSync();
+    expect(stops()[1].getAttribute("aria-current")).toBe("true");
+    for (let i = 0; i < 2; i++) {
+      stops()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      flushSync();
+    }
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("#00ff00 52%");
+    expect(stops()[1].getAttribute("aria-current")).toBe("true");
+  });
+
+  it("follows a new value from the parent without reporting it back", () => {
+    const calls: string[] = [];
+    const props = $state({ value: "linear-gradient(90deg, #ff0000 0%, #0000ff 100%)", onchange: (v: string) => calls.push(v) });
+    const { target } = render(FillPicker, props);
+    props.value = "linear-gradient(90deg, #000000 0%, #888888 50%, #ffffff 100%)";
+    flushSync();
+    expect(target.querySelectorAll('[data-testid^="gradient-stop-"]')).toHaveLength(3);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("forwards gradient drag gestures to the host", () => {
+    const { gestures, stops } = host("linear-gradient(90deg, #ff0000 0%, #0000ff 100%)");
+    stops()[0].dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 0, clientY: 0 }));
+    flushSync();
+    expect(gestures).toEqual(["start"]);
+    window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    flushSync();
+    expect(gestures).toEqual(["start", "end"]);
+  });
+
+  it("passes showCss through to the gradient editor", () => {
+    const { target } = render(FillPicker, { value: "linear-gradient(90deg, #ff0000 0%, #0000ff 100%)", showCss: true });
+    expect([...target.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Copy")).toBe(true);
+  });
+});

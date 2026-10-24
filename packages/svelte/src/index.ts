@@ -66,8 +66,6 @@ export type StylesGalleryProps = ComponentProps<typeof StylesGalleryComponent>;
 export { default as StylesGallery } from "./StylesGallery.svelte";
 export type ExportDocxButtonProps = ComponentProps<typeof ExportDocxButtonComponent>;
 export { default as ExportDocxButton } from "./ExportDocxButton.svelte";
-export * from "./color/index.js";
-export * from "./gradient/index.js";
 
 export type {
   Template,

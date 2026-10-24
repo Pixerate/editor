@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import {
     type ColorPickerState,
     contrastRatio,
@@ -95,8 +95,9 @@
     } catch {}
   }
 
+  /** Transparency checkerboard; themeable through `--pixerate-checker-a` / `--pixerate-checker-b`. */
   const CHECKERBOARD_BG =
-    'linear-gradient(45deg, #333842 25%, transparent 25%), linear-gradient(-45deg, #333842 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333842 75%), linear-gradient(-45deg, transparent 75%, #333842 75%)';
+    'repeating-conic-gradient(var(--pixerate-checker-a, #d4d4d8) 0 25%, var(--pixerate-checker-b, #ffffff) 0 50%)';
 
   const DEFAULT_STATE: ColorPickerState = { h: 0, s: 1, v: 1, alpha: 1 };
 
@@ -230,96 +231,52 @@
     }
   }
 
-  // 2D Area Pointer Interactions
-  function handleAreaPointerDown(e: PointerEvent) {
+  // Pointer drags: listeners live on window and are removed on pointerup, or on unmount,
+  // which also ends the host's gesture so it never stays open.
+  let endDrag: (() => void) | null = null;
+  onDestroy(() => endDrag?.());
+
+  function startDrag(
+    e: PointerEvent,
+    next: (state: ColorPickerState, x: number, y: number) => ColorPickerState
+  ) {
     if (disabled) return;
     e.preventDefault();
+    endDrag?.();
     emitGestureStart();
 
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const update = (clientX: number, clientY: number) => {
       const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-      pickerState = pickerStateFromArea(pickerState, x, y);
+      pickerState = next(pickerState, x, y);
       emitChange(pickerStateToHex(pickerState, alpha));
     };
     update(e.clientX, e.clientY);
 
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX, ev.clientY);
-    };
-    const onPointerUp = () => {
+    const onPointerMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY);
+    const end = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
+      endDrag = null;
       emitGestureEnd();
+    };
+    const onPointerUp = () => {
+      end();
       recordRecent(pickerStateToHex(pickerState, alpha));
     };
+    endDrag = end;
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
   }
 
-  // Hue Slider Pointer Interactions
-  function handleHuePointerDown(e: PointerEvent) {
-    if (disabled) return;
-    e.preventDefault();
-    emitGestureStart();
-
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const update = (clientX: number) => {
-      const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      pickerState = pickerStateFromHue(pickerState, t);
-      emitChange(pickerStateToHex(pickerState, alpha));
-    };
-    update(e.clientX);
-
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX);
-    };
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-      emitGestureEnd();
-      recordRecent(pickerStateToHex(pickerState, alpha));
-    };
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-  }
-
-  // Alpha Slider Pointer Interactions
-  function handleAlphaPointerDown(e: PointerEvent) {
-    if (disabled) return;
-    e.preventDefault();
-    emitGestureStart();
-
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const update = (clientX: number) => {
-      const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      pickerState = pickerStateFromAlpha(pickerState, t);
-      emitChange(pickerStateToHex(pickerState, alpha));
-    };
-    update(e.clientX);
-
-    const onPointerMove = (ev: PointerEvent) => {
-      update(ev.clientX);
-    };
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-      emitGestureEnd();
-      recordRecent(pickerStateToHex(pickerState, alpha));
-    };
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-  }
+  const handleAreaPointerDown = (e: PointerEvent) =>
+    startDrag(e, (state, x, y) => pickerStateFromArea(state, x, y));
+  const handleHuePointerDown = (e: PointerEvent) => startDrag(e, (state, x) => pickerStateFromHue(state, x));
+  const handleAlphaPointerDown = (e: PointerEvent) =>
+    startDrag(e, (state, x) => pickerStateFromAlpha(state, x));
 
   // Keyboard navigation
   function handleAreaKeyDown(e: KeyboardEvent) {
