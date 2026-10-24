@@ -1,5 +1,25 @@
 # @pixerate/editor-svelte
 
+## 0.106.0
+
+### Minor Changes
+
+- f81828c: Add dual colour support (`DualColor`, `light-dark()`, `deriveDualColor`, `checkDualColorContrast`, `dualColorsToCss`), agent tools (`derive_dual_color`, `check_dual_color_contrast`, `export_dual_colors_css`), `DualColorPicker`, and theme scheme observation (`useColorScheme`, `createColorScheme`).
+- 2c08d7b: Add accessible `ColorPicker` component with 2D area, hue & alpha sliders, hex/CSS text inputs, swatch grid, recent colours, contrast badge against `contrastAgainst`, and EyeDropper support.
+- 244f673: Parameter colour fields (`ParameterColor`) now open the shared `ColorPicker` in a popover instead of the native `<input type="color">`. The hex box stays inline. A field's swatches and its alpha slider (`alpha: true`) moved from below the field into the popover, so they are no longer visible until the swatch button is clicked. Gesture callbacks fire once per drag as before.
+- cde624d: Add `GradientEditor` and `FillPicker` components to `@pixerate/editor-svelte/gradient`. `FillPicker` reports every gradient edit through `onchange`, follows a new `value` without adding an undo step, forwards drag gestures, and passes `showPresets` / `showCss` to the gradient editor.
+
+### Patch Changes
+
+- Updated dependencies [eac0ca4]
+- Updated dependencies [f81828c]
+- Updated dependencies [8646b9a]
+- Updated dependencies [c784c86]
+- Updated dependencies [2c08d7b]
+- Updated dependencies [991d283]
+- Updated dependencies [0fc89a6]
+  - @pixerate/editor@0.147.0
+
 ## 0.105.0
 
 ### Minor Changes

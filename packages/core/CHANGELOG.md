@@ -1,5 +1,29 @@
 # @pixerate/editor
 
+## 0.147.0
+
+### Minor Changes
+
+- eac0ca4: Add colour agent tools provider (`createColorToolProvider`) and `pixerate-color` agent skill covering colour inspection, contrast checking with WCAG 2.1 compliance and OKLCH lightness suggestions, colour-vision deficiency simulation, palette distinctness audits, harmonies, and perceptual blends.
+- f81828c: Add dual colour support (`DualColor`, `light-dark()`, `deriveDualColor`, `checkDualColorContrast`, `dualColorsToCss`), agent tools (`derive_dual_color`, `check_dual_color_contrast`, `export_dual_colors_css`), `DualColorPicker`, and theme scheme observation (`useColorScheme`, `createColorScheme`).
+- 8646b9a: Add gradient model, controller, and agent tools (`@pixerate/editor/gradient`). Includes support for linear, radial, and conic geometries, OKLab interpolation, dual `light-dark()` color stops, WCAG contrast checks, and 11 agent tools. `GradientController` validates geometry (`setGeometry` applies several fields as one undo step), `load()` syncs a host value without an undo step, and selecting a stop does not call `onChange`.
+- c784c86: feat(core): add shared colour module (@pixerate/editor/color)
+
+  - Zero-dependency colour parsing for CSS Color 4 syntax (`#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `hsl()`, `oklab()`, `oklch()`, `color(srgb)`, `color(srgb-linear)`, `color(display-p3)` and 148 standard CSS names)
+  - Conversions between sRGB, linear sRGB, HSL, HSV, OKLab, OKLCH, and Display P3
+  - CSS Color 4 OKLCH chroma binary-search gamut mapping (`toSrgbGamut`, `inSrgbGamut`)
+  - WCAG 2 contrast ratios, APCA contrast, and readable text colour determination
+  - Machado-Oliveira-Fernandes (2009) colour-vision deficiency simulation and palette harmony checks
+  - Colour harmonies on RGB and artistic RYB wheels (`colorHarmony`)
+  - Perceptual colour mixing in OKLab, OKLCH, sRGB, and sRGB-linear spaces
+
+- 991d283: Add headless colour picker model (`ColorPickerState`, `pickerStateFromColor`, `pickerStateToHex`, `pickerStateFromArea`, `pickerStateFromHue`, `pickerStateFromAlpha`, `pickerKeyStep`, `pickerAreaBackground`, `pickerAlphaBackground`, `PICKER_HUE_BACKGROUND`) in `@pixerate/editor/color`.
+- 0fc89a6: add headless gradient editor helpers (`gradientKeyStep`, `stopFromTrackPosition`, `trackPositionFromStop`, `angleFromPointer`, `gradientTrackBackground`)
+
+### Patch Changes
+
+- 2c08d7b: Add accessible `ColorPicker` component with 2D area, hue & alpha sliders, hex/CSS text inputs, swatch grid, recent colours, contrast badge against `contrastAgainst`, and EyeDropper support.
+
 ## 0.146.0
 
 ### Minor Changes
