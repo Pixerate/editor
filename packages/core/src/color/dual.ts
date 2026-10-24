@@ -188,6 +188,8 @@ export function setDualColorSide(
  * - `from`: which scheme the input colour belongs to (default `'light'`).
  * - `surfaces`: background surfaces for light and dark schemes. When provided,
  *   matches the contrast ratio against the target surface.
+ *
+ * Throws when `color` or `surfaces` can't be read.
  */
 export function deriveDualColor(
 	color: string,
@@ -196,8 +198,10 @@ export function deriveDualColor(
 	const fromScheme: ColorScheme = options?.from ?? 'light';
 	const baseRgba = parseColor(color);
 	if (!baseRgba) {
-		const fallback = normalizeColor(color) ?? '#000000';
-		return { light: fallback, dark: fallback };
+		throw new Error(`"${String(color)}" is not a colour; pass hex, rgb(), hsl(), oklch() or a CSS colour name.`);
+	}
+	if (options?.surfaces && !normalizeDualColor(options.surfaces)) {
+		throw new Error('The surfaces need a readable light and dark colour, e.g. { light: "#ffffff", dark: "#0b0b0f" }.');
 	}
 
 	const baseHex = formatHex(baseRgba);
@@ -213,9 +217,9 @@ export function deriveDualColor(
 
 	if (options?.surfaces) {
 		const surfaces = options.surfaces;
-		const fromSurfaceRgba = parseColor(surfaces[fromScheme]) ?? { r: 1, g: 1, b: 1, a: 1 };
+		const fromSurfaceRgba = parseColor(surfaces[fromScheme])!;
 		const targetScheme: ColorScheme = fromScheme === 'light' ? 'dark' : 'light';
-		const targetSurfaceRgba = parseColor(surfaces[targetScheme]) ?? { r: 0, g: 0, b: 0, a: 1 };
+		const targetSurfaceRgba = parseColor(surfaces[targetScheme])!;
 
 		const targetRatio = contrastRatio(baseRgba, fromSurfaceRgba);
 		const targetSurfaceL = oklabToOklch(rgbToOklab(targetSurfaceRgba)).l;
@@ -262,6 +266,7 @@ export function deriveDualColor(
 
 /**
  * Checks contrast compliance of a foreground/background dual colour pair across both modes.
+ * Throws when either value can't be read.
  */
 export function checkDualColorContrast(
 	foreground: ColorValue,
@@ -275,10 +280,15 @@ export function checkDualColorContrast(
 	const large = options?.large ?? false;
 	const requiredRatio = large ? 3 : 4.5;
 
-	const lightFgHex = resolveColor(foreground, 'light') ?? '#000000';
-	const lightBgHex = resolveColor(background, 'light') ?? '#ffffff';
-	const darkFgHex = resolveColor(foreground, 'dark') ?? '#000000';
-	const darkBgHex = resolveColor(background, 'dark') ?? '#000000';
+	const fg = normalizeDualColor(foreground);
+	const bg = normalizeDualColor(background);
+	if (!fg) throw new Error(`The foreground "${describeValue(foreground)}" is not a colour, light-dark() or { light, dark }.`);
+	if (!bg) throw new Error(`The background "${describeValue(background)}" is not a colour, light-dark() or { light, dark }.`);
+
+	const lightFgHex = fg.light;
+	const lightBgHex = bg.light;
+	const darkFgHex = fg.dark;
+	const darkBgHex = bg.dark;
 
 	const lightFg = parseColor(lightFgHex)!;
 	const lightBg = parseColor(lightBgHex)!;
@@ -312,8 +322,16 @@ export function checkDualColorContrast(
 	};
 }
 
+/** A custom property name without its leading `--`. */
+const CSS_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+function describeValue(value: unknown): string {
+	return typeof value === 'string' ? value : JSON.stringify(value) ?? String(value);
+}
+
 /**
  * Formats a dictionary of dual colours as CSS custom properties according to a strategy.
+ * Keys are variable names without `--`. Throws on an invalid name, colour or selector.
  */
 export function dualColorsToCss(
 	colors: Record<string, ColorValue>,
@@ -327,7 +345,22 @@ export function dualColorsToCss(
 	const strategy = options?.strategy ?? 'light-dark';
 	const darkSelector = options?.darkSelector ?? '.dark';
 
-	const sortedKeys = Object.keys(colors).sort();
+	for (const [label, sel] of [['selector', selector], ['darkSelector', darkSelector]] as const) {
+		if (!sel.trim() || /[{};]/.test(sel)) {
+			throw new Error(`The ${label} "${sel}" is not a CSS selector (it can't be empty or contain "{", "}" or ";").`);
+		}
+	}
+	const normalized: Record<string, DualColor> = {};
+	for (const [key, value] of Object.entries(colors)) {
+		if (!CSS_VARIABLE_NAME.test(key)) {
+			throw new Error(`"${key}" is not a CSS variable name; use letters, digits, "-" and "_" without the leading "--" (e.g. "brand-color").`);
+		}
+		const dual = normalizeDualColor(value);
+		if (!dual) throw new Error(`"${key}" has "${describeValue(value)}", which is not a colour, light-dark() or { light, dark }.`);
+		normalized[key] = dual;
+	}
+
+	const sortedKeys = Object.keys(normalized).sort();
 
 	switch (strategy) {
 		case 'light-dark': {
@@ -335,9 +368,7 @@ export function dualColorsToCss(
 				`${selector} {`,
 				...(selector === ':root' ? ['  color-scheme: light dark;'] : []),
 				...sortedKeys.map((k) => {
-					const norm = normalizeDualColor(colors[k]);
-					const val = norm ? formatDualColor(norm) : String(colors[k]);
-					return `  --${k}: ${val};`;
+					return `  --${k}: ${formatDualColor(normalized[k])};`;
 				}),
 				'}'
 			];
@@ -347,13 +378,13 @@ export function dualColorsToCss(
 		case 'media': {
 			const lightLines = [
 				`${selector} {`,
-				...sortedKeys.map((k) => `  --${k}: ${resolveColor(colors[k], 'light') ?? colors[k]};`),
+				...sortedKeys.map((k) => `  --${k}: ${normalized[k].light};`),
 				'}'
 			];
 			const darkLines = [
 				`@media (prefers-color-scheme: dark) {`,
 				`  ${selector} {`,
-				...sortedKeys.map((k) => `    --${k}: ${resolveColor(colors[k], 'dark') ?? colors[k]};`),
+				...sortedKeys.map((k) => `    --${k}: ${normalized[k].dark};`),
 				`  }`,
 				`}`
 			];
@@ -363,12 +394,12 @@ export function dualColorsToCss(
 		case 'class': {
 			const lightLines = [
 				`${selector} {`,
-				...sortedKeys.map((k) => `  --${k}: ${resolveColor(colors[k], 'light') ?? colors[k]};`),
+				...sortedKeys.map((k) => `  --${k}: ${normalized[k].light};`),
 				'}'
 			];
 			const darkLines = [
 				`${darkSelector} {`,
-				...sortedKeys.map((k) => `  --${k}: ${resolveColor(colors[k], 'dark') ?? colors[k]};`),
+				...sortedKeys.map((k) => `  --${k}: ${normalized[k].dark};`),
 				'}'
 			];
 			return `${lightLines.join('\n')}\n\n${darkLines.join('\n')}`;

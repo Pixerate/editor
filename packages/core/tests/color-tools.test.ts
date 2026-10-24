@@ -337,3 +337,20 @@ describe('createColorToolProvider', () => {
 		});
 	});
 });
+
+describe('dual colour tools fail usefully', () => {
+	const registry = new ToolRegistry();
+	registry.register(createColorToolProvider({ namespace: '' }));
+
+	it('export_dual_colors_css rejects a variable name that would inject CSS', async () => {
+		const res = (await registry.callTool('export_dual_colors_css', { colors: { 'a; } body { x': '#fff' } })) as any;
+		expect(res.isError).toBe(true);
+		expect(res.content[0].text).toMatch(/not a CSS variable name/);
+	});
+
+	it('derive_dual_color rejects unreadable surfaces', async () => {
+		const res = (await registry.callTool('derive_dual_color', { color: '#1d4ed8', surfaces: { light: '#fff', dark: 'mud' } })) as any;
+		expect(res.isError).toBe(true);
+		expect(res.content[0].text).toMatch(/not a dual colour/);
+	});
+});

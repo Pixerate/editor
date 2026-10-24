@@ -203,3 +203,23 @@ describe('Dual Colours (@pixerate/editor/color)', () => {
 		});
 	});
 });
+
+describe('dual colour helpers fail usefully', () => {
+	it('deriveDualColor throws on an unreadable colour or surfaces', () => {
+		expect(() => deriveDualColor('nope')).toThrow(/"nope" is not a colour/);
+		expect(() => deriveDualColor('#1d4ed8', { surfaces: { light: '#fff', dark: 'mud' } })).toThrow(/surfaces/);
+	});
+
+	it('checkDualColorContrast throws instead of assuming black and white', () => {
+		expect(() => checkDualColorContrast('nope', '#ffffff')).toThrow(/foreground "nope"/);
+		expect(() => checkDualColorContrast('#000000', { light: '#fff', dark: 'x' })).toThrow(/background/);
+	});
+
+	it('dualColorsToCss rejects variable names and selectors that would break the CSS', () => {
+		expect(() => dualColorsToCss({ 'x: red; } body { color: red': '#fff' })).toThrow(/not a CSS variable name/);
+		expect(() => dualColorsToCss({ '--brand': '#fff' })).toThrow(/without the leading "--"/);
+		expect(() => dualColorsToCss({ brand: 'mud' })).toThrow(/"brand" has "mud"/);
+		expect(() => dualColorsToCss({ brand: '#fff' }, { selector: ':root } body {' })).toThrow(/selector/);
+		expect(() => dualColorsToCss({ brand: '#fff' }, { strategy: 'class', darkSelector: '' })).toThrow(/darkSelector/);
+	});
+});
