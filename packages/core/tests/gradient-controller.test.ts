@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GradientController } from '../src/gradient/index.js';
+import { GradientController, createGradient } from '../src/gradient/index.js';
 
 describe('GradientController', () => {
 	it('initializes with default gradient and selects first stop', () => {
@@ -77,5 +77,91 @@ describe('GradientController', () => {
 
 		const addRes = ctrl.addStop(0.5, '#ff0000');
 		expect(addRes.ok).toBe(false);
+	});
+});
+
+describe('GradientController geometry validation', () => {
+	it('rejects invalid geometry without changing anything', () => {
+		const ctrl = new GradientController();
+		const before = ctrl.getGradient();
+		const cases: [() => { ok: boolean }, RegExp][] = [
+			[() => ctrl.setAngle(Number.NaN), /finite number/],
+			[() => ctrl.setType('bogus' as any), /Unknown gradient type "bogus"/],
+			[() => ctrl.setInterpolation('hwb' as any), /Unknown interpolation "hwb"/],
+			[() => ctrl.setRepeating('yes' as any), /true or false/],
+			[() => ctrl.setShape('circle'), /radial gradients only/],
+			[() => ctrl.setCenter({ x: 0.5, y: 0.5 }), /radial and conic gradients only/]
+		];
+		for (const [call, message] of cases) {
+			const res = call() as { ok: false; message: string };
+			expect(res.ok).toBe(false);
+			expect(res.message).toMatch(message);
+		}
+		ctrl.setType('radial');
+		const res = ctrl.setCenter({ x: 9, y: 0.5 }) as { ok: false; message: string };
+		expect(res.ok).toBe(false);
+		expect(res.message).toMatch(/between 0 and 1/);
+		expect(ctrl.getGradient().center).toEqual({ x: 0.5, y: 0.5 });
+		expect(before.type).toBe('linear');
+	});
+
+	it('setGeometry applies several fields as one undo step, or none of them', () => {
+		const ctrl = new GradientController();
+		expect(ctrl.setGeometry({ type: 'radial', shape: 'circle', center: { x: 0.2, y: 0.8 } }).ok).toBe(true);
+		expect(ctrl.getGradient()).toMatchObject({ type: 'radial', shape: 'circle', center: { x: 0.2, y: 0.8 } });
+		ctrl.undo();
+		expect(ctrl.getGradient().type).toBe('linear');
+		expect(ctrl.state.canUndo).toBe(false);
+
+		const res = ctrl.setGeometry({ type: 'conic', interpolation: 'nope' as any });
+		expect(res.ok).toBe(false);
+		expect(ctrl.getGradient().type).toBe('linear');
+	});
+
+	it('checks read-only before validating', () => {
+		const ctrl = new GradientController({ readOnly: 'Locked' });
+		expect(ctrl.setAngle(Number.NaN)).toEqual({ ok: false, message: 'Locked' });
+	});
+});
+
+describe('GradientController selection and load', () => {
+	it('selecting a stop notifies subscribers but not onChange', () => {
+		const onChange = vi.fn();
+		const ctrl = new GradientController({ value: createGradient(['#f00', '#0f0', '#00f']), onChange });
+		const listener = vi.fn();
+		ctrl.subscribe(listener);
+		listener.mockClear();
+		ctrl.selectStop(ctrl.getGradient().stops[1].id);
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(onChange).not.toHaveBeenCalled();
+		expect(ctrl.state.canUndo).toBe(false);
+	});
+
+	it('load replaces the gradient without an undo step and keeps the selection', () => {
+		const onChange = vi.fn();
+		const ctrl = new GradientController({ value: createGradient(['#f00', '#0f0', '#00f']), onChange });
+		const second = ctrl.getGradient().stops[1].id;
+		ctrl.selectStop(second);
+		expect(ctrl.load('linear-gradient(90deg, #000 0%, #888 40%, #fff 100%)').ok).toBe(true);
+		expect(ctrl.getGradient().angle).toBe(90);
+		expect(ctrl.state.canUndo).toBe(false);
+		expect(ctrl.getSelectedStop()?.offset).toBe(0.4);
+		expect(onChange).toHaveBeenCalledTimes(1);
+
+		// Loading the same gradient again is a no-op.
+		ctrl.load('linear-gradient(90deg, #000 0%, #888 40%, #fff 100%)');
+		expect(onChange).toHaveBeenCalledTimes(1);
+
+		const bad = ctrl.load('linear-gradient(') as { ok: false; message: string };
+		expect(bad.ok).toBe(false);
+		expect(bad.message).toMatch(/Could not parse/);
+	});
+
+	it('setGradient keeps the selected stop when it survives', () => {
+		const ctrl = new GradientController({ value: createGradient(['#f00', '#0f0', '#00f']) });
+		const g = ctrl.getGradient();
+		ctrl.selectStop(g.stops[2].id);
+		ctrl.setGradient({ ...g, angle: 45 });
+		expect(ctrl.getSelectedStopId()).toBe(g.stops[2].id);
 	});
 });

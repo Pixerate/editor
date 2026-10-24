@@ -40,6 +40,51 @@ export interface GradientState {
 
 export type GradientActionResult = { ok: true } | { ok: false; message: string };
 
+/** The geometry fields `setGeometry` changes; omitted fields stay as they are. */
+export interface GradientGeometryPatch {
+	type?: GradientType;
+	/** Degrees (linear and conic); any finite number, stored modulo 360. */
+	angle?: number;
+	/** 0–1 of the box (radial and conic). */
+	center?: { x: number; y: number };
+	shape?: GradientShape;
+	interpolation?: GradientInterpolation;
+	repeating?: boolean;
+}
+
+export const GRADIENT_TYPES: readonly GradientType[] = ['linear', 'radial', 'conic'];
+export const GRADIENT_INTERPOLATIONS: readonly GradientInterpolation[] = ['oklab', 'oklch', 'srgb', 'srgb-linear'];
+const GRADIENT_SHAPES: readonly GradientShape[] = ['circle', 'ellipse'];
+const GEOMETRY_KEYS = ['type', 'angle', 'shape', 'interpolation', 'repeating'] as const;
+
+/** Why a geometry patch is invalid, or null when it is fine. */
+function geometryError(patch: GradientGeometryPatch): string | null {
+	const list = (values: readonly string[]) => values.map((v) => `"${v}"`).join(', ');
+	if (patch.type !== undefined && !GRADIENT_TYPES.includes(patch.type)) {
+		return `Unknown gradient type "${String(patch.type)}"; use one of ${list(GRADIENT_TYPES)}.`;
+	}
+	if (patch.angle !== undefined && (typeof patch.angle !== 'number' || !Number.isFinite(patch.angle))) {
+		return `The angle must be a finite number of degrees; got ${String(patch.angle)}.`;
+	}
+	if (patch.center !== undefined) {
+		const c = patch.center as { x?: unknown; y?: unknown } | null;
+		const inRange = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+		if (!c || typeof c !== 'object' || !inRange(c.x) || !inRange(c.y)) {
+			return `The center needs x and y between 0 and 1; got ${JSON.stringify(patch.center)}.`;
+		}
+	}
+	if (patch.shape !== undefined && !GRADIENT_SHAPES.includes(patch.shape)) {
+		return `Unknown radial shape "${String(patch.shape)}"; use ${list(GRADIENT_SHAPES)}.`;
+	}
+	if (patch.interpolation !== undefined && !GRADIENT_INTERPOLATIONS.includes(patch.interpolation)) {
+		return `Unknown interpolation "${String(patch.interpolation)}"; use one of ${list(GRADIENT_INTERPOLATIONS)}.`;
+	}
+	if (patch.repeating !== undefined && typeof patch.repeating !== 'boolean') {
+		return `"repeating" must be true or false; got ${String(patch.repeating)}.`;
+	}
+	return null;
+}
+
 function sameGradientJson(a: unknown, b: unknown): boolean {
 	if (a === b) return true;
 	if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return Number.isNaN(a) && Number.isNaN(b);
@@ -145,7 +190,8 @@ export class GradientController {
 		};
 	}
 
-	private _notify(): void {
+	/** `changed` is false for view-only updates (selection), which don't call `onChange`. */
+	private _notify(changed = true): void {
 		this._revision++;
 		const s = this.state;
 		for (const fn of this._listeners) {
@@ -155,7 +201,7 @@ export class GradientController {
 				console.error('GradientController subscriber error', err);
 			}
 		}
-		if (this._onChange) {
+		if (changed && this._onChange) {
 			try {
 				this._onChange(this._gradient);
 			} catch (err) {
@@ -172,13 +218,14 @@ export class GradientController {
 		return null;
 	}
 
+	/** Selects a stop (view state; not an undo step and no `onChange`). Unknown ids are ignored. */
 	selectStop(stopId: string | null): void {
 		if (stopId !== null && !this._gradient.stops.some((s) => s.id === stopId)) {
 			return;
 		}
 		if (this._selectedStopId !== stopId) {
 			this._selectedStopId = stopId;
-			this._notify();
+			this._notify(false);
 		}
 	}
 
@@ -232,36 +279,93 @@ export class GradientController {
 		return { ok: true };
 	}
 
+	/** The selected stop after `next` replaces the gradient: same id if it survives, else same index. */
+	private _selectionAfterReplace(next: Gradient): string | null {
+		if (this._selectedStopId === null) return null;
+		if (next.stops.some((s) => s.id === this._selectedStopId)) return this._selectedStopId;
+		const index = this._gradient.stops.findIndex((s) => s.id === this._selectedStopId);
+		return next.stops[Math.min(Math.max(index, 0), next.stops.length - 1)]?.id ?? null;
+	}
+
 	setGradient(value: unknown, label = 'Set Gradient'): GradientActionResult {
 		const norm = normalizeGradient(value);
 		if ('error' in norm) {
 			return { ok: false, message: norm.error };
 		}
-		return this._apply(norm.gradient, label, norm.gradient.stops[0]?.id ?? null);
+		return this._apply(norm.gradient, label, this._selectionAfterReplace(norm.gradient));
+	}
+
+	/**
+	 * Replaces the gradient without an undo step (e.g. syncing a controlled `value` from the
+	 * host). Keeps the selection when the stop survives. Notifies subscribers and `onChange`.
+	 */
+	load(value: unknown, options: { clearHistory?: boolean } = {}): GradientActionResult {
+		const norm = normalizeGradient(value);
+		if ('error' in norm) {
+			return { ok: false, message: norm.error };
+		}
+		const nextStopId = this._selectionAfterReplace(norm.gradient);
+		if (options.clearHistory) this._history.clear();
+		if (sameGradientJson(this._gradient, norm.gradient) && this._selectedStopId === nextStopId) {
+			return { ok: true };
+		}
+		this._gradient = norm.gradient;
+		this._selectedStopId = nextStopId;
+		this._notify();
+		return { ok: true };
+	}
+
+	/**
+	 * Changes any of type, angle, center, shape, interpolation and repeating as one undo step.
+	 * Every field is checked before anything changes; an invalid one fails the whole call.
+	 */
+	setGeometry(patch: GradientGeometryPatch, label = 'Change Gradient Geometry'): GradientActionResult {
+		const ro = this._checkReadOnly();
+		if (ro) return ro;
+		const error = geometryError(patch);
+		if (error) return { ok: false, message: error };
+		const merged: Gradient = { ...this._gradient };
+		for (const key of GEOMETRY_KEYS) {
+			if (patch[key] !== undefined) (merged as unknown as Record<string, unknown>)[key] = patch[key];
+		}
+		if (patch.center) merged.center = { ...patch.center };
+		if (patch.shape !== undefined && merged.type !== 'radial') {
+			return { ok: false, message: `The shape applies to radial gradients only; this one is ${merged.type}. Set type "radial" too.` };
+		}
+		if (patch.center !== undefined && merged.type === 'linear') {
+			return { ok: false, message: 'The center applies to radial and conic gradients only; this one is linear.' };
+		}
+		if (patch.angle !== undefined && merged.type === 'radial') {
+			return { ok: false, message: 'The angle applies to linear and conic gradients only; this one is radial.' };
+		}
+		// Fill the defaults a new type needs (center for radial / conic, angle for linear / conic).
+		const norm = normalizeGradient(merged);
+		if ('error' in norm) return { ok: false, message: norm.error };
+		return this._apply(norm.gradient, label);
 	}
 
 	setType(type: GradientType): GradientActionResult {
-		return this._apply({ ...this._gradient, type }, 'Change Gradient Type');
+		return this.setGeometry({ type }, 'Change Gradient Type');
 	}
 
 	setAngle(angle: number): GradientActionResult {
-		return this._apply({ ...this._gradient, angle }, 'Change Gradient Angle');
+		return this.setGeometry({ angle }, 'Change Gradient Angle');
 	}
 
 	setCenter(center: { x: number; y: number }): GradientActionResult {
-		return this._apply({ ...this._gradient, center }, 'Change Gradient Center');
+		return this.setGeometry({ center }, 'Change Gradient Center');
 	}
 
 	setShape(shape: GradientShape): GradientActionResult {
-		return this._apply({ ...this._gradient, shape }, 'Change Gradient Shape');
+		return this.setGeometry({ shape }, 'Change Gradient Shape');
 	}
 
 	setInterpolation(interpolation: GradientInterpolation): GradientActionResult {
-		return this._apply({ ...this._gradient, interpolation }, 'Change Gradient Interpolation');
+		return this.setGeometry({ interpolation }, 'Change Gradient Interpolation');
 	}
 
 	setRepeating(repeating: boolean): GradientActionResult {
-		return this._apply({ ...this._gradient, repeating }, 'Toggle Gradient Repeating');
+		return this.setGeometry({ repeating }, 'Toggle Gradient Repeating');
 	}
 
 	addStop(offset: number, color?: string): { ok: true; stop: GradientStop } | { ok: false; message: string } {

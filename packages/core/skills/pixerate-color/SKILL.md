@@ -33,7 +33,7 @@ The colour module provides DOM-free colour tools for inspection, WCAG accessibil
 - **Don't simply invert lightness for brand colours.** When creating dark-mode variants, keep the hue and lower the chroma slightly rather than just inverting RGB channels.
 - **Perceptual spaces.** Use OKLab / OKLCH for interpolation and distance metrics to avoid muddy midpoints and hue shifts common in linear RGB or HSL blending.
 - **Palette distinctness.** In data visualizations and charts, ensure colours can be distinguished not only under normal vision but also under deuteranopia and protanopia.
-- **Alpha handling.** Colours with partial alpha are supported; contrast calculations evaluate relative luminance.
+- **Alpha in contrast checks.** A translucent foreground is composited over the background, and a translucent background over white, before the ratio is taken. If the real backdrop behind a translucent background isn't white, pass the opaque colour the user actually sees.
 
 ## Tool reference
 
@@ -51,7 +51,7 @@ The colour module provides DOM-free colour tools for inspection, WCAG accessibil
 | `check_gradient` | Audits gradient for crowded stops, banding risk, out-of-gamut colours, and text contrast | `{ pass, issueCount, issues }` |
 | `list_gradient_presets` | Returns the collection of built-in gradient presets | `{ presets: [{ id, name, category, css, gradient }] }` |
 | `set_gradient` | Replaces the entire gradient with a new gradient object or CSS string | `{ gradient, css }` |
-| `set_gradient_geometry` | Updates geometric parameters (type, angle, center, shape, interpolation, repeating) | `{ gradient, css }` |
+| `set_gradient_geometry` | Changes any of type, angle, center, shape, interpolation, repeating in one undo step; pass only the fields to change. Angle applies to linear and conic, center to radial and conic, shape to radial only; a field that doesn't fit the (new) type fails the whole call and changes nothing | `{ gradient, css }` |
 | `add_gradient_stop` | Adds a new color stop to the gradient ramp | `{ stop, gradient, css }` |
 | `update_gradient_stop` | Updates an existing stop's color, offset, or midpoint | `{ stop, gradient, css }` |
 | `remove_gradient_stop` | Removes a color stop by ID | `{ gradient, css }` |
@@ -65,4 +65,5 @@ The colour module provides DOM-free colour tools for inspection, WCAG accessibil
 - **JavaScript resolution required for non-CSS targets.** Canvas 2D, WebGL, SVG presentation attributes, and raster image exporters cannot read `light-dark()` strings; resolve them in JavaScript with `resolveColor(value, scheme)`.
 - **Gamut clipping.** Colours specified in wide-gamut spaces (e.g. high-chroma OKLCH) will be mapped into sRGB for hex representations. Check `inSrgbGamut` if exact fidelity is required.
 - **Large text thresholds.** WCAG allows 3:1 for large text (18pt / 24px or 14pt / 18.5px bold); pass `large: true` to avoid overly aggressive contrast suggestions.
+- **Geometry fields depend on the type.** To make a radial circle, send `type: "radial"` and `shape: "circle"` in the same `set_gradient_geometry` call; sending `shape` to a linear gradient is an error.
 - **Ramp steps bounds.** `blend_colors` requires `steps` to be between 2 and 32 when generating a ramp.

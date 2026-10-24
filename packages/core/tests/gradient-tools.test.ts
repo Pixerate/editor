@@ -123,3 +123,42 @@ describe('createGradientToolProvider', () => {
 		expect(toolNames).not.toContain('remove_gradient_stop');
 	});
 });
+
+describe('set_gradient_geometry', () => {
+	const setup = () => {
+		const ctrl = new GradientController();
+		const registry = new ToolRegistry();
+		registry.register(createGradientToolProvider(ctrl, { namespace: '' }));
+		return { ctrl, registry };
+	};
+
+	it('applies several fields as one undo step and returns the result', async () => {
+		const { ctrl, registry } = setup();
+		const res = (await registry.callTool('set_gradient_geometry', { type: 'radial', shape: 'circle', center: { x: 0.25, y: 0.75 } })) as any;
+		expect(res.isError).toBeFalsy();
+		expect(res.structuredContent.gradient).toMatchObject({ type: 'radial', shape: 'circle', center: { x: 0.25, y: 0.75 } });
+		expect(res.structuredContent.css).toContain('radial-gradient(');
+		ctrl.undo();
+		expect(ctrl.getGradient().type).toBe('linear');
+	});
+
+	it('changes nothing when one field is invalid', async () => {
+		const { ctrl, registry } = setup();
+		const res = (await registry.callTool('set_gradient_geometry', { type: 'conic', shape: 'circle' })) as any;
+		expect(res.isError).toBe(true);
+		expect(res.content[0].text).toMatch(/radial gradients only/);
+		expect(ctrl.getGradient().type).toBe('linear');
+		expect(ctrl.state.canUndo).toBe(false);
+	});
+
+	it('rejects unsupported interpolation spaces, stray center keys and empty calls', async () => {
+		const { registry } = setup();
+		const interp = (await registry.callTool('set_gradient_geometry', { interpolation: 'hwb' })) as any;
+		expect(interp.isError).toBe(true);
+		const center = (await registry.callTool('set_gradient_geometry', { type: 'radial', center: { x: 0.5, y: 0.5, z: 1 } })) as any;
+		expect(center.isError).toBe(true);
+		const empty = (await registry.callTool('set_gradient_geometry', {})) as any;
+		expect(empty.isError).toBe(true);
+		expect(empty.content[0].text).toMatch(/at least one/);
+	});
+});

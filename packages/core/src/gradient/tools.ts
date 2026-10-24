@@ -1,5 +1,5 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
-import type { GradientController } from './controller.js';
+import { GRADIENT_INTERPOLATIONS, type GradientController } from './controller.js';
 import {
 	GRADIENT_PRESETS,
 	checkGradient,
@@ -182,7 +182,7 @@ export function createGradientToolProvider(
 				name: 'set_gradient_geometry',
 				title: 'Set Gradient Geometry',
 				description:
-					'Updates the geometric parameters of the gradient: type (linear/radial/conic), angle in degrees, center coordinates (0 to 1), shape (circle/ellipse), interpolation space (oklab, srgb, etc.), or repeating mode.',
+					'Updates the geometry of the gradient: type (linear/radial/conic), angle in degrees, center (0 to 1), shape (circle/ellipse), interpolation space or repeating mode. Pass only the fields to change. All fields are checked first and applied as one undo step; an invalid field (e.g. shape on a linear gradient) changes nothing. Returns the resulting gradient and its CSS.',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -197,19 +197,13 @@ export function createGradientToolProvider(
 						},
 						center: {
 							type: 'object',
-							description: 'Center coordinate object { x, y } (0 to 1) for radial or conic gradients.',
+							description: 'Center { x, y } as fractions of the box (0 to 1) for radial or conic gradients. Default { x: 0.5, y: 0.5 }.',
 							properties: {
-								x: { type: 'number', description: 'Horizontal center between 0 and 1.' },
-								y: { type: 'number', description: 'Vertical center between 0 and 1.' }
-							}
-						},
-						centerX: {
-							type: 'number',
-							description: 'Horizontal center position (0 to 1) for radial or conic gradients.'
-						},
-						centerY: {
-							type: 'number',
-							description: 'Vertical center position (0 to 1) for radial or conic gradients.'
+								x: { type: 'number', minimum: 0, maximum: 1, description: 'Horizontal center, 0 (left) to 1 (right).' },
+								y: { type: 'number', minimum: 0, maximum: 1, description: 'Vertical center, 0 (top) to 1 (bottom).' }
+							},
+							required: ['x', 'y'],
+							additionalProperties: false
 						},
 						shape: {
 							type: 'string',
@@ -218,59 +212,34 @@ export function createGradientToolProvider(
 						},
 						interpolation: {
 							type: 'string',
-							enum: ['srgb', 'srgb-linear', 'lab', 'oklab', 'lch', 'oklch', 'hsl', 'hwb'],
-							description: 'Color interpolation space (e.g. "oklab" for smooth perceptual blends).'
+							enum: [...GRADIENT_INTERPOLATIONS],
+							description: 'Colour interpolation space. "oklab" (the default) gives smooth perceptual blends; "oklch" keeps chroma through hue changes.'
 						},
 						repeating: {
 							type: 'boolean',
 							description: 'Whether the gradient pattern repeats outside the defined stops.'
 						}
 					},
+					minProperties: 1,
 					additionalProperties: false
 				},
 				annotations: writeIdempotentTool('Set Gradient Geometry'),
 				handler: async (args) => {
-					controller.beginGesture('Update Gradient Geometry');
-					try {
-						if (typeof args.type === 'string') {
-							const r = controller.setType(args.type as GradientType);
-							if (!r.ok) fail(r.message);
-						}
-						if (typeof args.angle === 'number') {
-							const r = controller.setAngle(args.angle);
-							if (!r.ok) fail(r.message);
-						}
-						if (args.center && typeof args.center === 'object') {
-							const c = args.center as { x?: number; y?: number };
-							const currentCenter = controller.getGradient().center ?? { x: 0.5, y: 0.5 };
-							const r = controller.setCenter({
-								x: typeof c.x === 'number' ? c.x : currentCenter.x,
-								y: typeof c.y === 'number' ? c.y : currentCenter.y
-							});
-							if (!r.ok) fail(r.message);
-						} else if (typeof args.centerX === 'number' || typeof args.centerY === 'number') {
-							const currentCenter = controller.getGradient().center ?? { x: 0.5, y: 0.5 };
-							const r = controller.setCenter({
-								x: typeof args.centerX === 'number' ? args.centerX : currentCenter.x,
-								y: typeof args.centerY === 'number' ? args.centerY : currentCenter.y
-							});
-							if (!r.ok) fail(r.message);
-						}
-						if (typeof args.shape === 'string') {
-							const r = controller.setShape(args.shape as GradientShape);
-							if (!r.ok) fail(r.message);
-						}
-						if (typeof args.interpolation === 'string') {
-							const r = controller.setInterpolation(args.interpolation as GradientInterpolation);
-							if (!r.ok) fail(r.message);
-						}
-						if (typeof args.repeating === 'boolean') {
-							const r = controller.setRepeating(args.repeating);
-							if (!r.ok) fail(r.message);
-						}
-					} finally {
-						controller.endGesture();
+					if (!['type', 'angle', 'center', 'shape', 'interpolation', 'repeating'].some((k) => args[k] !== undefined)) {
+						fail('Pass at least one of type, angle, center, shape, interpolation or repeating.');
 					}
+					const r = controller.setGeometry(
+						{
+							type: args.type as GradientType | undefined,
+							angle: args.angle as number | undefined,
+							center: args.center as { x: number; y: number } | undefined,
+							shape: args.shape as GradientShape | undefined,
+							interpolation: args.interpolation as GradientInterpolation | undefined,
+							repeating: args.repeating as boolean | undefined
+						},
+						'Update Gradient Geometry'
+					);
+					if (!r.ok) fail(r.message);
 					const current = controller.getGradient();
 					return {
 						gradient: current,
