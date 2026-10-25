@@ -1,5 +1,19 @@
 # @pixerate/editor-react
 
+## 0.99.0
+
+### Minor Changes
+
+- 2a49499: An explicit agent playback surface now wins over a provider's own. `createImageEditorToolProvider`, `createImageEffectsToolProvider`, `createVideoEditorToolProvider`, `createVideoEffectsToolProvider`, `createAnimationEditorToolProvider`, `createAnimationEffectsToolProvider`, `createChartToolProvider`, `createPaintEditorToolProvider` and `createPaintEffectsToolProvider` take a `playbackSurface` option, so several editors of one kind on one registry can each play on their own surface (default unchanged: `image`, `video`, `animation`, `chart`, `paint`). `withImagePlayback`, `withVideoPlayback`, `withAnimationPlayback`, `withChartPlayback` and `withPaintPlayback` prefer an explicit `surface` argument over the provider's `playbackSurface`, and fall back to the default only when neither is given. The React hooks that register these providers (`useImageEffectsTools`, `useVideoEditorTools`, `useVideoEffectsTools`, `useAnimationEditorTools`, `useAnimationEffectsTools`, `usePaintEffectsTools`, `useChartToolProvider`) forward `playbackSurface`; the Svelte hooks already pass their options through.
+- 33ce77e: The image editor follows the host's theme. `ImageEditor` and every image-editor panel (adjustment layers, layers, layer effects, colour profile, brush, selection, Refine Edge, Free Transform, shape and type bars, provider effects, curves, sliders) now use shadcn theme tokens (`bg-background`, `bg-muted`, `border-border`, `text-muted-foreground`, `bg-primary`, `text-destructive`, …) instead of the fixed slate / indigo palette, through class constants shared in `image-editor/styles.ts`. Hosts need the theme colours the README lists (with `accent`, `primary-foreground` and `accent-foreground`). `AdjustmentLayersPanel`, `ControlSlider`, `CurvesEditor` and `ImageEffectControls` take `className` (Svelte `class`); the editor's tabs are a `tablist` whose open tab has `aria-selected="true"`. The curve's line and points use `var(--foreground)` / `var(--background)`.
+- b10b6ab: App chrome on canvas and element playback surfaces. `useCanvasPlaybackSurface` / `createCanvasPlaybackSurface` and `useElementPlaybackSurface` / `createElementPlaybackSurface` take `locate(ref)` (a rectangle in surface coordinates), `locateElement(ref)` (an element anywhere on the page, whose client box is mapped into surface coordinates through the surface's `fromViewport`) and `open(ref)`, so a host's HUD, toolbar or panels can answer `{ kind: 'panel' | 'control', id }` refs and open steps. The surface's own locator runs first; the element surface's `selectors` are now optional. `usePlaybackSurface` / `createPlaybackSurface` define `open` on the attached surface only when the options give one, so `AgentPlayback` skips `open` steps on surfaces that can't open anything instead of clicking nothing and waiting 220 ms. Core adds `PlaybackChromeOptions`, `PlaybackClientRect`, `playbackRectFromClient` and `locatePlaybackChrome` to `@pixerate/editor/tools`.
+
+### Patch Changes
+
+- Updated dependencies [2a49499]
+- Updated dependencies [b10b6ab]
+  - @pixerate/editor@0.149.0
+
 ## 0.98.0
 
 ### Minor Changes
