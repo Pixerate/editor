@@ -38,6 +38,7 @@ import { RefineEdgePanel } from './RefineEdgePanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
 import { ShapeOptionsBar } from './ShapeOptionsBar';
 import { TypeOptionsBar } from './TypeOptionsBar';
+import { imageDividerClass, imageEditorFrameClass, imageEditorHeaderClass, imageErrorBannerClass, imageHeaderButtonClass, imagePrimaryButtonClass, imageRangeClass, imageSectionClass, imageSectionTitleClass, imageSelectClass, imageSidebarClass, imageSmallButtonClass, imageSpinnerClass, imageTabClass, imageTabListClass } from './styles';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -262,13 +263,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   return (
     <div
       ref={rootRef}
-      className={`relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 ${className}`}
+      className={`${imageEditorFrameClass} ${className}`}
       style={style}
     >
       {/* Top Action Header */}
-      <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
+      <div className={imageEditorHeaderClass}>
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+        <div role="tablist" className={imageTabListClass}>
           <button
             type="button"
             data-image-tab="crop"
@@ -276,9 +277,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('crop');
               editor.setTool('crop');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'crop' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'crop'} className={`${imageTabClass(activeTab === 'crop')}`}
           >
             Transform & Crop
           </button>
@@ -289,9 +288,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('adjust');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'adjust' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'adjust'} className={`${imageTabClass(activeTab === 'adjust')}`}
           >
             Adjustments
           </button>
@@ -302,9 +299,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('layers');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'layers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'layers'} className={`${imageTabClass(activeTab === 'layers')}`}
           >
             Layers
           </button>
@@ -315,9 +310,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('paint');
               editor.setTool('brush');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'paint' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'paint'} className={`${imageTabClass(activeTab === 'paint')}`}
           >
             Paint
           </button>
@@ -328,9 +321,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('select');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'select' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'select'} className={`${imageTabClass(activeTab === 'select')}`}
           >
             Select & Mask
           </button>
@@ -341,9 +332,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('annotate');
               editor.setTool('pen');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'annotate' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'annotate'} className={`${imageTabClass(activeTab === 'annotate')}`}
           >
             Annotations
           </button>
@@ -354,9 +343,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('depth');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'depth' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'depth'} className={`${imageTabClass(activeTab === 'depth')}`}
           >
             Depth Mask
           </button>
@@ -367,9 +354,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('ai');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
-              activeTab === 'ai' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'ai'} className={`${imageTabClass(activeTab === 'ai')} flex items-center gap-1.5`}
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -384,7 +369,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             type="button"
             disabled={!editor.canUndo}
             onClick={() => editor.undo()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Undo"
           >
             ↩
@@ -393,7 +378,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             type="button"
             disabled={!editor.canRedo}
             onClick={() => editor.redo()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Redo"
           >
             ↪
@@ -401,33 +386,33 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={() => editor.reset()}
-            className="px-2 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            className={`${imageHeaderButtonClass} px-2 text-muted-foreground`}
           >
             Reset
           </button>
 
-          <div className="h-4 w-px bg-slate-800 mx-1" />
+          <div className="h-4 w-px bg-muted mx-1" />
 
           {/* Zoom */}
           <button
             type="button"
             onClick={() => editor.zoomOut()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Zoom Out"
           >
             -
           </button>
-          <span className="font-mono text-slate-400 w-10 text-center">{Math.round(state.zoom * 100)}%</span>
+          <span className="font-mono text-muted-foreground w-10 text-center">{Math.round(state.zoom * 100)}%</span>
           <button
             type="button"
             onClick={() => editor.zoomIn()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Zoom In"
           >
             +
           </button>
 
-          <div className="h-4 w-px bg-slate-800 mx-1" />
+          <div className="h-4 w-px bg-muted mx-1" />
 
           {/* Live Compare */}
           <button
@@ -435,7 +420,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             onMouseDown={() => editor.setComparing(true)}
             onMouseUp={() => editor.setComparing(false)}
             onMouseLeave={() => editor.setComparing(false)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800 select-none active:bg-amber-950/40"
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-amber-600 hover:bg-muted select-none active:bg-amber-500/10"
           >
             Hold Compare
           </button>
@@ -444,7 +429,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={handleExport}
-            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-md shadow-emerald-900/30 transition-colors"
+            className={`${imagePrimaryButtonClass} px-4 py-1.5`}
           >
             Export Image
           </button>
@@ -452,9 +437,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       </div>
 
       {/* Free Transform options bar (Ctrl/Cmd+T), above the viewport while a transform is open */}
-      {transformTool.active && <FreeTransformOptionsBar tool={transformTool} className="border-b border-slate-800 bg-slate-900/95 px-4 py-2" />}
+      {transformTool.active && <FreeTransformOptionsBar tool={transformTool} className="border-b border-border bg-background/95 px-4 py-2" />}
       {!transformTool.active && transformTool.error && (
-        <div role="alert" className="border-b border-rose-900 bg-rose-950/80 px-4 py-1.5 text-xs text-rose-200">
+        <div role="alert" className={imageErrorBannerClass}>
           {transformTool.error}
         </div>
       )}
@@ -481,15 +466,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           onPlaybackReveal={onPlaybackReveal}
           chromeRoot={rootRef}
           open={openPanel}
-          className="flex-1 h-[360px] md:h-full min-h-[320px] bg-slate-950"
+          className="flex-1 h-[360px] md:h-full min-h-[320px] bg-muted"
         />
 
         {/* Tab Controls Sidebar */}
-        <div className="w-full md:w-80 bg-slate-900/90 border-t md:border-t-0 md:border-l border-slate-800 p-4 overflow-y-auto h-auto md:h-full md:max-h-[560px]">
+        <div className={imageSidebarClass}>
           {/* TAB 1: CROP & TRANSFORM */}
           {activeTab === 'crop' && (
             <div className="flex flex-col gap-4 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Aspect Ratio Presets
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -501,8 +486,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === null && state.crop
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   Freeform
@@ -515,8 +500,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 1
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   1:1 Square
@@ -529,8 +514,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 4 / 3
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   4:3 Standard
@@ -543,8 +528,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 16 / 9
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   16:9 Wide
@@ -557,8 +542,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 3 / 2
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   3:2 Photo
@@ -569,29 +554,29 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     setActiveCropRatio(null);
                     editor.resetCrop();
                   }}
-                  className="px-2.5 py-2 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 font-medium"
+                  className="px-2.5 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/40 font-medium"
                 >
                   Clear Crop
                 </button>
               </div>
 
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Orientation & Flips
               </span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => editor.rotate(-90)}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                  className="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
                 >
                   Rotate -90°
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.rotate(90)}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                  className="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
                 >
                   Rotate +90°
                 </button>
@@ -600,8 +585,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   onClick={() => editor.flipHorizontal()}
                   className={`px-3 py-2 rounded-lg border transition-colors ${
                     state.transform.flipH
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted border-border text-foreground hover:bg-accent'
                   }`}
                 >
                   Flip Horizontal
@@ -611,8 +596,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   onClick={() => editor.flipVertical()}
                   className={`px-3 py-2 rounded-lg border transition-colors ${
                     state.transform.flipV
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted border-border text-foreground hover:bg-accent'
                   }`}
                 >
                   Flip Vertical
@@ -625,13 +610,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {activeTab === 'adjust' && (
             <div className="flex flex-col gap-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+                <span className={imageSectionTitleClass}>
                   Color Adjustments
                 </span>
                 <button
                   type="button"
                   onClick={() => editor.resetAdjustments()}
-                  className="text-[10px] text-rose-400 hover:underline"
+                  className="text-[10px] text-destructive hover:underline"
                 >
                   Reset Sliders
                 </button>
@@ -649,7 +634,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   />
                   {spec.id === 'tint' && legacyProcess && (
                     <div
-                      className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                      className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-600"
                       data-testid="image-editor-process-notice"
                     >
                       <span>Legacy rendering (process 1). Tint needs the current process.</span>
@@ -665,7 +650,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 </React.Fragment>
               ))}
 
-              <div className="border-t border-slate-700/60 pt-3">
+              <div className={imageSectionClass}>
                 <AdjustmentLayersPanel
                   controller={controller}
                   layers={state.adjustments.layers}
@@ -678,19 +663,19 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB: LAYERS */}
           {activeTab === 'layers' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+              <span className={imageSectionTitleClass}>Layers</span>
               <button
                 type="button"
                 title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin()}
               >
                 Free Transform
               </button>
               <LayersPanel controller={controller} />
-              {effectsShown && <ImageProviderEffectsPanel controller={controller} className="border-t border-slate-700/60 pt-3" />}
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+              {effectsShown && <ImageProviderEffectsPanel controller={controller} className={imageSectionClass} />}
+              <span className={imageSectionTitleClass}>Colour</span>
               <ColorProfilePanel controller={controller} />
             </div>
           )}
@@ -698,23 +683,23 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB: PAINT */}
           {activeTab === 'paint' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+              <span className={imageSectionTitleClass}>Paint</span>
               <BrushOptionsBar controller={controller} />
               <button
                 type="button"
                 title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start"
+                className="px-2 py-1 rounded text-[11px] bg-muted text-foreground hover:bg-accent hover:text-accent-foreground self-start"
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin()}
               >
                 Free Transform
               </button>
               {paintError && (
-                <p role="alert" className="text-rose-400" data-testid="paint-error">
+                <p role="alert" className="text-destructive" data-testid="paint-error">
                   {paintError}
                 </p>
               )}
-              <div className="border-t border-slate-700/60 pt-3">
+              <div className={imageSectionClass}>
                 <LayersPanel controller={controller} />
               </div>
             </div>
@@ -723,7 +708,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 3: ANNOTATIONS */}
           {activeTab === 'annotate' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Shape & Type Layers</span>
+              <span className={imageSectionTitleClass}>Shape & Type Layers</span>
               <div className="grid grid-cols-2 gap-1.5">
                 {(['shape', 'type'] as ImageEditorTool[]).map((t) => (
                   <button
@@ -732,7 +717,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     aria-pressed={state.activeTool === t}
                     onClick={() => editor.setTool(t)}
                     className={`py-1.5 px-2 rounded-lg font-medium border transition-colors ${
-                      state.activeTool === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      state.activeTool === t ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
                     {t === 'shape' ? 'Shape' : 'Type'}
@@ -744,18 +729,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <TypeOptionsBar controller={controller} options={typeOptions} onChange={setTypeOptions} session={typeSession} />
               )}
               {state.activeTool === 'type' && typeSession && (
-                <button type="button" onClick={finishTyping} className="self-start rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700">
+                <button type="button" onClick={finishTyping} className="self-start rounded bg-muted px-2 py-1 text-[11px] text-foreground hover:bg-accent">
                   Done editing text
                 </button>
               )}
               {shapeTypeError && (
-                <p role="alert" className="text-rose-400" data-testid="shape-type-error">
+                <p role="alert" className="text-destructive" data-testid="shape-type-error">
                   {shapeTypeError}
                 </p>
               )}
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Draw & Annotate
               </span>
 
@@ -768,8 +753,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     onClick={() => editor.setTool(t)}
                     className={`py-1.5 px-2 rounded-lg font-medium capitalize border transition-colors ${
                       state.activeTool === t
-                        ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
                     {t}
@@ -779,15 +764,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
               {/* Color & Size */}
               <div className="flex items-center gap-2 mt-2">
-                <label className="text-slate-400">Color:</label>
+                <label className="text-muted-foreground">Color:</label>
                 <input
                   type="color"
                   value={activeColor}
                   onChange={(e) => setActiveColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-slate-700 cursor-pointer bg-transparent"
+                  className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
                 />
                 <div className="flex-1 ml-2">
-                  <div className="flex justify-between text-slate-400 mb-0.5">
+                  <div className="flex justify-between text-muted-foreground mb-0.5">
                     <span>Width:</span>
                     <span className="font-mono">{strokeWidth}px</span>
                   </div>
@@ -797,15 +782,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     max="20"
                     value={strokeWidth}
                     onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                    className="w-full accent-indigo-500"
+                    className={imageRangeClass}
                   />
                 </div>
               </div>
 
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
               {/* Text Tool */}
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Add Text</span>
+              <span className={imageSectionTitleClass}>Add Text</span>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -813,17 +798,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddText()}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
                 <button
                   type="button"
                   onClick={handleAddText}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow"
+                  className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow"
                 >
                   Add
                 </button>
               </div>
-              <div className="flex items-center justify-between text-slate-400">
+              <div className="flex items-center justify-between text-muted-foreground">
                 <span>Font Size:</span>
                 <span className="font-mono">{fontSize}px</span>
               </div>
@@ -833,18 +818,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 max="72"
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-full accent-indigo-500"
+                className={imageRangeClass}
               />
 
               {/* Layers & Selected Annotation */}
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Layers ({state.annotations.length})</span>
+                <span className="text-muted-foreground">Layers ({state.annotations.length})</span>
                 {state.selectedAnnotationId && (
                   <button
                     type="button"
                     onClick={() => editor.removeAnnotation(state.selectedAnnotationId!)}
-                    className="text-rose-400 hover:underline text-[11px]"
+                    className="text-destructive hover:underline text-[11px]"
                   >
                     Delete Selected
                   </button>
@@ -853,7 +838,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => editor.clearAnnotations()}
-                    className="text-slate-400 hover:text-slate-200 text-[11px]"
+                    className="text-muted-foreground hover:text-foreground text-[11px]"
                   >
                     Clear All
                   </button>
@@ -866,24 +851,24 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {activeTab === 'depth' && (
             <div className="flex flex-col gap-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+                <span className={imageSectionTitleClass}>
                   Depth Masking
                 </span>
                 <button
                   type="button"
                   onClick={() => editor.resetDepthMask()}
-                  className="text-[10px] text-rose-400 hover:underline"
+                  className="text-[10px] text-destructive hover:underline"
                 >
                   Reset Mask
                 </button>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <label className="flex items-center gap-2 cursor-pointer text-foreground">
                 <input
                   type="checkbox"
                   checked={state.depthMask.enabled}
                   onChange={(e) => editor.setDepthMask({ enabled: e.target.checked })}
-                  className="rounded accent-indigo-500"
+                  className="rounded accent-primary"
                 />
                 <span>Enable Depth / Alpha Mask</span>
               </label>
@@ -891,13 +876,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               {state.depthMask.enabled && (
                 <>
                   <div>
-                    <label className="text-slate-400 block mb-1">Mask Image URL:</label>
+                    <label className="text-muted-foreground block mb-1">Mask Image URL:</label>
                     <input
                       type="text"
                       placeholder="https://.../depthmap.png"
                       value={state.depthMask.maskSource || ''}
                       onChange={(e) => editor.setDepthMask({ maskSource: e.target.value || null })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500"
+                      className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
 
@@ -907,8 +892,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => editor.setDepthMask({ mode: 'threshold' })}
                       className={`flex-1 py-1.5 rounded-lg border text-xs font-medium ${
                         state.depthMask.mode === 'threshold'
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-300'
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-muted border-border text-foreground'
                       }`}
                     >
                       Threshold Mode
@@ -918,8 +903,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => editor.setDepthMask({ mode: 'brightness' })}
                       className={`flex-1 py-1.5 rounded-lg border text-xs font-medium ${
                         state.depthMask.mode === 'brightness'
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-300'
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-muted border-border text-foreground'
                       }`}
                     >
                       Brightness Mode
@@ -927,7 +912,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Depth Start (Lower):</span>
                       <span className="font-mono">{state.depthMask.depthRange[0]}</span>
                     </div>
@@ -941,12 +926,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                           depthRange: [Number(e.target.value), state.depthMask.depthRange[1]],
                         })
                       }
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Depth Stop (Upper):</span>
                       <span className="font-mono">{state.depthMask.depthRange[1]}</span>
                     </div>
@@ -960,12 +945,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                           depthRange: [state.depthMask.depthRange[0], Number(e.target.value)],
                         })
                       }
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Softness:</span>
                       <span className="font-mono">{state.depthMask.softness}</span>
                     </div>
@@ -975,16 +960,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       max="50"
                       value={state.depthMask.softness}
                       onChange={(e) => editor.setDepthMask({ softness: Number(e.target.value) })}
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-foreground mt-1">
                     <input
                       type="checkbox"
                       checked={state.depthMask.invert}
                       onChange={(e) => editor.setDepthMask({ invert: e.target.checked })}
-                      className="rounded accent-indigo-500"
+                      className="rounded accent-primary"
                     />
                     <span>Invert Mask</span>
                   </label>
@@ -1004,7 +989,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 quickMask={Boolean(state.quickMask)}
               />
               {selectionError && (
-                <p role="alert" className="text-rose-400">
+                <p role="alert" className="text-destructive">
                   {selectionError}
                 </p>
               )}
@@ -1012,7 +997,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <button
                 type="button"
                 title="Select › Transform Selection: the outline only"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin({ content: 'selection-outline' })}
               >
@@ -1021,7 +1006,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <button
                 type="button"
                 title="Edit › Free Transform: the selected pixels of the active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin({ content: 'selection' })}
               >
@@ -1035,13 +1020,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL */}
           {activeTab === 'ai' && (
             <div className="flex flex-col gap-4 text-xs">
-              <label className="flex items-center justify-between gap-2 text-slate-300">
+              <label className="flex items-center justify-between gap-2 text-foreground">
                 <span>Results go to</span>
                 <select
                   aria-label="AI result target"
                   value={aiTarget}
                   onChange={(e) => setAiTarget(e.target.value as typeof aiTarget)}
-                  className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+                  className={imageSelectClass}
                 >
                   <option value="auto">{controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
                   <option value="new-layer">New layer / mask</option>
@@ -1049,22 +1034,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 </select>
               </label>
               {/* Background Removal Section */}
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+              <div className="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
                     </svg>
                     Background Removal
                   </span>
                   {isRemovingBg && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900/60 text-indigo-300 animate-pulse">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                       Removing...
                     </span>
                   )}
                 </div>
 
-                <p className="text-slate-400 text-[11px] leading-relaxed">
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
                   Isolate foreground subject with AI alpha transparency segmentation.
                 </p>
 
@@ -1072,11 +1057,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   type="button"
                   onClick={handleRemoveBackground}
                   disabled={isRemovingBg || isInpainting}
-                  className="mt-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                  className="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
                 >
                   {isRemovingBg ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className={imageSpinnerClass} />
                       Removing Background...
                     </>
                   ) : (
@@ -1091,48 +1076,48 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               </div>
 
               {/* AI Inpainting / Generative Fill Section */}
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+              <div className="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m21.64 3.64-1.28-1.28a1.2 1.2 0 0 0-1.7 0l-9.72 9.72-1.94 4.86 4.86-1.94 9.72-9.72a1.2 1.2 0 0 0 .06-1.64z" />
                       <path d="m14 7 3 3" />
                     </svg>
                     Generative Inpainting
                   </span>
                   {isInpainting && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300 animate-pulse">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                       Inpainting...
                     </span>
                   )}
                 </div>
 
-                <p className="text-slate-400 text-[11px] leading-relaxed">
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
                   Replace, modify, or fill selected regions using prompt-guided generative inpainting.
                 </p>
 
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="ai-inpaint-prompt-react" className="text-slate-300 text-[11px] font-medium">Prompt</label>
+                  <label htmlFor="ai-inpaint-prompt-react" className="text-foreground text-[11px] font-medium">Prompt</label>
                   <textarea
                     id="ai-inpaint-prompt-react"
                     value={inpaintPrompt}
                     onChange={(e) => setInpaintPrompt(e.target.value)}
                     placeholder="e.g. replace sunglasses with steampunk goggles, remove person in background..."
                     rows={3}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <span className="text-slate-300 text-[11px] font-medium">Target Mask Region</span>
+                  <span className="text-foreground text-[11px] font-medium">Target Mask Region</span>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
                       onClick={() => setInpaintMaskMode('annotations')}
                       className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
                         inpaintMaskMode === 'annotations'
-                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                          ? 'bg-primary/30 border-primary text-primary'
+                          : 'bg-background border-border text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       Drawn Shapes ({state.annotations.length})
@@ -1142,8 +1127,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => setInpaintMaskMode('crop')}
                       className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
                         inpaintMaskMode === 'crop'
-                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                          ? 'bg-primary/30 border-primary text-primary'
+                          : 'bg-background border-border text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       Crop Box ({state.crop ? 'Selected' : 'Full'})
@@ -1155,11 +1140,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   type="button"
                   onClick={handleInpaint}
                   disabled={isInpainting || isRemovingBg || !inpaintPrompt.trim()}
-                  className="mt-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                  className="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
                 >
                   {isInpainting ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className={imageSpinnerClass} />
                       Generating Inpaint...
                     </>
                   ) : (
@@ -1174,13 +1159,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               </div>
 
               {aiError && (
-                <div className="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/40 text-destructive text-[11px]">
                   {aiError}
                 </div>
               )}
 
               {aiSuccess && (
-                <div className="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-[11px]">
                   {aiSuccess}
                 </div>
               )}

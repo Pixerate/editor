@@ -17,6 +17,7 @@ import {
   layerPanelRows,
   runLayerMenuAction,
 } from '@pixerate/editor/image-editor';
+import { imageIconButtonClass, imageSelectClass } from './styles';
 
 export interface LayersPanelProps {
   controller: ImageEditorController;
@@ -30,10 +31,8 @@ export interface LayersPanelProps {
   effects?: boolean;
   className?: string;
 }
-
-const iconButton = 'px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:text-white disabled:opacity-40';
 const rowClass = (active: boolean) =>
-  `flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer select-none ${active ? 'bg-indigo-600/30 ring-1 ring-indigo-500' : 'hover:bg-slate-800'}`;
+  `flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer select-none ${active ? 'bg-primary/30 ring-1 ring-primary' : 'hover:bg-muted'}`;
 
 /** Draws a thumbnail (RGBA pixels) into a small canvas; nothing without a 2D context. */
 const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: string; onClick?: (e: React.MouseEvent) => void; selected?: boolean; testId?: string }> = ({
@@ -63,7 +62,7 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
       data-testid={testId}
       onClick={onClick}
       style={{ width: size, height: size }}
-      className={`shrink-0 rounded bg-[repeating-conic-gradient(#334155_0%_25%,#1e293b_0%_50%)] [background-size:8px_8px] object-contain ${selected ? 'ring-2 ring-white' : 'ring-1 ring-slate-700'}`}
+      className={`shrink-0 rounded bg-[repeating-conic-gradient(#334155_0%_25%,#1e293b_0%_50%)] [background-size:8px_8px] object-contain ${selected ? 'ring-2 ring-foreground' : 'ring-1 ring-border'}`}
     />
   );
 };
@@ -140,16 +139,16 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
   const locked = (layer: ImageLayer) => Boolean(layer.locks?.all || layer.locks?.pixels || layer.locks?.position || layer.locks?.transparency);
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="layers-panel" onClick={() => menu && setMenu(null)}>
+    <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="layers-panel" onClick={() => menu && setMenu(null)}>
       <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Layer actions">
-        <button type="button" className={iconButton} onClick={() => run('new-layer')}>New Layer</button>
-        <button type="button" className={iconButton} onClick={() => run('new-group')}>New Group</button>
-        <button type="button" className={iconButton} disabled={!active} onClick={() => run('duplicate')}>Duplicate</button>
-        <button type="button" className={iconButton} disabled={!active} onClick={() => run('add-mask')}>Add Mask</button>
-        <button type="button" className={iconButton} disabled={!active} onClick={() => run('delete')}>Delete</button>
+        <button type="button" className={imageIconButtonClass} onClick={() => run('new-layer')}>New Layer</button>
+        <button type="button" className={imageIconButtonClass} onClick={() => run('new-group')}>New Group</button>
+        <button type="button" className={imageIconButtonClass} disabled={!active} onClick={() => run('duplicate')}>Duplicate</button>
+        <button type="button" className={imageIconButtonClass} disabled={!active} onClick={() => run('add-mask')}>Add Mask</button>
+        <button type="button" className={imageIconButtonClass} disabled={!active} onClick={() => run('delete')}>Delete</button>
         <button
           type="button"
-          className={iconButton}
+          className={imageIconButtonClass}
           aria-label="Layer menu"
           aria-haspopup="menu"
           onClick={(e) => {
@@ -163,7 +162,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         <select
           aria-label="Bits per channel"
           title="Image › Mode: bits per channel"
-          className="rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200"
+          className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground"
           value={controller.bitDepth}
           onChange={(e) => attempt(() => controller.setBitDepth(Number(e.target.value) as 8 | 16 | 32))}
         >
@@ -175,8 +174,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         </select>
         {psd && (
           <>
-            <button type="button" className={iconButton} onClick={() => fileInput.current?.click()}>Open PSD…</button>
-            <button type="button" className={iconButton} onClick={() => psdTask(async () => (await downloadPsd(controller, psdFileName)).warnings)}>Export PSD</button>
+            <button type="button" className={imageIconButtonClass} onClick={() => fileInput.current?.click()}>Open PSD…</button>
+            <button type="button" className={imageIconButtonClass} onClick={() => psdTask(async () => (await downloadPsd(controller, psdFileName)).warnings)}>Export PSD</button>
             <input
               ref={fileInput}
               type="file"
@@ -194,7 +193,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         )}
       </div>
       {psdNotes.length > 0 && (
-        <ul className="rounded bg-amber-900/30 text-amber-200 px-2 py-1 space-y-0.5" data-testid="psd-warnings" aria-label="PSD warnings">
+        <ul className="rounded bg-amber-500/10 text-amber-600 px-2 py-1 space-y-0.5" data-testid="psd-warnings" aria-label="PSD warnings">
           {psdNotes.map((n) => (
             <li key={n}>{n}</li>
           ))}
@@ -207,7 +206,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
       {active && (
         <div className="grid grid-cols-2 gap-x-2 gap-y-1 items-center" data-testid="layer-properties">
           <label className="flex flex-col gap-0.5">
-            <span className="text-slate-400">Opacity {Math.round(active.opacity * 100)}%</span>
+            <span className="text-muted-foreground">Opacity {Math.round(active.opacity * 100)}%</span>
             <input
               type="range"
               min={0}
@@ -216,11 +215,11 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
               value={Math.round(active.opacity * 100)}
               {...sliderEvents}
               onChange={(e) => prop('opacity', Number(e.target.value) / 100)}
-              className="accent-indigo-500"
+              className="accent-primary"
             />
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-slate-400">Fill {Math.round(((active.type === 'pixel' ? active.fillOpacity : undefined) ?? 1) * 100)}%</span>
+            <span className="text-muted-foreground">Fill {Math.round(((active.type === 'pixel' ? active.fillOpacity : undefined) ?? 1) * 100)}%</span>
             <input
               type="range"
               min={0}
@@ -230,12 +229,12 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
               value={Math.round(((active.type === 'pixel' ? active.fillOpacity : undefined) ?? 1) * 100)}
               {...sliderEvents}
               onChange={(e) => prop('fillOpacity', Number(e.target.value) / 100)}
-              className="accent-indigo-500 disabled:opacity-40"
+              className="accent-primary disabled:opacity-40"
             />
           </label>
           <select
             aria-label="Layer blend mode"
-            className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+            className={imageSelectClass}
             value={active.blend}
             onChange={(e) => attempt(() => controller.setLayerProperties(active.id, { blend: e.target.value as never }))}
           >
@@ -244,17 +243,17 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
-          <label className="flex items-center gap-1.5 text-slate-300">
+          <label className="flex items-center gap-1.5 text-foreground">
             <input
               type="checkbox"
               aria-label="Clip to layer below"
               checked={Boolean(active.clipped)}
               onChange={(e) => attempt(() => controller.setLayerProperties(active.id, { clipped: e.target.checked }))}
-              className="accent-indigo-500"
+              className="accent-primary"
             />
             Clip to below
           </label>
-          <div className="col-span-2 flex flex-wrap gap-2 text-slate-400" role="group" aria-label="Layer locks">
+          <div className="col-span-2 flex flex-wrap gap-2 text-muted-foreground" role="group" aria-label="Layer locks">
             {(['pixels', 'transparency', 'position', 'all'] as const).map((k) => (
               <label key={k} className="flex items-center gap-1">
                 <input
@@ -262,7 +261,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   aria-label={`Lock ${k}`}
                   checked={Boolean(active.locks?.[k])}
                   onChange={(e) => attempt(() => controller.setLayerProperties(active.id, { locks: { ...active.locks, [k]: e.target.checked } }))}
-                  className="accent-indigo-500"
+                  className="accent-primary"
                 />
                 {k}
               </label>
@@ -271,7 +270,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         </div>
       )}
 
-      {effects && active && active.type !== 'adjustment' && <LayerEffectsPanel controller={controller} className="border-t border-slate-800 pt-1.5" />}
+      {effects && active && active.type !== 'adjustment' && <LayerEffectsPanel controller={controller} className="border-t border-border pt-1.5" />}
 
       <ul className="flex flex-col gap-0.5" role="tree" aria-label="Layers">
         {rows.map((row) => {
@@ -310,7 +309,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 type="button"
                 aria-label={layer.visible ? `Hide ${row.label}` : `Show ${row.label}`}
                 aria-pressed={layer.visible}
-                className="w-4 text-center text-slate-300"
+                className="w-4 text-center text-foreground"
                 onClick={(e) => {
                   e.stopPropagation();
                   attempt(() => controller.setLayerProperties(layer.id, { visible: !layer.visible }));
@@ -322,7 +321,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 <button
                   type="button"
                   aria-label={layer.collapsed ? `Expand ${row.label}` : `Collapse ${row.label}`}
-                  className="w-3 text-slate-400"
+                  className="w-3 text-muted-foreground"
                   onClick={(e) => {
                     e.stopPropagation();
                     attempt(() => controller.setLayerProperties(layer.id, { collapsed: !layer.collapsed }));
@@ -331,7 +330,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   {layer.collapsed ? '▸' : '▾'}
                 </button>
               )}
-              {row.clipped && <span className="text-slate-500" aria-label="Clipped">↳</span>}
+              {row.clipped && <span className="text-muted-foreground" aria-label="Clipped">↳</span>}
               {layerHasThumbnail(layer) ? (
                 <span className="relative shrink-0">
                   <Thumbnail
@@ -343,7 +342,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   {layer.type !== 'pixel' && (
                     <span
                       data-testid="layer-kind-badge"
-                      className="absolute -bottom-1 -right-1 rounded bg-slate-700 px-0.5 text-[8px] font-bold leading-tight text-slate-100 ring-1 ring-slate-900"
+                      className="absolute -bottom-1 -right-1 rounded bg-accent px-0.5 text-[8px] font-bold leading-tight text-foreground ring-1 ring-background"
                     >
                       {layerBadge(layer)}
                     </span>
@@ -351,7 +350,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 </span>
               ) : (
                 <span
-                  className="shrink-0 grid place-items-center rounded bg-slate-800 text-[9px] text-slate-400 ring-1 ring-slate-700"
+                  className="shrink-0 grid place-items-center rounded bg-muted text-[9px] text-muted-foreground ring-1 ring-border"
                   style={{ width: thumbnailSize, height: thumbnailSize }}
                 >
                   {layerBadge(layer)}
@@ -364,7 +363,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   aria-pressed={layer.mask.linked !== false}
                   title={layer.mask.linked === false ? 'Mask unlinked: it stays put when the layer moves or transforms. Click to link.' : 'Mask linked: it moves with the layer. Click to unlink.'}
                   data-testid="layer-mask-link"
-                  className={`shrink-0 text-[10px] leading-none ${layer.mask.linked === false ? 'text-slate-600' : 'text-slate-300'}`}
+                  className={`shrink-0 text-[10px] leading-none ${layer.mask.linked === false ? 'text-muted-foreground/70' : 'text-foreground'}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     attempt(() => controller.setLayerMaskProps(layer.id, { linked: layer.mask!.linked === false }));
@@ -392,7 +391,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   autoFocus
                   aria-label="Layer name"
                   defaultValue={layer.name || row.label}
-                  className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-1"
+                  className="flex-1 min-w-0 bg-background border border-border rounded px-1"
                   onClick={(e) => e.stopPropagation()}
                   onBlur={(e) => {
                     setRenaming(null);
@@ -405,7 +404,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 />
               ) : (
                 <span
-                  className={`flex-1 min-w-0 truncate ${layer.visible ? '' : 'text-slate-500'}`}
+                  className={`flex-1 min-w-0 truncate ${layer.visible ? '' : 'text-muted-foreground'}`}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     setRenaming(layer.id);
@@ -415,7 +414,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 </span>
               )}
               {layerWarning(layer) && (
-                <span role="img" data-testid="layer-warning" aria-label={layerWarning(layer)!} title={layerWarning(layer)!} className="text-[10px] text-amber-400">
+                <span role="img" data-testid="layer-warning" aria-label={layerWarning(layer)!} title={layerWarning(layer)!} className="text-[10px] text-amber-600">
                   ⚠
                 </span>
               )}
@@ -425,7 +424,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   data-testid="layer-fx-badge"
                   aria-label={layerEffectsBadge(layer) === 'on' ? `Turn effects off for ${row.label}` : `Turn effects on for ${row.label}`}
                   aria-pressed={layerEffectsBadge(layer) === 'on'}
-                  className={`text-[9px] italic font-semibold ${layerEffectsBadge(layer) === 'on' ? 'text-indigo-300' : 'text-slate-600 line-through'}`}
+                  className={`text-[9px] italic font-semibold ${layerEffectsBadge(layer) === 'on' ? 'text-primary' : 'text-muted-foreground/70 line-through'}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     attempt(() => controller.setLayerEffectsEnabled(layer.id, layerEffectsBadge(layer) !== 'on'));
@@ -434,15 +433,15 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   fx
                 </button>
               )}
-              {locked(layer) && <span aria-label="Locked" className="text-slate-400">🔒</span>}
-              {layer.blend !== 'normal' && layer.blend !== 'pass-through' && <span className="text-[9px] text-slate-500">{layer.blend}</span>}
+              {locked(layer) && <span aria-label="Locked" className="text-muted-foreground">🔒</span>}
+              {layer.blend !== 'normal' && layer.blend !== 'pass-through' && <span className="text-[9px] text-muted-foreground">{layer.blend}</span>}
             </li>
           );
         })}
       </ul>
 
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}
@@ -451,7 +450,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
         <div
           role="menu"
           aria-label="Layer menu"
-          className="fixed z-50 min-w-44 rounded border border-slate-700 bg-slate-900 py-1 shadow-xl"
+          className="fixed z-50 min-w-44 rounded border border-border bg-background py-1 shadow-xl"
           style={{ left: menu.x, top: menu.y }}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.key === 'Escape' && setMenu(null)}
@@ -462,7 +461,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
               type="button"
               role="menuitem"
               disabled={!item.enabled}
-              className="block w-full px-3 py-1 text-left hover:bg-slate-800 disabled:opacity-40"
+              className="block w-full px-3 py-1 text-left hover:bg-muted disabled:opacity-40"
               onClick={() => run(item.action)}
             >
               {item.label}
