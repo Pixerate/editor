@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { EffectAuthoringSession, EffectRenderer } from '@pixerate/editor/effects';
 import { useEffectAuthoring } from './useEffectAuthoring';
 import { EffectParameters } from './EffectParameters';
@@ -34,7 +34,9 @@ export function EffectAuthoringEditor({
   const rendererRef = useRef<EffectRenderer | null>(null);
   const [rendererReady, setRendererReady] = useState(0);
   const renderingRef = useRef(false);
-  const queuedRef = useRef(false);
+  const pendingRef = useRef(false);
+  /** The playhead the next frame should show (the latest state's). */
+  const timeRef = useRef(0);
 
   // Preset saving state
   const [savingPreset, setSavingPreset] = useState(false);
@@ -42,6 +44,7 @@ export function EffectAuthoringEditor({
 
   // Source code pane state
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   const [sourceCode, setSourceCode] = useState<string>('');
   const sourceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,48 +81,39 @@ export function EffectAuthoringEditor({
     };
   }, [session, previewSize.width, previewSize.height]);
 
-  // Sync preview rendering
-  useEffect(() => {
-    if (!session || !rendererRef.current || !state) return;
-    let live = true;
-
-    const renderFrame = async () => {
-      if (renderingRef.current) {
-        queuedRef.current = true;
-        return;
-      }
-      renderingRef.current = true;
-      try {
-        const pixels = await rendererRef.current!.render({ time: state.time });
-        if (!live) return;
-        const canvas = canvasRef.current;
-        if (canvas && typeof ImageData !== 'undefined') {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.putImageData(
-              new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height),
-              0,
-              0
-            );
+  // Draws frames one at a time. A change while a frame renders asks for one more frame, which
+  // then shows the latest playhead and values, so the preview never stops on a stale frame.
+  const pump = useCallback(async () => {
+    if (renderingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    renderingRef.current = true;
+    try {
+      do {
+        pendingRef.current = false;
+        const renderer = rendererRef.current;
+        if (!renderer) break;
+        try {
+          const pixels = await renderer.render({ time: timeRef.current });
+          const ctx = rendererRef.current === renderer ? canvasRef.current?.getContext('2d') : null;
+          if (ctx && typeof ImageData !== 'undefined') {
+            ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
           }
+        } catch {
+          // A failed frame (for example a disposed renderer) is skipped; the next change draws again.
         }
-      } catch {
-        // Frame skipped or failed
-      } finally {
-        renderingRef.current = false;
-        if (queuedRef.current && live) {
-          queuedRef.current = false;
-          renderFrame();
-        }
-      }
-    };
+      } while (pendingRef.current);
+    } finally {
+      renderingRef.current = false;
+    }
+  }, []);
 
-    renderFrame();
-
-    return () => {
-      live = false;
-    };
-  }, [session, state?.time, state?.values, state?.compiled, rendererReady]);
+  useEffect(() => {
+    if (!state) return;
+    timeRef.current = state.time;
+    void pump();
+  }, [state, rendererReady, pump]);
 
   // Sync source code when state.source updates externally
   useEffect(() => {
@@ -295,7 +289,7 @@ export function EffectAuthoringEditor({
             </div>
             <div className="flex h-64 rounded border border-border bg-muted/20 font-mono text-xs">
               {/* Line Gutter */}
-              <div className="select-none border-r border-border bg-muted/40 px-2 py-2 text-right text-muted-foreground" aria-hidden="true">
+              <div ref={gutterRef} className="select-none overflow-hidden border-r border-border bg-muted/40 px-2 py-2 text-right text-muted-foreground" aria-hidden="true">
                 {sourceLines.map((_, i) => {
                   const lineNum = i + 1;
                   const hasIssue = issueLines.has(lineNum);
@@ -315,8 +309,12 @@ export function EffectAuthoringEditor({
                 ref={textareaRef}
                 value={sourceCode}
                 onChange={handleSourceChange}
+                onScroll={(e) => {
+                  if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                }}
                 aria-label="Effect source code"
                 spellCheck={false}
+                wrap="off"
                 className="flex-1 resize-none bg-transparent p-2 font-mono text-xs text-foreground focus:outline-none"
               />
             </div>
@@ -335,7 +333,6 @@ export function EffectAuthoringEditor({
           onChange={(control, val, gesture) => session.setValue(control, val as any, { gesture })}
           onReset={(control) => session.resetValues([control])}
           onPresetName={(name) => session.applyPreset(name)}
-          keyframed={new Set(Object.keys(state.tracks))}
           renderControlAddon={(control) => {
             const track = state.tracks[control];
             const isAnimated = Boolean(track && track.length > 0);
@@ -383,16 +380,7 @@ export function EffectAuthoringEditor({
             <div className="flex items-center gap-3 text-xs">
               <label className="flex items-center gap-1.5">
                 <span>Duration:</span>
-                <input
-                  type="number"
-                  aria-label="Duration"
-                  min={1}
-                  value={state.duration}
-                  onChange={(e) =>
-                    session.setTiming({ duration: Math.max(1, Number(e.target.value)) })
-                  }
-                  className="w-16 rounded border border-border bg-background px-1.5 py-0.5 text-xs font-mono"
-                />
+                <DurationField duration={state.duration} onCommit={(duration) => session.setTiming({ duration })} />
                 <span className="text-muted-foreground">ms</span>
               </label>
 
@@ -468,5 +456,31 @@ export function EffectAuthoringEditor({
         </div>
       )}
     </div>
+  );
+}
+
+/** The duration in ms, committed on blur or Enter (one undo step), so typing "2000" doesn't apply 2, 20 and 200 on the way. */
+function DurationField({ duration, onCommit }: { duration: number; onCommit: (duration: number) => void }) {
+  const [draft, setDraft] = useState(String(duration));
+  useEffect(() => setDraft(String(duration)), [duration]);
+  const commit = () => {
+    const next = Number(draft);
+    if (Number.isFinite(next) && next >= 1 && next !== duration) onCommit(next);
+    else setDraft(String(duration));
+  };
+  return (
+    <input
+      type="number"
+      aria-label="Duration"
+      min={1}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        else if (e.key === 'Escape') setDraft(String(duration));
+      }}
+      className="w-16 rounded border border-border bg-background px-1.5 py-0.5 text-xs font-mono"
+    />
   );
 }

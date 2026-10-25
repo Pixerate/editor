@@ -229,4 +229,94 @@ describe('EffectAuthoringEditor (React)', () => {
 
     expect(disposeSpy).toHaveBeenCalled();
   });
+  it('draws the latest playhead after the playhead moves while a frame renders', async () => {
+    const drawnAt: number[] = [];
+    let lastRendered = -1;
+    const pending: Array<() => void> = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ putImageData: () => drawnAt.push(lastRendered) })) as any);
+    if (typeof (globalThis as any).ImageData === 'undefined') {
+      vi.stubGlobal('ImageData', class { constructor(public data: unknown, public width: number, public height: number) {} });
+    }
+    const session = await createEffectAuthoringSession({ effectId: 'fake.gradient' }, { provider: createFakeEffectProvider(), schedule: () => () => {} });
+    const real = await session.createPreview({ width: 4, height: 4 });
+    vi.spyOn(session, 'createPreview').mockResolvedValue({
+      ...real,
+      render: (req) =>
+        new Promise((resolve) =>
+          pending.push(() => {
+            lastRendered = req.time;
+            resolve({ width: 1, height: 1, data: new Uint8ClampedArray(4) });
+          })
+        )
+    });
+
+    act(() => {
+      root.render(<EffectAuthoringEditor session={session} />);
+    });
+    await flush();
+    expect(pending).toHaveLength(1); // the first frame (0 ms) is in flight
+
+    act(() => session.seek(100));
+    act(() => session.seek(200));
+    for (let i = 0; i < 4 && pending.length; i++) {
+      const next = pending.shift()!;
+      await act(async () => {
+        next();
+        await new Promise((r) => setTimeout(r, 5));
+      });
+    }
+
+    expect(drawnAt.at(-1)).toBe(200);
+    expect(drawnAt).toEqual([0, 200]); // one catch-up frame, not one per change
+  });
+
+  it('keeps animated controls editable: a change keys the playhead', async () => {
+    const session = await createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' });
+    session.setKeyframe('amount', 0, 0.2);
+    session.setKeyframe('amount', 500, 0.8);
+    session.seek(500);
+
+    act(() => {
+      root.render(<EffectAuthoringEditor session={session} />);
+    });
+    await flush();
+
+    const field = container.querySelector<HTMLInputElement>('[data-effect-control="amount"] input');
+    expect(field).not.toBeNull();
+    expect(field!.disabled).toBe(false);
+
+    act(() => {
+      session.setValue('amount', 0.6);
+    });
+    expect(session.getState().tracks.amount.map((k) => [k.time, k.value])).toEqual([
+      [0, 0.2],
+      [500, 0.6]
+    ]);
+  });
+
+  it('commits the duration once, on blur, not on every keystroke', async () => {
+    const session = await createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' });
+    const setTiming = vi.spyOn(session, 'setTiming');
+    act(() => {
+      root.render(<EffectAuthoringEditor session={session} />);
+    });
+    await flush();
+
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Duration"]')!;
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    for (const text of ['2', '20', '200', '2000']) {
+      act(() => {
+        setValue.call(input, text);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    expect(setTiming).not.toHaveBeenCalled();
+
+    act(() => {
+      input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(setTiming).toHaveBeenCalledTimes(1);
+    expect(setTiming).toHaveBeenCalledWith({ duration: 2000 });
+    expect(session.getState().duration).toBe(2000);
+  });
 });
