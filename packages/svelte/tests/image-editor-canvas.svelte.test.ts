@@ -131,4 +131,25 @@ describe('ImageEditorCanvas (Svelte)', () => {
     expect(opened).toEqual([{ kind: 'panel', id: 'adjust' }]);
     expect(target.querySelector('.pixerate-presence')).toBeTruthy();
   });
+
+  it("draws the crop box while the agent drags it out, then the call's real crop", async () => {
+    const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+    const registry = new ToolRegistry();
+    playback.install(registry);
+    const { c } = setup({ mode: 'crop', playback, playbackId: 'img', open: () => {} });
+    registry.register(createImageEditorToolProvider(c, { id: 'img', namespace: 'img' }));
+    (playback.surface('img') as { visible?: () => boolean }).visible = () => true;
+    const drafts: unknown[] = [];
+    const render = c.render.bind(c);
+    c.render = ((canvasEl: HTMLCanvasElement, options: { draftCrop?: unknown }) => {
+      drafts.push(options?.draftCrop ?? null);
+      return render(canvasEl, options as never);
+    }) as typeof c.render;
+    const result = await registry.callTool('img__set_crop', { x: 20, y: 10, width: 120, height: 80 });
+    flushSync();
+    expect(result.isError).toBeFalsy();
+    expect(drafts.some((d) => d && (d as { width: number }).width > 1)).toBe(true);
+    expect(drafts.at(-1)).toBeNull();
+    expect(c.getState().crop).toMatchObject({ x: 20, y: 10, width: 120, height: 80 });
+  });
 });

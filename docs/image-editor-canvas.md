@@ -78,3 +78,5 @@ Playback coordinates are document pixels. The image tools' plans name panels (`{
 ```
 
 Playback looks for a surface under the provider's `playbackSurface`, then its id, then its namespace, so give the node's image tool providers that surface id (see [agent playback](./agent-playback.md)). The cursor layer does not clip to the canvas, so the cursor can travel to chrome around it; keep that chrome inside an ancestor that does not clip it.
+
+While the agent drags on the canvas, the canvas draws what the drag makes, as it does for a user: the crop box in `crop` mode and the marquee in `select` mode (`agentDragDraft`, from `trackPresenceDrag`). The call that follows sets the real crop or selection.

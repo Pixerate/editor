@@ -5,6 +5,7 @@
     canvasToImagePoint,
     imageToCanvasPoint,
     createImagePlaybackLocator,
+    agentDragDraft,
     hitTestCrop,
     getCropCursor,
     calculateCropDrag,
@@ -26,6 +27,7 @@
     type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
+  import { trackPresenceDrag } from '@pixerate/editor/tools';
   import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
   import PresenceLayer from '../playback/PresenceLayer.svelte';
   import type { ReactiveImageEditor } from './imageEditorState.svelte.js';
@@ -324,6 +326,35 @@
   let isDrawing = false;
   let currentPath: ImagePoint[] = [];
   let dragStartPoint: ImagePoint | null = null;
+
+  // The agent's drags pull out the crop box or the marquee as it goes, like a user's drag; the call
+  // that follows sets the real crop or selection.
+  let agentDrafting = false;
+  $effect(() => {
+    const presence = agentPresence;
+    return untrack(() =>
+      presence.subscribe(
+        trackPresenceDrag({
+          onDrag: (box) => {
+            if (cropDragInfo || selectionGesture.active) return;
+            const draft = agentDragDraft(mode, box, editor.controller.getState().imageDimensions);
+            if (!draft) return;
+            agentDrafting = true;
+            if ('crop' in draft) draftCrop = draft.crop;
+            else selectionDraft = draft.selectionPath;
+            void renderCanvas();
+          },
+          onEnd: () => {
+            if (!agentDrafting) return;
+            agentDrafting = false;
+            draftCrop = null;
+            selectionDraft = null;
+            void renderCanvas();
+          },
+        }),
+      ),
+    );
+  });
 
   async function renderCanvas(overrideAnnotation?: Annotation | null, overrideCrop?: CropBox | null) {
     if (!canvasEl || !containerEl) return;

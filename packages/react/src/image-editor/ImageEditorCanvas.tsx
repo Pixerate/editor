@@ -5,6 +5,7 @@ import {
   canvasToImagePoint,
   imageToCanvasPoint,
   createImagePlaybackLocator,
+  agentDragDraft,
   hitTestCrop,
   getCropCursor,
   calculateCropDrag,
@@ -28,6 +29,7 @@ import {
 } from '@pixerate/editor/image-editor';
 import { useAgentPlayback } from '../playback/AgentPlaybackContext';
 import { usePlaybackSurface } from '../playback/usePlaybackSurface';
+import { trackPresenceDrag } from '@pixerate/editor/tools';
 import { PresenceLayer } from '../playback/PresenceLayer';
 import type { UseImageEditorReturn } from './useImageEditor';
 
@@ -309,6 +311,32 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
   // The text being edited: re-render on every change, and end it when the tool or mode changes or
   // the host clears its session.
+  // The agent's drags pull out the crop box or the marquee as it goes, like a user's drag; the call
+  // that follows sets the real crop or selection.
+  useEffect(() => {
+    let drafting = false;
+    return agentPresence.subscribe(
+      trackPresenceDrag({
+        onDrag: (box) => {
+          if (cropDragInfoRef.current || selectionGestureRef.current?.active) return;
+          const draft = agentDragDraft(modeRef.current, box, controller.getState().imageDimensions);
+          if (!draft) return;
+          drafting = true;
+          if ('crop' in draft) draftCropRef.current = draft.crop;
+          else selectionDraftRef.current = draft.selectionPath;
+          void renderCanvas();
+        },
+        onEnd: () => {
+          if (!drafting) return;
+          drafting = false;
+          draftCropRef.current = null;
+          selectionDraftRef.current = null;
+          void renderCanvas();
+        },
+      }),
+    );
+  }, [agentPresence, controller, renderCanvas]);
+
   useEffect(() => typeSession?.subscribe(() => void renderCanvas()), [typeSession, renderCanvas]);
   const finishTyping = () => {
     typeToolRef.current?.finish();
