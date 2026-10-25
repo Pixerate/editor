@@ -25,13 +25,13 @@
   }: Props = $props();
 
   const authoring = effectAuthoringOf(() => session);
-  const state = $derived(authoring.state);
+  const current = $derived(authoring.state);
 
   // Preview renderer lifecycle
   let canvas: HTMLCanvasElement | null = $state(null);
-  let renderer: EffectRenderer | null = $state(null);
+  let renderer: EffectRenderer | null = $state.raw(null);
   let rendering = false;
-  let queued = false;
+  let pending = false;
 
   // Preset saving state
   let savingPreset = $state(false);
@@ -39,6 +39,7 @@
 
   // Source code pane state
   let textarea: HTMLTextAreaElement | null = $state(null);
+  let gutter: HTMLDivElement | null = $state(null);
   let sourceCode = $state('');
   let sourceDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -79,56 +80,46 @@
     };
   });
 
-  // Sync preview rendering
-  $effect(() => {
-    const s = session;
-    const r = renderer;
-    const st = state;
-    if (!s || !r || !st) return;
-
-    let live = true;
-
-    async function renderFrame() {
-      if (rendering) {
-        queued = true;
-        return;
-      }
-      rendering = true;
-      try {
-        const pixels = await r!.render({ time: st!.time });
-        if (!live) return;
-        if (canvas && typeof ImageData !== 'undefined') {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.putImageData(
-              new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height),
-              0,
-              0
-            );
-          }
-        }
-      } catch {
-        // Frame skipped or failed
-      } finally {
-        rendering = false;
-        if (queued && live) {
-          queued = false;
-          renderFrame();
-        }
-      }
+  // Draws frames one at a time. A change while a frame renders asks for one more frame, which
+  // then shows the latest playhead and values, so the preview never stops on a stale frame.
+  let latestTime = 0;
+  async function pump() {
+    if (rendering) {
+      pending = true;
+      return;
     }
+    rendering = true;
+    try {
+      do {
+        pending = false;
+        const r = renderer;
+        if (!r) break;
+        try {
+          const pixels = await r.render({ time: latestTime });
+          const ctx = renderer === r ? canvas?.getContext('2d') : null;
+          if (ctx && typeof ImageData !== 'undefined') {
+            ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
+          }
+        } catch {
+          // A failed frame (for example a disposed renderer) is skipped; the next change draws again.
+        }
+      } while (pending);
+    } finally {
+      rendering = false;
+    }
+  }
 
-    renderFrame();
-
-    return () => {
-      live = false;
-    };
+  $effect(() => {
+    const st = current;
+    if (!renderer || !st) return;
+    latestTime = st.time;
+    void pump();
   });
 
-  // Sync source code when state.source updates externally
+  // Sync source code when the session's source changes
   $effect(() => {
-    if (state?.source !== null && state?.source !== undefined) {
-      sourceCode = state.source;
+    if (current?.source !== null && current?.source !== undefined) {
+      sourceCode = current.source;
     }
   });
 
@@ -167,34 +158,34 @@
   }
 
   const hasSource = $derived(
-    showSource && state?.sourceLanguage !== null && typeof session?.setSource === 'function'
+    showSource && current?.sourceLanguage !== null && typeof session?.setSource === 'function'
   );
 
   const sourceLines = $derived(sourceCode.split('\n'));
   const issueLines = $derived(
-    new Set((state?.issues ?? []).map((i) => i.line).filter((l): l is number => typeof l === 'number'))
+    new Set((current?.issues ?? []).map((i) => i.line).filter((l): l is number => typeof l === 'number'))
   );
 </script>
 
-{#if !session || !state}
+{#if !session || !current}
   <div class="p-4 text-center text-xs text-muted-foreground {className}">
     No effect authoring session is open.
   </div>
 {:else}
-  <div class="space-y-4 rounded border border-border bg-background p-4 text-foreground {className}" data-effect-authoring-editor={state.name}>
+  <div class="space-y-4 rounded border border-border bg-background p-4 text-foreground {className}" data-effect-authoring-editor={current.name}>
     <!-- Toolbar -->
     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
       <div class="flex items-center gap-2">
         <button
           type="button"
           class="rounded border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted"
-          aria-label={state.playing ? 'Pause playback' : 'Start playback'}
-          onclick={() => (state.playing ? session?.pause() : session?.play())}
+          aria-label={current.playing ? 'Pause playback' : 'Start playback'}
+          onclick={() => (current.playing ? session?.pause() : session?.play())}
         >
-          {state.playing ? 'Pause' : 'Play'}
+          {current.playing ? 'Pause' : 'Play'}
         </button>
         <span class="font-mono text-xs text-muted-foreground" data-time-readout>
-          {state.time}ms / {state.duration}ms
+          {current.time}ms / {current.duration}ms
         </span>
       </div>
 
@@ -203,7 +194,7 @@
           type="button"
           class="rounded border border-border px-2 py-1 text-xs disabled:opacity-40 hover:bg-muted"
           aria-label="Undo"
-          disabled={!state.canUndo}
+          disabled={!current.canUndo}
           onclick={() => session?.undo()}
         >
           Undo
@@ -212,7 +203,7 @@
           type="button"
           class="rounded border border-border px-2 py-1 text-xs disabled:opacity-40 hover:bg-muted"
           aria-label="Redo"
-          disabled={!state.canRedo}
+          disabled={!current.canRedo}
           onclick={() => session?.redo()}
         >
           Redo
@@ -268,9 +259,9 @@
             aria-label="Effect preview canvas"
           ></canvas>
         </div>
-        {#if state.issues.length > 0}
+        {#if current.issues.length > 0}
           <div class="space-y-1 rounded border border-destructive/20 bg-destructive/10 p-2 text-xs" data-effect-issues>
-            {#each state.issues as issue, idx (idx)}
+            {#each current.issues as issue, idx (idx)}
               <button
                 type="button"
                 class="block w-full text-left {issue.severity === 'error' ? 'text-destructive' : 'text-amber-500'}"
@@ -288,11 +279,11 @@
       {#if hasSource}
         <div class="space-y-2" data-effect-source-pane>
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Source ({state.sourceLanguage})</span>
+            <span>Source ({current.sourceLanguage})</span>
           </div>
           <div class="flex h-64 rounded border border-border bg-muted/20 font-mono text-xs">
             <!-- Line Gutter -->
-            <div class="select-none border-r border-border bg-muted/40 px-2 py-2 text-right text-muted-foreground" aria-hidden="true">
+            <div bind:this={gutter} class="select-none overflow-hidden border-r border-border bg-muted/40 px-2 py-2 text-right text-muted-foreground" aria-hidden="true">
               {#each sourceLines as _, i (i)}
                 {@const lineNum = i + 1}
                 {@const hasIssue = issueLines.has(lineNum)}
@@ -306,6 +297,10 @@
               bind:this={textarea}
               value={sourceCode}
               oninput={handleSourceInput}
+              onscroll={(e) => {
+                if (gutter) gutter.scrollTop = e.currentTarget.scrollTop;
+              }}
+              wrap="off"
               aria-label="Effect source code"
               spellcheck="false"
               class="flex-1 resize-none bg-transparent p-2 font-mono text-xs text-foreground focus:outline-none"
@@ -321,17 +316,16 @@
         Parameters
       </div>
       <EffectParameters
-        description={state.description}
-        values={state.values}
+        description={current.description}
+        values={current.values}
         onchange={(control, val, gesture) => session?.setValue(control, val as any, { gesture })}
         onreset={(control) => session?.resetValues([control])}
         onpresetname={(name) => session?.applyPreset(name)}
-        keyframed={new Set(Object.keys(state.tracks))}
       >
         {#snippet addon(control: string)}
-          {@const track = state.tracks[control]}
+          {@const track = current.tracks[control]}
           {@const isAnimated = Boolean(track && track.length > 0)}
-          {@const hasKeyframeAtPlayhead = Boolean(isAnimated && track?.some((kf) => kf.time === state.time))}
+          {@const hasKeyframeAtPlayhead = Boolean(isAnimated && track?.some((kf) => kf.time === current.time))}
           <button
             type="button"
             data-keyframe-toggle={control}
@@ -342,9 +336,9 @@
             }
             onclick={() => {
               if (hasKeyframeAtPlayhead) {
-                session?.removeKeyframe(control, state.time);
+                session?.removeKeyframe(control, current.time);
               } else {
-                session?.setKeyframe(control, state.time);
+                session?.setKeyframe(control, current.time);
               }
             }}
             class="rounded px-1 text-xs transition-colors {hasKeyframeAtPlayhead ? 'text-primary font-bold' : isAnimated ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
@@ -370,7 +364,7 @@
                 type="number"
                 aria-label="Duration"
                 min={1}
-                value={state.duration}
+                value={current.duration}
                 onchange={(e) =>
                   session?.setTiming({ duration: Math.max(1, Number(e.currentTarget.value)) })
                 }
@@ -383,7 +377,7 @@
               <input
                 type="checkbox"
                 aria-label="Loop playback"
-                checked={state.loop}
+                checked={current.loop}
                 onchange={(e) => session?.setTiming({ loop: e.currentTarget.checked })}
               />
               <span>Loop</span>
@@ -397,17 +391,17 @@
             type="range"
             aria-label="Timeline scrubber"
             min={0}
-            max={state.duration}
-            value={state.time}
+            max={current.duration}
+            value={current.time}
             oninput={(e) => session?.seek(Number(e.currentTarget.value))}
             class="w-full cursor-pointer accent-primary"
           />
         </div>
 
         <!-- Tracks -->
-        {#if Object.entries(state.tracks).length > 0}
+        {#if Object.entries(current.tracks).length > 0}
           <div class="space-y-2 pt-1">
-            {#each Object.entries(state.tracks) as [control, keyframes] (control)}
+            {#each Object.entries(current.tracks) as [control, keyframes] (control)}
               {#if keyframes && keyframes.length > 0}
                 <div class="space-y-1" data-track={control}>
                   <div class="flex items-center justify-between text-xs text-muted-foreground">
@@ -425,7 +419,7 @@
                     {#each keyframes as kf, i (i)}
                       {@const leftPct = Math.max(
                         0,
-                        Math.min(100, (kf.time / (state.duration || 1)) * 100)
+                        Math.min(100, (kf.time / (current.duration || 1)) * 100)
                       )}
                       <button
                         type="button"
