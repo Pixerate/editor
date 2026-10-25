@@ -20,7 +20,7 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 ## Working method
 
 1. **Inspect first.** Run `effect_authoring_describe` to inspect the effect name, kind, source
-   language (e.g. GLSL, WGSL, or null for code-less effects), control parameter schemas, current
+   language (`glsl`, `svg`, or null when the effect has no source to edit), control parameter schemas, current
    values, existing tracks, and compile issues.
 2. **Read or update source code.** If `sourceLanguage` is non-null, use `effect_authoring_get_source`
    to read the shader or script code. Use `effect_authoring_set_source` to recompile with new code
@@ -29,10 +29,10 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
    This runs all-or-nothing validation: any invalid control name or out-of-range value cancels the
    change and returns a helpful error.
 4. **Animate with keyframes.** For controls that change over time, set keyframes using
-   `effect_authoring_set_keyframe` specifying `control`, `time` (ms), optional `value`, and `easing`.
+   `effect_authoring_set_keyframe` specifying `control`, `time` (ms), optional `value`, and `easing` (a preset name such as `ease-in-out`, or a `cubic-bezier`, `spring` or `elastic` curve object).
    Use `effect_authoring_seek` to move the playhead across the timeline and check resolved values.
    Use `effect_authoring_remove_keyframe` to delete specific points, or `effect_authoring_clear_track`
-   to revert a parameter to static behavior.
+   to revert a parameter to static behavior (both refuse a control that has no keyframes, and say which controls are animated).
 5. **Tune timing.** Use `effect_authoring_set_timing` to configure total `duration` in ms and
    whether playback loops.
 6. **Save presets.** When an interesting look is achieved, save it with `effect_authoring_save_preset`
