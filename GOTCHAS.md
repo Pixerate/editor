@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/tools] A Tool-Provider Factory's Default Playback Surface Must Not Beat the Caller's
+
+- **Issue / Symptom**: An app with one image editor per canvas node attached each `<ImageEditor>` under its own `playbackId` and wrapped `createImageEditorToolProvider(...)` in `withImagePlayback(provider, 'image4:surface')`, but every call still played on `image` (no surface there, so it ran instantly or on the wrong editor).
+- **Root Cause**: The factories wrap themselves with `with*Playback(provider)`, which already set `playbackSurface: 'image'`. A second wrap used `provider.playbackSurface ?? surface`, so the default from the first wrap won over the explicit argument.
+- **Solution / Workaround**: Every `with*Playback` resolves `explicit surface ?? provider.playbackSurface ?? default`, and every factory that wraps itself takes a `playbackSurface` option and passes it in. Pass `playbackSurface` to the factory (or the React / Svelte hook that registers it) rather than wrapping again. `tests/playback-surface-option.test.ts` covers each factory and two image editors on one registry.
+
 ### [color/gradient] Svelte 5 Effect vs Controller Subscription Initial State
 
 - **Issue / Symptom**: In Svelte 5 with runes, subscribing to `GradientController` inside `$effect` with an initial `$state<GradientState>(controller.state)` can trigger reactive dependency cycle warnings or stale reads if the parent re-passes a new controller instance.

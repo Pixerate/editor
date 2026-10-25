@@ -62,6 +62,11 @@ export interface ChartToolProviderOptions {
 	actor?: ChartDirectorActor;
 	/** Turns SVG into an image so `render_chart` can return PNG (e.g. through a canvas). */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
+	 * The agent playback surface its calls are acted out on (default `chart`, where `ChartEditor` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 /**
@@ -706,5 +711,5 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				}
 			});
 		}
-	}, { director: !!options.director });
+	}, { director: !!options.director, surface: options.playbackSurface });
 }

@@ -49,6 +49,11 @@ export interface PaintEditorToolProviderOptions {
   director?: PaintDirector;
   /** The agent's cursor (default `{ id: 'agent', name: 'Agent' }`). */
   actor?: PresenceActorInfo;
+  /**
+   * The agent playback surface its calls are acted out on (default `paint`, where `PaintEditor` attaches).
+   * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+   */
+  playbackSurface?: string;
 }
 
 const TIP = {
@@ -1111,5 +1116,5 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.',
     skill: 'pixerate-paint-editor',
     tools
-  }, { director: !!options.director });
+  }, { director: !!options.director, surface: options.playbackSurface });
 }

@@ -20,6 +20,11 @@ export interface PaintEffectsToolProviderOptions {
   namespace?: string;
   /** The painting cannot be edited: write tools are hidden. A string is the reason. */
   readOnly?: boolean | string | (() => boolean | string);
+  /**
+   * The agent playback surface its calls are acted out on (default `paint`, where `PaintEditor` attaches).
+   * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+   */
+  playbackSurface?: string;
 }
 
 /** The target id of the effect paper. */
@@ -200,5 +205,5 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
         },
       },
     ],
-  }), { director: false });
+  }), { director: false, surface: options.playbackSurface });
 }
