@@ -83,7 +83,37 @@ const release = editor.useEffects(effects);
 | `createCanvasEffectsToolProvider` | `set_canvas_effect_mode`, `list_scene_transitions`, `set_scene_transition` |
 | `createPaintEffectsToolProvider` | `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` |
 
-The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`). There is no separate effects skill.
+The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`).
+
+## Effect authoring
+
+Providers that support live editing and authoring declare `supportsAuthoring: true` on their `capabilities` and implement `openAuthoring(options): MaybePromise<EffectAuthoringSession>` (`packages/core/src/effects/types.ts`).
+
+### The authoring session
+
+`createEffectAuthoringSession(options)` (`packages/core/src/effects/authoring-session.ts`) provides a generic, framework-agnostic session managing:
+- **Observable state (`getState()`, `subscribe()`):** Values, parameter definitions, keyframe tracks, playback timing, compile diagnostics, and undo/redo history.
+- **Keyframing:** Add, evaluate, and remove keyframes per control with easing curves (`packages/core/src/animation/easing.ts`).
+- **Live source editing:** Optional `setSource(source)` compiling custom shader or vector scripts and emitting diagnostic error/warning issues with line and column positions.
+- **Preset management:** Save current values as named presets (`savePreset`), delete presets (`deletePreset`), and apply presets (`applyPreset`).
+- **Preview renderer lifecycle:** `createPreview(size)` returns a preview `EffectRenderer` reflecting current authoring values and animation playback.
+
+### Agent tools & skill
+
+Authoring tools are exposed via `createEffectAuthoringToolProvider(session)` (`packages/core/src/effects/authoring-tools.ts`):
+- `get_effect_authoring_state`, `set_effect_authoring_value`, `reset_effect_authoring_values`
+- `set_effect_authoring_keyframe`, `remove_effect_authoring_keyframe`, `clear_effect_authoring_track`
+- `seek_effect_authoring_time`, `set_effect_authoring_playback`, `set_effect_authoring_timing`
+- `get_effect_authoring_source`, `set_effect_authoring_source`, `get_effect_authoring_issues`
+- `save_effect_authoring_preset`, `delete_effect_authoring_preset`, `apply_effect_authoring_preset`
+
+The domain's skill is `packages/core/skills/pixerate-effect-authoring/SKILL.md`.
+
+### UI components
+
+- **React:** `useEffectAuthoring(session)` hook and `<EffectAuthoringEditor session={session} />` (`@pixerate/editor-react/effects`).
+- **Svelte:** `effectAuthoringOf(session)` store and `<EffectAuthoringEditor {session} />` (`@pixerate/editor-svelte/effects`).
+- Features: visual preview canvas with frame rendering, line-gutter source code editor with diagnostic markers, parameter controls with keyframe diamond toggles (`◆` / `◇`), and keyframe timeline scrubber and tracks.
 
 ## Writing a provider
 
