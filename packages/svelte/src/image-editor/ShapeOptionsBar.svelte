@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles.js';
   import type { ImageEditorController, ShapeToolOptions } from '@pixerate/editor/image-editor';
   import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -29,7 +30,7 @@
   });
   let error = $state<string | null>(null);
 
-  const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+  
   const num = (v: string, min: number, max: number) => Math.max(min, Math.min(max, Number(v) || min));
 
   function set(change: Partial<ShapeToolOptions>) {
@@ -46,10 +47,10 @@
   const checked = (e: Event) => (e.target as HTMLInputElement).checked;
 </script>
 
-<div class="flex flex-col gap-2 text-xs text-slate-200 {className}" data-testid="shape-options">
+<div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="shape-options">
   <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
     {#each LIVE_SHAPE_KINDS as k (k)}
-      <button type="button" aria-pressed={options.kind === k} class={chip(options.kind === k)} onclick={() => onchange({ ...options, kind: k })}>{SHAPE_KIND_LABELS[k]}</button>
+      <button type="button" aria-pressed={options.kind === k} class={imageChipClass(options.kind === k)} onclick={() => onchange({ ...options, kind: k })}>{SHAPE_KIND_LABELS[k]}</button>
     {/each}
   </div>
   <div class="flex flex-wrap items-center gap-3">
@@ -62,7 +63,7 @@
         disabled={options.fill === null}
         value={options.fill ?? '#4f46e5'}
         oninput={(e) => set({ fill: value(e) })}
-        class="h-6 w-8 rounded border border-slate-700 bg-transparent"
+        class={imageColorInputClass}
       />
     </label>
     <label class="flex items-center gap-1">
@@ -74,38 +75,38 @@
         disabled={options.stroke === null}
         value={options.stroke ?? '#000000'}
         oninput={(e) => set({ stroke: value(e) })}
-        class="h-6 w-8 rounded border border-slate-700 bg-transparent"
+        class={imageColorInputClass}
       />
     </label>
     <label class="flex items-center gap-1">
       Width
-      <input type="number" aria-label="Stroke width" min="0" max="200" value={options.strokeWidth} oninput={(e) => set({ strokeWidth: num(value(e), 0, 200) })} class="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+      <input type="number" aria-label="Stroke width" min="0" max="200" value={options.strokeWidth} oninput={(e) => set({ strokeWidth: num(value(e), 0, 200) })} class="w-14 {imageFieldClass}" />
     </label>
   </div>
   <div class="flex flex-wrap items-center gap-3">
     {#if options.kind === 'rect'}
       <label class="flex items-center gap-1">
         Radius
-        <input type="number" aria-label="Corner radius" min="0" max="1000" value={options.radius} oninput={(e) => set({ radius: num(value(e), 0, 1000) })} class="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+        <input type="number" aria-label="Corner radius" min="0" max="1000" value={options.radius} oninput={(e) => set({ radius: num(value(e), 0, 1000) })} class="w-14 {imageFieldClass}" />
       </label>
     {:else if options.kind === 'polygon'}
       <label class="flex items-center gap-1">
         Sides
-        <input type="number" aria-label="Sides" min="3" max="100" value={options.sides} oninput={(e) => set({ sides: num(value(e), 3, 100) })} class="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+        <input type="number" aria-label="Sides" min="3" max="100" value={options.sides} oninput={(e) => set({ sides: num(value(e), 3, 100) })} class="w-14 {imageFieldClass}" />
       </label>
     {:else if options.kind === 'star'}
       <label class="flex items-center gap-1">
         Points
-        <input type="number" aria-label="Points" min="3" max="100" value={options.points} oninput={(e) => set({ points: num(value(e), 3, 100) })} class="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+        <input type="number" aria-label="Points" min="3" max="100" value={options.points} oninput={(e) => set({ points: num(value(e), 3, 100) })} class="w-14 {imageFieldClass}" />
       </label>
       <label class="flex items-center gap-1">
         Inner
-        <input type="range" aria-label="Inner radius" min="0.05" max="1" step="0.05" value={options.innerRatio} oninput={(e) => set({ innerRatio: Number(value(e)) })} class="accent-indigo-500" />
+        <input type="range" aria-label="Inner radius" min="0.05" max="1" step="0.05" value={options.innerRatio} oninput={(e) => set({ innerRatio: Number(value(e)) })} class="accent-primary" />
       </label>
     {:else if options.kind === 'line'}
       <label class="flex items-center gap-1">
         Weight
-        <input type="number" aria-label="Line weight" min="1" max="200" value={options.weight} oninput={(e) => set({ weight: num(value(e), 1, 200) })} class="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+        <input type="number" aria-label="Line weight" min="1" max="200" value={options.weight} oninput={(e) => set({ weight: num(value(e), 1, 200) })} class="w-14 {imageFieldClass}" />
       </label>
       <label class="flex items-center gap-1">
         <input type="checkbox" aria-label="Arrowhead" checked={options.arrow} onchange={(e) => set({ arrow: checked(e) })} />
@@ -113,8 +114,8 @@
       </label>
     {/if}
   </div>
-  <p class="text-[10px] text-slate-500">Drag on the image to draw. Shift: square, circle or 45° line. Alt: from the centre.</p>
+  <p class="text-[10px] text-muted-foreground">Drag on the image to draw. Shift: square, circle or 45° line. Alt: from the centre.</p>
   {#if error}
-    <p role="alert" class="text-rose-400">{error}</p>
+    <p role="alert" class="text-destructive">{error}</p>
   {/if}
 </div>

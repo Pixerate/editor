@@ -115,7 +115,7 @@ The components are styled with [Tailwind CSS](https://tailwindcss.com) utility c
 
 2. **Define the theme colors.** `SpreadsheetEditor`, `FormulaBar`, `TemplateRenderer` and the editor use [shadcn-svelte](https://www.shadcn-svelte.com)-style tokens: `background`, `foreground`, `muted`, `muted-foreground`, `border`, `input`, `primary`, `popover`, `popover-foreground` and `destructive`. Projects already using shadcn-svelte have these. Otherwise, define them as colors in your Tailwind theme.
 
-`ImageEditor` uses a fixed dark (slate) palette and only needs step 1. Component-scoped styles, such as the editor placeholder, are included automatically.
+`ImageEditor`, `ImageEditorCanvas` and the image panels use the same tokens (plus `accent`, `primary-foreground` and `accent-foreground`), so they follow your light or dark theme; their shared classes are in `image-editor/styles.ts`. Component-scoped styles, such as the editor placeholder, are included automatically.
 
 ## License
 

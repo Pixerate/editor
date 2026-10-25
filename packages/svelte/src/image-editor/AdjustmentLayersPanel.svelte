@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageSectionTitleClass, imageSelectClass } from './styles.js';
   import type {
     AdjustmentKind,
     AdjustmentLayer,
@@ -28,9 +29,11 @@
     /** The current layers (`state.adjustments.layers`), bottom to top. Omit to follow the controller. */
     layers?: AdjustmentLayer[];
     histogram?: ImageHistogram | null;
+    /** Extra classes on the root element. */
+    class?: string;
   }
 
-  let { controller, layers: layersProp, histogram = null }: Props = $props();
+  let { controller, layers: layersProp, histogram = null, class: className = '' }: Props = $props();
 
   // Follows the controller when no `layers` prop is given.
   let tick = $state(0);
@@ -66,10 +69,8 @@
 
   const selected = $derived(layers.find((l) => l.id === selectedId) ?? null);
   const topFirst = $derived([...layers].reverse());
-
-  const selectClass = 'bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-slate-200';
   const chipClass = (on: boolean) =>
-    `px-2 py-0.5 rounded text-[10px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`;
+    `px-2 py-0.5 rounded text-[10px] ${on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`;
 
   function setParam(layer: AdjustmentLayer, path: string, value: unknown, commit = true) {
     controller.updateAdjustmentLayer(layer.id, { params: setControlPath(layer.params, path, value) as never }, commit);
@@ -103,17 +104,17 @@
   }
 </script>
 
-<div class="flex flex-col gap-2 text-xs" data-testid="adjustment-layers-panel">
+<div class="flex flex-col gap-2 text-xs {className}" data-testid="adjustment-layers-panel">
   <div class="flex items-center justify-between">
-    <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Adjustment Layers</span>
+    <span class={imageSectionTitleClass}>Adjustment Layers</span>
   </div>
   <div class="flex gap-1.5">
-    <select aria-label="New adjustment layer kind" class="{selectClass} flex-1" bind:value={newKind}>
+    <select aria-label="New adjustment layer kind" class="{imageSelectClass} flex-1" bind:value={newKind}>
       {#each ADJUSTMENT_KINDS as k (k.kind)}
         <option value={k.kind}>{k.label}</option>
       {/each}
     </select>
-    <button type="button" class="px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500" onclick={addLayer}>
+    <button type="button" class="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90" onclick={addLayer}>
       Add Layer
     </button>
   </div>
@@ -125,19 +126,19 @@
         {@const label = layer.name || adjustmentKindLabel(layer.kind)}
         <li
           class="flex items-center gap-1.5 rounded px-1.5 py-1 {layer.id === selectedId
-            ? 'bg-indigo-600/20 ring-1 ring-indigo-500/50'
-            : 'bg-slate-800/60'}"
+            ? 'bg-primary/20 ring-1 ring-primary/50'
+            : 'bg-muted/60'}"
         >
           <input
             type="checkbox"
             aria-label="Show {label}"
             checked={layer.enabled}
             onchange={() => controller.toggleAdjustmentLayer(layer.id)}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           <button
             type="button"
-            class="flex-1 text-left truncate {layer.enabled ? 'text-slate-200' : 'text-slate-500 line-through'}"
+            class="flex-1 text-left truncate {layer.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}"
             aria-pressed={layer.id === selectedId}
             onclick={() => (selectedId = layer.id === selectedId ? null : layer.id)}
           >
@@ -148,7 +149,7 @@
             aria-label="Move {label} up"
             disabled={index === layers.length - 1}
             onclick={() => controller.moveAdjustmentLayer(layer.id, index + 1)}
-            class="px-1 text-slate-400 hover:text-slate-200 disabled:opacity-30"
+            class="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
           >
             ↑
           </button>
@@ -157,7 +158,7 @@
             aria-label="Move {label} down"
             disabled={index === 0}
             onclick={() => controller.moveAdjustmentLayer(layer.id, index - 1)}
-            class="px-1 text-slate-400 hover:text-slate-200 disabled:opacity-30"
+            class="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
           >
             ↓
           </button>
@@ -168,7 +169,7 @@
               controller.removeAdjustmentLayer(layer.id);
               if (selectedId === layer.id) selectedId = null;
             }}
-            class="px-1 text-rose-400 hover:text-rose-300"
+            class="px-1 text-destructive hover:text-destructive"
           >
             ✕
           </button>
@@ -179,12 +180,12 @@
 
   {#if selected}
     {@const layer = selected}
-    <div class="flex flex-col gap-2 rounded border border-slate-700/60 p-2" data-testid="adjustment-layer-editor">
+    <div class="flex flex-col gap-2 rounded border border-border p-2" data-testid="adjustment-layer-editor">
       <div class="flex items-center gap-2">
-        <span class="text-slate-400">Blend</span>
+        <span class="text-muted-foreground">Blend</span>
         <select
           aria-label="Blend mode"
-          class="{selectClass} flex-1"
+          class="{imageSelectClass} flex-1"
           value={layer.blend}
           onchange={(e) => controller.updateAdjustmentLayer(layer.id, { blend: (e.target as HTMLSelectElement).value as BlendMode })}
         >
@@ -244,7 +245,7 @@
           {/each}
         </div>
       {:else if layer.kind === 'photoFilter'}
-        <label class="flex items-center gap-2 text-slate-300">
+        <label class="flex items-center gap-2 text-foreground">
           Filter colour
           <input
             type="color"
@@ -255,7 +256,7 @@
           />
         </label>
       {:else if layer.kind === 'invert'}
-        <p class="text-slate-500 text-[11px]">Invert has no settings.</p>
+        <p class="text-muted-foreground text-[11px]">Invert has no settings.</p>
       {/if}
 
       {#each visibleControls(layer) as spec (spec.id)}
@@ -263,34 +264,34 @@
       {/each}
 
       {#if layer.kind === 'hueSaturation' && range === -1}
-        <label class="flex items-center gap-2 text-slate-300">
+        <label class="flex items-center gap-2 text-foreground">
           <input
             type="checkbox"
             checked={layer.params.colorize}
             onchange={(e) => setParam(layer, 'colorize', (e.target as HTMLInputElement).checked)}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           Colorize
         </label>
       {/if}
       {#if layer.kind === 'colorBalance' || layer.kind === 'photoFilter'}
-        <label class="flex items-center gap-2 text-slate-300">
+        <label class="flex items-center gap-2 text-foreground">
           <input
             type="checkbox"
             checked={layer.params.preserveLuminosity}
             onchange={(e) => setParam(layer, 'preserveLuminosity', (e.target as HTMLInputElement).checked)}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           Preserve luminosity
         </label>
       {/if}
       {#if layer.kind === 'blackWhite'}
-        <label class="flex items-center gap-2 text-slate-300">
+        <label class="flex items-center gap-2 text-foreground">
           <input
             type="checkbox"
             checked={layer.params.tint !== null}
             onchange={(e) => setParam(layer, 'tint', (e.target as HTMLInputElement).checked ? '#e1d3b3' : null)}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           Tint
           {#if layer.params.tint}

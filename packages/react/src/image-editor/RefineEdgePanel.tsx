@@ -6,6 +6,7 @@ import {
   adjustmentKindLabel,
   layerMaskFromSelection,
 } from '@pixerate/editor/image-editor';
+import { imageRangeClass, imageSectionTitleClass } from './styles';
 
 export interface RefineEdgePanelProps {
   controller: ImageEditorController;
@@ -19,7 +20,7 @@ export interface RefineEdgePanelProps {
 const DEFAULT_PARAMS: Required<RefineEdgeParams> = { radius: 8, smartRadius: false, smooth: 0, feather: 0, contrast: 0, shiftEdge: 0 };
 
 const button =
-  'px-2 py-1 rounded-md border border-slate-800 bg-slate-950 text-[11px] text-slate-200 hover:text-white disabled:opacity-40';
+  'px-2 py-1 rounded-md border border-border bg-background text-[11px] text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40';
 
 /**
  * Refine Edge (snap the selection, e.g. a coarse AI mask, to the image's edges) and layer masks:
@@ -50,10 +51,10 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
 
   return (
     <div data-testid="refine-edge-panel" className={`flex flex-col gap-3 text-xs ${className}`}>
-      <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Refine Edge</span>
+      <span className={imageSectionTitleClass}>Refine Edge</span>
       {REFINE_EDGE_CONTROLS.map((c) => (
         <label key={c.id} className="flex flex-col gap-1">
-          <span className="flex justify-between text-slate-400">
+          <span className="flex justify-between text-muted-foreground">
             <span>{c.label}</span>
             <span className="font-mono">
               {params[c.id]}
@@ -68,11 +69,11 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
             aria-label={c.label}
             value={params[c.id]}
             onChange={(e) => setParams({ ...params, [c.id]: Number(e.target.value) })}
-            className="w-full accent-indigo-500"
+            className={imageRangeClass}
           />
         </label>
       ))}
-      <label className="flex items-center gap-2 text-slate-300">
+      <label className="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={params.smartRadius} onChange={(e) => setParams({ ...params, smartRadius: e.target.checked })} />
         Smart Radius
       </label>
@@ -85,18 +86,18 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}
 
-      <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
+      <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
       <div className="flex gap-1 items-center">
         <select
           aria-label="New masked layer kind"
           value={newKind}
           onChange={(e) => setNewKind(e.target.value as AdjustmentKind)}
-          className="flex-1 bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+          className="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
         >
           {ADJUSTMENT_KINDS.map((k) => (
             <option key={k.kind} value={k.kind}>
@@ -119,7 +120,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
             aria-label="Mask layer"
             value={target.id}
             onChange={(e) => setLayerId(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+            className="bg-background border border-border rounded px-1 py-1 text-foreground"
           >
             {list.map((l) => (
               <option key={l.id} value={l.id}>
@@ -142,7 +143,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
           {target.mask && (
             <>
               <label className="flex flex-col gap-1">
-                <span className="flex justify-between text-slate-400">
+                <span className="flex justify-between text-muted-foreground">
                   <span>Density</span>
                   <span className="font-mono">{Math.round((target.mask.density ?? 1) * 100)}%</span>
                 </span>
@@ -154,11 +155,11 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
                   aria-label="Mask density"
                   value={Math.round((target.mask.density ?? 1) * 100)}
                   onChange={(e) => controller.setAdjustmentLayerMaskProps(target.id, { density: Number(e.target.value) / 100 })}
-                  className="w-full accent-indigo-500"
+                  className={imageRangeClass}
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="flex justify-between text-slate-400">
+                <span className="flex justify-between text-muted-foreground">
                   <span>Mask Feather</span>
                   <span className="font-mono">{target.mask.feather ?? 0}px</span>
                 </span>
@@ -170,7 +171,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
                   aria-label="Mask feather"
                   value={target.mask.feather ?? 0}
                   onChange={(e) => controller.setAdjustmentLayerMaskProps(target.id, { feather: Number(e.target.value) })}
-                  className="w-full accent-indigo-500"
+                  className={imageRangeClass}
                 />
               </label>
             </>

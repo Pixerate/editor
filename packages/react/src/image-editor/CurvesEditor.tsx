@@ -18,16 +18,18 @@ export interface CurvesEditorProps {
   histogram?: ImageHistogram | null;
   channel?: 'master' | 'red' | 'green' | 'blue';
   size?: number;
+  /** Extra classes on the root element. */
+  className?: string;
 }
 
 const BOX = 256;
-const STROKE = { master: '#e2e8f0', red: '#ef4444', green: '#22c55e', blue: '#3b82f6' };
+const STROKE = { master: 'var(--foreground, #e2e8f0)', red: '#ef4444', green: '#22c55e', blue: '#3b82f6' };
 
 /**
  * Curves editor over the histogram: click to add a point, drag to move it, double-click to
  * remove it.
  */
-export const CurvesEditor: React.FC<CurvesEditorProps> = ({ points, onChange, histogram, channel = 'master', size = 200 }) => {
+export const CurvesEditor: React.FC<CurvesEditorProps> = ({ points, onChange, histogram, channel = 'master', size = 200, className = '' }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<number | null>(null);
 
@@ -72,7 +74,7 @@ export const CurvesEditor: React.FC<CurvesEditorProps> = ({ points, onChange, hi
       role="application"
       aria-label={`${channel} curve`}
       data-testid="curves-editor"
-      className="rounded bg-slate-950/70 touch-none select-none cursor-crosshair"
+      className={`rounded bg-muted/40 touch-none select-none cursor-crosshair ${className}`.trim()}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={() => setDrag(null)}
@@ -98,7 +100,7 @@ export const CurvesEditor: React.FC<CurvesEditorProps> = ({ points, onChange, hi
             cx={b.x}
             cy={b.y}
             r={5}
-            fill={drag === i ? STROKE[channel] : '#0f172a'}
+            fill={drag === i ? STROKE[channel] : 'var(--background, #0f172a)'}
             stroke={STROKE[channel]}
             strokeWidth={2}
             aria-label={`Point ${p.input} to ${p.output}`}

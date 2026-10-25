@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageDividerClass, imageEditorFrameClass, imageEditorHeaderClass, imageErrorBannerClass, imageHeaderButtonClass, imagePrimaryButtonClass, imageRangeClass, imageSectionClass, imageSectionTitleClass, imageSelectClass, imageSidebarClass, imageSmallButtonClass, imageSpinnerClass, imageTabClass, imageTabListClass } from './styles.js';
   import type {
     ExportOptions,
     ImageEditorTool,
@@ -281,13 +282,13 @@
 
 <div
   bind:this={rootEl}
-  class="relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 {className}"
+  class="{imageEditorFrameClass} {className}"
   {style}
 >
   <!-- Top Action Header -->
-  <div class="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
+  <div class={imageEditorHeaderClass}>
     <!-- Navigation Tabs -->
-    <div class="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+    <div role="tablist" class={imageTabListClass}>
       <button
         type="button"
         data-image-tab="crop"
@@ -295,9 +296,7 @@
           activeTab = 'crop';
           editor.setTool('crop');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'crop'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'crop'} class="{imageTabClass(activeTab === 'crop')}"
       >
         Transform & Crop
       </button>
@@ -308,9 +307,7 @@
           activeTab = 'adjust';
           editor.setTool('select');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'adjust'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'adjust'} class="{imageTabClass(activeTab === 'adjust')}"
       >
         Adjustments
       </button>
@@ -321,9 +318,7 @@
           activeTab = 'layers';
           editor.setTool('select');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'layers'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'layers'} class="{imageTabClass(activeTab === 'layers')}"
       >
         Layers
       </button>
@@ -334,9 +329,7 @@
           activeTab = 'paint';
           editor.setTool('brush');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'paint'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'paint'} class="{imageTabClass(activeTab === 'paint')}"
       >
         Paint
       </button>
@@ -347,9 +340,7 @@
           activeTab = 'select';
           editor.setTool('select');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'select'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'select'} class="{imageTabClass(activeTab === 'select')}"
       >
         Select & Mask
       </button>
@@ -360,9 +351,7 @@
           activeTab = 'annotate';
           editor.setTool('pen');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'annotate'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'annotate'} class="{imageTabClass(activeTab === 'annotate')}"
       >
         Annotations
       </button>
@@ -373,9 +362,7 @@
           activeTab = 'depth';
           editor.setTool('select');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors {activeTab === 'depth'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'depth'} class="{imageTabClass(activeTab === 'depth')}"
       >
         Depth Mask
       </button>
@@ -386,9 +373,7 @@
           activeTab = 'ai';
           editor.setTool('select');
         }}
-        class="px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 {activeTab === 'ai'
-          ? 'bg-indigo-600 text-white shadow'
-          : 'text-slate-400 hover:text-slate-200'}"
+        role="tab" aria-selected={activeTab === 'ai'} class="{imageTabClass(activeTab === 'ai')} flex items-center gap-1.5"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
@@ -403,7 +388,7 @@
         type="button"
         disabled={!editor.canUndo}
         onclick={() => editor.undo()}
-        class="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+        class={imageHeaderButtonClass}
         title="Undo"
       >
         ↩
@@ -412,7 +397,7 @@
         type="button"
         disabled={!editor.canRedo}
         onclick={() => editor.redo()}
-        class="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+        class={imageHeaderButtonClass}
         title="Redo"
       >
         ↪
@@ -420,33 +405,33 @@
       <button
         type="button"
         onclick={() => editor.reset()}
-        class="px-2 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+        class="{imageHeaderButtonClass} px-2 text-muted-foreground"
       >
         Reset
       </button>
 
-      <div class="h-4 w-px bg-slate-800 mx-1"></div>
+      <div class="h-4 w-px bg-muted mx-1"></div>
 
       <!-- Zoom -->
       <button
         type="button"
         onclick={() => editor.zoomOut()}
-        class="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+        class={imageHeaderButtonClass}
         title="Zoom Out"
       >
         -
       </button>
-      <span class="font-mono text-slate-400 w-10 text-center">{Math.round(editor.state.zoom * 100)}%</span>
+      <span class="font-mono text-muted-foreground w-10 text-center">{Math.round(editor.state.zoom * 100)}%</span>
       <button
         type="button"
         onclick={() => editor.zoomIn()}
-        class="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+        class={imageHeaderButtonClass}
         title="Zoom In"
       >
         +
       </button>
 
-      <div class="h-4 w-px bg-slate-800 mx-1"></div>
+      <div class="h-4 w-px bg-muted mx-1"></div>
 
       <!-- Live Compare -->
       <button
@@ -454,7 +439,7 @@
         onmousedown={() => editor.setComparing(true)}
         onmouseup={() => editor.setComparing(false)}
         onmouseleave={() => editor.setComparing(false)}
-        class="px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800 select-none active:bg-amber-950/40"
+        class="px-2.5 py-1.5 rounded-lg border border-border bg-background text-amber-600 hover:bg-muted select-none active:bg-amber-500/10"
       >
         Hold Compare
       </button>
@@ -463,7 +448,7 @@
       <button
         type="button"
         onclick={handleExport}
-        class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-md shadow-emerald-900/30 transition-colors"
+        class="{imagePrimaryButtonClass} px-4 py-1.5"
       >
         Export Image
       </button>
@@ -473,9 +458,9 @@
   <!-- Main Viewport + Sidebar Layout -->
   <!-- Free Transform options bar (Ctrl/Cmd+T), above the viewport while a transform is open -->
   {#if transformActive}
-    <FreeTransformOptionsBar tool={transformTool} class="border-b border-slate-800 bg-slate-900/95 px-4 py-2" />
+    <FreeTransformOptionsBar tool={transformTool} class="border-b border-border bg-background/95 px-4 py-2" />
   {:else if transformError}
-    <div role="alert" class="border-b border-rose-900 bg-rose-950/80 px-4 py-1.5 text-xs text-rose-200">{transformError}</div>
+    <div role="alert" class={imageErrorBannerClass}>{transformError}</div>
   {/if}
 
   <div class="flex flex-col md:flex-row flex-1 min-h-[520px] md:h-[560px]">
@@ -498,15 +483,15 @@
       {onplaybackreveal}
       chromeRoot={() => rootEl}
       open={openPanel}
-      class="flex-1 h-[360px] md:h-full min-h-[320px] bg-slate-950"
+      class="flex-1 h-[360px] md:h-full min-h-[320px] bg-muted"
     />
 
     <!-- Tab Controls Sidebar -->
-    <div class="w-full md:w-80 bg-slate-900/90 border-t md:border-t-0 md:border-l border-slate-800 p-4 overflow-y-auto h-auto md:h-full md:max-h-[560px]">
+    <div class={imageSidebarClass}>
       <!-- TAB 1: CROP & TRANSFORM -->
       {#if activeTab === 'crop'}
         <div class="flex flex-col gap-4 text-xs">
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+          <span class={imageSectionTitleClass}>
             Aspect Ratio Presets
           </span>
           <div class="grid grid-cols-3 gap-2">
@@ -517,8 +502,8 @@
                 editor.applyCropPreset(null);
               }}
               class="px-2.5 py-2 rounded-lg border font-medium {activeCropRatio === null && editor.state.crop
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted hover:bg-accent text-foreground border-border'}"
             >
               Freeform
             </button>
@@ -529,8 +514,8 @@
                 editor.applyCropPreset(1);
               }}
               class="px-2.5 py-2 rounded-lg border font-medium {activeCropRatio === 1
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted hover:bg-accent text-foreground border-border'}"
             >
               1:1 Square
             </button>
@@ -541,8 +526,8 @@
                 editor.applyCropPreset(4 / 3);
               }}
               class="px-2.5 py-2 rounded-lg border font-medium {activeCropRatio === 4 / 3
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted hover:bg-accent text-foreground border-border'}"
             >
               4:3 Standard
             </button>
@@ -553,8 +538,8 @@
                 editor.applyCropPreset(16 / 9);
               }}
               class="px-2.5 py-2 rounded-lg border font-medium {activeCropRatio === 16 / 9
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted hover:bg-accent text-foreground border-border'}"
             >
               16:9 Wide
             </button>
@@ -565,8 +550,8 @@
                 editor.applyCropPreset(3 / 2);
               }}
               class="px-2.5 py-2 rounded-lg border font-medium {activeCropRatio === 3 / 2
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted hover:bg-accent text-foreground border-border'}"
             >
               3:2 Photo
             </button>
@@ -576,29 +561,29 @@
                 activeCropRatio = null;
                 editor.resetCrop();
               }}
-              class="px-2.5 py-2 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 font-medium"
+              class="px-2.5 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/40 font-medium"
             >
               Clear Crop
             </button>
           </div>
 
-          <div class="h-px bg-slate-800 my-1"></div>
+          <div class={imageDividerClass}></div>
 
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+          <span class={imageSectionTitleClass}>
             Orientation & Flips
           </span>
           <div class="grid grid-cols-2 gap-2">
             <button
               type="button"
               onclick={() => editor.rotate(-90)}
-              class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              class="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
             >
               Rotate -90°
             </button>
             <button
               type="button"
               onclick={() => editor.rotate(90)}
-              class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              class="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
             >
               Rotate +90°
             </button>
@@ -606,8 +591,8 @@
               type="button"
               onclick={() => editor.flipHorizontal()}
               class="px-3 py-2 rounded-lg border transition-colors {editor.state.transform.flipH
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted border-border text-foreground hover:bg-accent'}"
             >
               Flip Horizontal
             </button>
@@ -615,8 +600,8 @@
               type="button"
               onclick={() => editor.flipVertical()}
               class="px-3 py-2 rounded-lg border transition-colors {editor.state.transform.flipV
-                ? 'bg-indigo-600 border-indigo-500 text-white'
-                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}"
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-muted border-border text-foreground hover:bg-accent'}"
             >
               Flip Vertical
             </button>
@@ -628,13 +613,13 @@
       {#if activeTab === 'adjust'}
         <div class="flex flex-col gap-3 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+            <span class={imageSectionTitleClass}>
               Color Adjustments
             </span>
             <button
               type="button"
               onclick={() => editor.resetAdjustments()}
-              class="text-[10px] text-rose-400 hover:underline"
+              class="text-[10px] text-destructive hover:underline"
             >
               Reset Sliders
             </button>
@@ -651,7 +636,7 @@
             />
             {#if spec.id === 'tint' && legacyProcess}
               <div
-                class="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                class="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-600"
                 data-testid="image-editor-process-notice"
               >
                 <span>Legacy rendering (process 1). Tint needs the current process.</span>
@@ -666,7 +651,7 @@
             {/if}
           {/each}
 
-          <div class="border-t border-slate-700/60 pt-3">
+          <div class={imageSectionClass}>
             <AdjustmentLayersPanel
               controller={editor.controller}
               layers={editor.state.adjustments.layers}
@@ -679,34 +664,34 @@
       <!-- TAB 3: ANNOTATIONS -->
       {#if activeTab === 'layers'}
         <div class="flex flex-col gap-3 text-xs">
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+          <span class={imageSectionTitleClass}>Layers</span>
           <button
             type="button"
             title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            class={imageSmallButtonClass}
             disabled={transformActive}
             onclick={() => transformTool.begin()}>Free Transform</button>
           <LayersPanel controller={editor.controller} />
-          {#if effectsShown}<ImageProviderEffectsPanel controller={editor.controller} class="border-t border-slate-700/60 pt-3" />{/if}
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+          {#if effectsShown}<ImageProviderEffectsPanel controller={editor.controller} class={imageSectionClass} />{/if}
+          <span class={imageSectionTitleClass}>Colour</span>
           <ColorProfilePanel controller={editor.controller} />
         </div>
       {/if}
 
       {#if activeTab === 'paint'}
         <div class="flex flex-col gap-3 text-xs">
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+          <span class={imageSectionTitleClass}>Paint</span>
           <BrushOptionsBar controller={editor.controller} />
           <button
             type="button"
             title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            class={imageSmallButtonClass}
             disabled={transformActive}
             onclick={() => transformTool.begin()}>Free Transform</button>
           {#if paintError}
-            <p role="alert" class="text-rose-400" data-testid="paint-error">{paintError}</p>
+            <p role="alert" class="text-destructive" data-testid="paint-error">{paintError}</p>
           {/if}
-          <div class="border-t border-slate-700/60 pt-3">
+          <div class={imageSectionClass}>
             <LayersPanel controller={editor.controller} />
           </div>
         </div>
@@ -714,7 +699,7 @@
 
       {#if activeTab === 'annotate'}
         <div class="flex flex-col gap-3 text-xs">
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Shape & Type Layers</span>
+          <span class={imageSectionTitleClass}>Shape & Type Layers</span>
           <div class="grid grid-cols-2 gap-1.5">
             {#each ['shape', 'type'] as const as t (t)}
               <button
@@ -722,8 +707,8 @@
                 aria-pressed={editor.state.activeTool === t}
                 onclick={() => editor.setTool(t)}
                 class="py-1.5 px-2 rounded-lg font-medium border transition-colors {editor.state.activeTool === t
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}">{t === 'shape' ? 'Shape' : 'Type'}</button>
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-muted border-border text-foreground hover:bg-accent'}">{t === 'shape' ? 'Shape' : 'Type'}</button>
             {/each}
           </div>
           {#if editor.state.activeTool === 'shape'}
@@ -732,15 +717,15 @@
           {#if editor.state.activeTool === 'type'}
             <TypeOptionsBar controller={editor.controller} options={typeOptions} onchange={(o) => (typeOptions = o)} session={typeSession} />
             {#if typeSession}
-              <button type="button" onclick={finishTyping} class="self-start rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700">Done editing text</button>
+              <button type="button" onclick={finishTyping} class="self-start rounded bg-muted px-2 py-1 text-[11px] text-foreground hover:bg-accent">Done editing text</button>
             {/if}
           {/if}
           {#if shapeTypeError}
-            <p role="alert" class="text-rose-400" data-testid="shape-type-error">{shapeTypeError}</p>
+            <p role="alert" class="text-destructive" data-testid="shape-type-error">{shapeTypeError}</p>
           {/if}
-          <div class="h-px bg-slate-800 my-1"></div>
+          <div class={imageDividerClass}></div>
 
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+          <span class={imageSectionTitleClass}>
             Draw & Annotate
           </span>
 
@@ -751,8 +736,8 @@
                 type="button"
                 onclick={() => editor.setTool(t)}
                 class="py-1.5 px-2 rounded-lg font-medium capitalize border transition-colors {editor.state.activeTool === t
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}"
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-muted border-border text-foreground hover:bg-accent'}"
               >
                 {t}
               </button>
@@ -761,14 +746,14 @@
 
           <!-- Color & Size -->
           <div class="flex items-center gap-2 mt-2">
-            <span class="text-slate-400">Color:</span>
+            <span class="text-muted-foreground">Color:</span>
             <input
               type="color"
               bind:value={activeColor}
-              class="w-8 h-8 rounded border border-slate-700 cursor-pointer bg-transparent"
+              class="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
             />
             <div class="flex-1 ml-2">
-              <div class="flex justify-between text-slate-400 mb-0.5">
+              <div class="flex justify-between text-muted-foreground mb-0.5">
                 <span>Width:</span>
                 <span class="font-mono">{strokeWidth}px</span>
               </div>
@@ -777,32 +762,32 @@
                 min="1"
                 max="20"
                 bind:value={strokeWidth}
-                class="w-full accent-indigo-500"
+                class={imageRangeClass}
               />
             </div>
           </div>
 
-          <div class="h-px bg-slate-800 my-1"></div>
+          <div class={imageDividerClass}></div>
 
           <!-- Text Tool -->
-          <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Add Text</span>
+          <span class={imageSectionTitleClass}>Add Text</span>
           <div class="flex gap-2">
             <input
               type="text"
               placeholder="Type watermark or label..."
               bind:value={textInput}
               onkeydown={(e) => e.key === 'Enter' && handleAddText()}
-              class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              class="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
             <button
               type="button"
               onclick={handleAddText}
-              class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow"
+              class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow"
             >
               Add
             </button>
           </div>
-          <div class="flex items-center justify-between text-slate-400">
+          <div class="flex items-center justify-between text-muted-foreground">
             <span>Font Size:</span>
             <span class="font-mono">{fontSize}px</span>
           </div>
@@ -811,18 +796,18 @@
             min="12"
             max="72"
             bind:value={fontSize}
-            class="w-full accent-indigo-500"
+            class={imageRangeClass}
           />
 
           <!-- Layers & Selected Annotation -->
-          <div class="h-px bg-slate-800 my-1"></div>
+          <div class={imageDividerClass}></div>
           <div class="flex items-center justify-between">
-            <span class="text-slate-400">Layers ({editor.state.annotations.length})</span>
+            <span class="text-muted-foreground">Layers ({editor.state.annotations.length})</span>
             {#if editor.state.selectedAnnotationId}
               <button
                 type="button"
                 onclick={() => editor.removeAnnotation(editor.state.selectedAnnotationId!)}
-                class="text-rose-400 hover:underline text-[11px]"
+                class="text-destructive hover:underline text-[11px]"
               >
                 Delete Selected
               </button>
@@ -831,7 +816,7 @@
               <button
                 type="button"
                 onclick={() => editor.clearAnnotations()}
-                class="text-slate-400 hover:text-slate-200 text-[11px]"
+                class="text-muted-foreground hover:text-foreground text-[11px]"
               >
                 Clear All
               </button>
@@ -844,37 +829,37 @@
       {#if activeTab === 'depth'}
         <div class="flex flex-col gap-3 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+            <span class={imageSectionTitleClass}>
               Depth Masking
             </span>
             <button
               type="button"
               onclick={() => editor.resetDepthMask()}
-              class="text-[10px] text-rose-400 hover:underline"
+              class="text-[10px] text-destructive hover:underline"
             >
               Reset Mask
             </button>
           </div>
 
-          <label class="flex items-center gap-2 cursor-pointer text-slate-300">
+          <label class="flex items-center gap-2 cursor-pointer text-foreground">
             <input
               type="checkbox"
               checked={editor.state.depthMask.enabled}
               onchange={(e) => editor.setDepthMask({ enabled: (e.target as HTMLInputElement).checked })}
-              class="rounded accent-indigo-500"
+              class="rounded accent-primary"
             />
             <span>Enable Depth / Alpha Mask</span>
           </label>
 
           {#if editor.state.depthMask.enabled}
             <div>
-              <span class="text-slate-400 block mb-1">Mask Image URL:</span>
+              <span class="text-muted-foreground block mb-1">Mask Image URL:</span>
               <input
                 type="text"
                 placeholder="https://.../depthmap.png"
                 value={editor.state.depthMask.maskSource || ''}
                 oninput={(e) => editor.setDepthMask({ maskSource: (e.target as HTMLInputElement).value || null })}
-                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500"
+                class="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground"
               />
             </div>
 
@@ -883,8 +868,8 @@
                 type="button"
                 onclick={() => editor.setDepthMask({ mode: 'threshold' })}
                 class="flex-1 py-1.5 rounded-lg border text-xs font-medium {editor.state.depthMask.mode === 'threshold'
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300'}"
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-muted border-border text-foreground'}"
               >
                 Threshold Mode
               </button>
@@ -892,15 +877,15 @@
                 type="button"
                 onclick={() => editor.setDepthMask({ mode: 'brightness' })}
                 class="flex-1 py-1.5 rounded-lg border text-xs font-medium {editor.state.depthMask.mode === 'brightness'
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300'}"
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'bg-muted border-border text-foreground'}"
               >
                 Brightness Mode
               </button>
             </div>
 
             <div>
-              <div class="flex justify-between text-slate-400 mb-1">
+              <div class="flex justify-between text-muted-foreground mb-1">
                 <span>Depth Start (Lower):</span>
                 <span class="font-mono">{editor.state.depthMask.depthRange[0]}</span>
               </div>
@@ -913,12 +898,12 @@
                   editor.setDepthMask({
                     depthRange: [Number((e.target as HTMLInputElement).value), editor.state.depthMask.depthRange[1]],
                   })}
-                class="w-full accent-indigo-500"
+                class={imageRangeClass}
               />
             </div>
 
             <div>
-              <div class="flex justify-between text-slate-400 mb-1">
+              <div class="flex justify-between text-muted-foreground mb-1">
                 <span>Depth Stop (Upper):</span>
                 <span class="font-mono">{editor.state.depthMask.depthRange[1]}</span>
               </div>
@@ -931,12 +916,12 @@
                   editor.setDepthMask({
                     depthRange: [editor.state.depthMask.depthRange[0], Number((e.target as HTMLInputElement).value)],
                   })}
-                class="w-full accent-indigo-500"
+                class={imageRangeClass}
               />
             </div>
 
             <div>
-              <div class="flex justify-between text-slate-400 mb-1">
+              <div class="flex justify-between text-muted-foreground mb-1">
                 <span>Softness:</span>
                 <span class="font-mono">{editor.state.depthMask.softness}</span>
               </div>
@@ -946,16 +931,16 @@
                 max="50"
                 value={editor.state.depthMask.softness}
                 oninput={(e) => editor.setDepthMask({ softness: Number((e.target as HTMLInputElement).value) })}
-                class="w-full accent-indigo-500"
+                class={imageRangeClass}
               />
             </div>
 
-            <label class="flex items-center gap-2 cursor-pointer text-slate-300 mt-1">
+            <label class="flex items-center gap-2 cursor-pointer text-foreground mt-1">
               <input
                 type="checkbox"
                 checked={editor.state.depthMask.invert}
                 onchange={(e) => editor.setDepthMask({ invert: (e.target as HTMLInputElement).checked })}
-                class="rounded accent-indigo-500"
+                class="rounded accent-primary"
               />
               <span>Invert Mask</span>
             </label>
@@ -974,19 +959,19 @@
             quickMask={Boolean(editor.state.quickMask)}
           />
           {#if selectionError}
-            <p role="alert" class="text-rose-400">{selectionError}</p>
+            <p role="alert" class="text-destructive">{selectionError}</p>
           {/if}
           <div class="flex gap-1">
             <button
             type="button"
             title="Select › Transform Selection: the outline only"
-            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            class={imageSmallButtonClass}
             disabled={transformActive}
             onclick={() => transformTool.begin({ content: 'selection-outline' })}>Transform Selection</button>
             <button
             type="button"
             title="Edit › Free Transform: the selected pixels of the active layer"
-            class="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+            class={imageSmallButtonClass}
             disabled={transformActive}
             onclick={() => transformTool.begin({ content: 'selection' })}>Free Transform Pixels</button>
           </div>
@@ -1001,12 +986,12 @@
       <!-- TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL -->
       {#if activeTab === 'ai'}
         <div class="flex flex-col gap-4 text-xs">
-          <label class="flex items-center justify-between gap-2 text-slate-300">
+          <label class="flex items-center justify-between gap-2 text-foreground">
             <span>Results go to</span>
             <select
               aria-label="AI result target"
               bind:value={aiTarget}
-              class="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+              class={imageSelectClass}
             >
               <option value="auto">{editor.controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
               <option value="new-layer">New layer / mask</option>
@@ -1014,22 +999,22 @@
             </select>
           </label>
           <!-- Background Removal Section -->
-          <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+          <div class="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
             <div class="flex items-center justify-between">
-              <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <span class="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
                 </svg>
                 Background Removal
               </span>
               {#if isRemovingBg}
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900/60 text-indigo-300 animate-pulse">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                   Removing...
                 </span>
               {/if}
             </div>
 
-            <p class="text-slate-400 text-[11px] leading-relaxed">
+            <p class="text-muted-foreground text-[11px] leading-relaxed">
               Isolate foreground subject with AI alpha transparency segmentation.
             </p>
 
@@ -1037,10 +1022,10 @@
               type="button"
               onclick={handleRemoveBackground}
               disabled={isRemovingBg || isInpainting}
-              class="mt-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+              class="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
             >
               {#if isRemovingBg}
-                <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <div class={imageSpinnerClass}></div>
                 Removing Background...
               {:else}
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1052,46 +1037,46 @@
           </div>
 
           <!-- AI Inpainting / Generative Fill Section -->
-          <div class="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+          <div class="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
             <div class="flex items-center justify-between">
-              <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <span class="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="m21.64 3.64-1.28-1.28a1.2 1.2 0 0 0-1.7 0l-9.72 9.72-1.94 4.86 4.86-1.94 9.72-9.72a1.2 1.2 0 0 0 .06-1.64z"/>
                   <path d="m14 7 3 3"/>
                 </svg>
                 Generative Inpainting
               </span>
               {#if isInpainting}
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300 animate-pulse">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                   Inpainting...
                 </span>
               {/if}
             </div>
 
-            <p class="text-slate-400 text-[11px] leading-relaxed">
+            <p class="text-muted-foreground text-[11px] leading-relaxed">
               Replace, modify, or fill selected regions using prompt-guided generative inpainting.
             </p>
 
             <div class="flex flex-col gap-1">
-              <label for="ai-inpaint-prompt" class="text-slate-300 text-[11px] font-medium">Prompt</label>
+              <label for="ai-inpaint-prompt" class="text-foreground text-[11px] font-medium">Prompt</label>
               <textarea
                 id="ai-inpaint-prompt"
                 bind:value={inpaintPrompt}
                 placeholder="e.g. replace sunglasses with steampunk goggles, remove person in background..."
                 rows="3"
-                class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                class="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
               ></textarea>
             </div>
 
             <div class="flex flex-col gap-1">
-              <span class="text-slate-300 text-[11px] font-medium">Target Mask Region</span>
+              <span class="text-foreground text-[11px] font-medium">Target Mask Region</span>
               <div class="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
                   onclick={() => inpaintMaskMode = 'annotations'}
                   class="px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors {inpaintMaskMode === 'annotations'
-                    ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}"
+                    ? 'bg-primary/30 border-primary text-primary'
+                    : 'bg-background border-border text-muted-foreground hover:text-foreground'}"
                 >
                   Drawn Shapes ({editor.state.annotations.length})
                 </button>
@@ -1099,8 +1084,8 @@
                   type="button"
                   onclick={() => inpaintMaskMode = 'crop'}
                   class="px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors {inpaintMaskMode === 'crop'
-                    ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}"
+                    ? 'bg-primary/30 border-primary text-primary'
+                    : 'bg-background border-border text-muted-foreground hover:text-foreground'}"
                 >
                   Crop Box ({editor.state.crop ? 'Selected' : 'Full'})
                 </button>
@@ -1111,10 +1096,10 @@
               type="button"
               onclick={handleInpaint}
               disabled={isInpainting || isRemovingBg || !inpaintPrompt.trim()}
-              class="mt-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+              class="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
             >
               {#if isInpainting}
-                <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <div class={imageSpinnerClass}></div>
                 Generating Inpaint...
               {:else}
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1126,13 +1111,13 @@
           </div>
 
           {#if aiError}
-            <div class="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px]">
+            <div class="p-2.5 rounded-lg bg-destructive/10 border border-destructive/40 text-destructive text-[11px]">
               {aiError}
             </div>
           {/if}
 
           {#if aiSuccess}
-            <div class="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-[11px]">
+            <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-[11px]">
               {aiSuccess}
             </div>
           {/if}

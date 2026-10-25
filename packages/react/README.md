@@ -130,7 +130,7 @@ The components are styled with [Tailwind CSS](https://tailwindcss.com) utility c
 
 2. **Define the theme colors.** `SpreadsheetEditor`, `BubbleMenu`, `TemplateRenderer` and the slot components use [shadcn/ui](https://ui.shadcn.com)-style tokens: `background`, `foreground`, `muted`, `muted-foreground`, `border`, `input`, `primary`, `popover`, `popover-foreground` and `destructive`. Projects already using shadcn/ui have these. Otherwise, define them as colors in your Tailwind theme.
 
-`ImageEditor` uses a fixed dark (slate) palette and only needs step 1. Without Tailwind, the components work but render unstyled. Pass `className` to override.
+`ImageEditor`, `ImageEditorCanvas` and the image panels use the same theme tokens (plus `accent`, `primary-foreground` and `accent-foreground`), so they follow your light or dark theme; their shared classes are in `image-editor/styles.ts`. Without Tailwind, the components work but render unstyled. Pass `className` to override.
 
 ## License
 

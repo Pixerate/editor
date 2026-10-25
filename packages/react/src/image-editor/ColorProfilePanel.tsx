@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, Intent } from '@pixerate/editor/image-editor';
 import { COLOR_MODE_OPTIONS, INTENT_OPTIONS, PROOF_PROFILE_OPTIONS, WORKING_SPACE_OPTIONS, colorPanelView } from '@pixerate/editor/image-editor';
+import { imageChipClass } from './styles';
 
 export interface ColorProfilePanelProps {
   controller: ImageEditorController;
   className?: string;
 }
-
-const chip = 'px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white';
-const select = 'rounded bg-slate-800 px-1 py-0.5 text-[11px] text-slate-200';
+const chip = imageChipClass(false);
+const select = 'rounded bg-muted px-1 py-0.5 text-[11px] text-foreground';
 
 /**
  * Colour management: the document's profile (working space) with Assign Profile and Convert to
@@ -45,13 +45,13 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
   };
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="color-profile-panel">
+    <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="color-profile-panel">
       <div className="flex items-center gap-2">
-        <span className="text-slate-400">Profile</span>
+        <span className="text-muted-foreground">Profile</span>
         <span data-testid="color-profile-name">{view.profileName}</span>
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Colour mode">
-        <span className="text-slate-400">Mode</span>
+        <span className="text-muted-foreground">Mode</span>
         <select aria-label="Colour mode" className={select} value={view.mode} onChange={(e) => attempt(() => controller.setColorMode(e.target.value as 'rgb' | 'cmyk' | 'lab'))}>
           {COLOR_MODE_OPTIONS.map((o) => (
             <option key={o.id} value={o.id} title={o.title}>
@@ -59,7 +59,7 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
             </option>
           ))}
         </select>
-        {view.cmykProfileName && <span className="text-slate-400">{view.cmykProfileName}</span>}
+        {view.cmykProfileName && <span className="text-muted-foreground">{view.cmykProfileName}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Assign or convert">
         <select aria-label="Target profile" className={select} value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -77,7 +77,7 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
           ))}
         </select>
         <label className="flex items-center gap-1">
-          <input type="checkbox" aria-label="Black point compensation" checked={bpc} onChange={(e) => setBpc(e.target.checked)} className="accent-indigo-500" />
+          <input type="checkbox" aria-label="Black point compensation" checked={bpc} onChange={(e) => setBpc(e.target.checked)} className="accent-primary" />
           BPC
         </label>
         <button type="button" className={chip} title="Edit › Assign Profile: keep the numbers" onClick={() => attempt(() => controller.assignProfile(target))}>
@@ -88,7 +88,7 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Proof setup">
-        <span className="text-slate-400">Proof</span>
+        <span className="text-muted-foreground">Proof</span>
         <select
           aria-label="Proof profile"
           className={select}
@@ -112,18 +112,18 @@ export const ColorProfilePanel: React.FC<ColorProfilePanelProps> = ({ controller
               ))}
             </select>
             <label className="flex items-center gap-1">
-              <input type="checkbox" aria-label="Simulate paper colour" checked={view.proof.simulatePaper} onChange={(e) => proofWith({ simulatePaper: e.target.checked })} className="accent-indigo-500" />
+              <input type="checkbox" aria-label="Simulate paper colour" checked={view.proof.simulatePaper} onChange={(e) => proofWith({ simulatePaper: e.target.checked })} className="accent-primary" />
               Paper
             </label>
             <label className="flex items-center gap-1">
-              <input type="checkbox" aria-label="Gamut warning" checked={view.proof.gamutWarning} onChange={(e) => proofWith({ gamutWarning: e.target.checked })} className="accent-indigo-500" />
+              <input type="checkbox" aria-label="Gamut warning" checked={view.proof.gamutWarning} onChange={(e) => proofWith({ gamutWarning: e.target.checked })} className="accent-primary" />
               Gamut warning
             </label>
           </>
         )}
       </div>
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}

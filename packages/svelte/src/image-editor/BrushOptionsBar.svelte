@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageChipClass, imageColorInputClass } from './styles.js';
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
   import {
     BRUSH_OPTION_CONTROLS,
@@ -41,7 +42,7 @@
   });
   let error = $state<string | null>(null);
 
-  const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+  
 
   function attempt(fn: () => unknown) {
     try {
@@ -53,14 +54,14 @@
   }
 </script>
 
-<div class="flex flex-col gap-2 text-xs text-slate-200 {className}" data-testid="brush-options">
+<div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="brush-options">
   <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
     {#each PAINT_TOOLS as t (t.id)}
       <button
         type="button"
         aria-pressed={view.tool === t.id}
         title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
-        class={chip(view.tool === t.id)}
+        class={imageChipClass(view.tool === t.id)}
         onclick={() => controller.setTool(t.id)}>{t.label}</button>
     {/each}
   </div>
@@ -72,9 +73,9 @@
         aria-label="Foreground colour"
         value={view.foreground}
         oninput={(e) => controller.setPaintOptions({ foreground: (e.target as HTMLInputElement).value })}
-        class="h-6 w-8 rounded border border-slate-700 bg-transparent"
+        class={imageColorInputClass}
       />
-      <span class="text-slate-400">FG</span>
+      <span class="text-muted-foreground">FG</span>
     </label>
     <label class="flex items-center gap-1">
       <input
@@ -82,18 +83,18 @@
         aria-label="Background colour"
         value={view.background}
         oninput={(e) => controller.setPaintOptions({ background: (e.target as HTMLInputElement).value })}
-        class="h-6 w-8 rounded border border-slate-700 bg-transparent"
+        class={imageColorInputClass}
       />
-      <span class="text-slate-400">BG</span>
+      <span class="text-muted-foreground">BG</span>
     </label>
-    <button type="button" title="Swap colours (X)" class={chip(false)} onclick={() => controller.swapPaintColors()}>Swap</button>
-    <button type="button" title="Default colours (D)" class={chip(false)} onclick={() => controller.resetPaintColors()}>Default</button>
+    <button type="button" title="Swap colours (X)" class={imageChipClass(false)} onclick={() => controller.swapPaintColors()}>Swap</button>
+    <button type="button" title="Default colours (D)" class={imageChipClass(false)} onclick={() => controller.resetPaintColors()}>Default</button>
     {#if view.tool === 'brush'}
       <button
         type="button"
         aria-pressed={view.paint.type === 'gradient'}
         title="Gradient paint: the brush changes colour as the stroke goes"
-        class={chip(view.paint.type === 'gradient')}
+        class={imageChipClass(view.paint.type === 'gradient')}
         onclick={() => attempt(() => controller.setPaintOptions(view.paint.type === 'gradient' ? { foreground: view.foreground } : { paint: DEFAULT_PAINT_GRADIENT }))}>Gradient</button
       >
     {/if}
@@ -108,16 +109,16 @@
 
   {#if view.tool === 'mixer'}
     {@const load = view.mixerLoad}
-    <div class="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
+    <div class="flex flex-col gap-2 border-t border-border pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
       <div class="flex items-center gap-2">
         <span
           aria-label="Brush load"
           title={load.reservoir ? `Loaded ${rgbUnitToHex(load.reservoir)}, ${Math.round(load.amount * 100)}% left` : 'Unloaded'}
-          class="h-6 w-6 rounded border border-slate-700"
+          class="h-6 w-6 rounded border border-border"
           style:background={load.reservoir ? rgbUnitToHex(load.reservoir) : 'transparent'}
         ></span>
-        <button type="button" title="Fill the reservoir with the foreground colour" class={chip(false)} onclick={() => controller.loadMixerBrush()}>Load brush</button>
-        <button type="button" title="Empty the picked-up colour" class={chip(false)} onclick={() => controller.cleanMixerBrush()}>Clean brush</button>
+        <button type="button" title="Fill the reservoir with the foreground colour" class={imageChipClass(false)} onclick={() => controller.loadMixerBrush()}>Load brush</button>
+        <button type="button" title="Empty the picked-up colour" class={imageChipClass(false)} onclick={() => controller.cleanMixerBrush()}>Clean brush</button>
       </div>
       <div class="flex gap-1" role="group" aria-label="Mixing">
         {#each MIXER_MIXING_OPTIONS as m (m.id)}
@@ -125,21 +126,21 @@
             type="button"
             aria-pressed={view.mixer.mixing === m.id}
             title={m.title}
-            class={chip(view.mixer.mixing === m.id)}
+            class={imageChipClass(view.mixer.mixing === m.id)}
             onclick={() => controller.setPaintOptions({ mixer: { mixing: m.id } })}>{m.label}</button>
         {/each}
       </div>
       {#each MIXER_OPTION_CONTROLS as spec (spec.id)}
         <ControlSlider {spec} value={view.mixer[spec.id]} onchange={(v) => controller.setPaintOptions({ mixer: { [spec.id]: v } })} />
       {/each}
-      <div class="flex flex-wrap gap-3 text-slate-300">
+      <div class="flex flex-wrap gap-3 text-foreground">
         <label class="flex items-center gap-1.5">
           <input
             type="checkbox"
             aria-label="Load the brush after each stroke"
             checked={view.mixer.loadEachStroke}
             onchange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: (e.target as HTMLInputElement).checked } })}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           Load each stroke
         </label>
@@ -149,7 +150,7 @@
             aria-label="Clean the brush after each stroke"
             checked={view.mixer.cleanEachStroke}
             onchange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: (e.target as HTMLInputElement).checked } })}
-            class="accent-indigo-500"
+            class="accent-primary"
           />
           Clean each stroke
         </label>
@@ -158,12 +159,12 @@
   {/if}
 
   {#if isRetouchPaintTool(view.tool)}
-    <div class="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
+    <div class="flex flex-col gap-2 border-t border-border pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
       {#if view.tool === 'clone' || view.tool === 'heal'}
         <div class="flex items-center gap-2">
-          <span class="text-slate-400" data-testid="clone-source">{view.sourceLabel}</span>
+          <span class="text-muted-foreground" data-testid="clone-source">{view.sourceLabel}</span>
           {#if view.cloneSource}
-            <button type="button" title="Forget the source point" class={chip(false)} onclick={() => controller.setCloneSource(null)}>Clear source</button>
+            <button type="button" title="Forget the source point" class={imageChipClass(false)} onclick={() => controller.setCloneSource(null)}>Clear source</button>
           {/if}
         </div>
         <div class="flex flex-col gap-1" role="group" aria-label="Clone source transform" data-testid="clone-transform">
@@ -171,23 +172,23 @@
             <ControlSlider {spec} value={view.cloneView[spec.id]} onchange={(v) => setCloneTransformValue(controller, spec.id, v)} />
           {/each}
           <div class="flex items-center gap-1">
-            <button type="button" aria-pressed={view.cloneView.flipH} title="Mirror the source left to right" class={chip(view.cloneView.flipH)} onclick={() => setCloneTransformValue(controller, 'flipH')}>Flip H</button>
-            <button type="button" aria-pressed={view.cloneView.flipV} title="Mirror the source top to bottom" class={chip(view.cloneView.flipV)} onclick={() => setCloneTransformValue(controller, 'flipV')}>Flip V</button>
+            <button type="button" aria-pressed={view.cloneView.flipH} title="Mirror the source left to right" class={imageChipClass(view.cloneView.flipH)} onclick={() => setCloneTransformValue(controller, 'flipH')}>Flip H</button>
+            <button type="button" aria-pressed={view.cloneView.flipV} title="Mirror the source top to bottom" class={imageChipClass(view.cloneView.flipV)} onclick={() => setCloneTransformValue(controller, 'flipV')}>Flip V</button>
             {#if !view.cloneView.identity}
-              <button type="button" title="Back to 100 %, no flip, 0°" class={chip(false)} onclick={() => controller.setCloneTransform(null)}>Reset transform</button>
+              <button type="button" title="Back to 100 %, no flip, 0°" class={imageChipClass(false)} onclick={() => controller.setCloneTransform(null)}>Reset transform</button>
             {/if}
           </div>
         </div>
       {/if}
       {#each RETOUCH_CHOICES.filter((c) => c.tools.includes(view.tool as never)) as choice (choice.id)}
         <div class="flex flex-wrap items-center gap-1" role="group" aria-label={choice.label}>
-          <span class="text-slate-400">{choice.label}</span>
+          <span class="text-muted-foreground">{choice.label}</span>
           {#each choice.options as o (o.id)}
             <button
               type="button"
               aria-pressed={view.retouch[choice.id] === o.id}
               title={o.title}
-              class={chip(view.retouch[choice.id] === o.id)}
+              class={imageChipClass(view.retouch[choice.id] === o.id)}
               onclick={() => setRetouchChoice(controller, choice.id, o.id)}>{o.label}</button>
           {/each}
         </div>
@@ -195,7 +196,7 @@
       {#each RETOUCH_OPTION_CONTROLS.filter((c) => c.tools.includes(view.tool as never)) as spec (spec.id)}
         <ControlSlider {spec} value={view.retouch[spec.id]} onchange={(v) => controller.setPaintOptions({ retouch: { [spec.id]: v } })} />
       {/each}
-      <div class="flex flex-wrap gap-3 text-slate-300">
+      <div class="flex flex-wrap gap-3 text-foreground">
         {#each RETOUCH_TOGGLES.filter((t) => t.tools.includes(view.tool as never)) as t (t.id)}
           <label class="flex items-center gap-1.5">
             <input
@@ -203,7 +204,7 @@
               aria-label={t.label}
               checked={view.retouch[t.id]}
               onchange={(e) => controller.setPaintOptions({ retouch: { [t.id]: (e.target as HTMLInputElement).checked } })}
-              class="accent-indigo-500"
+              class="accent-primary"
             />
             {t.label}
           </label>
@@ -212,14 +213,14 @@
     </div>
   {/if}
 
-  <div class="flex flex-wrap gap-3 text-slate-300" role="group" aria-label="Pressure">
+  <div class="flex flex-wrap gap-3 text-foreground" role="group" aria-label="Pressure">
     <label class="flex items-center gap-1.5">
       <input
         type="checkbox"
         aria-label="Pressure controls size"
         checked={view.brush.pressureSize}
         onchange={(e) => controller.setPaintOptions({ brush: { pressureSize: (e.target as HTMLInputElement).checked } })}
-        class="accent-indigo-500"
+        class="accent-primary"
       />
       Pressure size
     </label>
@@ -229,17 +230,17 @@
         aria-label="Pressure controls opacity"
         checked={view.brush.pressureOpacity}
         onchange={(e) => controller.setPaintOptions({ brush: { pressureOpacity: (e.target as HTMLInputElement).checked } })}
-        class="accent-indigo-500"
+        class="accent-primary"
       />
       Pressure opacity
     </label>
   </div>
 
   <div class="flex gap-1">
-    <button type="button" class={chip(false)} onclick={() => attempt(() => controller.fillPixels())}>Fill</button>
-    <button type="button" class={chip(false)} onclick={() => attempt(() => controller.clearPixels())}>Clear</button>
+    <button type="button" class={imageChipClass(false)} onclick={() => attempt(() => controller.fillPixels())}>Fill</button>
+    <button type="button" class={imageChipClass(false)} onclick={() => attempt(() => controller.clearPixels())}>Clear</button>
   </div>
   {#if error}
-    <p role="alert" class="text-rose-400">{error}</p>
+    <p role="alert" class="text-destructive">{error}</p>
   {/if}
 </div>

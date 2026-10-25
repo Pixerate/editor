@@ -2,13 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
 import { EffectsBrowser } from '../effects';
 import { ImageEffectControls as Controls } from './ImageEffectControls';
+import { imageOutlineButtonClass } from './styles';
 
 export interface ImageProviderEffectsPanelProps {
   controller: ImageEditorController;
   className?: string;
 }
-
-const btn = 'rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:text-white disabled:opacity-40';
 
 /**
  * Provider effects in the image editor, for the active layer: its effect smart filters (apply,
@@ -50,15 +49,15 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
   return (
     <section className={`flex flex-col gap-2 text-xs ${className}`} aria-label="Provider effects" data-image-provider-effects="">
       <div className="flex items-center gap-1">
-        <span className="flex-1 font-semibold uppercase tracking-wider text-[11px] text-slate-200">Effects</span>
-        <button type="button" className={btn} disabled={!provider || !canFilter} aria-pressed={browse === 'filter'} onClick={() => setBrowse(browse === 'filter' ? null : 'filter')}>
+        <span className="flex-1 font-semibold uppercase tracking-wider text-[11px] text-foreground">Effects</span>
+        <button type="button" className={imageOutlineButtonClass} disabled={!provider || !canFilter} aria-pressed={browse === 'filter'} onClick={() => setBrowse(browse === 'filter' ? null : 'filter')}>
           Apply effect…
         </button>
-        <button type="button" className={btn} disabled={!provider} aria-pressed={browse === 'layer'} onClick={() => setBrowse(browse === 'layer' ? null : 'layer')}>
+        <button type="button" className={imageOutlineButtonClass} disabled={!provider} aria-pressed={browse === 'layer'} onClick={() => setBrowse(browse === 'layer' ? null : 'layer')}>
           Effect layer…
         </button>
       </div>
-      {!provider && <p className="text-[11px] text-slate-400">No effects provider is registered. Effects in the document are kept.</p>}
+      {!provider && <p className="text-[11px] text-muted-foreground">No effects provider is registered. Effects in the document are kept.</p>}
       {browse === 'filter' && layer && (
         <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id)))} />
       )}
@@ -68,8 +67,8 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
       {generator && layer && (
         <div className="space-y-1" data-effect-part="generator">
           <div className="flex items-center gap-1">
-            <span className="flex-1 font-medium text-slate-200">{generator.name ?? generator.effect}</span>
-            <button type="button" className={btn} title="Keep the pixels as a plain layer" onClick={() => run(() => controller.rasterizeEffectLayer(layer.id))}>
+            <span className="flex-1 font-medium text-foreground">{generator.name ?? generator.effect}</span>
+            <button type="button" className={imageOutlineButtonClass} title="Keep the pixels as a plain layer" onClick={() => run(() => controller.rasterizeEffectLayer(layer.id))}>
               Rasterize
             </button>
           </div>
@@ -91,29 +90,29 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
             const index = all.indexOf(f);
             if (f.kind !== 'effect') return null;
             return (
-              <li key={f.id} className="rounded border border-slate-700 p-1" data-smart-effect={f.id}>
+              <li key={f.id} className="rounded border border-border p-1" data-smart-effect={f.id}>
                 <div className="flex items-center gap-1">
                   <input type="checkbox" checked={f.enabled} aria-label={`${label} on`} onChange={(e) => {
                       const enabled = e.currentTarget.checked;
                       run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
                     }} />
-                  <button type="button" className="min-w-0 flex-1 truncate text-left text-slate-200" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}>
+                  <button type="button" className="min-w-0 flex-1 truncate text-left text-foreground" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}>
                     {label}
                   </button>
-                  <button type="button" className={btn} disabled={index === all.length - 1} aria-label="Move up" onClick={() => run(() => controller.updateEffectFilter(layer.id, f.id, { index: index + 1 }))}>
+                  <button type="button" className={imageOutlineButtonClass} disabled={index === all.length - 1} aria-label="Move up" onClick={() => run(() => controller.updateEffectFilter(layer.id, f.id, { index: index + 1 }))}>
                     ↑
                   </button>
-                  <button type="button" className={btn} disabled={index === 0} aria-label="Move down" onClick={() => run(() => controller.updateEffectFilter(layer.id, f.id, { index: index - 1 }))}>
+                  <button type="button" className={imageOutlineButtonClass} disabled={index === 0} aria-label="Move down" onClick={() => run(() => controller.updateEffectFilter(layer.id, f.id, { index: index - 1 }))}>
                     ↓
                   </button>
-                  <button type="button" className={btn} aria-label={`Remove ${label}`} onClick={() => run(() => controller.removeSmartFilter(layer.id, f.id))}>
+                  <button type="button" className={imageOutlineButtonClass} aria-label={`Remove ${label}`} onClick={() => run(() => controller.removeSmartFilter(layer.id, f.id))}>
                     ✕
                   </button>
                 </div>
                 {open === f.id && (
                   <div className="mt-1 space-y-2">
                     <label className="flex items-center gap-1">
-                      <span className="w-14 text-[11px] text-slate-300">Opacity</span>
+                      <span className="w-14 text-[11px] text-foreground">Opacity</span>
                       <input
                         type="range"
                         min={0}
@@ -143,9 +142,9 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
           })}
         </ol>
       )}
-      {!layer && <p className="text-[11px] text-slate-400">Select a layer to apply effects to it.</p>}
+      {!layer && <p className="text-[11px] text-muted-foreground">Select a layer to apply effects to it.</p>}
       {message && (
-        <p role="alert" className="text-[11px] text-rose-400">
+        <p role="alert" className="text-[11px] text-destructive">
           {message}
         </p>
       )}

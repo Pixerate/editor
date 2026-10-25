@@ -34,7 +34,7 @@
   role="img"
   aria-label={histogram ? `Histogram of ${histogram.samples} pixels` : 'Histogram (no data)'}
   data-testid="image-editor-histogram"
-  class="w-full rounded bg-slate-950/60 {className}"
+  class="w-full rounded bg-muted/40 {className}"
   style="height: {height}px"
 >
   {#each paths as p (p.c)}
