@@ -106,16 +106,16 @@ export function planImageToolPlayback(tool: string, args: Record<string, any>): 
 
 /**
  * Gives an image tool provider agent playback: each write tool plans its steps with
- * `planImageToolPlayback` and every call plays on the `surface` (default `image`, where
- * `ImageEditor` attaches itself).
+ * `planImageToolPlayback` and every call plays on `surface`. An explicit `surface` wins over the
+ * provider's own `playbackSurface`; with neither, it is `image` (where `ImageEditor` attaches itself).
  */
-export function withImagePlayback(provider: AgentToolProvider, surface = 'image'): AgentToolProvider {
+export function withImagePlayback(provider: AgentToolProvider, surface?: string): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool =>
 		tool.plan || tool.playback !== undefined ? tool : { ...tool, plan: (args) => planImageToolPlayback(tool.name, args) };
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? surface,
+		playbackSurface: surface ?? provider.playbackSurface ?? 'image',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
 }

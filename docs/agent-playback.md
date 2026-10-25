@@ -107,6 +107,16 @@ Before each write the cursor opens the panel the tool belongs to, by clicking it
 
 Surface coordinates are document pixels. The editor's own tabs, sliders and layer rows are located too, through `{ kind: 'panel' | 'control' | 'layer', id }` refs.
 
+**Several editors of one kind on one registry** (an image editor per canvas node, say) each attach under their own surface id. Give each editor's tool providers the same id as `playbackSurface`, and the component that id as `playbackId`:
+
+```tsx
+registry.register(createImageEditorToolProvider(controllerA, { id: 'imageA', playbackSurface: 'imageA:surface' }));
+useImageEffectsTools(registry, controllerA, { id: 'imageA-effects', playbackSurface: 'imageA:surface' });
+<ImageEditor editor={editorA} playback={playback} playbackId="imageA:surface" />
+```
+
+Every tool-provider factory that plays on its editor takes `playbackSurface`: `createImageEditorToolProvider`, `createImageEffectsToolProvider`, `createVideoEditorToolProvider`, `createVideoEffectsToolProvider`, `createAnimationEditorToolProvider`, `createAnimationEffectsToolProvider`, `createChartToolProvider`, `createPaintEditorToolProvider`, `createPaintEffectsToolProvider` and `createSpreadsheetToolProvider`, and so do the React and Svelte hooks that register them (`useImageEffectsTools`, `useVideoEditorTools`, …). Without it they play on their default surface (`image`, `video`, `animation`, `chart`, `paint`, `spreadsheet`). The `with*Playback(provider, surface)` wrappers follow the same rule when you wrap a provider of your own: an explicit `surface` wins over the provider's `playbackSurface`, which wins over the default.
+
 **Spreadsheet, video, animation and parameters** work the same way. Each component takes `playback`, `playbackId` and a reveal callback:
 - `<SpreadsheetEditor>` attaches as `spreadsheet` and finds cells by `td[data-row][data-col]`.
 - `<VideoTimeline>` / `<VideoEditor>` attach as `video` and map times through their zoom.

@@ -101,12 +101,12 @@ export type ChartToolProviderHookOptions = Omit<ChartToolProviderOptions, 'raste
 export function useChartToolProvider(registry: ToolRegistry | null | undefined, controller: ChartController, options: ChartToolProviderHookOptions = {}): void {
   const latest = useRef(options);
   latest.current = options;
-  const { id, namespace } = options;
+  const { id, namespace, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
     const { rasterize, ...rest } = latest.current;
-    return registry.register(createChartToolProvider(controller, { ...rest, id, namespace, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
-  }, [registry, controller, id, namespace]);
+    return registry.register(createChartToolProvider(controller, { ...rest, id, namespace, playbackSurface, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
+  }, [registry, controller, id, namespace, playbackSurface]);
 }
 
 /**

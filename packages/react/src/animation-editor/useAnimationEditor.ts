@@ -75,11 +75,11 @@ export function useAnimationEditorTools(
   controller: AnimationEditorController,
   options: AnimationEditorToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly, rasterize } = options;
+  const { id, namespace, readOnly, rasterize, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createAnimationEditorToolProvider(controller, { id, namespace, readOnly, rasterize }));
-  }, [registry, controller, id, namespace, readOnly, rasterize]);
+    return registry.register(createAnimationEditorToolProvider(controller, { id, namespace, readOnly, rasterize, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, rasterize, playbackSurface]);
 }
 
 /**
@@ -92,9 +92,9 @@ export function useAnimationEffectsTools(
   controller: AnimationEditorController,
   options: AnimationEffectsToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createAnimationEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createAnimationEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }
