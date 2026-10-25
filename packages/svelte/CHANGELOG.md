@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.109.1
+
+### Patch Changes
+
+- de9d04b: `EditableTextNodeEditor`: bold, italic, underline, links and inline code keep the colour of the text around them, so making coloured or gradient text bold no longer resets its colour.
+
 ## 0.109.0
 
 ### Minor Changes
