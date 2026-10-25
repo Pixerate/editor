@@ -293,7 +293,7 @@ export class WetStrokeDriver {
 /** The wet settings each medium gives a layer the first time it holds wet paint. */
 export const WET_MEDIUM_PARAMS: Readonly<Record<WetMediumKind, Partial<WetParams>>> = {
   watercolor: {},
-  gouache: { viscosity: 0.45, edgeDarkening: 0.15, granulation: 0.1, bloom: 0.1, bleed: 0.15, pigmentWeight: 0.5 },
+  gouache: { viscosity: 0.45, evaporation: 0.1, edgeDarkening: 0.15, granulation: 0.1, bloom: 0.1, bleed: 0.15, pickup: 0.5, pigmentWeight: 0.5 },
   oil: { viscosity: 0.95, evaporation: 0.03, edgeDarkening: 0, granulation: 0, bloom: 0, bleed: 0.08, pickup: 0.6, fixture: 0.02, pigmentWeight: 0.8 },
 };
 

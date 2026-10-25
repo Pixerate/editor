@@ -40,13 +40,16 @@ export class WetMedium implements PaintMedium {
   sample(rect: RasterRect, cov: ArrayLike<number>): PaintSample | null {
     const s = this.world.sample(this.laneId, rect, cov);
     if (!(s.wet > 0) || !(s.weight > 0)) return null;
-    const k = s.pigment;
-    const kmax = Math.max(k[0], k[1], k[2]);
+    const k0 = s.pigment[0] + s.settled[0];
+    const k1 = s.pigment[1] + s.settled[1];
+    const k2 = s.pigment[2] + s.settled[2];
+    const k3 = s.pigment[3] + s.settled[3];
+    const kmax = Math.max(k0, k1, k2);
     if (!(kmax > 1e-9)) return null;
     const f = SAMPLE_K / kmax;
-    const rgb = pigmentColor(k[0] * f, k[1] * f, k[2] * f, k[3] * f) as RgbTriple;
+    const rgb = pigmentColor(k0 * f, k1 * f, k2 * f, k3 * f) as RgbTriple;
     // Mass per wet cell, against a moderate wash (0.02 of K per cell).
-    const density = Math.min(1, (k[0] + k[1] + k[2]) / s.wet / 0.06);
+    const density = Math.min(1, (k0 + k1 + k2) / s.wet / 0.06);
     return { rgb, contact: (s.wet / s.weight) * density };
   }
 
