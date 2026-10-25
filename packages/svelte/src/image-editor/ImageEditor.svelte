@@ -1,40 +1,20 @@
 <script lang="ts">
   import type {
-    Annotation,
-    CropBox,
-    CropHandle,
     ExportOptions,
     ImageEditorTool,
-    ImagePoint,
     InpaintHook,
     RemoveBackgroundHook,
     ImageEditorAIHooks,
     ImageEditorFit,
   } from '@pixerate/editor/image-editor';
-  import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
-  import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
-  import PresenceLayer from '../playback/PresenceLayer.svelte';
+  import type { AgentPlayback, PlaybackRef } from '@pixerate/editor/tools';
   import {
-    canvasToImagePoint,
-    imageToCanvasPoint,
-    createImagePlaybackLocator,
-    hitTestCrop,
-    getCropCursor,
-    calculateCropDrag,
-    hitTestAnnotation,
     normalizeProcessVersion,
     LATEST_PROCESS_VERSION,
     IMAGE_ADJUSTMENT_CONTROLS,
     readAdjustmentControls,
     DEFAULT_SELECTION_TOOL_OPTIONS,
-    SelectionGesture,
-    PaintGesture,
-    handlePaintShortcut,
-    pointerPressure,
     FreeTransformTool,
-    getViewportProjection,
-    ShapeDrawGesture,
-    TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
     DEFAULT_TYPE_TOOL_OPTIONS,
     type SelectionToolOptions,
@@ -42,6 +22,8 @@
     type TextEditSession,
     type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
+  import ImageEditorCanvas from './ImageEditorCanvas.svelte';
+  import type { ImageEditorCanvasErrorSource, ImageEditorCanvasMode } from './canvasTypes.js';
   import ControlSlider from './ControlSlider.svelte';
   import Histogram from './Histogram.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
@@ -115,204 +97,59 @@
     normalizeProcessVersion(editor.state.adjustments.process) < LATEST_PROCESS_VERSION
   );
 
-  let canvasEl = $state<HTMLCanvasElement | null>(null);
-  let containerEl = $state<HTMLDivElement | null>(null);
   let activeTab = $state<'crop' | 'adjust' | 'layers' | 'paint' | 'select' | 'annotate' | 'depth' | 'ai'>('crop');
   let rootEl = $state<HTMLDivElement | null>(null);
+  /** The tabs with canvas gestures drive the canvas mode; the others only view. */
+  const canvasMode = $derived<ImageEditorCanvasMode>(
+    activeTab === 'crop' || activeTab === 'select' || activeTab === 'paint' || activeTab === 'annotate' ? activeTab : 'none'
+  );
 
-  // Agent playback: the agent's cursor in document pixels, over the whole editor (canvas and panels).
-  const ambientPlayback = getAgentPlayback();
-  const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
-  /** Document pixels → pixels in the editor's root element, through the canvas projection. */
-  const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
-    if (!canvasEl || !rootEl || !canvasEl.width) return p;
-    const r = canvasEl.getBoundingClientRect();
-    const box = rootEl.getBoundingClientRect();
-    const c = imageToCanvasPoint(p, editor.controller.getState(), canvasEl.width, canvasEl.height, activeTab === 'crop');
-    return { x: r.left - box.left + (c.x * r.width) / canvasEl.width, y: r.top - box.top + (c.y * r.height) / canvasEl.height };
-  };
-  /** Viewport (client) pixels → document pixels. */
-  const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
-    if (!canvasEl || !canvasEl.width) return p;
-    const r = canvasEl.getBoundingClientRect();
-    const sx = r.width > 0 ? canvasEl.width / r.width : 1;
-    const sy = r.height > 0 ? canvasEl.height / r.height : 1;
-    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, editor.controller.getState(), canvasEl.width, canvasEl.height, activeTab === 'crop');
-  };
-  /** An element of the editor (a tab, slider or layer row) as a rectangle in document pixels. */
-  const elementRect = (selector: string): PlaybackRect | null => {
-    const r = rootEl?.querySelector(selector)?.getBoundingClientRect();
-    if (!r || r.width <= 0) return null;
-    const a = clientToDoc({ x: r.left, y: r.top });
-    const b = clientToDoc({ x: r.right, y: r.bottom });
-    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
-  };
-  const agentPresence = createPlaybackSurface(() => playing, () => playbackId, () => ({
-    defaultKind: 'layer',
-    locate: (ref: PlaybackRef) => {
-      if (ref.kind === 'panel') return elementRect(`[data-image-tab="${CSS.escape(ref.id)}"]`);
-      if (ref.kind === 'control') return elementRect(`[data-control-id="${CSS.escape(ref.id)}"]`);
-      return createImagePlaybackLocator(editor.controller)(ref) ?? (ref.kind === 'layer' || ref.kind === 'item' ? elementRect(`[data-layer-id="${CSS.escape(ref.id)}"]`) : null);
-    },
-    open: async (ref: PlaybackRef) => {
-      if (ref.kind !== 'panel' || activeTab === ref.id) return;
-      rootEl?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
-      // Let the panel render before the cursor looks for its controls.
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    },
-    bounds: () => {
-      const r = canvasEl?.getBoundingClientRect();
-      if (!r || r.width <= 0) return null;
-      const a = clientToDoc({ x: r.left, y: r.top });
-      const b = clientToDoc({ x: r.right, y: r.bottom });
-      return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
-    },
-    visible: () => {
-      const r = rootEl?.getBoundingClientRect();
-      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
-    },
-    toViewport: (p: PlaybackPoint) => {
-      const box = rootEl?.getBoundingClientRect();
-      const q = docToRoot(p);
-      return { x: (box?.left ?? 0) + q.x, y: (box?.top ?? 0) + q.y };
-    },
-    fromViewport: clientToDoc,
-    reveal: () => onplaybackreveal?.()
-  }));
+  /** Agent playback opens a panel by clicking its tab, unless it is already open. */
+  async function openPanel(ref: PlaybackRef) {
+    if (ref.kind !== 'panel' || activeTab === ref.id) return;
+    rootEl?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
+    // Let the panel render before the cursor looks for its controls.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  }
 
-  // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
+  // Tool options for the canvas, set by the options bars.
   let selectionOptions = $state<SelectionToolOptions>({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
-  const selectionGesture = $derived(new SelectionGesture(editor.controller, () => selectionOptions));
-  // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
-  const paintGesture = $derived(new PaintGesture(editor.controller));
-  let brushCursor: ImagePoint | null = null;
-
-  // Shape and type tools: their options and gestures; type is edited on the canvas through a hidden textarea.
   let shapeOptions = $state<ShapeToolOptions>({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
   let typeOptions = $state<TypeToolOptions>({ ...DEFAULT_TYPE_TOOL_OPTIONS });
-  const shapeGesture = $derived(new ShapeDrawGesture(editor.controller, () => shapeOptions));
-  const typeTool = $derived(new TypeToolGesture(editor.controller, () => typeOptions));
   let typeSession = $state<TextEditSession | null>(null);
-  let typeInputEl = $state<HTMLTextAreaElement | null>(null);
   let shapeTypeError = $state<string | null>(null);
-  $effect(() => {
-    const s = typeSession;
-    if (!s) return;
-    return untrack(() => s.subscribe(() => void renderCanvas()));
-  });
-  $effect(() => {
-    // End the edit when the tool or tab changes.
-    const keep = activeTab === 'annotate' && editor.state.activeTool === 'type';
-    untrack(() => {
-      if (!keep && typeTool.session) finishTyping();
-    });
-  });
+  let paintError = $state<string | null>(null);
+  let selectionError = $state<string | null>(null);
+  let activeCropRatio = $state<number | null>(null);
+  function handleCanvasError(source: ImageEditorCanvasErrorSource, message: string | null) {
+    if (source === 'paint') paintError = message;
+    else if (source === 'select') selectionError = message;
+    else shapeTypeError = message;
+  }
   function finishTyping() {
-    typeTool.finish();
+    // The canvas finishes the edit when its bound session is cleared.
     typeSession = null;
-    void renderCanvas();
-  }
-  function handleTypeKeyDown(e: KeyboardEvent) {
-    const session = typeTool.session;
-    if (!session || e.isComposing) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      finishTyping();
-      return;
-    }
-    if ((e.metaKey || e.ctrlKey) && ['z', 'y', 'c', 'x', 'v'].includes(e.key.toLowerCase())) return;
-    if (session.handleKey(e)) {
-      e.preventDefault();
-      shapeTypeError = session.error;
-    }
-  }
-  function handleTypeInput(e: Event) {
-    // Composed (IME) and pasted text arrives here; plain keys were handled on keydown.
-    const el = e.currentTarget as HTMLTextAreaElement;
-    const session = typeTool.session;
-    if (session && el.value && !(e as InputEvent).isComposing) {
-      session.insert(el.value);
-      el.value = '';
-    }
-  }
-  function handleTypeComposition(e: CompositionEvent) {
-    const session = typeTool.session;
-    if (session && e.data) session.insert(e.data);
-    (e.currentTarget as HTMLTextAreaElement).value = '';
   }
 
-  // Free Transform (Ctrl/Cmd+T): the shared tool drives a session; its overlay is drawn by the renderer.
+  // Free Transform (Ctrl/Cmd+T): shared with the canvas, which drives and draws it.
   const transformTool = $derived(
     new FreeTransformTool(editor.controller, {
       schedule: (run) => (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(run) : run()),
     })
   );
   let transformTick = $state(0);
-  let transformCursor = $state('default');
   const transformActive = $derived((void transformTick, transformTool.active));
   const transformError = $derived((void transformTick, transformTool.error));
   $effect(() => {
     const tool = transformTool;
     const off = tool.subscribe(() => {
       transformTick++;
-      void renderCanvas();
     });
     return () => {
       off();
       tool.cancel();
     };
   });
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    const tool = transformTool;
-    const onKey = (e: KeyboardEvent) => {
-      if (tool.key(e)) e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
-  /** The document point of a pointer event and the hit tolerance (6 screen px). */
-  function transformPoint(e: PointerEvent) {
-    const rect = canvasEl!.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
-    const s = editor.controller.getState();
-    const cropping = activeTab === 'crop';
-    const projection = getViewportProjection(s, canvasEl!.width, canvasEl!.height, cropping);
-    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, cropping);
-    transformTool.setView(projection.scale);
-    return { pt, tolerance: 6 / (projection.scale || 1) };
-  }
-  function handleTransformPointerDown(e: PointerEvent): boolean {
-    if (!transformTool.active || !canvasEl) return false;
-    if (e.button !== 0) return true;
-    e.preventDefault();
-    try {
-      canvasEl.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Synthetic events have no active pointer to capture.
-    }
-    const { pt, tolerance } = transformPoint(e);
-    transformTool.down(pt, tolerance);
-    return true;
-  }
-  function handleTransformPointerMove(e: PointerEvent): boolean {
-    if (!transformTool.active || !canvasEl) return false;
-    const { pt, tolerance } = transformPoint(e);
-    if (e.buttons & 1) transformTool.move(pt, e);
-    else transformCursor = transformTool.cursor(transformTool.hit(pt, tolerance));
-    return true;
-  }
-  function handleTransformPointerUp(): boolean {
-    if (!transformTool.active) return false;
-    transformTool.up();
-    return true;
-  }
-  let paintError = $state<string | null>(null);
-  let selectionDraft = $state.raw<ImagePoint[] | null>(null);
-  let selectionError = $state<string | null>(null);
-  let activeCropRatio = $state<number | null>(null);
 
   // AI state
   let inpaintPrompt = $state('');
@@ -398,24 +235,6 @@
   let fontSize = $state(24);
   let textInput = $state('');
 
-  // Live draft and drag references
-  let draftAnnotation = $state<Annotation | null>(null);
-  let draftCrop = $state<CropBox | null>(null);
-  let cropDragInfo: {
-    handle: CropHandle | 'new';
-    startCanvasPt: ImagePoint;
-    startImgPt: ImagePoint;
-    startCrop: CropBox;
-  } | null = null;
-  let annotationDragInfo: {
-    annId: string;
-    startImgPt: ImagePoint;
-    initialAnn: Annotation;
-  } | null = null;
-  let isDrawing = false;
-  let currentPath: ImagePoint[] = [];
-  let dragStartPoint: ImagePoint | null = null;
-
   // Load the image when `src` changes. Only `src` is tracked: AI edits replace
   // the editor's source with a data URL and must not be reverted to `src`.
   let loadedSrc: string | undefined;
@@ -428,511 +247,11 @@
     });
   });
 
-  async function renderCanvas(overrideAnnotation?: Annotation | null, overrideCrop?: CropBox | null) {
-    if (!canvasEl || !containerEl) return;
-    const vpWidth = containerEl.clientWidth || 800;
-    const vpHeight = containerEl.clientHeight || 500;
-
-    await editor.controller.render(canvasEl, {
-      viewportWidth: vpWidth,
-      viewportHeight: vpHeight,
-      fit,
-      showCropOverlay: activeTab === 'crop',
-      showSelectionOverlay: true,
-      interactive: true,
-      draftAnnotation: overrideAnnotation !== undefined ? overrideAnnotation : draftAnnotation,
-      draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,
-      draftSelectionPath: selectionDraft,
-      brushCursor:
-        activeTab === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move' && !transformTool.active
-          ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
-          : null,
-      freeTransform: transformTool.overlay(),
-      textEdit: typeTool.session?.alive ? typeTool.session.overlay() : null,
-    });
-  }
-
-  // Paint tools: pointer events (coalesced samples, pointer capture) into strokes and moves.
-  function paintSamples(e: PointerEvent) {
-    const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
-    const list = events.length ? events : [e];
-    const rect = canvasEl!.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
-    const s = editor.controller.getState();
-    return list.map((ev) => ({
-      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, false),
-      pressure: pointerPressure(ev),
-    }));
-  }
-  function handlePaintPointerDown(e: PointerEvent) {
-    if (handleTransformPointerDown(e)) return;
-    if (activeTab !== 'paint' || e.button !== 0 || !canvasEl) return;
-    e.preventDefault();
-    try {
-      canvasEl.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Synthetic events have no active pointer to capture.
-    }
-    paintError = paintGesture.down({ ...paintSamples(e)[0], altKey: e.altKey });
-  }
-  function handlePaintPointerMove(e: PointerEvent) {
-    if (handleTransformPointerMove(e)) return;
-    if (activeTab !== 'paint' || !canvasEl) return;
-    const samples = paintSamples(e);
-    brushCursor = samples[samples.length - 1] ?? null;
-    if (paintGesture.active) paintGesture.moveTo(samples);
-    else void renderCanvas();
-  }
-  function handlePaintPointerUp() {
-    if (handleTransformPointerUp()) return;
-    if (activeTab !== 'paint' || !paintGesture.active) return;
-    paintGesture.up();
-    if (paintGesture.error) paintError = paintGesture.error;
-  }
-
-  $effect(() => {
-    if (activeTab !== 'paint' || typeof window === 'undefined') return;
-    const c = editor.controller;
-    const onKey = (e: KeyboardEvent) => {
-      if (handlePaintShortcut(c, e)) e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
-  $effect(() => {
-    // Re-render when editor state or activeTab changes
-    void editor.state;
-    void activeTab;
-
-    const raf = typeof requestAnimationFrame !== 'undefined'
-      ? requestAnimationFrame
-      : (cb: () => void) => setTimeout(cb, 0) as unknown as number;
-    const caf = typeof cancelAnimationFrame !== 'undefined'
-      ? cancelAnimationFrame
-      : (id: number) => clearTimeout(id);
-
-    const animId = raf(() => {
-      renderCanvas();
-    });
-    return () => caf(animId);
-  });
-
   $effect(() => {
     if (activeTab === 'crop' && editor.state.activeTool !== 'crop') {
       editor.setTool('crop');
     }
   });
-
-  $effect(() => {
-    if (!containerEl) return;
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        renderCanvas();
-      });
-      observer.observe(containerEl);
-      return () => observer.disconnect();
-    } else {
-      const handleResize = () => renderCanvas();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  });
-
-  function getCanvasEventPoint(e: MouseEvent): ImagePoint {
-    if (!canvasEl) return { x: 0, y: 0 };
-    const rect = canvasEl.getBoundingClientRect();
-    const scaleX = rect.width > 0 ? canvasEl.width / rect.width : 1;
-    const scaleY = rect.height > 0 ? canvasEl.height / rect.height : 1;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
-  }
-
-  function handleMouseDown(e: MouseEvent) {
-    if (!canvasEl || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGesture;
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-      void gesture.begin(imgPt, e).then(() => (selectionError = gesture.error));
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      const activeCrop = draftCrop || editor.state.crop || {
-        x: 0,
-        y: 0,
-        width: editor.state.imageDimensions.width,
-        height: editor.state.imageDimensions.height,
-      };
-      const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
-      const startImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, true);
-
-      if (handle) {
-        cropDragInfo = {
-          handle,
-          startCanvasPt: canvasPt,
-          startImgPt,
-          startCrop: activeCrop,
-        };
-      } else {
-        // Clicked outside crop box: start new crop selection
-        cropDragInfo = {
-          handle: 'new',
-          startCanvasPt: canvasPt,
-          startImgPt,
-          startCrop: { x: startImgPt.x, y: startImgPt.y, width: 0, height: 0 },
-        };
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && (editor.state.activeTool === 'shape' || editor.state.activeTool === 'type')) {
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-      shapeTypeError = null;
-      if (editor.state.activeTool === 'shape') shapeGesture.down(imgPt);
-      else {
-        typeTool.down(imgPt, { shift: e.shiftKey });
-        typeSession = typeTool.session;
-        void renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-      dragStartPoint = imgPt;
-
-      if (editor.state.activeTool === 'select') {
-        for (let i = editor.state.annotations.length - 1; i >= 0; i--) {
-          const ann = editor.state.annotations[i];
-          if (hitTestAnnotation(imgPt, ann)) {
-            editor.selectAnnotation(ann.id);
-            annotationDragInfo = {
-              annId: ann.id,
-              startImgPt: imgPt,
-              initialAnn: { ...ann },
-            };
-            return;
-          }
-        }
-        editor.selectAnnotation(null);
-        return;
-      }
-
-      if (editor.state.activeTool === 'pen') {
-        isDrawing = true;
-        currentPath = [imgPt];
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'pen',
-          x: 0,
-          y: 0,
-          points: [imgPt],
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      }
-    }
-  }
-
-  function handleMouseMove(e: MouseEvent) {
-    if (!canvasEl || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGesture;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false))) {
-        selectionDraft = gesture.draftPath;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      if (cropDragInfo) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, true);
-        let newCrop: CropBox;
-
-        if (cropDragInfo.handle === 'new') {
-          const minX = Math.max(0, Math.min(cropDragInfo.startImgPt.x, currentImgPt.x));
-          const minY = Math.max(0, Math.min(cropDragInfo.startImgPt.y, currentImgPt.y));
-          const maxX = Math.min(editor.state.imageDimensions.width, Math.max(cropDragInfo.startImgPt.x, currentImgPt.x));
-          const maxY = Math.min(editor.state.imageDimensions.height, Math.max(cropDragInfo.startImgPt.y, currentImgPt.y));
-          newCrop = {
-            x: Math.round(minX),
-            y: Math.round(minY),
-            width: Math.round(Math.max(20, maxX - minX)),
-            height: Math.round(Math.max(20, maxY - minY)),
-          };
-        } else {
-          newCrop = calculateCropDrag(
-            cropDragInfo.startCrop,
-            cropDragInfo.handle,
-            cropDragInfo.startImgPt,
-            currentImgPt,
-            editor.state.imageDimensions.width,
-            editor.state.imageDimensions.height,
-            activeCropRatio,
-            editor.state.transform
-          );
-        }
-
-        draftCrop = newCrop;
-        renderCanvas(null, newCrop);
-      } else {
-        const activeCrop = draftCrop || editor.state.crop || {
-          x: 0,
-          y: 0,
-          width: editor.state.imageDimensions.width,
-          height: editor.state.imageDimensions.height,
-        };
-        const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
-        canvasEl.style.cursor = getCropCursor(handle, editor.state.transform);
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && editor.state.activeTool === 'shape') {
-      if (shapeGesture.active) {
-        shapeGesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), { shift: e.shiftKey, alt: e.altKey });
-        if (shapeGesture.error) shapeTypeError = shapeGesture.error;
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      if (annotationDragInfo) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-        const dx = currentImgPt.x - annotationDragInfo.startImgPt.x;
-        const dy = currentImgPt.y - annotationDragInfo.startImgPt.y;
-        editor.updateAnnotation(annotationDragInfo.annId, {
-          x: Math.round(annotationDragInfo.initialAnn.x + dx),
-          y: Math.round(annotationDragInfo.initialAnn.y + dy),
-        });
-        return;
-      }
-
-      if (!dragStartPoint) {
-        if (editor.state.activeTool === 'select') {
-          const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-          let hovered = false;
-          for (let i = editor.state.annotations.length - 1; i >= 0; i--) {
-            if (hitTestAnnotation(imgPt, editor.state.annotations[i])) {
-              hovered = true;
-              break;
-            }
-          }
-          canvasEl.style.cursor = hovered ? 'move' : 'default';
-        } else {
-          canvasEl.style.cursor = 'crosshair';
-        }
-        return;
-      }
-
-      const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-
-      if (editor.state.activeTool === 'pen' && isDrawing) {
-        currentPath.push(currentImgPt);
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'pen',
-          x: 0,
-          y: 0,
-          points: [...currentPath],
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      } else if (editor.state.activeTool === 'rect') {
-        const w = currentImgPt.x - dragStartPoint.x;
-        const h = currentImgPt.y - dragStartPoint.y;
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'rect',
-          x: Math.min(dragStartPoint.x, currentImgPt.x),
-          y: Math.min(dragStartPoint.y, currentImgPt.y),
-          width: Math.abs(w),
-          height: Math.abs(h),
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      } else if (editor.state.activeTool === 'circle') {
-        const rx = Math.abs(currentImgPt.x - dragStartPoint.x) / 2;
-        const ry = Math.abs(currentImgPt.y - dragStartPoint.y) / 2;
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'circle',
-          x: Math.min(dragStartPoint.x, currentImgPt.x) + rx,
-          y: Math.min(dragStartPoint.y, currentImgPt.y) + ry,
-          radiusX: rx,
-          radiusY: ry,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      } else if (editor.state.activeTool === 'arrow') {
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'arrow',
-          x: dragStartPoint.x,
-          y: dragStartPoint.y,
-          endX: currentImgPt.x,
-          endY: currentImgPt.y,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      } else if (editor.state.activeTool === 'line') {
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'line',
-          x: dragStartPoint.x,
-          y: dragStartPoint.y,
-          endX: currentImgPt.x,
-          endY: currentImgPt.y,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotation = draft;
-        renderCanvas(draft);
-      }
-    }
-  }
-
-  function handleMouseUp(e: MouseEvent) {
-    if (!canvasEl || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGesture;
-      if (gesture.active) {
-        gesture.end(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), e);
-        selectionDraft = null;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      if (cropDragInfo) {
-        if (draftCrop && draftCrop.width >= 20 && draftCrop.height >= 20) {
-          editor.setCrop(draftCrop, true);
-        }
-        cropDragInfo = null;
-        draftCrop = null;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && editor.state.activeTool === 'shape') {
-      shapeGesture.up();
-      return;
-    }
-    if (activeTab === 'annotate' && editor.state.activeTool === 'type') {
-      typeTool.up(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false));
-      typeSession = typeTool.session;
-      if (typeTool.error) shapeTypeError = typeTool.error;
-      void renderCanvas();
-      // Keystrokes go to the hidden textarea while text is being edited.
-      if (typeTool.session) setTimeout(() => typeInputEl?.focus(), 0);
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      if (annotationDragInfo) {
-        annotationDragInfo = null;
-        return;
-      }
-
-      if (dragStartPoint) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
-
-        if (editor.state.activeTool === 'pen' && isDrawing) {
-          if (currentPath.length > 1) {
-            editor.addAnnotation({
-              type: 'pen',
-              x: 0,
-              y: 0,
-              points: [...currentPath],
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-          isDrawing = false;
-          currentPath = [];
-        } else if (editor.state.activeTool === 'rect') {
-          const w = Math.abs(currentImgPt.x - dragStartPoint.x);
-          const h = Math.abs(currentImgPt.y - dragStartPoint.y);
-          if (w > 4 && h > 4) {
-            editor.addAnnotation({
-              type: 'rect',
-              x: Math.min(dragStartPoint.x, currentImgPt.x),
-              y: Math.min(dragStartPoint.y, currentImgPt.y),
-              width: w,
-              height: h,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (editor.state.activeTool === 'circle') {
-          const rx = Math.abs(currentImgPt.x - dragStartPoint.x) / 2;
-          const ry = Math.abs(currentImgPt.y - dragStartPoint.y) / 2;
-          if (rx > 4 && ry > 4) {
-            editor.addAnnotation({
-              type: 'circle',
-              x: Math.min(dragStartPoint.x, currentImgPt.x) + rx,
-              y: Math.min(dragStartPoint.y, currentImgPt.y) + ry,
-              radiusX: rx,
-              radiusY: ry,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (editor.state.activeTool === 'arrow') {
-          if (Math.hypot(currentImgPt.x - dragStartPoint.x, currentImgPt.y - dragStartPoint.y) > 4) {
-            editor.addAnnotation({
-              type: 'arrow',
-              x: dragStartPoint.x,
-              y: dragStartPoint.y,
-              endX: currentImgPt.x,
-              endY: currentImgPt.y,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (editor.state.activeTool === 'line') {
-          if (Math.hypot(currentImgPt.x - dragStartPoint.x, currentImgPt.y - dragStartPoint.y) > 4) {
-            editor.addAnnotation({
-              type: 'line',
-              x: dragStartPoint.x,
-              y: dragStartPoint.y,
-              endX: currentImgPt.x,
-              endY: currentImgPt.y,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        }
-
-        draftAnnotation = null;
-        dragStartPoint = null;
-        renderCanvas();
-      }
-    }
-  }
 
   function handleAddText() {
     if (!textInput.trim()) return;
@@ -965,9 +284,6 @@
   class="relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 {className}"
   {style}
 >
-  {#if playing}
-    <PresenceLayer presence={agentPresence} viewport={docToRoot} />
-  {/if}
   <!-- Top Action Header -->
   <div class="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
     <!-- Navigation Tabs -->
@@ -1164,39 +480,26 @@
 
   <div class="flex flex-col md:flex-row flex-1 min-h-[520px] md:h-[560px]">
     <!-- Canvas Area -->
-    <div
-      bind:this={containerEl}
-      class="relative flex-1 h-[360px] md:h-full min-h-[320px] bg-slate-950 overflow-hidden select-none"
-    >
-      <canvas
-        bind:this={canvasEl}
-        onmousedown={handleMouseDown}
-        onmousemove={handleMouseMove}
-        onmouseup={handleMouseUp}
-        onmouseleave={handleMouseUp}
-        onpointerdown={handlePaintPointerDown}
-        onpointermove={handlePaintPointerMove}
-        onpointerup={handlePaintPointerUp}
-        onpointercancel={() => paintGesture.cancel()}
-        data-testid="image-editor-canvas"
-        style={transformActive ? `cursor: ${transformCursor}` : undefined}
-        class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : activeTab === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : activeTab === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
-      ></canvas>
-      {#if typeSession}
-        <textarea
-          bind:this={typeInputEl}
-          aria-label="Edit text"
-          data-testid="type-input"
-          autocapitalize="off"
-          spellcheck={false}
-          onkeydown={handleTypeKeyDown}
-          oninput={handleTypeInput}
-          oncompositionend={handleTypeComposition}
-          class="absolute left-0 top-0 h-px w-px opacity-0"
-        ></textarea>
-      {/if}
-
-    </div>
+    <ImageEditorCanvas
+      {editor}
+      mode={canvasMode}
+      {fit}
+      {selectionOptions}
+      {shapeOptions}
+      {typeOptions}
+      annotationColor={activeColor}
+      annotationWidth={strokeWidth}
+      cropRatio={activeCropRatio}
+      onerror={handleCanvasError}
+      bind:typeSession
+      {transformTool}
+      {playback}
+      {playbackId}
+      {onplaybackreveal}
+      chromeRoot={() => rootEl}
+      open={openPanel}
+      class="flex-1 h-[360px] md:h-full min-h-[320px] bg-slate-950"
+    />
 
     <!-- Tab Controls Sidebar -->
     <div class="w-full md:w-80 bg-slate-900/90 border-t md:border-t-0 md:border-l border-slate-800 p-4 overflow-y-auto h-auto md:h-full md:max-h-[560px]">

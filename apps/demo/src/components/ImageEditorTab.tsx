@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ImageEditor, useAgentToolProvider, useImageEditor } from '@pixerate/editor-react';
+import { ImageEditor, ImageEditorCanvas, useAgentToolProvider, useImageEditor, type ImageEditorCanvasMode } from '@pixerate/editor-react';
 import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@pixerate/editor/image-editor';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
@@ -46,6 +46,10 @@ export function ImageEditorTab() {
   const [selectedImage, setSelectedImage] = useState<string>(SAMPLE_IMAGES[0].url);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const editor = useImageEditor();
+  // A second editor for the standalone canvas below, with its own small toolbar.
+  const canvasOnly = useImageEditor();
+  const [canvasMode, setCanvasMode] = useState<ImageEditorCanvasMode>('paint');
+  const [canvasError, setCanvasError] = useState<string | null>(null);
   const [maskNote, setMaskNote] = useState<string | null>(null);
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
@@ -60,6 +64,14 @@ export function ImageEditorTab() {
   useEffect(() => {
     void editor.controller.loadImage(selectedImage);
   }, [editor.controller, selectedImage]);
+  useEffect(() => {
+    void canvasOnly.controller.loadImage(selectedImage).then(() => canvasOnly.controller.addPixelLayer({ name: 'Paint' }));
+  }, [canvasOnly.controller, selectedImage]);
+  const pickCanvasMode = (mode: ImageEditorCanvasMode) => {
+    setCanvasMode(mode);
+    setCanvasError(null);
+    canvasOnly.setTool(mode === 'paint' ? 'brush' : mode === 'annotate' ? 'pen' : mode === 'crop' ? 'crop' : 'select');
+  };
 
   const loadCoarseMask = async () => {
     const { width, height } = editor.controller.getState().imageDimensions;
@@ -163,6 +175,33 @@ export function ImageEditorTab() {
             setExportedUrl(dataUrl);
           }}
         />
+      </div>
+      {/* The canvas alone (ImageEditorCanvas): your own chrome around it, sized by its box. */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold uppercase tracking-wider text-slate-300">Canvas only</span>
+          {(['paint', 'crop', 'select', 'annotate', 'none'] as ImageEditorCanvasMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={canvasMode === m}
+              onClick={() => pickCanvasMode(m)}
+              className={`px-2.5 py-1 rounded-md border capitalize ${canvasMode === m ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
+            >
+              {m}
+            </button>
+          ))}
+          {canvasError && <span role="alert" className="text-rose-400">{canvasError}</span>}
+        </div>
+        <div className="resize overflow-hidden rounded-lg border border-slate-800" style={{ width: 480, height: 280, minWidth: 200, minHeight: 120 }}>
+          <ImageEditorCanvas
+            editor={canvasOnly}
+            mode={canvasMode}
+            playback={null}
+            onError={(_source, message) => setCanvasError(message)}
+            className="h-full w-full bg-slate-950"
+          />
+        </div>
       </div>
       <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
 

@@ -463,6 +463,7 @@ Every feature is available from core and from both framework packages, except wh
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
 | Image Editor Canvas 2D Engine & Transformations | ✅ | `<ImageEditor>` & `useImageEditor` | `<ImageEditor>` & `createReactiveImageEditor` |
+| Image Editor Canvas Alone (render loop sized by its container, every crop / select / paint / annotate / shape / type gesture, Free Transform, overlays, agent playback surface with host `locate` / `locateElement` / `open` hooks for your own chrome) | `ImageEditorController.render`, the gesture classes | `<ImageEditorCanvas>` | `<ImageEditorCanvas>` |
 | Image Filters & Adjustments | ✅ | ✅ | ✅ |
 | Image White Balance (Temperature / Tint, eyedropper) & Process Versions | ✅ | ✅ | ✅ |
 | Image Adjustment Layers (Curves, Levels, Hue/Saturation, Vibrance, Color Balance, B&W, Photo Filter, …) | ✅ | `<AdjustmentLayersPanel>` & `<CurvesEditor>` | `<AdjustmentLayersPanel>` & `<CurvesEditor>` |
