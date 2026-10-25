@@ -267,4 +267,25 @@ describe('effects contract: conformance check catches broken providers', () => {
 			])
 		);
 	});
+
+	it('validates authoring support and catches missing openAuthoring', async () => {
+		const good = createFakeEffectProvider();
+		const withoutOpen: EffectProvider = {
+			...good,
+			id: 'no-open',
+			capabilities: {
+				...good.capabilities,
+				supportsAuthoring: true
+			}
+		};
+		// explicitly ensure openAuthoring is deleted
+		delete (withoutOpen as { openAuthoring?: unknown }).openAuthoring;
+
+		const issues = await checkEffectProvider(withoutOpen);
+		expect(issues.some((i) => i.message.includes('supportsAuthoring is set but openAuthoring is missing'))).toBe(true);
+
+		// Provider without authoring capability is not checked for authoring
+		const noAuthoringProvider = createFakeEffectProvider({ authoring: false });
+		expect(await checkEffectProvider(noAuthoringProvider)).toEqual([]);
+	});
 });
