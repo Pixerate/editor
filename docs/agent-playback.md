@@ -79,6 +79,22 @@ function Board() {
 
 `<AgentPlaybackProvider playback={playback}>` makes a playback the default for every surface below it. Surfaces then take `undefined` for the playback argument and use the context.
 
+**App chrome over the canvas.** The canvas finds nodes and edges from the flow's geometry. A tool whose plan names something else, such as `{ kind: 'panel' | 'control', id }` for your own HUD, toolbar or side panels, is located through options you add:
+
+```tsx
+const presence = useCanvasPlaybackSurface(playback, 'canvas', {
+  getNodes: flow.getNodes, getEdges: flow.getEdges, viewport, container,
+  // An element anywhere on the page; its client box is mapped into flow coordinates.
+  locateElement: (ref) => document.querySelector(`[data-hud="${CSS.escape(ref.id)}"]`),
+  // Or a rectangle already in flow coordinates (tried first).
+  locate: (ref) => null,
+  // Show a panel for an `open` step. Without it, open steps are skipped.
+  open: (ref) => setPanel(ref.id),
+});
+```
+
+The canvas locator runs first; `locate`, then `locateElement`, answer what it does not find. The same three options (`PlaybackChromeOptions` in `@pixerate/editor/tools`) work on `useElementPlaybackSurface` / `createElementPlaybackSurface`, whose `selectors` are now optional, and on the Svelte `createCanvasPlaybackSurface`. `playbackRectFromClient(rect, fromViewport)` and `locatePlaybackChrome(ref, chrome, fromViewport)` do the mapping for a surface of your own.
+
 Arrange commands registered with `createArrangeCommands` (`canvas.alignLeft`, …) play on the same surface. A command plays on the surface named by its `scope`, or by its id prefix (`canvas.`).
 
 Another provider that acts on the same canvas plays there if it names the surface. Spread the provider and add `playbackSurface: 'canvas'`, as with `createCanvasComponentToolProvider`. Providers whose namespace is the surface id (`canvas`) find it on their own.
@@ -152,7 +168,7 @@ The provider marks the director's tools `playback: 'self'`, so value drags (char
 | `defaultKind` | The kind of a bare `id` / `ids` argument |
 | `reveal()` | Bring the surface on screen before playing |
 | `beginGesture` / `endGesture` | Group a call's changes into one undo step |
-| `open(ref)` | Show a panel or tab for an `open` step (e.g. click its tab) |
+| `open(ref)` | Show a panel or tab for an `open` step (e.g. click its tab). The attached surface has `open` only when you give one, so without it `open` steps are skipped instead of waiting |
 
 ## Show the cursor: Svelte
 

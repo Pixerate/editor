@@ -2824,3 +2824,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `pnpm check:packages` failed under node16 (ESM) with `Module '"*.svelte"' has no exported member 'FillMode'`, while `svelte-check`, the build and the bundler check all passed.
 - **Root Cause**: The published `index.d.ts` re-exported the type from `./FillPicker.svelte`. Consumers with `moduleResolution: node16` see `.svelte` imports through the ambient `*.svelte` declaration, which only has a default export.
 - **Solution / Workaround**: Put types that a package entry re-exports in a `.ts` file (e.g. `gradient/types.ts`) and import them into the component from there. Run `pnpm check:packages` after changing a Svelte entry's exports.
+
+### [react|svelte/playback] A Surface That Always Defines `open` Makes Every `open` Step Wait
+
+- **Issue / Symptom**: On surfaces without panels (the node canvas, spreadsheets, a plain element surface), every tool whose plan starts with an `open` step paused for about a third of a second before acting, and the cursor pressed on nothing.
+- **Root Cause**: `AgentPlayback` skips an `open` step only when `surface.open` is undefined. `usePlaybackSurface` / `createPlaybackSurface` always built `open: (ref) => o().open?.(ref)`, so every attached surface looked able to open things, and playback glided, pressed and waited 220 ms for a no-op.
+- **Solution / Workaround**: The helpers expose `open` as a getter that is undefined unless the current options have one (options are still read per step). Surfaces that wrap them pass `open` through the same way (`get open()` or `open: o.open ? … : undefined`), never as an unconditional arrow.
