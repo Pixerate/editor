@@ -83,6 +83,16 @@ export function effectSamplePicture(width: number, height: number, variant = 0):
 }
 
 /**
+ * Sample pictures for an effect's image inputs (`effectSamplePicture`; a transition's `to` gets
+ * the second variant), so previews of filters and transitions have something to change.
+ */
+export function effectSampleInputs(description: Pick<EffectDescription, 'inputs'>, size: { width: number; height: number }): Record<string, EffectPixels> {
+	const inputs: Record<string, EffectPixels> = {};
+	for (const input of description.inputs) if (input.kind === 'image') inputs[input.name] = effectSamplePicture(size.width, size.height, input.name === 'to' ? 1 : 0);
+	return inputs;
+}
+
+/**
  * A small preview of an effect from the provider's own renderer: filters run on a sample picture,
  * transitions go half way between two, generators and overlays draw at `time` (default half
  * their length, or 1 s). Thumbnails render one at a time (each renderer is disposed before the
@@ -112,8 +122,7 @@ async function renderThumbnail(provider: EffectProvider, effect: EffectSummary |
 	const renderer = await provider.createRenderer(d.id, size);
 	try {
 		const time = d.duration ? d.duration / 2 : 1000;
-		const inputs: Record<string, EffectPixels> = {};
-		for (const input of d.inputs) if (input.kind === 'image') inputs[input.name] = effectSamplePicture(size.width, size.height, input.name === 'to' ? 1 : 0);
+		const inputs = effectSampleInputs(d, size);
 		return await renderer.render({ time, inputs, ...(d.uses.includes('transition') ? { progress: 0.5 } : {}) });
 	} finally {
 		renderer.dispose();

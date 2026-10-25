@@ -19,18 +19,27 @@
     keyframed?: ReadonlySet<string>;
     /** Applies a preset's values. */
     onpreset?: (values: Readonly<Record<string, unknown>>) => void;
+    /** Applies a preset by name. */
+    onpresetname?: (name: string) => void;
+    /** Optional addon rendered next to the control label (e.g. keyframe toggle button). */
+    addon?: import('svelte').Snippet<[string]>;
     disabled?: boolean;
     class?: string;
   }
 
-  let { description, values, onchange, onreset, keyframed, onpreset, disabled = false, class: className = '' }: Props = $props();
+  let { description, values, onchange, onreset, keyframed, onpreset, onpresetname, addon, disabled = false, class: className = '' }: Props = $props();
   const fields = $derived(effectParameterFields(description));
   const idBase = `fx-${Math.random().toString(36).slice(2, 8)}`;
   let gesture: string | null = null;
   let count = 0;
   function preset(name: string) {
-    const p = description.presets.find((x) => x.name === name);
-    if (p) onpreset?.({ ...description.defaults, ...p.values });
+    if (!name) return;
+    if (onpresetname) {
+      onpresetname(name);
+    } else if (onpreset) {
+      const p = description.presets.find((x) => x.name === name);
+      if (p) onpreset({ ...description.defaults, ...p.values });
+    }
   }
 </script>
 
@@ -40,7 +49,7 @@
   per-control reset and the effect's presets.
 -->
 <div class="space-y-2 {className}" data-effect-parameters={description.id}>
-  {#if onpreset && description.presets.length > 0}
+  {#if (onpreset || onpresetname) && description.presets.length > 0}
     <select class="w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs" aria-label="{description.name} presets" value="" {disabled} onchange={(e) => preset(e.currentTarget.value)}>
       <option value="">Presets…</option>
       {#each description.presets as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
@@ -54,6 +63,7 @@
       <div class="flex items-center gap-1.5">
         <label for="{idBase}-{field.id}" class="min-w-0 flex-1 truncate text-xs font-medium" title={field.description}>{label}</label>
         {#if keyed}<span class="text-[10px] text-muted-foreground">keyframed</span>{/if}
+        {#if addon}{@render addon(field.id)}{/if}
         {#if onreset && !keyed && !disabled && !parameterValuesEqual(value, field.default)}
           <button type="button" class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Reset {label}" onclick={() => onreset(field.id)}>↺</button>
         {/if}

@@ -12,6 +12,7 @@
  */
 
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
+import { createEffectAuthoringSession } from './authoring-session.js';
 import { createEffectPixels, encodeEffectFloat, isEffectPixels, resolveEffectValues, searchEffectSummaries, srgbToLinear } from './helpers.js';
 import type {
 	EffectDescription,
@@ -314,16 +315,20 @@ export interface FakeEffectProviderOptions {
 	capabilities?: Partial<EffectProviderCapabilities>;
 	/** Called on every render (tests count frames with it). */
 	onRender?: (effectId: string, request: EffectRenderRequest) => void;
+	/** Whether authoring is supported (default true). */
+	authoring?: boolean;
 }
 
 /** A deterministic CPU effects provider with six effects (see the module comment). */
 export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}): EffectProvider {
+	const supportsAuthoring = options.authoring ?? true;
 	const capabilities: EffectProviderCapabilities = {
 		supportsWorker: false,
 		supportsFloat: true,
 		supportsMask: true,
 		supportsHostImages: false,
 		supportsVector: true,
+		supportsAuthoring,
 		maxSize: 8192,
 		...options.capabilities
 	};
@@ -395,7 +400,12 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 				duration: ms + Math.max(0, ids.length - 1) * stagger,
 				loop: false
 			};
-		}
+		},
+		...(supportsAuthoring
+			? {
+					openAuthoring: (from) => createEffectAuthoringSession(from, { provider })
+			  }
+			: {})
 	};
 	return provider;
 }

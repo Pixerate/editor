@@ -20,6 +20,8 @@ export interface EffectConformanceOptions {
 	render?: boolean;
 	/** Renderer size for the render check (default 8). */
 	size?: number;
+	/** Also check authoring when supportsAuthoring is true (default true). */
+	authoring?: boolean;
 }
 
 const codeOf = (e: unknown) => (isEffectError(e) ? e.code : e instanceof Error ? `untyped ${e.name}: ${e.message}` : String(e));
@@ -110,7 +112,9 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	for (const k of ['supportsWorker', 'supportsFloat', 'supportsMask', 'supportsHostImages', 'supportsVector'] as const) {
 		if (typeof caps?.[k] !== 'boolean') top(`capabilities.${k} is not a boolean`);
 	}
+	if (caps?.supportsAuthoring !== undefined && typeof caps.supportsAuthoring !== 'boolean') top('capabilities.supportsAuthoring is not a boolean');
 	if (caps?.supportsVector && typeof provider.applyVectorEffect !== 'function') top('supportsVector is set but applyVectorEffect is missing');
+	if (caps?.supportsAuthoring && typeof provider.openAuthoring !== 'function') top('supportsAuthoring is set but openAuthoring is missing');
 
 	const list = await provider.list();
 	const ids = new Set<string>();
@@ -155,5 +159,65 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 			if (bad) issues.push({ effectId: id, message: `applyVectorEffect with an unknown control ${bad}` });
 		}
 	}
+
+	if (caps?.supportsAuthoring && options.authoring !== false && typeof provider.openAuthoring === 'function') {
+		const targetEffect = (await Promise.all((options.ids ?? [...ids]).map((id) => provider.describe(id)))).find(
+			(d) => d.kind !== 'motion' && d.kind !== 'vector'
+		);
+		if (targetEffect) {
+			try {
+				const session = await provider.openAuthoring({ effectId: targetEffect.id });
+				const s1 = session.getState();
+				const s2 = session.getState();
+				if (s1 !== s2) {
+					issues.push({ effectId: targetEffect.id, message: 'session.getState() returned different objects without changes' });
+				}
+				checkDescription(targetEffect.id, s1.description, issues);
+
+				const badRes = session.setValue('__no_such_control__', 123);
+				if (badRes.ok) {
+					issues.push({ effectId: targetEffect.id, message: 'setValue with unknown control did not fail' });
+				} else if (session.getState() !== s1) {
+					issues.push({ effectId: targetEffect.id, message: 'setValue with unknown control changed state' });
+				}
+
+				// Check valid setValue and undo
+				const firstKey = Object.keys(targetEffect.defaults)[0];
+				if (firstKey) {
+					const val = targetEffect.defaults[firstKey];
+					session.setValue(firstKey, val);
+					if (!session.getState().canUndo) {
+						issues.push({ effectId: targetEffect.id, message: 'setValue did not enable canUndo' });
+					}
+					const undone = session.undo();
+					if (!undone) {
+						issues.push({ effectId: targetEffect.id, message: 'undo() returned false' });
+					}
+				}
+
+				// exportDocument survives roundtrip
+				const doc = session.exportDocument();
+				const cloned = JSON.parse(JSON.stringify(doc));
+				const restored = await provider.openAuthoring({ document: cloned });
+				if (JSON.stringify(restored.getState().values) !== JSON.stringify(session.getState().values)) {
+					issues.push({ effectId: targetEffect.id, message: 'reopening exported document gave different values' });
+				}
+				restored.dispose();
+
+				if (s1.sourceLanguage !== null && typeof session.setSource !== 'function') {
+					issues.push({ effectId: targetEffect.id, message: 'sourceLanguage is not null but setSource is missing' });
+				}
+
+				try {
+					session.dispose();
+				} catch (e) {
+					issues.push({ effectId: targetEffect.id, message: `session.dispose() threw: ${codeOf(e)}` });
+				}
+			} catch (e) {
+				issues.push({ effectId: targetEffect.id, message: `authoring check failed: ${codeOf(e)}` });
+			}
+		}
+	}
+
 	return issues;
 }

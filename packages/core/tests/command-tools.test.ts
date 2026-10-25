@@ -20,7 +20,7 @@ import { ChartController, createChartToolProvider, createOfficeChartToolProvider
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
-import { createFakeEffectProvider } from '../src/effects';
+import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { VectorEditorController, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
@@ -237,6 +237,19 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		);
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
+		{
+			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
+			authoringSession.setSource = async () => ({ ok: true, issues: [] });
+			registry.register(
+				createEffectAuthoringToolProvider(
+					{
+						session: () => authoringSession,
+						capture: async () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+					},
+					{ id: 'effect-authoring', namespace: 'fxauth' }
+				)
+			);
+		}
 		const allTools = registry.listTools().tools;
 		expect(allTools.length).toBeGreaterThan(tools.length);
 		const undescribed: string[] = [];

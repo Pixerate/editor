@@ -8,6 +8,7 @@ import {
 	checkEffectProvider,
 	createEffectPixels,
 	createFakeEffectProvider,
+	effectSampleInputs,
 	isEffectError,
 	resolveEffectValues,
 	searchEffectSummaries,
@@ -266,5 +267,43 @@ describe('effects contract: conformance check catches broken providers', () => {
 				'render after dispose did not fail (expected disposed)'
 			])
 		);
+	});
+
+	it('validates authoring support and catches missing openAuthoring', async () => {
+		const good = createFakeEffectProvider();
+		const withoutOpen: EffectProvider = {
+			...good,
+			id: 'no-open',
+			capabilities: {
+				...good.capabilities,
+				supportsAuthoring: true
+			}
+		};
+		// explicitly ensure openAuthoring is deleted
+		delete (withoutOpen as { openAuthoring?: unknown }).openAuthoring;
+
+		const issues = await checkEffectProvider(withoutOpen);
+		expect(issues.some((i) => i.message.includes('supportsAuthoring is set but openAuthoring is missing'))).toBe(true);
+
+		// The original capabilities are still required; supportsAuthoring may be left out
+		const { supportsVector: _, ...loose } = good.capabilities;
+		const missing = await checkEffectProvider({ ...good, capabilities: loose as typeof good.capabilities });
+		expect(missing.some((i) => i.message === 'capabilities.supportsVector is not a boolean')).toBe(true);
+		const { supportsAuthoring: __, ...noFlag } = good.capabilities;
+		const unflagged = await checkEffectProvider({ ...good, capabilities: noFlag });
+		expect(unflagged.some((i) => i.message.includes('supportsAuthoring'))).toBe(false);
+
+		// Provider without authoring capability is not checked for authoring
+		const noAuthoringProvider = createFakeEffectProvider({ authoring: false });
+		expect(await checkEffectProvider(noAuthoringProvider)).toEqual([]);
+	});
+	it('effectSampleInputs gives each image input a picture (a transition two different ones)', async () => {
+		const provider = createFakeEffectProvider();
+		const crossfade = await provider.describe('fake.crossfade');
+		const inputs = effectSampleInputs(crossfade, { width: 8, height: 4 });
+		expect(Object.keys(inputs).sort()).toEqual(['from', 'to']);
+		expect(inputs.from).toMatchObject({ width: 8, height: 4 });
+		expect(inputs.from.data).not.toEqual(inputs.to.data);
+		expect(effectSampleInputs(await provider.describe('fake.gradient'), { width: 8, height: 4 })).toEqual({});
 	});
 });

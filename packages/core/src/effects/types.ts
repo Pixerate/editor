@@ -9,6 +9,7 @@
 
 import type { JsonSchema } from '../tools/schema.js';
 import type { FlairSvgAnimation } from '../animation-editor/flair.js';
+import type { EffectAuthoringSession, EffectAuthoringSource } from './authoring.js';
 
 /** How an effect is drawn: a pixel shader, an animated vector picture, or motion applied to someone else's vector art. */
 export type EffectKind = 'shader' | 'vector' | 'motion';
@@ -181,9 +182,11 @@ export interface EffectProviderCapabilities {
 	supportsVector: boolean;
 	/** Largest width or height a renderer accepts (px). */
 	maxSize?: number;
+	/** Implements `openAuthoring`: effects can be edited, not only used. */
+	supportsAuthoring?: boolean;
 }
 
-type MaybePromise<T> = T | Promise<T>;
+export type MaybePromise<T> = T | Promise<T>;
 
 /**
  * A source of effects. Implementations live outside this library (for example Flair's
@@ -211,4 +214,9 @@ export interface EffectProvider {
 	 * effect cannot use with `EffectUnsupportedError`.
 	 */
 	applyVectorEffect?(id: string, target: EffectVectorTarget, values?: EffectValues): MaybePromise<EffectVectorMotion>;
+	/**
+	 * Opens an effect for editing. Present when `capabilities.supportsAuthoring`. Unknown ids throw
+	 * `UnknownEffectError`; an effect the provider cannot edit throws `EffectUnsupportedError`.
+	 */
+	openAuthoring?(from: EffectAuthoringSource): MaybePromise<EffectAuthoringSession>;
 }

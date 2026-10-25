@@ -83,7 +83,57 @@ const release = editor.useEffects(effects);
 | `createCanvasEffectsToolProvider` | `set_canvas_effect_mode`, `list_scene_transitions`, `set_scene_transition` |
 | `createPaintEffectsToolProvider` | `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` |
 
-The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`). There is no separate effects skill.
+The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`).
+
+## Effect authoring
+
+Providers that let effects be edited, not only used, set `capabilities.supportsAuthoring: true` and implement `openAuthoring(source)`, which returns an `EffectAuthoringSession` (`packages/core/src/effects/authoring.ts`). Both are optional: a provider without them is unchanged and conforms as before.
+
+```ts
+const session = await provider.openAuthoring!({ effectId: 'fake.tint', preset: 'Sepia' });
+// or reopen a saved document: provider.openAuthoring!({ document: saved })
+
+session.setValue('amount', 0.8);                          // one undo step; slider drags merge by `gesture`
+session.setKeyframe('amount', 1000, 0.2, 'ease-in-out');   // animated controls take keyframes
+session.seek(500);
+session.getState().values.amount;                          // the value at the playhead
+const saved = session.exportDocument();                    // plain JSON
+```
+
+### The session
+
+- **State.** `getState()` returns the same object until something changes (so `useSyncExternalStore` and Svelte runes can use it directly) and `subscribe(listener)` reports every change. It holds the description (controls, defaults, presets), `values` at the playhead, `tracks` (keyframes per control), `source` and `sourceLanguage` (`'glsl' | 'svg' | null`), `issues` (with 1-based `line` when known), `compiled`, `time`, `duration`, `loop`, `playing`, `canUndo` and `canRedo`.
+- **Edits return results, never throw.** `setValue`, `setValues` (all or nothing), `resetValues`, `applyPreset`, `savePreset`, `setKeyframe`, `removeKeyframe`, `clearTrack` and `setTiming` return `{ ok: true }` or `{ ok: false, message }`; a refusal changes nothing and its message names the control and the valid choices. Setting an animated control keys it at the playhead.
+- **Source.** `setSource(source)` is optional and only present when `sourceLanguage` is not null. It returns the compile `issues`.
+- **Playback and history.** `play`, `pause`, `seek`, `undo` and `redo`. Playback and seeking are not undo steps.
+- **Preview.** `createPreview({ width, height })` returns an `EffectRenderer` that draws the session's current effect; `render({ time })` uses the keyframed values for that time unless `values` is given. Filters and transitions need input pictures: `effectSampleInputs(description, size)` gives sample ones.
+- **Documents.** `exportDocument()` gives `{ version: 1, providerId, effectId, name, values, tracks, presets, duration, loop }`. Reopening checks it against the effect and throws `EffectControlError` naming each problem.
+
+`createEffectAuthoringSession(source, { provider, history?, schedule?, mergeWindowMs? })` (`authoring-session.ts`) is a generic session over any provider's `describe` and `createRenderer`: values, presets, keyframes, timing, playback and undo, with no source editing. The fake provider's `openAuthoring` uses it. Motion effects can't be authored (`EffectUnsupportedError`). `checkEffectProvider` opens a session when `supportsAuthoring` is set and checks state identity, refusals, undo and the document round trip (`authoring: false` skips it).
+
+### Agent tools
+
+`createEffectAuthoringToolProvider({ session: () => session, capture? })` (`authoring-tools.ts`) serves the open session, documented in the [`pixerate-effect-authoring`](../packages/core/skills/pixerate-effect-authoring/SKILL.md) skill:
+
+| Tools | |
+| :--- | :--- |
+| `effect_authoring_describe` | Controls, values, presets, animated tracks, timing and issues |
+| `effect_authoring_get_source`, `effect_authoring_set_source` | Read the source; replace it and get compile issues (only listed when the session has `setSource`) |
+| `effect_authoring_set_values`, `effect_authoring_reset_values` | Set controls (all or nothing) or reset them |
+| `effect_authoring_apply_preset`, `effect_authoring_save_preset` | Presets |
+| `effect_authoring_set_keyframe`, `effect_authoring_remove_keyframe`, `effect_authoring_clear_track` | Keyframes, with any easing (presets, cubic-bezier, spring, elastic) |
+| `effect_authoring_set_timing`, `effect_authoring_seek` | Duration, loop and the playhead |
+| `effect_authoring_undo`, `effect_authoring_redo` | History |
+| `effect_authoring_view` | A picture of the preview (only listed when the host gives `capture`) |
+
+With no session open, every tool refuses and says how to open one.
+
+### Components
+
+- **React:** `useEffectAuthoring(session)` and `<EffectAuthoringEditor session={session} />` from `@pixerate/editor-react/effects`.
+- **Svelte:** `effectAuthoringOf(() => session)` and `<EffectAuthoringEditor {session} />` from `@pixerate/editor-svelte/effects`.
+
+The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a source pane (a plain textarea with line numbers and issue markers, shown only when the session has source), the parameter panel with a keyframe diamond per control, and a timeline (scrubber, duration, loop, keyframe rows per animated control). `EffectParameters` gained `onPresetName` and a per-control addon (`renderControlAddon` in React, the `addon` snippet in Svelte) for this.
 
 ## Writing a provider
 

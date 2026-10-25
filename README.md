@@ -521,7 +521,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Effects providers</strong> (7)</summary>
+<summary><strong>Effects providers</strong> (8)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -529,9 +529,10 @@ Every feature is available from core and from both framework packages, except wh
 | Frame-Exact Renderers (`createRenderer` at 8, 16 or 32 bits, linear float output, named inputs, masks, `dispose`) and Vector Motion (`applyVectorEffect`) | `EffectRenderer`, `applyEffectMask` | Via core | Via core |
 | Typed Errors and Value Validation (unknown effect, invalid values, unsupported, disposed, no provider) | `resolveEffectValues`, `isEffectError` | Via core | Via core |
 | Renderer Pool for GPU Providers (a few live renderers reused per effect, size and depth; least recently used disposed after its renders; thumbnails one at a time, cached per provider) | `EffectRendererPool`, `renderEffectThumbnail` | Via core | Via core |
-| Provider Conformance Check and Fake Provider (invert, tint, gradient, lower-third bar, crossfade, fade-in) | `checkEffectProvider`, `createFakeEffectProvider` | Via core | Via core |
+| Provider Conformance Check and Fake Provider (invert, tint, gradient, lower-third bar, crossfade, fade-in; authoring capability conformance check) | `checkEffectProvider`, `createFakeEffectProvider` | Via core | Via core |
 | Effects Browser and Parameter Panel (search, category and use filters, previews from the provider's renderer; controls generated from the JSON Schema: sliders, switches, choices, colours, vectors, text, presets, per-control reset, one undo step per slider drag) | `effectParameterFields`, `renderEffectThumbnail` | `<EffectsBrowser>`, `<EffectParameters>`, `<EffectThumbnail>` (`/effects`) | `<EffectsBrowser>`, `<EffectParameters>`, `<EffectThumbnail>` (`/effects`) |
 | Shared Effect Agent Tools (`search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect`, `remove_effect` for any editor: strict schemas listing the catalog's ids, values checked against the provider's controls, read tools say when no provider is registered and write tools refuse with the reason) | `createEffectToolProvider` | `useEffects` + the editor's tools hook | `useEffects` + the editor's tools hook |
+| Effect Authoring (`supportsAuthoring`, `openAuthoring`, reactive session with keyframe tracks, playback, undo/redo, source editing & live shader compilation, agent authoring tools & skill, visual authoring editor) | `createEffectAuthoringSession`, `createEffectAuthoringToolProvider`, `pixerate-effect-authoring` skill (`/effects`) | `useEffectAuthoring`, `<EffectAuthoringEditor>` (`/effects`) | `effectAuthoringOf`, `<EffectAuthoringEditor>` (`/effects`) |
 
 </details>
 

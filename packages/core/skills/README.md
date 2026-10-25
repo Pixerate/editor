@@ -20,6 +20,7 @@ that uses the tools can load the matching skill.
 | [`pixerate-video-editor`](pixerate-video-editor/SKILL.md) | Non-linear video editing: tracks, clips, transitions, export. |
 | [`pixerate-generation`](pixerate-generation/SKILL.md) | Planning, estimating and running paid media generation. |
 | [`pixerate-parameters`](pixerate-parameters/SKILL.md) | Effect parameters, presets and keyframes. |
+| [`pixerate-effect-authoring`](pixerate-effect-authoring/SKILL.md) | Authoring shaders and procedural effects: inspecting parameters and source code, setting values and presets, keyframing animation tracks, playback timing, and previewing. |
 | [`pixerate-color`](pixerate-color/SKILL.md) | Colour inspection, WCAG accessibility and contrast optimization, CVD simulation, palette audits, harmonies, and OKLab/OKLCH blends. |
 
 ## Using them
