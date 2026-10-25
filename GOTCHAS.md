@@ -1093,6 +1093,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A "changed since save" boolean set by every edit never goes back to false on undo; whole-state comparison counts view state (selection, viewport); programmatic loads go through the same change paths as user edits.
 - **Solution / Workaround**: Use `bindDirtyToHistory({ history, getValue, normalize })` (React `useHistoryDirty`, Svelte `createHistoryDirty`): every history change re-compares `normalize(value)` with the saved baseline (cached per `history.getRevision()`), so undo-to-saved is clean. Strip view state in `normalize`. Wrap loads/restores in `suppress(fn)`: it is re-entrant (depth counter), lasts until a returned promise settles, and rebaselines to the loaded value even if the load bypassed the history. Changes made outside the history (e.g. selection) need `refresh()`, which ignores the revision cache.
 
+### [react|svelte/image-editor] The Agent's Cursor on `ImageEditorCanvas` Must Not Clip to the Canvas
+
+- **Issue / Symptom**: After the canvas moved out of `ImageEditor` into `ImageEditorCanvas`, the agent's cursor vanished whenever playback clicked a tab or visited a slider: it was drawn, but outside the canvas box.
+- **Root Cause**: `PresenceLayer` is `position: absolute; inset: 0; overflow: hidden` over its parent. `ImageEditor` used to put it over its whole root, so tabs and panels were inside it; the canvas component draws it over the canvas only, while `open` and `target` steps aim at the host's chrome around it.
+- **Solution / Workaround**: `PresenceLayer` takes `clip={false}`, and `ImageEditorCanvas` uses it, with its root `position: relative` and only the inner canvas box `overflow: hidden`. The cursor then reaches any chrome inside the nearest clipping ancestor. Hosts whose chrome is outside a clipping ancestor (a flow node, a scroll box) should answer those refs through `locate` / `locateElement` with chrome inside it, or accept the cursor stopping at the edge.
+
 ### [core/canvas] xyflow Resizers Report Raw Sizes, and SvelteFlow Writes Them After `onResize`
 
 - **Issue / Symptom**: Resize snapping flickered back to the unsnapped size when the pointer was released (React Flow), or did nothing at all (SvelteFlow `onResize`).
