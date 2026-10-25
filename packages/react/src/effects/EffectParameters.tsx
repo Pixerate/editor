@@ -19,6 +19,10 @@ export interface EffectParametersProps {
   keyframed?: ReadonlySet<string>;
   /** Applies a preset's values. */
   onPreset?: (values: Readonly<Record<string, unknown>>) => void;
+  /** Applies a preset by name. */
+  onPresetName?: (name: string) => void;
+  /** Optional addon rendered next to the control label (e.g. keyframe toggle button). */
+  renderControlAddon?: (control: string) => React.ReactNode;
   disabled?: boolean;
   className?: string;
 }
@@ -28,22 +32,39 @@ export interface EffectParametersProps {
  * numbers, switches, choices, colour pickers, vectors and text, with each control's description,
  * per-control reset and the effect's presets.
  */
-export function EffectParameters({ description, values, onChange, onReset, keyframed, onPreset, disabled = false, className = '' }: EffectParametersProps) {
+export function EffectParameters({
+  description,
+  values,
+  onChange,
+  onReset,
+  keyframed,
+  onPreset,
+  onPresetName,
+  renderControlAddon,
+  disabled = false,
+  className = ''
+}: EffectParametersProps) {
   const fields = useMemo(() => effectParameterFields(description), [description]);
   const idBase = useId();
   const gesture = React.useRef<string | null>(null);
   const count = React.useRef(0);
   return (
     <div className={`space-y-2 ${className}`} data-effect-parameters={description.id}>
-      {onPreset && description.presets.length > 0 && (
+      {(onPreset || onPresetName) && description.presets.length > 0 && (
         <select
           className="w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs"
           aria-label={`${description.name} presets`}
           value=""
           disabled={disabled}
           onChange={(e) => {
-            const preset = description.presets.find((p) => p.name === e.currentTarget.value);
-            if (preset) onPreset({ ...description.defaults, ...preset.values });
+            const name = e.currentTarget.value;
+            if (!name) return;
+            if (onPresetName) {
+              onPresetName(name);
+            } else if (onPreset) {
+              const preset = description.presets.find((p) => p.name === name);
+              if (preset) onPreset({ ...description.defaults, ...preset.values });
+            }
           }}
         >
           <option value="">Presets…</option>
@@ -67,6 +88,7 @@ export function EffectParameters({ description, values, onChange, onReset, keyfr
                 {label}
               </label>
               {keyed && <span className="text-[10px] text-muted-foreground">keyframed</span>}
+              {renderControlAddon?.(field.id)}
               {onReset && changed && !disabled && (
                 <button type="button" className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label={`Reset ${label}`} onClick={() => onReset(field.id)}>
                   ↺

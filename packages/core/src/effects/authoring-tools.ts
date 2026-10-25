@@ -5,7 +5,7 @@
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
-import type { AnimationEasing } from '../animation/types.js';
+import type { AnimationEasing } from '../animation/easing.js';
 import type { EffectAuthoringSession } from './authoring.js';
 import type { EffectValue, EffectValues } from './types.js';
 import { effectParameterFields } from './ui.js';
