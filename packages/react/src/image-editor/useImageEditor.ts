@@ -257,9 +257,9 @@ export function useImageEffectsTools(
   controller: ImageEditorController,
   options: ImageEffectsToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createImageEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createImageEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }

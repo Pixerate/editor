@@ -83,11 +83,11 @@ export function useVideoEditorTools(
   controller: VideoEditorController,
   options: VideoEditorToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout } = options;
+  const { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout }));
-  }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout]);
+    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface]);
 }
 
 /**
@@ -101,9 +101,9 @@ export function useVideoEffectsTools(
   controller: VideoEditorController,
   options: VideoEffectsToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }
