@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import type { EffectAuthoringSession, EffectRenderer } from '@pixerate/editor/effects';
+  import { effectSampleInputs, type EffectAuthoringSession, type EffectRenderer } from '@pixerate/editor/effects';
   import { effectAuthoringOf } from './effects.svelte.js';
   import EffectParameters from './EffectParameters.svelte';
 
@@ -83,6 +83,9 @@
   // Draws frames one at a time. A change while a frame renders asks for one more frame, which
   // then shows the latest playhead and values, so the preview never stops on a stale frame.
   let latestTime = 0;
+  /** Sample pictures for the effect's image inputs, so filters and transitions show something. */
+  const inputSpecs = $derived(current?.description.inputs);
+  const sampleInputs = $derived(inputSpecs ? effectSampleInputs({ inputs: inputSpecs }, previewSize) : {});
   async function pump() {
     if (rendering) {
       pending = true;
@@ -95,7 +98,7 @@
         const r = renderer;
         if (!r) break;
         try {
-          const pixels = await r.render({ time: latestTime });
+          const pixels = await r.render({ time: latestTime, inputs: sampleInputs });
           const ctx = renderer === r ? canvas?.getContext('2d') : null;
           if (ctx && typeof ImageData !== 'undefined') {
             ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);

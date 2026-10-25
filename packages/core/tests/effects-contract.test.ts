@@ -8,6 +8,7 @@ import {
 	checkEffectProvider,
 	createEffectPixels,
 	createFakeEffectProvider,
+	effectSampleInputs,
 	isEffectError,
 	resolveEffectValues,
 	searchEffectSummaries,
@@ -295,5 +296,14 @@ describe('effects contract: conformance check catches broken providers', () => {
 		// Provider without authoring capability is not checked for authoring
 		const noAuthoringProvider = createFakeEffectProvider({ authoring: false });
 		expect(await checkEffectProvider(noAuthoringProvider)).toEqual([]);
+	});
+	it('effectSampleInputs gives each image input a picture (a transition two different ones)', async () => {
+		const provider = createFakeEffectProvider();
+		const crossfade = await provider.describe('fake.crossfade');
+		const inputs = effectSampleInputs(crossfade, { width: 8, height: 4 });
+		expect(Object.keys(inputs).sort()).toEqual(['from', 'to']);
+		expect(inputs.from).toMatchObject({ width: 8, height: 4 });
+		expect(inputs.from.data).not.toEqual(inputs.to.data);
+		expect(effectSampleInputs(await provider.describe('fake.gradient'), { width: 8, height: 4 })).toEqual({});
 	});
 });

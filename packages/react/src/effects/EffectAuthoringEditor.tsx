@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { EffectAuthoringSession, EffectRenderer } from '@pixerate/editor/effects';
+import { effectSampleInputs, type EffectAuthoringSession, type EffectPixels, type EffectRenderer } from '@pixerate/editor/effects';
 import { useEffectAuthoring } from './useEffectAuthoring';
 import { EffectParameters } from './EffectParameters';
 
@@ -37,6 +37,8 @@ export function EffectAuthoringEditor({
   const pendingRef = useRef(false);
   /** The playhead the next frame should show (the latest state's). */
   const timeRef = useRef(0);
+  /** Sample pictures for the effect's image inputs, so filters and transitions show something. */
+  const inputsRef = useRef<Record<string, EffectPixels>>({});
 
   // Preset saving state
   const [savingPreset, setSavingPreset] = useState(false);
@@ -95,7 +97,7 @@ export function EffectAuthoringEditor({
         const renderer = rendererRef.current;
         if (!renderer) break;
         try {
-          const pixels = await renderer.render({ time: timeRef.current });
+          const pixels = await renderer.render({ time: timeRef.current, inputs: inputsRef.current });
           const ctx = rendererRef.current === renderer ? canvasRef.current?.getContext('2d') : null;
           if (ctx && typeof ImageData !== 'undefined') {
             ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
@@ -108,6 +110,11 @@ export function EffectAuthoringEditor({
       renderingRef.current = false;
     }
   }, []);
+
+  const inputSpecs = state?.description.inputs;
+  useEffect(() => {
+    inputsRef.current = inputSpecs ? effectSampleInputs({ inputs: inputSpecs }, previewSize) : {};
+  }, [inputSpecs, previewSize.width, previewSize.height]);
 
   useEffect(() => {
     if (!state) return;

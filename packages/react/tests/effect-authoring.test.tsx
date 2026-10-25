@@ -319,4 +319,16 @@ describe('EffectAuthoringEditor (React)', () => {
     expect(setTiming).toHaveBeenCalledWith({ duration: 2000 });
     expect(session.getState().duration).toBe(2000);
   });
+  it('gives filters a sample picture in the preview', async () => {
+    const session = await createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' });
+    const preview = await session.createPreview({ width: 480, height: 270 });
+    const render = vi.spyOn(preview, 'render');
+    vi.spyOn(session, 'createPreview').mockResolvedValue(preview);
+    act(() => {
+      root.render(<EffectAuthoringEditor session={session} />);
+    });
+    await flush();
+    const request = render.mock.calls.at(-1)?.[0];
+    expect(request?.inputs?.source).toMatchObject({ width: 480, height: 270 });
+  });
 });
