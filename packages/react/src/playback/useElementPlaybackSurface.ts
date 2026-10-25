@@ -1,15 +1,16 @@
 import { useRef, type RefObject } from "react";
-import type { AgentPlayback, PlaybackRect, PlaybackRef, PresenceStore } from "@pixerate/editor/tools";
+import { locatePlaybackChrome, type AgentPlayback, type PlaybackChromeOptions, type PlaybackPoint, type PlaybackRect, type PlaybackRef, type PresenceStore } from "@pixerate/editor/tools";
 import { usePlaybackSurface } from "./usePlaybackSurface";
 
-export interface ElementPlaybackSurfaceOptions {
+export interface ElementPlaybackSurfaceOptions extends PlaybackChromeOptions {
   /** The kind of a bare `id` / `ids` argument (e.g. `parameter`). */
   defaultKind?: string;
   /**
    * A CSS selector for each ref kind the surface can find inside the element, e.g.
-   * `{ parameter: (id) => \`[data-parameter-id="${CSS.escape(id)}"]\` }`.
+   * `{ parameter: (id) => \`[data-parameter-id="${CSS.escape(id)}"]\` }`. Refs they miss go to
+   * `locate`, then `locateElement` (which may return an element outside this one).
    */
-  selectors: Record<string, (id: string) => string>;
+  selectors?: Record<string, (id: string) => string>;
   /** Bring the element on screen (switch to its tab) before the agent acts. */
   reveal?: () => void | Promise<void>;
 }
@@ -28,15 +29,20 @@ export function useElementPlaybackSurface(
   const latest = useRef(options);
   latest.current = options;
   const box = () => element.current?.getBoundingClientRect() ?? null;
+  const fromViewport = (p: PlaybackPoint) => {
+    const r = box();
+    return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+  };
   return usePlaybackSurface(playback, id, {
     get defaultKind() {
       return latest.current.defaultKind;
     },
     locate: (ref: PlaybackRef): PlaybackRect | null => {
-      const selector = latest.current.selectors[ref.kind]?.(ref.id);
+      const selector = latest.current.selectors?.[ref.kind]?.(ref.id);
       const b = box();
       const r = selector ? element.current?.querySelector(selector)?.getBoundingClientRect() : null;
-      return b && r && r.width > 0 ? { x: r.left - b.left, y: r.top - b.top, width: r.width, height: r.height } : null;
+      if (b && r && r.width > 0) return { x: r.left - b.left, y: r.top - b.top, width: r.width, height: r.height };
+      return locatePlaybackChrome(ref, latest.current, fromViewport);
     },
     bounds: () => {
       const r = box();
@@ -50,10 +56,10 @@ export function useElementPlaybackSurface(
       const r = box();
       return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
     },
-    fromViewport: (p) => {
-      const r = box();
-      return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
-    },
+    fromViewport,
     reveal: () => latest.current.reveal?.(),
+    get open() {
+      return latest.current.open ? (ref: PlaybackRef) => latest.current.open?.(ref) : undefined;
+    },
   });
 }
