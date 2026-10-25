@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.150.0
+
+### Minor Changes
+
+- bf2cd2d: `ImageEditorCanvas` draws the crop box (crop mode) and the marquee (select mode) while an agent drags them out, as it does for a user's drag. New in `@pixerate/editor/tools`: `trackPresenceDrag`, which follows a presence store for an agent's drag. New in `@pixerate/editor/image-editor`: `agentDragDraft`, which turns that drag into the canvas's draft crop or selection path.
+
 ## 0.149.0
 
 ### Minor Changes
