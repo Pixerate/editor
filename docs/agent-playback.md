@@ -172,6 +172,7 @@ The provider marks the director's tools `playback: 'self'`, so value drags (char
 
 - `setAgentPlayback(playback)` (and `getAgentPlayback()`) is the context equivalent.
 - `<VectorCanvas playback={playback} onplaybackreveal={…} />` plays the vector commands, and `<ImageEditor playback={playback} />` the image tools, as in React.
+- `<ImageEditorCanvas>` (React and Svelte) is the image editor's canvas without its tabs and panels, with the same playback props plus `chromeRoot`, `locate`, `locateElement` and `open`, so the image tools play on a canvas inside your own chrome. See [Image editor canvas](./image-editor-canvas.md).
 - `createPlaybackSurface(playback, id, options)` builds a custom surface and takes the same options as React.
 - React and Svelte draw the same cursor.
 - The layer has the `.pixerate-presence` class, so snapshots, `view_editor` and `capture_view` leave it out.
