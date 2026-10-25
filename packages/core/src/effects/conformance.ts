@@ -109,9 +109,10 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	const top = (message: string) => issues.push({ message });
 	if (!provider.id) top('provider has no id');
 	const caps = provider.capabilities;
-	for (const k of ['supportsWorker', 'supportsFloat', 'supportsMask', 'supportsHostImages', 'supportsVector', 'supportsAuthoring'] as const) {
-		if (caps?.[k] !== undefined && typeof caps[k] !== 'boolean') top(`capabilities.${k} is not a boolean`);
+	for (const k of ['supportsWorker', 'supportsFloat', 'supportsMask', 'supportsHostImages', 'supportsVector'] as const) {
+		if (typeof caps?.[k] !== 'boolean') top(`capabilities.${k} is not a boolean`);
 	}
+	if (caps?.supportsAuthoring !== undefined && typeof caps.supportsAuthoring !== 'boolean') top('capabilities.supportsAuthoring is not a boolean');
 	if (caps?.supportsVector && typeof provider.applyVectorEffect !== 'function') top('supportsVector is set but applyVectorEffect is missing');
 	if (caps?.supportsAuthoring && typeof provider.openAuthoring !== 'function') top('supportsAuthoring is set but openAuthoring is missing');
 

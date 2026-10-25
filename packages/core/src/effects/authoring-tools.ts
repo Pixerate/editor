@@ -5,7 +5,7 @@
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
-import type { AnimationEasing } from '../animation/easing.js';
+import { ANIMATION_EASING_PRESETS, type AnimationEasing } from '../animation/easing.js';
 import type { EffectAuthoringSession } from './authoring.js';
 import type { EffectValue, EffectValues } from './types.js';
 import { effectParameterFields } from './ui.js';
@@ -48,6 +48,32 @@ const object = (properties: Record<string, JsonSchema>, required: string[] = [])
 	...(required.length ? { required } : {}),
 	additionalProperties: false
 });
+
+/** Every `AnimationEasing`: a preset name, or a cubic-bezier, spring or elastic curve. */
+const EASING_SCHEMA: JsonSchema = {
+	description:
+		'Easing into the next keyframe: a preset name, or a curve { "type": "cubic-bezier", x1, y1, x2, y2 }, { "type": "spring", stiffness, damping, mass, velocity } or { "type": "elastic", amplitude, period, mode }. Default: linear.',
+	anyOf: [
+		{ type: 'string', enum: [...ANIMATION_EASING_PRESETS] },
+		object(
+			{
+				type: { type: 'string', enum: ['cubic-bezier', 'spring', 'elastic'], description: 'Curve kind.' },
+				x1: { type: 'number', description: 'cubic-bezier: out handle x (0–1).' },
+				y1: { type: 'number', description: 'cubic-bezier: out handle y.' },
+				x2: { type: 'number', description: 'cubic-bezier: in handle x (0–1).' },
+				y2: { type: 'number', description: 'cubic-bezier: in handle y.' },
+				stiffness: { type: 'number', exclusiveMinimum: 0, description: 'spring: default 170.' },
+				damping: { type: 'number', minimum: 0, description: 'spring: default 26, lower bounces more.' },
+				mass: { type: 'number', exclusiveMinimum: 0, description: 'spring: default 1.' },
+				velocity: { type: 'number', description: 'spring: starting speed (default 0).' },
+				amplitude: { type: 'number', minimum: 0, description: 'elastic: overshoot (default 1).' },
+				period: { type: 'number', exclusiveMinimum: 0, description: 'elastic: fraction of the length (default 0.3).' },
+				mode: { type: 'string', enum: ['out', 'in', 'in-out'], description: 'elastic: default out.' }
+			},
+			['type']
+		)
+	]
+};
 
 const NO_SESSION =
 	'No effect authoring session is currently open. Open an effect using EffectProvider.openAuthoring() or in an authoring editor before calling effect authoring tools.';
@@ -234,10 +260,7 @@ export function createEffectAuthoringToolProvider(
 				control: { type: 'string', description: 'Name of the control to animate.' },
 				time: { type: 'number', minimum: 0, description: 'Time in milliseconds from the start of the effect.' },
 				value: { description: 'Value at this keyframe. If omitted, captures the control value at that time.' },
-				easing: {
-					type: 'string',
-					description: 'Easing function name (e.g. "linear", "ease-in", "ease-out", "ease-in-out"). Defaults to "linear".'
-				}
+				easing: EASING_SCHEMA
 			},
 			['control', 'time']
 		),
@@ -334,7 +357,7 @@ export function createEffectAuthoringToolProvider(
 			},
 			['time']
 		),
-		annotations: { title: 'Seek effect playhead', ...ANNOTATIONS.read },
+		annotations: { title: 'Seek effect playhead', ...ANNOTATIONS.writeIdempotent },
 		handler: (args) => {
 			const session = requireSession();
 			if (typeof args.time !== 'number' || !Number.isFinite(args.time) || args.time < 0) {

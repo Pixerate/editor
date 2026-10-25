@@ -284,6 +284,14 @@ describe('effects contract: conformance check catches broken providers', () => {
 		const issues = await checkEffectProvider(withoutOpen);
 		expect(issues.some((i) => i.message.includes('supportsAuthoring is set but openAuthoring is missing'))).toBe(true);
 
+		// The original capabilities are still required; supportsAuthoring may be left out
+		const { supportsVector: _, ...loose } = good.capabilities;
+		const missing = await checkEffectProvider({ ...good, capabilities: loose as typeof good.capabilities });
+		expect(missing.some((i) => i.message === 'capabilities.supportsVector is not a boolean')).toBe(true);
+		const { supportsAuthoring: __, ...noFlag } = good.capabilities;
+		const unflagged = await checkEffectProvider({ ...good, capabilities: noFlag });
+		expect(unflagged.some((i) => i.message.includes('supportsAuthoring'))).toBe(false);
+
 		// Provider without authoring capability is not checked for authoring
 		const noAuthoringProvider = createFakeEffectProvider({ authoring: false });
 		expect(await checkEffectProvider(noAuthoringProvider)).toEqual([]);

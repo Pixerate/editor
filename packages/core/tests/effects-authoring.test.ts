@@ -293,4 +293,58 @@ describe('createEffectAuthoringSession', () => {
     expect(res.ok).toBe(false);
     expect(res.message).toBe('the session is closed');
   });
+  it('refuses a document with bad values, tracks or timing, naming each problem', async () => {
+    const session = await createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider });
+    const good = session.exportDocument();
+    const open = (doc: unknown) => createEffectAuthoringSession({ document: doc }, { provider });
+
+    await expect(open({ ...good, values: { color: 'garbage', nope: 1 } })).rejects.toMatchObject({ code: 'invalid_values' });
+    await expect(open({ ...good, values: { color: 'garbage' } })).rejects.toThrow('/values/color');
+    await expect(open({ ...good, tracks: { amount: 5 } })).rejects.toThrow('/tracks/amount: must be a list of keyframes');
+    await expect(open({ ...good, tracks: { nope: [] } })).rejects.toThrow('there is no control "nope"');
+    await expect(open({ ...good, tracks: { amount: [{ time: -1, value: 2 }] } })).rejects.toThrow(/time.*\n.*value|value[\s\S]*time|time[\s\S]*value/);
+    await expect(open({ ...good, tracks: { amount: [{ time: 0, value: 0.5, easing: 'wobbly' }] } })).rejects.toThrow('easing');
+    await expect(open({ ...good, presets: [{ name: 'Bad', values: { amount: 9 } }] })).rejects.toThrow('/presets/0/values/amount');
+    await expect(open({ ...good, duration: 0 })).rejects.toThrow('/duration');
+    await expect(open(good)).resolves.toBeTruthy();
+  });
+
+  it('passes provider errors through instead of calling them unknown effects', async () => {
+    const broken = { ...provider, describe: () => Promise.reject(new Error('network down')) };
+    await expect(createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider: broken })).rejects.toThrow('network down');
+    await expect(createEffectAuthoringSession({ effectId: 'nope' }, { provider })).rejects.toMatchObject({ code: 'unknown_effect' });
+  });
+
+  it('names the control in value errors', async () => {
+    const session = await createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider });
+    const res = session.setValue('color', 'zzz');
+    expect(res.ok).toBe(false);
+    expect(!res.ok && res.message).toMatch(/^control "color": /);
+    const many = session.setValues({ amount: 0.2, color: 'zzz' });
+    expect(!many.ok && many.message).toMatch(/control "color"/);
+    expect(session.getState().values.amount).toBe(0.5);
+  });
+
+  it('refuses to clear or remove keyframes of unknown or unanimated controls, saying why', async () => {
+    const session = await createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider });
+    const before = session.getState();
+    const unknownClear = session.clearTrack('nope');
+    expect(!unknownClear.ok && unknownClear.message).toMatch(/there is no control "nope"; the controls are color, amount/);
+    const unanimated = session.clearTrack('amount');
+    expect(!unanimated.ok && unanimated.message).toMatch(/"amount" is not animated/);
+    const unknownRemove = session.removeKeyframe('nope', 0);
+    expect(!unknownRemove.ok && unknownRemove.message).toMatch(/there is no control "nope"/);
+    session.setKeyframe('amount', 250, 0.1);
+    const wrongTime = session.removeKeyframe('amount', 100);
+    expect(!wrongTime.ok && wrongTime.message).toMatch(/its keyframes are at 250 ms/);
+    expect(before.canUndo).toBe(false);
+  });
+
+  it('keeps the document name across export and reopen', async () => {
+    const session = await createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider });
+    const doc = { ...session.exportDocument(), name: 'My tint' };
+    const reopened = await createEffectAuthoringSession({ document: doc }, { provider });
+    expect(reopened.getState().name).toBe('My tint');
+    expect(reopened.exportDocument().name).toBe('My tint');
+  });
 });

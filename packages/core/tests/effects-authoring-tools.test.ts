@@ -319,4 +319,20 @@ describe('effect authoring agent tools', () => {
 			}
 		]);
 	});
+	it('takes curve easings on keyframes and refuses unknown ones', async () => {
+		const { call } = await setup();
+		const curve = await call('effect_authoring_set_keyframe', { control: 'amount', time: 0, value: 0.2, easing: { type: 'cubic-bezier', x1: 0.2, y1: 0, x2: 0, y2: 1 } });
+		expect(curve.isError).toBeFalsy();
+		const spring = await call('effect_authoring_set_keyframe', { control: 'amount', time: 500, value: 0.8, easing: { type: 'spring', stiffness: 200 } });
+		expect(spring.isError).toBeFalsy();
+		const bad = await call('effect_authoring_set_keyframe', { control: 'amount', time: 0, easing: 'wobbly' });
+		expect(bad.isError).toBe(true);
+	});
+
+	it('marks seek as a write: it moves the playhead', async () => {
+		const { registry } = await setup();
+		const seek = registry.listTools().tools.find((t) => baseToolName(t.name) === 'effect_authoring_seek');
+		expect(seek?.annotations?.readOnlyHint).toBe(false);
+		expect(seek?.annotations?.idempotentHint).toBe(true);
+	});
 });

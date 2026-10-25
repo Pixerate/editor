@@ -7,7 +7,8 @@ import { evaluateEasing, isAnimationEasing } from '../animation/easing.js';
 import type { AnimationEasing } from '../animation/easing.js';
 import { HistoryManager } from '../history/HistoryManager.js';
 import type { Command } from '../history/types.js';
-import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
+import type { SchemaValidationError } from '../tools/schema.js';
+import { EffectControlError, EffectDisposedError, EffectUnsupportedError } from './errors.js';
 import { effectValueErrors } from './helpers.js';
 import type {
 	EffectAuthoringDocument,
@@ -43,6 +44,56 @@ export interface GenericAuthoringOptions {
 }
 
 const HEX_RE = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** Schema errors as one sentence naming each control (`control "color": Must match …`). */
+function valueErrorMessage(errors: readonly SchemaValidationError[]): string {
+	return errors
+		.map((e) => {
+			const [control, ...rest] = e.path.replace(/^\//, '').split('/');
+			return `control "${control}"${rest.length ? ` (item ${rest.join('/')})` : ''}: ${e.message}`;
+		})
+		.join('; ');
+}
+
+/** Problems with a saved document against the effect it names, as schema-style errors (empty when it is valid). */
+function documentErrors(doc: EffectAuthoringDocument, description: EffectDescription): SchemaValidationError[] {
+	const errors: SchemaValidationError[] = [];
+	const controls = Object.keys(description.controls.properties);
+	const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+	if (doc.values !== undefined) {
+		if (!isRecord(doc.values)) errors.push({ path: '/values', message: 'must be an object of control values' });
+		else errors.push(...effectValueErrors(description, doc.values).map((e) => ({ ...e, path: `/values${e.path}` })));
+	}
+	if (doc.tracks !== undefined) {
+		if (!isRecord(doc.tracks)) errors.push({ path: '/tracks', message: 'must be an object of keyframe lists' });
+		else
+			for (const [control, kfs] of Object.entries(doc.tracks)) {
+				const at = `/tracks/${control}`;
+				if (!controls.includes(control)) errors.push({ path: at, message: `there is no control "${control}"; the controls are ${controls.join(', ')}` });
+				else if (!Array.isArray(kfs)) errors.push({ path: at, message: 'must be a list of keyframes' });
+				else
+					kfs.forEach((kf: unknown, i) => {
+						if (!isRecord(kf)) return errors.push({ path: `${at}/${i}`, message: 'must be a keyframe object' });
+						if (typeof kf.time !== 'number' || !Number.isFinite(kf.time) || kf.time < 0) errors.push({ path: `${at}/${i}/time`, message: 'must be a finite number of ms >= 0' });
+						errors.push(...effectValueErrors(description, { [control]: kf.value }).map((e) => ({ ...e, path: `${at}/${i}/value` })));
+						if (kf.easing !== undefined && !isAnimationEasing(kf.easing)) errors.push({ path: `${at}/${i}/easing`, message: 'is not a valid easing' });
+					});
+			}
+	}
+	if (doc.presets !== undefined) {
+		if (!Array.isArray(doc.presets)) errors.push({ path: '/presets', message: 'must be a list of presets' });
+		else
+			doc.presets.forEach((p: unknown, i) => {
+				if (!isRecord(p) || typeof p.name !== 'string' || !p.name) return errors.push({ path: `/presets/${i}`, message: 'must have a name' });
+				errors.push(...effectValueErrors(description, p.values).map((e) => ({ ...e, path: `/presets/${i}/values${e.path}` })));
+			});
+	}
+	if (doc.duration !== undefined && (typeof doc.duration !== 'number' || !Number.isFinite(doc.duration) || !(doc.duration > 0))) {
+		errors.push({ path: '/duration', message: 'must be a finite number of ms > 0' });
+	}
+	if (doc.loop !== undefined && typeof doc.loop !== 'boolean') errors.push({ path: '/loop', message: 'must be a boolean' });
+	return errors;
+}
 
 function parseHex(hex: string): { r: number; g: number; b: number; a: number; hasAlpha: boolean } | null {
 	if (!HEX_RE.test(hex)) return null;
@@ -193,12 +244,11 @@ export async function createEffectAuthoringSession(
 		throw new EffectUnsupportedError('Invalid effect authoring source');
 	}
 
-	let description: EffectDescription;
-	try {
-		description = await provider.describe(effectId);
-	} catch (e) {
-		if (e instanceof Error && e.name === 'UnknownEffectError') throw e;
-		throw new UnknownEffectError(effectId, provider.name);
+	// The provider's own errors (UnknownEffectError for a bad id, anything else as it is) pass through.
+	const description: EffectDescription = await provider.describe(effectId);
+	if (initialDoc) {
+		const problems = documentErrors(initialDoc, description);
+		if (problems.length) throw new EffectControlError(effectId, problems);
 	}
 
 	if (description.kind === 'motion') {
@@ -363,7 +413,7 @@ export async function createEffectAuthoringSession(
 
 			const errors = effectValueErrors(description, { [name]: value });
 			if (errors.length > 0) {
-				return { ok: false, message: errors.map((e) => e.message).join(', ') };
+				return { ok: false, message: valueErrorMessage(errors) };
 			}
 
 			const isAnimated = (tracks[name]?.length ?? 0) > 0;
@@ -444,7 +494,7 @@ export async function createEffectAuthoringSession(
 				}
 				const errors = effectValueErrors(description, { [k]: v });
 				if (errors.length > 0) {
-					return { ok: false, message: errors.map((e) => e.message).join(', ') };
+					return { ok: false, message: valueErrorMessage(errors) };
 				}
 			}
 
@@ -606,7 +656,7 @@ export async function createEffectAuthoringSession(
 			const targetValue = value !== undefined ? value : valuesAtTime(time, baseValues, tracks)[name];
 			const errors = effectValueErrors(description, { [name]: targetValue });
 			if (errors.length > 0) {
-				return { ok: false, message: errors.map((e) => e.message).join(', ') };
+				return { ok: false, message: valueErrorMessage(errors) };
 			}
 
 			const prevTrack = tracks[name] ? [...tracks[name]] : undefined;
@@ -649,9 +699,19 @@ export async function createEffectAuthoringSession(
 			const disp = checkDisposed();
 			if (disp) return disp;
 
+			const validNames = validControlNames();
+			if (!validNames.includes(name)) {
+				return { ok: false, message: `there is no control "${name}"; the controls are ${validNames.join(', ')}` };
+			}
 			const track = tracks[name];
 			if (!track || !track.some((kf) => kf.time === time)) {
-				return { ok: false, message: `no keyframe at ${time} ms on control "${name}"` };
+				const times = track?.map((kf) => `${kf.time}`).join(', ');
+				return {
+					ok: false,
+					message: times
+						? `no keyframe at ${time} ms on control "${name}"; its keyframes are at ${times} ms`
+						: `control "${name}" has no keyframes`
+				};
 			}
 
 			const prevTrack = [...track];
@@ -682,9 +742,17 @@ export async function createEffectAuthoringSession(
 			const disp = checkDisposed();
 			if (disp) return disp;
 
+			const validNames = validControlNames();
+			if (!validNames.includes(name)) {
+				return { ok: false, message: `there is no control "${name}"; the controls are ${validNames.join(', ')}` };
+			}
 			const prevTrack = tracks[name] ? [...tracks[name]] : undefined;
 			if (!prevTrack || prevTrack.length === 0) {
-				return { ok: true };
+				const animated = Object.keys(tracks).filter((k) => tracks[k]?.length);
+				return {
+					ok: false,
+					message: `control "${name}" is not animated, so there is nothing to clear; ${animated.length ? `the animated controls are ${animated.join(', ')}` : 'no control is animated'}`
+				};
 			}
 
 			const currentValue = valuesAtTime(playheadTime, baseValues, tracks)[name];
@@ -832,7 +900,7 @@ export async function createEffectAuthoringSession(
 				version: 1,
 				providerId: provider.id,
 				effectId,
-				name: description.name,
+				name: initialDoc?.name ?? description.name,
 				values: { ...currentValues },
 				tracks: JSON.parse(JSON.stringify(tracks)),
 				presets: JSON.parse(JSON.stringify(savedPresets)),
