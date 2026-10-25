@@ -1,5 +1,5 @@
 import { untrack } from "svelte";
-import type { EffectDescription, EffectProvider } from "@pixerate/editor/effects";
+import type { EffectAuthoringSession, EffectAuthoringState, EffectDescription, EffectProvider } from "@pixerate/editor/effects";
 
 /** Anything that takes an effects provider: every editor controller with effects support. */
 export interface EffectsHost {
@@ -51,6 +51,39 @@ export function effectDescriptionOf(provider: () => EffectProvider | null | unde
     },
     get error() {
       return error;
+    },
+  };
+}
+
+/**
+ * Subscribes a Svelte component to the observable state of an effect authoring session.
+ * Updates reactively whenever the session changes. State is `null` when session is null.
+ */
+export function effectAuthoringOf(
+  session: EffectAuthoringSession | null | undefined | (() => EffectAuthoringSession | null | undefined)
+): { readonly state: EffectAuthoringState | null } {
+  let currentState = $state.raw<EffectAuthoringState | null>(null);
+
+  $effect(() => {
+    const s = typeof session === "function" ? session() : session;
+    if (!s) {
+      currentState = null;
+      return;
+    }
+
+    currentState = s.getState();
+    const unsubscribe = s.subscribe((next) => {
+      currentState = next;
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  });
+
+  return {
+    get state() {
+      return currentState;
     },
   };
 }
