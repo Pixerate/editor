@@ -14,3 +14,4 @@ export * from './ui.js';
 export * from './pool.js';
 export * from './authoring.js';
 export * from './authoring-session.js';
+export * from './authoring-tools.js';

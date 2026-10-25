@@ -49,6 +49,7 @@ import { VectorEditorController, createVectorEffectsToolProvider, createVectorCo
 import { createParameterCommands } from '../src/parameters';
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
+import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
 const ROOT = join(__dirname, '..');
@@ -158,6 +159,15 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
 		'pixerate-parameters': commandIds(createParameterCommands(stub)),
+		'pixerate-effect-authoring': (() => {
+			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
+			authoringSession.setSource = async () => ({ ok: true, issues: [] });
+			const authoringProvider = createEffectAuthoringToolProvider({
+				session: () => authoringSession,
+				capture: async () => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+			});
+			return toolNames(authoringProvider);
+		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))]
 	};
 	doc.destroy();
@@ -205,6 +215,7 @@ const FACTORIES: Record<string, string> = {
 	createParameterCommands: 'pixerate-parameters',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
+	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',
