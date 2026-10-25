@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageIconButtonClass, imageSelectClass } from './styles.js';
   import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
   import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -36,8 +37,6 @@
   let error = $state<string | null>(null);
   /** Whether the next slider change records an undo step (the first of a drag does, the rest replace it). */
   let commitNext = true;
-
-  const button = 'px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:text-white disabled:opacity-40';
 
   function attempt(fn: () => unknown) {
     try {
@@ -78,24 +77,24 @@
 </script>
 
 {#if !view.model.available || !view.id}
-  <div class="text-xs text-slate-500 {className}" data-testid="layer-effects">{view.model.reason}</div>
+  <div class="text-xs text-muted-foreground {className}" data-testid="layer-effects">{view.model.reason}</div>
 {:else}
   {@const id = view.id}
-  <div class="flex flex-col gap-1.5 text-xs text-slate-200 {className}" data-testid="layer-effects" aria-label="Layer effects" role="group">
+  <div class="flex flex-col gap-1.5 text-xs text-foreground {className}" data-testid="layer-effects" aria-label="Layer effects" role="group">
     <div class="flex flex-wrap items-center gap-2">
-      <span class="font-semibold text-slate-300">fx Effects</span>
-      <label class="flex items-center gap-1 text-slate-300">
+      <span class="font-semibold text-foreground">fx Effects</span>
+      <label class="flex items-center gap-1 text-foreground">
         <input
           type="checkbox"
           aria-label="Effects on"
           checked={view.model.enabled}
           disabled={view.model.readOnly}
           onchange={(e) => attempt(() => controller.setLayerEffectsEnabled(id, (e.currentTarget as HTMLInputElement).checked))}
-          class="accent-indigo-500"
+          class="accent-primary"
         />
         On
       </label>
-      <label class="flex items-center gap-1 text-slate-400">
+      <label class="flex items-center gap-1 text-muted-foreground">
         Scale
         <input
           type="number"
@@ -106,23 +105,23 @@
           value={Math.round(view.model.scale * 100)}
           disabled={view.model.readOnly}
           oninput={setScale}
-          class="w-14 bg-slate-800 border border-slate-700 rounded px-1"
+          class="w-14 bg-muted border border-border rounded px-1"
         />
         %
       </label>
-      <select aria-label="Add effect" value="" disabled={view.model.readOnly} onchange={add} class="bg-slate-800 border border-slate-700 rounded px-1.5 py-1">
+      <select aria-label="Add effect" value="" disabled={view.model.readOnly} onchange={add} class={imageSelectClass}>
         <option value="">Add effect…</option>
         {#each LAYER_EFFECT_MENU as m (m.kind)}
           <option value={m.kind}>{m.label}</option>
         {/each}
       </select>
     </div>
-    {#if view.model.readOnly && view.model.reason}<p class="text-slate-500">{view.model.reason}</p>{/if}
+    {#if view.model.readOnly && view.model.reason}<p class="text-muted-foreground">{view.model.reason}</p>{/if}
     <ul class="flex flex-col gap-1" aria-label="Effects">
       {#each view.model.rows as row (row.id)}
         {@const effect = view.items.find((e) => e.id === row.id)}
         {@const expanded = open === row.id}
-        <li data-effect-id={row.id} class="rounded bg-slate-900/60 ring-1 ring-slate-800">
+        <li data-effect-id={row.id} class="rounded bg-background/60 ring-1 ring-border">
           <div class="flex items-center gap-1.5 px-1.5 py-1">
             <input
               type="checkbox"
@@ -130,19 +129,19 @@
               checked={row.enabled}
               disabled={view.model.readOnly}
               onchange={(e) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: (e.currentTarget as HTMLInputElement).checked }))}
-              class="accent-indigo-500"
+              class="accent-primary"
             />
-            <button type="button" aria-expanded={expanded} class="flex-1 text-left {row.enabled && view.model.enabled ? '' : 'text-slate-500'}" onclick={() => (open = expanded ? null : row.id)}>
+            <button type="button" aria-expanded={expanded} class="flex-1 text-left {row.enabled && view.model.enabled ? '' : 'text-muted-foreground'}" onclick={() => (open = expanded ? null : row.id)}>
               {row.label}
             </button>
-            <button type="button" class={button} aria-label="Remove {row.label}" disabled={view.model.readOnly} onclick={() => attempt(() => controller.removeLayerEffect(id, row.id))}>✕</button>
+            <button type="button" class={imageIconButtonClass} aria-label="Remove {row.label}" disabled={view.model.readOnly} onclick={() => attempt(() => controller.removeLayerEffect(id, row.id))}>✕</button>
           </div>
           {#if expanded && effect}
             <div class="grid grid-cols-2 gap-x-2 gap-y-1 px-1.5 pb-1.5" data-testid="effect-settings">
               {#each layerEffectControls(effect, view.patterns) as c (c.key)}
                 {#if c.type === 'range'}
                   <label class="flex flex-col gap-0.5">
-                    <span class="text-slate-400">{c.label} {shown(c)}{c.unit ?? ''}</span>
+                    <span class="text-muted-foreground">{c.label} {shown(c)}{c.unit ?? ''}</span>
                     <input
                       type="range"
                       aria-label={c.label}
@@ -155,23 +154,23 @@
                       onpointerup={() => (commitNext = true)}
                       onkeydown={() => (commitNext = true)}
                       oninput={(e) => change(row.id, c, Number((e.currentTarget as HTMLInputElement).value) / k(c), true)}
-                      class="accent-indigo-500"
+                      class="accent-primary"
                     />
                   </label>
                 {:else if c.type === 'color'}
-                  <label class="flex items-center gap-1.5 text-slate-300">
+                  <label class="flex items-center gap-1.5 text-foreground">
                     <input type="color" aria-label={c.label} value={c.value} disabled={view.model.readOnly} oninput={(e) => change(row.id, c, (e.currentTarget as HTMLInputElement).value)} />
                     {c.label}
                   </label>
                 {:else if c.type === 'checkbox'}
-                  <label class="flex items-center gap-1.5 text-slate-300">
-                    <input type="checkbox" aria-label={c.label} checked={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLInputElement).checked)} class="accent-indigo-500" />
+                  <label class="flex items-center gap-1.5 text-foreground">
+                    <input type="checkbox" aria-label={c.label} checked={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLInputElement).checked)} class="accent-primary" />
                     {c.label}
                   </label>
                 {:else}
                   <label class="flex flex-col gap-0.5">
-                    <span class="text-slate-400">{c.label}</span>
-                    <select aria-label={c.label} value={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLSelectElement).value)} class="bg-slate-800 border border-slate-700 rounded px-1.5 py-1">
+                    <span class="text-muted-foreground">{c.label}</span>
+                    <select aria-label={c.label} value={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLSelectElement).value)} class={imageSelectClass}>
                       {#each c.options as o (o.value)}
                         <option value={o.value}>{o.label}</option>
                       {/each}
@@ -184,6 +183,6 @@
         </li>
       {/each}
     </ul>
-    {#if error}<p role="alert" class="text-rose-400">{error}</p>{/if}
+    {#if error}<p role="alert" class="text-destructive">{error}</p>{/if}
   </div>
 {/if}

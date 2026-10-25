@@ -1099,6 +1099,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `PresenceLayer` is `position: absolute; inset: 0; overflow: hidden` over its parent. `ImageEditor` used to put it over its whole root, so tabs and panels were inside it; the canvas component draws it over the canvas only, while `open` and `target` steps aim at the host's chrome around it.
 - **Solution / Workaround**: `PresenceLayer` takes `clip={false}`, and `ImageEditorCanvas` uses it, with its root `position: relative` and only the inner canvas box `overflow: hidden`. The cursor then reaches any chrome inside the nearest clipping ancestor. Hosts whose chrome is outside a clipping ancestor (a flow node, a scroll box) should answer those refs through `locate` / `locateElement` with chrome inside it, or accept the cursor stopping at the edge.
 
+### [react|svelte/image-editor] Mapping the Slate Palette to Tokens: `hover:text-white` Became a No-Op
+
+- **Issue / Symptom**: After moving the image panels from slate / indigo classes to shadcn tokens, small buttons showed no hover state at all.
+- **Root Cause**: The old buttons were `text-slate-300 hover:text-white`; both map to `text-foreground`, so the hover changed nothing. Light themes also lose contrast tricks that relied on a dark background (white text on `bg-slate-800`).
+- **Solution / Workaround**: Hover states use a background (`hover:bg-muted`, or `hover:bg-accent hover:text-accent-foreground` on `bg-muted` buttons), and filled controls pair `bg-primary` with `text-primary-foreground`. Use the constants in `image-editor/styles.ts` rather than writing new combinations. `tests/image-editor-tokens.test.*` fails if a slate / indigo / purple / emerald / rose class comes back in any tab.
+
 ### [core/canvas] xyflow Resizers Report Raw Sizes, and SvelteFlow Writes Them After `onResize`
 
 - **Issue / Symptom**: Resize snapping flickered back to the unsnapped size when the pointer was released (React Flow), or did nothing at all (SvelteFlow `onResize`).

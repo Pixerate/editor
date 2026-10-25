@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageRangeClass, imageSectionTitleClass } from './styles.js';
   import type {
     AdjustmentKind,
     AdjustmentLayer,
@@ -65,14 +66,14 @@
   }
 
   const button =
-    'px-2 py-1 rounded-md border border-slate-800 bg-slate-950 text-[11px] text-slate-200 hover:text-white disabled:opacity-40';
+    'px-2 py-1 rounded-md border border-border bg-background text-[11px] text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40';
 </script>
 
 <div data-testid="refine-edge-panel" class="flex flex-col gap-3 text-xs {className}">
-  <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Refine Edge</span>
+  <span class={imageSectionTitleClass}>Refine Edge</span>
   {#each REFINE_EDGE_CONTROLS as c (c.id)}
     <label class="flex flex-col gap-1">
-      <span class="flex justify-between text-slate-400">
+      <span class="flex justify-between text-muted-foreground">
         <span>{c.label}</span>
         <span class="font-mono">{params[c.id]}{c.unit}</span>
       </span>
@@ -84,11 +85,11 @@
         aria-label={c.label}
         value={params[c.id]}
         oninput={(e) => (params = { ...params, [c.id]: Number((e.currentTarget as HTMLInputElement).value) })}
-        class="w-full accent-indigo-500"
+        class={imageRangeClass}
       />
     </label>
   {/each}
-  <label class="flex items-center gap-2 text-slate-300">
+  <label class="flex items-center gap-2 text-foreground">
     <input
       type="checkbox"
       checked={params.smartRadius}
@@ -101,16 +102,16 @@
     <button type="button" class={button} onclick={() => (params = { ...DEFAULT_PARAMS })}>Reset</button>
   </div>
   {#if error}
-    <p role="alert" class="text-rose-400">{error}</p>
+    <p role="alert" class="text-destructive">{error}</p>
   {/if}
 
-  <span class="font-semibold text-slate-200 uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
+  <span class="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
   <div class="flex gap-1 items-center">
     <select
       aria-label="New masked layer kind"
       value={newKind}
       onchange={(e) => (newKind = (e.currentTarget as HTMLSelectElement).value as AdjustmentKind)}
-      class="flex-1 bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+      class="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
     >
       {#each ADJUSTMENT_KINDS as k (k.kind)}
         <option value={k.kind}>{k.label}</option>
@@ -124,7 +125,7 @@
         aria-label="Mask layer"
         value={target.id}
         onchange={(e) => (layerId = (e.currentTarget as HTMLSelectElement).value)}
-        class="bg-slate-950 border border-slate-800 rounded px-1 py-1 text-slate-200"
+        class="bg-background border border-border rounded px-1 py-1 text-foreground"
       >
         {#each list as l (l.id)}
           <option value={l.id}>{l.name || adjustmentKindLabel(l.kind)}{l.mask ? ' (masked)' : ''}</option>
@@ -143,7 +144,7 @@
       </div>
       {#if target.mask}
         <label class="flex flex-col gap-1">
-          <span class="flex justify-between text-slate-400">
+          <span class="flex justify-between text-muted-foreground">
             <span>Density</span>
             <span class="font-mono">{Math.round((target.mask.density ?? 1) * 100)}%</span>
           </span>
@@ -155,11 +156,11 @@
             aria-label="Mask density"
             value={Math.round((target.mask.density ?? 1) * 100)}
             oninput={(e) => controller.setAdjustmentLayerMaskProps(target.id, { density: Number((e.currentTarget as HTMLInputElement).value) / 100 })}
-            class="w-full accent-indigo-500"
+            class={imageRangeClass}
           />
         </label>
         <label class="flex flex-col gap-1">
-          <span class="flex justify-between text-slate-400">
+          <span class="flex justify-between text-muted-foreground">
             <span>Mask Feather</span>
             <span class="font-mono">{target.mask.feather ?? 0}px</span>
           </span>
@@ -171,7 +172,7 @@
             aria-label="Mask feather"
             value={target.mask.feather ?? 0}
             oninput={(e) => controller.setAdjustmentLayerMaskProps(target.id, { feather: Number((e.currentTarget as HTMLInputElement).value) })}
-            class="w-full accent-indigo-500"
+            class={imageRangeClass}
           />
         </label>
       {/if}
