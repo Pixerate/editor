@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { EffectsBrowser, EffectAuthoringEditor } from "@pixerate/editor-react/effects";
 import type { EffectAuthoringSession } from "@pixerate/editor/effects";
 import { createEffectAuthoringToolProvider } from "@pixerate/editor/effects";
@@ -21,18 +21,23 @@ export function EffectAuthoringTab() {
       return;
     }
 
-    if (!provider.supportsAuthoring || !provider.openAuthoring) {
+    if (!provider.capabilities.supportsAuthoring || !provider.openAuthoring) {
       setSession(null);
       return;
     }
 
     let live = true;
+    let opened: EffectAuthoringSession | null = null;
     setSessionLoading(true);
     setSessionError(null);
 
     Promise.resolve(provider.openAuthoring({ effectId: selectedEffectId }))
       .then((s) => {
-        if (!live) return;
+        if (!live) {
+          s.dispose();
+          return;
+        }
+        opened = s;
         setSession(s);
         setSessionLoading(false);
       })
@@ -45,15 +50,16 @@ export function EffectAuthoringTab() {
 
     return () => {
       live = false;
+      opened?.dispose();
     };
   }, [provider, selectedEffectId]);
 
   // Expose agent authoring tools when session is active
-  useAgentToolProvider(
-    demoToolRegistry,
-    () => (session ? createEffectAuthoringToolProvider(session) : null),
+  const authoringTools = useMemo(
+    () => (session ? createEffectAuthoringToolProvider({ session: () => session }) : null),
     [session]
   );
+  useAgentToolProvider(demoToolRegistry, authoringTools);
 
   return (
     <div className="space-y-6">
@@ -79,11 +85,7 @@ export function EffectAuthoringTab() {
           </h3>
           {provider ? (
             <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-              <EffectsBrowser
-                provider={provider}
-                selected={selectedEffectId}
-                onSelect={(effect) => setSelectedEffectId(effect.id)}
-              />
+              <EffectsBrowser provider={provider} onPick={(effect) => setSelectedEffectId(effect.id)} />
             </div>
           ) : (
             <div className="rounded-lg border border-slate-800 bg-slate-900/20 p-4 text-xs text-slate-500">
@@ -102,7 +104,7 @@ export function EffectAuthoringTab() {
             <div className="rounded-lg border border-slate-800 bg-slate-900/20 p-8 text-center text-xs text-slate-500">
               Select an effects provider to author effects.
             </div>
-          ) : !provider.supportsAuthoring || !provider.openAuthoring ? (
+          ) : !provider.capabilities.supportsAuthoring || !provider.openAuthoring ? (
             <div className="rounded-lg border border-slate-800 bg-slate-900/20 p-8 text-center text-xs text-slate-500">
               The current provider ({provider.id}) does not support authoring.
             </div>
