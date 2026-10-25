@@ -9,6 +9,8 @@ export interface PresenceLayerProps {
    * (`x * zoom + viewport.x`), or a function. Default: one to one.
    */
   viewport?: { x: number; y: number; zoom: number } | ((point: { x: number; y: number }) => { x: number; y: number });
+  /** Clip the cursors to the layer's box (default true). `false` lets a cursor visit chrome outside it. */
+  clip?: boolean;
   className?: string;
 }
 
@@ -17,7 +19,7 @@ export interface PresenceLayerProps {
  * in a `position: relative` box over the surface. It has the `pixerate-presence` class, so
  * snapshots and exports leave it out.
  */
-export function PresenceLayer({ presence, viewport, className = "" }: PresenceLayerProps) {
+export function PresenceLayer({ presence, viewport, clip = true, className = "" }: PresenceLayerProps) {
   const { actors } = useSyncExternalStore(presence.subscribe, presence.getState, presence.getState);
   if (!actors.length) return null;
   const map =
@@ -31,7 +33,7 @@ export function PresenceLayer({ presence, viewport, className = "" }: PresenceLa
       className={`pixerate-presence ${className}`.trim()}
       aria-hidden="true"
       data-testid="presence-layer"
-      style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 50 }}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: clip ? "hidden" : "visible", zIndex: 50 }}
     >
       {actors.map((a) => {
         const at = map(a);

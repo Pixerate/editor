@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
-import type { EffectProvider } from '@pixerate/editor/effects';
-import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
+import { EffectsBrowser } from '../effects';
+import { ImageEffectControls as Controls } from './ImageEffectControls';
 
 export interface ImageProviderEffectsPanelProps {
   controller: ImageEditorController;
@@ -9,29 +9,6 @@ export interface ImageProviderEffectsPanelProps {
 }
 
 const btn = 'rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-slate-300 hover:text-white disabled:opacity-40';
-
-/** One effect's controls, loaded from the provider; a note when it does not have the effect. */
-function Controls({
-  provider,
-  effect,
-  name,
-  values,
-  onChange,
-  onPreset,
-}: {
-  provider: EffectProvider | null;
-  effect: string;
-  name?: string;
-  values: Readonly<Record<string, unknown>>;
-  onChange: (control: string, value: unknown, gesture: string | null) => void;
-  onPreset: (values: Readonly<Record<string, unknown>>) => void;
-}) {
-  const { description, error } = useEffectDescription(provider, effect);
-  if (!provider) return <p className="text-[11px] text-slate-400">No effects provider: "{name ?? effect}" is kept but not drawn.</p>;
-  if (error) return <p className="text-[11px] text-amber-400">{error}</p>;
-  if (!description) return <p className="text-[11px] text-slate-400">Loading…</p>;
-  return <EffectParameters description={description} values={values} onChange={onChange} onReset={(k) => onChange(k, description.defaults[k], null)} onPreset={onPreset} />;
-}
 
 /**
  * Provider effects in the image editor, for the active layer: its effect smart filters (apply,
