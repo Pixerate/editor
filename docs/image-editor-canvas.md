@@ -59,6 +59,10 @@ React and Svelte take the same props; Svelte spells callbacks in lower case (`on
 | `open` | `(ref) => void \| Promise<void>` | Show a panel for an `open` step. Default: click its `[data-image-tab]` under `chromeRoot` unless it has `aria-selected="true"` |
 | `className` / `class`, `style` | | On the canvas' root element |
 
+## Theme
+
+`ImageEditor`, the canvas and every image panel use shadcn theme tokens (`bg-background`, `bg-muted`, `border-border`, `text-muted-foreground`, `bg-primary`, `text-destructive`, …) through the class constants in `image-editor/styles.ts`, so they follow the host's light or dark theme. Every panel takes `className` (Svelte `class`) for your own additions.
+
 ## Agent playback with your own chrome
 
 Playback coordinates are document pixels. The image tools' plans name panels (`{ kind: 'panel', id: 'paint' }`), controls (`{ kind: 'control', id: 'contrast' }`) and layers. Layers are found on the canvas; answer the rest from your chrome:
