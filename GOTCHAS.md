@@ -2830,3 +2830,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: On surfaces without panels (the node canvas, spreadsheets, a plain element surface), every tool whose plan starts with an `open` step paused for about a third of a second before acting, and the cursor pressed on nothing.
 - **Root Cause**: `AgentPlayback` skips an `open` step only when `surface.open` is undefined. `usePlaybackSurface` / `createPlaybackSurface` always built `open: (ref) => o().open?.(ref)`, so every attached surface looked able to open things, and playback glided, pressed and waited 220 ms for a no-op.
 - **Solution / Workaround**: The helpers expose `open` as a getter that is undefined unless the current options have one (options are still read per step). Surfaces that wrap them pass `open` through the same way (`get open()` or `open: o.open ? … : undefined`), never as an unconditional arrow.
+
+### [svelte/rich-text] Typography Resets the Colour of Bold Text
+
+- **Issue / Symptom**: Making coloured or gradient text bold in `EditableTextNodeEditor` turned it white (or the theme's bold colour). Italic, links and inline code did the same.
+- **Root Cause**: The editor content uses Tailwind Typography (`prose`), which sets `color: var(--tw-prose-bold)` on `strong` (and its own colours on `a` and `code`). A colour mark renders as a span around the `strong`, so the span's colour (or a gradient's `text-transparent`) never reaches the text.
+- **Solution / Workaround**: Inline marks inside `.pixerate-editor-content` use `color: inherit`. Colour marks that wrap text must not rely on the inner element keeping their colour.
