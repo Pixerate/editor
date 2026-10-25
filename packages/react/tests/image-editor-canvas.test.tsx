@@ -153,4 +153,32 @@ describe('ImageEditorCanvas (React)', () => {
     expect(opened).toEqual([{ kind: 'panel', id: 'adjust' }]);
     expect(container.querySelector('.pixerate-presence')).toBeTruthy();
   });
+
+  it("draws the crop box while the agent drags it out, then the call's real crop", async () => {
+    const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+    const registry = new ToolRegistry();
+    const drafts: unknown[] = [];
+    let controller: UseImageEditorReturn['controller'] | null = null;
+    function Host() {
+      const editor = useImageEditor({ image: fake });
+      controller = editor.controller;
+      const provider = useMemo(() => {
+        const render = editor.controller.render.bind(editor.controller);
+        editor.controller.render = ((canvasEl: HTMLCanvasElement, options: { draftCrop?: unknown }) => {
+          drafts.push(options?.draftCrop ?? null);
+          return render(canvasEl, options as never);
+        }) as typeof editor.controller.render;
+        return createImageEditorToolProvider(editor.controller, { id: 'img', namespace: 'img' });
+      }, [editor.controller]);
+      useAgentToolProvider(registry, provider, { playback });
+      return <ImageEditorCanvas editor={editor} mode="crop" playback={playback} playbackId="img" open={() => {}} />;
+    }
+    await act(async () => root.render(<Host />));
+    (playback.surface('img') as { visible?: () => boolean }).visible = () => true;
+    const result = await act(() => registry.callTool('img__set_crop', { x: 20, y: 10, width: 120, height: 80 }));
+    expect(result.isError).toBeFalsy();
+    expect(drafts.some((d) => d && (d as { width: number }).width > 1)).toBe(true);
+    expect(drafts.at(-1)).toBeNull();
+    expect(controller!.getState().crop).toMatchObject({ x: 20, y: 10, width: 120, height: 80 });
+  });
 });

@@ -368,7 +368,7 @@ Rules for planners:
 - **Live state for the post-roll.** The post-roll locates new ids right after the handler returns. Make `locate` read a copy you update synchronously, not state that renders later.
 - **Never block a call.** If a planner throws or returns nothing, the call falls back to the derived tier.
 - **Durations are optional.** Leave `ms` out and the cursor moves at the shared natural pace, scaled by `speed`.
-- **Live previews need a director.** If the change should update step by step as the cursor moves (a value following a drag, paint landing along a stroke), write a director and mark the tool `playback: 'self'`. Use `PresenceStore`, `PerformanceQueue` and `tweenPresenceCursor` from `@pixerate/editor/tools`.
+- **Live previews need a director.** If the change should update step by step as the cursor moves (a value following a drag, paint landing along a stroke), write a director and mark the tool `playback: 'self'`. Use `PresenceStore`, `PerformanceQueue` and `tweenPresenceCursor` from `@pixerate/editor/tools`. For drag feedback alone (a box pulled out under the cursor while the call itself applies at `commit`), subscribe `trackPresenceDrag` to the surface's presence store instead: it reports the box from the press to the cursor and when the drag ends.
 
 ### Test it
 
