@@ -217,6 +217,48 @@ export function unionRects(rects: readonly (PlaybackRect | null | undefined)[]):
 	return { x, y, width: Math.max(...list.map((r) => r.x + r.width)) - x, height: Math.max(...list.map((r) => r.y + r.height)) - y };
 }
 
+/** A box in client (viewport) pixels, as `Element.getBoundingClientRect()` returns it. */
+export interface PlaybackClientRect {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * A client-pixel box (e.g. `element.getBoundingClientRect()`) in a surface's coordinates, through
+ * its `fromViewport` (identity without one). Null for an empty box (a hidden element).
+ */
+export function playbackRectFromClient(rect: PlaybackClientRect | null | undefined, fromViewport?: (point: PlaybackPoint) => PlaybackPoint): PlaybackRect | null {
+	if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+	const map = fromViewport ?? ((p: PlaybackPoint) => p);
+	const a = map({ x: rect.left, y: rect.top });
+	const b = map({ x: rect.left + rect.width, y: rect.top + rect.height });
+	return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+}
+
+/**
+ * How a host's own chrome (a HUD, toolbar or panel over or beside an editor) answers a surface's
+ * refs. The canvas and element playback surfaces take these options; their own locator runs first.
+ */
+export interface PlaybackChromeOptions {
+	/** Where `ref` is, in the surface's coordinates (flow units on a canvas, element pixels on an element surface), or null. */
+	locate?(ref: PlaybackRef): PlaybackRect | null;
+	/** The element that shows `ref` anywhere on the page, or null; its client box is mapped to surface coordinates. */
+	locateElement?(ref: PlaybackRef): { getBoundingClientRect(): PlaybackClientRect } | null;
+	/** Show `ref` for an `open` step (switch to a tab, expand a panel). Without it, `open` steps are skipped. */
+	open?(ref: PlaybackRef): void | Promise<void>;
+}
+
+/** Finds `ref` through `chrome.locate`, then `chrome.locateElement` (mapped with `fromViewport`), or null. */
+export function locatePlaybackChrome(ref: PlaybackRef, chrome: PlaybackChromeOptions | null | undefined, fromViewport?: (point: PlaybackPoint) => PlaybackPoint): PlaybackRect | null {
+	if (!chrome) return null;
+	const own = chrome.locate?.(ref);
+	if (own) return own;
+	const el = chrome.locateElement?.(ref);
+	return el ? playbackRectFromClient(el.getBoundingClientRect(), fromViewport) : null;
+}
+
 function normalizePlan(plan: PlaybackPlan): PlaybackPlanResult | null {
 	if (!plan) return null;
 	if (Array.isArray(plan)) return plan.length ? { steps: plan } : null;
