@@ -1,5 +1,11 @@
 # @pixerate/editor-react
 
+## 0.98.0
+
+### Minor Changes
+
+- 65f5873: `ImageEditorCanvas`: the image editor's canvas as its own component, for apps with their own chrome. It has the render loop (sized by its container), every pointer gesture (crop, select, paint with its shortcuts, annotations, shape and type layers with the hidden textarea, Free Transform), the overlays, the agent's cursor and the playback surface. Props: `editor`, `mode` (`crop` / `select` / `paint` / `annotate` / `none`), `fit`, `selectionOptions`, `shapeOptions`, `typeOptions`, `annotationColor`, `annotationWidth`, `cropRatio`, `onError` (Svelte `onerror`), `typeSession` (React with `onTypeSessionChange`, Svelte bindable), `transformTool`, `playback`, `playbackId`, `onPlaybackReveal` (Svelte `onplaybackreveal`), and `chromeRoot`, `locate`, `locateElement` and `open` so a host's chrome answers panel, control and layer refs. `ImageEditor` is now `ImageEditorCanvas` plus its tabs and panels, with no change in behaviour. React's `ImageEditor` gains the `fit` prop Svelte already had. `ImageEffectControls` is exported in both packages. `PresenceLayer` takes `clip` (default true; `false` lets a cursor leave the layer's box).
+
 ## 0.97.0
 
 ### Minor Changes
