@@ -17,6 +17,7 @@ const VideoTab = lazy(() => import("./components/VideoTab").then((m) => ({ defau
 const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ default: m.ChartTab })));
 const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ default: m.ColorTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
+const EffectAuthoringTab = lazy(() => import("./components/EffectAuthoringTab").then((m) => ({ default: m.EffectAuthoringTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
   Sparkles,
@@ -32,9 +33,10 @@ import {
   Film,
   Brush,
   Palette,
+  Wand2,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "params" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "params" | "effects" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -69,6 +71,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "video", label: "Video", icon: Film, hint: "Tracks, trims, transitions, ffmpeg" },
       { id: "image", label: "Image", icon: ImageIcon, hint: "Adjustments, layers, masks" },
       { id: "paint", label: "Paint", icon: Brush, hint: "Natural media, paper, pigment" },
+      { id: "effects", label: "Effect Authoring", icon: Wand2, hint: "Keyframes, shaders, presets" },
     ],
   },
   {
@@ -230,6 +233,7 @@ export default function App() {
           {activeTab === "video" && <VideoTab />}
           {activeTab === "chart" && <ChartTab />}
           {activeTab === "color" && <ColorTab />}
+          {activeTab === "effects" && <EffectAuthoringTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
         {activeTab !== "parity" && (
