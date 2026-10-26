@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.152.0
+
+### Minor Changes
+
+- 0ae2073: Paint editor: `compositeTiles` and `pickColor` take `paper: false` to leave the paper out, so a host can draw the paint over its own surface and sample only what was painted.
+
 ## 0.151.0
 
 ### Minor Changes
