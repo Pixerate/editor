@@ -1425,8 +1425,11 @@ export class PaintEditorController {
     this.emit([]);
   }
 
-  /** The colour at a document pixel: of the composite (paper included) or of one layer. */
-  pickColor(x: number, y: number, options: { layerId?: string } = {}): { color: string; alpha: number } {
+  /**
+   * The colour at a document pixel: of the composite or of one layer. The composite includes the
+   * paper unless `paper` is false, so a pick where nothing is painted comes back with alpha 0.
+   */
+  pickColor(x: number, y: number, options: { layerId?: string; paper?: boolean } = {}): { color: string; alpha: number } {
     const { width, height } = this.doc.canvas;
     const px = Math.floor(x);
     const py = Math.floor(y);
@@ -1437,7 +1440,7 @@ export class PaintEditorController {
       const [r, g, b, a] = readPixel(l.surface, px - l.offset.x, py - l.offset.y);
       return { color: rgbToHex(r, g, b), alpha: Math.round((a / 255) * 1000) / 1000 };
     }
-    const d = this.exportCompositor.composite(this.renderLayers({}), { x: px, y: py, width: 1, height: 1 }, this.sources());
+    const d = this.exportCompositor.composite(this.renderLayers({ paper: options.paper }), { x: px, y: py, width: 1, height: 1 }, this.sources());
     return { color: rgbToHex(d[0], d[1], d[2]), alpha: Math.round((d[3] / 255) * 1000) / 1000 };
   }
 
@@ -2237,11 +2240,12 @@ export class PaintEditorController {
   /**
    * Composites the viewport stack (paper, view-only underlays, layers with the live stroke) tile by
    * tile over `rect`, calling `onTile` with each 256 px tile's RGBA (cached: unchanged tiles come back
-   * as the same buffer). Pass `takeDirty()` as `dirty`.
+   * as the same buffer). Pass `takeDirty()` as `dirty`. With `paper: false` the paper is left out and
+   * unpainted pixels stay transparent, for a host that draws the paint over its own surface.
    */
-  compositeTiles(rect: RasterRect, onTile: (tx: number, ty: number, data: Uint8ClampedArray, changed: boolean) => void, options: { dirty?: RasterRect[] | 'all' } = {}): void {
+  compositeTiles(rect: RasterRect, onTile: (tx: number, ty: number, data: Uint8ClampedArray, changed: boolean) => void, options: { dirty?: RasterRect[] | 'all'; paper?: boolean } = {}): void {
     const dirty = options.dirty === 'all' ? undefined : options.dirty;
-    this.viewCompositor.compositeTiles(this.renderLayers({}, true), rect, this.sources(), onTile, { dirty, checkpointLayerId: this.live?.layerId ?? this.doc.activeLayerId });
+    this.viewCompositor.compositeTiles(this.renderLayers({ paper: options.paper }, true), rect, this.sources(), onTile, { dirty, checkpointLayerId: this.live?.layerId ?? this.doc.activeLayerId });
   }
 
   /** The canvas as canvas-sized RGBA (paper included by default). */
