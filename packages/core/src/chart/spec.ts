@@ -11,6 +11,7 @@ import type {
 	ChartMarker,
 	ChartNumberFormat,
 	ChartOrientation,
+	ChartRadarGraticule,
 	ChartSeries,
 	ChartSeriesType,
 	ChartSpec,
@@ -31,6 +32,7 @@ export const CHART_AXIS_SCALES: readonly NonNullable<ChartAxis['scale']>[] = ['l
 export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'area', 'scatter'];
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
+export const CHART_RADAR_GRATICULES: readonly ChartRadarGraticule[] = ['polygon', 'circle'];
 export const CHART_ORIENTATIONS: readonly ChartOrientation[] = ['vertical', 'horizontal'];
 export const CHART_LEGEND_POSITIONS: readonly ChartLegendPosition[] = ['top', 'bottom', 'left', 'right'];
 export const CHART_NUMBER_STYLES: readonly NonNullable<ChartNumberFormat['style']>[] = ['number', 'percent', 'currency', 'compact'];
@@ -519,6 +521,12 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		if (Number.isInteger(b) && b >= 1 && b <= 500) bins = b;
 		else issues.push({ path: 'bins', message: 'bins must be a whole number from 1 to 500, or null for automatic.' });
 	}
+	let radarTicks: number | null = null;
+	if (value.radarTicks !== undefined && value.radarTicks !== null) {
+		const t = Number(value.radarTicks);
+		if (Number.isInteger(t) && t >= 1 && t <= 50) radarTicks = t;
+		else issues.push({ path: 'radarTicks', message: 'radarTicks must be a whole number from 1 to 50, or null for round-number rings.' });
+	}
 
 	const spec: ChartSpec = {
 		version: 1,
@@ -542,7 +550,9 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		gapWidth,
 		overlap,
 		bins,
-		showTotal: flag(value.showTotal, true, 'showTotal', issues)
+		showTotal: flag(value.showTotal, true, 'showTotal', issues),
+		radarTicks,
+		radarGraticule: pick(value.radarGraticule, CHART_RADAR_GRATICULES, 'polygon', 'radarGraticule', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {

@@ -76,7 +76,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			label: 'Change Chart…',
 			keywords: ['chart', 'title', 'axis', 'legend', 'stack', 'style', 'format', 'type'],
 			description:
-				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values; reverse, and scale "log" on value axes), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins or waterfall total. Invalid values change nothing and return why.',
+				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values; reverse, and scale "log" on value axes), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins, waterfall total, or radar rings and grid shape. Invalid values change nothing and return why.',
 			params: object(CHART_UPDATE_PROPERTIES),
 			run: (_ctx: unknown, params: ChartSpecPatch) => {
 				check(controller.update(params));

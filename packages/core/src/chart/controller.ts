@@ -914,6 +914,8 @@ function updateLabel(patch: ChartSpecPatch): string {
 		overlap: 'Change bar overlap',
 		bins: 'Change histogram bins',
 		showTotal: 'Toggle waterfall total',
+		radarTicks: 'Change radar rings',
+		radarGraticule: 'Change radar grid',
 		legend: 'Change legend',
 		stacking: 'Change stacking',
 		orientation: 'Change orientation',

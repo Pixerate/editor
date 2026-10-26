@@ -109,7 +109,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`. Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -190,6 +190,9 @@ several charts may register them with another prefix.
 - Percent-stacked charts, pies and gaps cannot be dragged; use `set_chart_values`.
 - Radar needs at least three categories (it draws as a line chart until then); trendlines
   are refused on stacked charts, pies and the other single-series families.
+- Radar `radarTicks` and `radarGraticule` are Mermaid's `ticks` and `graticule`. A
+  `radar-beta` block with no `graticule` line imports as `circle`, because that is what
+  Mermaid draws; set `radarGraticule: "polygon"` if the user wants the editor's default look.
 - `transpose_chart` and `load_file_chart` drop or replace styling; restyle and re-check
   colours afterwards.
 - A `%% @pixerate` comment is what makes Mermaid round-trip exactly. Keep it when the text

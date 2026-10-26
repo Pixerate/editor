@@ -13,6 +13,7 @@ import {
   chartSupportsTrendlines,
   chartTrendlineName,
   CHART_CURVES,
+  CHART_RADAR_GRATICULES,
   CHART_LEGEND_POSITIONS,
   CHART_NUMBER_STYLES,
   CHART_SERIES_TYPES,
@@ -391,6 +392,16 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 onPointerUp={() => controller.endGesture()}
                 onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
               />
+            </Field>
+          )}
+          {spec.type === 'radar' && (
+            <Field label="Rings" htmlFor={`${idBase}-radar-ticks`}>
+              <ChartCommitInput id={`${idBase}-radar-ticks`} value={spec.radarTicks === null ? '' : String(spec.radarTicks)} placeholder="Auto" inputMode="numeric" data-option="radarTicks" className={chartInputClass} onCommit={(text) => controller.update({ radarTicks: text.trim() === '' ? null : Number(text) }).ok} />
+            </Field>
+          )}
+          {spec.type === 'radar' && (
+            <Field label="Grid" htmlFor={`${idBase}-radar-graticule`}>
+              <Select id={`${idBase}-radar-graticule`} name="radarGraticule" value={spec.radarGraticule} options={CHART_RADAR_GRATICULES} labels={{ polygon: 'Polygons', circle: 'Circles' }} onChange={(radarGraticule) => controller.update({ radarGraticule })} />
             </Field>
           )}
           {spec.dataLabels && hasBars && (

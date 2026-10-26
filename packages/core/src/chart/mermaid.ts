@@ -119,6 +119,9 @@ export function chartToMermaid(spec: ChartSpec, options: ChartMermaidOptions = {
 		}
 		if (spec.yAxis.max !== null) lines.push(`${ind}max ${num(spec.yAxis.max)}`);
 		if (spec.yAxis.min !== null) lines.push(`${ind}min ${num(spec.yAxis.min)}`);
+		if (spec.radarTicks !== null) lines.push(`${ind}ticks ${spec.radarTicks}`);
+		// Mermaid draws circles unless told otherwise.
+		if (spec.radarGraticule === 'polygon') lines.push(`${ind}graticule polygon`);
 		if (!spec.legend.show) lines.push(`${ind}showLegend false`);
 	} else {
 		lines.push(`xychart-beta${spec.orientation === 'horizontal' ? ' horizontal' : ''}`);
@@ -249,6 +252,9 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 	const radarAxes: { id: string; label: string }[] = [];
 	const pieSlices: { label: string; value: number }[] = [];
 	let legendShow = true;
+	let radarTicks: number | null = null;
+	// Mermaid's radar default.
+	let graticule: 'circle' | 'polygon' = 'circle';
 	const counts = { bar: 0, line: 0 };
 	const lineIssue = (i: number, message: string) => issues.push({ path: `line ${i + 1}`, line: i + 1, message: `Line ${i + 1}: ${message}` });
 	for (let i = headerLine + 1; family && i < all.length; i++) {
@@ -356,6 +362,12 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 				if (m[1] === 'max') yAxis.max = Number(m[2]);
 				else if (m[1] === 'min') yAxis.min = Number(m[2]);
 				else if (m[1] === 'showLegend') legendShow = m[2] !== 'false';
+				else if (m[1] === 'ticks') {
+					const n = Number(m[2]);
+					if (Number.isFinite(n) && n >= 1) radarTicks = Math.min(50, Math.round(n));
+					else lineIssue(i, `expected ticks to be a number of rings (1 or more), got "${m[2]}".`);
+				} else if (m[2] === 'circle' || m[2] === 'polygon') graticule = m[2];
+				else lineIssue(i, `expected graticule circle or polygon, got "${m[2]}".`);
 				continue;
 			}
 		}
@@ -372,7 +384,7 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 			series: [{ id: 'series-1', name: title || 'Values', values: pieSlices.map((s) => s.value) }]
 		};
 	} else if (family === 'radar') {
-		input = { type: 'radar', title, categories: radarAxes.map((a) => a.label), series, yAxis, legend: { show: legendShow, position: 'bottom' } };
+		input = { type: 'radar', title, categories: radarAxes.map((a) => a.label), series, yAxis, legend: { show: legendShow, position: 'bottom' }, radarTicks, radarGraticule: graticule };
 	} else {
 		const allBar = series.length > 0 && series.every((s) => s.type === 'bar');
 		const allLine = series.length > 0 && series.every((s) => s.type === 'line');
