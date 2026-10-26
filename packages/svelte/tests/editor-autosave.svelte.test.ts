@@ -10,6 +10,8 @@ import { createAnimationEditor } from "../src/animation-editor";
 import { createVideoEditor } from "../src/video-editor";
 import { createParameters } from "../src/parameters";
 import { createVectorEditor } from "../src/vector";
+import { createReactiveImageEditor } from "../src/image-editor";
+import { createReactivePaintEditor } from "../src/paint-editor";
 import { createReactiveSpreadsheet } from "../src/spreadsheet";
 import { createTokens } from "../src/tokens";
 import { TokenStore } from "@pixerate/editor/tokens";
@@ -125,5 +127,23 @@ describe("createCanvasDocument", () => {
     expect(nodes.map((n) => n.id)).toEqual(["b"]);
     history.undo();
     expect(nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+});
+
+describe("image and paint runes", () => {
+  it("expose editorDocument, and autosave writes their assets with the snapshot", async () => {
+    const storage = createMemoryStorage();
+    const image = createReactiveImageEditor();
+    const painter = createReactivePaintEditor({ width: 120, height: 60, paper: "smooth" });
+    cleanup.push(() => image.destroy(), () => painter.destroy());
+    expect(image.editorDocument.kind).toBe("image");
+    const autosave = createEditorAutosave(painter.editorDocument, { storage, debounceMs: 5, interval: 20 });
+    cleanup.push(() => autosave.destroy());
+    await autosave.checked;
+    const points = Array.from({ length: 20 }, (_, i) => ({ x: 5 + i * 5, y: 30 + (i % 3) * 4, pressure: 0.7 }));
+    painter.controller.paintStroke({ points, brushId: "ink-pen", color: "#000000" });
+    await wait(60);
+    expect(storage.entries.get("paint")).toContain("pixerate-asset:");
+    expect([...storage.entries.keys()].some((k) => k.startsWith("pixerate.assets:"))).toBe(true);
   });
 });

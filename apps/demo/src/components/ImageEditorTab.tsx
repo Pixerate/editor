@@ -4,6 +4,7 @@ import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
+import { EditorDocumentAutosave, useDemoDocumentTools } from './EditorDocumentAutosave';
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { IMAGE_SCRIPTS } from '../agentScripts';
 import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
@@ -54,6 +55,8 @@ export function ImageEditorTab() {
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, provider);
+  // Save / load (the editor's own tools have undo), with layer pixels kept as assets; and autosave.
+  useDemoDocumentTools(editor.editorDocument, { namespace: 'image', skill: 'pixerate-image-editor', history: false });
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
   const { provider: effects, source: effectsSource } = useDemoEffects();
   // The effects turn names effect ids, so play the one written for the selected provider.
@@ -140,6 +143,7 @@ export function ImageEditorTab() {
           </label>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editor.editorDocument} name="Image" />
 
       {/* Selection demo: simulate an AI segmentation and refine it to the image edges */}
       <div className="flex flex-wrap items-center gap-2 text-xs">

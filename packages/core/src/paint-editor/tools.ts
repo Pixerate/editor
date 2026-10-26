@@ -1083,7 +1083,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'save_document',
     title: 'Save the document',
-    description: 'Returns the document as JSON (format pixerate-paint, version 1): canvas, paper, layers with PNG data URLs, and the recorded strokes unless strokes is false. Changes nothing.',
+    description: 'Deprecated (kept for one minor version): use get_paint_document, which returns the painting with images as asset references, or save_paint_document to store it. Returns the document as JSON (format pixerate-paint, version 1): canvas, paper, layers with PNG data URLs, and the recorded strokes unless strokes is false. Changes nothing.',
     inputSchema: { type: 'object', properties: { strokes: { type: 'boolean', description: 'Include the recorded strokes (default true).' } }, additionalProperties: false },
     annotations: { title: 'Save the document', ...READ },
     handler: ({ strokes }) => c.toJSON({ strokes }),
@@ -1092,7 +1092,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'open_document',
     title: 'Open a document',
-    description: 'Opens a saved paint document (as save_document returns), replacing the painting and clearing the undo history. Returns the canvas, the layers and anything that could not be read.',
+    description: 'Deprecated (kept for one minor version): use load_paint_document or open_saved_paint_document. Opens a saved paint document (as save_document returns), replacing the painting and clearing the undo history. Returns the canvas, the layers and anything that could not be read.',
     inputSchema: { type: 'object', properties: { document: { type: 'object', description: 'The saved document JSON.' } }, required: ['document'], additionalProperties: false },
     annotations: { title: 'Open a document', ...DESTRUCTIVE },
     handler: ({ document }) => {

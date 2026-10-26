@@ -4,6 +4,7 @@ import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools } f
 import { createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
 import { Brush } from 'lucide-react';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
+import { EditorDocumentAutosave, useDemoDocumentTools } from './EditorDocumentAutosave';
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { PAINT_SCRIPTS } from '../agentScripts';
 import { demoAgentSpeed } from '../agentScript';
@@ -20,6 +21,8 @@ export function PaintTab() {
     [editor.controller, director]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  // Save / load (the editor's own tools have undo), with layer pixels kept as assets; and autosave.
+  useDemoDocumentTools(editor.editorDocument, { namespace: 'paint', skill: 'pixerate-paint-editor', history: false });
   // The demo-wide effects provider (built-in test effects, or Flair): effect paper, effect layers,
   // fills and light on dried paint (Effects tab), and the paintfx__* tools.
   const { provider: effects, source: effectsSource } = useDemoEffects();
@@ -44,6 +47,7 @@ export function PaintTab() {
           mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed. With an effects provider, the Effects tab adds effect paper, effect layers, effect fills and light baked onto dried paint.
         </p>
       </div>
+      <EditorDocumentAutosave doc={editor.editorDocument} name="Painting" />
       <div className="relative">
         {/* The director's presence is the editor's playback cursor too: strokes and panel edits share it. */}
         <PaintEditor controller={editor.controller} height={760} presence={presence} playback={demoPlayback} />

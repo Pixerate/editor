@@ -36,8 +36,8 @@ import {
 	createCanvasAnimationCommands,
 	type CommandSpec
 } from '../src/commands';
-import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
+import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { TokenStore, createTokensEditorDocument } from '../src/tokens';
@@ -147,11 +147,13 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
-			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' }))
+			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' })),
+			...toolNames(createDocumentToolProvider(createImageEditorDocument(new ImageEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-paint-editor': [
 			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
-			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' }))
+			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' })),
+			...toolNames(createDocumentToolProvider(createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), { history: false, store: documentStore() }))
 		],
 		'pixerate-animation-editor': [
 			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
@@ -216,7 +218,7 @@ const FACTORIES: Record<string, string> = {
 	createDiagramToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
 	createDocumentToolProvider:
-		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas',
+		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas, pixerate-image-editor, pixerate-paint-editor',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',

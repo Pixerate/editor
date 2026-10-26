@@ -93,3 +93,4 @@ export * from './layers/transform-ui';
 export * from './effects';
 export * from './provider-effect-tools';
 export * from './playback';
+export * from './editorDocument';
