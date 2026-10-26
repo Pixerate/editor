@@ -507,6 +507,23 @@ export class PaintEditorController {
 
   // --- History -------------------------------------------------------------------
 
+  private docRevision = 0;
+
+  /**
+   * Bumped on every change to the painting (a committed or amended step, undo, redo, opening a
+   * document), not on wet-paint frames or view changes. `createPaintEditorDocument` uses it.
+   */
+  get documentRevision(): number {
+    return this.docRevision;
+  }
+
+  /** Why the document cannot be replaced or stepped through right now, or `null`. */
+  busyReason(): string | null {
+    if (this.session) return 'A stroke is in progress; end or cancel it first.';
+    if (this.wet.busy) return 'Wet paint is mid-step; wait a moment (wetIdle()) first.';
+    return null;
+  }
+
   private requireIdle(what: string): void {
     if (this.session) throw new PaintEditorError(`A stroke is in progress; end or cancel it before ${what}.`);
   }
@@ -521,6 +538,7 @@ export class PaintEditorController {
     if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
     this.redoStack = [];
     this.doc = next;
+    this.docRevision++;
     this.trimWetHistory();
     this.emit();
   }
@@ -538,6 +556,7 @@ export class PaintEditorController {
     last.after = next;
     this.redoStack = [];
     this.doc = next;
+    this.docRevision++;
     this.emit();
   }
 
@@ -610,6 +629,7 @@ export class PaintEditorController {
     this.redoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.before;
+    this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.before);
     if (e.wet) {
       if (paper !== this.doc.paper) this.wet.paperChanged();
@@ -629,6 +649,7 @@ export class PaintEditorController {
     this.undoStack.push(e);
     const paper = this.doc.paper;
     this.doc = e.after;
+    this.docRevision++;
     if (e.guides) this.restoreGuides(e.guides.after);
     if (e.wet) {
       this.wet.restore(e.wet.lost ? null : e.wet.after);
@@ -2472,6 +2493,7 @@ export class PaintEditorController {
     this.undoStack = [];
     this.redoStack = [];
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
+    this.docRevision++;
     delete this.extensions.layerChannels;
     delete this.extensions.lighting;
     delete this.extensions.stickers;

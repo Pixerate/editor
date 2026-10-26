@@ -13,7 +13,7 @@ import {
 } from '../src/agent';
 import { CommandRegistry, createCommandToolProvider, createHistoryCommands } from '../src/commands';
 import { HistoryManager } from '../src/history';
-import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
+import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { ParametersController, createParametersEditorDocument } from '../src/parameters';
@@ -28,7 +28,7 @@ import { VectorEditorController, createVectorEditorDocument, createVectorEffects
 import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
@@ -231,7 +231,9 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			[createSpreadsheetEditorDocument(sheet), 'pixerate-spreadsheet'],
 			[createRichTextEditorDocument(editor), 'pixerate-rich-text'],
 			[createTokensEditorDocument(new TokenStore()), 'pixerate-tokens'],
-			[createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), 'pixerate-canvas']
+			[createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), 'pixerate-canvas'],
+			[createImageEditorDocument(new ImageEditorController()), 'pixerate-image-editor'],
+			[createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), 'pixerate-paint-editor']
 		] as const) {
 			registry.register(createDocumentToolProvider(doc, { namespace: `${doc.kind}doc`, skill, store: createEditorDocumentStore({ storage: createMemoryStorage() }) }));
 		}

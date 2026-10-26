@@ -1189,6 +1189,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: React Flow (and Svelte Flow) apply drag positions through `onNodesChange` straight into host state; nothing records a history step. When the drop's final position arrives, React has not re-rendered yet inside `onNodeDragStop`, so state read there is one frame stale.
 - **Solution / Workaround**: `createCanvasGestureRecorder({ getNodes, setNodes, getEdges, setEdges, history })`: call `begin()` in `onNodeDragStart` and `end("Move")` a frame after `onNodeDragStop` (`requestAnimationFrame`), reading nodes through a ref. It records one undo step only when something other than selection or measurement changed. For change events without history, `useCanvasEditorDocument` / `createCanvasDocument` compare the nodes and edges without runtime fields, and skip frames where a node is still `dragging`.
 
+### [core/persistence] Image and Paint Documents Keep Pixels as Assets; Storage Must Carry Them
+
+- **Issue / Symptom**: An image or paint document is tens to hundreds of MB of PNG data URLs, too big for an agent tool result or a whole-document autosave. The existing external asset stores are async, but `EditorDocument` loads synchronously.
+- **Root Cause**: `toJSON()` inlines every layer, mask, thick-paint channel, mixing pad and guide as a data URL (or base64), and making `loadDocument` async would have changed the API of every editor.
+- **Solution / Workaround**: `defineEditorDocument({ assets })` runs `getDocument()` output through `externalizeAssets`, which replaces each inline image with a content-addressed `pixerate-asset:<len>-<hash>` reference held in a synchronous `EditorAssetRegistry`, and `loadDocument` swaps them back. The async part happens around storage: `withEditorAssets(storage, registry)` writes referenced assets before the document on `set`, and reads them into the registry on `get`. `createEditorAutosave`, `useEditorAutosave` / `createEditorAutosave` (Svelte) and `createEditorDocumentStore` do this whenever `doc.assets` is set. A document whose references are not loaded is refused, naming the missing assets. Assets are kept under one shared `pixerate.assets:` pool and are never deleted yet.
+
+### [core/image-editor] Loading the Source Image Is Not a Document Change
+
+- **Issue / Symptom**: Opening the Image tab marked the document as changed, so every reload offered to "restore unsaved changes" nobody made.
+- **Root Cause**: `loadImage` replaces the source image, and an early `documentRevision` counted it like an edit. The source is the host's (`sourceUrl`) and is not saved in the document.
+- **Solution / Workaround**: `documentRevision` counts history steps, undo, redo and stroke frames (`notify(strokeRects)`), not `loadImage` or view changes. Any change that is not saved in `toJSON()` must not bump a document revision.
+
 ### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
 
 - **Issue / Symptom**: Under `<React.StrictMode>`, `useMermaidDiagram().editorDocument` stopped counting changes after mount, so autosave never wrote a snapshot.
