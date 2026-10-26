@@ -484,7 +484,11 @@ export class PaintWetLayers {
   /** The world (made on first use, at the canvas size). */
   ensureWorld(): WetWorld {
     const { width, height } = this.host.canvas();
-    if (this.world && (this.world.width !== width || this.world.height !== height)) throw new Error('The wet world is the wrong size; dry the paint before resizing the canvas.');
+    if (this.world && (this.world.width !== width || this.world.height !== height)) {
+      // Undo or redo across a canvas size change: a world without wet paint is made again at the new size.
+      if (this.world.laneIds().length) throw new Error('The wet world is the wrong size; dry the paint before resizing the canvas.');
+      this.dropWorld();
+    }
     if (!this.world) {
       this.world = new WetWorld(width, height, wetPaperInput(this.host.paper()), { kernel: this.options.kernel, threads: this.options.threads });
       this.world.setTilt(this.tilt);
@@ -775,8 +779,16 @@ export class PaintWetLayers {
       if (this.world) for (const id of this.world.laneIds()) this.world.removeLane(id);
       return;
     }
+    const { width, height } = this.host.canvas();
+    if (this.world && (this.world.width !== width || this.world.height !== height)) this.dropWorld();
     this.ensureWorld().restore(snap);
     this.syncDisplays();
+  }
+
+  private dropWorld(): void {
+    this.world?.destroy();
+    this.world = null;
+    this.driver = null;
   }
 
   /** Forgets everything wet (a new canvas, a resize, opening a document). */

@@ -45,6 +45,11 @@ export interface PaperSettings {
   roughness: number;
   /** Metallic paper (gold or silver leaf, pearlescent card): the grain catches the light, 0..1 (default 0). */
   metallic?: number;
+  /**
+   * Where the grain's (0, 0) sits in document pixels (missing = the top-left). `extendCanvas` moves
+   * it with the paint, so the texture stays under what was painted on it.
+   */
+  offset?: { x: number; y: number };
 }
 
 const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
@@ -107,7 +112,14 @@ export function paperPreset(id: string): PaperSettings | undefined {
 }
 
 export function clonePaper(p: PaperSettings): PaperSettings {
-  return { ...p, dry: { ...p.dry }, wet: { ...p.wet } };
+  return { ...p, dry: { ...p.dry }, wet: { ...p.wet }, ...(p.offset ? { offset: { ...p.offset } } : {}) };
+}
+
+function readOffset(raw: unknown, d: { x: number; y: number } | undefined): { offset?: { x: number; y: number } } {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+  const x = o && typeof o.x === 'number' && Number.isFinite(o.x) ? Math.round(o.x) : (d?.x ?? 0);
+  const y = o && typeof o.y === 'number' && Number.isFinite(o.y) ? Math.round(o.y) : (d?.y ?? 0);
+  return x || y ? { offset: { x, y } } : {};
 }
 
 function readTuning(raw: unknown, d: GrainTuning): GrainTuning {
@@ -139,6 +151,7 @@ export function normalizePaper(raw: Partial<PaperSettings> | Record<string, unkn
     permeability: unit(r.permeability, b.permeability),
     roughness: unit(r.roughness, b.roughness),
     ...(unit(r.metallic, b.metallic ?? 0) > 0 ? { metallic: unit(r.metallic, b.metallic ?? 0) } : {}),
+    ...readOffset(r.offset, b.offset),
   };
 }
 

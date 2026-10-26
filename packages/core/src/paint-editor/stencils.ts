@@ -245,6 +245,19 @@ export function stencilMask(stencils: readonly Stencil[], width: number, height:
   return { width, height, data };
 }
 
+/** A stencil moved by (dx, dy) document pixels (for a canvas extended to the left or top). */
+export function translateStencil(s: Stencil, dx: number, dy: number): Stencil {
+  const p = (q?: Point2) => (q ? { x: q.x + dx, y: q.y + dy } : undefined);
+  return {
+    ...s,
+    ...(s.from ? { from: p(s.from) } : {}),
+    ...(s.to ? { to: p(s.to) } : {}),
+    ...(s.center ? { center: p(s.center) } : {}),
+    ...(s.rect ? { rect: { ...s.rect, x: s.rect.x + dx, y: s.rect.y + dy } } : {}),
+    ...(s.points ? { points: s.points.map((q) => p(q)!) } : {}),
+  };
+}
+
 /** A stencil scaled about the origin by `k` (for repainting at a larger size). */
 export function scaleStencil(s: Stencil, k: number): Stencil {
   const p = (q?: Point2) => (q ? { x: q.x * k, y: q.y * k } : undefined);
