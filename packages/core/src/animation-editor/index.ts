@@ -31,3 +31,4 @@ export * from './form.js';
 export * from './effects.js';
 export * from './effect-tools.js';
 export * from './playback.js';
+export * from './editorDocument.js';

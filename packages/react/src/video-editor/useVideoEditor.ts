@@ -8,7 +8,10 @@ import {
   type VideoEditorOptions,
   type VideoEditorState,
   type VideoEditorToolProviderOptions,
+  createVideoEditorDocument,
+  type VideoProject,
 } from '@pixerate/editor/video-editor';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /** A `VideoEditorController` created once for the component's lifetime (destroyed on unmount). */
@@ -27,6 +30,8 @@ export function useVideoEditorState(controller: VideoEditorController): VideoEdi
 
 export interface UseVideoEditorResult {
   controller: VideoEditorController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<VideoProject>;
   state: VideoEditorState;
   play: () => void;
   pause: () => void;
@@ -71,7 +76,10 @@ export function useVideoEditor(controllerOrOptions: VideoEditorController | Vide
     }),
     [controller],
   );
-  return { controller, state, ...actions };
+  const editorDocument = useMemo(() => createVideoEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, ...actions };
 }
 
 /**

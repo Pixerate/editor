@@ -10,7 +10,10 @@ import {
   type VectorEditorOptions,
   type VectorEditorState,
   type VectorTool,
+  createVectorEditorDocument,
+  type VectorDocument,
 } from '@pixerate/editor/vector';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /** A `VectorEditorController` created once for the component's lifetime (destroyed on unmount). */
@@ -29,6 +32,8 @@ export function useVectorEditorState(controller: VectorEditorController): Vector
 
 export interface UseVectorEditorResult {
   controller: VectorEditorController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<VectorDocument>;
   state: VectorEditorState;
   setTool: (tool: VectorTool) => void;
   undo: () => void;
@@ -60,7 +65,10 @@ export function useVectorEditor(controllerOrOptions: VectorEditorController | Ve
     }),
     [controller],
   );
-  return { controller, state, ...actions };
+  const editorDocument = useMemo(() => createVectorEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, ...actions };
 }
 
 /** Anything with `register(specs) → unregister` (a `CommandRegistry`). */

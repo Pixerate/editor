@@ -54,3 +54,4 @@ export { loadOpenTypeFont, parseOpenTypeFont, type OpenTypeFont } from '../text/
 export type { TextFont, TextShaper } from '../text/types.js';
 export * from './effect-tools.js';
 export * from './playback.js';
+export * from './editorDocument.js';

@@ -131,6 +131,18 @@ it changed.
 | `undo_chart` | Undo the last chart edit. Returns the label of what was undone and the next undo. |
 | `redo_chart` | Redo the last undone chart edit. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A chart document is the `ChartSpec`.
+
+| Tool | Use |
+| --- | --- |
+| `get_chart_document` | Take a copy of the whole chart as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the chart, use `get_chart`: it is smaller and says more. Refuses very large documents. |
+| `load_chart_document` | Put back a copy from `get_chart_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_chart` brings the previous chart back). Every problem in the spec is refused, the same as `update_chart`; for data from a file use the import tools. |
+| `save_chart_document` | Save the chart under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_chart_documents` | List saved charts (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_chart_document` | Replace the chart with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Commands
 
 The `chart.*` commands (run with `run_command` / `run_commands`) mirror the tools. Prefer

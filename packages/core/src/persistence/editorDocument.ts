@@ -1,5 +1,5 @@
 import { stripPrototypeKeys } from "../tools/safe-json";
-import { createLoadReport, migrateDocument, type JsonObject, type LoadReport } from "./migrate";
+import { createLoadReport, migrateDocument, type JsonObject, type LoadReport, type SectionProblem } from "./migrate";
 
 /**
  * Undo / redo of an editor. Satisfies `HistoryCommandTarget`, so
@@ -134,9 +134,10 @@ export interface EditorDocumentSpec<T> {
   get(): T;
   /**
    * Replaces the document. Throw (with a message saying what is wrong) before
-   * changing anything when `document` does not fit.
+   * changing anything when `document` does not fit. Return `problems` for parts
+   * that were repaired with defaults (they land in the `LoadReport`).
    */
-  load(document: unknown, options: { history: "reset" | "record" }): void;
+  load(document: unknown, options: { history: "reset" | "record" }): void | { problems?: SectionProblem[] };
   /** Calls `listener` after each document change (not selection or view changes). */
   subscribe(listener: () => void): () => void;
   history: EditorDocumentHistory;
@@ -199,7 +200,8 @@ export function defineEditorDocument<T>(spec: EditorDocumentSpec<T>): EditorDocu
       const { document, report } = unwrap(input);
       if (document === undefined || document === null) throw new EditorDocumentLoadError(`No ${spec.kind} document was given.`);
       try {
-        spec.load(document, { history: options.history ?? "reset" });
+        const result = spec.load(document, { history: options.history ?? "reset" });
+        if (result?.problems?.length) report.problems.push(...result.problems);
       } catch (error) {
         if (error instanceof EditorDocumentLoadError) throw error;
         throw new EditorDocumentLoadError(error instanceof Error ? error.message : String(error));

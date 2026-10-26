@@ -40,13 +40,13 @@ import { ImageEditorController, createImageEditorToolProvider, createImageEffect
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
-import { ChartController, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
+import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
-import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
-import { VectorEditorController, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
-import { createParameterCommands } from '../src/parameters';
+import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
+import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
+import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
+import { ParametersController, createParameterCommands, createParametersEditorDocument } from '../src/parameters';
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
@@ -127,11 +127,12 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createComponentCommands(stub)),
 			...commandIds(createCanvasAnimationCommands(stub))
 		],
-		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) }))],
+		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() }))],
 		'pixerate-chart': [
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
-			...commandIds(createChartCommands(new ChartController()))
+			...commandIds(createChartCommands(new ChartController())),
+			...toolNames(createDocumentToolProvider(createChartEditorDocument(new ChartController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-diagram': [
 			...toolNames(createDiagramToolProvider(new DiagramController(), { id: 'diagram', renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) })),
@@ -148,17 +149,25 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-animation-editor': [
 			...toolNames(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' })),
-			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' }))
+			...toolNames(createAnimationEffectsToolProvider(new AnimationEditorController(), { id: 'animation-effects' })),
+			...toolNames(createDocumentToolProvider(createAnimationEditorDocument(new AnimationEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-video-editor': [
 			...toolNames(createVideoEditorToolProvider(new VideoEditorController(), { id: 'video' })),
-			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' }))
+			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' })),
+			...toolNames(createDocumentToolProvider(createVideoEditorDocument(new VideoEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
-		'pixerate-parameters': commandIds(createParameterCommands(stub)),
+		'pixerate-parameters': [
+			...commandIds(createParameterCommands(stub)),
+			// parameters.undo / parameters.redo are commands, so the document tools leave undo out.
+			...toolNames(
+				createDocumentToolProvider(createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), { history: false, store: documentStore() })
+			)
+		],
 		'pixerate-effect-authoring': (() => {
 			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
 			authoringSession.setSource = async () => ({ ok: true, issues: [] });
@@ -199,7 +208,7 @@ const FACTORIES: Record<string, string> = {
 	createChartCommands: 'pixerate-chart',
 	createDiagramToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
-	createDocumentToolProvider: 'pixerate-diagram',
+	createDocumentToolProvider: 'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',

@@ -6,6 +6,11 @@ import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor
 import { createMemoryStorage, toEditorDocumentFile, type EditorDocument, type MemoryStorage } from "@pixerate/editor/persistence";
 import { useEditorAutosave, type UseEditorAutosaveResult } from "../src/persistence";
 import { useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
+import { useChartEditor } from "../src/chart";
+import { useAnimationEditor } from "../src/animation-editor";
+import { useVideoEditor } from "../src/video-editor";
+import { useParameters } from "../src/parameters";
+import { useVectorEditor } from "../src/vector";
 
 let container: HTMLDivElement;
 let root: any;
@@ -85,5 +90,35 @@ describe("useMermaidDiagram().editorDocument", () => {
     expect(seen.length).toBe(1);
     expect(doc.getDocument()).toEqual({ source: controller.getSource() });
     off();
+  });
+});
+
+describe("editor hooks expose editorDocument", () => {
+  it("chart, animation, video, parameters and vector", async () => {
+    const docs: Record<string, EditorDocument> = {};
+    const Probe = () => {
+      docs.chart = useChartEditor().editorDocument;
+      docs.animation = useAnimationEditor().editorDocument;
+      docs.video = useVideoEditor().editorDocument;
+      docs.parameters = useParameters({ schema: { fields: [{ id: "speed", type: "number", min: 0, max: 4, default: 1 }] } }).editorDocument;
+      docs.vector = useVectorEditor().editorDocument;
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    for (const [kind, doc] of Object.entries(docs)) {
+      expect(doc.kind).toBe(kind);
+      const seen: number[] = [];
+      const off = doc.subscribe(() => seen.push(doc.revision()));
+      const start = doc.getDocument();
+      await act(async () => void doc.loadDocument(start, { history: "record" }));
+      expect(doc.getDocument()).toEqual(start);
+      off();
+    }
+    // A recorded load of a changed document is one undo step.
+    const before = docs.parameters.getDocument();
+    await act(async () => void docs.parameters.loadDocument({ values: { speed: 3 } }, { history: "record" }));
+    expect((docs.parameters.getDocument() as any).values.speed).toBe(3);
+    await act(async () => void docs.parameters.history.undo());
+    expect(docs.parameters.getDocument()).toEqual(before);
   });
 });

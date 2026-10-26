@@ -1,7 +1,28 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
+import { useAgentToolProvider } from "@pixerate/editor-react";
 import { RecoveryPrompt, useEditorAutosave } from "@pixerate/editor-react/persistence";
-import type { EditorDocument } from "@pixerate/editor/persistence";
-import { demoDocumentStorage } from "../agentTools";
+import { createDocumentToolProvider, type EditorDocument } from "@pixerate/editor/persistence";
+import { demoDocumentStorage, demoDocumentStore, demoToolRegistry } from "../agentTools";
+
+/**
+ * An editor's `EditorDocument` for a demo tab, with its save / load tools registered while the
+ * tab is mounted (`<namespace>__get_<kind>_document`, `…__save_<kind>_document`, …).
+ */
+export function useDemoEditorDocument<C, T>(
+  controller: C,
+  create: (controller: C) => EditorDocument<T>,
+  tools: { namespace: string; skill: string; history?: boolean; name?: () => string | undefined },
+): EditorDocument<T> {
+  const doc = useMemo(() => create(controller), [controller, create]);
+  useEffect(() => () => doc.destroy(), [doc]);
+  const provider = useMemo(
+    () => createDocumentToolProvider(doc, { id: `${doc.kind}-document`, store: demoDocumentStore, ...tools }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [doc],
+  );
+  useAgentToolProvider(demoToolRegistry, provider);
+  return doc;
+}
 
 /**
  * Crash-recovery autosave for any editor tab: pass the editor's `EditorDocument`
