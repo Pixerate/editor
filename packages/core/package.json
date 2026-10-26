@@ -369,7 +369,7 @@
     "prosemirror-markdown": "^1.13.9"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "0.137.0",
+    "@anthropic-ai/sdk": "1.1.0",
     "@dagrejs/dagre": "^1.1.8",
     "@tiptap/core": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
