@@ -17,6 +17,8 @@ import {
   pointerPressure,
   FreeTransformTool,
   getViewportProjection,
+  measureCanvasViewport,
+  watchCanvasViewport,
   ShapeDrawGesture,
   TypeToolGesture,
   DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -134,6 +136,11 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  /**
+   * The viewport in CSS pixels as last rendered. The backing store is larger (device pixel ratio,
+   * CSS transforms), so pointer mapping and the projection use this, never `canvas.width`.
+   */
+  const viewRef = useRef({ width: 0, height: 0 });
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const latest = useRef({ onError, onTypeSessionChange, locate, locateElement, open, chromeRoot, onPlaybackReveal });
@@ -149,20 +156,20 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
     const canvas = canvasRef.current;
     const root = rootRef.current;
-    if (!canvas || !root || !canvas.width) return p;
+    if (!canvas || !root || !viewRef.current.width) return p;
     const r = canvas.getBoundingClientRect();
     const box = root.getBoundingClientRect();
-    const c = imageToCanvasPoint(p, controller.getState(), canvas.width, canvas.height, modeRef.current === 'crop');
-    return { x: r.left - box.left + (c.x * r.width) / canvas.width, y: r.top - box.top + (c.y * r.height) / canvas.height };
+    const c = imageToCanvasPoint(p, controller.getState(), viewRef.current.width, viewRef.current.height, modeRef.current === 'crop');
+    return { x: r.left - box.left + (c.x * r.width) / viewRef.current.width, y: r.top - box.top + (c.y * r.height) / viewRef.current.height };
   };
   /** Viewport (client) pixels → document pixels. */
   const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
     const canvas = canvasRef.current;
-    if (!canvas || !canvas.width) return p;
+    if (!canvas || !viewRef.current.width) return p;
     const r = canvas.getBoundingClientRect();
-    const sx = r.width > 0 ? canvas.width / r.width : 1;
-    const sy = r.height > 0 ? canvas.height / r.height : 1;
-    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, controller.getState(), canvas.width, canvas.height, modeRef.current === 'crop');
+    const sx = r.width > 0 ? viewRef.current.width / r.width : 1;
+    const sy = r.height > 0 ? viewRef.current.height / r.height : 1;
+    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, controller.getState(), viewRef.current.width, viewRef.current.height, modeRef.current === 'crop');
   };
   /** A client box as a rectangle in document pixels. */
   const clientRect = (r: DOMRect | null | undefined): PlaybackRect | null => {
@@ -285,12 +292,13 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       const container = containerRef.current;
       if (!canvas || !container) return;
 
-      const vpWidth = container.clientWidth || 800;
-      const vpHeight = container.clientHeight || 500;
+      const viewport = measureCanvasViewport(container);
+      viewRef.current = { width: viewport.width, height: viewport.height };
 
       await controller.render(canvas, {
-        viewportWidth: vpWidth,
-        viewportHeight: vpHeight,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        pixelRatio: viewport.pixelRatio,
         fit,
         showCropOverlay: mode === 'crop',
         showSelectionOverlay: true,
@@ -388,12 +396,12 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   const transformPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+    const sx = rect.width > 0 ? viewRef.current.width / rect.width : 1;
+    const sy = rect.height > 0 ? viewRef.current.height / rect.height : 1;
     const s = controller.getState();
     const cropping = mode === 'crop';
-    const projection = getViewportProjection(s, canvas.width, canvas.height, cropping);
-    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvas.width, canvas.height, cropping);
+    const projection = getViewportProjection(s, viewRef.current.width, viewRef.current.height, cropping);
+    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, viewRef.current.width, viewRef.current.height, cropping);
     transformTool.setView(projection.scale);
     return { pt, tolerance: 6 / (projection.scale || 1) };
   };
@@ -451,22 +459,13 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     return () => caf(animId);
   }, [renderCanvas, state]);
 
-  // Container resize observer to safely adapt viewport without feedback loops
+  // Re-render when the layout size, the device pixel ratio or a host's CSS transform scale changes.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        renderCanvas();
-      });
-      observer.observe(container);
-      return () => observer.disconnect();
-    } else {
-      const handleResize = () => renderCanvas();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
+    const { width, height } = measureCanvasViewport(container);
+    viewRef.current = { width, height };
+    return watchCanvasViewport(container, () => renderCanvas());
   }, [renderCanvas]);
 
   // Convert mouse event coordinates to internal canvas pixel space
@@ -474,8 +473,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
-    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+    const scaleX = rect.width > 0 ? viewRef.current.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? viewRef.current.height / rect.height : 1;
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -489,11 +488,11 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     const events = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : [];
     const list = events.length ? events : [native];
     const rect = canvas.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
+    const sx = rect.width > 0 ? viewRef.current.width / rect.width : 1;
+    const sy = rect.height > 0 ? viewRef.current.height / rect.height : 1;
     const s = controller.getState();
     return list.map((ev) => ({
-      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvas.width, canvas.height, false),
+      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, viewRef.current.width, viewRef.current.height, false),
       pressure: pointerPressure(ev),
     }));
   };
@@ -544,7 +543,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
       void gesture.begin(imgPt, e).then(() => report('select', gesture.error));
       return;
     }
@@ -556,8 +555,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
         width: state.imageDimensions.width,
         height: state.imageDimensions.height,
       };
-      const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
-      const startImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, true);
+      const handle = hitTestCrop(canvasPt, state, viewRef.current.width, viewRef.current.height, 14, activeCrop);
+      const startImgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, true);
 
       if (handle) {
         cropDragInfoRef.current = {
@@ -579,7 +578,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     }
 
     if (mode === 'annotate' && (state.activeTool === 'shape' || state.activeTool === 'type')) {
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
       report(state.activeTool, null);
       if (state.activeTool === 'shape') shapeGestureRef.current!.down(imgPt);
       else {
@@ -591,7 +590,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     }
 
     if (mode === 'annotate') {
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
       dragStartPointRef.current = imgPt;
 
       if (state.activeTool === 'select') {
@@ -636,7 +635,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false))) {
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false))) {
         selectionDraftRef.current = gesture.draftPath;
         renderCanvas();
       }
@@ -646,7 +645,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     if (mode === 'crop') {
       const drag = cropDragInfoRef.current;
       if (drag) {
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, true);
+        const currentImgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, true);
         let newCrop: CropBox;
 
         if (drag.handle === 'new') {
@@ -682,7 +681,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
           width: state.imageDimensions.width,
           height: state.imageDimensions.height,
         };
-        const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
+        const handle = hitTestCrop(canvasPt, state, viewRef.current.width, viewRef.current.height, 14, activeCrop);
         canvas.style.cursor = getCropCursor(handle, state.transform);
       }
       return;
@@ -691,7 +690,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     if (mode === 'annotate' && state.activeTool === 'shape') {
       const g = shapeGestureRef.current!;
       if (g.active) {
-        g.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), { shift: e.shiftKey, alt: e.altKey });
+        g.move(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false), { shift: e.shiftKey, alt: e.altKey });
         if (g.error) report('shape', g.error);
       }
       return;
@@ -701,7 +700,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       // If moving selected annotation
       if (annotationDragInfoRef.current) {
         const drag = annotationDragInfoRef.current;
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+        const currentImgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
         const dx = currentImgPt.x - drag.startImgPt.x;
         const dy = currentImgPt.y - drag.startImgPt.y;
         editor.updateAnnotation(drag.annId, {
@@ -715,7 +714,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       if (!startPt) {
         // Update cursor for hover on select tool
         if (state.activeTool === 'select') {
-          const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+          const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
           let hovered = false;
           for (let i = state.annotations.length - 1; i >= 0; i--) {
             if (hitTestAnnotation(imgPt, state.annotations[i])) {
@@ -730,7 +729,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
         return;
       }
 
-      const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+      const currentImgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
       const stroke = { strokeColor: annotationColor, strokeWidth: annotationWidth };
 
       if (state.activeTool === 'pen' && isDrawingRef.current) {
@@ -790,7 +789,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
       if (gesture.active) {
-        gesture.end(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), e);
+        gesture.end(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false), e);
         selectionDraftRef.current = null;
         renderCanvas();
       }
@@ -819,7 +818,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     }
     if (mode === 'annotate' && state.activeTool === 'type') {
       const tool = typeToolRef.current!;
-      tool.up(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false));
+      tool.up(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false));
       setTypeSession(tool.session);
       if (tool.error) report('type', tool.error);
       void renderCanvas();
@@ -836,7 +835,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
       const startPt = dragStartPointRef.current;
       if (startPt) {
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
+        const currentImgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
         const stroke = { strokeColor: annotationColor, strokeWidth: annotationWidth };
 
         if (state.activeTool === 'pen' && isDrawingRef.current) {
@@ -905,7 +904,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
           onPointerUp={handlePaintPointerUp}
           onPointerCancel={() => paintGestureRef.current?.cancel()}
           data-testid="image-editor-canvas"
-          style={transformTool.active ? { cursor: transformCursor } : undefined}
+          style={transformTool.active ? { width: '100%', height: '100%', cursor: transformCursor } : { width: '100%', height: '100%' }}
           className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && state.activeTool === 'shape' ? 'cursor-crosshair' : ''}`}
         />
         {typeSession && (

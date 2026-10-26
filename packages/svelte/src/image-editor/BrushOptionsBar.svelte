@@ -2,6 +2,7 @@
   import { imageChipClass, imageColorInputClass } from './styles.js';
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
   import {
+    userErrorMessage,
     BRUSH_OPTION_CONTROLS,
     MIXER_MIXING_OPTIONS,
     MIXER_OPTION_CONTROLS,
@@ -49,7 +50,7 @@
       error = null;
       fn();
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      error = userErrorMessage(err);
     }
   }
 </script>

@@ -251,13 +251,13 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'remove_layer',
     title: 'Delete a layer',
     description:
-      'Deletes a layer (a group with its children). Refused for a layer locked with all. Prefer hiding it (set_layer_properties visible false) when it may be wanted back. One undo step. Returns the removed id and the remaining top-level ids.',
+      'Deletes a layer (a group with its children). Refused for a layer locked with all. Prefer hiding it (set_layer_properties visible false) when it may be wanted back. Deleting the active layer makes the nearest paintable pixel layer below it active (else the topmost one). One undo step. Returns the removed id, the remaining top-level ids and the active layer id afterwards.',
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Delete a layer', ...DESTRUCTIVE },
     handler: ({ layerId }) => {
       const id = exists(layerId);
       controller.removeLayer(id);
-      return { removed: id, layers: controller.getLayers().map((l) => l.id) };
+      return { removed: id, layers: controller.getLayers().map((l) => l.id), activeLayerId: controller.getState().activeLayerId };
     },
   };
 

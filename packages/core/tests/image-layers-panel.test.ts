@@ -38,6 +38,9 @@ describe('layers panel view model', () => {
   it('enables menu items for the active layer and runs them, returning refusals', async () => {
     const c = setup();
     const menu = () => Object.fromEntries(layerMenu(c).map((m) => [m.action, m.enabled]));
+    // A new image starts on its Background.
+    expect(menu()).toMatchObject({ 'new-layer': true, duplicate: true, 'merge-down': false });
+    c.setActiveLayer(null);
     expect(menu()).toMatchObject({ 'new-layer': true, duplicate: false, 'merge-down': false });
     expect(await runLayerMenuAction(c, 'new-layer')).toBeNull();
     expect(menu()).toMatchObject({ duplicate: true, 'merge-down': true, 'via-copy': false, 'apply-mask': false });

@@ -2836,3 +2836,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Making coloured or gradient text bold in `EditableTextNodeEditor` turned it white (or the theme's bold colour). Italic, links and inline code did the same.
 - **Root Cause**: The editor content uses Tailwind Typography (`prose`), which sets `color: var(--tw-prose-bold)` on `strong` (and its own colours on `a` and `code`). A colour mark renders as a span around the `strong`, so the span's colour (or a gradient's `text-transparent`) never reaches the text.
 - **Solution / Workaround**: Inline marks inside `.pixerate-editor-content` use `color: inherit`. Colour marks that wrap text must not rely on the inner element keeping their colour.
+
+### [image-editor] A Canvas Sized From `clientWidth` Blurs Under a Host CSS Transform
+
+- **Issue / Symptom**: An `ImageEditorCanvas` inside a node that the host scales with a CSS transform (e.g. a 220px node shown at 500px) rendered at 220px and was stretched, so it looked blurry. It was also soft on high-DPI screens.
+- **Root Cause**: `clientWidth` / `clientHeight` are layout sizes that ignore transforms, and the backing store was set to exactly that size, without `devicePixelRatio`. A `ResizeObserver` does not fire when only a transform changes.
+- **Solution / Workaround**: `measureCanvasViewport` keeps the layout size for the projection and pointer mapping. It sets the backing store to layout × `devicePixelRatio` × (on-screen size from `getBoundingClientRect()` ÷ layout size). `renderToCanvas({ pixelRatio })` sets a base `setTransform`, so everything still draws in CSS pixels. Pointer mapping must divide by the CSS viewport, never `canvas.width`, which is now larger. `watchCanvasViewport` also measures again on window `resize`, `transitionend` and `animationend`. jsdom has no layout, so the canvas there uses `DEFAULT_CANVAS_VIEWPORT` (800 × 500). Tests that place pointer events compute points against it.
+
+### [image-editor] Agent Error Text Shown to People
+
+- **Issue / Symptom**: Painting a new image in `ImageEditorCanvas` reported "No layer given and none is active; pass layerId (see list_layers) to paint." through `onerror`.
+- **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
+- **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.

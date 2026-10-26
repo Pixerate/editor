@@ -4,6 +4,7 @@ import {
   DEFAULT_SELECTION_TOOL_OPTIONS,
   ImageEditorController,
   type SelectionToolOptions,
+  DEFAULT_CANVAS_VIEWPORT,
 } from '@pixerate/editor/image-editor';
 import { ImageEditor, RefineEdgePanel, SelectionOptionsBar, createReactiveImageEditor } from '../src/image-editor';
 
@@ -144,10 +145,10 @@ describe('Svelte ImageEditor Select & Mask tab', () => {
     const canvas = target.querySelector('canvas')!;
     const fire = (type: string, x: number, y: number) =>
       canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
-    // jsdom: no layout, so client coordinates are canvas pixels; the 20×10 image is drawn 1:1 at
-    // the canvas centre, so 5 px left of the centre is in the red half.
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    // jsdom: no layout, so the canvas projects through the fallback viewport and client coordinates
+    // map 1:1; the 20×10 image is drawn 1:1 at its centre, so 5 px left of the centre is in the red half.
+    const cx = DEFAULT_CANVAS_VIEWPORT.width / 2;
+    const cy = DEFAULT_CANVAS_VIEWPORT.height / 2;
     fire('mousedown', cx - 5, cy);
     await settle();
     const wand = editor.controller.getSelection()!;
