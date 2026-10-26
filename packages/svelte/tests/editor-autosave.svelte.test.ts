@@ -8,6 +8,9 @@ import { createAnimationEditor } from "../src/animation-editor";
 import { createVideoEditor } from "../src/video-editor";
 import { createParameters } from "../src/parameters";
 import { createVectorEditor } from "../src/vector";
+import { createReactiveSpreadsheet } from "../src/spreadsheet";
+import { createTokens } from "../src/tokens";
+import { TokenStore } from "@pixerate/editor/tokens";
 
 let cleanup: Array<() => void> = [];
 afterEach(() => {
@@ -76,5 +79,19 @@ describe("editor runes expose editorDocument", () => {
     expect(editors.parameters.values.speed).toBe(3);
     editors.parameters.undo();
     expect(doc.getDocument()).toEqual(before);
+  });
+});
+
+describe("phase 3 runes expose editorDocument", () => {
+  it("spreadsheet and tokens", () => {
+    const sheet = createReactiveSpreadsheet();
+    const tokens = createTokens(new TokenStore());
+    cleanup.push(() => tokens.destroy());
+    expect(sheet.editorDocument.kind).toBe("spreadsheet");
+    expect(tokens.editorDocument.kind).toBe("tokens");
+    const workbook = sheet.editorDocument.getDocument();
+    sheet.editorDocument.loadDocument(workbook, { history: "record" });
+    expect(sheet.editorDocument.history.getState().canUndo).toBe(true);
+    expect(sheet.editorDocument.history.undo()).toBe(true);
   });
 });

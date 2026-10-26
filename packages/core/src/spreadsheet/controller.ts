@@ -399,6 +399,7 @@ export class SpreadsheetController {
   private boundSheetId: string | null = null;
   private names: SpreadsheetDefinedName[] = [];
   private onSelectionChange?: (activeCell: CellCoordinate | null, range: CellRange | null) => void;
+  private readonly changeListeners = new Set<() => void>();
   private onCellCommit?: (rowId: string, colId: string, raw: string, value: any) => void;
 
   // History stack for undo/redo
@@ -677,15 +678,21 @@ export class SpreadsheetController {
     return JSON.parse(JSON.stringify({ ...snapshot, sheets: snapshot.sheets.map(withoutNames) }));
   }
 
-  /** Replaces the whole workbook (sheets, names, active sheet). Clears undo history. */
-  public loadWorkbook(workbook: SpreadsheetWorkbook): void {
+  /**
+   * Replaces the whole workbook (sheets, names, active sheet). Clears undo
+   * history, or with `undoable: true` records the replacement as one undo step.
+   */
+  public loadWorkbook(workbook: SpreadsheetWorkbook, options: { undoable?: boolean } = {}): void {
     if (!workbook.sheets.length) return;
+    if (options.undoable) this.recordWorkbookSnapshot();
     this.setWorkbookState(JSON.parse(JSON.stringify(workbook)), true);
     this.boundSheetId = this.runtimes[0].doc.id;
     this.editingCell = null;
     this.draftValue = '';
-    this.undoStack = [];
-    this.redoStack = [];
+    if (!options.undoable) {
+      this.undoStack = [];
+      this.redoStack = [];
+    }
     this.syncWithDataSource();
     for (const rt of this.runtimes) this.withSheet(rt, () => this.rederiveTypedValues());
     this.recalculateAll();
@@ -3283,12 +3290,18 @@ export class SpreadsheetController {
     return { undo: this.undoStack.length, redo: this.redoStack.length };
   }
 
-  public undo(): void {
+  /** Returns `false` when there was nothing to undo. */
+  public undo(): boolean {
+    if (!this.undoStack.length) return false;
     this.applyHistory(this.undoStack, this.redoStack);
+    return true;
   }
 
-  public redo(): void {
+  /** Returns `false` when there was nothing to redo. */
+  public redo(): boolean {
+    if (!this.redoStack.length) return false;
     this.applyHistory(this.redoStack, this.undoStack);
+    return true;
   }
 
   /** Restores the newest entry of `from`, saving the current state of the same scope on `to`. */
@@ -3377,6 +3390,24 @@ export class SpreadsheetController {
       const snapshot = this.workbookSnapshot();
       this.onWorkbookChange({ sheets: snapshot.sheets, activeSheetId: snapshot.activeSheetId, names: snapshot.names });
     }
+    for (const listener of [...this.changeListeners]) {
+      try {
+        listener();
+      } catch (error) {
+        console.error('[SpreadsheetController] Error in change listener:', error);
+      }
+    }
+  }
+
+  /**
+   * Calls `listener` after every change to the workbook's data (the moments
+   * `onDocumentChange` fires; not selection). Returns an unsubscribe function.
+   */
+  public subscribe(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
   }
 
   // --- Conditional formatting and data validation ---

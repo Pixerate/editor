@@ -40,6 +40,8 @@ import { ImageEditorController, createImageEditorToolProvider, createImageEffect
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
+import { TokenStore, createTokensEditorDocument } from '../src/tokens';
+import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
 import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
@@ -50,7 +52,7 @@ import { ParametersController, createParameterCommands, createParametersEditorDo
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
-import { createRichTextPreset, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
+import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
 
 const ROOT = join(__dirname, '..');
 const SKILLS_DIR = join(ROOT, 'skills');
@@ -110,11 +112,13 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createRichTextToolProvider(doc, { id: 'doc' })),
 			...toolNames(editorMcp, (n) => n.startsWith('prompt_') || shared.includes(n)),
 			...commandIds(createFindReplaceCommands(doc)),
-			...commandIds(createTableCommands(doc))
+			...commandIds(createTableCommands(doc)),
+			...toolNames(createDocumentToolProvider(createRichTextEditorDocument(doc), { store: documentStore() }))
 		],
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
-			...commandIds(createSpreadsheetCommands(stub))
+			...commandIds(createSpreadsheetCommands(stub)),
+			...toolNames(createDocumentToolProvider(createSpreadsheetEditorDocument(sheet), { store: documentStore() }))
 		],
 		'pixerate-canvas': [
 			...toolNames(editorMcp, (n) => n.startsWith('canvas_') || shared.includes(n)),
@@ -161,6 +165,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
+		'pixerate-tokens': toolNames(createDocumentToolProvider(createTokensEditorDocument(new TokenStore()), { store: documentStore() })),
 		'pixerate-parameters': [
 			...commandIds(createParameterCommands(stub)),
 			// parameters.undo / parameters.redo are commands, so the document tools leave undo out.
@@ -208,7 +213,8 @@ const FACTORIES: Record<string, string> = {
 	createChartCommands: 'pixerate-chart',
 	createDiagramToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
-	createDocumentToolProvider: 'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector',
+	createDocumentToolProvider:
+		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',

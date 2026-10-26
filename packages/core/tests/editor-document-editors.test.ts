@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
+import { Editor } from "@tiptap/core";
 import { createDocumentToolProvider, type EditorDocument } from "../src/persistence";
 import { ToolRegistry } from "../src/tools";
 import { ChartController, createChartEditorDocument } from "../src/chart";
@@ -6,6 +8,17 @@ import { AnimationEditorController, createAnimationEditorDocument, createMotionS
 import { VideoEditorController, createVideoEditorDocument, createVideoProject } from "../src/video-editor";
 import { ParametersController, createParametersEditorDocument } from "../src/parameters";
 import { VectorEditorController, createVectorEditorDocument } from "../src/vector";
+import { SpreadsheetController, createSpreadsheetEditorDocument } from "../src/spreadsheet";
+import { TokenStore, createTokensEditorDocument } from "../src/tokens";
+import { createRichTextEditorDocument, createRichTextPreset } from "../src";
+
+beforeAll(() => {
+  const dom = new JSDOM("", { pretendToBeVisual: true });
+  globalThis.document = dom.window.document as any;
+  globalThis.window = dom.window as any;
+  (globalThis as any).Node = dom.window.Node;
+  (globalThis as any).requestAnimationFrame ??= (cb: () => void) => setTimeout(cb, 0);
+});
 
 const text = (result: any) => result.content?.[0]?.text as string;
 
@@ -137,6 +150,86 @@ describe("editor documents", () => {
       viewChange: () => controller.setTool("pen"),
     });
     expect(text(await tools2.callTool("undo_vector", {}))).toBe("Nothing to undo.");
+  });
+
+  it("spreadsheet", async () => {
+    const sheet = () => ({
+      columns: [{ id: "c0", key: "A", title: "A", type: "freeform" as const }],
+      rows: [{ id: "r0", index: 0, type: "freeform" as const }],
+    });
+    const controller = new SpreadsheetController({ document: sheet() });
+    const doc = createSpreadsheetEditorDocument(controller);
+    const next = controller.getWorkbook();
+    next.sheets[0].cells = { r0: { c0: { raw: "=1+2" } } } as any;
+    await contract({
+      doc,
+      current: () => controller.getWorkbook(),
+      undo: () => controller.undo(),
+      next,
+      invalid: { sheets: [{ columns: [], rows: "x", cells: {} }] },
+      invalidMessage: "sheets[0].rows must be an array.",
+      viewChange: () => controller.selectCell(0, 0),
+    });
+    expect(controller.getCell("r0", "c0").raw).toBe("=1+2");
+  });
+
+  it("tokens", async () => {
+    const store = new TokenStore();
+    const doc = createTokensEditorDocument(store);
+    const other = new TokenStore();
+    const collection = other.createCollection("Colours", ["Light", "Dark"]);
+    other.createVariable({ collectionId: collection.id, name: "brand", type: "color", values: { [collection.modes[0].id]: "#ff0000" } } as any);
+    await contract({
+      doc,
+      current: () => store.toJSON(),
+      undo: () => store.undo(),
+      next: other.toJSON(),
+      invalid: { collections: [{ id: "x" }], variables: [{ id: "v", collectionId: "missing" }] },
+      invalidMessage: "Dropped an invalid collection. Dropped an invalid variable (v). A tokens document is",
+      viewChange: () => store.resolve("nope"),
+    });
+  });
+
+  it("tokens refuse broken aliases from agents", async () => {
+    const store = new TokenStore();
+    const doc = createTokensEditorDocument(store);
+    const other = new TokenStore();
+    const c = other.createCollection("Colours");
+    const v = other.createVariable({ collectionId: c.id, name: "button", type: "color" } as any);
+    const broken = other.toJSON();
+    const bad = { ...broken, variables: broken.variables.map((x) => (x.id === v.id ? { ...x, valuesByMode: { [c.modes[0].id]: { alias: "nope" } } } : x)) };
+    const result: any = await tools(doc).callTool("load_tokens_document", { document: bad });
+    expect(text(result)).toMatch("`button` aliased a missing or mistyped variable");
+    // A cycle between two variables is refused too.
+    const w = other.createVariable({ collectionId: c.id, name: "link", type: "color" } as any);
+    const mode = c.modes[0].id;
+    const state = other.toJSON();
+    const cycle = {
+      ...state,
+      variables: state.variables.map((x) => ({ ...x, valuesByMode: { [mode]: { alias: x.id === v.id ? w.id : v.id } } })),
+    };
+    const looped: any = await tools(doc).callTool("load_tokens_document", { document: cycle });
+    expect(looped.isError).toBe(true);
+    expect(text(looped)).toMatch(/cycle|loop|itself/i);
+    expect(store.toJSON().variables).toEqual([]);
+  });
+
+  it("rich text", async () => {
+    const editor = new Editor({ extensions: createRichTextPreset(), content: "<p>Hello</p>" });
+    const doc = createRichTextEditorDocument(editor);
+    await contract({
+      doc,
+      current: () => editor.getJSON(),
+      undo: () => editor.commands.undo(),
+      next: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Goodbye" }] }] },
+      invalid: { type: "doc", content: [{ type: "nonsense" }] },
+      invalidMessage: /Unknown node type: nonsense/,
+      viewChange: () => editor.commands.setTextSelection(2),
+    });
+    editor.setEditable(false);
+    const result: any = await tools(doc).callTool("load_rich_text_document", { document: doc.getDocument() });
+    expect(text(result)).toMatch("The document is read-only.");
+    editor.destroy();
   });
 
   it("read-only animation and video refuse agent loads", async () => {

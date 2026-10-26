@@ -1171,6 +1171,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `ChartController.load` and `ParametersController.load` are built for opening files: they fix problems with defaults, report them in state and record no undo step. That is right for a recovered file and wrong for an agent, which needs to be told and to undo.
 - **Solution / Workaround**: The adapters split on `history`. `"record"` (agent loads) goes through `ChartController.replace` / `ParametersController.replace`, which refuse any problem and are one undo step. `"reset"` (opening a file or a recovery) keeps the lenient `load` and returns the repaired parts as `problems`, which `defineEditorDocument` puts in the `LoadReport`. Do the same for any editor whose `load` repairs input.
 
+### [core/rich-text] Opening a Rich Text Document Must Rebuild the Editor State to Drop Undo History
+
+- **Issue / Symptom**: After restoring a recovered document (or opening a saved one), pressing Undo brought back the document that was there before the restore.
+- **Root Cause**: `editor.commands.setContent` is an ordinary transaction, so the history plugin records it. TipTap 2 has no command that clears the undo history.
+- **Solution / Workaround**: `createRichTextEditorDocument` applies `setContent(doc, true)` (so `update` listeners and the UI hear about it), then, for `history: "reset"`, swaps in `EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins })` with `editor.view.updateState`. Every plugin's state starts fresh from the new document, which is what opening a file means. Agent loads (`history: "record"`) skip the swap, so they stay one undo step.
+
 ### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
 
 - **Issue / Symptom**: Under `<React.StrictMode>`, `useMermaidDiagram().editorDocument` stopped counting changes after mount, so autosave never wrote a snapshot.

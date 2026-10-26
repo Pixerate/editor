@@ -10,7 +10,8 @@ import {
   bindCanvasToken,
 } from "@pixerate/editor-react/canvas";
 import { TokensPanel, useTokenStore, useTokens } from "@pixerate/editor-react/tokens";
-import type { TokenStore } from "@pixerate/editor/tokens";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
+import { createTokensEditorDocument, type TokenStore } from "@pixerate/editor/tokens";
 import { Moon, Palette, Sun } from "lucide-react";
 
 type DemoNode = Node<Record<string, any>, "card" | "label" | "shape">;
@@ -96,10 +97,12 @@ const TokensCanvas: React.FC = () => {
   );
   // App theming from the same tokens: the panel takes the card's mode.
   const { cssVariables } = useTokens(store, { modes: { [theme.id]: cardMode } });
+  const editorDocument = useDemoEditorDocument(store, createTokensEditorDocument, { namespace: "tokens", skill: "pixerate-tokens" });
 
   const btn = "flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200";
   return (
     <div className="space-y-2">
+      <EditorDocumentAutosave doc={editorDocument} name="Design tokens" />
       <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Design tokens">
         <Palette className="w-4 h-4 text-sky-400" />
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1">Design tokens</span>
