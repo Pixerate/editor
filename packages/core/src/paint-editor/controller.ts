@@ -39,6 +39,7 @@ import { brushToJSON, BUILTIN_BRUSHES, DEFAULT_BRUSH_ID, normalizePaintBrush, ty
 import {
   createPaintDocument,
   createPaintLayer,
+  MAX_CANVAS_SIDE,
   newPaintLayerId,
   normalizeCanvas,
   type PaintCanvas,
@@ -79,9 +80,9 @@ import {
   type TracingImage,
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
-import { normalizeStencil, StencilSnapper, stencilMask, type Stencil, type StencilInput } from './stencils';
+import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, STAMP_KINDS, stickerSurface, type Sticker } from './stickers';
-import { DEFAULT_VIEW, normalizeView, type PaintView } from './view';
+import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
 import { isWetBrush } from './brushes';
@@ -253,6 +254,22 @@ export interface FillLayerOptions {
   blend?: BlendMode;
 }
 
+/** Pixels to add on each side of the canvas (whole numbers, 0 or more; missing = 0). */
+export interface PaintCanvasExtension {
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+}
+
+export interface PaintCanvasExtended {
+  canvas: PaintCanvas;
+  /** The new canvas in the previous document's pixels: x −left, y −top and the new size. */
+  rect: RasterRect;
+  /** The document's origin after the change (see `PaintDocumentState.origin`). */
+  origin: { x: number; y: number };
+}
+
 export interface ReplayOptions extends StrokeVariation {
   /** Recorded stroke ids (see `getStrokes`). */
   strokeIds: readonly string[];
@@ -302,6 +319,8 @@ interface HistoryEntry {
   after: PaintDocumentState;
   /** Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry). */
   wet?: { before: WetSnapshot | null; after: WetSnapshot | null; lost: boolean };
+  /** Steps that move the guides with the paint (extending the canvas): the guides before and after. */
+  guides?: { before: PaintGuides; after: PaintGuides };
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -611,6 +630,7 @@ export class PaintEditorController {
     const paper = this.doc.paper;
     this.doc = e.before;
     this.docRevision++;
+    if (e.guides) this.restoreGuides(e.guides.before);
     if (e.wet) {
       if (paper !== this.doc.paper) this.wet.paperChanged();
       this.wet.restore(e.wet.lost ? null : e.wet.before);
@@ -630,12 +650,18 @@ export class PaintEditorController {
     const paper = this.doc.paper;
     this.doc = e.after;
     this.docRevision++;
+    if (e.guides) this.restoreGuides(e.guides.after);
     if (e.wet) {
       this.wet.restore(e.wet.lost ? null : e.wet.after);
       if (paper !== this.doc.paper) this.wet.paperChanged();
     }
     this.emit();
     return e.label;
+  }
+
+  private restoreGuides(guides: PaintGuides): void {
+    if (guides.tracing !== this.guides.tracing) this.tracingVersion++;
+    this.guides = guides;
   }
 
   /** Labels of the undo steps, oldest first. */
@@ -661,7 +687,7 @@ export class PaintEditorController {
       width: options.width ?? this.doc.canvas.width,
       height: options.height ?? this.doc.canvas.height,
       dpi: options.dpi ?? this.doc.canvas.dpi,
-      paper: options.paper === undefined ? this.doc.paper : this.resolvePaper(options.paper),
+      paper: options.paper === undefined ? { ...this.doc.paper, offset: undefined } : this.resolvePaper(options.paper),
     });
     this.extensions = {};
     this.guides = { ...this.guides, symmetry: { ...this.guides.symmetry, center: { x: next.canvas.width / 2, y: next.canvas.height / 2 } }, tracing: null };
@@ -691,6 +717,58 @@ export class PaintEditorController {
     return canvas;
   }
 
+  /**
+   * Grows the canvas by `left`, `top`, `right` and `bottom` pixels without moving anything
+   * relative to anything else: the layers (with their masks, relief and stickers), the paper grain,
+   * the effect paper, guides, stencils, the tracing image and the recorded strokes and events all
+   * move by (left, top) in document pixels, `document.origin` moves by (−left, −top), and the view
+   * pans so the picture stays still on screen.
+   *
+   * Wet paint dries first (the wet simulation is canvas-sized), as with `setCanvas`; one undo step
+   * (undo brings back the old size, origin and guides, and the wet paint). Returns the new canvas,
+   * where it sits in the previous document's pixels, and the origin.
+   */
+  extendCanvas(by: PaintCanvasExtension): PaintCanvasExtended {
+    this.requireIdle('extending the canvas');
+    const side = (k: keyof PaintCanvasExtension) => {
+      const v = by[k] ?? 0;
+      if (!Number.isInteger(v) || v < 0) throw new PaintEditorError(`${k} is ${JSON.stringify(by[k])}; use a whole number of pixels to add, 0 or more.`);
+      return v;
+    };
+    const left = side('left');
+    const top = side('top');
+    const right = side('right');
+    const bottom = side('bottom');
+    if (!(left || top || right || bottom)) throw new PaintEditorError('Nothing to extend: give left, top, right or bottom (pixels to add on that side) above 0.');
+    const was = this.doc.canvas;
+    const width = was.width + left + right;
+    const height = was.height + top + bottom;
+    if (width > MAX_CANVAS_SIDE || height > MAX_CANVAS_SIDE) {
+      throw new PaintEditorError(`The canvas would be ${width}×${height}; the limit is ${MAX_CANVAS_SIDE} px per side. Extend by less (it is ${was.width}×${was.height} now).`);
+    }
+    if (this.wet.world) {
+      // The wet simulation is canvas-sized: the paint dries first (one undo step with the change).
+      this.requireWetIdle('extending the canvas');
+      this.dryLayersFirst(this.wet.wetLayerIds());
+      // Keep each layer's wet settings (a flow map's centre moves with the paint).
+      const settings = [...this.wet.settings];
+      this.wet.reset();
+      for (const [id, s] of settings) this.wet.settings.set(id, s.flow.center ? { ...s, flow: { ...s.flow, center: { x: s.flow.center.x + left, y: s.flow.center.y + top } } } : s);
+    }
+    const next: PaintDocumentState = { ...shiftDocument(this.withWetEvents(this.doc), left, top), canvas: { ...was, width, height } };
+    // The new centre is (right − left, bottom − top) / 2 from the old one: pan by that on screen.
+    const m = viewMatrix(this.view, was, { width: 0, height: 0 });
+    const dx = (right - left) / 2;
+    const dy = (bottom - top) / 2;
+    this.view = { ...this.view, pan: { x: this.view.pan.x + m[0] * dx + m[1] * dy, y: this.view.pan.y + m[2] * dx + m[3] * dy } };
+    const guidesBefore = this.guides;
+    if (left || top) this.restoreGuides(shiftGuides(this.guides, left, top));
+    this.commit('Extend canvas', next);
+    if (this.guides !== guidesBefore) this.undoStack[this.undoStack.length - 1].guides = { before: guidesBefore, after: this.guides };
+    const origin = { ...(next.origin ?? { x: 0, y: 0 }) };
+    return { canvas: { ...next.canvas }, rect: { x: 0 - left, y: 0 - top, width, height }, origin };
+  }
+
   /** Changes the paper: a library preset (`preset`), and / or any of its settings (one undo step). */
   setPaper(update: Partial<PaperSettings> & { preset?: string }): PaperSettings {
     this.requireIdle('changing the paper');
@@ -702,7 +780,8 @@ export class PaintEditorController {
     }
     const { preset: _p, ...rest } = update;
     if (rest.color !== undefined) parseColor(rest.color, 'paper color');
-    const paper = normalizePaper({ ...rest, preset: base.preset }, base);
+    // The grain stays where the paint is (see extendCanvas), whichever paper it becomes.
+    const paper = normalizePaper({ ...rest, preset: base.preset, offset: rest.offset ?? this.doc.paper.offset }, base);
     const changedKeys = Object.keys(rest).filter((k) => k !== 'name');
     if (changedKeys.length && update.preset === undefined) paper.preset = base.preset;
     if (this.wet.world) this.beginWetOp();
@@ -3078,6 +3157,71 @@ export type { Tile };
 
 /** Largest tracing or reference image side, in pixels. */
 export const MAX_IMAGE_SIDE = 8192;
+
+const movePoint = (p: { x: number; y: number }, dx: number, dy: number) => ({ x: p.x + dx, y: p.y + dy });
+const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: number): R => ({ ...r, x: r.x + dx, y: r.y + dy });
+
+/**
+ * The document with its content moved by (dx, dy) document pixels (`extendCanvas`): layer offsets
+ * (masks and relief are in layer space and follow), sticker positions, the paper grain, the effect
+ * paper, the origin, and the recorded strokes and events, so a replay paints the same picture.
+ */
+function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDocumentState {
+  if (!dx && !dy) return doc;
+  let layers = doc.layers;
+  for (const l of flattenLayers(doc.layers)) if (l.type === 'pixel') layers = mapLayer(layers, l.id, () => ({ ...l, offset: movePoint(l.offset, dx, dy) }));
+  const m: Affine = [1, 0, 0, 1, dx, dy];
+  // Stickers keep positions to 0.01 px, as sprayed.
+  const moveStickers = (list: readonly Sticker[]) => list.map((s) => ({ ...s, x: Math.round((s.x + dx) * 100) / 100, y: Math.round((s.y + dy) * 100) / 100 }));
+  const out: PaintDocumentState = {
+    ...doc,
+    layers,
+    paper: { ...doc.paper, offset: movePoint(doc.paper.offset ?? { x: 0, y: 0 }, dx, dy) },
+    origin: movePoint(doc.origin ?? { x: 0, y: 0 }, -dx, -dy),
+    strokes: doc.strokes.map((s) => {
+      const moved = varyStroke(s, m, {});
+      return s.stencils ? { ...moved, stencils: s.stencils.map((x) => translateStencil(x, dx, dy)) } : moved;
+    }),
+  };
+  if (doc.stickers) out.stickers = Object.fromEntries(Object.entries(doc.stickers).map(([id, list]) => [id, moveStickers(list)]));
+  if (doc.paintEvents) {
+    out.paintEvents = doc.paintEvents.map((e) => {
+      const list = e.kind === 'stickers' ? (e.data as { stickers?: Sticker[] } | undefined)?.stickers : undefined;
+      return list ? { ...e, data: { ...e.data, stickers: moveStickers(list) } } : e;
+    });
+  }
+  if (doc.wetEvents) {
+    out.wetEvents = doc.wetEvents.map((e) => {
+      const d = e.data as { x?: number; rect?: RasterRect; center?: { x: number; y: number } } | undefined;
+      if (!d) return e;
+      if (e.kind === 'dry' && typeof d.x === 'number') return { ...e, data: moveRect(d as RasterRect, dx, dy) };
+      if (e.kind === 'wet-paper' && d.rect) return { ...e, data: { ...d, rect: moveRect(d.rect, dx, dy) } };
+      if (e.kind === 'flow' && d.center) return { ...e, data: { ...d, center: movePoint(d.center, dx, dy) } };
+      return e;
+    });
+  }
+  if (doc.paperEffect) {
+    // Kept in place; smaller than the new canvas, so updatePaperEffect draws it again across all of it.
+    const src = doc.paperEffect.image;
+    const width = src.width + dx;
+    const height = src.height + dy;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < src.height; y++) data.set(src.data.subarray(y * src.width * 4, (y + 1) * src.width * 4), ((y + dy) * width + dx) * 4);
+    out.paperEffect = { ...doc.paperEffect, image: { width, height, data }, version: nextPaperEffectVersion() };
+  }
+  return out;
+}
+
+/** The guides moved by (dx, dy) document pixels with the paint (reference panels are on screen and stay). */
+function shiftGuides(g: PaintGuides, dx: number, dy: number): PaintGuides {
+  return {
+    ...g,
+    symmetry: { ...g.symmetry, center: movePoint(g.symmetry.center, dx, dy) },
+    perspective: { ...g.perspective, points: g.perspective.points.map((p) => movePoint(p, dx, dy)) },
+    tracing: g.tracing ? { ...g.tracing, rect: moveRect(g.tracing.rect, dx, dy) } : null,
+    stencils: g.stencils.map((s) => translateStencil(s, dx, dy)),
+  };
+}
 
 /** `src` drawn into `rect` of a `width × height` canvas (bilinear), canvas-sized RGBA. */
 function resampleInto(src: PixelImage, rect: { x: number; y: number; width: number; height: number }, width: number, height: number): PixelImage {

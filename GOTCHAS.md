@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [paint-editor] Moving the Picture Means Moving Every Document-Space Coordinate
+
+- **Issue / Symptom**: Growing the paint canvas to the left or top by bumping layer offsets alone left the paper grain, symmetry centre, stencils and recorded strokes behind. Paint no longer sat in its grain, guides pointed at the wrong place, and replays painted shifted. Undo after a later wet stroke threw "The wet world is the wrong size".
+- **Root Cause**: Many things are in document pixels rather than layer space. The grain is sampled at document (x, y) (`PaperGrain.at`). Guides live outside the undo history. Stickers are stored in document coordinates, because sticker layers are re-rendered at offset 0. Strokes and wet / paint events are replayed at their recorded positions. Sticker stamps' shading noise is also keyed on document pixels. The wet simulation is canvas-sized, and undo restored an old-size snapshot into the new-size world.
+- **Solution / Workaround**: `extendCanvas` moves all of them together (`shiftDocument` / `shiftGuides` in `paint-editor/controller.ts`). It adds `PaperSettings.offset` for the grain and records the guides on the history entry. It dries wet paint first, and `PaintWetLayers` drops an empty or wrong-size world on restore. Masks and thick channels are in layer space and follow the offset. When adding anything new that holds document coordinates, shift it there too and extend `tests/paint-editor-extend.test.ts`. A sticker layer re-rendered after a shift differs by a few levels of shading noise; that is expected.
+
 ### [core/tools] A Tool-Provider Factory's Default Playback Surface Must Not Beat the Caller's
 
 - **Issue / Symptom**: An app with one image editor per canvas node attached each `<ImageEditor>` under its own `playbackId` and wrapped `createImageEditorToolProvider(...)` in `withImagePlayback(provider, 'image4:surface')`, but every call still played on `image` (no surface there, so it ran instantly or on the wrong editor).

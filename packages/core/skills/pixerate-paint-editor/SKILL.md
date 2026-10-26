@@ -133,6 +133,13 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
   PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow
   as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
+- **Grow the canvas instead of starting big**: when the picture needs more room, call
+  `extend_canvas` with the pixels to add on each side (nothing painted moves relative to
+  anything else). Adding on the `left` or `top` shifts every coordinate you hold (stroke points,
+  guide and stencil positions, layer bounds) by (+left, +top); re-read with `list_layers` or use
+  the returned `rect` (the new canvas in the old coordinates). Wet paint dries first, so finish
+  or dry a wash (`dry_paint`) before extending. `set_canvas` only crops or grows at the
+  bottom-right and never moves the picture.
 - **Save brushes you build** (`set_brush` then `save_brush`), and share them with
   `export_brushes` / `import_brushes`.
 
@@ -264,9 +271,10 @@ for the controls and presets.
 
 | Tool | Use |
 | --- | --- |
-| `get_canvas_info` | Read the canvas size and dpi, paper (preset, colour, depth), active layer, layer count, active brush id, colours, view, hand, number of recorded strokes, undo / redo labels and the blend modes. Call first. |
+| `get_canvas_info` | Read the canvas size and dpi, its `origin` (moved by `extend_canvas`), paper (preset, colour, depth), active layer, layer count, active brush id, colours, view, hand, number of recorded strokes, undo / redo labels and the blend modes. Call first. |
 | `new_canvas` | Start over with a blank canvas: one empty layer over the paper. `width`, `height` (1..16384 px), `dpi`, `paper` preset id; missing ones keep the current values. Undo brings the old painting back. Returns the size, paper and layer id. |
 | `set_canvas` | Resize the canvas (pixels stay put, anchored top-left) or change its `dpi`. Returns the canvas. |
+| `extend_canvas` | Add pixels on any side (`left`, `top`, `right`, `bottom`, default 0) keeping everything painted, the paper grain and the guides in place relative to each other. `left` / `top` move all document coordinates by that much. Wet paint dries first; one undo step. Returns `canvas`, `rect` (the new canvas in the previous coordinates) and `origin` (also in `get_canvas_info`). |
 | `list_papers` | Read the paper library: id, name, family, grain pattern, colour, depth and the wet-media properties (absorption, permeability, roughness, stored for later wet media). Call before `set_paper`. |
 | `get_paper` | Read every setting of the current paper (pattern, seed, scale, tiling, depth, shading, dry and wet tuning). |
 | `set_paper` | Change the paper: `preset`, then any of `color`, `depth` (0..1), `scale` (0.25..8), `seed` (another sheet), `pattern`, `tiling`, `shading`, `dry` / `wet` tuning (`contrast` 0..3, `invert`). Affects new strokes' grain and how the paper shows; strokes already painted keep their pixels. Returns the paper. |
