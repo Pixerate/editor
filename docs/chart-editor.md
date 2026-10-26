@@ -140,6 +140,20 @@ chart.updateSeries("sales", { errorBars: null }); // remove
 
 Bar, line, area and scatter series take `errorBars` along the value axis; scatter and bubble series with numeric x also take `xErrorBars`. The types follow Excel's `c:errValType`: `fixed` (`value`, default 1), `percent` (`value` percent of each point, default 5), `stddev` (`value` sample standard deviations, default 1, drawn around the series mean as Excel does), `stderr` (sample standard deviation / √n at every point) and `custom` (`plus` / `minus` per category, minus defaulting to plus). `direction` is `both`, `plus` or `minus`; `cap: false` drops the end caps. They are drawn as `error-bar` path marks that select their series, sit on the stack top of stacked series (scaled to shares when 100% stacked), and are included in the axis range. `chartErrorAmounts(bars, values)` gives the centre and reach at each point.
 
+## Annotations
+
+```ts
+chart.addReferenceLine({ value: 135, label: "Target" }); // { ok: true, index: 0 }
+chart.addReferenceBand({ from: 110, to: 130, label: "Usual range" });
+chart.addReferenceLine({ value: 8, axis: "x", label: "Cutoff" }); // numeric x of a scatter or bubble chart
+chart.setCallout("closed", 5, "Backlog cleared"); // series id, category index, label (null removes)
+chart.setHighlight(["W4", "W6"]); // { ok: true, categories: [3, 5], series: [] }
+chart.setNote("Source: helpdesk export");
+chart.update({ varyColors: true }); // one colour per category on a one-series chart
+```
+
+These are the annotations of Ursula's chart documents. Bar, line, area, scatter and bubble charts draw `referenceLines` (dashed, over the data) and `referenceBands` (shaded, under it) on the value axis (`y`), the secondary axis (`y2`, which needs a series there) or the numeric x axis (`x`); the axis grows to keep them in view, and a line outside a fixed `min` / `max` is left out with a warning. `series.callouts` holds one label per category: each is drawn as a boxed label with a leader line to its bar or point, kept inside the plot and clear of the others, and clicking it selects the point. Other chart types keep these in the spec and leave them out of the drawing (an `annotations-skipped` warning). `highlight` names categories (labels) and series (names or ids): a point stays bright when its category or its series is named, whole lines, areas and legend entries when their series is named or no series is, and every other data mark is drawn at a quarter of its opacity, on every chart type. `note` is written along the bottom left. `varyColors` colours each category from the palette on a one-series bar, line, area or scatter chart and lists the categories in the legend (Office `c:varyColors`). The controller keeps callouts, point colours, x values, sizes and custom error amounts with their categories when categories are added, removed or moved, and keeps highlight names through renames. `suggestChartReferences(spec)` gives a line at the average and a band over the middle half, which the inspectors' Add buttons use. Mermaid keeps them all in the `%% @pixerate` comment; Office export keeps `varyColors` and lists the rest as not written.
+
 ## Logarithmic and reversed axes
 
 ```ts

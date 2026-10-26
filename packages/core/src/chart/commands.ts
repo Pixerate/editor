@@ -6,11 +6,25 @@ import { chartFromMermaid, chartToMermaid } from './mermaid.js';
 import { chartToOoxml } from './ooxml.js';
 import { CHART_COLOR_SCHEMES, CHART_LAYOUT_PRESETS } from './presets.js';
 import { recommendChartTypes } from './recommend.js';
-import { CATEGORY_REF, CHART_UPDATE_PROPERTIES, HEIGHT, SERIES_PROPS, SERIES_REF, TRENDLINE_PROPS, VALUE, WIDTH } from './schemas.js';
-import { chartColorsByCategory, chartDataToTable, chartSeriesColor, chartSliceColor } from './spec.js';
+import {
+	CATEGORY_REF,
+	CHART_UPDATE_PROPERTIES,
+	HEIGHT,
+	REFERENCE_BAND_PATCH,
+	REFERENCE_BAND_PROPS,
+	REFERENCE_INDEX,
+	REFERENCE_LINE_PATCH,
+	REFERENCE_LINE_PROPS,
+	SERIES_PROPS,
+	SERIES_REF,
+	TRENDLINE_PROPS,
+	VALUE,
+	WIDTH
+} from './schemas.js';
+import { chartSpecColorsByCategory, chartDataToTable, chartSeriesColor, chartSliceColor } from './spec.js';
 import { summarizeChart } from './summary.js';
 import { chartToSvg } from './svg.js';
-import type { ChartTrendline } from './types.js';
+import type { ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
 
 export interface ChartCommandOptions {
 	/** Id prefix (default `chart.`); use one per chart when several are registered. */
@@ -31,7 +45,8 @@ const check = (result: { ok: boolean; message?: string }) => {
 
 /**
  * Palette and agent commands for a chart: describe, update presentation, replace data, set
- * values, add / remove series, categories and trendlines, apply presets, switch rows and
+ * values, add / remove series, categories, trendlines and reference lines and bands, pin
+ * callouts, highlight, apply presets, switch rows and
  * columns, import CSV or Mermaid, export SVG, Mermaid or Office XML, recommend types and
  * check colours. Register them in a `CommandRegistry` and agents get them through
  * `createCommandToolProvider`; `createChartToolProvider` offers the same operations as
@@ -76,7 +91,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			label: 'Change Chart…',
 			keywords: ['chart', 'title', 'axis', 'legend', 'stack', 'style', 'format', 'type'],
 			description:
-				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values; reverse, and scale "log" on value axes), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins, waterfall total, or radar rings and grid shape. Invalid values change nothing and return why.',
+				'Changes chart presentation as one undo step: type, titles, axes (xAxis = categories, yAxis = values, yAxis2 = secondary values; reverse, and scale "log" on value axes), legend, stacking, orientation, curve, points, data labels, palette, donut hole, bar spacing, histogram bins, waterfall total, or radar rings and grid shape, note, highlight, reference lines and bands, or colour by category (varyColors). Invalid values change nothing and return why.',
 			params: object(CHART_UPDATE_PROPERTIES),
 			run: (_ctx: unknown, params: ChartSpecPatch) => {
 				check(controller.update(params));
@@ -201,6 +216,110 @@ export function createChartCommands(controller: ChartController, options: ChartC
 		},
 		{
 			...base,
+			id: `${prefix}addReferenceLine`,
+			label: 'Add Reference Line…',
+			keywords: ['chart', 'target', 'goal', 'threshold', 'average', 'reference', 'line', 'annotation'],
+			description: 'Draws a dashed line across the plot at one value (a target, floor or average). Returns its index.',
+			params: object(REFERENCE_LINE_PROPS, ['value']),
+			run: (_ctx: unknown, params: ChartReferenceLine) => {
+				const result = controller.addReferenceLine(params);
+				check(result);
+				return { index: (result as { index: number }).index, referenceLines: controller.getSpec().referenceLines };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}updateReferenceLine`,
+			label: 'Change Reference Line…',
+			keywords: ['chart', 'target', 'reference', 'line', 'annotation'],
+			description: 'Changes a reference line by index; label, axis and color take null to remove them.',
+			params: object({ index: REFERENCE_INDEX('Reference line'), ...REFERENCE_LINE_PATCH }, ['index']),
+			run: (_ctx: unknown, params: { index: number } & Record<string, unknown>) => {
+				const { index, ...patch } = params;
+				check(controller.updateReferenceLine(index, patch));
+				return { referenceLine: controller.getSpec().referenceLines[index] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeReferenceLine`,
+			label: 'Delete Reference Line',
+			keywords: ['chart', 'target', 'reference', 'line', 'remove'],
+			description: 'Deletes a reference line by index.',
+			params: object({ index: REFERENCE_INDEX('Reference line') }, ['index']),
+			run: (_ctx: unknown, params: { index: number }) => {
+				check(controller.removeReferenceLine(params.index));
+				return { referenceLines: controller.getSpec().referenceLines };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addReferenceBand`,
+			label: 'Add Reference Band…',
+			keywords: ['chart', 'target', 'range', 'band', 'reference', 'shade', 'annotation'],
+			description: 'Shades a band across the plot between two values (a target or normal range). Returns its index.',
+			params: object(REFERENCE_BAND_PROPS, ['from', 'to']),
+			run: (_ctx: unknown, params: ChartReferenceBand) => {
+				const result = controller.addReferenceBand(params);
+				check(result);
+				return { index: (result as { index: number }).index, referenceBands: controller.getSpec().referenceBands };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}updateReferenceBand`,
+			label: 'Change Reference Band…',
+			keywords: ['chart', 'range', 'band', 'reference', 'annotation'],
+			description: 'Changes a reference band by index; label, axis and color take null to remove them.',
+			params: object({ index: REFERENCE_INDEX('Reference band'), ...REFERENCE_BAND_PATCH }, ['index']),
+			run: (_ctx: unknown, params: { index: number } & Record<string, unknown>) => {
+				const { index, ...patch } = params;
+				check(controller.updateReferenceBand(index, patch));
+				return { referenceBand: controller.getSpec().referenceBands[index] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeReferenceBand`,
+			label: 'Delete Reference Band',
+			keywords: ['chart', 'range', 'band', 'reference', 'remove'],
+			description: 'Deletes a reference band by index.',
+			params: object({ index: REFERENCE_INDEX('Reference band') }, ['index']),
+			run: (_ctx: unknown, params: { index: number }) => {
+				check(controller.removeReferenceBand(params.index));
+				return { referenceBands: controller.getSpec().referenceBands };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setCallout`,
+			label: 'Pin Label to Point…',
+			keywords: ['chart', 'callout', 'annotation', 'label', 'note', 'point'],
+			description: 'Pins a short label to one bar or point (label null or "" removes it).',
+			params: object({ series: SERIES_REF, category: CATEGORY_REF, label: { type: ['string', 'null'], description: 'The label (a few words), or null to remove it.' } }, ['series', 'category', 'label']),
+			run: (_ctx: unknown, params: { series: string; category: string | number; label: string | null }) => {
+				const series = resolveSeries(params.series);
+				const index = resolveCategory(params.category);
+				check(controller.setCallout(series.id, index, params.label));
+				return { series: series.id, index, label: controller.getSeries(series.id)?.callouts?.[index] ?? null };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}highlight`,
+			label: 'Highlight…',
+			keywords: ['chart', 'highlight', 'emphasise', 'emphasize', 'focus', 'mute', 'dim'],
+			description: 'Draws the named categories and series normally and mutes the rest ([] shows everything). Unknown names change nothing.',
+			params: object({ names: { type: 'array', items: { type: 'string' }, description: 'Category labels and / or series names or ids; [] clears the highlight.' } }, ['names']),
+			run: (_ctx: unknown, params: { names: string[] }) => {
+				const result = controller.setHighlight(params.names);
+				check(result);
+				const { categories, series } = result as { categories: number[]; series: string[] };
+				return { highlight: controller.getSpec().highlight, categories, series };
+			}
+		},
+		{
+			...base,
 			id: `${prefix}applyPreset`,
 			label: 'Apply Chart Style…',
 			keywords: ['chart', 'quick layout', 'style', 'colours', 'colors', 'monochrome', 'theme'],
@@ -312,7 +431,7 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			run: () => {
 				const s = controller.getSpec();
 				const visible = s.series.filter((x) => !x.hidden);
-				const colors = chartColorsByCategory(s.type) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
+				const colors = chartSpecColorsByCategory(s) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
 				return { colors, ...checkChartColors(colors) };
 			}
 		},

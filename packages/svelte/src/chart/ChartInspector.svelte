@@ -36,6 +36,7 @@
     defaultChartErrorBarValue,
     formatChartAmountList,
     isCartesianChart,
+    suggestChartReferences,
     parseChartAmountList,
     type ChartAxis,
     type ChartController,
@@ -66,6 +67,7 @@
   const view = chartStateOf(() => controller);
   const spec = $derived(view.current.spec);
   const selectedSeries = $derived(view.current.selectedSeries);
+  const selection = $derived(view.current.selection);
   const show = (section: ChartInspectorSection) => !sections || sections.includes(section);
   const cartesian = $derived(isCartesianChart(spec.type));
   const family = $derived(chartFamily(spec));
@@ -80,6 +82,10 @@
   const horizontal = $derived(spec.orientation === 'horizontal');
   // Log and reversed axes and error bars are drawn by the bar / line / area / scatter layouts.
   const scales = $derived(family === 'cartesian' || family === 'xy');
+  // Reference lines and bands, callouts and colour by category are drawn by the same layouts.
+  const annotated = $derived(scales);
+  const oneSeries = $derived(cartesian && spec.series.filter((s) => !s.hidden).length === 1);
+  const calloutIndex = $derived(selection?.kind === 'point' && selection.seriesId === selectedSeries?.id ? selection.index : null);
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const stackingLabels: Record<string, string> = { none: 'None', stacked: 'Stacked', percent: '100%' };
 
@@ -332,6 +338,12 @@
           <ChartCommitInput id="{idPrefix}-subtitle" value={spec.subtitle} data-option="subtitle" oncommit={(subtitle) => void controller.setSubtitle(subtitle)} />
         </div>
       </div>
+      <div class="flex items-center gap-2">
+        <label for="{idPrefix}-note" class="{chartLabelClass} w-20 shrink-0">Note</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput id="{idPrefix}-note" value={spec.note} placeholder="Source or footnote" data-option="note" oncommit={(note) => void controller.setNote(note)} />
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -450,6 +462,9 @@
         {#if hasLines}
           {@render toggle('Points', 'points', spec.points, (points) => controller.update({ points }))}
         {/if}
+        {#if oneSeries}
+          {@render toggle('Colour by category', 'varyColors', spec.varyColors, (varyColors) => controller.update({ varyColors }))}
+        {/if}
         {@render toggle('Data labels', 'dataLabels', spec.dataLabels, (dataLabels) => controller.update({ dataLabels }))}
       </div>
     </div>
@@ -481,6 +496,43 @@
     {#if usesSecondary}
       {@render axisSection('y2', spec.yAxis2, false)}
     {/if}
+  {/if}
+
+  {#if show('annotations') && annotated}
+    <div class={chartSectionClass} data-section="annotations">
+      <h4 class="text-xs font-semibold text-foreground">Annotations</h4>
+      <div class="flex items-center gap-2">
+        <label for="{idPrefix}-highlight" class="{chartLabelClass} w-20 shrink-0">Highlight</label>
+        <div class="min-w-0 flex-1">
+          <ChartCommitInput
+            id="{idPrefix}-highlight"
+            value={spec.highlight.join(', ')}
+            placeholder="Categories or series"
+            data-option="highlight"
+            oncommit={(text) => controller.setHighlight(text.split(',').map((n) => n.trim()).filter(Boolean)).ok}
+          />
+        </div>
+      </div>
+      {#each spec.referenceLines as line, i (i)}
+        <div class="flex items-center gap-1" data-reference-line={i}>
+          <ChartCommitInput value={String(line.value)} aria-label="Line value" inputmode="decimal" data-option="referenceLine.{i}.value" class="{chartInputClass} w-16 shrink-0" oncommit={(text) => controller.updateReferenceLine(i, { value: Number(text) }).ok} />
+          <ChartCommitInput value={line.label ?? ''} aria-label="Line label" placeholder="Label" data-option="referenceLine.{i}.label" class="{chartInputClass} flex-1" oncommit={(text) => controller.updateReferenceLine(i, { label: text || null }).ok} />
+          <button type="button" class={chartButtonClass} aria-label="Delete reference line" data-action="reference-line-delete" onclick={() => controller.removeReferenceLine(i)}>×</button>
+        </div>
+      {/each}
+      {#each spec.referenceBands as band, i (i)}
+        <div class="flex items-center gap-1" data-reference-band={i}>
+          <ChartCommitInput value={String(band.from)} aria-label="Band from" inputmode="decimal" data-option="referenceBand.{i}.from" class="{chartInputClass} w-14 shrink-0" oncommit={(text) => controller.updateReferenceBand(i, { from: Number(text) }).ok} />
+          <ChartCommitInput value={String(band.to)} aria-label="Band to" inputmode="decimal" data-option="referenceBand.{i}.to" class="{chartInputClass} w-14 shrink-0" oncommit={(text) => controller.updateReferenceBand(i, { to: Number(text) }).ok} />
+          <ChartCommitInput value={band.label ?? ''} aria-label="Band label" placeholder="Label" data-option="referenceBand.{i}.label" class="{chartInputClass} flex-1" oncommit={(text) => controller.updateReferenceBand(i, { label: text || null }).ok} />
+          <button type="button" class={chartButtonClass} aria-label="Delete reference band" data-action="reference-band-delete" onclick={() => controller.removeReferenceBand(i)}>×</button>
+        </div>
+      {/each}
+      <div class="flex gap-1">
+        <button type="button" class={chartButtonClass} data-option="referenceLine.add" onclick={() => controller.addReferenceLine(suggestChartReferences(spec).line)}>Add line</button>
+        <button type="button" class={chartButtonClass} data-option="referenceBand.add" onclick={() => controller.addReferenceBand(suggestChartReferences(spec).band)}>Add band</button>
+      </div>
+    </div>
   {/if}
 
   {#if show('series') && selectedSeries}
@@ -544,6 +596,21 @@
               <option value={m}>{cap(m)}</option>
             {/each}
           </select>
+        </div>
+      {/if}
+      {#if annotated && calloutIndex !== null}
+        {@const at = calloutIndex}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-series-callout" class="{chartLabelClass} w-20 shrink-0">Callout</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput
+              id="{idPrefix}-series-callout"
+              value={series.callouts?.[at] ?? ''}
+              placeholder="Label for {spec.categories[at] ?? 'this point'}"
+              data-option="series.callout"
+              oncommit={(text) => controller.setCallout(series.id, at, text || null).ok}
+            />
+          </div>
         </div>
       {/if}
       {#if scales}

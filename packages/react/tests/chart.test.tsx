@@ -243,6 +243,39 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("edits the note, highlight, reference lines and bands, callouts and colour by category", async () => {
+    const controller = new ChartController({ spec: sales });
+    await render(<ChartInspector controller={controller} />);
+    await type(q<HTMLInputElement>('[data-option="note"]'), "Source: finance");
+    expect(controller.getSpec().note).toBe("Source: finance");
+    await type(q<HTMLInputElement>('[data-option="highlight"]'), "Q2, South");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    await type(q<HTMLInputElement>('[data-option="highlight"]'), "Nope");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    await act(async () => q('[data-option="referenceLine.add"]').click());
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 12, label: "Average" }]);
+    await type(q<HTMLInputElement>('[data-option="referenceLine.0.label"]'), "Target");
+    await type(q<HTMLInputElement>('[data-option="referenceLine.0.value"]'), "15");
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 15, label: "Target" }]);
+    await act(async () => q('[data-option="referenceBand.add"]').click());
+    await type(q<HTMLInputElement>('[data-option="referenceBand.0.to"]'), "20");
+    expect(controller.getSpec().referenceBands[0].to).toBe(20);
+    await act(async () => q('[data-action="reference-band-delete"]').click());
+    expect(controller.getSpec().referenceBands).toEqual([]);
+    // A callout field appears for the selected point.
+    expect(q('[data-option="series.callout"]')).toBeNull();
+    await act(async () => controller.select({ kind: "point", seriesId: "north", index: 1 }));
+    await type(q<HTMLInputElement>('[data-option="series.callout"]'), "Best month");
+    expect(controller.getSeries("north")!.callouts).toEqual([null, "Best month", null]);
+    // Colour by category needs exactly one visible series.
+    expect(q('[data-option="varyColors"]')).toBeNull();
+    await act(async () => controller.updateSeries("south", { hidden: true }));
+    await act(async () => q<HTMLInputElement>('[data-option="varyColors"]').click());
+    expect(controller.getSpec().varyColors).toBe(true);
+    await act(async () => controller.setType("pie"));
+    expect(q('[data-section="annotations"]')).toBeNull();
+  });
+
   it("sets radar rings and grid shape", async () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     await render(<ChartInspector controller={controller} />);

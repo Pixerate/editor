@@ -2884,3 +2884,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Painting a new image in `ImageEditorCanvas` reported "No layer given and none is active; pass layerId (see list_layers) to paint." through `onerror`.
 - **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
 - **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.
+
+### [chart] Per-Category Lists Drifted When Categories Were Added, Removed or Moved
+
+- **Issue / Symptom**: After inserting, deleting or reordering a category, a series' point colours (and its numeric x values, bubble sizes and custom error amounts) stayed where they were while the values moved, so colours and sizes landed on the wrong bars. Callouts, which are also one per category, would have done the same.
+- **Root Cause**: `addCategory`, `removeCategory` and `moveCategory` spliced only `series.values`. Normalising afterwards pads or trims the other lists to the category count, which hides the mismatch instead of fixing it.
+- **Solution / Workaround**: The controller edits every per-category list of a series together (`pointLists`: values, x, sizes, pointColors, callouts and custom error-bar plus / minus). Any new per-category series field must be added to `pointLists`. Names in `highlight` are kept in step the same way: renaming a category or series renames its entry, and removing one drops it.

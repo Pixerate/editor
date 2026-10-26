@@ -8,6 +8,8 @@ import { chartMovingAverage, chartSupportsTrendlines, fitChartTrendline, type Ch
 import {
 	chartDataFromTable,
 	normalizeChartTrendline,
+	normalizeChartReferenceBand,
+	normalizeChartReferenceLine,
 	cloneChartSeries,
 	cloneChartSpec,
 	normalizeChartSpec,
@@ -23,6 +25,8 @@ import type {
 	ChartLegend,
 	ChartMarker,
 	ChartNumberFormat,
+	ChartReferenceBand,
+	ChartReferenceLine,
 	ChartSelection,
 	ChartSeries,
 	ChartSeriesType,
@@ -31,6 +35,12 @@ import type {
 	ChartType,
 	ChartValue
 } from './types.js';
+
+/** The per-category lists of a series (values, x, sizes, colours, callouts, custom error amounts), which follow category edits. */
+function pointLists(s: ChartSeries): (string | ChartValue)[][] {
+	const lists: ((string | ChartValue)[] | undefined)[] = [s.values, s.x, s.sizes, s.pointColors, s.callouts, s.errorBars?.plus, s.errorBars?.minus, s.xErrorBars?.plus, s.xErrorBars?.minus];
+	return lists.filter((l): l is (string | ChartValue)[] => Array.isArray(l));
+}
 
 /** Structural equality of JSON-like values (specs are plain data; key order does not matter). */
 function sameChartJson(a: unknown, b: unknown): boolean {
@@ -98,6 +108,7 @@ export interface ChartSeriesInput {
 	x?: readonly unknown[];
 	sizes?: readonly unknown[];
 	pointColors?: readonly (string | null)[];
+	callouts?: readonly (string | null)[];
 	marker?: ChartMarker;
 	curve?: ChartCurve;
 	dataLabels?: boolean;
@@ -119,6 +130,8 @@ export interface ChartSeriesPatch {
 	x?: readonly unknown[] | null;
 	sizes?: readonly unknown[] | null;
 	pointColors?: readonly (string | null)[] | null;
+	/** One label per category (null: none); `null` removes them all. */
+	callouts?: readonly (string | null)[] | null;
 	marker?: ChartMarker | null;
 	curve?: ChartCurve | null;
 	dataLabels?: boolean | null;
@@ -455,6 +468,7 @@ export class ChartController {
 			`Delete series "${series.name}"`,
 			this.edited((d) => {
 				d.series = d.series.filter((s) => s.id !== id);
+				d.highlight = d.highlight.filter((h) => h !== id && (h !== series.name || d.series.some((s) => s.name === h) || d.categories.includes(h)));
 			})
 		);
 		return { ok: true };
@@ -473,7 +487,7 @@ export class ChartController {
 			if (patch.hidden) next.hidden = true;
 			else delete next.hidden;
 		}
-		const resettable = ['axis', 'x', 'sizes', 'pointColors', 'marker', 'curve', 'dataLabels', 'format', 'errorBars', 'xErrorBars'] as const;
+		const resettable = ['axis', 'x', 'sizes', 'pointColors', 'callouts', 'marker', 'curve', 'dataLabels', 'format', 'errorBars', 'xErrorBars'] as const;
 		for (const key of resettable) {
 			if (!(key in patch) || patch[key] === undefined) continue;
 			if (patch[key] === null) delete (next as any)[key];
@@ -481,7 +495,10 @@ export class ChartController {
 		}
 		if (next.axis === 'primary') delete next.axis;
 		const series2 = this.spec.series.map((s) => (s.id === id ? next : s));
-		const { spec, issues } = normalizeChartSpec({ ...this.spec, series: series2 });
+		// A series highlighted by name stays highlighted after a rename.
+		const renamed = next.name !== series.name && this.spec.highlight.includes(series.name) && !this.spec.categories.includes(series.name);
+		const highlight = renamed ? this.spec.highlight.map((h) => (h === series.name ? next.name : h)) : this.spec.highlight;
+		const { spec, issues } = normalizeChartSpec({ ...this.spec, series: series2, highlight });
 		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
 		if (JSON.stringify(spec.series) === JSON.stringify(this.spec.series)) return { ok: true };
 		const label =
@@ -524,7 +541,7 @@ export class ChartController {
 			`Add category "${name}"`,
 			this.edited((d) => {
 				d.categories.splice(at, 0, name);
-				for (const s of d.series) s.values.splice(at, 0, null);
+				for (const s of d.series) for (const list of pointLists(s)) list.splice(at, 0, null);
 			}),
 			{ kind: 'category', index: at }
 		);
@@ -536,8 +553,9 @@ export class ChartController {
 		this.commit(
 			`Delete category "${this.spec.categories[index]}"`,
 			this.edited((d) => {
-				d.categories.splice(index, 1);
-				for (const s of d.series) s.values.splice(index, 1);
+				const [label] = d.categories.splice(index, 1);
+				for (const s of d.series) for (const list of pointLists(s)) list.splice(index, 1);
+				if (!d.categories.includes(label)) d.highlight = d.highlight.filter((h) => h !== label);
 			})
 		);
 		return { ok: true };
@@ -549,7 +567,10 @@ export class ChartController {
 		this.commit(
 			'Rename category',
 			this.edited((d) => {
+				const before = d.categories[index];
 				d.categories[index] = String(label);
+				// A highlighted category stays highlighted under its new name.
+				if (d.highlight.includes(before) && !d.categories.includes(before)) d.highlight = d.highlight.map((h) => (h === before ? String(label) : h));
 			})
 		);
 		return { ok: true };
@@ -567,7 +588,7 @@ export class ChartController {
 			'Reorder categories',
 			this.edited((d) => {
 				move(d.categories);
-				for (const s of d.series) move(s.values);
+				for (const s of d.series) for (const list of pointLists(s)) move(list);
 			})
 		);
 		return { ok: true };
@@ -641,6 +662,152 @@ export class ChartController {
 	importCsv(text: string, options: ChartTableOptions & { delimiter?: string } = {}): ChartActionResult & { issues?: ChartIssue[] } {
 		const delimiter = options.delimiter ?? (text.includes('\t') ? '\t' : ',');
 		return this.importTable(parseCsv(text, { delimiter }), options);
+	}
+
+	// -------------------------------------------------------------------------
+	// Annotations
+	// -------------------------------------------------------------------------
+
+	/** Sets the note written under the chart ("" removes it). */
+	setNote(note: string): ChartActionResult {
+		return this.update({ note }, { label: note ? 'Edit note' : 'Remove note' });
+	}
+
+	/**
+	 * Draws the named categories (labels) and series (names or ids) normally and mutes the
+	 * rest; an empty list shows everything. Unknown names change nothing. Returns the category
+	 * indexes and series ids that matched.
+	 */
+	setHighlight(names: readonly string[]): { ok: true; categories: number[]; series: string[] } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const s = this.spec;
+		const list = [...new Set(names.map(String))];
+		const unknown = list.filter((n) => !s.categories.includes(n) && !s.series.some((x) => x.id === n || x.name === n));
+		if (unknown.length)
+			return this.reject(
+				`${unknown.map((u) => `"${u}"`).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} neither a category nor a series. Categories: ${s.categories.slice(0, 20).map((c) => `"${c}"`).join(', ') || '(none)'}; series: ${s.series.map((x) => `"${x.name}"`).join(', ') || '(none)'}.`
+			) as { ok: false; message: string };
+		const result = this.update({ highlight: list }, { label: list.length ? 'Highlight' : 'Clear highlight' });
+		if (!result.ok) return result;
+		return {
+			ok: true,
+			categories: s.categories.flatMap((c, i) => (list.includes(c) ? [i] : [])),
+			series: s.series.filter((x) => list.includes(x.id) || list.includes(x.name)).map((x) => x.id)
+		};
+	}
+
+	/** Why a reference on `axis` at `values` cannot be drawn on this chart, or null. */
+	private referenceProblem(axis: ChartReferenceLine['axis'], values: number[]): string | null {
+		const s = this.spec;
+		const family = chartFamily(s);
+		if (family !== 'cartesian' && family !== 'xy') return `Reference lines and bands are drawn on bar, line, area, scatter and bubble charts; this is a ${s.type} chart.`;
+		if (axis === 'x' && family !== 'xy') return 'axis "x" needs a scatter or bubble chart with numeric x values; use "y" for the value axis.';
+		if (axis === 'y2' && (family !== 'cartesian' || !s.series.some((x) => !x.hidden && x.axis === 'secondary')))
+			return 'axis "y2" needs a visible series on the secondary axis (set one with update_chart_series axis "secondary"), or use "y".';
+		const scale = (axis === 'x' ? s.xAxis : axis === 'y2' ? s.yAxis2 : s.yAxis).scale;
+		if (scale === 'log' && values.some((v) => !(v > 0))) return 'That axis is logarithmic, so the values must be above 0.';
+		return null;
+	}
+
+	private editReferences<K extends 'referenceLines' | 'referenceBands'>(kind: K, label: string, edit: (list: ChartSpec[K]) => void, select?: ChartSelection | null): void {
+		this.commit(
+			label,
+			this.edited((d) => edit(d[kind])),
+			select
+		);
+	}
+
+	/** Adds a reference line (a target, floor or average). Returns its index. */
+	addReferenceLine(input: ChartReferenceLine): { ok: true; index: number } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const issues: ChartIssue[] = [];
+		const line = normalizeChartReferenceLine(input, 'referenceLine', issues);
+		if (!line || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues) as { ok: false; message: string };
+		const problem = this.referenceProblem(line.axis, [line.value]);
+		if (problem) return this.reject(problem) as { ok: false; message: string };
+		const index = this.spec.referenceLines.length;
+		this.editReferences('referenceLines', `Add reference line${line.label ? ` "${line.label}"` : ''}`, (list) => list.push(line));
+		return { ok: true, index };
+	}
+
+	/** Changes a reference line (all-or-nothing); `null` removes its label, colour or axis. */
+	updateReferenceLine(index: number, patch: { [K in keyof ChartReferenceLine]?: ChartReferenceLine[K] | null }): ChartActionResult {
+		const current = this.spec.referenceLines[index];
+		if (!current) return fail(this.noReference('reference line', this.spec.referenceLines.length, index));
+		const merged: Record<string, unknown> = { ...current, ...patch };
+		for (const [k, v] of Object.entries(patch)) if (v === null) delete merged[k];
+		const issues: ChartIssue[] = [];
+		const line = normalizeChartReferenceLine(merged, 'referenceLine', issues);
+		if (!line || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		const problem = this.referenceProblem(line.axis, [line.value]);
+		if (problem) return this.reject(problem);
+		this.editReferences('referenceLines', 'Change reference line', (list) => (list[index] = line));
+		return { ok: true };
+	}
+
+	removeReferenceLine(index: number): ChartActionResult {
+		if (!this.spec.referenceLines[index]) return fail(this.noReference('reference line', this.spec.referenceLines.length, index));
+		this.editReferences('referenceLines', 'Delete reference line', (list) => list.splice(index, 1));
+		return { ok: true };
+	}
+
+	/** Adds a reference band (a target range). Returns its index. */
+	addReferenceBand(input: ChartReferenceBand): { ok: true; index: number } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const issues: ChartIssue[] = [];
+		const band = normalizeChartReferenceBand(input, 'referenceBand', issues);
+		if (!band || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues) as { ok: false; message: string };
+		const problem = this.referenceProblem(band.axis, [band.from, band.to]);
+		if (problem) return this.reject(problem) as { ok: false; message: string };
+		const index = this.spec.referenceBands.length;
+		this.editReferences('referenceBands', `Add reference band${band.label ? ` "${band.label}"` : ''}`, (list) => list.push(band));
+		return { ok: true, index };
+	}
+
+	/** Changes a reference band (all-or-nothing); `null` removes its label, colour or axis. */
+	updateReferenceBand(index: number, patch: { [K in keyof ChartReferenceBand]?: ChartReferenceBand[K] | null }): ChartActionResult {
+		const current = this.spec.referenceBands[index];
+		if (!current) return fail(this.noReference('reference band', this.spec.referenceBands.length, index));
+		const merged: Record<string, unknown> = { ...current, ...patch };
+		for (const [k, v] of Object.entries(patch)) if (v === null) delete merged[k];
+		const issues: ChartIssue[] = [];
+		const band = normalizeChartReferenceBand(merged, 'referenceBand', issues);
+		if (!band || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		const problem = this.referenceProblem(band.axis, [band.from, band.to]);
+		if (problem) return this.reject(problem);
+		this.editReferences('referenceBands', 'Change reference band', (list) => (list[index] = band));
+		return { ok: true };
+	}
+
+	removeReferenceBand(index: number): ChartActionResult {
+		if (!this.spec.referenceBands[index]) return fail(this.noReference('reference band', this.spec.referenceBands.length, index));
+		this.editReferences('referenceBands', 'Delete reference band', (list) => list.splice(index, 1));
+		return { ok: true };
+	}
+
+	private noReference(what: string, count: number, index: number): string {
+		return `There is no ${what} ${index}; ${count ? `expected 0 to ${count - 1}` : `the chart has none yet`}.`;
+	}
+
+	/**
+	 * Pins a label to one bar or point (`null` or "" removes it) and selects the point. The
+	 * point must have a value, on a bar, line, area, scatter or bubble chart.
+	 */
+	setCallout(seriesId: string, index: number, label: string | null): ChartActionResult {
+		const series = this.getSeries(seriesId);
+		if (!series) return this.unknownSeries(seriesId);
+		if (!Number.isInteger(index) || index < 0 || index >= this.spec.categories.length) return this.badIndex(index);
+		const family = chartFamily(this.spec);
+		const text = label === null ? '' : String(label).trim();
+		if (text && family !== 'cartesian' && family !== 'xy') return this.reject(`Callouts are drawn on bar, line, area, scatter and bubble charts; this is a ${this.spec.type} chart.`);
+		if (text && (series.values[index] === null || series.values[index] === undefined))
+			return this.reject(`"${series.name}" has no value at "${this.spec.categories[index]}", so there is nothing to point at; set a value first.`);
+		const next = this.edited((d) => {
+			const s = d.series.find((x) => x.id === seriesId)!;
+			const labels = s.callouts ? [...s.callouts] : d.categories.map(() => null as string | null);
+			labels[index] = text || null;
+			if (labels.some((l) => l)) s.callouts = labels;
+			else delete s.callouts;
+		});
+		this.commit(text ? 'Add callout' : 'Remove callout', next, { kind: 'point', seriesId, index });
+		return { ok: true };
 	}
 
 	// -------------------------------------------------------------------------
@@ -914,6 +1081,11 @@ function updateLabel(patch: ChartSpecPatch): string {
 		overlap: 'Change bar overlap',
 		bins: 'Change histogram bins',
 		showTotal: 'Toggle waterfall total',
+		note: 'Edit note',
+		highlight: 'Change highlight',
+		referenceLines: 'Change reference lines',
+		referenceBands: 'Change reference bands',
+		varyColors: 'Toggle colour by category',
 		radarTicks: 'Change radar rings',
 		radarGraticule: 'Change radar grid',
 		legend: 'Change legend',

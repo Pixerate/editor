@@ -4,7 +4,7 @@
 // from wordcraft-main/crates/docx/src/chart_spec.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors).
 // See THIRD_PARTY_NOTICES.md.
 import { parseChartColor, chartRgbToHex } from './color.js';
-import { chartFamily, chartSeriesType, defaultChartAxis, isCartesianChart, normalizeChartSpec } from './spec.js';
+import { chartFamily, chartSeriesType, chartVariesColors, defaultChartAxis, isCartesianChart, normalizeChartSpec } from './spec.js';
 import type { ChartAxis, ChartErrorBars, ChartErrorBarType, ChartIssue, ChartLegendPosition, ChartMarker, ChartNumberFormat, ChartSeries, ChartSpec, ChartTrendline, ChartTrendlineType, ChartType, ChartValue } from './types.js';
 
 export const CHART_OOXML_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
@@ -337,7 +337,7 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 	input.orientation = orientation;
 	input.dataLabels = dataLabels;
 	input.points = points || first !== 'line';
-	if (bool(val(groups[0], 'varyColors')) && (first === 'bar' || first === 'line') && series.length === 1) unsupported.push('one colour per point (vary colours)');
+	if (bool(val(groups[0], 'varyColors')) && !combo && isCartesianChart(first) && series.length === 1) input.varyColors = true;
 
 	// Axes
 	const readAxis = (a: Element | undefined, fallback: ChartAxis): ChartAxis => {
@@ -515,6 +515,13 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		type = 'pie';
 	}
 	const visible = spec.series.filter((s) => !s.hidden);
+	const annotations = [
+		spec.referenceLines.length || spec.referenceBands.length ? 'reference lines and bands' : '',
+		spec.series.some((s) => s.callouts) ? 'callouts' : '',
+		spec.highlight.length ? 'the highlight' : '',
+		spec.note ? 'the note' : ''
+	].filter(Boolean);
+	if (annotations.length) issues.push(`${annotations.join(', ').replace(/^./, (c) => c.toUpperCase())} ${annotations.length === 1 && !annotations[0].endsWith('s') ? 'is' : 'are'} not written: DrawingML has no equivalent.`);
 	if (visible.length < spec.series.length) issues.push(`${spec.series.length - visible.length} hidden series ${spec.series.length - visible.length === 1 ? 'is' : 'are'} left out.`);
 	const grouping = spec.stacking === 'stacked' ? 'stacked' : spec.stacking === 'percent' ? 'percentStacked' : 'standard';
 	const ids = { cat: 500000001, val: 500000002, cat2: 500000003, val2: 500000004 };
@@ -584,6 +591,7 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		return `<c:ser>${parts.join('')}</c:ser>`;
 	};
 	const dLbls = `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${spec.dataLabels ? 1 : 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>`;
+	const vary = chartVariesColors(spec) ? 1 : 0;
 	const groupXml = groups.map((g) => {
 		const axes = g.secondary ? `<c:axId val="${ids.cat2}"/><c:axId val="${ids.val2}"/>` : `<c:axId val="${ids.cat}"/><c:axId val="${ids.val}"/>`;
 		const sers = g.series.map(({ s, index }) => serXml(g.kind, s, index)).join('');
@@ -593,14 +601,14 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 				const barsWidth = spec.stacking === 'none' ? n - (n - 1) * spec.overlap : 1;
 				const gapPct = Math.round(Math.min(500, (spec.gapWidth / Math.max(0.01, 1 - spec.gapWidth)) * barsWidth * 100));
 				const overlapPct = spec.stacking === 'none' ? Math.round(spec.overlap * 100) : 100;
-				return `<c:barChart><c:barDir val="${spec.orientation === 'horizontal' ? 'bar' : 'col'}"/><c:grouping val="${spec.stacking === 'none' ? 'clustered' : grouping}"/><c:varyColors val="0"/>${sers}${dLbls}<c:gapWidth val="${gapPct}"/><c:overlap val="${overlapPct}"/>${axes}</c:barChart>`;
+				return `<c:barChart><c:barDir val="${spec.orientation === 'horizontal' ? 'bar' : 'col'}"/><c:grouping val="${spec.stacking === 'none' ? 'clustered' : grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}<c:gapWidth val="${gapPct}"/><c:overlap val="${overlapPct}"/>${axes}</c:barChart>`;
 			}
 			case 'line':
-				return `<c:lineChart><c:grouping val="${spec.stacking === 'none' ? 'standard' : 'standard'}"/><c:varyColors val="0"/>${sers}${dLbls}<c:marker val="1"/>${axes}</c:lineChart>`;
+				return `<c:lineChart><c:grouping val="${spec.stacking === 'none' ? 'standard' : 'standard'}"/><c:varyColors val="${vary}"/>${sers}${dLbls}<c:marker val="1"/>${axes}</c:lineChart>`;
 			case 'area':
-				return `<c:areaChart><c:grouping val="${grouping}"/><c:varyColors val="0"/>${sers}${dLbls}${axes}</c:areaChart>`;
+				return `<c:areaChart><c:grouping val="${grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}</c:areaChart>`;
 			case 'scatter':
-				return `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}${dLbls}${axes}</c:scatterChart>`;
+				return `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}</c:scatterChart>`;
 			case 'bubble':
 				return `<c:bubbleChart><c:varyColors val="0"/>${sers}${dLbls}<c:bubbleScale val="100"/>${axes}</c:bubbleChart>`;
 			case 'radar':

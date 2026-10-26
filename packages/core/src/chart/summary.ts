@@ -6,7 +6,7 @@ import { describeChartErrorBars } from './errorbars.js';
 import { layoutChart } from './layout.js';
 import type { ChartLayoutOptions } from './layout-shared.js';
 import { formatChartNumber } from './scale.js';
-import { chartColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
+import { chartSpecColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
 import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
 
@@ -44,7 +44,7 @@ export interface ChartSummary {
 export function summarizeChart(spec: ChartSpec, size: Pick<ChartLayoutOptions, 'width' | 'height' | 'measureText'> = { width: 640, height: 400 }, scene: ChartScene = layoutChart(spec, { ...size, selection: null })): ChartSummary {
 	const visible = spec.series.filter((s) => !s.hidden);
 	const series = visible.map((s) => summarizeChartSeries(s, spec.categories));
-	const colors = chartColorsByCategory(spec.type) ? spec.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(spec, i)) : visible.map((s) => chartSeriesColor(spec, spec.series.indexOf(s)));
+	const colors = chartSpecColorsByCategory(spec) ? spec.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(spec, i)) : visible.map((s) => chartSeriesColor(spec, spec.series.indexOf(s)));
 	const check = checkChartColors(colors, { surface: scene.theme.surface.startsWith('var(') ? '#ffffff' : scene.theme.surface });
 	const axis = (s: ChartScene['valueScale'], a: ChartAxis): ChartAxisSummary | undefined =>
 		s ? { min: s.domain[0], max: s.domain[1], ticks: [...s.ticks], ...(s.logBase ? { logBase: s.logBase } : {}), ...(a.reverse ? { reversed: true } : {}) } : undefined;

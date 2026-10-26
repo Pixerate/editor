@@ -12,6 +12,9 @@ import type {
 	ChartNumberFormat,
 	ChartOrientation,
 	ChartRadarGraticule,
+	ChartReferenceAxis,
+	ChartReferenceBand,
+	ChartReferenceLine,
 	ChartSeries,
 	ChartSeriesType,
 	ChartSpec,
@@ -33,6 +36,7 @@ export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'a
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
 export const CHART_RADAR_GRATICULES: readonly ChartRadarGraticule[] = ['polygon', 'circle'];
+export const CHART_REFERENCE_AXES: readonly ChartReferenceAxis[] = ['y', 'y2', 'x'];
 export const CHART_ORIENTATIONS: readonly ChartOrientation[] = ['vertical', 'horizontal'];
 export const CHART_LEGEND_POSITIONS: readonly ChartLegendPosition[] = ['top', 'bottom', 'left', 'right'];
 export const CHART_NUMBER_STYLES: readonly NonNullable<ChartNumberFormat['style']>[] = ['number', 'percent', 'currency', 'compact'];
@@ -129,6 +133,11 @@ export function chartColorsByCategory(type: ChartType): boolean {
 	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap';
 }
 
+/** Whether this chart colours by category: a pie-like type, or `varyColors` on a one-series chart. */
+export function chartSpecColorsByCategory(spec: Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean }): boolean {
+	return chartColorsByCategory(spec.type) || chartVariesColors(spec);
+}
+
 export function defaultChartAxis(value: boolean): ChartAxis {
 	return { show: true, title: '', min: null, max: null, step: null, gridlines: value, format: {} };
 }
@@ -150,9 +159,17 @@ export function chartSliceColor(spec: Pick<ChartSpec, 'palette'>, index: number)
 	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, index);
 }
 
-/** The colour of one bar or point: its override, else the series colour. */
-export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number, index: number): string {
-	return spec.series[seriesIndex]?.pointColors?.[index] || chartSeriesColor(spec, seriesIndex);
+/** Whether `varyColors` applies: a bar, line, area or scatter chart with one visible series. */
+export function chartVariesColors(spec: Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean }): boolean {
+	return !!spec.varyColors && isCartesianChart(spec.type) && spec.series.filter((s) => !s.hidden).length === 1;
+}
+
+/** The colour of one bar or point: its override, else the palette colour of its category (`varyColors`), else the series colour. */
+export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'> & { type?: ChartType; varyColors?: boolean }, seriesIndex: number, index: number): string {
+	const own = spec.series[seriesIndex]?.pointColors?.[index];
+	if (own) return own;
+	if (spec.type && chartVariesColors(spec as Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean })) return chartSliceColor(spec, index);
+	return chartSeriesColor(spec, seriesIndex);
 }
 
 /** How a series is drawn in a cartesian chart. */
@@ -374,6 +391,16 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 			if (colors.some((c) => c !== null)) series.pointColors = colors;
 		}
 	}
+	if (value.callouts !== undefined && value.callouts !== null) {
+		if (!Array.isArray(value.callouts)) issues.push({ path: `${path}.callouts`, message: `${path}.callouts must be an array of labels or nulls, one per category.` });
+		else {
+			const labels = Array.from({ length }, (_, i) => {
+				const c = (value.callouts as unknown[])[i];
+				return typeof c === 'string' && c.trim() ? c : typeof c === 'number' ? String(c) : null;
+			});
+			if (labels.some((c) => c !== null)) series.callouts = labels;
+		}
+	}
 	if (value.marker !== undefined && value.marker !== null) series.marker = pick(value.marker, CHART_MARKERS, 'circle', `${path}.marker`, issues);
 	if (value.curve !== undefined && value.curve !== null) series.curve = pick(value.curve, CHART_CURVES, 'linear', `${path}.curve`, issues);
 	if (value.dataLabels !== undefined && value.dataLabels !== null) series.dataLabels = flag(value.dataLabels, false, `${path}.dataLabels`, issues);
@@ -397,6 +424,55 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 }
 
 const key = (value: Record<string, unknown>, name: string) => value[name] !== undefined && value[name] !== null;
+
+function referenceCommon(value: Record<string, unknown>, path: string, issues: ChartIssue[]): { label?: string; axis?: ChartReferenceAxis; color?: string } {
+	const out: { label?: string; axis?: ChartReferenceAxis; color?: string } = {};
+	const label = text(value.label, '', `${path}.label`, issues);
+	if (label) out.label = label;
+	if (key(value, 'axis')) {
+		const axis = pick(value.axis, CHART_REFERENCE_AXES, 'y', `${path}.axis`, issues);
+		if (axis !== 'y') out.axis = axis;
+	}
+	if (typeof value.color === 'string' && value.color.trim()) out.color = value.color.trim();
+	else if (key(value, 'color')) issues.push({ path: `${path}.color`, message: `${path}.color must be a CSS colour.` });
+	return out;
+}
+
+const finiteNumber = (value: unknown): number | null => {
+	const n = typeof value === 'string' && value.trim() ? Number(value) : value;
+	return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+
+/** Checks one reference line; `null` (reported) when it has no usable value. */
+export function normalizeChartReferenceLine(value: unknown, path: string, issues: ChartIssue[] = []): ChartReferenceLine | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with a value, e.g. {"value": 100, "label": "Target"}.` });
+		return null;
+	}
+	const at = finiteNumber(value.value);
+	if (at === null) {
+		issues.push({ path: `${path}.value`, message: `${path}.value must be a number (where the line crosses the axis).` });
+		return null;
+	}
+	for (const k of Object.keys(value)) if (!['value', 'label', 'axis', 'color'].includes(k)) issues.push({ path: `${path}.${k}`, message: `${path} has no "${k}"; it takes value, label, axis and color.` });
+	return { value: at, ...referenceCommon(value, path, issues) };
+}
+
+/** Checks one reference band; `null` (reported) when its ends are not numbers. Ends are put in order. */
+export function normalizeChartReferenceBand(value: unknown, path: string, issues: ChartIssue[] = []): ChartReferenceBand | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with from and to, e.g. {"from": 80, "to": 120, "label": "Target range"}.` });
+		return null;
+	}
+	const from = finiteNumber(value.from);
+	const to = finiteNumber(value.to);
+	if (from === null || to === null) {
+		issues.push({ path, message: `${path} needs numbers for from and to (the ends of the band on its axis).` });
+		return null;
+	}
+	for (const k of Object.keys(value)) if (!['from', 'to', 'label', 'axis', 'color'].includes(k)) issues.push({ path: `${path}.${k}`, message: `${path} has no "${k}"; it takes from, to, label, axis and color.` });
+	return { from: Math.min(from, to), to: Math.max(from, to), ...referenceCommon(value, path, issues) };
+}
 
 /** Checks one set of error bars; `null` (reported) when it is unusable. Custom amounts are padded to `length`. */
 export function normalizeChartErrorBars(value: unknown, length: number, path: string, issues: ChartIssue[] = []): ChartErrorBars | null {
@@ -521,6 +597,26 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		if (Number.isInteger(b) && b >= 1 && b <= 500) bins = b;
 		else issues.push({ path: 'bins', message: 'bins must be a whole number from 1 to 500, or null for automatic.' });
 	}
+	const highlight: string[] = [];
+	if (Array.isArray(value.highlight)) {
+		for (const h of value.highlight) {
+			if (typeof h === 'string' || typeof h === 'number') {
+				const name = String(h);
+				if (!highlight.includes(name)) highlight.push(name);
+			} else issues.push({ path: 'highlight', message: 'highlight must list category labels or series names.' });
+		}
+	} else if (value.highlight !== undefined && value.highlight !== null) issues.push({ path: 'highlight', message: 'highlight must be an array of category labels or series names.' });
+	const listOf = <T>(name: 'referenceLines' | 'referenceBands', read: (item: unknown, path: string, issues: ChartIssue[]) => T | null): T[] => {
+		const raw = value[name];
+		if (raw === undefined || raw === null) return [];
+		if (!Array.isArray(raw)) {
+			issues.push({ path: name, message: `${name} must be an array.` });
+			return [];
+		}
+		return raw.map((item, i) => read(item, `${name}[${i}]`, issues)).filter((x): x is T => x !== null);
+	};
+	const referenceLines = listOf('referenceLines', normalizeChartReferenceLine);
+	const referenceBands = listOf('referenceBands', normalizeChartReferenceBand);
 	let radarTicks: number | null = null;
 	if (value.radarTicks !== undefined && value.radarTicks !== null) {
 		const t = Number(value.radarTicks);
@@ -552,7 +648,12 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		bins,
 		showTotal: flag(value.showTotal, true, 'showTotal', issues),
 		radarTicks,
-		radarGraticule: pick(value.radarGraticule, CHART_RADAR_GRATICULES, 'polygon', 'radarGraticule', issues)
+		radarGraticule: pick(value.radarGraticule, CHART_RADAR_GRATICULES, 'polygon', 'radarGraticule', issues),
+		note: text(value.note, '', 'note', issues),
+		highlight,
+		referenceLines,
+		referenceBands,
+		varyColors: flag(value.varyColors, false, 'varyColors', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {
@@ -574,7 +675,10 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		yAxis: { ...spec.yAxis, format: { ...spec.yAxis.format } },
 		yAxis2: { ...spec.yAxis2, format: { ...spec.yAxis2.format } },
 		legend: { ...spec.legend },
-		palette: [...spec.palette]
+		palette: [...spec.palette],
+		highlight: [...spec.highlight],
+		referenceLines: spec.referenceLines.map((l) => ({ ...l })),
+		referenceBands: spec.referenceBands.map((b) => ({ ...b }))
 	};
 }
 
@@ -583,6 +687,7 @@ export function cloneChartSeries(series: ChartSeries): ChartSeries {
 	if (series.x) copy.x = [...series.x];
 	if (series.sizes) copy.sizes = [...series.sizes];
 	if (series.pointColors) copy.pointColors = [...series.pointColors];
+	if (series.callouts) copy.callouts = [...series.callouts];
 	if (series.format) copy.format = { ...series.format };
 	if (series.trendlines) copy.trendlines = series.trendlines.map((t) => ({ ...t }));
 	for (const name of ['errorBars', 'xErrorBars'] as const) {

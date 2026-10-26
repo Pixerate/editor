@@ -48,6 +48,17 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
     yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { style: "currency" } },
     yAxis2: { show: true, title: "Margin", min: null, max: null, step: null, gridlines: false, format: { style: "percent" } },
   },
+  Targets: {
+    type: "bar",
+    title: "Support tickets closed per week",
+    subtitle: "Week 6 cleared the backlog",
+    note: "Source: helpdesk export, Q1 2025",
+    categories: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+    series: [{ id: "closed", name: "Closed", values: [118, 124, 131, 109, 140, 182, 150, 146], callouts: [null, null, null, "Outage", null, "Backlog cleared", null, null] }],
+    referenceLines: [{ value: 135, label: "Target" }],
+    referenceBands: [{ from: 110, to: 130, label: "Usual range" }],
+    highlight: ["W4", "W6"],
+  },
   "Web traffic": {
     type: "area",
     title: "Weekly visitors",

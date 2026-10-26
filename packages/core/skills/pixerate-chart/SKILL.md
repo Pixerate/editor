@@ -1,6 +1,6 @@
 ---
 name: pixerate-chart
-description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel and treemap charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
+description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel and treemap charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
 ---
 
 # Charts
@@ -10,7 +10,8 @@ A chart editor holds one `ChartSpec`: a `type`, `title` / `subtitle`, `xAxis` / 
 a list of `categories` (strings, in order) and a list of `series`. Each series has an `id`
 (such as `series-1`), a `name` and one value per category (`null` is a gap), plus optional
 per-series settings (type for combos, secondary axis, marker, colour, format, trendlines,
-error bars). Tools take a series by id or exact name and a category by 0-based index or
+error bars, callouts). Annotations sit on the spec: `note` (footnote), `highlight` (names of
+categories and series to keep bright), `referenceLines`, `referenceBands` and `varyColors`. Tools take a series by id or exact name and a category by 0-based index or
 exact label; `get_chart` returns both. Pie, donut, funnel and treemap draw only the first
 visible series, one slice per category; histogram and box read every value of the visible
 series.
@@ -34,10 +35,15 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 4. **Style in one call.** Put type, titles, axes, legend, stacking and labels in a single
    `update_chart`; it is all-or-nothing and one undo step. Use `apply_chart_preset` for a
    coherent layout or colour scheme, `update_chart_series` for per-series settings.
-5. **Check.** Read the `warnings` that `get_chart` and `render_chart` return (hidden or
+5. **Point the reader at the message.** Once the data and style are right, annotate:
+   `add_chart_reference_line` for a target or average, `add_chart_reference_band` for a
+   normal or target range, `set_chart_callout` on the one or two points the title talks
+   about, `highlight_chart` to mute what does not matter, and `note` (in `update_chart`) for
+   the source.
+6. **Check.** Read the `warnings` that `get_chart` and `render_chart` return (hidden or
    thinned labels, crowded legend, skipped values) and run `check_chart_colors`. Fix every
    problem.
-6. **Look once.** `render_chart` with `format: "png"` after a batch of edits, at the size
+7. **Look once.** `render_chart` with `format: "png"` after a batch of edits, at the size
    the chart will be shown, to check overlap and legibility. Use `undo_chart` for your own
    mistakes.
 
@@ -81,6 +87,19 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
   (`showR2`) and read it with `get_chart_trendline` before describing the trend; label any
   `forward` forecast as a projection. Exponential, power and log fits need positive values;
   category charts fit against x = 1, 2, 3.
+- **Annotate sparingly.** One or two reference lines, one band and a couple of callouts at
+  most; every label competes with the data. Label every reference line (`label`) so the
+  reader knows what it is, and keep callouts to a few words that say *why* the point
+  matters ("Launch", "Strike"), not its value (that is what data labels are for).
+- **Highlight instead of recolouring.** To show one bar or series against the rest, use
+  `highlight_chart` (it mutes the rest and keeps the palette) rather than greying series by
+  hand. Name categories to pick bars or points, series to pick whole lines. Clear it with
+  `names: []`.
+- **One series, many categories:** `varyColors: true` gives each bar its own palette colour
+  and a category legend. Use it only when colour carries meaning (brands, teams); a ranked
+  bar chart reads better in one colour.
+- **Cite the source** in `note` ("Source: ONS, 2025"); it sits under the chart, apart from
+  the title.
 - **Error bars:** say what they are (standard deviation, standard error, confidence) in the
   title or subtitle.
 
@@ -109,7 +128,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`). Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -123,6 +142,14 @@ it changed.
 | `load_file_chart` | Replace the editor's chart with one from an Office file (`file` or `data`, `chartId`). Returns the spec, read problems and the features the editor could not keep; tell the user about any. |
 | `add_chart_trendline` | Fit a trendline to a series (`type`: linear, exponential, logarithmic, power, polynomial with `order` 2-6, moving-average with `period`; `forward` / `backward` in x units, `intercept`, `showEquation`, `showR2`). Unstacked bar, line, area, scatter and bubble charts only. Returns its index, coefficients, R2 and equation. |
 | `remove_chart_trendline` | Delete a trendline by `series` and `index`. |
+| `add_chart_reference_line` | Draw a dashed line across the plot at `value` (a target, floor or average) with an optional `label`, `color` and `axis` (`y` default, `y2` for the secondary axis, `x` for numeric x on scatter and bubble). Bar, line, area, scatter and bubble charts; the axis grows to keep it in view. Returns its `index`. |
+| `update_chart_reference_line` | Change a reference line by `index` (from `add_chart_reference_line` or `spec.referenceLines`); `null` removes the label, colour or axis. Returns the line as stored. |
+| `remove_chart_reference_line` | Delete a reference line by `index`; later ones move up. Returns the rest. |
+| `add_chart_reference_band` | Shade a range from `from` to `to` (a target or normal range) under the data, with an optional `label`, `color` and `axis`. Same charts as reference lines. Returns its `index`. |
+| `update_chart_reference_band` | Change a reference band by `index`; `null` removes the label, colour or axis. |
+| `remove_chart_reference_band` | Delete a reference band by `index`. Returns the rest. |
+| `set_chart_callout` | Pin a short `label` to one bar or point (`series`, `category`) with a leader line; `label: null` removes it. The point needs a value. Bar, line, area, scatter and bubble charts. Selects the point. |
+| `highlight_chart` | Keep the named categories and series (`names`) bright and mute everything else; `[]` clears it. Unknown names change nothing and are listed. Returns the matched category indexes and series ids. |
 | `apply_chart_preset` | Apply a quick `layout` and / or a `colors` scheme from `list_chart_presets` in one step. |
 | `transpose_chart` | Swap series and categories. Drops per-series colours and settings, so restyle afterwards. |
 | `select_chart_element` | Select part of the chart (`kind`: none, chart, title, subtitle, legend, axis, series, point, category, trendline) for the user to see or before `press_chart_key`. |
@@ -166,6 +193,14 @@ several charts may register them with another prefix.
 | `chart.removeCategory` | Delete a category by index or label. |
 | `chart.addTrendline` | Fit a trendline (as `add_chart_trendline`). |
 | `chart.removeTrendline` | Delete a trendline. |
+| `chart.addReferenceLine` | Add a reference line (as `add_chart_reference_line`). |
+| `chart.updateReferenceLine` | Change a reference line by index. |
+| `chart.removeReferenceLine` | Delete a reference line by index. |
+| `chart.addReferenceBand` | Add a reference band (as `add_chart_reference_band`). |
+| `chart.updateReferenceBand` | Change a reference band by index. |
+| `chart.removeReferenceBand` | Delete a reference band by index. |
+| `chart.setCallout` | Pin or remove a point's callout (as `set_chart_callout`). |
+| `chart.highlight` | Highlight categories and series (as `highlight_chart`). |
 | `chart.applyPreset` | Apply a quick layout and / or colour scheme. |
 | `chart.transpose` | Swap series and categories. |
 | `chart.importCsv` | Replace data from CSV / TSV (no automatic chart type). |
@@ -190,6 +225,15 @@ several charts may register them with another prefix.
 - Percent-stacked charts, pies and gaps cannot be dragged; use `set_chart_values`.
 - Radar needs at least three categories (it draws as a line chart until then); trendlines
   are refused on stacked charts, pies and the other single-series families.
+- Reference lines, bands and callouts are drawn on bar, line, area, scatter and bubble
+  charts only. Switching to another type keeps them in the spec but leaves them out of the
+  drawing (an `annotations-skipped` warning says so); they come back when you switch back.
+- Reference values on a log axis must be above 0, and `axis: "y2"` needs a visible series on
+  the secondary axis. A line outside a fixed `min` / `max` is not drawn.
+- Callouts and highlight names follow the data: removing a category drops its callouts and
+  its highlight entry, renaming a category or series keeps it highlighted.
+- Office export has no reference lines, bands, callouts, highlight or note; `export_chart_ooxml`
+  lists them as not written. `varyColors` is kept.
 - Radar `radarTicks` and `radarGraticule` are Mermaid's `ticks` and `graticule`. A
   `radar-beta` block with no `graticule` line imports as `circle`, because that is what
   Mermaid draws; set `radarGraticule: "polygon"` if the user wants the editor's default look.

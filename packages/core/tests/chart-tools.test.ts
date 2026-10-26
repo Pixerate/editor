@@ -43,7 +43,9 @@ describe("chart agent tools", () => {
     expect(tools.map((t) => baseToolName(t.name))).toEqual([
       "get_chart", "render_chart", "check_chart_colors", "recommend_chart", "get_chart_trendline", "list_chart_presets", "export_chart_mermaid", "export_chart_ooxml",
       "update_chart", "set_chart_data", "set_chart_values", "add_chart_series", "update_chart_series", "remove_chart_series", "add_chart_category", "remove_chart_category",
-      "import_chart_csv", "import_chart_mermaid", "import_chart_ooxml", "add_chart_trendline", "remove_chart_trendline", "apply_chart_preset", "transpose_chart",
+      "import_chart_csv", "import_chart_mermaid", "import_chart_ooxml", "add_chart_trendline", "remove_chart_trendline",
+      "add_chart_reference_line", "update_chart_reference_line", "remove_chart_reference_line", "add_chart_reference_band", "update_chart_reference_band", "remove_chart_reference_band",
+      "set_chart_callout", "highlight_chart", "apply_chart_preset", "transpose_chart",
       "select_chart_element", "drag_chart_point", "press_chart_key", "undo_chart", "redo_chart",
     ]);
     for (const tool of tools) {

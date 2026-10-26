@@ -229,6 +229,41 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("edits the note, highlight, reference lines and bands, callouts and colour by category", () => {
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    type(q<HTMLInputElement>('[data-option="note"]'), "Source: finance");
+    expect(controller.getSpec().note).toBe("Source: finance");
+    type(q<HTMLInputElement>('[data-option="highlight"]'), "Q2, South");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    type(q<HTMLInputElement>('[data-option="highlight"]'), "Nope");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    click(q('[data-option="referenceLine.add"]'));
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 12, label: "Average" }]);
+    type(q<HTMLInputElement>('[data-option="referenceLine.0.label"]'), "Target");
+    type(q<HTMLInputElement>('[data-option="referenceLine.0.value"]'), "15");
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 15, label: "Target" }]);
+    click(q('[data-option="referenceBand.add"]'));
+    type(q<HTMLInputElement>('[data-option="referenceBand.0.to"]'), "20");
+    expect(controller.getSpec().referenceBands[0].to).toBe(20);
+    click(q('[data-action="reference-band-delete"]'));
+    expect(controller.getSpec().referenceBands).toEqual([]);
+    expect(q('[data-option="series.callout"]')).toBeNull();
+    controller.select({ kind: "point", seriesId: "north", index: 1 });
+    flushSync();
+    type(q<HTMLInputElement>('[data-option="series.callout"]'), "Best month");
+    expect(controller.getSeries("north")!.callouts).toEqual([null, "Best month", null]);
+    expect(q('[data-option="varyColors"]')).toBeNull();
+    controller.updateSeries("south", { hidden: true });
+    flushSync();
+    click(q('[data-option="varyColors"]'));
+    expect(controller.getSpec().varyColors).toBe(true);
+    controller.setType("pie");
+    flushSync();
+    expect(q('[data-section="annotations"]')).toBeNull();
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });

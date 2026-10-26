@@ -27,15 +27,31 @@ import {
 	CHART_STACKINGS,
 	CHART_TRENDLINE_TYPES,
 	CHART_TYPES,
-	chartColorsByCategory,
+	chartSpecColorsByCategory,
 	chartDataToTable,
 	chartSeriesColor,
 	chartSliceColor
 } from './spec.js';
-import { AXIS, CATEGORY_REF, CHART_UPDATE_PROPERTIES, FORMAT, HEIGHT, SERIES_PROPS, SERIES_REF, TRENDLINE_PROPS, VALUE, WIDTH } from './schemas.js';
+import {
+	AXIS,
+	CATEGORY_REF,
+	CHART_UPDATE_PROPERTIES,
+	FORMAT,
+	HEIGHT,
+	REFERENCE_BAND_PATCH,
+	REFERENCE_BAND_PROPS,
+	REFERENCE_INDEX,
+	REFERENCE_LINE_PATCH,
+	REFERENCE_LINE_PROPS,
+	SERIES_PROPS,
+	SERIES_REF,
+	TRENDLINE_PROPS,
+	VALUE,
+	WIDTH
+} from './schemas.js';
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
-import type { ChartSelection, ChartTrendline } from './types.js';
+import type { ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
 
@@ -94,7 +110,7 @@ function resolve<T>(result: { ok: boolean; message?: string } & T): T {
  * Agent tools for a chart editor, for a `ToolRegistry`: one tool per operation with strict
  * schemas. Reads (`get_chart`, `render_chart`, `check_chart_colors`, `recommend_chart`,
  * `get_chart_trendline`, `list_chart_presets`, `export_chart_mermaid`, `export_chart_ooxml`)
- * are always there; writes (data, series, categories, presentation, trendlines, presets,
+ * are always there; writes (data, series, categories, presentation, trendlines, reference lines and bands, callouts, highlight, presets,
  * imports, selection, pointer and key input, undo / redo) are hidden while the chart is
  * read-only. Every write is one undo step and returns what it changed.
  */
@@ -194,7 +210,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		handler: ({ colors, surface }) => {
 			const s = spec();
 			const visible = s.series.filter((x) => !x.hidden);
-			const own = chartColorsByCategory(s.type) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
+			const own = chartSpecColorsByCategory(s) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
 			return { colors: colors ?? own, ...checkChartColors(colors ?? own, { surface }) };
 		}
 	};
@@ -273,7 +289,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'update_chart',
 		title: 'Change chart presentation',
 		description:
-			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule). All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
+			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule), note, highlight, reference lines and bands (whole lists), and varyColors. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
 		inputSchema: {
 			type: 'object',
 			properties: CHART_UPDATE_PROPERTIES,
@@ -513,6 +529,91 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
+	const referenceTools = (what: 'line' | 'band') => {
+		const Kind = what === 'line' ? 'Reference line' : 'Reference band';
+		const list = (): readonly (ChartReferenceLine | ChartReferenceBand)[] => (what === 'line' ? spec().referenceLines : spec().referenceBands);
+		const listKey = what === 'line' ? 'referenceLines' : 'referenceBands';
+		const add: AgentTool = {
+			name: `add_chart_reference_${what}`,
+			title: `Add a reference ${what}`,
+			description:
+				what === 'line'
+					? 'Draws a dashed line across the plot at one value: a target, a floor, an average (bar, line, area, scatter and bubble charts). The axis grows to keep it in view. Returns its index and the reference lines.'
+					: 'Shades a band across the plot between two values: a target or normal range (bar, line, area, scatter and bubble charts), drawn under the data. The axis grows to keep it in view. Returns its index and the reference bands.',
+			inputSchema: { type: 'object', properties: what === 'line' ? REFERENCE_LINE_PROPS : REFERENCE_BAND_PROPS, required: what === 'line' ? ['value'] : ['from', 'to'], additionalProperties: false },
+			annotations: { title: `Add a reference ${what}`, ...WRITE },
+			handler: (args) => {
+				const result = resolve(what === 'line' ? controller.addReferenceLine(args as ChartReferenceLine) : controller.addReferenceBand(args as ChartReferenceBand)) as { index: number };
+				return { index: result.index, [listKey]: list() };
+			}
+		};
+		const update: AgentTool = {
+			name: `update_chart_reference_${what}`,
+			title: `Change a reference ${what}`,
+			description: `Changes a reference ${what} by index (all-or-nothing); label, axis and color take null to remove them. Returns the ${what} as stored.`,
+			inputSchema: { type: 'object', properties: { index: REFERENCE_INDEX(Kind), ...(what === 'line' ? REFERENCE_LINE_PATCH : REFERENCE_BAND_PATCH) }, required: ['index'], additionalProperties: false },
+			annotations: { title: `Change a reference ${what}`, ...WRITE_IDEMPOTENT },
+			handler: ({ index, ...patch }) => {
+				if (!Object.keys(patch).length) fail(`Nothing to change: pass at least one field besides index, e.g. {"index": ${index}, "label": "Target"}.`);
+				resolve(what === 'line' ? controller.updateReferenceLine(index, patch) : controller.updateReferenceBand(index, patch));
+				return { index, [`reference${what === 'line' ? 'Line' : 'Band'}`]: list()[index] };
+			}
+		};
+		const remove: AgentTool = {
+			name: `remove_chart_reference_${what}`,
+			title: `Delete a reference ${what}`,
+			description: `Deletes a reference ${what} by index; the ones after it move up one. Returns the reference ${what}s left.`,
+			inputSchema: { type: 'object', properties: { index: REFERENCE_INDEX(Kind) }, required: ['index'], additionalProperties: false },
+			annotations: { title: `Delete a reference ${what}`, ...DESTRUCTIVE },
+			handler: ({ index }) => {
+				resolve(what === 'line' ? controller.removeReferenceLine(index) : controller.removeReferenceBand(index));
+				return { [listKey]: list() };
+			}
+		};
+		return [add, update, remove];
+	};
+	const [addReferenceLine, updateReferenceLine, removeReferenceLine] = referenceTools('line');
+	const [addReferenceBand, updateReferenceBand, removeReferenceBand] = referenceTools('band');
+
+	const setCallout: AgentTool = {
+		name: 'set_chart_callout',
+		title: 'Pin a label to a point',
+		description:
+			'Pins a short label to one bar or point, with a leader line, to say why it matters ("Record quarter", "Launch"); label null or "" removes it. Bar, line, area, scatter and bubble charts; the point must have a value. Selects the point and returns the series id, category index and label.',
+		inputSchema: {
+			type: 'object',
+			properties: { series: SERIES_REF, category: CATEGORY_REF, label: { type: ['string', 'null'], description: 'The label (keep it to a few words), or null to remove it.' } },
+			required: ['series', 'category', 'label'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Pin a label to a point', ...WRITE_IDEMPOTENT },
+		handler: ({ series, category, label }) => {
+			const s = seriesById(series);
+			const index = categoryIndex(category);
+			resolve(controller.setCallout(s.id, index, label));
+			return { series: s.id, index, category: spec().categories[index], label: controller.getSeries(s.id)?.callouts?.[index] ?? null };
+		}
+	};
+
+	const highlight: AgentTool = {
+		name: 'highlight_chart',
+		title: 'Highlight categories or series',
+		description:
+			'Draws the named categories (labels) and series (names or ids) normally and mutes everything else, to point the reader at what matters; [] shows everything again. A point stays bright when its category or its series is named. Unknown names change nothing and are reported. Returns the category indexes and series ids that matched.',
+		inputSchema: {
+			type: 'object',
+			properties: { names: { type: 'array', items: { type: 'string' }, description: 'Category labels and / or series names or ids, exactly as get_chart shows them. [] clears the highlight.' } },
+			required: ['names'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Highlight categories or series', ...WRITE_IDEMPOTENT },
+		handler: ({ names }) => {
+			const result = resolve(controller.setHighlight(names)) as { categories: number[]; series: string[] };
+			const s = spec();
+			return { highlight: s.highlight, categories: result.categories.map((index) => ({ index, label: s.categories[index] })), series: result.series.map((id) => ({ id, name: s.series.find((x) => x.id === id)!.name })) };
+		}
+	};
+
 	const applyPreset: AgentTool = {
 		name: 'apply_chart_preset',
 		title: 'Apply a chart style',
@@ -688,13 +789,41 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	};
 
 	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, listPresets, exportMermaid, exportOoxml];
-	const writes = [updateChart, setData, setValues, addSeries, updateSeries, removeSeries, addCategory, removeCategory, importCsv, importMermaid, addTrendline, removeTrendline, applyPreset, transpose, select, drag, key, undo, redo];
+	const writes = [
+		updateChart,
+		setData,
+		setValues,
+		addSeries,
+		updateSeries,
+		removeSeries,
+		addCategory,
+		removeCategory,
+		importCsv,
+		importMermaid,
+		addTrendline,
+		removeTrendline,
+		addReferenceLine,
+		updateReferenceLine,
+		removeReferenceLine,
+		addReferenceBand,
+		updateReferenceBand,
+		removeReferenceBand,
+		setCallout,
+		highlight,
+		applyPreset,
+		transpose,
+		select,
+		drag,
+		key,
+		undo,
+		redo
+	];
 
 	return withChartPlayback({
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
-		description: 'One chart: its spec, data and values, series and categories, trendlines and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
 		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;

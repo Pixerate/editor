@@ -122,6 +122,32 @@ export interface ChartSeries {
 	errorBars?: ChartErrorBars;
 	/** Error bars along the numeric x axis (scatter charts with x values). */
 	xErrorBars?: ChartErrorBars;
+	/** A label pinned to each point that matters, one per category (null: none). Bar, line, area and scatter charts. */
+	callouts?: (string | null)[];
+}
+
+/** Which axis a reference line or band is measured on: the value axis, the secondary value axis, or the numeric x axis of a scatter or bubble chart. */
+export type ChartReferenceAxis = 'y' | 'y2' | 'x';
+
+/** A line across the plot at one value: a target, a floor, an average. */
+export interface ChartReferenceLine {
+	value: number;
+	label?: string;
+	/** Default `y`. */
+	axis?: ChartReferenceAxis;
+	/** CSS colour (default: the theme's text colour). */
+	color?: string;
+}
+
+/** A band across the plot between two values: a target range. */
+export interface ChartReferenceBand {
+	from: number;
+	to: number;
+	label?: string;
+	/** Default `y`. */
+	axis?: ChartReferenceAxis;
+	/** CSS colour (default: the theme's text colour, faint). */
+	color?: string;
 }
 
 export interface ChartNumberFormat {
@@ -230,6 +256,20 @@ export interface ChartSpec {
 	radarTicks: number | null;
 	/** Radar: rings drawn as polygons through the spokes or as circles. */
 	radarGraticule: ChartRadarGraticule;
+	/** A source or footnote, written under the chart. */
+	note: string;
+	/**
+	 * The marks the chart is about; the rest are drawn muted. Each entry names a category
+	 * (label) or a series (name or id). A point stays bright when its category or its series
+	 * is named; whole lines and areas are muted only when another series is named.
+	 */
+	highlight: string[];
+	/** Targets, floors and averages across the plot (bar, line, area, scatter and bubble charts). */
+	referenceLines: ChartReferenceLine[];
+	/** Target ranges across the plot (bar, line, area, scatter and bubble charts). */
+	referenceBands: ChartReferenceBand[];
+	/** A one-series bar, line, area or scatter chart colours each category from the palette (and the legend lists categories). */
+	varyColors: boolean;
 }
 
 /** What a click selects. */
@@ -299,6 +339,11 @@ export type ChartMarkRole =
 	| 'legend-swatch'
 	| 'legend-label'
 	| 'drag-readout'
+	| 'reference-line'
+	| 'reference-band'
+	| 'reference-label'
+	| 'callout'
+	| 'note'
 	| 'selection'
 	| 'empty';
 
@@ -385,7 +430,7 @@ export interface ChartValueScale {
 
 /** Something the layout had to leave out or shorten, as a sentence (for agents and screen readers). */
 export interface ChartWarning {
-	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback';
+	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback' | 'annotations-skipped' | 'highlight-unmatched';
 	message: string;
 }
 

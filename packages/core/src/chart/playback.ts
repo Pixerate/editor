@@ -71,6 +71,19 @@ export function planChartToolPlayback(tool: string, args: Record<string, any>): 
 		case 'add_chart_trendline':
 		case 'remove_chart_trendline':
 			return click(control('trendline.add'));
+		case 'add_chart_reference_line':
+		case 'update_chart_reference_line':
+		case 'remove_chart_reference_line':
+			return click(control('referenceLine.add'));
+		case 'add_chart_reference_band':
+		case 'update_chart_reference_band':
+		case 'remove_chart_reference_band':
+			return click(control('referenceBand.add'));
+		case 'set_chart_callout':
+			if (typeof args.series === 'string' && (typeof args.category === 'string' || typeof args.category === 'number')) return [...click(chartPointRef(args.series, args.category)), ...click(control('series.callout'))];
+			return click(control('series.callout'));
+		case 'highlight_chart':
+			return click(control('highlight'));
 		case 'render_chart':
 			return [{ type: 'target', ref: { kind: 'action', id: 'download-png' } }];
 		case 'undo_chart':
