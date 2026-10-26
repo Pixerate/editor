@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from "vitest";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
 import { createMemoryStorage, toEditorDocumentFile } from "@pixerate/editor/persistence";
 import { createEditorAutosave } from "../src/persistence";
-import { createMermaidDiagram } from "../src/canvas";
+import { createCanvasDocument, createMermaidDiagram } from "../src/canvas";
+import { HistoryManager } from "@pixerate/editor/history";
+import { flushSync } from "svelte";
 import { createChartEditor } from "../src/chart";
 import { createAnimationEditor } from "../src/animation-editor";
 import { createVideoEditor } from "../src/video-editor";
@@ -93,5 +95,35 @@ describe("phase 3 runes expose editorDocument", () => {
     sheet.editorDocument.loadDocument(workbook, { history: "record" });
     expect(sheet.editorDocument.history.getState().canUndo).toBe(true);
     expect(sheet.editorDocument.history.undo()).toBe(true);
+  });
+});
+
+describe("createCanvasDocument", () => {
+  it("counts finished moves, not selection or drag frames", () => {
+    let nodes = $state<any[]>([{ id: "a", position: { x: 0, y: 0 }, data: {} }]);
+    const history = new HistoryManager();
+    const doc = createCanvasDocument({
+      getNodes: () => nodes,
+      setNodes: (next) => void (nodes = next),
+      getEdges: () => [],
+      setEdges: () => {},
+      history,
+    });
+    cleanup.push(() => doc.destroy());
+    flushSync();
+    let changes = 0;
+    doc.subscribe(() => changes++);
+    nodes = [{ ...nodes[0], selected: true }];
+    flushSync();
+    nodes = [{ id: "a", position: { x: 5, y: 0 }, data: {}, dragging: true }];
+    flushSync();
+    expect(changes).toBe(0);
+    nodes = [{ id: "a", position: { x: 9, y: 0 }, data: {} }];
+    flushSync();
+    expect(changes).toBe(1);
+    doc.loadDocument({ nodes: [{ id: "b", position: { x: 1, y: 1 }, data: {} }], edges: [] }, { history: "record" });
+    expect(nodes.map((n) => n.id)).toEqual(["b"]);
+    history.undo();
+    expect(nodes.map((n) => n.id)).toEqual(["a"]);
   });
 });

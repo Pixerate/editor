@@ -44,7 +44,8 @@ import { TokenStore, createTokensEditorDocument } from '../src/tokens';
 import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
 import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
-import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { HistoryManager } from '../src/history';
 import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
@@ -129,7 +130,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createShapeCommands(stub)),
 			...commandIds(createDrawCommands(stub)),
 			...commandIds(createComponentCommands(stub)),
-			...commandIds(createCanvasAnimationCommands(stub))
+			...commandIds(createCanvasAnimationCommands(stub)),
+			...toolNames(createDocumentToolProvider(createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), { store: documentStore() }))
 		],
 		'pixerate-vector': [...commandIds(createVectorCommands(new VectorEditorController())), ...toolNames(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects' })), ...toolNames(createVectorGenerationToolProvider(new VectorEditorController(), { models: [], generate: () => ({ svg: '' }) })), ...toolNames(createDocumentToolProvider(createVectorEditorDocument(new VectorEditorController()), { store: documentStore() }))],
 		'pixerate-chart': [
@@ -214,7 +216,7 @@ const FACTORIES: Record<string, string> = {
 	createDiagramToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
 	createDocumentToolProvider:
-		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens',
+		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',

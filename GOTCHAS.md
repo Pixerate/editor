@@ -1177,6 +1177,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `editor.commands.setContent` is an ordinary transaction, so the history plugin records it. TipTap 2 has no command that clears the undo history.
 - **Solution / Workaround**: `createRichTextEditorDocument` applies `setContent(doc, true)` (so `update` listeners and the UI hear about it), then, for `history: "reset"`, swaps in `EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins })` with `editor.view.updateState`. Every plugin's state starts fresh from the new document, which is what opening a file means. Agent loads (`history: "record"`) skip the swap, so they stay one undo step.
 
+### [core/canvas] React Flow Drags Bypass History, and the Drop Lands After `onNodeDragStop`
+
+- **Issue / Symptom**: Dragging a node on the canvas could not be undone, and a canvas `EditorDocument` built only on the `HistoryManager` never noticed the move, so autosave wrote nothing.
+- **Root Cause**: React Flow (and Svelte Flow) apply drag positions through `onNodesChange` straight into host state; nothing records a history step. When the drop's final position arrives, React has not re-rendered yet inside `onNodeDragStop`, so state read there is one frame stale.
+- **Solution / Workaround**: `createCanvasGestureRecorder({ getNodes, setNodes, getEdges, setEdges, history })`: call `begin()` in `onNodeDragStart` and `end("Move")` a frame after `onNodeDragStop` (`requestAnimationFrame`), reading nodes through a ref. It records one undo step only when something other than selection or measurement changed. For change events without history, `useCanvasEditorDocument` / `createCanvasDocument` compare the nodes and edges without runtime fields, and skip frames where a node is still `dragging`.
+
 ### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
 
 - **Issue / Symptom**: Under `<React.StrictMode>`, `useMermaidDiagram().editorDocument` stopped counting changes after mount, so autosave never wrote a snapshot.

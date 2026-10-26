@@ -27,7 +27,7 @@ import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../
 import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
 import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
-import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
@@ -230,7 +230,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			[createVectorEditorDocument(new VectorEditorController()), 'pixerate-vector'],
 			[createSpreadsheetEditorDocument(sheet), 'pixerate-spreadsheet'],
 			[createRichTextEditorDocument(editor), 'pixerate-rich-text'],
-			[createTokensEditorDocument(new TokenStore()), 'pixerate-tokens']
+			[createTokensEditorDocument(new TokenStore()), 'pixerate-tokens'],
+			[createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), 'pixerate-canvas']
 		] as const) {
 			registry.register(createDocumentToolProvider(doc, { namespace: `${doc.kind}doc`, skill, store: createEditorDocumentStore({ storage: createMemoryStorage() }) }));
 		}

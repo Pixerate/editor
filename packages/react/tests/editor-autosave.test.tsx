@@ -5,7 +5,9 @@ import { createRoot } from "react-dom/client";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
 import { createMemoryStorage, toEditorDocumentFile, type EditorDocument, type MemoryStorage } from "@pixerate/editor/persistence";
 import { useEditorAutosave, type UseEditorAutosaveResult } from "../src/persistence";
-import { useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
+import { useCanvasEditorDocument, useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
+import { HistoryManager } from "@pixerate/editor/history";
+import type { CanvasNode } from "@pixerate/editor/canvas";
 import { useChartEditor } from "../src/chart";
 import { useAnimationEditor } from "../src/animation-editor";
 import { useVideoEditor } from "../src/video-editor";
@@ -145,6 +147,35 @@ describe("phase 3 hooks expose editorDocument", () => {
     await act(async () => void doc.loadDocument({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Bye" }] }] }, { history: "record" }));
     expect(seen.length).toBeGreaterThan(0);
     expect(JSON.stringify(doc.getDocument())).toContain("Bye");
+    off();
+  });
+});
+
+describe("useCanvasEditorDocument", () => {
+  it("counts finished moves, not selection or drag frames", async () => {
+    const history = new HistoryManager();
+    let setNodes!: (nodes: CanvasNode[]) => void;
+    let doc!: EditorDocument;
+    const Probe = () => {
+      const [nodes, set] = React.useState<CanvasNode[]>([{ id: "a", position: { x: 0, y: 0 }, data: {} }]);
+      setNodes = set;
+      doc = useCanvasEditorDocument({ nodes, edges: [], setNodes: set, setEdges: () => {}, history });
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    let changes = 0;
+    const off = doc.subscribe(() => changes++);
+    await act(async () => setNodes([{ id: "a", position: { x: 0, y: 0 }, data: {}, selected: true }]));
+    await act(async () => setNodes([{ id: "a", position: { x: 5, y: 0 }, data: {}, dragging: true } as CanvasNode]));
+    expect(changes).toBe(0);
+    await act(async () => setNodes([{ id: "a", position: { x: 9, y: 0 }, data: {} }]));
+    expect(changes).toBe(1);
+    expect((doc.getDocument() as any).nodes[0].position).toEqual({ x: 9, y: 0 });
+    // A recorded load goes through the shared history and lands in React state.
+    await act(async () => void doc.loadDocument({ nodes: [{ id: "b", position: { x: 1, y: 1 }, data: {} }], edges: [] }, { history: "record" }));
+    expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["b"]);
+    await act(async () => void history.undo());
+    expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["a"]);
     off();
   });
 });
