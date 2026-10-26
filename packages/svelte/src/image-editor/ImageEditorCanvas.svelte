@@ -17,6 +17,8 @@
     pointerPressure,
     FreeTransformTool,
     getViewportProjection,
+    measureCanvasViewport,
+    watchCanvasViewport,
     ShapeDrawGesture,
     TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -117,6 +119,11 @@
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
   let rootEl = $state<HTMLDivElement | null>(null);
+  /**
+   * The viewport in CSS pixels as last rendered. The backing store is larger (device pixel ratio,
+   * CSS transforms), so pointer mapping and the projection use this, never `canvasEl.width`.
+   */
+  let view = { width: 0, height: 0 };
   const report = (source: ImageEditorCanvasErrorSource, message: string | null) => onerror?.(source, message);
 
   // Agent playback: the agent's cursor in document pixels, drawn over the canvas without clipping so
@@ -125,19 +132,19 @@
   const playing = $derived((playback === undefined ? ambientPlayback : playback) ?? null);
   /** Document pixels → pixels in the canvas root, through the canvas projection. */
   const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
-    if (!canvasEl || !rootEl || !canvasEl.width) return p;
+    if (!canvasEl || !rootEl || !view.width) return p;
     const r = canvasEl.getBoundingClientRect();
     const box = rootEl.getBoundingClientRect();
-    const c = imageToCanvasPoint(p, editor.controller.getState(), canvasEl.width, canvasEl.height, mode === 'crop');
-    return { x: r.left - box.left + (c.x * r.width) / canvasEl.width, y: r.top - box.top + (c.y * r.height) / canvasEl.height };
+    const c = imageToCanvasPoint(p, editor.controller.getState(), view.width, view.height, mode === 'crop');
+    return { x: r.left - box.left + (c.x * r.width) / view.width, y: r.top - box.top + (c.y * r.height) / view.height };
   };
   /** Viewport (client) pixels → document pixels. */
   const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
-    if (!canvasEl || !canvasEl.width) return p;
+    if (!canvasEl || !view.width) return p;
     const r = canvasEl.getBoundingClientRect();
-    const sx = r.width > 0 ? canvasEl.width / r.width : 1;
-    const sy = r.height > 0 ? canvasEl.height / r.height : 1;
-    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, editor.controller.getState(), canvasEl.width, canvasEl.height, mode === 'crop');
+    const sx = r.width > 0 ? view.width / r.width : 1;
+    const sy = r.height > 0 ? view.height / r.height : 1;
+    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, editor.controller.getState(), view.width, view.height, mode === 'crop');
   };
   /** A client box as a rectangle in document pixels. */
   const clientRect = (r: DOMRect | null | undefined): PlaybackRect | null => {
@@ -274,12 +281,12 @@
   /** The document point of a pointer event and the hit tolerance (6 screen px). */
   function transformPoint(e: PointerEvent) {
     const rect = canvasEl!.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
+    const sx = rect.width > 0 ? view.width / rect.width : 1;
+    const sy = rect.height > 0 ? view.height / rect.height : 1;
     const s = editor.controller.getState();
     const cropping = mode === 'crop';
-    const projection = getViewportProjection(s, canvasEl!.width, canvasEl!.height, cropping);
-    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, cropping);
+    const projection = getViewportProjection(s, view.width, view.height, cropping);
+    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, view.width, view.height, cropping);
     transformTool.setView(projection.scale);
     return { pt, tolerance: 6 / (projection.scale || 1) };
   }
@@ -358,12 +365,13 @@
 
   async function renderCanvas(overrideAnnotation?: Annotation | null, overrideCrop?: CropBox | null) {
     if (!canvasEl || !containerEl) return;
-    const vpWidth = containerEl.clientWidth || 800;
-    const vpHeight = containerEl.clientHeight || 500;
+    const viewport = measureCanvasViewport(containerEl);
+    view = { width: viewport.width, height: viewport.height };
 
     await editor.controller.render(canvasEl, {
-      viewportWidth: vpWidth,
-      viewportHeight: vpHeight,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      pixelRatio: viewport.pixelRatio,
       fit,
       showCropOverlay: mode === 'crop',
       showSelectionOverlay: true,
@@ -385,11 +393,11 @@
     const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
     const list = events.length ? events : [e];
     const rect = canvasEl!.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvasEl!.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvasEl!.height / rect.height : 1;
+    const sx = rect.width > 0 ? view.width / rect.width : 1;
+    const sy = rect.height > 0 ? view.height / rect.height : 1;
     const s = editor.controller.getState();
     return list.map((ev) => ({
-      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvasEl!.width, canvasEl!.height, false),
+      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, view.width, view.height, false),
       pressure: pointerPressure(ev),
     }));
   }
@@ -450,24 +458,17 @@
 
   $effect(() => {
     if (!containerEl) return;
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        renderCanvas();
-      });
-      observer.observe(containerEl);
-      return () => observer.disconnect();
-    } else {
-      const handleResize = () => renderCanvas();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
+    const { width, height } = measureCanvasViewport(containerEl);
+    view = { width, height };
+    // Re-render when the layout size, the device pixel ratio or a host's CSS transform scale changes.
+    return watchCanvasViewport(containerEl, () => renderCanvas());
   });
 
   function getCanvasEventPoint(e: MouseEvent): ImagePoint {
     if (!canvasEl) return { x: 0, y: 0 };
     const rect = canvasEl.getBoundingClientRect();
-    const scaleX = rect.width > 0 ? canvasEl.width / rect.width : 1;
-    const scaleY = rect.height > 0 ? canvasEl.height / rect.height : 1;
+    const scaleX = rect.width > 0 ? view.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? view.height / rect.height : 1;
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -480,7 +481,7 @@
 
     if (mode === 'select') {
       const gesture = selectionGesture;
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
       void gesture.begin(imgPt, e).then(() => report('select', gesture.error));
       return;
     }
@@ -492,8 +493,8 @@
         width: editor.state.imageDimensions.width,
         height: editor.state.imageDimensions.height,
       };
-      const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
-      const startImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, true);
+      const handle = hitTestCrop(canvasPt, editor.state, view.width, view.height, 14, activeCrop);
+      const startImgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, true);
 
       if (handle) {
         cropDragInfo = {
@@ -515,7 +516,7 @@
     }
 
     if (mode === 'annotate' && (editor.state.activeTool === 'shape' || editor.state.activeTool === 'type')) {
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
       report(editor.state.activeTool, null);
       if (editor.state.activeTool === 'shape') shapeGesture.down(imgPt);
       else {
@@ -527,7 +528,7 @@
     }
 
     if (mode === 'annotate') {
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
       dragStartPoint = imgPt;
 
       if (editor.state.activeTool === 'select') {
@@ -571,7 +572,7 @@
 
     if (mode === 'select') {
       const gesture = selectionGesture;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false))) {
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false))) {
         selectionDraft = gesture.draftPath;
         renderCanvas();
       }
@@ -580,7 +581,7 @@
 
     if (mode === 'crop') {
       if (cropDragInfo) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, true);
+        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, true);
         let newCrop: CropBox;
 
         if (cropDragInfo.handle === 'new') {
@@ -616,7 +617,7 @@
           width: editor.state.imageDimensions.width,
           height: editor.state.imageDimensions.height,
         };
-        const handle = hitTestCrop(canvasPt, editor.state, canvasEl.width, canvasEl.height, 14, activeCrop);
+        const handle = hitTestCrop(canvasPt, editor.state, view.width, view.height, 14, activeCrop);
         canvasEl.style.cursor = getCropCursor(handle, editor.state.transform);
       }
       return;
@@ -624,7 +625,7 @@
 
     if (mode === 'annotate' && editor.state.activeTool === 'shape') {
       if (shapeGesture.active) {
-        shapeGesture.move(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), { shift: e.shiftKey, alt: e.altKey });
+        shapeGesture.move(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), { shift: e.shiftKey, alt: e.altKey });
         if (shapeGesture.error) report('shape', shapeGesture.error);
       }
       return;
@@ -632,7 +633,7 @@
 
     if (mode === 'annotate') {
       if (annotationDragInfo) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
         const dx = currentImgPt.x - annotationDragInfo.startImgPt.x;
         const dy = currentImgPt.y - annotationDragInfo.startImgPt.y;
         editor.updateAnnotation(annotationDragInfo.annId, {
@@ -644,7 +645,7 @@
 
       if (!dragStartPoint) {
         if (editor.state.activeTool === 'select') {
-          const imgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+          const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
           let hovered = false;
           for (let i = editor.state.annotations.length - 1; i >= 0; i--) {
             if (hitTestAnnotation(imgPt, editor.state.annotations[i])) {
@@ -659,7 +660,7 @@
         return;
       }
 
-      const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+      const currentImgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
       const stroke = { strokeColor: annotationColor, strokeWidth: annotationWidth };
 
       if (editor.state.activeTool === 'pen' && isDrawing) {
@@ -718,7 +719,7 @@
     if (mode === 'select') {
       const gesture = selectionGesture;
       if (gesture.active) {
-        gesture.end(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false), e);
+        gesture.end(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), e);
         selectionDraft = null;
         renderCanvas();
       }
@@ -742,7 +743,7 @@
       return;
     }
     if (mode === 'annotate' && editor.state.activeTool === 'type') {
-      typeTool.up(canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false));
+      typeTool.up(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false));
       typeSession = typeTool.session;
       if (typeTool.error) report('type', typeTool.error);
       void renderCanvas();
@@ -758,7 +759,7 @@
       }
 
       if (dragStartPoint) {
-        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, canvasEl.width, canvasEl.height, false);
+        const currentImgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
         const stroke = { strokeColor: annotationColor, strokeWidth: annotationWidth };
 
         if (editor.state.activeTool === 'pen' && isDrawing) {
@@ -833,7 +834,7 @@
       onpointerup={handlePaintPointerUp}
       onpointercancel={() => paintGesture.cancel()}
       data-testid="image-editor-canvas"
-      style={transformActive ? `cursor: ${transformCursor}` : undefined}
+      style="width: 100%; height: 100%;{transformActive ? ` cursor: ${transformCursor};` : ''}"
       class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
     ></canvas>
     {#if typeSession}

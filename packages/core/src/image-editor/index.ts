@@ -4,6 +4,7 @@ export * from './color';
 export * from './renderer';
 export * from './controller';
 export * from './geometry';
+export * from './canvas-viewport';
 export * from './document';
 export * from './blend';
 export * from './adjustment-layers';

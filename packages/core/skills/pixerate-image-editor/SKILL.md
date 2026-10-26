@@ -57,9 +57,9 @@ batching.
 
 ### Working with layers
 
-1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background;
-   documents made elsewhere may have pixel layers, groups and masks. Note which layer is
-   `active`: `set_adjustments` base controls edit the active pixel layer's `develop` filter.
+1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background
+   (active); others may have pixel layers, groups and masks. Note which layer is `active`:
+   `set_adjustments` base controls edit the active pixel layer's `develop` filter.
 2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
    `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
    risky change. Name layers by intent.
@@ -151,8 +151,8 @@ drawing or editing either.
 
 ### Painting
 
-1. **Paint on its own layer** (`add_pixel_layer`), never on the Background, unless asked: a
-   layer can be faded, masked, blended or deleted later. Painting the Background bakes it.
+1. **Paint on its own layer** (`add_pixel_layer`), not on the Background (active on a new image, so
+   strokes without `layerId` land there) unless asked: a layer can be faded, masked or deleted.
 2. **Retouch through masks**: to hide part of a layer, add a mask and paint black on it
    (`paint_stroke` with `channel: "mask"`, `color: "#000000"`); paint white to bring it back.
    A soft brush (`hardness` 0..0.3) gives soft transitions.
@@ -323,7 +323,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels`, `mask`, or a smart object's `filter-mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
 | `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
 | `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
-| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Returns the remaining top-level ids. |
+| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Deleting the active layer makes the nearest paintable pixel layer below it active. Returns the remaining top-level ids and the new `activeLayerId`. |
 | `move_layer` | Reorder: give exactly one of `aboveId`, `belowId`, `parentId` (into a group, optional `index`) or `index` alone. Returns the new `parentId` and `index`. |
 | `set_layer_properties` | Change `name`, `visible`, `opacity`, `fillOpacity`, `blend` (`pass-through` for groups), `clipped`, `locks` or `collapsed`. Only given fields change. Returns the layer. |
 | `group_layers` | Put sibling layers (`layerIds`) into a new pass-through group at the topmost one's position. Returns the group and its children. |

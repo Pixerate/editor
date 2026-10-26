@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FreeTransformOptionsBar, ImageEditor, LayersPanel, useImageEditor } from '../src/image-editor';
-import { FreeTransformTool, ImageEditorController, imageToCanvasPoint } from '@pixerate/editor/image-editor';
+import { DEFAULT_CANVAS_VIEWPORT, FreeTransformTool, ImageEditorController, imageToCanvasPoint } from '@pixerate/editor/image-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -109,8 +109,9 @@ describe('React Free Transform', () => {
     const canvas = container.querySelector('[data-testid="image-editor-canvas"]') as HTMLCanvasElement;
     const s = c.getState();
     const before = c.getLayerBounds(id)!;
-    const se = imageToCanvasPoint({ x: before.x + before.width, y: before.y + before.height }, s, canvas.width, canvas.height, false);
-    const to = imageToCanvasPoint({ x: before.x + before.width * 2, y: before.y + before.height * 2 }, s, canvas.width, canvas.height, false);
+    // jsdom has no layout: the canvas projects through the fallback viewport and maps client pixels 1:1.
+    const se = imageToCanvasPoint({ x: before.x + before.width, y: before.y + before.height }, s, DEFAULT_CANVAS_VIEWPORT.width, DEFAULT_CANVAS_VIEWPORT.height, false);
+    const to = imageToCanvasPoint({ x: before.x + before.width * 2, y: before.y + before.height * 2 }, s, DEFAULT_CANVAS_VIEWPORT.width, DEFAULT_CANVAS_VIEWPORT.height, false);
     await act(async () => {
       canvas.dispatchEvent(pointer('pointerdown', se.x, se.y));
       canvas.dispatchEvent(pointer('pointermove', to.x, to.y));

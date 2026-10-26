@@ -16,7 +16,7 @@ import {
   rgbUnitToHex,
   setRetouchChoice,
 } from '@pixerate/editor/image-editor';
-import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
+import { DEFAULT_PAINT_GRADIENT, userErrorMessage } from '@pixerate/editor/image-editor';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
 import { imageChipClass, imageColorInputClass } from './styles';
@@ -51,7 +51,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
       setError(null);
       fn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(userErrorMessage(err));
     }
   };
 

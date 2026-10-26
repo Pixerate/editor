@@ -977,6 +977,36 @@ describe('Image editor geometry - canonical natural-image space', () => {
     expect(border.args[1]).toBeCloseTo(600, 6);
   });
 
+  it('renderer sizes the backing store by pixelRatio and draws in CSS pixels through a base scale', async () => {
+    const renderer = new ImageEditorRenderer();
+    const controller = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: false, flipV: false } } });
+    controller.setCrop({ x: 0, y: 0, width: 400, height: 600 });
+    const { ctx, calls } = makeRecordingCtx({ setTransform: (...args: number[]) => calls.push({ name: 'setTransform', args } as Call) });
+    const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    await renderer.renderToCanvas(target, fakeImage('', 800, 600), controller.getState(), {
+      viewportWidth: VP,
+      viewportHeight: VP,
+      pixelRatio: 2.5,
+      showCropOverlay: true,
+    });
+    expect(target.width).toBe(VP * 2.5);
+    expect(target.height).toBe(VP * 2.5);
+    expect(calls.find((c) => c.name === 'setTransform')!.args).toEqual([2.5, 0, 0, 2.5, 0, 0]);
+    expect(calls.find((c) => c.name === 'clearRect')!.args).toEqual([0, 0, VP, VP]);
+    // Overlays keep their CSS-pixel geometry: the same crop border as at pixel ratio 1.
+    const border = calls.find((c) => c.name === 'strokeRect')!;
+    expect(border.args.map((v: number) => Math.round(v))).toEqual([700, 600, 600, 400]);
+  });
+
+  it('renderer keeps a 1:1 backing store without pixelRatio', async () => {
+    const renderer = new ImageEditorRenderer();
+    const { ctx, calls } = makeRecordingCtx({ setTransform: (...args: number[]) => calls.push({ name: 'setTransform', args } as Call) });
+    const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    await renderer.renderToCanvas(target, fakeImage('', 800, 600), new ImageEditorController().getState(), { viewportWidth: 640, viewportHeight: 480 });
+    expect([target.width, target.height]).toEqual([640, 480]);
+    expect(calls.some((c) => c.name === 'setTransform')).toBe(false);
+  });
+
   it('hit-tests crop handles in screen orientation and reports image-space handles', () => {
     const crop = { x: 200, y: 150, width: 400, height: 300 };
     const flipped = new ImageEditorController({ initialState: { transform: { rotate: 0, flipH: true, flipV: false }, crop } }).getState();

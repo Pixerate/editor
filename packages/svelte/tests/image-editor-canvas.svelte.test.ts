@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import { FreeTransformTool, createImageEditorToolProvider } from '@pixerate/editor/image-editor';
+import { FreeTransformTool, createImageEditorToolProvider, imageToCanvasPoint } from '@pixerate/editor/image-editor';
 import { ToolRegistry, createAgentPlayback, createInstantPresenceClock, type PlaybackRef } from '@pixerate/editor/tools';
 import { ImageEditorCanvas, createReactiveImageEditor } from '../src/image-editor';
 
@@ -67,14 +67,90 @@ describe('ImageEditorCanvas (Svelte)', () => {
     expect(c.getLayerBounds(id)).not.toBeNull();
   });
 
-  it('reports gesture errors through onerror', () => {
+  it('paints a freshly loaded image without picking a layer first', () => {
     const errors: Array<[string, string | null]> = [];
     const { c } = setup({ mode: 'paint', onerror: (source: string, message: string | null) => errors.push([source, message]) });
+    expect(c.getState().activeLayerId).toBe('background');
+    c.setTool('brush');
+    flushSync();
+    canvas().dispatchEvent(pointer('pointerdown', 120, 70));
+    canvas().dispatchEvent(pointer('pointermove', 150, 75));
+    canvas().dispatchEvent(pointer('pointerup', 150, 75));
+    expect(errors.every(([, message]) => message === null)).toBe(true);
+    expect(c.getLayer('background')).not.toHaveProperty('source');
+  });
+
+  it('reports gesture errors through onerror, written for a person', () => {
+    const errors: Array<[string, string | null]> = [];
+    const { c } = setup({ mode: 'paint', onerror: (source: string, message: string | null) => errors.push([source, message]) });
+    c.removeLayer('background');
+    c.setTool('brush');
+    flushSync();
+    canvas().dispatchEvent(pointer('pointerdown', 50, 50));
+    expect(errors.at(-1)).toEqual(['paint', 'Pick a layer to paint on in the Layers panel.']);
     c.setTool('move');
     flushSync();
     canvas().dispatchEvent(pointer('pointerdown', 50, 50));
-    expect(errors.at(-1)?.[0]).toBe('paint');
-    expect(errors.at(-1)?.[1]).toMatch(/layer/i);
+    expect(errors.at(-1)).toEqual(['paint', 'Select a layer to move in the Layers panel.']);
+  });
+
+  describe('under a host CSS transform', () => {
+    // A 220 × 110 node scaled to 500px wide on screen, as a host's expanded view does.
+    const W = 220;
+    const H = 110;
+    const SCALE = 500 / W;
+    const LEFT = 10;
+    const TOP = 20;
+    const restores: Array<() => void> = [];
+    beforeEach(() => {
+      for (const [key, value] of [['clientWidth', W], ['offsetWidth', W], ['clientHeight', H], ['offsetHeight', H]] as const) {
+        const own = Object.getOwnPropertyDescriptor(HTMLElement.prototype, key);
+        Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get: () => value });
+        restores.push(() => (own ? Object.defineProperty(HTMLElement.prototype, key, own) : delete (HTMLElement.prototype as any)[key]));
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = () =>
+        ({ left: LEFT, top: TOP, x: LEFT, y: TOP, width: W * SCALE, height: H * SCALE, right: LEFT + W * SCALE, bottom: TOP + H * SCALE }) as DOMRect;
+      restores.push(() => (Element.prototype.getBoundingClientRect = rect));
+    });
+    afterEach(() => restores.splice(0).forEach((r) => r()));
+    /** The client point where the canvas shows document point `p` (CSS-pixel projection, then the transform). */
+    const client = (c: { getState(): any }, p: { x: number; y: number }, cropping = false) => {
+      const q = imageToCanvasPoint(p, c.getState(), W, H, cropping);
+      return { x: LEFT + q.x * SCALE, y: TOP + q.y * SCALE };
+    };
+
+    it('paints where the pointer is (pointer events)', () => {
+      const { c } = setup({ mode: 'paint' });
+      const id = c.addPixelLayer();
+      c.setTool('brush');
+      c.setPaintOptions({ brush: { size: 4, hardness: 1 } });
+      flushSync();
+      const a = client(c, { x: 140, y: 75 });
+      const b = client(c, { x: 160, y: 75 });
+      canvas().dispatchEvent(pointer('pointerdown', a.x, a.y));
+      canvas().dispatchEvent(pointer('pointermove', b.x, b.y));
+      canvas().dispatchEvent(pointer('pointerup', b.x, b.y));
+      const bounds = c.getLayerBounds(id)!;
+      expect(bounds.x + bounds.width / 2).toBeCloseTo(150, 0);
+      expect(bounds.y + bounds.height / 2).toBeCloseTo(75, 0);
+      expect(bounds.width).toBeLessThan(30);
+    });
+
+    it('drags the crop handle where the mouse is (mouse events)', () => {
+      const { c } = setup({ mode: 'crop' });
+      c.setTool('crop');
+      flushSync();
+      const from = client(c, { x: 300, y: 150 }, true);
+      const to = client(c, { x: 200, y: 100 }, true);
+      canvas().dispatchEvent(pointer('mousedown', from.x, from.y));
+      canvas().dispatchEvent(pointer('mousemove', to.x, to.y));
+      canvas().dispatchEvent(pointer('mouseup', to.x, to.y));
+      const crop = c.getState().crop!;
+      expect(crop.x).toBeCloseTo(0, 0);
+      expect(Math.abs(crop.width - 200)).toBeLessThanOrEqual(2);
+      expect(Math.abs(crop.height - 100)).toBeLessThanOrEqual(2);
+    });
   });
 
   it('crops in crop mode', () => {
