@@ -27,3 +27,4 @@ export * from './office-files.js';
 export * from './file-tools.js';
 export * from './playback.js';
 export * from './editorDocument.js';
+export * from './style.js';

@@ -3,6 +3,7 @@ import type { McpToolDefinition, McpToolResult, ToolSource, ToolsetInfo } from "
 import { Bot, Play, Plug } from "lucide-react";
 import { useToolBridge, useToolRegistryView } from "@pixerate/editor-react";
 import { demoSkillFiles, demoToolRegistry } from "../agentTools";
+import { demoStyles } from "../houseStyles";
 
 /** Example arguments for a tool, so "Call" works without typing JSON. */
 const EXAMPLE_ARGS: Record<string, Record<string, unknown>> = {
@@ -79,7 +80,7 @@ const BridgeConnect: React.FC<{ source: ToolSource }> = ({ source }) => {
 export const AgentToolsPanel: React.FC = () => {
   // Discovery: the agent (and the bridge) see only the discovery tools until they enable more.
   const [discovery, setDiscovery] = useState(false);
-  const viewOptions = useMemo(() => (discovery ? { discovery: { skills: demoSkillFiles } } : {}), [discovery]);
+  const viewOptions = useMemo(() => (discovery ? { discovery: { skills: demoSkillFiles, styles: demoStyles } } : {}), [discovery]);
   const view = useToolRegistryView(demoToolRegistry, viewOptions);
   const source: ToolSource = view ?? demoToolRegistry;
   const [tools, setTools] = useState<McpToolDefinition[]>(

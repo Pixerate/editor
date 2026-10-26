@@ -10,3 +10,4 @@ export * from './store.js';
 export * from './css.js';
 export * from './w3c.js';
 export * from './editorDocument.js';
+export * from './style.js';

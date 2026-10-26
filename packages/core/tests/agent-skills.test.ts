@@ -14,7 +14,7 @@ import { JSDOM } from 'jsdom';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Editor } from '@tiptap/core';
-import { TOOL_DISCOVERY_TOOLS, createAgentPlayback, createPlaybackToolProvider } from '../src/tools';
+import { TOOL_DISCOVERY_TOOLS, createAgentPlayback, createPlaybackToolProvider, createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
 import {
 	ToolRegistry,
 	baseToolName,
@@ -40,9 +40,9 @@ import { ImageEditorController, createImageEditorDocument, createImageEditorTool
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
-import { TokenStore, createTokensEditorDocument } from '../src/tokens';
+import { TokenStore, createTokensEditorDocument, createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
 import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
-import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
+import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands, createChartStyleToolProvider, chartStyleDomain } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { HistoryManager } from '../src/history';
@@ -99,6 +99,7 @@ function expectedBySkill(): Record<string, string[]> {
 		captureView: () => ({ data: '', mimeType: 'image/png' })
 	});
 	const shared = ['get_editor_state', 'view_editor'];
+	const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain] });
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
@@ -107,7 +108,8 @@ function expectedBySkill(): Record<string, string[]> {
 			// Added by discovery views (`registry.view({ discovery })`), not by a provider.
 			...TOOL_DISCOVERY_TOOLS,
 			...commandIds(createHistoryCommands(stub)),
-			...toolNames(createPlaybackToolProvider(createAgentPlayback()))
+			...toolNames(createPlaybackToolProvider(createAgentPlayback())),
+			...toolNames(createStyleToolProvider(styles))
 		],
 		'pixerate-rich-text': [
 			...toolNames(createRichTextToolProvider(doc, { id: 'doc' })),
@@ -138,6 +140,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createChartToolProvider(new ChartController(), { id: 'chart' })),
 			...toolNames(createOfficeChartToolProvider({ id: 'office', files: () => [], controller: new ChartController() })),
 			...commandIds(createChartCommands(new ChartController())),
+			...toolNames(createChartStyleToolProvider(new ChartController(), styles)),
 			...toolNames(createDocumentToolProvider(createChartEditorDocument(new ChartController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-diagram': [
@@ -169,7 +172,10 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
 		],
-		'pixerate-tokens': toolNames(createDocumentToolProvider(createTokensEditorDocument(new TokenStore()), { store: documentStore() })),
+		'pixerate-tokens': [
+			...toolNames(createDocumentToolProvider(createTokensEditorDocument(new TokenStore()), { store: documentStore() })),
+			...toolNames(createTokensStyleToolProvider(new TokenStore(), styles))
+		],
 		'pixerate-parameters': [
 			...commandIds(createParameterCommands(stub)),
 			// parameters.undo / parameters.redo are commands, so the document tools leave undo out.
@@ -215,6 +221,9 @@ const FACTORIES: Record<string, string> = {
 	createChartToolProvider: 'pixerate-chart',
 	createOfficeChartToolProvider: 'pixerate-chart',
 	createChartCommands: 'pixerate-chart',
+	createChartStyleToolProvider: 'pixerate-chart',
+	createTokensStyleToolProvider: 'pixerate-tokens',
+	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',
 	// The shared document tools (get / load / undo / redo / save / open), named per editor kind.
 	createDocumentToolProvider:

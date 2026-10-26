@@ -22,6 +22,9 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 
 ## Working method
 
+0. **House style.** When the host has one (`list_toolsets` shows a `style` field on the chart
+   toolset), call `get_style` with `domain: "chart"` first and start from its palette and
+   defaults.
 1. **Read.** `get_chart` returns the spec, the data as a table, the selection and a
    summary at the given size (default 640 x 400): per-series min / max / mean / trend, the
    axes as drawn, layout warnings, a colour check and a plain-language description. If the
@@ -35,8 +38,9 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
    `update_chart`; it is all-or-nothing and one undo step. Use `apply_chart_preset` for a
    coherent layout or colour scheme, `update_chart_series` for per-series settings.
 5. **Check.** Read the `warnings` that `get_chart` and `render_chart` return (hidden or
-   thinned labels, crowded legend, skipped values) and run `check_chart_colors`. Fix every
-   problem.
+   thinned labels, crowded legend, skipped values) and run `check_chart_colors`. With a house
+   style, also run `check_chart_style` and fix each finding with `update_chart_series` or
+   `update_chart` (its `target` names the series or point). Fix every problem.
 6. **Look once.** `render_chart` with `format: "png"` after a batch of edits, at the size
    the chart will be shown, to check overlap and legibility. Use `undo_chart` for your own
    mistakes.
@@ -92,6 +96,7 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 | --- | --- |
 | `get_chart` | Start here. Returns spec, data table, selection, issues and a summary (min / max / mean / trend, axes as drawn, layout warnings, colour check, description) at `width` x `height` px (default 640 x 400). Also says why when the chart is read-only. Cheaper than rendering. |
 | `render_chart` | Draw without changing anything: SVG text by default, or `format: "png"` for an image (only when the host can rasterize; otherwise it fails and says to use SVG). Returns the layout warnings too. Images cost tokens: render after a batch of edits, at the display size, to check overlapping or cut-off labels, a crowded legend and unreadable colours. |
+| `check_chart_style` | Check the chart against the house style (`get_style` with `domain: "chart"`): runs the checks its profile turns on (`palette-only`, `distinguishable`, `min-contrast`, `allowed-type`). Returns `ok`, findings (severity, a sentence saying how to fix it, a `target` selection such as `{ kind: "series", seriesId }`, and the layer that asked), the checks that `ran` and those `skipped` with the reason. Run after a batch of edits and again after fixing. |
 | `check_chart_colors` | Check the chart's series (or slice) colours, or a `colors` list, for normal vision, protanopia, deuteranopia and tritanopia, and contrast against `surface` (default white). Returns the closest pair per vision and problems as sentences. Run after any colour change. |
 | `recommend_chart` | Ranked chart types with a reason each, from `csv` when given, else the current data (series count, points, dates, negative values). Use before choosing a type. |
 | `get_chart_trendline` | Read a trendline's fit (`series`, `index`): coefficients, R2, equation and point count, or the moving-average points. Fails when the fit needs more or positive values. |

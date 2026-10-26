@@ -3,6 +3,7 @@ import { baseToolName, errorResult, toToolResult, unknownToolMessage } from './r
 import { validateJsonSchema } from './schema.js';
 import { searchTools } from './search.js';
 import { listSkills, readSkillFile, type SkillFiles } from './skills.js';
+import type { StyleResolver } from './style.js';
 
 export interface ToolDiscoveryOptions {
 	/** Toolsets listed from the start (default none: the agent enables what it needs). */
@@ -11,6 +12,11 @@ export interface ToolDiscoveryOptions {
 	skills?: SkillFiles;
 	/** Default and maximum number of `search_tools` results (default 10, at most 50). */
 	searchLimit?: number;
+	/**
+	 * House styles: `list_toolsets` marks each toolset whose domain (its skill's name without
+	 * `pixerate-`) has style skills, and `enable_tools` says to read them with `get_style`.
+	 */
+	styles?: StyleResolver;
 }
 
 export interface ToolViewOptions {
@@ -295,6 +301,13 @@ export class ToolRegistryView implements ToolSource {
 			return set.tools.some((t) => this.enabledTools.has(t)) ? 'some' : 'none';
 		};
 		const listedCount = () => this.listed(this.catalogue()).length;
+		/** The house style that applies to a toolset's domain, if any. */
+		const styleOf = async (set: ToolsetInfo) => {
+			const domain = set.skill?.replace(/^pixerate-/, '');
+			if (!discovery.styles || !domain || !discovery.styles.domains.some((d) => d.id === domain)) return undefined;
+			const style = await discovery.styles.resolve(domain);
+			return style.skills.length ? { domain, skills: style.skills.length, layers: [...new Set(style.skills.map((s) => s.layer))] } : undefined;
+		};
 
 		const tools: AgentTool[] = [
 			{
@@ -304,16 +317,18 @@ export class ToolRegistryView implements ToolSource {
 					'Lists the groups of editor tools available here (one per open editor or feature): name, title, what it covers, its agent skill, how many tools it has and whether they are in your tool list (`enabled`: all, some or none). Start here, then call search_tools or enable_tools.',
 				annotations: READ_ONLY,
 				inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-				handler: () => {
+				handler: async () => {
 					const cat = this.catalogue();
+					const styles = await Promise.all(cat.sets.map(styleOf));
 					return {
-						toolsets: cat.sets.map((set) => ({
+						toolsets: cat.sets.map((set, i) => ({
 							name: set.name,
 							...(set.title ? { title: set.title } : {}),
 							...(set.description ? { description: set.description } : {}),
 							...(set.skill ? { skill: set.skill } : {}),
 							tools: set.tools.length,
-							enabled: enabledState(set)
+							enabled: enabledState(set),
+							...(styles[i] ? { style: styles[i] } : {})
 						})),
 						...(skills.length > 0 ? { skills: skills.map((s) => s.name) } : {})
 					};
@@ -357,9 +372,12 @@ export class ToolRegistryView implements ToolSource {
 					'Adds tools to your tool list: single tools by name (from search_tools) and/or whole toolsets (from list_toolsets). Returns the names added and how many tools are listed now. Prefer single tools over large toolsets. Unknown names fail and change nothing.',
 				annotations: LISTING,
 				inputSchema: SELECTION_SCHEMA,
-				handler: (args) => {
+				handler: async (args) => {
 					const added = this.enableTools(args);
-					return { added, listed: listedCount() };
+					const sets = this.catalogue().sets.filter((set) => set.tools.some((t) => added.includes(t)));
+					const domains = (await Promise.all(sets.map(styleOf))).filter((s) => s !== undefined).map((s) => s.domain);
+					const style = [...new Set(domains)].map((d) => `House style applies: call get_style with domain "${d}" before making changes.`);
+					return { added, listed: listedCount(), ...(style.length ? { style } : {}) };
 				}
 			},
 			{

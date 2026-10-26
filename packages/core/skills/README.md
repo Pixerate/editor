@@ -40,6 +40,18 @@ MCP prompts and `skill://<name>/SKILL.md` resources, `createMcpServer(source, { 
 the same for your own server, and a discovery view (`registry.view({ discovery: { skills } })`)
 adds a `get_skill` tool. In Node, `loadSkillFiles()` from `@pixerate/editor/bridge` reads them.
 
+## House-style skills
+
+The skills above teach how to use the tools and ship with the package. A host can also give
+agents **house-style skills** at runtime: an org's, a team's, a user's or a document's
+preferences for a domain, in the same `SKILL.md` format plus optional per-domain profiles
+(`chart.json`, `tokens.json`) whose strings may be `{ "$token": "brand/primary" }`
+references to design tokens. `createStyleResolver` merges them in layers (later layers win
+unless an earlier one is `locked`), `createStyleToolProvider` serves `list_styles`,
+`get_style`, `get_style_file` and `get_style_schema`, and each domain's
+`check_<domain>_style` runs the checks a profile turns on. They never replace the skills
+here; `pixerate-agent-tools` tells a model how to use them.
+
 ## Maintaining them
 
 A skill is part of its domain's agent path (see section 4 of `AGENTS.md`). When you add,

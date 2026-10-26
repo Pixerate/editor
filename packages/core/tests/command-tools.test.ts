@@ -30,6 +30,9 @@ import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSur
 import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
+import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
+import { chartStyleDomain, createChartStyleToolProvider } from '../src/chart';
+import { createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
 
@@ -254,6 +257,12 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			createGenerationHistoryToolProvider({ namespace: 'genhistory', store: createGenerationRecordStore({ storage: createMemoryStorage() }) })
 		);
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
+		{
+			const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain] });
+			registry.register(createStyleToolProvider(styles));
+			registry.register(createChartStyleToolProvider(new ChartController(), styles, { namespace: 'chartstyle' }));
+			registry.register(createTokensStyleToolProvider(new TokenStore(), styles, { namespace: 'tokenstyle' }));
+		}
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
 		{
 			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;
