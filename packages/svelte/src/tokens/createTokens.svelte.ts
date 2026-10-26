@@ -1,4 +1,5 @@
 import {
+  createTokensEditorDocument,
   exportTokensCss,
   getTokenCssVariables,
   type TokenCssOptions,
@@ -6,6 +7,7 @@ import {
   type TokenState,
   type TokenStore,
 } from "@pixerate/editor/tokens";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 
 export interface CreateTokensOptions {
   /** Modes for `cssVariables` (collection id → mode id), or a getter for reactive modes. */
@@ -16,6 +18,8 @@ export interface CreateTokensOptions {
 
 export interface SvelteTokens {
   readonly store: TokenStore;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<TokenState>;
   /** The store's state (reactive). */
   readonly state: TokenState;
   /** Resolved custom properties for `modes` (reactive), e.g. for `style:` directives. */
@@ -45,8 +49,10 @@ export function createTokens(store: TokenStore, options: CreateTokensOptions = {
   const modes = () => (typeof options.modes === "function" ? options.modes() : options.modes);
   const cssVariables = $derived(getTokenCssVariables(state, modes(), options.css));
   const css = $derived(exportTokensCss(state, options.css));
+  const editorDocument = createTokensEditorDocument(store);
   return {
     store,
+    editorDocument,
     get state() {
       return state;
     },
@@ -71,6 +77,9 @@ export function createTokens(store: TokenStore, options: CreateTokensOptions = {
     },
     undo: () => void store.undo(),
     redo: () => void store.redo(),
-    destroy: unsubscribe,
+    destroy: () => {
+      unsubscribe();
+      editorDocument.destroy();
+    },
   };
 }

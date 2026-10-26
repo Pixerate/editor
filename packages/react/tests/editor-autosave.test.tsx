@@ -11,6 +11,9 @@ import { useAnimationEditor } from "../src/animation-editor";
 import { useVideoEditor } from "../src/video-editor";
 import { useParameters } from "../src/parameters";
 import { useVectorEditor } from "../src/vector";
+import { useSpreadsheetEditor } from "../src/spreadsheet";
+import { useTokens, useTokenStore } from "../src/tokens";
+import { useEditor, useRichTextEditorDocument } from "../src";
 
 let container: HTMLDivElement;
 let root: any;
@@ -120,5 +123,28 @@ describe("editor hooks expose editorDocument", () => {
     expect((docs.parameters.getDocument() as any).values.speed).toBe(3);
     await act(async () => void docs.parameters.history.undo());
     expect(docs.parameters.getDocument()).toEqual(before);
+  });
+});
+
+describe("phase 3 hooks expose editorDocument", () => {
+  it("spreadsheet, tokens and rich text", async () => {
+    const docs: Record<string, EditorDocument | null> = {};
+    const Probe = () => {
+      docs.spreadsheet = useSpreadsheetEditor().editorDocument;
+      docs.tokens = useTokens(useTokenStore()).editorDocument;
+      docs.rich_text = useRichTextEditorDocument(useEditor({ content: "<p>Hi</p>", immediatelyRender: false }));
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    for (const [kind, doc] of Object.entries(docs)) {
+      expect(doc?.kind).toBe(kind);
+    }
+    const doc = docs.rich_text!;
+    const seen: number[] = [];
+    const off = doc.subscribe(() => seen.push(doc.revision()));
+    await act(async () => void doc.loadDocument({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Bye" }] }] }, { history: "record" }));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(JSON.stringify(doc.getDocument())).toContain("Bye");
+    off();
   });
 });

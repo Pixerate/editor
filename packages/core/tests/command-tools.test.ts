@@ -17,13 +17,15 @@ import { ImageEditorController, createImageEditorToolProvider, createImageEffect
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { ParametersController, createParametersEditorDocument } from '../src/parameters';
+import { TokenStore, createTokensEditorDocument } from '../src/tokens';
+import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
 import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
-import { createRichTextPreset, SpreadsheetController } from '../src';
+import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
@@ -225,7 +227,10 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			[createAnimationEditorDocument(new AnimationEditorController()), 'pixerate-animation-editor'],
 			[createVideoEditorDocument(new VideoEditorController()), 'pixerate-video-editor'],
 			[createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), 'pixerate-parameters'],
-			[createVectorEditorDocument(new VectorEditorController()), 'pixerate-vector']
+			[createVectorEditorDocument(new VectorEditorController()), 'pixerate-vector'],
+			[createSpreadsheetEditorDocument(sheet), 'pixerate-spreadsheet'],
+			[createRichTextEditorDocument(editor), 'pixerate-rich-text'],
+			[createTokensEditorDocument(new TokenStore()), 'pixerate-tokens']
 		] as const) {
 			registry.register(createDocumentToolProvider(doc, { namespace: `${doc.kind}doc`, skill, store: createEditorDocumentStore({ storage: createMemoryStorage() }) }));
 		}

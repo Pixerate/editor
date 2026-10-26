@@ -107,6 +107,20 @@ cell was deleted), `#NAME?`, `#N/A` (lookup miss), `#NUM!`, `#CYCLE!` (circular 
 | `unmerge_cells` | Split every merge touching a `range` (a single cell is enough) back into cells; the value stays top-left. Returns the ranges unmerged; fails when there are none (`get_range` lists them). Unmerge before sorting, filtering or transposing a region. |
 | `transpose_range` | Swap rows and columns of a `range` in place, anchored at its top-left (`A1:C2` becomes `A1:B3`), moving values, formulas and formats; formulas that pointed into the range follow their cells. Cells the new shape covers outside the old range are overwritten, so check that area is empty first. Refused across merges (unmerge first), read-only cells or spills. Returns the new range. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A spreadsheet document is the whole workbook: `{ sheets: [{ columns, rows, cells, ... }], activeSheetId, names }`; selection and editing state are not part of it.
+
+| Tool | Use |
+| --- | --- |
+| `get_spreadsheet_document` | Take a copy of the whole workbook as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the workbook, use `get_range`: it is smaller and says more. Refuses very large documents. |
+| `load_spreadsheet_document` | Put back a copy from `get_spreadsheet_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_spreadsheet` brings the previous workbook back). To change cells use `set_range` or `set_cell`. |
+| `undo_spreadsheet` | Undo the last workbook edit (one tool call or one user gesture). Returns `undone` (the step's name, when it has one) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |
+| `redo_spreadsheet` | Redo the last undone workbook edit. |
+| `save_spreadsheet_document` | Save the workbook under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_spreadsheet_documents` | List saved workbooks (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_spreadsheet_document` | Replace the workbook with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Commands
 
 Run with `run_command` when the host registers them. Merge, unmerge and transpose act on the

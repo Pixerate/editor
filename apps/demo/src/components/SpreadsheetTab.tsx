@@ -16,6 +16,8 @@ import {
   type SpreadsheetWorkbook,
 } from "@pixerate/editor";
 import { createSpreadsheetToolProvider } from "@pixerate/editor/agent";
+import { createSpreadsheetEditorDocument } from "@pixerate/editor/spreadsheet";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import {
   Table2,
   Upload,
@@ -260,6 +262,7 @@ export const SpreadsheetTab: React.FC = () => {
     [state.controller]
   );
   useAgentToolProvider(demoToolRegistry, provider);
+  const editorDocument = useDemoEditorDocument(state.controller, createSpreadsheetEditorDocument, { namespace: "sheet", skill: "pixerate-spreadsheet" });
 
   const importFile = async (file: File) => {
     try {
@@ -305,6 +308,7 @@ export const SpreadsheetTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <EditorDocumentAutosave doc={editorDocument} name="Spreadsheet" />
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 shadow-md">
         <div className="flex items-center gap-2 mr-2">
           <Table2 className="w-4 h-4 text-emerald-400" />

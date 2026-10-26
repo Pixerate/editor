@@ -106,6 +106,20 @@ Errors, namespacing (`doc-1__find_text`) and `run_commands` batching are covered
 | `prompt_set_variable` | Set the value of a template variable (`name` without braces, `value` any JSON value). Prefer this over editing the prompt text when only a slot's value changes. |
 | `prompt_select` | Select prompt text between two positions (`from === to` places the cursor), e.g. to show the user what you changed. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A rich text document is the editor's ProseMirror JSON (`{ "type": "doc", "content": [...] }`), with marks such as tracked changes and comment anchors; comment threads stay in their own store.
+
+| Tool | Use |
+| --- | --- |
+| `get_rich_text_document` | Take a copy of the whole document as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the document, use `get_text`: it is smaller and says more. Refuses very large documents. |
+| `load_rich_text_document` | Put back a copy from `get_rich_text_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_rich_text` brings the previous document back). Refused while the document is read-only. To change text use `replace_range`, `replace_text` or `insert_text`: they keep formatting and comments. |
+| `undo_rich_text` | Undo the last document edit (one tool call or one user gesture). Returns `undone` (the step's name, when it has one) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |
+| `redo_rich_text` | Redo the last undone document edit. |
+| `save_rich_text_document` | Save the document under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_rich_text_documents` | List saved documents (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_rich_text_document` | Replace the document with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Commands
 
 Run with `run_command` / `run_commands` when the host registers them. Check

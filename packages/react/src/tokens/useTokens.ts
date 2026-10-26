@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   TokenStore,
+  createTokensEditorDocument,
   exportTokensCss,
   getTokenCssVariables,
   type TokenCssOptions,
@@ -8,6 +9,7 @@ import {
   type TokenState,
   type TokenStoreOptions,
 } from '@pixerate/editor/tokens';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 
 /** A `TokenStore` created once for the component's lifetime. */
 export function useTokenStore(options?: TokenStoreOptions): TokenStore {
@@ -30,6 +32,8 @@ export interface UseTokensOptions {
 
 export interface UseTokensResult {
   store: TokenStore;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<TokenState>;
   state: TokenState;
   /** Resolved custom properties for `modes`, e.g. `<div style={cssVariables}>`. */
   cssVariables: Record<string, string>;
@@ -59,5 +63,8 @@ export function useTokens(store: TokenStore, options: UseTokensOptions = {}): Us
   const css = useMemo(() => exportTokensCss(state, options.css), [state, cssKey]);
   const undo = useCallback(() => void store.undo(), [store]);
   const redo = useCallback(() => void store.redo(), [store]);
-  return { store, state, cssVariables, css, canUndo: store.canUndo(), canRedo: store.canRedo(), undo, redo };
+  const editorDocument = useMemo(() => createTokensEditorDocument(store), [store]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { store, editorDocument, state, cssVariables, css, canUndo: store.canUndo(), canRedo: store.canRedo(), undo, redo };
 }

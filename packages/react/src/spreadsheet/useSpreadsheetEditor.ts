@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   SpreadsheetController,
   bindSpreadsheetTableActions,
+  createSpreadsheetEditorDocument,
   type SpreadsheetControllerOptions,
   type SpreadsheetDocument,
   type CellCoordinate,
@@ -249,6 +250,10 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const conditionalFormatOverlay = useMemo(() => controller.getConditionalFormatOverlay(), [controller, doc]);
 
+  // The save / load / undo contract; subscribing again reconnects it after a StrictMode remount.
+  const editorDocument = useMemo(() => createSpreadsheetEditorDocument(controller), [controller]);
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+
   return {
     document: doc,
     activeCell,
@@ -260,6 +265,8 @@ export function useSpreadsheetEditor(options: SpreadsheetControllerOptions = {})
     resolveValidationPrompt,
     commitCellInput,
     controller,
+    /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+    editorDocument,
     getCell: (rowId: string, colId: string) => controller.getCell(rowId, colId),
     setCellValue,
     selectCell,
