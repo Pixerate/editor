@@ -7,3 +7,4 @@ export * from "./editorDocument";
 export * from "./editorAutosave";
 export * from "./documentStore";
 export * from "./documentTools";
+export * from "./assets";

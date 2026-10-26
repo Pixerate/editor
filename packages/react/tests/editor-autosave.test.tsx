@@ -16,6 +16,8 @@ import { useVectorEditor } from "../src/vector";
 import { useSpreadsheetEditor } from "../src/spreadsheet";
 import { useTokens, useTokenStore } from "../src/tokens";
 import { useEditor, useRichTextEditorDocument } from "../src";
+import { useImageEditor } from "../src/image-editor";
+import { usePaintEditor } from "../src/paint-editor";
 
 let container: HTMLDivElement;
 let root: any;
@@ -177,5 +179,30 @@ describe("useCanvasEditorDocument", () => {
     await act(async () => void history.undo());
     expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["a"]);
     off();
+  });
+});
+
+describe("image and paint hooks", () => {
+  it("expose editorDocument, and autosave writes their assets with the snapshot", async () => {
+    const storage = createMemoryStorage();
+    let image!: EditorDocument;
+    let painter!: ReturnType<typeof usePaintEditor>;
+    const Probe = () => {
+      painter = usePaintEditor({ width: 120, height: 60, paper: "smooth" });
+      image = useImageEditor().editorDocument;
+      useEditorAutosave(painter.editorDocument, { storage, debounceMs: 5, interval: 20 });
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    await act(async () => void (await wait(5)));
+    expect(image.kind).toBe("image");
+    expect(painter.editorDocument.kind).toBe("paint");
+    const points = Array.from({ length: 20 }, (_, i) => ({ x: 5 + i * 5, y: 30 + (i % 3) * 4, pressure: 0.7 }));
+    await act(async () => void painter.controller.paintStroke({ points, brushId: "ink-pen", color: "#000000" }));
+    await act(async () => void (await wait(60)));
+    const snapshot = storage.entries.get("paint");
+    expect(snapshot).toBeDefined();
+    expect(snapshot).toContain("pixerate-asset:");
+    expect([...storage.entries.keys()].some((k) => k.startsWith("pixerate.assets:"))).toBe(true);
   });
 });

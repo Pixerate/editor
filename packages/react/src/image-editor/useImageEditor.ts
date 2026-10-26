@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 import {
   ImageEditorController,
+  createImageEditorDocument,
   createImageEffectsToolProvider,
   type ImageEffectsToolProviderOptions,
   type ImageEditorOptions,
@@ -22,9 +23,12 @@ import {
   type AdjustmentLayerUpdate,
   type ImageHistogram,
 } from '@pixerate/editor/image-editor';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 
 export interface UseImageEditorReturn {
   controller: ImageEditorController;
+  /** The save / load / undo contract, with layer pixels as asset references (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<SerializedImageEditorState>;
   state: ImageEditorState;
   canUndo: boolean;
   canRedo: boolean;
@@ -191,9 +195,14 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
     [controller]
   );
 
+  const editorDocument = useMemo(() => createImageEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+
   return useMemo(
     () => ({
       controller,
+      editorDocument,
       state,
       canUndo: controller.canUndo,
       canRedo: controller.canRedo,
@@ -242,7 +251,7 @@ export function useImageEditor(options: ImageEditorOptions = {}): UseImageEditor
       applyBackgroundRemovedImage,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [controller, state, historyTicks, histogram]
+    [controller, editorDocument, state, historyTicks, histogram]
   );
 }
 

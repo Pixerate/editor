@@ -1,4 +1,5 @@
 import { stripPrototypeKeys } from "../tools/safe-json";
+import { externalizeAssets, internalizeAssets, type EditorAssetRegistry } from "./assets";
 import { createLoadReport, migrateDocument, type JsonObject, type LoadReport, type SectionProblem } from "./migrate";
 
 /**
@@ -52,6 +53,12 @@ export interface EditorDocument<T = unknown> {
   readOnly(): string | false;
   /** Stops listening to the editor; `subscribe` or `revision` reconnects (React StrictMode remounts). */
   destroy(): void;
+  /**
+   * Where the document's binary data lives (image and paint editors): `getDocument()` holds
+   * references instead of pixels. Autosave and the document store save and read the assets
+   * with the document (see `withEditorAssets`).
+   */
+  readonly assets?: EditorAssetRegistry;
 }
 
 /** Thrown by `loadDocument` / `parseEditorDocument` when the input does not fit; nothing changed. */
@@ -145,6 +152,11 @@ export interface EditorDocumentSpec<T> {
   readOnly?: () => string | false;
   /** `migrations[v]` turns a version `v` document into version `v + 1`. */
   migrations?: Record<number, (document: unknown) => unknown>;
+  /**
+   * Keeps inline binary data (PNG data URLs, long base64) out of the document: `get` results
+   * are externalized into it, and `load` receives the data back in place of the references.
+   */
+  assets?: EditorAssetRegistry;
 }
 
 /**
@@ -195,12 +207,12 @@ export function defineEditorDocument<T>(spec: EditorDocumentSpec<T>): EditorDocu
     kind: spec.kind,
     formatVersion,
     recordsLoads: spec.recordsLoads !== false,
-    getDocument: () => spec.get(),
+    getDocument: () => (spec.assets ? externalizeAssets(spec.get(), spec.assets) : spec.get()),
     loadDocument(input, options = {}) {
       const { document, report } = unwrap(input);
       if (document === undefined || document === null) throw new EditorDocumentLoadError(`No ${spec.kind} document was given.`);
       try {
-        const result = spec.load(document, { history: options.history ?? "reset" });
+        const result = spec.load(spec.assets ? internalizeAssets(document, spec.assets) : document, { history: options.history ?? "reset" });
         if (result?.problems?.length) report.problems.push(...result.problems);
       } catch (error) {
         if (error instanceof EditorDocumentLoadError) throw error;
@@ -220,6 +232,7 @@ export function defineEditorDocument<T>(spec: EditorDocumentSpec<T>): EditorDocu
       };
     },
     history: spec.history,
+    ...(spec.assets ? { assets: spec.assets } : {}),
     readOnly: () => spec.readOnly?.() ?? false,
     destroy() {
       unsubscribe?.();

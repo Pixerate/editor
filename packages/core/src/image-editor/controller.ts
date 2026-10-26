@@ -1438,6 +1438,8 @@ export class ImageEditorController {
   private pendingDirty: CropBox[] | 'all' = 'all';
 
   private notify(strokeRects?: CropBox[]): void {
+    // Stroke frames change pixels after the stroke's history step was recorded.
+    if (strokeRects) this.docRevision++;
     if (strokeRects && this.pendingDirty !== 'all') this.pendingDirty.push(...strokeRects);
     else if (!strokeRects) this.pendingDirty = 'all';
     this.syncViews();
@@ -1770,6 +1772,7 @@ export class ImageEditorController {
 
   private recordHistory(): void {
     if (this.isApplyingHistory) return;
+    this.docRevision++;
     this.undoStack.push(this.captureHistoryEntry());
     if (this.undoStack.length > this.maxHistoryDepth) {
       this.undoStack.shift();
@@ -1801,6 +1804,23 @@ export class ImageEditorController {
     return this.undoStack.length > 0;
   }
 
+  private docRevision = 0;
+
+  /**
+   * Bumped on every change to the document (an undoable edit, a stroke, undo, redo), not on view
+   * or tool changes, nor on `loadImage` (the source image is the host's, not part of the document). `createImageEditorDocument` uses it to tell document changes apart.
+   */
+  public get documentRevision(): number {
+    return this.docRevision;
+  }
+
+  /** Drops the undo and redo steps (e.g. after opening a document). */
+  public clearHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.notify();
+  }
+
   public get canRedo(): boolean {
     return this.redoStack.length > 0;
   }
@@ -1811,6 +1831,7 @@ export class ImageEditorController {
     this.redoStack.push(this.captureHistoryEntry());
 
     const prev = this.undoStack.pop()!;
+    this.docRevision++;
     this.restoreHistoryEntry(prev);
     this.isApplyingHistory = false;
     this.notify();
@@ -1823,6 +1844,7 @@ export class ImageEditorController {
     this.undoStack.push(this.captureHistoryEntry());
 
     const next = this.redoStack.pop()!;
+    this.docRevision++;
     this.restoreHistoryEntry(next);
     this.isApplyingHistory = false;
     this.notify();

@@ -5,6 +5,7 @@ import {
   type EditorDocument,
   type EditorDocumentFile,
 } from "./editorDocument";
+import { persistEditorAssets, preloadEditorAssets } from "./assets";
 import type { LoadReport } from "./migrate";
 import type { StorageAdapter } from "./storage";
 
@@ -115,8 +116,10 @@ export function createEditorDocumentStore(options: EditorDocumentStoreOptions): 
           formatVersion: doc.formatVersion,
           savedAt: new Date(now()).toISOString(),
         };
-        // File first: a crash between the two writes leaves an unlisted file, never a dangling entry.
-        await storage.set(fileKey(entry.key), JSON.stringify(toEditorDocumentFile(doc, trimmed)));
+        const text = JSON.stringify(toEditorDocumentFile(doc, trimmed));
+        // Assets, then the file, then the index: a crash in between leaves unlisted data, never a dangling entry.
+        if (doc.assets) await persistEditorAssets(storage, doc.assets, text);
+        await storage.set(fileKey(entry.key), text);
         await saveIndex([...(await loadIndex()).filter((item) => item.key !== entry.key), entry]);
         return entry;
       }),
@@ -131,6 +134,10 @@ export function createEditorDocumentStore(options: EditorDocumentStoreOptions): 
           throw new EditorDocumentLoadError(
             `There is no saved document "${key}". ${keys.length ? `Saved ${doc.kind} documents: ${keys.join(", ")}.` : `No ${doc.kind} documents are saved yet.`}`,
           );
+        }
+        if (doc.assets) {
+          const missing = await preloadEditorAssets(storage, doc.assets, file);
+          if (missing.length) throw new EditorDocumentLoadError(`The saved document "${key}" refers to ${missing.length} asset${missing.length === 1 ? "" : "s"} that storage no longer has, so it cannot be opened.`);
         }
         const report = doc.loadDocument(file, { history: openOptions.history ?? "reset" });
         return { ...entry, report };
