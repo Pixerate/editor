@@ -3,6 +3,11 @@ import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor
 import { createMemoryStorage, toEditorDocumentFile } from "@pixerate/editor/persistence";
 import { createEditorAutosave } from "../src/persistence";
 import { createMermaidDiagram } from "../src/canvas";
+import { createChartEditor } from "../src/chart";
+import { createAnimationEditor } from "../src/animation-editor";
+import { createVideoEditor } from "../src/video-editor";
+import { createParameters } from "../src/parameters";
+import { createVectorEditor } from "../src/vector";
 
 let cleanup: Array<() => void> = [];
 afterEach(() => {
@@ -49,5 +54,27 @@ describe("createMermaidDiagram().editorDocument", () => {
     expect(diagram.source).toBe("flowchart LR\n  Q\n");
     diagram.undo();
     expect(diagram.source).toBe(source);
+  });
+});
+
+describe("editor runes expose editorDocument", () => {
+  it("chart, animation, video, parameters and vector", () => {
+    const editors = {
+      chart: createChartEditor(),
+      animation: createAnimationEditor(),
+      video: createVideoEditor(),
+      parameters: createParameters({ schema: { fields: [{ id: "speed", type: "number", min: 0, max: 4, default: 1 }] } }),
+      vector: createVectorEditor(),
+    };
+    for (const [kind, editor] of Object.entries(editors)) {
+      cleanup.push(() => editor.destroy());
+      expect(editor.editorDocument.kind).toBe(kind);
+    }
+    const doc = editors.parameters.editorDocument;
+    const before = doc.getDocument();
+    doc.loadDocument({ values: { speed: 3 } }, { history: "record" });
+    expect(editors.parameters.values.speed).toBe(3);
+    editors.parameters.undo();
+    expect(doc.getDocument()).toEqual(before);
   });
 });

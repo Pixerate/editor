@@ -8,11 +8,16 @@ import {
   type VideoEditorState,
   type VideoEditorToolProviderOptions,
   type VideoEditResult,
+  createVideoEditorDocument,
+  type VideoProject,
 } from "@pixerate/editor/video-editor";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 import type { ToolRegistry } from "@pixerate/editor/tools";
 
 export interface SvelteVideoEditor {
   readonly controller: VideoEditorController;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<VideoProject>;
   /** The controller's state (reactive, including the playhead while playing). */
   readonly state: VideoEditorState;
   play(): void;
@@ -43,8 +48,10 @@ export function createVideoEditor(controllerOrOptions: VideoEditorController | V
   const unsubscribe = controller.subscribe((next) => {
     state = next;
   });
+  const editorDocument = createVideoEditorDocument(controller);
   return {
     controller,
+    editorDocument,
     get state() {
       return state;
     },
@@ -59,6 +66,7 @@ export function createVideoEditor(controllerOrOptions: VideoEditorController | V
     deleteSelection: (options) => controller.deleteSelection(options),
     destroy: () => {
       unsubscribe();
+      editorDocument.destroy();
       if (owned) controller.destroy();
     },
   };

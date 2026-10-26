@@ -16,12 +16,13 @@ import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
-import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
+import { ParametersController, createParametersEditorDocument } from '../src/parameters';
+import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
-import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
+import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
+import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
-import { VectorEditorController, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
+import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
 import { createRichTextPreset, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
@@ -219,6 +220,15 @@ describe('built-in tool providers have complete MCP annotations', () => {
 				store: createEditorDocumentStore({ storage: createMemoryStorage() })
 			})
 		);
+		for (const [doc, skill] of [
+			[createChartEditorDocument(new ChartController()), 'pixerate-chart'],
+			[createAnimationEditorDocument(new AnimationEditorController()), 'pixerate-animation-editor'],
+			[createVideoEditorDocument(new VideoEditorController()), 'pixerate-video-editor'],
+			[createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), 'pixerate-parameters'],
+			[createVectorEditorDocument(new VectorEditorController()), 'pixerate-vector']
+		] as const) {
+			registry.register(createDocumentToolProvider(doc, { namespace: `${doc.kind}doc`, skill, store: createEditorDocumentStore({ storage: createMemoryStorage() }) }));
+		}
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));
 		registry.register(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects', namespace: 'vecfx' }));
 		registry.register(createVectorGenerationToolProvider(new VectorEditorController(), { id: 'vector-generation', namespace: 'vecgen', models: [{ id: 'm', media: 'image' }], generate: () => ({ svg: '' }) }));

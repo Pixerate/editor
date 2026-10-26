@@ -7,7 +7,10 @@ import {
   type ParametersState,
   type ParameterValue,
   type ParameterSetResult,
+  createParametersEditorDocument,
+  type ParametersSnapshot,
 } from '@pixerate/editor/parameters';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 
 /**
  * A `ParametersController` created once for the component's lifetime. When `options.schema`
@@ -36,6 +39,8 @@ export function useParametersState(controller: ParametersController): Parameters
 
 export interface UseParametersResult {
   controller: ParametersController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<ParametersSnapshot>;
   state: ParametersState;
   values: ParametersState['values'];
   setValue: (id: string, value: ParameterValue) => ParameterSetResult;
@@ -68,7 +73,10 @@ export function useParameters(controllerOrOptions: ParametersController | Parame
     }),
     [controller],
   );
-  return { controller, state, values: state.values, ...actions };
+  const editorDocument = useMemo(() => createParametersEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, values: state.values, ...actions };
 }
 
 /** Anything with `register(specs) → unregister` (a `CommandRegistry`). */

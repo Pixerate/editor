@@ -1165,6 +1165,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Controllers notify their `subscribe` listeners on every state change, including selection, hover, issues and read-only flips. Passing `controller.subscribe` straight to `defineEditorDocument` counted all of them as document revisions.
 - **Solution / Workaround**: An editor's `subscribe` in `defineEditorDocument({ subscribe })` must call the listener only when the saved document changed. `createDiagramEditorDocument` keeps the last `source` and skips notifications where it is unchanged. Do the same in every adapter (compare the snapshot's identity or a cheap key, not a deep copy).
 
+### [core/persistence] Chart and Parameter Loads Repair Bad Input, So Agent Loads Need a Strict Path
+
+- **Issue / Symptom**: `load_chart_document` with `"series": 3` reported success and quietly replaced the chart with an empty bar chart; a parameters load with an unknown field id did the same with defaults.
+- **Root Cause**: `ChartController.load` and `ParametersController.load` are built for opening files: they fix problems with defaults, report them in state and record no undo step. That is right for a recovered file and wrong for an agent, which needs to be told and to undo.
+- **Solution / Workaround**: The adapters split on `history`. `"record"` (agent loads) goes through `ChartController.replace` / `ParametersController.replace`, which refuse any problem and are one undo step. `"reset"` (opening a file or a recovery) keeps the lenient `load` and returns the repaired parts as `problems`, which `defineEditorDocument` puts in the `LoadReport`. Do the same for any editor whose `load` repairs input.
+
 ### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
 
 - **Issue / Symptom**: Under `<React.StrictMode>`, `useMermaidDiagram().editorDocument` stopped counting changes after mount, so autosave never wrote a snapshot.
