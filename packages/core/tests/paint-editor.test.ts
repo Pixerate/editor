@@ -502,6 +502,28 @@ describe('PaintEditorController', () => {
     expect(() => c.pickColor(500, 10)).toThrow(/outside the 400×200 canvas/);
   });
 
+  it('picks and composites without the paper when paper is false', () => {
+    const c = new PaintEditorController({ width: 512, height: 256, paper: 'smooth' });
+    expect(c.pickColor(10, 10).alpha).toBe(1);
+    expect(c.pickColor(10, 10, { paper: false })).toEqual({ color: '#000000', alpha: 0 });
+
+    const withPaper: Uint8ClampedArray[] = [];
+    c.compositeTiles({ x: 0, y: 0, width: 512, height: 256 }, (_tx, _ty, data) => withPaper.push(data));
+    expect(withPaper.length).toBe(2);
+    expect(withPaper[0][3]).toBe(255);
+
+    const bare: Uint8ClampedArray[] = [];
+    c.compositeTiles({ x: 0, y: 0, width: 512, height: 256 }, (_tx, _ty, data) => bare.push(data), { paper: false, dirty: 'all' });
+    expect(bare.length).toBe(2);
+    expect(bare.every((d) => d.every((v, i) => i % 4 !== 3 || v === 0))).toBe(true);
+
+    c.fillLayer({ color: '#00ff00', opacity: 1 });
+    expect(c.pickColor(10, 10, { paper: false })).toEqual({ color: '#00ff00', alpha: 1 });
+    const painted: Uint8ClampedArray[] = [];
+    c.compositeTiles({ x: 0, y: 0, width: 512, height: 256 }, (_tx, _ty, data) => painted.push(data), { paper: false, dirty: 'all' });
+    expect(Array.from(painted[0].slice(0, 4))).toEqual([0, 255, 0, 255]);
+  });
+
   it('brush library: set, save, import, export, thumbnails', () => {
     const c = new PaintEditorController({ width: 16, height: 16 });
     const b = c.setBrush({ id: 'soft-pastel', tip: { size: 50 } });
