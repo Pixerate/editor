@@ -61,6 +61,7 @@ export {
 } from './useCanvasScenes.js';
 
 export { useCanvasCapture, type UseCanvasCaptureOptions } from './useCanvasCapture.js';
+export { useCanvasEditorDocument, type UseCanvasEditorDocumentOptions } from './useCanvasEditorDocument.js';
 
 export {
 	CanvasGuidesLayer,

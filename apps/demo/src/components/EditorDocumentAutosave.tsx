@@ -15,13 +15,21 @@ export function useDemoEditorDocument<C, T>(
 ): EditorDocument<T> {
   const doc = useMemo(() => create(controller), [controller, create]);
   useEffect(() => () => doc.destroy(), [doc]);
+  useDemoDocumentTools(doc, tools);
+  return doc;
+}
+
+/** Registers an `EditorDocument`'s save / load tools (with the demo's document store) while mounted. */
+export function useDemoDocumentTools(
+  doc: EditorDocument,
+  tools: { namespace: string; skill: string; history?: boolean; name?: () => string | undefined },
+): void {
   const provider = useMemo(
     () => createDocumentToolProvider(doc, { id: `${doc.kind}-document`, store: demoDocumentStore, ...tools }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [doc],
   );
   useAgentToolProvider(demoToolRegistry, provider);
-  return doc;
 }
 
 /**

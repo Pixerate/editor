@@ -11,6 +11,8 @@ import { VectorEditorController, createVectorEditorDocument } from "../src/vecto
 import { SpreadsheetController, createSpreadsheetEditorDocument } from "../src/spreadsheet";
 import { TokenStore, createTokensEditorDocument } from "../src/tokens";
 import { createRichTextEditorDocument, createRichTextPreset } from "../src";
+import { CanvasScenesStore, createCanvasEditorDocument, createCanvasGestureRecorder, type CanvasEdge, type CanvasNode } from "../src/canvas";
+import { HistoryManager } from "../src/history";
 
 beforeAll(() => {
   const dom = new JSDOM("", { pretendToBeVisual: true });
@@ -230,6 +232,53 @@ describe("editor documents", () => {
     const result: any = await tools(doc).callTool("load_rich_text_document", { document: doc.getDocument() });
     expect(text(result)).toMatch("The document is read-only.");
     editor.destroy();
+  });
+
+  it("canvas", async () => {
+    let nodes: CanvasNode[] = [
+      { id: "a", position: { x: 0, y: 0 }, data: { label: "A" } },
+      { id: "b", position: { x: 100, y: 0 }, data: { label: "B" }, selected: true },
+    ];
+    let edges: CanvasEdge[] = [{ id: "e", source: "a", target: "b" }];
+    const history = new HistoryManager();
+    const scenes = new CanvasScenesStore();
+    const doc = createCanvasEditorDocument({
+      getNodes: () => nodes,
+      setNodes: (n) => void (nodes = n),
+      getEdges: () => edges,
+      setEdges: (e) => void (edges = e),
+      history,
+      scenes,
+    });
+    expect(doc.getDocument().nodes[1]).not.toHaveProperty("selected");
+    await contract({
+      doc,
+      current: () => doc.getDocument(),
+      undo: () => history.undo(),
+      next: { nodes: [{ id: "c", position: { x: 5, y: 5 }, data: {} }], edges: [], scenes: [] },
+      invalid: { nodes: [{ id: "c", position: { x: 0, y: 0 }, data: {} }], edges: [{ id: "x", source: "c", target: "gone" }] },
+      invalidMessage: 'Edge "x" connects to "gone", which is not a node in the document.',
+      viewChange: () => void (nodes = nodes.map((n) => ({ ...n, selected: !n.selected }))),
+    });
+  });
+
+  it("canvas gestures become one undo step", () => {
+    let nodes: CanvasNode[] = [{ id: "a", position: { x: 0, y: 0 }, data: {} }];
+    const history = new HistoryManager();
+    const recorder = createCanvasGestureRecorder({ getNodes: () => nodes, setNodes: (n) => void (nodes = n), history });
+    recorder.begin();
+    nodes = [{ ...nodes[0], position: { x: 10, y: 0 }, selected: true }];
+    nodes = [{ ...nodes[0], position: { x: 40, y: 20 }, dragging: true } as CanvasNode];
+    expect(recorder.end("Move")).toBe(true);
+    expect(history.getState().undoName).toBe("Move");
+    history.undo();
+    expect(nodes[0].position).toEqual({ x: 0, y: 0 });
+    history.redo();
+    expect(nodes[0].position).toEqual({ x: 40, y: 20 });
+    // Selecting without moving records nothing.
+    recorder.begin();
+    nodes = [{ ...nodes[0], selected: false }];
+    expect(recorder.end()).toBe(false);
   });
 
   it("read-only animation and video refuse agent loads", async () => {
