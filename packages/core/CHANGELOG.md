@@ -1,5 +1,15 @@
 # @pixerate/editor
 
+## 0.168.0
+
+### Minor Changes
+
+- 7dd63d6: Effect authoring previews no longer go stale or blank for some effects (#359).
+
+  - `createEffectAuthoringSession` starts the playhead at half the effect's length, as catalog thumbnails do, so entrance-style effects and transitions open on a frame that shows them. Pass the new `startTime` option to start elsewhere.
+  - When `createPreview` cannot make a pixel renderer (for example a vector effect the provider only draws as SVG), the session records why in the new `EffectAuthoringState.previewError`. `effect_authoring_describe` returns it with the playhead `time`, and `effect_authoring_view` refuses with that reason instead of capturing a blank frame.
+  - `EffectAuthoringEditor` (React and Svelte) clears the canvas when the session changes, catches preview and frame failures instead of leaving an unhandled rejection, and shows the reason over the preview while parameters, keyframes and the timeline stay usable.
+
 ## 0.167.0
 
 ### Minor Changes
