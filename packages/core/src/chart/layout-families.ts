@@ -5,8 +5,10 @@ import { categoryFrame, toValueScale } from './layout-cartesian.js';
 import { arcPath, axisScale, contrastingTextColor, r2, truncate, type FamilyResult, type LayoutCtx } from './layout-shared.js';
 import { formatChartNumber, linearMap, stepDecimals } from './scale.js';
 import { chartSeriesColor, chartSliceColor } from './spec.js';
+import { shadeChartColor } from './color.js';
 import { chartBoxStats, chartHistogram, chartSquarify } from './stats.js';
-import type { ChartMark, ChartRect, ChartSelection, ChartSeries } from './types.js';
+import { chartTreeDepth, chartTreeFromSeries, chartTreeTotal } from './tree.js';
+import type { ChartMark, ChartRect, ChartSelection, ChartSeries, ChartTreeNode } from './types.js';
 
 const sliceColor = (ctx: LayoutCtx, series: ChartSeries, i: number) => series.pointColors?.[i] || chartSliceColor(ctx.spec, i);
 
@@ -620,4 +622,119 @@ export function layoutParliament(ctx: LayoutCtx, area: ChartRect, series: ChartS
 		marks.push({ kind: 'text', key: 'parliament-caption', role: 'data-label', x: cx, y: spec.parliamentArc <= 200 ? ty + 2 : ty + size * 0.6, text: spec.parliamentLabel || 'seats', anchor: 'middle', baseline: 'top', size: fs, fill: theme.mutedText, target: totalTarget });
 	}
 	return { plot: { x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2 } };
+}
+
+/** The colour of a tree node: its own, else its top-level group's palette colour, shaded by `shade`. */
+function treeColor(ctx: LayoutCtx, series: ChartSeries | undefined, node: ChartTreeNode, group: number, base: string | null, shade: number): string {
+	if (node.color) return node.color;
+	if (base === null) return series?.pointColors?.[group] || chartSliceColor(ctx.spec, group);
+	return shadeChartColor(base, shade);
+}
+
+/**
+ * Treemap of `spec.tree`: each group a rectangle sized by its total, its children squarified
+ * inside under a header with its name, down to the leaves. Everything in a top-level group is
+ * drawn in its colour (leaves in lighter and darker shades) and selects that category.
+ */
+export function layoutTreemapTree(ctx: LayoutCtx, area: ChartRect, series: ChartSeries | undefined): FamilyResult {
+	const { spec, marks, theme, fs, measure } = ctx;
+	const format = series?.format ?? spec.yAxis.format;
+	const labelsOn = series?.dataLabels ?? true;
+	let unlabelled = 0;
+	const draw = (nodes: readonly ChartTreeNode[], rect: ChartRect, key: string, group: number | null, base: string | null) => {
+		const rects = chartSquarify(nodes.map(chartTreeTotal), rect);
+		nodes.forEach((node, k) => {
+			const r = rects[k];
+			if (r.width <= 0.5 || r.height <= 0.5) return;
+			const g = group ?? k;
+			const target: ChartSelection = { kind: 'category', index: g };
+			const selected = ctx.isSelected(target) || ctx.isSelected({ kind: 'point', seriesId: series?.id ?? '', index: g });
+			const id = `${key}-${k}`;
+			// Leaves vary a little around their group's colour so neighbours stay apart.
+			const fill = treeColor(ctx, series, node, g, base, base === null ? 0 : ((k % 4) - 1.5) * 0.14);
+			if (node.children) {
+				const header = r.height > fs * 3.2 && r.width > fs * 3 ? fs * 1.5 : 0;
+				marks.push({ kind: 'rect', key: `group-${id}`, role: 'cell', ...r, fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2.5 : 2, target, selected });
+				if (header) marks.push({ kind: 'text', key: `label-group-${id}`, role: 'data-label', x: r.x + 5, y: r.y + 4, text: truncate(node.name, r.width - 10, fs, measure), anchor: 'start', baseline: 'top', size: fs, weight: 700, fill: contrastingTextColor(fill), target });
+				const inner = { x: r.x + 2, y: r.y + (header || 2), width: Math.max(0, r.width - 4), height: Math.max(0, r.height - (header || 2) - 2) };
+				draw(node.children, inner, id, g, base ?? fill);
+				return;
+			}
+			marks.push({ kind: 'rect', key: `cell-${id}`, role: 'cell', ...r, fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2.5 : 1, target, selected });
+			if (!labelsOn) return;
+			const room = r.width - 8;
+			if (room < fs * 2 || r.height < fs * 1.5) {
+				unlabelled++;
+				return;
+			}
+			const color = contrastingTextColor(fill);
+			marks.push({ kind: 'text', key: `label-cell-${id}`, role: 'data-label', x: r.x + 4, y: r.y + 4, text: truncate(node.name, room, fs, measure), anchor: 'start', baseline: 'top', size: fs, weight: 600, fill: color, target });
+			if (r.height >= fs * 3) marks.push({ kind: 'text', key: `label-value-${id}`, role: 'data-label', x: r.x + 4, y: r.y + 6 + fs * 1.2, text: truncate(formatChartNumber(node.value ?? 0, format), room, fs - 1, measure), anchor: 'start', baseline: 'top', size: fs - 1, fill: color, target });
+		});
+	};
+	draw(spec.tree, area, 'n', null, null);
+	if (unlabelled) ctx.warn('data-labels-hidden', `${unlabelled} treemap cell${unlabelled === 1 ? ' is' : 's are'} too small for a label.`);
+	return { plot: area };
+}
+
+/**
+ * Sunburst: `spec.tree` as rings from the centre out, each node an arc sized by its total
+ * inside its parent's arc (without a tree, the first series as one ring). Labels go on arcs
+ * wide enough for them; the total and `sunburstLabel` sit in the centre.
+ */
+export function layoutSunburst(ctx: LayoutCtx, area: ChartRect, series: ChartSeries | undefined): FamilyResult {
+	const { spec, marks, theme, fs, measure } = ctx;
+	const tree = spec.tree.length ? spec.tree : chartTreeFromSeries(spec.categories, series?.values ?? []);
+	const indexOf = new Map(spec.categories.map((c, i) => [c.trim() || `${i + 1}`, i] as const));
+	const depth = chartTreeDepth(tree);
+	const total = tree.reduce((t, n) => t + chartTreeTotal(n), 0);
+	const cx = area.x + area.width / 2;
+	const cy = area.y + area.height / 2;
+	const outer = Math.max(8, Math.min(area.width, area.height) / 2 - 4);
+	const plot = { x: cx - outer, y: cy - outer, width: outer * 2, height: outer * 2 };
+	if (!(total > 0)) {
+		marks.push({ kind: 'text', key: 'empty', role: 'empty', x: cx, y: cy, text: 'No positive values', anchor: 'middle', baseline: 'middle', size: fs + 1, fill: theme.mutedText });
+		return { plot };
+	}
+	const hole = outer * 0.28;
+	const ring = (outer - hole) / Math.max(1, depth);
+	const format = series?.format ?? spec.yAxis.format;
+	let unlabelled = 0;
+	const walk = (nodes: readonly ChartTreeNode[], start: number, sweep: number, level: number, key: string, group: number | null, base: string | null) => {
+		const sum = nodes.reduce((t, n) => t + chartTreeTotal(n), 0);
+		let at = start;
+		nodes.forEach((node, k) => {
+			const value = chartTreeTotal(node);
+			if (!(value > 0) || !sum) return;
+			const a0 = at;
+			const a1 = at + (sweep * value) / sum;
+			at = a1;
+			const g = group ?? indexOf.get(node.name) ?? k;
+			const target: ChartSelection = { kind: 'category', index: g };
+			const selected = ctx.isSelected(target) || ctx.isSelected({ kind: 'point', seriesId: series?.id ?? '', index: g });
+			const fill = treeColor(ctx, series, node, g, base, 0.22 * level);
+			const id = `${key}-${k}`;
+			const r0 = hole + ring * level;
+			const r1 = r0 + ring;
+			marks.push({ kind: 'path', key: `slice-${id}`, role: 'slice', d: arcPath(cx, cy, r1, r0, a0, a1), fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2 : 1, target, selected });
+			const mid = (a0 + a1) / 2;
+			const rm = (r0 + r1) / 2;
+			const text = node.name;
+			const width = measure(text, fs - 1);
+			// Horizontal text fits where the arc's chord at mid radius is wider than the label.
+			if (ring >= fs * 1.3 && 2 * rm * Math.sin(Math.min(Math.PI / 2, (a1 - a0) / 2)) >= width + 6) marks.push({ kind: 'text', key: `label-slice-${id}`, role: 'data-label', x: cx + rm * Math.sin(mid), y: cy - rm * Math.cos(mid), text, anchor: 'middle', baseline: 'middle', size: fs - 1, weight: level === 0 ? 600 : undefined, fill: contrastingTextColor(fill), target });
+			else unlabelled++;
+			if (node.children) walk(node.children, a0, a1 - a0, level + 1, id, g, base ?? fill);
+		});
+	};
+	walk(tree, 0, Math.PI * 2, 0, 'n', null, null);
+	if (unlabelled) ctx.warn('data-labels-hidden', `${unlabelled} sunburst arc${unlabelled === 1 ? ' is' : 's are'} too narrow for a label.`);
+	if (hole > fs * 2) {
+		const size = Math.min(theme.titleSize + 4, hole * 0.45);
+		const centre: ChartSelection | undefined = series ? { kind: 'series', seriesId: series.id } : undefined;
+		const caption = spec.sunburstLabel;
+		marks.push({ kind: 'text', key: 'sunburst-total', role: 'data-label', x: cx, y: caption ? cy - 2 : cy, text: formatChartNumber(total, format), anchor: 'middle', baseline: caption ? 'bottom' : 'middle', size, weight: 700, fill: theme.text, ...(centre ? { target: centre } : {}) });
+		if (caption) marks.push({ kind: 'text', key: 'sunburst-caption', role: 'data-label', x: cx, y: cy + 2, text: truncate(caption, hole * 1.8, fs - 1, measure), anchor: 'middle', baseline: 'top', size: fs - 1, fill: theme.mutedText, ...(centre ? { target: centre } : {}) });
+	}
+	return { plot };
 }

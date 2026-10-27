@@ -17,6 +17,8 @@ import {
 	REFERENCE_LINE_PROPS,
 	SERIES_PROPS,
 	SERIES_REF,
+	TREE_DEFS,
+	TREE_PATH,
 	TRENDLINE_PROPS,
 	VALUE,
 	WIDTH
@@ -24,6 +26,7 @@ import {
 import { chartSpecColorsByCategory, chartDataToTable, chartSeriesColor, chartSliceColor } from './spec.js';
 import { summarizeChart } from './summary.js';
 import { chartToSvg } from './svg.js';
+import { chartTreeTotal } from './tree.js';
 import type { ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
 
 export interface ChartCommandOptions {
@@ -173,7 +176,11 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			keywords: ['chart', 'category', 'row', 'label'],
 			description: 'Inserts a category (gaps in every series) at `at` (default: the end).',
 			params: object({ label: { type: 'string', description: 'Category label (default: its number).' }, at: { type: 'integer', minimum: 0, description: 'Index to insert at (default: the end).' } }),
-			run: (_ctx: unknown, params: { label?: string; at?: number } = {}) => controller.addCategory(params?.label, { at: params?.at })
+			run: (_ctx: unknown, params: { label?: string; at?: number } = {}) => {
+				const result = controller.addCategory(params?.label, { at: params?.at });
+				check(result);
+				return result;
+			}
 		},
 		{
 			...base,
@@ -316,6 +323,93 @@ export function createChartCommands(controller: ChartController, options: ChartC
 				check(result);
 				const { categories, series } = result as { categories: number[]; series: string[] };
 				return { highlight: controller.getSpec().highlight, categories, series };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTree`,
+			label: 'Replace Grouped Data…',
+			keywords: ['chart', 'tree', 'hierarchy', 'groups', 'treemap', 'sunburst', 'nested'],
+			description: 'Replaces the data with groups of items (a tree) for treemaps and sunbursts; [] goes back to plain data.',
+			params: { type: 'object', properties: { tree: { type: 'array', items: { $ref: '#/$defs/chartTreeNode' }, description: 'The top-level nodes; [] removes the grouping.' } }, required: ['tree'], additionalProperties: false, $defs: TREE_DEFS } as any,
+			run: (_ctx: unknown, params: { tree: unknown[] }) => {
+				check(controller.setTree(params.tree));
+				return { groups: controller.getSpec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}importTreeCsv`,
+			label: 'Import Grouped Data from CSV…',
+			keywords: ['chart', 'tree', 'hierarchy', 'csv', 'import', 'treemap', 'sunburst'],
+			description: 'Replaces the data with grouped data from CSV / TSV: names in every column but the last (group, …, item), the value in the last.',
+			params: object(
+				{
+					csv: { type: 'string', description: 'CSV or TSV text.' },
+					header: { type: ['boolean', 'string'], enum: [true, false, 'auto'], description: 'The first row holds column names (default auto).' }
+				},
+				['csv']
+			),
+			run: (_ctx: unknown, params: { csv: string; header?: boolean | 'auto' }) => {
+				check(controller.importTreeTable(parseCsv(params.csv, { delimiter: params.csv.includes('\t') ? '\t' : ',' }), { header: params.header }));
+				return { tree: controller.getSpec().tree };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addTreeNode`,
+			label: 'Add Item or Group…',
+			keywords: ['chart', 'tree', 'group', 'item', 'add', 'treemap', 'sunburst'],
+			description: 'Adds an item or group under a group of the grouped data ([] for the top level). Returns its path.',
+			params: {
+				type: 'object',
+				properties: {
+					parent: { type: 'array', items: { type: 'string' }, description: 'Path of the group to add to; [] or omitted for the top level.' },
+					node: { $ref: '#/$defs/chartTreeNode', description: 'The item or group to add.' },
+					at: { type: 'integer', minimum: 0, description: 'Position among its siblings (default: the end).' }
+				},
+				required: ['node'],
+				additionalProperties: false,
+				$defs: TREE_DEFS
+			} as any,
+			run: (_ctx: unknown, params: { parent?: string[]; node: { name: string; value?: number }; at?: number }) => {
+				const result = controller.addTreeNode(params.parent ?? [], params.node, { at: params.at });
+				check(result);
+				return { path: (result as { path: string[] }).path };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}updateTreeNode`,
+			label: 'Change Item or Group…',
+			keywords: ['chart', 'tree', 'group', 'item', 'rename', 'value'],
+			description: 'Renames a node, sets an item\'s value or sets a node\'s colour (null for the palette).',
+			params: object(
+				{
+					path: TREE_PATH,
+					name: { type: 'string', description: 'New name.' },
+					value: { type: 'number', minimum: 0, description: 'Items only: the new amount.' },
+					color: { type: ['string', 'null'], description: 'CSS colour, or null for the palette colour.' }
+				},
+				['path']
+			),
+			run: (_ctx: unknown, params: { path: string[]; name?: string; value?: number; color?: string | null }) => {
+				const { path, ...patch } = params;
+				const result = controller.updateTreeNode(path, patch);
+				check(result);
+				return { path: (result as { path: string[] }).path };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeTreeNode`,
+			label: 'Delete Item or Group',
+			keywords: ['chart', 'tree', 'group', 'item', 'remove', 'delete'],
+			description: 'Deletes a node of the grouped data with everything under it.',
+			params: object({ path: TREE_PATH }, ['path']),
+			run: (_ctx: unknown, params: { path: string[] }) => {
+				check(controller.removeTreeNode(params.path));
+				return { groups: controller.getSpec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })) };
 			}
 		},
 		{

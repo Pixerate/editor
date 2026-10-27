@@ -294,6 +294,30 @@ describe("ChartInspector", () => {
     expect(controller.getSpec().parliamentArc).toBe(270);
   });
 
+  it("edits grouped data as a table of names and values", async () => {
+    const controller = new ChartController({ spec: { ...sales, type: "treemap" } });
+    await render(<ChartDataGrid controller={controller} />);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+    await act(async () => q('[data-action="tree-from-table"]').click());
+    expect(controller.getSpec().tree).toEqual([{ name: "Q1", value: 12 }, { name: "Q2", value: 18 }, { name: "Q3", value: 9 }]);
+    expect(q("[data-chart-tree-grid]")).not.toBeNull();
+    await act(async () => q('[data-action="tree-add-level"]').click());
+    await type(q<HTMLInputElement>('[data-tree-cell="0:0"]'), "H1");
+    await type(q<HTMLInputElement>('[data-tree-cell="0:1"]'), "Jan");
+    expect(controller.getSpec().tree[0]).toEqual({ name: "H1", children: [{ name: "Jan", value: 12 }] });
+    await type(q<HTMLInputElement>('[data-tree-value="0"]'), "20");
+    expect(controller.getSpec().series[0].values[0]).toBe(20);
+    await type(q<HTMLInputElement>('[data-tree-value="1"]'), "lots");
+    expect(q<HTMLInputElement>('[data-tree-value="1"]').value).toBe("18");
+    await act(async () => q('[data-action="tree-add-row"]').click());
+    expect(qa("[data-tree-row]")).toHaveLength(4);
+    await act(async () => qa('[data-action="tree-remove-row"]')[3].click());
+    expect(qa("[data-tree-row]")).toHaveLength(3);
+    await act(async () => q('[data-action="tree-ungroup"]').click());
+    expect(controller.getSpec().tree).toEqual([]);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+  });
+
   it("sets radar rings and grid shape", async () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     await render(<ChartInspector controller={controller} />);

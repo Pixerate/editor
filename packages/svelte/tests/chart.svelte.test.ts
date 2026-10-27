@@ -282,6 +282,30 @@ describe("ChartInspector", () => {
     expect(controller.getSpec().parliamentMajority).toBeNull();
   });
 
+  it("edits grouped data as a table of names and values", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "treemap" } });
+    const el = render(ChartDataGrid, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    const qa = (sel: string) => Array.from(el.querySelectorAll(sel)) as HTMLElement[];
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+    click(q('[data-action="tree-from-table"]'));
+    expect(controller.getSpec().tree).toEqual([{ name: "Q1", value: 12 }, { name: "Q2", value: 18 }, { name: "Q3", value: 9 }]);
+    expect(q("[data-chart-tree-grid]")).not.toBeNull();
+    click(q('[data-action="tree-add-level"]'));
+    type(q<HTMLInputElement>('[data-tree-cell="0:0"]'), "H1");
+    type(q<HTMLInputElement>('[data-tree-cell="0:1"]'), "Jan");
+    expect(controller.getSpec().tree[0]).toEqual({ name: "H1", children: [{ name: "Jan", value: 12 }] });
+    type(q<HTMLInputElement>('[data-tree-value="0"]'), "20");
+    expect(controller.getSpec().series[0].values[0]).toBe(20);
+    click(q('[data-action="tree-add-row"]'));
+    expect(qa("[data-tree-row]")).toHaveLength(4);
+    click(qa('[data-action="tree-remove-row"]')[3]);
+    expect(qa("[data-tree-row]")).toHaveLength(3);
+    click(q('[data-action="tree-ungroup"]'));
+    expect(controller.getSpec().tree).toEqual([]);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });

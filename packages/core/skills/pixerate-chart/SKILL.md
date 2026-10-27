@@ -1,6 +1,6 @@
 ---
 name: pixerate-chart
-description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
+description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap (flat or grouped), sunburst, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
 ---
 
 # Charts
@@ -17,6 +17,12 @@ the first visible series, one slice (or group of seats) per category; histogram 
 every value of the visible series. A slope chart joins the first series (before) to the
 second (after) for each category; a Likert chart reads each category as a question and the
 series as its answers, ordered from most negative to most positive.
+
+Grouped data lives in `spec.tree` (items `{name, value}`, groups `{name, children}`, up to 6
+levels). When a tree is set it *is* the data: the categories are its top-level group names
+and the first series their totals, so a treemap nests the groups, a sunburst draws them as
+rings, and any other type draws the totals. Nodes are addressed by `path`, the names from the
+top down (`["Europe", "France"]`); `get_chart` returns them as `treeTable`.
 
 Read `pixerate-agent-tools` first for tool naming, errors and `run_commands` batching.
 Charts inside a rich-text document are not edited with these tools: use `insert_chart`,
@@ -61,6 +67,9 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
   and what fell between two points in time: slope (two series, the names are the column
   captions). Agree-to-disagree survey answers: likert (`likertSort: "positive"` ranks the
   questions; `likertNeutral: "separate"` keeps the middle answer out of the comparison).
+  Parts of parts (regions → countries, budget → departments → teams): a treemap with grouped
+  data for comparing sizes, a sunburst for showing the levels (`sunburstLabel` captions the
+  total in the middle). Load the levels with `import_chart_tree_csv` or `set_chart_tree`.
   Seats or votes per group with a majority: parliament (`parliamentMajority`,
   `parliamentArc`, `parliamentLabel`).
 - **Bars start at zero.** Bar length encodes the value, so never set a non-zero `min` on the
@@ -135,7 +144,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total). Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total), `sunburstLabel` (caption under a sunburst's total). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -157,6 +166,11 @@ it changed.
 | `remove_chart_reference_band` | Delete a reference band by `index`. Returns the rest. |
 | `set_chart_callout` | Pin a short `label` to one bar or point (`series`, `category`) with a leader line; `label: null` removes it. The point needs a value. Bar, line, area, scatter and bubble charts. Selects the point. |
 | `highlight_chart` | Keep the named categories and series (`names`) bright and mute everything else; `[]` clears it. Unknown names change nothing and are listed. Returns the matched category indexes and series ids. |
+| `set_chart_tree` | Replace the data with grouped data (`tree`: items `{name, value}`, groups `{name, children}`, up to 6 levels, sibling names unique) for grouped treemaps and sunbursts; `[]` goes back to plain data and keeps the totals. Returns the tree, group totals and depth. |
+| `import_chart_tree_csv` | Replace the data with grouped data from CSV / TSV: names in every column but the last (group, ..., item), the value last; a blank group name repeats the one above. The quickest way to load a spreadsheet's hierarchy. |
+| `add_chart_tree_node` | Add an item or a group (`node`) under the group at `parent` (a path; `[]` for the top level) at `at`. Returns its `path` and the parent's new total. |
+| `update_chart_tree_node` | Rename a node, set an item's `value`, or set a node's `color` (null for the palette) by `path`. Groups have no value of their own. Returns the path (new after a rename). |
+| `remove_chart_tree_node` | Delete a node and everything under it by `path`. Returns the group totals left. |
 | `apply_chart_preset` | Apply a quick `layout` and / or a `colors` scheme from `list_chart_presets` in one step. |
 | `transpose_chart` | Swap series and categories. Drops per-series colours and settings, so restyle afterwards. |
 | `select_chart_element` | Select part of the chart (`kind`: none, chart, title, subtitle, legend, axis, series, point, category, trendline) for the user to see or before `press_chart_key`. |
@@ -208,6 +222,11 @@ several charts may register them with another prefix.
 | `chart.removeReferenceBand` | Delete a reference band by index. |
 | `chart.setCallout` | Pin or remove a point's callout (as `set_chart_callout`). |
 | `chart.highlight` | Highlight categories and series (as `highlight_chart`). |
+| `chart.setTree` | Replace the grouped data (as `set_chart_tree`). |
+| `chart.importTreeCsv` | Replace the data with grouped data from CSV / TSV. |
+| `chart.addTreeNode` | Add an item or group; returns its path. |
+| `chart.updateTreeNode` | Rename, revalue or recolour a node by path. |
+| `chart.removeTreeNode` | Delete a node by path. |
 | `chart.applyPreset` | Apply a quick layout and / or colour scheme. |
 | `chart.transpose` | Swap series and categories. |
 | `chart.importCsv` | Replace data from CSV / TSV (no automatic chart type). |
@@ -238,6 +257,13 @@ several charts may register them with another prefix.
 - A slope chart needs exactly two visible series; with one it draws a line chart (a
   `type-fallback` warning), and a third is not drawn. Hide the extra series or move them.
 - Parliament seats are rounded to whole numbers; more than 2,000 seats are not drawn.
+- While a chart has grouped data, cell edits (`set_chart_values`, adding, renaming or deleting
+  categories, `transpose_chart`) are refused, because the totals come from the tree. Edit the
+  nodes, or replace the data (`set_chart_data`, `import_chart_csv`), which clears the tree.
+- Highlight, selection and colours work per top-level group: every item in a group selects
+  and highlights that group. Give a node its own `color` with `update_chart_tree_node`.
+- Office export writes a grouped treemap or sunburst as a pie or doughnut of the group totals
+  (DrawingML has no hierarchy); Office chartex imports keep the levels.
 - Reference lines, bands and callouts are drawn on bar, line, area, scatter and bubble
   charts only. Switching to another type keeps them in the spec but leaves them out of the
   drawing (an `annotations-skipped` warning says so); they come back when you switch back.

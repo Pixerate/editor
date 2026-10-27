@@ -5,6 +5,7 @@ import { sameChartSelection } from './layout.js';
 import { chartPresetPatch } from './presets.js';
 import { chartFamily } from './spec.js';
 import { chartMovingAverage, chartSupportsTrendlines, fitChartTrendline, type ChartTrendFit } from './trend.js';
+import { chartTreeFromRows, chartTreeFromTable, cloneChartTree, findChartTreeNode, normalizeChartTree, type ChartTreeRow } from './tree.js';
 import {
 	chartDataFromTable,
 	normalizeChartTrendline,
@@ -32,6 +33,7 @@ import type {
 	ChartSeriesType,
 	ChartSpec,
 	ChartTrendline,
+	ChartTreeNode,
 	ChartType,
 	ChartValue
 } from './types.js';
@@ -400,7 +402,9 @@ export class ChartController {
 	 * to the categories; all-or-nothing like `update`.
 	 */
 	setData(data: { categories?: readonly unknown[]; series?: readonly ChartSeriesInput[] }, options: ChartEditOptions = {}): ChartActionResult {
-		return this.update({ ...(data.categories ? { categories: data.categories as string[] } : {}), ...(data.series ? { series: data.series as ChartSeries[] } : {}) }, { label: options.label ?? 'Edit chart data' });
+		// New categories or series replace grouped data.
+		const clear = (data.categories || data.series) && this.spec.tree.length ? { tree: [] } : {};
+		return this.update({ ...(data.categories ? { categories: data.categories as string[] } : {}), ...(data.series ? { series: data.series as ChartSeries[] } : {}), ...clear }, { label: options.label ?? 'Edit chart data' });
 	}
 
 	/**
@@ -408,6 +412,8 @@ export class ChartController {
 	 * One undo step, or part of the current gesture.
 	 */
 	setValue(seriesId: string, index: number, value: unknown, options: ChartEditOptions = {}): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		const series = this.getSeries(seriesId);
 		if (!series) return this.unknownSeries(seriesId);
 		if (!Number.isInteger(index) || index < 0 || index >= this.spec.categories.length) return this.badIndex(index);
@@ -429,6 +435,8 @@ export class ChartController {
 
 	/** Several values as one undo step (all-or-nothing). */
 	setValues(cells: readonly { seriesId: string; index: number; value: unknown }[], options: ChartEditOptions = {}): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		const issues: ChartIssue[] = [];
 		const parsed: { seriesId: string; index: number; value: ChartValue }[] = [];
 		for (const cell of cells) {
@@ -534,7 +542,9 @@ export class ChartController {
 	}
 
 	/** Inserts a category (with gaps in every series) at `at` (default: the end). Returns its index. */
-	addCategory(label?: string, options: { at?: number } = {}): { ok: true; index: number } {
+	addCategory(label?: string, options: { at?: number } = {}): { ok: true; index: number } | { ok: false; message: string } {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped as { ok: false; message: string };
 		const at = Math.max(0, Math.min(this.spec.categories.length, options.at ?? this.spec.categories.length));
 		const name = label ?? `${this.spec.categories.length + 1}`;
 		this.commit(
@@ -549,6 +559,8 @@ export class ChartController {
 	}
 
 	removeCategory(index: number): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		if (!Number.isInteger(index) || index < 0 || index >= this.spec.categories.length) return this.badIndex(index);
 		this.commit(
 			`Delete category "${this.spec.categories[index]}"`,
@@ -562,6 +574,8 @@ export class ChartController {
 	}
 
 	renameCategory(index: number, label: string): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		if (!Number.isInteger(index) || index < 0 || index >= this.spec.categories.length) return this.badIndex(index);
 		if (this.spec.categories[index] === label) return { ok: true };
 		this.commit(
@@ -577,6 +591,8 @@ export class ChartController {
 	}
 
 	moveCategory(from: number, to: number): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		if (!Number.isInteger(from) || from < 0 || from >= this.spec.categories.length) return this.badIndex(from);
 		const target = Math.max(0, Math.min(this.spec.categories.length - 1, to));
 		if (target === from) return { ok: true };
@@ -600,6 +616,8 @@ export class ChartController {
 	 * grid grows to fit. Non-numeric value cells become gaps and are reported in `issues`.
 	 */
 	pasteCells(row: number, column: number, cells: string | ReadonlyArray<ReadonlyArray<unknown>>): ChartActionResult & { issues?: ChartIssue[] } {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		const rows: unknown[][] = typeof cells === 'string' ? (cells.includes('\t') ? parseTsv(cells) : parseCsv(cells)) : cells.map((r) => [...r]);
 		if (!rows.length) return { ok: true };
 		const issues: ChartIssue[] = [];
@@ -648,7 +666,7 @@ export class ChartController {
 			const old = byName.get(s.name);
 			return { ...s, ...(old?.color ? { color: old.color } : {}), ...(old?.type ? { type: old.type } : {}), ...(old ? { id: old.id } : {}) };
 		});
-		const { spec } = normalizeChartSpec({ ...this.spec, categories: data.categories, series });
+		const { spec } = normalizeChartSpec({ ...this.spec, categories: data.categories, series, tree: [] });
 		this.commit('Import data', spec);
 		if (data.issues.length) {
 			this.issues = data.issues;
@@ -662,6 +680,128 @@ export class ChartController {
 	importCsv(text: string, options: ChartTableOptions & { delimiter?: string } = {}): ChartActionResult & { issues?: ChartIssue[] } {
 		const delimiter = options.delimiter ?? (text.includes('\t') ? '\t' : ',');
 		return this.importTable(parseCsv(text, { delimiter }), options);
+	}
+
+	// -------------------------------------------------------------------------
+	// Grouped data (tree)
+	// -------------------------------------------------------------------------
+
+	/** A refusal while the data is a tree (cell edits would be overwritten by its totals), else null. */
+	private treeLocked(): { ok: false; message: string } | null {
+		if (!this.spec.tree.length) return null;
+		return this.reject(
+			'This chart\'s data is grouped (a tree): its categories and values are the top-level groups and their totals. Change it with setTree / the tree node edits (set_chart_tree, add_chart_tree_node, update_chart_tree_node, remove_chart_tree_node), or replace it with new data.'
+		) as { ok: false; message: string };
+	}
+
+	/** Replaces the grouped data (an empty list goes back to the table, keeping the totals as values). One undo step. */
+	setTree(tree: unknown, options: ChartEditOptions = {}): ChartActionResult {
+		const issues: ChartIssue[] = [];
+		const next = normalizeChartTree(tree, issues);
+		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		return this.update({ tree: next }, { label: options.label ?? (next.length ? 'Replace grouped data' : 'Ungroup data') });
+	}
+
+	/**
+	 * Replaces the grouped data from rows of names and a value (group, …, item, value), as the
+	 * data grid edits it; colours of nodes whose path is unchanged are kept. All-or-nothing.
+	 */
+	setTreeRows(rows: readonly ChartTreeRow[] | readonly { path: readonly unknown[]; value: unknown }[], options: ChartEditOptions = {}): ChartActionResult {
+		const issues: ChartIssue[] = [];
+		const next = chartTreeFromRows(rows, issues);
+		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		const keepColors = (list: ChartTreeNode[], prefix: string[]) => {
+			for (const n of list) {
+				const old = findChartTreeNode(this.spec.tree, [...prefix, n.name]);
+				if (old?.color) n.color = old.color;
+				if (n.children) keepColors(n.children, [...prefix, n.name]);
+			}
+		};
+		keepColors(next, []);
+		return this.update({ tree: next }, { label: options.label ?? 'Edit grouped data' });
+	}
+
+	/** Replaces the data with a table of names and values (group, …, item, value); see `chartTreeFromTable`. */
+	importTreeTable(rows: ReadonlyArray<ReadonlyArray<unknown>>, options: { header?: boolean | 'auto' } = {}): ChartActionResult {
+		const issues: ChartIssue[] = [];
+		const next = chartTreeFromTable(rows, options, issues);
+		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		if (!next.length) return this.reject('There is no grouped data to import: expected rows of names followed by a value, e.g. "Europe,France,40".');
+		return this.update({ tree: next }, { label: 'Import grouped data' });
+	}
+
+	private nodeAt(path: readonly string[]): ChartTreeNode | { ok: false; message: string } {
+		const node = findChartTreeNode(this.spec.tree, path);
+		if (node) return node;
+		const known = path.length > 1 ? findChartTreeNode(this.spec.tree, path.slice(0, -1)) : null;
+		const siblings = (path.length > 1 ? known?.children : this.spec.tree) ?? [];
+		return fail(
+			`There is no node ${JSON.stringify(path)}. ${siblings.length ? `${path.length > 1 && known ? `"${known.name}" contains` : 'The top level has'} ${siblings.map((n) => `"${n.name}"`).slice(0, 20).join(', ')}.` : 'The chart has no grouped data yet; add nodes with add_chart_tree_node or set_chart_tree.'}`
+		) as { ok: false; message: string };
+	}
+
+	/** Adds a node under the group at `parent` ([] for the top level) at `at` (default: the end). Returns its path. */
+	addTreeNode(parent: readonly string[], input: { name: string; value?: number; color?: string; children?: unknown[] }, options: { at?: number } = {}): { ok: true; path: string[] } | { ok: false; message: string; issues?: ChartIssue[] } {
+		let siblings: ChartTreeNode[] = this.spec.tree;
+		if (parent.length) {
+			const group = this.nodeAt(parent);
+			if ('ok' in group) return group;
+			if (!group.children) return this.reject(`"${group.name}" is an item with its own value, not a group; add the node next to it, or turn it into a group by replacing the tree with set_chart_tree.`) as { ok: false; message: string };
+			siblings = group.children;
+		}
+		const issues: ChartIssue[] = [];
+		const [node] = normalizeChartTree([input], issues, 'node');
+		if (!node || issues.length) return this.reject(issues.map((i) => i.message).join(' ') || 'The node is not valid.', issues) as { ok: false; message: string };
+		if (siblings.some((n) => n.name === node.name)) return this.reject(`"${node.name}" is already there; names under one group must be unique.`) as { ok: false; message: string };
+		const at = Math.max(0, Math.min(siblings.length, options.at ?? siblings.length));
+		const tree = cloneChartTree(this.spec.tree);
+		const list = parent.length ? findChartTreeNode(tree, parent)!.children! : tree;
+		list.splice(at, 0, node);
+		const result = this.update({ tree }, { label: `Add "${node.name}"` });
+		if (!result.ok) return result;
+		return { ok: true, path: [...parent, node.name] };
+	}
+
+	/** Renames, revalues (items only) or recolours a node; `color: null` goes back to the palette. Returns its path. */
+	updateTreeNode(path: readonly string[], patch: { name?: string; value?: number; color?: string | null }): { ok: true; path: string[] } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const node = this.nodeAt(path);
+		if ('ok' in node) return node;
+		if (patch.value !== undefined && node.children) return this.reject(`"${node.name}" is a group: its value is the sum of its items. Change the items instead.`) as { ok: false; message: string };
+		const name = patch.name !== undefined ? String(patch.name).trim() : node.name;
+		const siblings = (path.length > 1 ? findChartTreeNode(this.spec.tree, path.slice(0, -1))!.children! : this.spec.tree).filter((n) => n !== node);
+		if (siblings.some((n) => n.name === name)) return this.reject(`There is already a "${name}" next to "${node.name}"; names under one group must be unique.`) as { ok: false; message: string };
+		const tree = cloneChartTree(this.spec.tree);
+		const target = findChartTreeNode(tree, path)!;
+		const merged: Record<string, unknown> = { ...target, name };
+		if (patch.value !== undefined) merged.value = patch.value;
+		if (patch.color === null) delete merged.color;
+		else if (patch.color !== undefined) merged.color = patch.color;
+		const issues: ChartIssue[] = [];
+		const [checked] = normalizeChartTree([merged], issues, 'node');
+		if (!checked || issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues) as { ok: false; message: string };
+		Object.assign(target, checked);
+		if (patch.color === null) delete target.color;
+		const result = this.update({ tree }, { label: patch.name !== undefined && patch.name !== node.name ? 'Rename group' : `Change "${node.name}"` });
+		if (!result.ok) return result;
+		return { ok: true, path: [...path.slice(0, -1), name] };
+	}
+
+	/** Removes a node (with everything under it). A group left empty becomes an item with value 0. */
+	removeTreeNode(path: readonly string[]): ChartActionResult {
+		const node = this.nodeAt(path);
+		if ('ok' in node) return node;
+		const tree = cloneChartTree(this.spec.tree);
+		const parent = path.length > 1 ? findChartTreeNode(tree, path.slice(0, -1))! : null;
+		const list = parent ? parent.children! : tree;
+		list.splice(
+			list.findIndex((n) => n.name === node.name),
+			1
+		);
+		if (parent && !parent.children!.length) {
+			delete parent.children;
+			parent.value = 0;
+		}
+		return this.update({ tree }, { label: `Delete "${node.name}"` });
 	}
 
 	// -------------------------------------------------------------------------
@@ -903,6 +1043,8 @@ export class ChartController {
 	 * undo step). Series colours, types and other per-series settings are dropped.
 	 */
 	transpose(): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		const s = this.spec;
 		if (!s.series.length || !s.categories.length) return this.reject('There is no data to switch: the chart needs at least one series and one category.');
 		const used = new Set<string>();
@@ -960,6 +1102,8 @@ export class ChartController {
 
 	/** Adds `delta` to a value (a gap counts as 0). */
 	nudgeValue(seriesId: string, index: number, delta: number): ChartActionResult {
+		const grouped = this.treeLocked();
+		if (grouped) return grouped;
 		const series = this.getSeries(seriesId);
 		if (!series) return this.unknownSeries(seriesId);
 		const current = series.values[index] ?? 0;
@@ -1091,6 +1235,8 @@ function updateLabel(patch: ChartSpecPatch): string {
 		parliamentArc: 'Change hemicycle sweep',
 		parliamentMajority: 'Change majority',
 		parliamentLabel: 'Edit seat caption',
+		sunburstLabel: 'Edit centre caption',
+		tree: 'Replace grouped data',
 		radarTicks: 'Change radar rings',
 		radarGraticule: 'Change radar grid',
 		legend: 'Change legend',
