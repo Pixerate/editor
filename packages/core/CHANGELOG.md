@@ -1,5 +1,15 @@
 # @pixerate/editor
 
+## 0.162.0
+
+### Minor Changes
+
+- b514d51: New `@pixerate/editor/typography` subpath: a DOM-free typography module. Font specs and weight matching (`normalizeFontWeight`, `nearestFontWeight`); modular type scales and a caption-to-display hierarchy (`computeTypeScale`, `generateTypeHierarchy`, `typeHierarchyToCss`) with recommended line-height and tracking; fluid `clamp()` sizes (`computeFluidSize`); readability audits for measure, line spacing and capitals (`auditTextReadability`); WCAG contrast that decides large text from size and weight (`checkTypographyAccessibility`); `font-family` parsing, quoting and cross-platform fallback stacks (`parseFontFamily`, `resolveFontFallback`, `FONT_STACKS`); text segmentation into graphemes, words, sentences or lines with UTF-16 offsets (`segmentText`); pluggable font providers (`FontProvider`, `combineFontProviders`, `ensureFontsLoaded`) with a system font metadata catalog (`createSystemFontProvider`, Local Font Access only when the host opts in), a web font provider over the CSS Font Loading API with injectable `FontFace` (`createWebFontProvider`, `fontFaceCss`); a headless `FontPickerModel`; and agent tools: `createTypographyToolProvider` (`list_fonts`, `resolve_font_stack`, `suggest_type_scale`, `generate_type_hierarchy`, `compute_fluid_type_size`, `audit_text_readability`, `check_typography_accessibility`, `segment_text`, `load_font`) and `createFontPickerToolProvider` (`get_font_selection`, `list_picker_fonts`, `set_font_selection`), documented in the new `pixerate-typography` skill.
+
+  Effects: string controls with `format: "font"` or `"x-pixerate-control": "font"` become a font choice in `effectParameterFields` (families from `options.fonts`, default the system catalog), and `effectFontFamilies` lists the families to load before rendering a title preview.
+
+  Colour: new `suggestAccessibleForeground`, shared by `check_color_contrast`, `check_dual_color_contrast` and the typography check. Suggestions are now measured after rounding to hex, so a suggested colour no longer lands just below the AA threshold.
+
 ## 0.161.0
 
 ### Minor Changes
