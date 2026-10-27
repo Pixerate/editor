@@ -17,7 +17,7 @@
     pointerPressure,
     FreeTransformTool,
     boxFrameHit,
-    boxFrameOverlay,
+    quadFrameOverlay,
     getViewportProjection,
     measureCanvasViewport,
     watchCanvasViewport,
@@ -359,9 +359,9 @@
     const id = c.getState().activeLayerId;
     const layer = id ? c.getLayer(id) : undefined;
     if (!layer || layer.visible === false) return null;
-    const bounds = c.getLayerBounds(layer.id);
-    if (!bounds) return null;
-    return boxFrameOverlay(bounds, !(layer.locks?.all || layer.locks?.position));
+    const corners = c.getLayerFrame(layer.id);
+    if (!corners) return null;
+    return quadFrameOverlay(corners, !(layer.locks?.all || layer.locks?.position));
   }
 
   /**
@@ -391,7 +391,8 @@
     } catch {
       // Synthetic events have no active pointer to capture.
     }
-    transformTool.down(pt, tolerance);
+    // A press anywhere inside moves the layer, the centre included.
+    transformTool.down(pt, tolerance, { reference: false });
     frameDrag = true;
     return true;
   }

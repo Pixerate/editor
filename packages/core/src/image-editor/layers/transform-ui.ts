@@ -201,22 +201,30 @@ export interface FreeTransformToolOptions {
 }
 
 /**
- * A Free Transform frame for a box with no transform open (a host's selected-layer frame): the
- * outline, the eight handles (none with `handles = false`, e.g. for a layer locked in place) and
- * the centre as the reference point. Same shape and handle order as `FreeTransformTool.overlay`.
+ * A Free Transform frame with no transform open (a host's selected-layer frame) from where its
+ * corners lie (top-left, top-right, bottom-right, bottom-left, as `getLayerFrame` gives them): the
+ * outline, the eight handles (none with `handles = false`, e.g. for a layer locked in place) and the
+ * centre as the reference point. Same shape and handle order as `FreeTransformTool.overlay`.
  */
-export function boxFrameOverlay(box: CropBox, handles = true): TransformOverlay {
-  const { x, y, width: w, height: h } = box;
-  const at = { nw: [x, y], ne: [x + w, y], se: [x + w, y + h], sw: [x, y + h], n: [x + w / 2, y], e: [x + w, y + h / 2], s: [x + w / 2, y + h], w: [x, y + h / 2] } as const;
+export function quadFrameOverlay(corners: readonly ImagePoint[], handles = true): TransformOverlay {
+  const [nw, ne, se, sw] = corners;
+  const mid = (a: ImagePoint, b: ImagePoint) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const at = { nw, ne, se, sw, n: mid(nw, ne), e: mid(ne, se), s: mid(se, sw), w: mid(sw, nw) };
   return {
-    outline: CORNERS.map((id) => ({ x: at[id][0], y: at[id][1] })),
-    handles: handles ? [...CORNERS, ...SIDES].map((id) => ({ id, x: at[id][0], y: at[id][1] })) : [],
-    reference: { x: x + w / 2, y: y + h / 2 },
+    outline: CORNERS.map((id) => ({ ...at[id] })),
+    handles: handles ? [...CORNERS, ...SIDES].map((id) => ({ id, x: at[id].x, y: at[id].y })) : [],
+    reference: mid(nw, se),
   };
 }
 
+/** `quadFrameOverlay` for an axis-aligned box. */
+export function boxFrameOverlay(box: CropBox, handles = true): TransformOverlay {
+  const { x, y, width: w, height: h } = box;
+  return quadFrameOverlay([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], handles);
+}
+
 /**
- * What a document point is over on a frame from `boxFrameOverlay`: a handle (within `tolerance`),
+ * What a document point is over on a frame from `quadFrameOverlay`: a handle (within `tolerance`),
  * `inside`, `outside` within `band` of the outline (where a drag rotates), or `null` beyond that.
  */
 export function boxFrameHit(overlay: TransformOverlay, p: ImagePoint, tolerance: number, band: number): TransformHandle | null {
@@ -497,10 +505,14 @@ export class FreeTransformTool {
     return CURSOR[handle];
   }
 
-  /** Starts a drag on what `p` is over. */
-  down(p: ImagePoint, tolerance: number): TransformHandle | null {
+  /**
+   * Starts a drag on what `p` is over. With `reference: false` the reference point is not a handle
+   * (a press on it moves the frame), for hosts that drag layers by their frame.
+   */
+  down(p: ImagePoint, tolerance: number, options: { reference?: boolean } = {}): TransformHandle | null {
     if (!this.session || !this.corners) return null;
-    const handle = this.hit(p, tolerance);
+    let handle = this.hit(p, tolerance);
+    if (handle === 'reference' && options.reference === false) handle = 'inside';
     if (!handle) return null;
     let st: { s: number; t: number } | null = null;
     if (this.modeValue === 'warp' && this.mesh && handle === 'inside') {
