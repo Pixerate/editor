@@ -20,6 +20,7 @@ import { DEFAULT_PAINT_GRADIENT, userErrorMessage } from '@pixerate/editor/image
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
 import { imageChipClass, imageColorInputClass } from './styles';
+import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface BrushOptionsBarProps {
   controller: ImageEditorController;
@@ -159,23 +160,11 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           ))}
           <div className="flex flex-wrap gap-3 text-foreground">
             <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                aria-label="Load the brush after each stroke"
-                checked={mixer.loadEachStroke}
-                onChange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: e.target.checked } })}
-                className="accent-primary"
-              />
+              <ImageCheckbox label="Load the brush after each stroke" checked={mixer.loadEachStroke} onChange={(on) => controller.setPaintOptions({ mixer: { loadEachStroke: on } })} />
               Load each stroke
             </label>
             <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                aria-label="Clean the brush after each stroke"
-                checked={mixer.cleanEachStroke}
-                onChange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: e.target.checked } })}
-                className="accent-primary"
-              />
+              <ImageCheckbox label="Clean the brush after each stroke" checked={mixer.cleanEachStroke} onChange={(on) => controller.setPaintOptions({ mixer: { cleanEachStroke: on } })} />
               Clean each stroke
             </label>
           </div>
@@ -239,13 +228,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           <div className="flex flex-wrap gap-3 text-foreground">
             {RETOUCH_TOGGLES.filter((t) => t.tools.includes(tool)).map((t) => (
               <label key={t.id} className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  aria-label={t.label}
-                  checked={retouch[t.id]}
-                  onChange={(e) => controller.setPaintOptions({ retouch: { [t.id]: e.target.checked } })}
-                  className="accent-primary"
-                />
+                <ImageCheckbox label={t.label} checked={retouch[t.id]} onChange={(on) => controller.setPaintOptions({ retouch: { [t.id]: on } })} />
                 {t.label}
               </label>
             ))}
@@ -255,23 +238,11 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
 
       <div className="flex flex-wrap gap-3 text-foreground" role="group" aria-label="Pressure">
         <label className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            aria-label="Pressure controls size"
-            checked={brush.pressureSize}
-            onChange={(e) => controller.setPaintOptions({ brush: { pressureSize: e.target.checked } })}
-            className="accent-primary"
-          />
+          <ImageCheckbox label="Pressure controls size" checked={brush.pressureSize} onChange={(on) => controller.setPaintOptions({ brush: { pressureSize: on } })} />
           Pressure size
         </label>
         <label className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            aria-label="Pressure controls opacity"
-            checked={brush.pressureOpacity}
-            onChange={(e) => controller.setPaintOptions({ brush: { pressureOpacity: e.target.checked } })}
-            className="accent-primary"
-          />
+          <ImageCheckbox label="Pressure controls opacity" checked={brush.pressureOpacity} onChange={(on) => controller.setPaintOptions({ brush: { pressureOpacity: on } })} />
           Pressure opacity
         </label>
       </div>

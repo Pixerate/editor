@@ -42,6 +42,18 @@ export { default as ShapeOptionsBar } from './ShapeOptionsBar.svelte';
 export { default as TypeOptionsBar } from './TypeOptionsBar.svelte';
 export { default as ImageProviderEffectsPanel } from './ImageProviderEffectsPanel.svelte';
 export * from './imageEditorState.svelte.js';
+export { default as ImageCheckbox } from './controls/ImageCheckbox.svelte';
+export { default as ImageRange } from './controls/ImageRange.svelte';
+export { default as ImageSelect } from './controls/ImageSelect.svelte';
+export {
+  setImageEditorControls,
+  getImageEditorControls,
+  type ImageEditorControls,
+  type ImageCheckboxProps,
+  type ImageRangeProps,
+  type ImageSelectProps,
+  type ImageSelectOption,
+} from './controls/controls.js';
 
 export type ImageEditorProps = ComponentProps<typeof ImageEditorComponent>;
 export type ImageEditorCanvasProps = ComponentProps<typeof ImageEditorCanvasComponent>;

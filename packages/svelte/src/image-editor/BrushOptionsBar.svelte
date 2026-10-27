@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import { imageChipClass, imageColorInputClass } from './styles.js';
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
   import {
@@ -136,23 +137,11 @@
       {/each}
       <div class="flex flex-wrap gap-3 text-foreground">
         <label class="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            aria-label="Load the brush after each stroke"
-            checked={view.mixer.loadEachStroke}
-            onchange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: (e.target as HTMLInputElement).checked } })}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Load the brush after each stroke" checked={view.mixer.loadEachStroke} onchange={(on) => controller.setPaintOptions({ mixer: { loadEachStroke: on } })} />
           Load each stroke
         </label>
         <label class="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            aria-label="Clean the brush after each stroke"
-            checked={view.mixer.cleanEachStroke}
-            onchange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: (e.target as HTMLInputElement).checked } })}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Clean the brush after each stroke" checked={view.mixer.cleanEachStroke} onchange={(on) => controller.setPaintOptions({ mixer: { cleanEachStroke: on } })} />
           Clean each stroke
         </label>
       </div>
@@ -200,13 +189,7 @@
       <div class="flex flex-wrap gap-3 text-foreground">
         {#each RETOUCH_TOGGLES.filter((t) => t.tools.includes(view.tool as never)) as t (t.id)}
           <label class="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              aria-label={t.label}
-              checked={view.retouch[t.id]}
-              onchange={(e) => controller.setPaintOptions({ retouch: { [t.id]: (e.target as HTMLInputElement).checked } })}
-              class="accent-primary"
-            />
+            <ImageCheckbox label={t.label} checked={view.retouch[t.id]} onchange={(on) => controller.setPaintOptions({ retouch: { [t.id]: on } })} />
             {t.label}
           </label>
         {/each}
@@ -216,23 +199,11 @@
 
   <div class="flex flex-wrap gap-3 text-foreground" role="group" aria-label="Pressure">
     <label class="flex items-center gap-1.5">
-      <input
-        type="checkbox"
-        aria-label="Pressure controls size"
-        checked={view.brush.pressureSize}
-        onchange={(e) => controller.setPaintOptions({ brush: { pressureSize: (e.target as HTMLInputElement).checked } })}
-        class="accent-primary"
-      />
+      <ImageCheckbox label="Pressure controls size" checked={view.brush.pressureSize} onchange={(on) => controller.setPaintOptions({ brush: { pressureSize: on } })} />
       Pressure size
     </label>
     <label class="flex items-center gap-1.5">
-      <input
-        type="checkbox"
-        aria-label="Pressure controls opacity"
-        checked={view.brush.pressureOpacity}
-        onchange={(e) => controller.setPaintOptions({ brush: { pressureOpacity: (e.target as HTMLInputElement).checked } })}
-        class="accent-primary"
-      />
+      <ImageCheckbox label="Pressure controls opacity" checked={view.brush.pressureOpacity} onchange={(on) => controller.setPaintOptions({ brush: { pressureOpacity: on } })} />
       Pressure opacity
     </label>
   </div>

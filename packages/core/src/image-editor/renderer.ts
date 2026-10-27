@@ -165,6 +165,21 @@ export const globalImageCache = new ImageCache();
  * Renders an image with all its transformations, filters, depth masks, and annotations
  * to a target HTMLCanvasElement.
  */
+/** The blue edge of the crop and transform handles. */
+const OVERLAY_HANDLE_EDGE = '#0284c7';
+
+/** The crop box's square handles (screen pixels), shared by the crop and transform overlays. */
+function drawOverlayHandles(ctx: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
+  const size = 10;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
+  ctx.lineWidth = 1.5;
+  for (const h of points) {
+    ctx.fillRect(h.x - size / 2, h.y - size / 2, size, size);
+    ctx.strokeRect(h.x - size / 2, h.y - size / 2, size, size);
+  }
+}
+
 export class ImageEditorRenderer {
   public imageCache = globalImageCache;
   private cachedBaseCanvas: HTMLCanvasElement | null = null;
@@ -475,7 +490,8 @@ export class ImageEditorRenderer {
       ctx.restore();
     }
 
-    // Free Transform: the frame, square handles and the reference point, a fixed size on screen.
+    // Free Transform: drawn like the crop box (a white frame, white handles edged in blue) and a
+    // small reference point, a fixed size on screen.
     if (options.freeTransform) {
       const t = options.freeTransform;
       ctx.save();
@@ -499,38 +515,29 @@ export class ImageEditorRenderer {
           outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
           ctx.closePath();
         }
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.stroke();
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
-        for (const h of [...t.handles, ...(t.warp?.anchors ?? [])].map(scr)) {
-          ctx.fillStyle = '#ffffff';
-          ctx.strokeStyle = '#1e293b';
-          ctx.fillRect(h.x - 4, h.y - 4, 8, 8);
-          ctx.strokeRect(h.x - 4, h.y - 4, 8, 8);
-        }
+        drawOverlayHandles(ctx, [...t.handles, ...(t.warp?.anchors ?? [])].map(scr));
         for (const h of (t.warp?.handles ?? []).map((w) => scr(w.point))) {
           ctx.beginPath();
-          ctx.arc(h.x, h.y, 3, 0, Math.PI * 2);
+          ctx.arc(h.x, h.y, 3.5, 0, Math.PI * 2);
           ctx.fillStyle = '#ffffff';
           ctx.fill();
-          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
           ctx.stroke();
         }
         const r = scr(t.reference);
         ctx.beginPath();
-        ctx.arc(r.x, r.y, 5, 0, Math.PI * 2);
-        ctx.moveTo(r.x - 8, r.y);
-        ctx.lineTo(r.x + 8, r.y);
-        ctx.moveTo(r.x, r.y - 8);
-        ctx.lineTo(r.x, r.y + 8);
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.stroke();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#ffffff';
+        ctx.arc(r.x, r.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
         ctx.stroke();
       } catch {
         // Best effort (headless / mocked contexts).
@@ -1183,11 +1190,7 @@ export class ImageEditorRenderer {
     ctx.stroke();
 
     // Corner and edge handles
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#0284c7';
-    ctx.lineWidth = 1.5;
-    const handleSize = 10;
-    const handles = [
+    drawOverlayHandles(ctx, [
       // Corners
       { x: startX, y: startY },
       { x: startX + cropBoxW, y: startY },
@@ -1198,11 +1201,7 @@ export class ImageEditorRenderer {
       { x: startX + cropBoxW / 2, y: startY + cropBoxH },
       { x: startX, y: startY + cropBoxH / 2 },
       { x: startX + cropBoxW, y: startY + cropBoxH / 2 },
-    ];
-    for (const h of handles) {
-      ctx.fillRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
-      ctx.strokeRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
-    }
+    ]);
 
     ctx.restore();
   }

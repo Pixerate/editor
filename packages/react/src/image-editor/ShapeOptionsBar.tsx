@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, LiveShapeKind, ShapeToolOptions } from '@pixerate/editor/image-editor';
 import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
 import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles';
+import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface ShapeOptionsBarProps {
   controller: ImageEditorController;
@@ -46,7 +47,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1">
-          <input type="checkbox" aria-label="Fill" checked={options.fill !== null} onChange={(e) => set({ fill: e.target.checked ? '#4f46e5' : null })} />
+          <ImageCheckbox label="Fill" checked={options.fill !== null} onChange={(on) => set({ fill: on ? '#4f46e5' : null })} />
           Fill
           <input
             type="color"
@@ -58,7 +59,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
           />
         </label>
         <label className="flex items-center gap-1">
-          <input type="checkbox" aria-label="Stroke" checked={options.stroke !== null} onChange={(e) => set({ stroke: e.target.checked ? '#000000' : null })} />
+          <ImageCheckbox label="Stroke" checked={options.stroke !== null} onChange={(on) => set({ stroke: on ? '#000000' : null })} />
           Stroke
           <input
             type="color"
@@ -103,16 +104,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
             </label>
             <label className="flex items-center gap-1">
               Inner
-              <input
-                type="range"
-                aria-label="Inner radius"
-                min={0.05}
-                max={1}
-                step={0.05}
-                value={options.innerRatio}
-                onChange={(e) => set({ innerRatio: Number(e.target.value) })}
-                className="accent-primary"
-              />
+              <ImageRange label="Inner radius" min={0.05} max={1} step={0.05} value={options.innerRatio} onChange={(v) => set({ innerRatio: v })} />
             </label>
           </>
         )}
@@ -123,7 +115,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
               <input type="number" aria-label="Line weight" min={1} max={200} value={options.weight} onChange={(e) => set({ weight: num(e.target.value, 1, 200) })} className={`w-14 ${imageFieldClass}`} />
             </label>
             <label className="flex items-center gap-1">
-              <input type="checkbox" aria-label="Arrowhead" checked={options.arrow} onChange={(e) => set({ arrow: e.target.checked })} />
+              <ImageCheckbox label="Arrowhead" checked={options.arrow} onChange={(on) => set({ arrow: on })} />
               Arrowhead
             </label>
           </>

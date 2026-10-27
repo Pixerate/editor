@@ -46,7 +46,13 @@ export type PlaybackStep =
 	 */
 	| { type: 'open'; ref: PlaybackRef; ms?: number }
 	/** The handler runs here, exactly once (appended when a plan leaves it out). */
-	| { type: 'commit' };
+	| { type: 'commit' }
+	/**
+	 * One part of a staged change lands here. A plan with `stage` steps starts the handler at
+	 * `commit` and keeps playing; each `stage` lets one `await context.stage()` in the handler
+	 * through, so a call that adds several things adds them one by one under the cursor.
+	 */
+	| { type: 'stage' };
 
 export interface PlaybackPlanResult {
 	steps: PlaybackStep[];
@@ -273,7 +279,7 @@ const center = (r: PlaybackRect): PlaybackPoint => ({ x: r.x + r.width / 2, y: r
 const finiteRect = (r: PlaybackRect | null): PlaybackRect | null =>
 	r && [r.x, r.y, r.width, r.height].every(Number.isFinite) ? r : null;
 
-const GLANCE_STEPS = new Set<PlaybackStep['type']>(['move', 'target', 'focus', 'say', 'wait', 'commit']);
+const GLANCE_STEPS = new Set<PlaybackStep['type']>(['move', 'target', 'focus', 'say', 'wait', 'commit', 'stage']);
 
 interface ActorState {
 	info: PresenceActorInfo & { color: string };
@@ -281,6 +287,32 @@ interface ActorState {
 	surface?: string;
 	viewport?: PlaybackPoint;
 	version: number;
+}
+
+/** Lets a staged handler's `context.stage()` calls through, one per `stage` step, then all of them. */
+function createStageGate() {
+	let credits = 0;
+	let opened = false;
+	const waiting: Array<() => void> = [];
+	return {
+		wait: (): Promise<void> => {
+			if (opened) return Promise.resolve();
+			if (credits > 0) {
+				credits--;
+				return Promise.resolve();
+			}
+			return new Promise<void>((resolve) => waiting.push(resolve));
+		},
+		release() {
+			const next = waiting.shift();
+			if (next) next();
+			else credits++;
+		},
+		open() {
+			opened = true;
+			waiting.splice(0).forEach((resolve) => resolve());
+		}
+	};
 }
 
 /**
@@ -485,13 +517,27 @@ export class AgentPlayback {
 			if (!readOnly) surface.beginGesture?.(`agent:${id}:${++this.calls}`);
 			let result: unknown;
 			let committed = false;
+			// A staged plan runs the handler alongside the steps; `stage` steps let its parts through.
+			const gate = run.steps.some((s) => s.type === 'stage') ? createStageGate() : null;
+			if (gate) call.context.stage = gate.wait;
+			let pending: Promise<unknown> | null = null;
 			try {
 				for (const step of run.steps) {
 					record(step);
 					if (step.type === 'commit') {
 						if (committed) continue;
 						committed = true;
-						result = await next();
+						if (gate) {
+							pending = next();
+							// Awaited after the steps; until then a failure must not go unhandled.
+							pending.catch(() => {});
+						} else result = await next();
+						continue;
+					}
+					if (step.type === 'stage') {
+						gate?.release();
+						// Let the handler land that part before the cursor moves on.
+						await wait(120);
 						continue;
 					}
 					if (step.type === 'open') {
@@ -511,9 +557,14 @@ export class AgentPlayback {
 				}
 				if (!committed) {
 					record({ type: 'commit' });
-					result = await next();
+					pending = next();
+				}
+				if (pending) {
+					gate?.open();
+					result = await pending;
 				}
 			} catch (error) {
+				gate?.open();
 				presence.set({ id, pressed: false, message: `✗ ${error instanceof Error ? error.message : String(error)}`.slice(0, 140) });
 				await wait(900);
 				throw error;

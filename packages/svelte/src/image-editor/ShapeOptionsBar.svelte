@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
+  import ImageRange from './controls/ImageRange.svelte';
   import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles.js';
   import type { ImageEditorController, ShapeToolOptions } from '@pixerate/editor/image-editor';
   import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
@@ -44,7 +46,6 @@
     }
   }
   const value = (e: Event) => (e.target as HTMLInputElement).value;
-  const checked = (e: Event) => (e.target as HTMLInputElement).checked;
 </script>
 
 <div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="shape-options">
@@ -55,7 +56,7 @@
   </div>
   <div class="flex flex-wrap items-center gap-3">
     <label class="flex items-center gap-1">
-      <input type="checkbox" aria-label="Fill" checked={options.fill !== null} onchange={(e) => set({ fill: checked(e) ? '#4f46e5' : null })} />
+      <ImageCheckbox label="Fill" checked={options.fill !== null} onchange={(on) => set({ fill: on ? '#4f46e5' : null })} />
       Fill
       <input
         type="color"
@@ -67,7 +68,7 @@
       />
     </label>
     <label class="flex items-center gap-1">
-      <input type="checkbox" aria-label="Stroke" checked={options.stroke !== null} onchange={(e) => set({ stroke: checked(e) ? '#000000' : null })} />
+      <ImageCheckbox label="Stroke" checked={options.stroke !== null} onchange={(on) => set({ stroke: on ? '#000000' : null })} />
       Stroke
       <input
         type="color"
@@ -101,7 +102,7 @@
       </label>
       <label class="flex items-center gap-1">
         Inner
-        <input type="range" aria-label="Inner radius" min="0.05" max="1" step="0.05" value={options.innerRatio} oninput={(e) => set({ innerRatio: Number(value(e)) })} class="accent-primary" />
+        <ImageRange label="Inner radius" min={0.05} max={1} step={0.05} value={options.innerRatio} oninput={(v) => set({ innerRatio: v })} />
       </label>
     {:else if options.kind === 'line'}
       <label class="flex items-center gap-1">
@@ -109,7 +110,7 @@
         <input type="number" aria-label="Line weight" min="1" max="200" value={options.weight} oninput={(e) => set({ weight: num(value(e), 1, 200) })} class="w-14 {imageFieldClass}" />
       </label>
       <label class="flex items-center gap-1">
-        <input type="checkbox" aria-label="Arrowhead" checked={options.arrow} onchange={(e) => set({ arrow: checked(e) })} />
+        <ImageCheckbox label="Arrowhead" checked={options.arrow} onchange={(on) => set({ arrow: on })} />
         Arrowhead
       </label>
     {/if}
