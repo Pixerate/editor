@@ -9,6 +9,7 @@ import type ChartSparklineComponent from "./ChartSparkline.svelte";
 export { default as ChartEditor } from "./ChartEditor.svelte";
 export { default as ChartCanvas } from "./ChartCanvas.svelte";
 export { default as ChartDataGrid } from "./ChartDataGrid.svelte";
+export { default as ChartTreeGrid } from "./ChartTreeGrid.svelte";
 export { default as ChartInspector } from "./ChartInspector.svelte";
 export { default as ChartCommitInput } from "./ChartCommitInput.svelte";
 export { default as ChartMarks } from "./ChartMarks.svelte";

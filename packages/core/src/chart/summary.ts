@@ -6,9 +6,10 @@ import { describeChartErrorBars } from './errorbars.js';
 import { layoutChart } from './layout.js';
 import type { ChartLayoutOptions } from './layout-shared.js';
 import { formatChartNumber } from './scale.js';
-import { chartColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
+import { chartSpecColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
 import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
+import { chartTreeDepth, chartTreeToRows } from './tree.js';
 
 /** An axis as drawn. `logBase` is set on a logarithmic axis, `reversed` when it runs the other way. */
 export interface ChartAxisSummary {
@@ -44,7 +45,7 @@ export interface ChartSummary {
 export function summarizeChart(spec: ChartSpec, size: Pick<ChartLayoutOptions, 'width' | 'height' | 'measureText'> = { width: 640, height: 400 }, scene: ChartScene = layoutChart(spec, { ...size, selection: null })): ChartSummary {
 	const visible = spec.series.filter((s) => !s.hidden);
 	const series = visible.map((s) => summarizeChartSeries(s, spec.categories));
-	const colors = chartColorsByCategory(spec.type) ? spec.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(spec, i)) : visible.map((s) => chartSeriesColor(spec, spec.series.indexOf(s)));
+	const colors = chartSpecColorsByCategory(spec) ? spec.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(spec, i)) : visible.map((s) => chartSeriesColor(spec, spec.series.indexOf(s)));
 	const check = checkChartColors(colors, { surface: scene.theme.surface.startsWith('var(') ? '#ffffff' : scene.theme.surface });
 	const axis = (s: ChartScene['valueScale'], a: ChartAxis): ChartAxisSummary | undefined =>
 		s ? { min: s.domain[0], max: s.domain[1], ticks: [...s.ticks], ...(s.logBase ? { logBase: s.logBase } : {}), ...(a.reverse ? { reversed: true } : {}) } : undefined;
@@ -71,13 +72,49 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 	const fmt = (v: number | null) => (v === null ? 'blank' : formatChartNumber(v, format));
 	const head = spec.title ? `${spec.title}: a ${kind} chart` : `A ${kind} chart`;
 	if (!series.length || series.every((s) => s.count === 0)) return `${head} with no data.`;
-	if (family === 'pie' || family === 'funnel' || family === 'treemap') {
+	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'sunburst') {
 		const s = series[0];
 		const total = s.sum ?? 0;
 		const share = (v: number | null) => (total && v !== null ? ` (${Math.round((v / total) * 100)}%)` : '');
 		parts.push(`${head} of ${s.name} across ${spec.categories.length} categories, totalling ${fmt(s.sum)}.`);
 		parts.push(`The largest is ${s.maxAt} at ${fmt(s.max)}${share(s.max)}; the smallest is ${s.minAt} at ${fmt(s.min)}${share(s.min)}.`);
+		if (spec.tree.length) {
+			const depth = chartTreeDepth(spec.tree);
+			const items = chartTreeToRows(spec.tree).length;
+			parts.push(`The data is grouped ${depth} level${depth === 1 ? '' : 's'} deep with ${items} item${items === 1 ? '' : 's'}.`);
+		}
 		return parts.join(' ');
+	}
+	if (family === 'parliament') {
+		const s = spec.series.find((x) => !x.hidden)!;
+		const seats = spec.categories.map((c, i) => ({ c, n: Math.max(0, Math.round(s.values[i] ?? 0)) }));
+		const total = seats.reduce((t, x) => t + x.n, 0);
+		const majority = spec.parliamentMajority ?? Math.floor(total / 2) + 1;
+		const largest = [...seats].sort((a, b) => b.n - a.n)[0];
+		const verdict = largest && largest.n >= majority ? `${largest.c} holds a majority with ${largest.n}` : `no group reaches the majority of ${majority}; the largest is ${largest?.c} with ${largest?.n}`;
+		return `${head} of ${total} seats across ${seats.length} groups: ${verdict}.`;
+	}
+	if (family === 'slope') {
+		const [a, b] = spec.series.filter((x) => !x.hidden);
+		if (!b) return `${head} that needs a second series to compare against.`;
+		const moves = spec.categories.map((c, i) => ({ c, d: a.values[i] !== null && b.values[i] !== null ? (b.values[i] as number) - (a.values[i] as number) : null })).filter((m): m is { c: string; d: number } => m.d !== null);
+		const up = moves.filter((m) => m.d > 0).length;
+		const down = moves.filter((m) => m.d < 0).length;
+		const top = [...moves].sort((x, y) => y.d - x.d);
+		const extremes = top.length ? ` The biggest rise is ${top[0].c} (${fmt(top[0].d)}); the biggest fall is ${top[top.length - 1].c} (${fmt(top[top.length - 1].d)}).` : '';
+		return `${head} from ${a.name} to ${b.name}: ${up} of ${moves.length} rose and ${down} fell.${extremes}`;
+	}
+	if (family === 'likert') {
+		const answers = spec.series.filter((x) => !x.hidden);
+		const side = Math.floor(answers.length / 2);
+		const agree = spec.categories.map((c, i) => {
+			const vals = answers.map((x) => Math.max(0, x.values[i] ?? 0));
+			const total = vals.reduce((t, v) => t + v, 0);
+			return { c, share: total ? vals.slice(answers.length - side).reduce((t, v) => t + v, 0) / total : 0 };
+		});
+		const best = [...agree].sort((x, y) => y.share - x.share);
+		const pct = (v: number) => `${Math.round(v * 100)}%`;
+		return `${head} of ${spec.categories.length} questions with ${answers.length} answers from ${answers[0]?.name} to ${answers[answers.length - 1]?.name}. Most positive: ${best[0]?.c} (${pct(best[0]?.share ?? 0)}); least: ${best[best.length - 1]?.c} (${pct(best[best.length - 1]?.share ?? 0)}).`;
 	}
 	if (family === 'waterfall') {
 		const s = spec.series.find((x) => !x.hidden)!;

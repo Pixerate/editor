@@ -125,6 +125,7 @@ export function recommendForShape(shape: Omit<ChartTableShape, 'headerRow' | 'by
 				add('donut', 'Donut', 'Shares of a whole with the total in the middle.');
 				if (shape.points >= 5) add('treemap', 'Treemap', 'Compares many shares by area.');
 				add('funnel', 'Funnel', 'Shows stages that narrow down.');
+				add('parliament', 'Parliament', 'Seats or votes per group, with the majority line.');
 			}
 			add('line', 'Line', 'Shows the values in order.');
 		}
@@ -136,11 +137,13 @@ export function recommendForShape(shape: Omit<ChartTableShape, 'headerRow' | 'by
 		add('area', 'Area', 'Emphasises volume.');
 		add('bar', 'Stacked column', 'Shows how the series add up.', 'stacked');
 	} else {
+		if (shape.series === 2 && shape.labelColumn) add('slope', 'Slope', 'Two columns per item: shows what rose and what fell between them.');
 		add('bar', 'Column', 'Several series: clustered columns compare them per category.');
 		add('bar', 'Bar', 'Horizontal bars fit long category names.');
 		add('bar', 'Stacked column', 'Shows how the series add up.', 'stacked');
 		add('line', 'Line', 'Shows the series in order.');
 		if (shape.points >= 3 && shape.series <= 6) add('radar', 'Radar', 'Compares several measures across the series.');
+		if (shape.nonNegative && shape.series >= 3 && shape.series <= 7) add('likert', 'Likert', 'Survey answers per question (columns from most negative to most positive): shows agreement against disagreement.');
 	}
 	return out;
 }

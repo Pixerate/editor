@@ -16,6 +16,7 @@ import {
 	type Pt
 } from './layout-shared.js';
 import { chartErrorAmounts } from './errorbars.js';
+import { drawReferences, referenceValues, type ReferenceAxis } from './layout-annotations.js';
 import { chartScaleToPixel, formatChartNumber, stepDecimals, type NiceScale } from './scale.js';
 import { chartPointColor, chartSeriesColor, chartSeriesType } from './spec.js';
 import { decimateChartPoints } from './stats.js';
@@ -473,6 +474,8 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 			else s.values.forEach((v) => v !== null && see(v));
 			errors.get(s.id)?.forEach((e) => e && (see(e.lo), see(e.hi)));
 		}
+		// Reference lines and bands stay in view.
+		for (const v of referenceValues(spec, secondary ? 'y2' : 'y')) see(v);
 		if (log) {
 			const skipped = group.reduce((t, s) => t + s.values.filter((v) => v !== null && Number.isFinite(v) && v <= 0).length, 0);
 			if (skipped) ctx.warn('values-skipped', `${skipped} value${skipped === 1 ? '' : 's'} of 0 or less cannot be drawn on the logarithmic ${secondary ? 'secondary ' : ''}value axis and ${skipped === 1 ? 'was' : 'were'} skipped.`);
@@ -499,6 +502,8 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 	});
 	const { plot, band, catCenter, map, catStart } = frame;
 	const infoOf = (s: ChartSeries) => (onSecondary(s) && frame.value2 ? frame.value2 : frame.value);
+	const refAxes: Partial<Record<'y' | 'y2', ReferenceAxis>> = { y: { info: frame.value, vertical: !horizontal }, ...(frame.value2 ? { y2: { info: frame.value2, vertical: !horizontal } } : {}) };
+	drawReferences(ctx, plot, refAxes, 'bands');
 
 	// Bars: groups take (1 - gapWidth) of each category; bars in a group overlap by `overlap`.
 	const bars = visible.filter((s) => types.get(s.id) === 'bar');
@@ -675,6 +680,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 			drawTrendlines(ctx, plot, s, color, points, toPx, trendLabels, !!info.logBase);
 		}
 	}
+	drawReferences(ctx, plot, refAxes, 'lines');
 	marks.push(...errorMarks, ...labelMarks);
 	drawTrendLabels(ctx, plot, trendLabels);
 	if (hiddenLabels) ctx.warn('data-labels-hidden', `${hiddenLabels} data label${hiddenLabels === 1 ? '' : 's'} did not fit and ${hiddenLabels === 1 ? 'is' : 'are'} hidden.`);
@@ -745,6 +751,8 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 			seeX(Math.max(...pts.map((p) => p.x)) + (t.forward ?? 0));
 		}
 	}
+	for (const v of referenceValues(spec, 'y')) seeY(v);
+	for (const v of referenceValues(spec, 'x')) seeX(v);
 	if (!Number.isFinite(xlo)) [xlo, xhi] = xLog ? [1, 10] : [0, 1];
 	if (!Number.isFinite(ylo)) [ylo, yhi] = yLog ? [1, 10] : [0, 1];
 	const titleBand = fs * 1.3 + 6;
@@ -790,6 +798,9 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 		if (!ctx.isSelected({ kind: 'axis', axis })) continue;
 		ctx.outline(`axis-${axis}-selection`, axis === 'y' ? { x: area.x, y: plot.y - fs / 2, width: left - 2, height: plot.height + fs } : { x: plot.x - 4, y: plot.y + plot.height + 2, width: plot.width + 8, height: area.y + area.height - plot.y - plot.height - 2 });
 	}
+
+	const refAxes: Partial<Record<'x' | 'y', ReferenceAxis>> = { y: { info: yInfo, vertical: true }, x: { info: xInfo, vertical: false } };
+	drawReferences(ctx, plot, refAxes, 'bands');
 
 	const labelMarks: ChartMark[] = [];
 	const errorMarks: ChartMark[] = [];
@@ -851,6 +862,7 @@ export function layoutXy(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]
 		}
 		if (s.trendlines?.length) drawTrendlines(ctx, plot, s, color, pts.map((p) => [p.x, p.y]), (x, y) => [xRaw(x), yRaw(y)], trendLabels, xLog || yLog);
 	}
+	drawReferences(ctx, plot, refAxes, 'lines');
 	marks.push(...errorMarks, ...labelMarks);
 	drawTrendLabels(ctx, plot, trendLabels);
 	return {

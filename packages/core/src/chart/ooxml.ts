@@ -4,7 +4,8 @@
 // from wordcraft-main/crates/docx/src/chart_spec.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors).
 // See THIRD_PARTY_NOTICES.md.
 import { parseChartColor, chartRgbToHex } from './color.js';
-import { chartFamily, chartSeriesType, defaultChartAxis, isCartesianChart, normalizeChartSpec } from './spec.js';
+import { chartFamily, chartSeriesType, chartVariesColors, defaultChartAxis, isCartesianChart, normalizeChartSpec } from './spec.js';
+import { chartTreeFromRows } from './tree.js';
 import type { ChartAxis, ChartErrorBars, ChartErrorBarType, ChartIssue, ChartLegendPosition, ChartMarker, ChartNumberFormat, ChartSeries, ChartSpec, ChartTrendline, ChartTrendlineType, ChartType, ChartValue } from './types.js';
 
 export const CHART_OOXML_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
@@ -337,7 +338,7 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 	input.orientation = orientation;
 	input.dataLabels = dataLabels;
 	input.points = points || first !== 'line';
-	if (bool(val(groups[0], 'varyColors')) && (first === 'bar' || first === 'line') && series.length === 1) unsupported.push('one colour per point (vary colours)');
+	if (bool(val(groups[0], 'varyColors')) && !combo && isCartesianChart(first) && series.length === 1) input.varyColors = true;
 
 	// Axes
 	const readAxis = (a: Element | undefined, fallback: ChartAxis): ChartAxis => {
@@ -378,13 +379,39 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 }
 
 function readChartex(root: Element, issues: ChartIssue[], unsupported: string[]): ChartOoxmlReadResult {
-	const data = new Map<string, { categories: string[]; values: ChartValue[]; code?: string }>();
+	const data = new Map<string, { categories: string[]; values: ChartValue[]; code?: string; paths?: string[][] }>();
 	for (const d of kids(kid(root, 'chartData'), 'data')) {
 		const id = d.getAttribute('id') ?? String(data.size);
 		const strDim = kids(d, 'strDim')[0];
 		const numDim = kids(d, 'numDim')[0];
 		const lvl = (dim: Element | undefined) => kids(dim, 'lvl')[0];
 		const cats = kids(lvl(strDim), 'pt').map((p) => p.textContent ?? '');
+		// Hierarchical categories (treemap and sunburst) list their levels leaf first, root last; a
+		// parent level names a group at the first point it covers and is blank until the next.
+		const levels = kids(strDim, 'lvl').map((l) => {
+			const out: string[] = [];
+			for (const p of kids(l, 'pt')) out[Number(p.getAttribute('idx') ?? out.length)] = (p.textContent ?? '').trim();
+			return out;
+		});
+		let paths: string[][] | undefined;
+		if (levels.length > 1) {
+			const carried: string[] = [];
+			paths = levels[0].map((_, i) => {
+				const path: string[] = [];
+				for (let k = levels.length - 1; k >= 1; k--) {
+					const name = levels[k][i];
+					if (name) {
+						carried[k] = name;
+						carried.length = Math.max(carried.length, k + 1);
+						// A new group resets the groups inside it.
+						for (let j = 1; j < k; j++) carried[j] = '';
+					}
+					if (carried[k]) path.push(carried[k]);
+				}
+				if (levels[0][i]) path.push(levels[0][i]);
+				return path;
+			});
+		}
 		const values: ChartValue[] = [];
 		const nl = lvl(numDim);
 		for (const p of kids(nl, 'pt')) {
@@ -392,19 +419,18 @@ function readChartex(root: Element, issues: ChartIssue[], unsupported: string[])
 			while (values.length < i) values.push(null);
 			values[i] = numberOf((p.textContent ?? '').trim());
 		}
-		data.set(id, { categories: cats, values, code: nl?.getAttribute('formatCode') ?? undefined });
+		data.set(id, { categories: cats, values, code: nl?.getAttribute('formatCode') ?? undefined, paths });
 	}
 	const chart = kid(root, 'chart');
 	const region = path(chart, 'plotArea', 'plotAreaRegion');
 	const seriesEls = kids(region, 'series');
-	const layouts: Record<string, ChartType> = { waterfall: 'waterfall', funnel: 'funnel', treemap: 'treemap', sunburst: 'treemap', boxWhisker: 'box', clusteredColumn: 'histogram', paretoLine: 'histogram' };
+	const layouts: Record<string, ChartType> = { waterfall: 'waterfall', funnel: 'funnel', treemap: 'treemap', sunburst: 'sunburst', boxWhisker: 'box', clusteredColumn: 'histogram', paretoLine: 'histogram' };
 	const layout = seriesEls[0]?.getAttribute('layoutId') ?? '';
 	const type = layouts[layout];
 	if (!type) {
 		issues.push({ path: 'plotArea', message: `The chart layout "${layout || 'unknown'}" is not supported.` });
 		return { spec: normalizeChartSpec({}).spec, issues, unsupported: [layout || 'unknown chartex layout'], lossless: false };
 	}
-	if (layout === 'sunburst') unsupported.push('sunburst (drawn as a treemap of the innermost level)');
 	if (layout === 'paretoLine') unsupported.push('pareto line');
 	const series: ChartSeries[] = [];
 	let categories: string[] = [];
@@ -427,6 +453,12 @@ function readChartex(root: Element, issues: ChartIssue[], unsupported: string[])
 		categories: categories.length >= longest ? categories : Array.from({ length: longest }, (_, i) => categories[i] ?? `${i + 1}`)
 	};
 	if (type === 'waterfall') input.showTotal = false;
+	const first = data.get(kid(seriesEls[0], 'dataId')?.getAttribute('val') ?? '0');
+	if ((type === 'treemap' || type === 'sunburst') && first?.paths) {
+		const treeIssues: ChartIssue[] = [];
+		input.tree = chartTreeFromRows(first.paths.map((path, i) => ({ path, value: first.values[i] ?? 0 })), treeIssues);
+		for (const t of treeIssues) issues.push({ path: 'chartData', message: t.message });
+	}
 	const { spec, issues: specIssues } = normalizeChartSpec(input);
 	issues.push(...specIssues);
 	return { spec, issues, unsupported, lossless: unsupported.length === 0 && specIssues.length === 0 };
@@ -511,10 +543,30 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		issues.push(`${spec.type} charts are written as bar charts: DrawingML has no ${spec.type} type (Office 2016 stores it as chartex).`);
 		type = 'bar';
 	} else if (family === 'treemap') {
-		issues.push('Treemaps are written as pie charts: DrawingML has no treemap type.');
+		issues.push(`Treemaps are written as pie charts${spec.tree.length ? ' of the top-level group totals' : ''}: DrawingML has no treemap type.`);
 		type = 'pie';
+	} else if (family === 'sunburst') {
+		issues.push(`Sunburst charts are written as doughnut charts of the ${spec.tree.length ? 'top-level group totals' : 'values'}: DrawingML has no sunburst type (Office 2016 stores it as chartex).`);
+		type = 'donut';
+	} else if (family === 'parliament') {
+		issues.push('Parliament charts are written as doughnut charts of the seats: DrawingML has no parliament type.');
+		type = 'donut';
+	} else if (family === 'slope') {
+		issues.push('Slope charts are written as line charts with the two series as lines over the categories: DrawingML has no slope type.');
+		type = 'line';
+	} else if (family === 'likert') {
+		issues.push('Likert charts are written as 100% stacked horizontal bars: DrawingML has no diverging bar.');
+		spec = { ...spec, type: 'bar', stacking: 'percent', orientation: 'horizontal' };
+		type = 'bar';
 	}
 	const visible = spec.series.filter((s) => !s.hidden);
+	const annotations = [
+		spec.referenceLines.length || spec.referenceBands.length ? 'reference lines and bands' : '',
+		spec.series.some((s) => s.callouts) ? 'callouts' : '',
+		spec.highlight.length ? 'the highlight' : '',
+		spec.note ? 'the note' : ''
+	].filter(Boolean);
+	if (annotations.length) issues.push(`${annotations.join(', ').replace(/^./, (c) => c.toUpperCase())} ${annotations.length === 1 && !annotations[0].endsWith('s') ? 'is' : 'are'} not written: DrawingML has no equivalent.`);
 	if (visible.length < spec.series.length) issues.push(`${spec.series.length - visible.length} hidden series ${spec.series.length - visible.length === 1 ? 'is' : 'are'} left out.`);
 	const grouping = spec.stacking === 'stacked' ? 'stacked' : spec.stacking === 'percent' ? 'percentStacked' : 'standard';
 	const ids = { cat: 500000001, val: 500000002, cat2: 500000003, val2: 500000004 };
@@ -584,6 +636,7 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		return `<c:ser>${parts.join('')}</c:ser>`;
 	};
 	const dLbls = `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="${spec.dataLabels ? 1 : 0}"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>`;
+	const vary = chartVariesColors(spec) ? 1 : 0;
 	const groupXml = groups.map((g) => {
 		const axes = g.secondary ? `<c:axId val="${ids.cat2}"/><c:axId val="${ids.val2}"/>` : `<c:axId val="${ids.cat}"/><c:axId val="${ids.val}"/>`;
 		const sers = g.series.map(({ s, index }) => serXml(g.kind, s, index)).join('');
@@ -593,14 +646,14 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 				const barsWidth = spec.stacking === 'none' ? n - (n - 1) * spec.overlap : 1;
 				const gapPct = Math.round(Math.min(500, (spec.gapWidth / Math.max(0.01, 1 - spec.gapWidth)) * barsWidth * 100));
 				const overlapPct = spec.stacking === 'none' ? Math.round(spec.overlap * 100) : 100;
-				return `<c:barChart><c:barDir val="${spec.orientation === 'horizontal' ? 'bar' : 'col'}"/><c:grouping val="${spec.stacking === 'none' ? 'clustered' : grouping}"/><c:varyColors val="0"/>${sers}${dLbls}<c:gapWidth val="${gapPct}"/><c:overlap val="${overlapPct}"/>${axes}</c:barChart>`;
+				return `<c:barChart><c:barDir val="${spec.orientation === 'horizontal' ? 'bar' : 'col'}"/><c:grouping val="${spec.stacking === 'none' ? 'clustered' : grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}<c:gapWidth val="${gapPct}"/><c:overlap val="${overlapPct}"/>${axes}</c:barChart>`;
 			}
 			case 'line':
-				return `<c:lineChart><c:grouping val="${spec.stacking === 'none' ? 'standard' : 'standard'}"/><c:varyColors val="0"/>${sers}${dLbls}<c:marker val="1"/>${axes}</c:lineChart>`;
+				return `<c:lineChart><c:grouping val="${spec.stacking === 'none' ? 'standard' : 'standard'}"/><c:varyColors val="${vary}"/>${sers}${dLbls}<c:marker val="1"/>${axes}</c:lineChart>`;
 			case 'area':
-				return `<c:areaChart><c:grouping val="${grouping}"/><c:varyColors val="0"/>${sers}${dLbls}${axes}</c:areaChart>`;
+				return `<c:areaChart><c:grouping val="${grouping}"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}</c:areaChart>`;
 			case 'scatter':
-				return `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>${sers}${dLbls}${axes}</c:scatterChart>`;
+				return `<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="${vary}"/>${sers}${dLbls}${axes}</c:scatterChart>`;
 			case 'bubble':
 				return `<c:bubbleChart><c:varyColors val="0"/>${sers}${dLbls}<c:bubbleScale val="100"/>${axes}</c:bubbleChart>`;
 			case 'radar':

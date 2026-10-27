@@ -2961,3 +2961,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `svelte-check` failed with "Cannot use 'state' as a store" and "Untyped function calls may not accept type arguments" on `let anchor = $state<number | null>(null)` in a component that also declared `const state = $derived(...)`.
 - **Root Cause**: In Svelte 5, a top-level variable named `state` makes `$state` look like an auto-subscription to a store called `state`, not the rune.
 - **Solution / Workaround**: Never name a component-level variable `state` (or `derived`, `effect`, `props`) when the component uses runes. `TranscriptEditor.svelte` uses `ts` for the transcript state.
+
+### [chart] Per-Category Lists Drifted When Categories Were Added, Removed or Moved
+
+- **Issue / Symptom**: After inserting, deleting or reordering a category, a series' point colours (and its numeric x values, bubble sizes and custom error amounts) stayed where they were while the values moved, so colours and sizes landed on the wrong bars. Callouts, which are also one per category, would have done the same.
+- **Root Cause**: `addCategory`, `removeCategory` and `moveCategory` spliced only `series.values`. Normalising afterwards pads or trims the other lists to the category count, which hides the mismatch instead of fixing it.
+- **Solution / Workaround**: The controller edits every per-category list of a series together (`pointLists`: values, x, sizes, pointColors, callouts and custom error-bar plus / minus). Any new per-category series field must be added to `pointLists`. Names in `highlight` are kept in step the same way: renaming a category or series renames its entry, and removing one drops it.

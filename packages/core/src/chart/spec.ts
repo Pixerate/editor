@@ -1,5 +1,6 @@
 import { cyclePaletteColor } from './color.js';
 import { CHART_ERROR_BAR_DIRECTIONS, CHART_ERROR_BAR_TYPES } from './errorbars.js';
+import { chartTreeTotal, cloneChartTree, normalizeChartTree } from './tree.js';
 import type {
 	ChartAxis,
 	ChartCurve,
@@ -8,10 +9,15 @@ import type {
 	ChartLabelPosition,
 	ChartLegend,
 	ChartLegendPosition,
+	ChartLikertNeutral,
+	ChartLikertSort,
 	ChartMarker,
 	ChartNumberFormat,
 	ChartOrientation,
 	ChartRadarGraticule,
+	ChartReferenceAxis,
+	ChartReferenceBand,
+	ChartReferenceLine,
 	ChartSeries,
 	ChartSeriesType,
 	ChartSpec,
@@ -23,7 +29,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'slope', 'likert', 'parliament'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -33,6 +39,9 @@ export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'a
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
 export const CHART_RADAR_GRATICULES: readonly ChartRadarGraticule[] = ['polygon', 'circle'];
+export const CHART_LIKERT_NEUTRALS: readonly ChartLikertNeutral[] = ['split', 'separate'];
+export const CHART_LIKERT_SORTS: readonly ChartLikertSort[] = ['none', 'positive', 'negative'];
+export const CHART_REFERENCE_AXES: readonly ChartReferenceAxis[] = ['y', 'y2', 'x'];
 export const CHART_ORIENTATIONS: readonly ChartOrientation[] = ['vertical', 'horizontal'];
 export const CHART_LEGEND_POSITIONS: readonly ChartLegendPosition[] = ['top', 'bottom', 'left', 'right'];
 export const CHART_NUMBER_STYLES: readonly NonNullable<ChartNumberFormat['style']>[] = ['number', 'percent', 'currency', 'compact'];
@@ -51,11 +60,15 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	histogram: 'Histogram',
 	box: 'Box plot',
 	funnel: 'Funnel',
-	treemap: 'Treemap'
+	treemap: 'Treemap',
+	slope: 'Slope',
+	likert: 'Likert',
+	parliament: 'Parliament',
+	sunburst: 'Sunburst'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -116,6 +129,10 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'box':
 		case 'funnel':
 		case 'treemap':
+		case 'slope':
+		case 'likert':
+		case 'parliament':
+		case 'sunburst':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -126,7 +143,12 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 
 /** Chart types whose legend lists categories (one colour per category) rather than series. */
 export function chartColorsByCategory(type: ChartType): boolean {
-	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap';
+	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament' || type === 'sunburst';
+}
+
+/** Whether this chart colours by category: a pie-like type, or `varyColors` on a one-series chart. */
+export function chartSpecColorsByCategory(spec: Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean }): boolean {
+	return chartColorsByCategory(spec.type) || chartVariesColors(spec);
 }
 
 export function defaultChartAxis(value: boolean): ChartAxis {
@@ -139,10 +161,31 @@ export function createChartSpec(partial: Partial<ChartSpec> = {}): ChartSpec {
 }
 
 /** The colour a series is drawn with. */
-export function chartSeriesColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number): string {
+export function chartSeriesColor(spec: Pick<ChartSpec, 'palette' | 'series'> & { type?: ChartType }, seriesIndex: number): string {
 	const series = spec.series[seriesIndex];
 	if (series?.color) return series.color;
+	if (spec.type === 'likert') return chartLikertColor(spec.series.length, seriesIndex);
 	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, seriesIndex);
+}
+
+// ColorBrewer PuOr (colour-blind safe): disagreement in oranges, agreement in purples.
+const LIKERT_NEGATIVE = [['#e66101'], ['#e66101', '#fdb863'], ['#b35806', '#f1a340', '#fee0b6'], ['#b35806', '#e08214', '#fdb863', '#fee0b6']];
+const LIKERT_POSITIVE = [['#5e3c99'], ['#b2abd2', '#5e3c99'], ['#d8daeb', '#998ec3', '#542788'], ['#d8daeb', '#b2abd2', '#8073ac', '#542788']];
+const LIKERT_NEUTRAL = '#d4d4d8';
+
+/**
+ * The colour of answer `index` of `count` on a Likert chart: oranges for the negative half
+ * (darkest first), grey for a middle answer, purples for the positive half (darkest last).
+ */
+export function chartLikertColor(count: number, index: number): string {
+	const side = Math.floor(count / 2);
+	if (count % 2 === 1 && index === side) return LIKERT_NEUTRAL;
+	if (!side) return LIKERT_POSITIVE[0][0];
+	const ramp = (sets: string[][]) => sets[Math.min(side, sets.length) - 1];
+	// More answers than the ramps hold share the nearest shade.
+	const pick = (list: string[], k: number) => list[Math.min(list.length - 1, Math.floor((k * list.length) / side))];
+	if (index < side) return pick(ramp(LIKERT_NEGATIVE), index);
+	return pick(ramp(LIKERT_POSITIVE), index - (count - side));
 }
 
 /** The colour a pie slice is drawn with (by category). */
@@ -150,15 +193,24 @@ export function chartSliceColor(spec: Pick<ChartSpec, 'palette'>, index: number)
 	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, index);
 }
 
-/** The colour of one bar or point: its override, else the series colour. */
-export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number, index: number): string {
-	return spec.series[seriesIndex]?.pointColors?.[index] || chartSeriesColor(spec, seriesIndex);
+/** Whether `varyColors` applies: a bar, line, area or scatter chart with one visible series. */
+export function chartVariesColors(spec: Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean }): boolean {
+	return !!spec.varyColors && isCartesianChart(spec.type) && spec.series.filter((s) => !s.hidden).length === 1;
+}
+
+/** The colour of one bar or point: its override, else the palette colour of its category (`varyColors`), else the series colour. */
+export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'> & { type?: ChartType; varyColors?: boolean }, seriesIndex: number, index: number): string {
+	const own = spec.series[seriesIndex]?.pointColors?.[index];
+	if (own) return own;
+	if (spec.type && chartVariesColors(spec as Pick<ChartSpec, 'type' | 'series'> & { varyColors?: boolean })) return chartSliceColor(spec, index);
+	return chartSeriesColor(spec, seriesIndex);
 }
 
 /** How a series is drawn in a cartesian chart. */
 export function chartSeriesType(spec: Pick<ChartSpec, 'type'>, series: ChartSeries): ChartSeriesType {
 	if (series.type) return series.type;
 	if (spec.type === 'bubble') return 'scatter';
+	if (spec.type === 'slope') return 'line';
 	return isCartesianChart(spec.type) ? (spec.type as ChartSeriesType) : 'bar';
 }
 
@@ -374,6 +426,16 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 			if (colors.some((c) => c !== null)) series.pointColors = colors;
 		}
 	}
+	if (value.callouts !== undefined && value.callouts !== null) {
+		if (!Array.isArray(value.callouts)) issues.push({ path: `${path}.callouts`, message: `${path}.callouts must be an array of labels or nulls, one per category.` });
+		else {
+			const labels = Array.from({ length }, (_, i) => {
+				const c = (value.callouts as unknown[])[i];
+				return typeof c === 'string' && c.trim() ? c : typeof c === 'number' ? String(c) : null;
+			});
+			if (labels.some((c) => c !== null)) series.callouts = labels;
+		}
+	}
 	if (value.marker !== undefined && value.marker !== null) series.marker = pick(value.marker, CHART_MARKERS, 'circle', `${path}.marker`, issues);
 	if (value.curve !== undefined && value.curve !== null) series.curve = pick(value.curve, CHART_CURVES, 'linear', `${path}.curve`, issues);
 	if (value.dataLabels !== undefined && value.dataLabels !== null) series.dataLabels = flag(value.dataLabels, false, `${path}.dataLabels`, issues);
@@ -397,6 +459,55 @@ function normalizeSeries(value: unknown, length: number, used: Set<string>, inde
 }
 
 const key = (value: Record<string, unknown>, name: string) => value[name] !== undefined && value[name] !== null;
+
+function referenceCommon(value: Record<string, unknown>, path: string, issues: ChartIssue[]): { label?: string; axis?: ChartReferenceAxis; color?: string } {
+	const out: { label?: string; axis?: ChartReferenceAxis; color?: string } = {};
+	const label = text(value.label, '', `${path}.label`, issues);
+	if (label) out.label = label;
+	if (key(value, 'axis')) {
+		const axis = pick(value.axis, CHART_REFERENCE_AXES, 'y', `${path}.axis`, issues);
+		if (axis !== 'y') out.axis = axis;
+	}
+	if (typeof value.color === 'string' && value.color.trim()) out.color = value.color.trim();
+	else if (key(value, 'color')) issues.push({ path: `${path}.color`, message: `${path}.color must be a CSS colour.` });
+	return out;
+}
+
+const finiteNumber = (value: unknown): number | null => {
+	const n = typeof value === 'string' && value.trim() ? Number(value) : value;
+	return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+
+/** Checks one reference line; `null` (reported) when it has no usable value. */
+export function normalizeChartReferenceLine(value: unknown, path: string, issues: ChartIssue[] = []): ChartReferenceLine | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with a value, e.g. {"value": 100, "label": "Target"}.` });
+		return null;
+	}
+	const at = finiteNumber(value.value);
+	if (at === null) {
+		issues.push({ path: `${path}.value`, message: `${path}.value must be a number (where the line crosses the axis).` });
+		return null;
+	}
+	for (const k of Object.keys(value)) if (!['value', 'label', 'axis', 'color'].includes(k)) issues.push({ path: `${path}.${k}`, message: `${path} has no "${k}"; it takes value, label, axis and color.` });
+	return { value: at, ...referenceCommon(value, path, issues) };
+}
+
+/** Checks one reference band; `null` (reported) when its ends are not numbers. Ends are put in order. */
+export function normalizeChartReferenceBand(value: unknown, path: string, issues: ChartIssue[] = []): ChartReferenceBand | null {
+	if (!isRecord(value)) {
+		issues.push({ path, message: `${path} must be an object with from and to, e.g. {"from": 80, "to": 120, "label": "Target range"}.` });
+		return null;
+	}
+	const from = finiteNumber(value.from);
+	const to = finiteNumber(value.to);
+	if (from === null || to === null) {
+		issues.push({ path, message: `${path} needs numbers for from and to (the ends of the band on its axis).` });
+		return null;
+	}
+	for (const k of Object.keys(value)) if (!['from', 'to', 'label', 'axis', 'color'].includes(k)) issues.push({ path: `${path}.${k}`, message: `${path} has no "${k}"; it takes from, to, label, axis and color.` });
+	return { from: Math.min(from, to), to: Math.max(from, to), ...referenceCommon(value, path, issues) };
+}
 
 /** Checks one set of error bars; `null` (reported) when it is unusable. Custom amounts are padded to `length`. */
 export function normalizeChartErrorBars(value: unknown, length: number, path: string, issues: ChartIssue[] = []): ChartErrorBars | null {
@@ -495,8 +606,16 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		categories = Array.from({ length: longest }, (_, i) => `${i + 1}`);
 	}
 
+	// A tree is the data: its top-level names are the categories and the first series holds their totals.
+	const tree = normalizeChartTree(value.tree, issues);
+	if (tree.length) categories = tree.map((n) => n.name);
+
 	const used = new Set<string>();
 	const series = rawSeries.map((s, i) => normalizeSeries(s, categories.length, used, i, issues)).filter((s): s is ChartSeries => s !== null);
+	if (tree.length) {
+		if (!series.length) series.push({ id: uniqueChartSeriesId(series), name: 'Values', values: [] });
+		series[0] = { ...series[0], values: tree.map(chartTreeTotal) };
+	}
 
 	let palette = [...DEFAULT_CHART_PALETTE];
 	if (Array.isArray(value.palette)) {
@@ -520,6 +639,32 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		const b = Number(value.bins);
 		if (Number.isInteger(b) && b >= 1 && b <= 500) bins = b;
 		else issues.push({ path: 'bins', message: 'bins must be a whole number from 1 to 500, or null for automatic.' });
+	}
+	const highlight: string[] = [];
+	if (Array.isArray(value.highlight)) {
+		for (const h of value.highlight) {
+			if (typeof h === 'string' || typeof h === 'number') {
+				const name = String(h);
+				if (!highlight.includes(name)) highlight.push(name);
+			} else issues.push({ path: 'highlight', message: 'highlight must list category labels or series names.' });
+		}
+	} else if (value.highlight !== undefined && value.highlight !== null) issues.push({ path: 'highlight', message: 'highlight must be an array of category labels or series names.' });
+	const listOf = <T>(name: 'referenceLines' | 'referenceBands', read: (item: unknown, path: string, issues: ChartIssue[]) => T | null): T[] => {
+		const raw = value[name];
+		if (raw === undefined || raw === null) return [];
+		if (!Array.isArray(raw)) {
+			issues.push({ path: name, message: `${name} must be an array.` });
+			return [];
+		}
+		return raw.map((item, i) => read(item, `${name}[${i}]`, issues)).filter((x): x is T => x !== null);
+	};
+	const referenceLines = listOf('referenceLines', normalizeChartReferenceLine);
+	const referenceBands = listOf('referenceBands', normalizeChartReferenceBand);
+	let parliamentMajority: number | null = null;
+	if (value.parliamentMajority !== undefined && value.parliamentMajority !== null) {
+		const m = Number(value.parliamentMajority);
+		if (Number.isInteger(m) && m >= 1) parliamentMajority = m;
+		else issues.push({ path: 'parliamentMajority', message: 'parliamentMajority must be a whole number of seats, 1 or more, or null for half plus one.' });
 	}
 	let radarTicks: number | null = null;
 	if (value.radarTicks !== undefined && value.radarTicks !== null) {
@@ -552,7 +697,19 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		bins,
 		showTotal: flag(value.showTotal, true, 'showTotal', issues),
 		radarTicks,
-		radarGraticule: pick(value.radarGraticule, CHART_RADAR_GRATICULES, 'polygon', 'radarGraticule', issues)
+		radarGraticule: pick(value.radarGraticule, CHART_RADAR_GRATICULES, 'polygon', 'radarGraticule', issues),
+		note: text(value.note, '', 'note', issues),
+		highlight,
+		referenceLines,
+		referenceBands,
+		varyColors: flag(value.varyColors, false, 'varyColors', issues),
+		likertNeutral: pick(value.likertNeutral, CHART_LIKERT_NEUTRALS, 'split', 'likertNeutral', issues),
+		likertSort: pick(value.likertSort, CHART_LIKERT_SORTS, 'none', 'likertSort', issues),
+		parliamentArc: fraction('parliamentArc', 180, 90, 360),
+		parliamentMajority,
+		parliamentLabel: text(value.parliamentLabel, '', 'parliamentLabel', issues),
+		tree,
+		sunburstLabel: text(value.sunburstLabel, '', 'sunburstLabel', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {
@@ -574,7 +731,11 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		yAxis: { ...spec.yAxis, format: { ...spec.yAxis.format } },
 		yAxis2: { ...spec.yAxis2, format: { ...spec.yAxis2.format } },
 		legend: { ...spec.legend },
-		palette: [...spec.palette]
+		palette: [...spec.palette],
+		highlight: [...spec.highlight],
+		referenceLines: spec.referenceLines.map((l) => ({ ...l })),
+		referenceBands: spec.referenceBands.map((b) => ({ ...b })),
+		tree: cloneChartTree(spec.tree)
 	};
 }
 
@@ -583,6 +744,7 @@ export function cloneChartSeries(series: ChartSeries): ChartSeries {
 	if (series.x) copy.x = [...series.x];
 	if (series.sizes) copy.sizes = [...series.sizes];
 	if (series.pointColors) copy.pointColors = [...series.pointColors];
+	if (series.callouts) copy.callouts = [...series.callouts];
 	if (series.format) copy.format = { ...series.format };
 	if (series.trendlines) copy.trendlines = series.trendlines.map((t) => ({ ...t }));
 	for (const name of ['errorBars', 'xErrorBars'] as const) {
