@@ -44,7 +44,7 @@ export const PAPER_EFFECT_NODE_ID = '__paper_effect';
 
 export function paperKey(p: PaperSettings, light?: { azimuth: number; elevation: number }): string {
   const metal = p.metallic ?? 0;
-  return JSON.stringify([p.pattern, p.seed, p.color, p.scale, p.tiling, p.shading, p.dry, metal, metal > 0 && light ? [light.azimuth, light.elevation] : null]);
+  return JSON.stringify([p.pattern, p.seed, p.color, p.scale, p.tiling, p.shading, p.dry, p.offset ?? null, metal, metal > 0 && light ? [light.azimuth, light.elevation] : null]);
 }
 
 const paperNodes = new WeakMap<PaperSettings, PaperNode>();
@@ -65,7 +65,7 @@ const tileCache = new Map<string, Uint8ClampedArray>();
 
 /** The paper's dry height field, built once per settings. */
 export function paperGrain(paper: PaperSettings): PaperGrain {
-  const key = JSON.stringify([paper.pattern, paper.seed, paper.scale, paper.tiling, paper.dry]);
+  const key = JSON.stringify([paper.pattern, paper.seed, paper.scale, paper.tiling, paper.dry, paper.offset ?? null]);
   let g = grainCache.get(key);
   if (!g) {
     g = new PaperGrain(paper, 'dry');

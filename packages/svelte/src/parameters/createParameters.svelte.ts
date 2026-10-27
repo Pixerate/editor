@@ -6,10 +6,15 @@ import {
   type ParameterSetResult,
   type ParametersState,
   type ParameterValue,
+  createParametersEditorDocument,
+  type ParametersSnapshot,
 } from "@pixerate/editor/parameters";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 
 export interface SvelteParameters {
   readonly controller: ParametersController;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<ParametersSnapshot>;
   /** The controller's state (reactive). */
   readonly state: ParametersState;
   /** Shorthand for `state.values` (reactive). */
@@ -34,8 +39,10 @@ export function createParameters(controllerOrOptions: ParametersController | Par
   const unsubscribe = controller.subscribe((next) => {
     state = next;
   });
+  const editorDocument = createParametersEditorDocument(controller);
   return {
     controller,
+    editorDocument,
     get state() {
       return state;
     },
@@ -47,7 +54,10 @@ export function createParameters(controllerOrOptions: ParametersController | Par
     redo: () => void controller.redo(),
     reset: (ids) => void controller.reset(ids),
     randomize: (ids) => void controller.randomize({ ids }),
-    destroy: unsubscribe,
+    destroy: () => {
+      unsubscribe();
+      editorDocument.destroy();
+    },
   };
 }
 

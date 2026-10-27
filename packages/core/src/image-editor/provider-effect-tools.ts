@@ -21,6 +21,11 @@ export interface ImageEffectsToolProviderOptions {
   namespace?: string;
   /** The document cannot be edited: write tools are hidden. A string is the reason. */
   readOnly?: boolean | string | (() => boolean | string);
+  /**
+   * The agent playback surface its calls are acted out on (default `image`, where `ImageEditor` attaches).
+   * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+   */
+  playbackSurface?: string;
 }
 
 /** A layer's provider effects as the tools report them: an effect layer's own effect, then its effect smart filters. */
@@ -127,5 +132,5 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         }
       }
     ]
-  }));
+  }), options.playbackSurface);
 }

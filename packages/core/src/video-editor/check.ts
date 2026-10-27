@@ -33,6 +33,7 @@ export const VIDEO_ISSUE_CODES = [
 	'unused-asset',
 	'unused-sequence',
 	'marker-past-end',
+	'missing-target-track',
 	'empty'
 ] as const;
 export type VideoIssueCode = (typeof VIDEO_ISSUE_CODES)[number];
@@ -101,6 +102,8 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 						issues.push({ code: 'source-overrun', severity: 'error', ...at, message: `Clip "${clip.id}" plays to ${formatVideoSeconds(range.out)} of "${asset.id}", which is only ${formatVideoSeconds(asset.duration)} long; shorten the clip or move its in point.` });
 				}
 			} else if (track.kind === 'audio') issues.push({ code: 'wrong-track', severity: 'error', ...at, message: `Clip "${clip.id}" is a ${clip.type} clip on audio track "${track.id}"; move it to a video track.` });
+			if (clip.type === 'adjustment' && (clip.scope ?? 'underneath') === 'track' && !(sequence ? (sequences.get(sequence)?.tracks ?? []) : project.tracks).some((t) => t.id === clip.targetTrack))
+				issues.push({ code: 'missing-target-track', severity: 'warning', ...at, message: `Adjustment clip "${clip.id}" changes track "${clip.targetTrack}", which is not ${sequence ? `in sequence "${sequence}"` : 'in the project'}, so it changes nothing; set its targetTrack to a track beside it or change its scope.` });
 			const next = clips[i + 1];
 			if (next && next.start < videoClipEnd(clip) - VIDEO_TIME_EPSILON)
 				issues.push({ code: 'overlap', severity: 'error', ...at, message: `Clips "${clip.id}" and "${next.id}" overlap on track "${track.id}"${where} from ${formatVideoSeconds(next.start)}; move one of them.` });

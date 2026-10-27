@@ -62,6 +62,11 @@ export interface ChartToolProviderOptions {
 	actor?: ChartDirectorActor;
 	/** Turns SVG into an image so `render_chart` can return PNG (e.g. through a canvas). */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
+	 * The agent playback surface its calls are acted out on (default `chart`, where `ChartEditor` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 /**
@@ -268,7 +273,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'update_chart',
 		title: 'Change chart presentation',
 		description:
-			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
+			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule). All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
 		inputSchema: {
 			type: 'object',
 			properties: CHART_UPDATE_PROPERTIES,
@@ -706,5 +711,5 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				}
 			});
 		}
-	}, { director: !!options.director });
+	}, { director: !!options.director, surface: options.playbackSurface });
 }

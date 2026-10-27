@@ -26,6 +26,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Overlapping wet paint strokes (such as Gouache or Watercolor) fail to mix; subsequent strokes paint with their raw color without picking up underlying wet strokes, behaving as opaque dry coats.
 - **Root Cause**: In the wet simulation grid (`world.ts`), pigment deposits from water suspension (`P_P0`) into settled grain (`P_D0`) within seconds, and re-wetted dry paint is directly placed into `settled`. `WetMedium.sample` was only reading `s.pigment`, meaning once pigment settled onto the paper substrate (even while paper remained completely wet), the sampler returned zero pigment density. Additionally, gouache presets lacked evaporation damping, causing moisture to dissipate before a user could pick another color.
 - **Solution / Workaround**: In `WetMedium.sample`, sum both suspended (`s.pigment`) and settled (`s.settled`) absorption channels ($K$), matching visual shader rendering (`shadeTile`). Ensure wet brush definitions specify proper `pickup` and `mixing: 'pigment'` behavior with appropriate evaporation rates to permit natural inter-stroke mixing.
+### [paint-editor] Moving the Picture Means Moving Every Document-Space Coordinate
+
+- **Issue / Symptom**: Growing the paint canvas to the left or top by bumping layer offsets alone left the paper grain, symmetry centre, stencils and recorded strokes behind. Paint no longer sat in its grain, guides pointed at the wrong place, and replays painted shifted. Undo after a later wet stroke threw "The wet world is the wrong size".
+- **Root Cause**: Many things are in document pixels rather than layer space. The grain is sampled at document (x, y) (`PaperGrain.at`). Guides live outside the undo history. Stickers are stored in document coordinates, because sticker layers are re-rendered at offset 0. Strokes and wet / paint events are replayed at their recorded positions. Sticker stamps' shading noise is also keyed on document pixels. The wet simulation is canvas-sized, and undo restored an old-size snapshot into the new-size world.
+- **Solution / Workaround**: `extendCanvas` moves all of them together (`shiftDocument` / `shiftGuides` in `paint-editor/controller.ts`). It adds `PaperSettings.offset` for the grain and records the guides on the history entry. It dries wet paint first, and `PaintWetLayers` drops an empty or wrong-size world on restore. Masks and thick channels are in layer space and follow the offset. When adding anything new that holds document coordinates, shift it there too and extend `tests/paint-editor-extend.test.ts`. A sticker layer re-rendered after a shift differs by a few levels of shading noise; that is expected.
+
+### [core/tools] A Tool-Provider Factory's Default Playback Surface Must Not Beat the Caller's
+
+- **Issue / Symptom**: An app with one image editor per canvas node attached each `<ImageEditor>` under its own `playbackId` and wrapped `createImageEditorToolProvider(...)` in `withImagePlayback(provider, 'image4:surface')`, but every call still played on `image` (no surface there, so it ran instantly or on the wrong editor).
+- **Root Cause**: The factories wrap themselves with `with*Playback(provider)`, which already set `playbackSurface: 'image'`. A second wrap used `provider.playbackSurface ?? surface`, so the default from the first wrap won over the explicit argument.
+- **Solution / Workaround**: Every `with*Playback` resolves `explicit surface ?? provider.playbackSurface ?? default`, and every factory that wraps itself takes a `playbackSurface` option and passes it in. Pass `playbackSurface` to the factory (or the React / Svelte hook that registers it) rather than wrapping again. `tests/playback-surface-option.test.ts` covers each factory and two image editors on one registry.
 
 ### [color/gradient] Svelte 5 Effect vs Controller Subscription Initial State
 
@@ -1099,6 +1110,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: A "changed since save" boolean set by every edit never goes back to false on undo; whole-state comparison counts view state (selection, viewport); programmatic loads go through the same change paths as user edits.
 - **Solution / Workaround**: Use `bindDirtyToHistory({ history, getValue, normalize })` (React `useHistoryDirty`, Svelte `createHistoryDirty`): every history change re-compares `normalize(value)` with the saved baseline (cached per `history.getRevision()`), so undo-to-saved is clean. Strip view state in `normalize`. Wrap loads/restores in `suppress(fn)`: it is re-entrant (depth counter), lasts until a returned promise settles, and rebaselines to the loaded value even if the load bypassed the history. Changes made outside the history (e.g. selection) need `refresh()`, which ignores the revision cache.
 
+### [react|svelte/image-editor] The Agent's Cursor on `ImageEditorCanvas` Must Not Clip to the Canvas
+
+- **Issue / Symptom**: After the canvas moved out of `ImageEditor` into `ImageEditorCanvas`, the agent's cursor vanished whenever playback clicked a tab or visited a slider: it was drawn, but outside the canvas box.
+- **Root Cause**: `PresenceLayer` is `position: absolute; inset: 0; overflow: hidden` over its parent. `ImageEditor` used to put it over its whole root, so tabs and panels were inside it; the canvas component draws it over the canvas only, while `open` and `target` steps aim at the host's chrome around it.
+- **Solution / Workaround**: `PresenceLayer` takes `clip={false}`, and `ImageEditorCanvas` uses it, with its root `position: relative` and only the inner canvas box `overflow: hidden`. The cursor then reaches any chrome inside the nearest clipping ancestor. Hosts whose chrome is outside a clipping ancestor (a flow node, a scroll box) should answer those refs through `locate` / `locateElement` with chrome inside it, or accept the cursor stopping at the edge.
+
+### [react|svelte/image-editor] Mapping the Slate Palette to Tokens: `hover:text-white` Became a No-Op
+
+- **Issue / Symptom**: After moving the image panels from slate / indigo classes to shadcn tokens, small buttons showed no hover state at all.
+- **Root Cause**: The old buttons were `text-slate-300 hover:text-white`; both map to `text-foreground`, so the hover changed nothing. Light themes also lose contrast tricks that relied on a dark background (white text on `bg-slate-800`).
+- **Solution / Workaround**: Hover states use a background (`hover:bg-muted`, or `hover:bg-accent hover:text-accent-foreground` on `bg-muted` buttons), and filled controls pair `bg-primary` with `text-primary-foreground`. Use the constants in `image-editor/styles.ts` rather than writing new combinations. `tests/image-editor-tokens.test.*` fails if a slate / indigo / purple / emerald / rose class comes back in any tab.
+
 ### [core/canvas] xyflow Resizers Report Raw Sizes, and SvelteFlow Writes Them After `onResize`
 
 - **Issue / Symptom**: Resize snapping flickered back to the unsnapped size when the pointer was released (React Flow), or did nothing at all (SvelteFlow `onResize`).
@@ -1152,6 +1175,36 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Autosave wrote a snapshot every time the user clicked a node, and an agent comparing `revision` from two `get_<kind>_document` calls saw a change when nothing in the document had changed.
 - **Root Cause**: Controllers notify their `subscribe` listeners on every state change, including selection, hover, issues and read-only flips. Passing `controller.subscribe` straight to `defineEditorDocument` counted all of them as document revisions.
 - **Solution / Workaround**: An editor's `subscribe` in `defineEditorDocument({ subscribe })` must call the listener only when the saved document changed. `createDiagramEditorDocument` keeps the last `source` and skips notifications where it is unchanged. Do the same in every adapter (compare the snapshot's identity or a cheap key, not a deep copy).
+
+### [core/persistence] Chart and Parameter Loads Repair Bad Input, So Agent Loads Need a Strict Path
+
+- **Issue / Symptom**: `load_chart_document` with `"series": 3` reported success and quietly replaced the chart with an empty bar chart; a parameters load with an unknown field id did the same with defaults.
+- **Root Cause**: `ChartController.load` and `ParametersController.load` are built for opening files: they fix problems with defaults, report them in state and record no undo step. That is right for a recovered file and wrong for an agent, which needs to be told and to undo.
+- **Solution / Workaround**: The adapters split on `history`. `"record"` (agent loads) goes through `ChartController.replace` / `ParametersController.replace`, which refuse any problem and are one undo step. `"reset"` (opening a file or a recovery) keeps the lenient `load` and returns the repaired parts as `problems`, which `defineEditorDocument` puts in the `LoadReport`. Do the same for any editor whose `load` repairs input.
+
+### [core/rich-text] Opening a Rich Text Document Must Rebuild the Editor State to Drop Undo History
+
+- **Issue / Symptom**: After restoring a recovered document (or opening a saved one), pressing Undo brought back the document that was there before the restore.
+- **Root Cause**: `editor.commands.setContent` is an ordinary transaction, so the history plugin records it. TipTap 2 has no command that clears the undo history.
+- **Solution / Workaround**: `createRichTextEditorDocument` applies `setContent(doc, true)` (so `update` listeners and the UI hear about it), then, for `history: "reset"`, swaps in `EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins })` with `editor.view.updateState`. Every plugin's state starts fresh from the new document, which is what opening a file means. Agent loads (`history: "record"`) skip the swap, so they stay one undo step.
+
+### [core/canvas] React Flow Drags Bypass History, and the Drop Lands After `onNodeDragStop`
+
+- **Issue / Symptom**: Dragging a node on the canvas could not be undone, and a canvas `EditorDocument` built only on the `HistoryManager` never noticed the move, so autosave wrote nothing.
+- **Root Cause**: React Flow (and Svelte Flow) apply drag positions through `onNodesChange` straight into host state; nothing records a history step. When the drop's final position arrives, React has not re-rendered yet inside `onNodeDragStop`, so state read there is one frame stale.
+- **Solution / Workaround**: `createCanvasGestureRecorder({ getNodes, setNodes, getEdges, setEdges, history })`: call `begin()` in `onNodeDragStart` and `end("Move")` a frame after `onNodeDragStop` (`requestAnimationFrame`), reading nodes through a ref. It records one undo step only when something other than selection or measurement changed. For change events without history, `useCanvasEditorDocument` / `createCanvasDocument` compare the nodes and edges without runtime fields, and skip frames where a node is still `dragging`.
+
+### [core/persistence] Image and Paint Documents Keep Pixels as Assets; Storage Must Carry Them
+
+- **Issue / Symptom**: An image or paint document is tens to hundreds of MB of PNG data URLs, too big for an agent tool result or a whole-document autosave. The existing external asset stores are async, but `EditorDocument` loads synchronously.
+- **Root Cause**: `toJSON()` inlines every layer, mask, thick-paint channel, mixing pad and guide as a data URL (or base64), and making `loadDocument` async would have changed the API of every editor.
+- **Solution / Workaround**: `defineEditorDocument({ assets })` runs `getDocument()` output through `externalizeAssets`, which replaces each inline image with a content-addressed `pixerate-asset:<len>-<hash>` reference held in a synchronous `EditorAssetRegistry`, and `loadDocument` swaps them back. The async part happens around storage: `withEditorAssets(storage, registry)` writes referenced assets before the document on `set`, and reads them into the registry on `get`. `createEditorAutosave`, `useEditorAutosave` / `createEditorAutosave` (Svelte) and `createEditorDocumentStore` do this whenever `doc.assets` is set. A document whose references are not loaded is refused, naming the missing assets. Assets are kept under one shared `pixerate.assets:` pool and are never deleted yet.
+
+### [core/image-editor] Loading the Source Image Is Not a Document Change
+
+- **Issue / Symptom**: Opening the Image tab marked the document as changed, so every reload offered to "restore unsaved changes" nobody made.
+- **Root Cause**: `loadImage` replaces the source image, and an early `documentRevision` counted it like an edit. The source is the host's (`sourceUrl`) and is not saved in the document.
+- **Solution / Workaround**: `documentRevision` counts history steps, undo, redo and stroke frames (`notify(strokeRects)`), not `loadImage` or view changes. Any change that is not saved in `toJSON()` must not bump a document revision.
 
 ### [react/persistence] Destroying an `EditorDocument` in an Effect Cleanup Breaks StrictMode
 
@@ -2812,3 +2865,75 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `pnpm check:packages` failed under node16 (ESM) with `Module '"*.svelte"' has no exported member 'FillMode'`, while `svelte-check`, the build and the bundler check all passed.
 - **Root Cause**: The published `index.d.ts` re-exported the type from `./FillPicker.svelte`. Consumers with `moduleResolution: node16` see `.svelte` imports through the ambient `*.svelte` declaration, which only has a default export.
 - **Solution / Workaround**: Put types that a package entry re-exports in a `.ts` file (e.g. `gradient/types.ts`) and import them into the component from there. Run `pnpm check:packages` after changing a Svelte entry's exports.
+
+### [react|svelte/playback] A Surface That Always Defines `open` Makes Every `open` Step Wait
+
+- **Issue / Symptom**: On surfaces without panels (the node canvas, spreadsheets, a plain element surface), every tool whose plan starts with an `open` step paused for about a third of a second before acting, and the cursor pressed on nothing.
+- **Root Cause**: `AgentPlayback` skips an `open` step only when `surface.open` is undefined. `usePlaybackSurface` / `createPlaybackSurface` always built `open: (ref) => o().open?.(ref)`, so every attached surface looked able to open things, and playback glided, pressed and waited 220 ms for a no-op.
+- **Solution / Workaround**: The helpers expose `open` as a getter that is undefined unless the current options have one (options are still read per step). Surfaces that wrap them pass `open` through the same way (`get open()` or `open: o.open ? … : undefined`), never as an unconditional arrow.
+
+### [svelte/rich-text] Typography Resets the Colour of Bold Text
+
+- **Issue / Symptom**: Making coloured or gradient text bold in `EditableTextNodeEditor` turned it white (or the theme's bold colour). Italic, links and inline code did the same.
+- **Root Cause**: The editor content uses Tailwind Typography (`prose`), which sets `color: var(--tw-prose-bold)` on `strong` (and its own colours on `a` and `code`). A colour mark renders as a span around the `strong`, so the span's colour (or a gradient's `text-transparent`) never reaches the text.
+- **Solution / Workaround**: Inline marks inside `.pixerate-editor-content` use `color: inherit`. Colour marks that wrap text must not rely on the inner element keeping their colour.
+
+### [image-editor] A Canvas Sized From `clientWidth` Blurs Under a Host CSS Transform
+
+- **Issue / Symptom**: An `ImageEditorCanvas` inside a node that the host scales with a CSS transform (e.g. a 220px node shown at 500px) rendered at 220px and was stretched, so it looked blurry. It was also soft on high-DPI screens.
+- **Root Cause**: `clientWidth` / `clientHeight` are layout sizes that ignore transforms, and the backing store was set to exactly that size, without `devicePixelRatio`. A `ResizeObserver` does not fire when only a transform changes.
+- **Solution / Workaround**: `measureCanvasViewport` keeps the layout size for the projection and pointer mapping. It sets the backing store to layout × `devicePixelRatio` × (on-screen size from `getBoundingClientRect()` ÷ layout size). `renderToCanvas({ pixelRatio })` sets a base `setTransform`, so everything still draws in CSS pixels. Pointer mapping must divide by the CSS viewport, never `canvas.width`, which is now larger. `watchCanvasViewport` also measures again on window `resize`, `transitionend` and `animationend`. jsdom has no layout, so the canvas there uses `DEFAULT_CANVAS_VIEWPORT` (800 × 500). Tests that place pointer events compute points against it.
+
+### [image-editor] Agent Error Text Shown to People
+
+- **Issue / Symptom**: Painting a new image in `ImageEditorCanvas` reported "No layer given and none is active; pass layerId (see list_layers) to paint." through `onerror`.
+- **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
+- **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.
+
+### [core/video-editor] An Adjustment Clip at Part Opacity Must Mix Over the Unadjusted Picture
+
+- **Issue / Symptom**: Drawn naively, an adjustment clip at 50% opacity (or fading in) fades the pictures beneath it towards the background, instead of mixing the adjusted look with the unadjusted picture.
+- **Root Cause**: An adjustment clip is evaluated as a group layer that holds the pictures it changes (like a compound clip), so the renderers can grade and run effects on the composite. Moving the pictures into the group took them out of the frame, so the group's opacity mixed against the background.
+- **Solution / Workaround**: When the adjusted copy does not cover everything fully (opacity below 1, fades, a blend mode, a mask, a wipe or iris), `videoFrameAt` keeps the unadjusted layers in place and draws the group over them. At full opacity it replaces them, so the pictures are drawn once. Scope `underneath` is applied while the tracks are evaluated (it wraps what has been drawn so far). Scopes `all` and `track` are applied after every track, because they reach tracks above the adjustment clip.
+
+### [core/video-editor] An Adjustment Clip's `track` Field Overwrote the Track in Tool Results
+
+- **Issue / Symptom**: Designing the adjustment clip with a `track` field (the track it targets) broke `get_video_project` and every tool result. Clip outputs are built as `{ track: <the track it is on>, ...clip }`, so the clip's own field replaced the track it sits on.
+- **Root Cause**: Clip fields are spread into tool results and inspector rows alongside the location fields.
+- **Solution / Workaround**: The target is `targetTrack`. Avoid clip fields named `track`, `end` or `source`, which tool outputs add.
+
+### [core/video-editor] A Feathered Mask on the Canvas Needs the Blur Scaled to Canvas Pixels
+
+- **Issue / Symptom**: Mask feathers looked right at preview scale 1 but too soft or too hard at other resolutions.
+- **Root Cause**: The mask is cut on a scratch canvas by filling its outline with `globalCompositeOperation = 'destination-in'` (`destination-out` when inverted) and `filter: blur()`. A canvas filter's blur radius is in canvas pixels and ignores the current transform, while the outline is drawn in frame pixels through `setTransform(scale…)`.
+- **Solution / Workaround**: `applyVideoMask` sets `blur(feather × scale / 2 px)`. SVG uses `feGaussianBlur stdDeviation = feather / 2` inside the mask, in user space. Mask outlines are polygons (`videoMaskPolygon`) so the canvas, SVG and agents (`videoMaskContains`) all cut the same shape. The scratch context needs `moveTo`, `lineTo`, `closePath` and `fill`. They are optional in `VideoScratchCanvas`, so hosts with minimal contexts still compile. Without them the mask is skipped.
+
+### [core/video-editor] ffmpeg's `lut3d` Cannot Protect Skin Tones, and Most Adjustment Clips Are Not Filters
+
+- **Issue / Symptom**: Exports did not match the preview for LUTs with `preserveSkinTones`, or for adjustment clips with masks, fades, part opacity or scope `track`.
+- **Root Cause**: Skin protection is a per-pixel mix weighted by the pixel's chroma, which `lut3d` cannot express. An adjustment clip changes the composite of several overlays. ffmpeg's timeline `enable` can switch a grade on the composite for the clip's span, but cannot fade or mask it without splitting the whole graph.
+- **Solution / Workaround**: `toVideoFfmpeg` draws a full-opacity grade or LUT on the composite with `enable='between(t,…)'` for scopes `underneath` and `all`. It refuses masks and other adjustment clips (`videoFfmpegUnsupportedFeatures` names them) unless given `frames` rendered with `renderVideoFrameExact`. Skin protection is applied in the preview and frame renders; the export adds a note. EDLs leave adjustment clips out rather than writing black events.
+
+### [core/video-editor] Loudness Cannot Be Measured From Min / Max Peaks
+
+- **Issue / Symptom**: Loudness worked out from the waveform peaks the editor already keeps does not match LUFS meters: a sine and a square wave at the same peak read the same.
+- **Root Cause**: LUFS (ITU-R BS.1770) is a gated mean of K-weighted energy over 400 ms blocks. Peaks keep only the extremes of each block, which says nothing about energy or frequency weighting.
+- **Solution / Workaround**: `buildVideoAudioPeaks` also stores the K-weighted mean square per 100 ms hop (`peaks.loudness`, from the decoded samples it already has). `videoAudioLoudness` gates any stretch of it into LUFS. Peaks built by older code or by a host without `loudness` make the loudness tools fail with a message saying to rebuild them. Tests check a full-scale 997 Hz sine at -3.0 LUFS.
+
+### [core/video-editor] Plans Must Be Re-Checked, and Their Ids Allocated Only When They Are Made
+
+- **Issue / Symptom**: A plan proposed before other edits could apply ops to clips that had moved or gone. A refused proposal also used up the next plan id, so agents told to apply "plan1" found "plan2".
+- **Root Cause**: A plan is a list of edits worked out against the project as it was. The id counter advanced before the edits were validated.
+- **Solution / Workaround**: The controller remembers the project each plan was made against. `isPlanStale` compares it with the current one, and `applyPlan` re-runs the edits on the current project, refusing (with the plan kept open) when they no longer apply. Ids are reserved only after `planVideoEdits` succeeds. Plans are view state: they are not in the project or the undo history, and applying one is a single undo step labelled with its title.
+
+### [core/video-editor] Spring and Elastic Easings Have No Video Keyframe Equivalent
+
+- **Issue / Symptom**: Writing an effect authored with spring or elastic keyframes back to a clip effect failed, because video keys only take linear, hold, the CSS named eases and cubic-bezier.
+- **Root Cause**: Springs and elastics are physical simulations, not curves through two handles.
+- **Solution / Workaround**: `videoEffectValuesFromDocument` samples those segments into 12 linear steps and says so in `notes`. Non-numeric keyframed controls (colours) keep their first value, also noted. Converting video keys to an authoring document is lossless (`videoEaseToAnimationEasing`).
+
+### [svelte] A Local Variable Named `state` Is Read as a Store
+
+- **Issue / Symptom**: `svelte-check` failed with "Cannot use 'state' as a store" and "Untyped function calls may not accept type arguments" on `let anchor = $state<number | null>(null)` in a component that also declared `const state = $derived(...)`.
+- **Root Cause**: In Svelte 5, a top-level variable named `state` makes `$state` look like an auto-subscription to a store called `state`, not the rune.
+- **Solution / Workaround**: Never name a component-level variable `state` (or `derived`, `effect`, `props`) when the component uses runes. `TranscriptEditor.svelte` uses `ts` for the transcript state.

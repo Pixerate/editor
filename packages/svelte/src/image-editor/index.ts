@@ -1,5 +1,7 @@
 import type { ComponentProps } from "svelte";
 import type ImageEditorComponent from "./ImageEditor.svelte";
+import type ImageEditorCanvasComponent from "./ImageEditorCanvas.svelte";
+import type ImageEffectControlsComponent from "./ImageEffectControls.svelte";
 import type HistogramComponent from "./Histogram.svelte";
 import type AdjustmentLayersPanelComponent from "./AdjustmentLayersPanel.svelte";
 import type CurvesEditorComponent from "./CurvesEditor.svelte";
@@ -15,7 +17,15 @@ import type ShapeOptionsBarComponent from "./ShapeOptionsBar.svelte";
 import type TypeOptionsBarComponent from "./TypeOptionsBar.svelte";
 import type ImageProviderEffectsPanelComponent from "./ImageProviderEffectsPanel.svelte";
 
+import type CanvasSizePanelComponent from "./CanvasSizePanel.svelte";
+import type LayerPanelComponent from "./LayerPanel.svelte";
+
 export { default as ImageEditor } from './ImageEditor.svelte';
+export { default as ImageEditorCanvas } from './ImageEditorCanvas.svelte';
+export { default as CanvasSizePanel } from './CanvasSizePanel.svelte';
+export { default as LayerPanel } from './LayerPanel.svelte';
+export { default as ImageEffectControls } from './ImageEffectControls.svelte';
+export type { ImageEditorCanvasMode, ImageEditorCanvasErrorSource } from './canvasTypes.js';
 export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as Histogram } from './Histogram.svelte';
 export { default as AdjustmentLayersPanel } from './AdjustmentLayersPanel.svelte';
@@ -34,6 +44,10 @@ export { default as ImageProviderEffectsPanel } from './ImageProviderEffectsPane
 export * from './imageEditorState.svelte.js';
 
 export type ImageEditorProps = ComponentProps<typeof ImageEditorComponent>;
+export type ImageEditorCanvasProps = ComponentProps<typeof ImageEditorCanvasComponent>;
+export type CanvasSizePanelProps = ComponentProps<typeof CanvasSizePanelComponent>;
+export type LayerPanelPropsComponent = ComponentProps<typeof LayerPanelComponent>;
+export type ImageEffectControlsProps = ComponentProps<typeof ImageEffectControlsComponent>;
 export type HistogramProps = ComponentProps<typeof HistogramComponent>;
 export type AdjustmentLayersPanelProps = ComponentProps<typeof AdjustmentLayersPanelComponent>;
 export type CurvesEditorProps = ComponentProps<typeof CurvesEditorComponent>;

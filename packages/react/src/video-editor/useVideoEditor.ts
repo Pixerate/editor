@@ -3,12 +3,19 @@ import {
   VideoEditorController,
   createVideoEditorToolProvider,
   createVideoEffectsToolProvider,
+  createVideoDialogueToolProvider,
+  createVideoMusicToolProvider,
+  type VideoDialogueToolProviderOptions,
+  type VideoMusicToolProviderOptions,
   type VideoEffectsToolProviderOptions,
   type VideoEditResult,
   type VideoEditorOptions,
   type VideoEditorState,
   type VideoEditorToolProviderOptions,
+  createVideoEditorDocument,
+  type VideoProject,
 } from '@pixerate/editor/video-editor';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /** A `VideoEditorController` created once for the component's lifetime (destroyed on unmount). */
@@ -27,6 +34,8 @@ export function useVideoEditorState(controller: VideoEditorController): VideoEdi
 
 export interface UseVideoEditorResult {
   controller: VideoEditorController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<VideoProject>;
   state: VideoEditorState;
   play: () => void;
   pause: () => void;
@@ -71,7 +80,10 @@ export function useVideoEditor(controllerOrOptions: VideoEditorController | Vide
     }),
     [controller],
   );
-  return { controller, state, ...actions };
+  const editorDocument = useMemo(() => createVideoEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, ...actions };
 }
 
 /**
@@ -83,11 +95,11 @@ export function useVideoEditorTools(
   controller: VideoEditorController,
   options: VideoEditorToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout } = options;
+  const { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout }));
-  }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout]);
+    return registry.register(createVideoEditorToolProvider(controller, { id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, rasterize, framePixels, framePixelsTimeout, playbackSurface]);
 }
 
 /**
@@ -101,9 +113,42 @@ export function useVideoEffectsTools(
   controller: VideoEditorController,
   options: VideoEffectsToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
+}
+
+/**
+ * Registers the talking-head cleanup tools (`find_video_disfluencies`, `plan_video_dialogue_cleanup`)
+ * in `registry` while mounted (skill `pixerate-talking-head-edit`).
+ */
+export function useVideoDialogueTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VideoEditorController,
+  options: VideoDialogueToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly, playbackSurface } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVideoDialogueToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
+}
+
+/**
+ * Registers the music and mix tools (`find_video_beats`, `plan_video_beat_snap`, `duck_video_music`,
+ * `measure_video_loudness`, `normalize_video_loudness`) in `registry` while mounted (skill
+ * `pixerate-bgm-alignment`).
+ */
+export function useVideoMusicTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VideoEditorController,
+  options: VideoMusicToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly, playbackSurface } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVideoMusicToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }

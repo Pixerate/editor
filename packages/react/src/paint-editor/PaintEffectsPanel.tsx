@@ -23,11 +23,11 @@ export function usePaintEffectsProvider(controller: PaintEditorController): Effe
 
 /** Registers the paint effect tools (`set_paper_effect`, `add_effect_layer`, `apply_effect`, …) while mounted. */
 export function usePaintEffectsTools(registry: ToolRegistry | null | undefined, controller: PaintEditorController, options: PaintEffectsToolProviderOptions = {}): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createPaintEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createPaintEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }
 
 /** One effect's controls from the provider; the first change of a drag records the undo step, later ones join it. */

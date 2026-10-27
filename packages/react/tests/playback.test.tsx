@@ -168,7 +168,8 @@ describe('ImageEditor playback', () => {
 		expect(result.isError).toBeFalsy();
 		expect(steps.map((r) => r.step.type)).toEqual(['open', 'target', 'commit']);
 		// The cursor clicked the Adjustments tab, so its sliders are on screen.
-		expect(host.querySelector('[data-image-tab="adjust"]')!.className).toContain('bg-indigo-600');
+		expect(host.querySelector('[data-image-tab="adjust"]')!.getAttribute('aria-selected')).toBe('true');
+		expect(host.querySelector('[data-image-tab="adjust"]')!.className).toContain('bg-primary');
 		expect(host.querySelector('[data-control-id="contrast"]')).toBeTruthy();
 		expect(host.querySelector('.pixerate-presence')).toBeTruthy();
 		unmount();

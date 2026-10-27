@@ -122,6 +122,7 @@ describe('layer operations', () => {
   it('layer via copy and via cut use the selection coverage', () => {
     const { c } = setup();
     c.selectRect({ x: 2, y: 2, width: 4, height: 3 });
+    c.setActiveLayer(null);
     expect(() => c.layerViaCopy()).toThrow(/none is active/);
     const copy = c.layerViaCopy({ layerId: 'background' });
     expect(c.getLayerBounds(copy)).toEqual({ x: 2, y: 2, width: 4, height: 3 });
@@ -269,5 +270,29 @@ describe('layer agent tools', () => {
     await fails('add_adjustment_layer', { kind: 'invert', parentId: id }, /not a group/);
     await fails('list_layers', { x: 1 }, /additional|not allowed|unknown/i);
     expect(c.getLayers()).toBe(before);
+  });
+
+  it('supports clearHistory, getCanvasSize, resizeCanvas and layerAt', () => {
+    const { c } = setup();
+    expect(c.getCanvasSize()).toEqual({ width: 40, height: 30 });
+
+    const l1 = c.addPixelLayer({ name: 'L1' });
+    expect(c.canUndo).toBe(true);
+    c.clearHistory();
+    expect(c.canUndo).toBe(false);
+    expect(c.canRedo).toBe(false);
+
+    // Canvas resize
+    c.resizeCanvas({ width: 60, height: 50, anchor: 'center' });
+    expect(c.getCanvasSize()).toEqual({ width: 60, height: 50 });
+    expect(c.canUndo).toBe(true);
+
+    // Hit test layerAt
+    // l1 is empty pixel layer; background has pixels filled
+    const hitBg = c.layerAt({ x: 30, y: 25 });
+    expect(hitBg).toBe('background');
+
+    // Miss outside canvas
+    expect(c.layerAt({ x: 100, y: 100 })).toBeNull();
   });
 });

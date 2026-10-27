@@ -16,16 +16,17 @@ import {
   rgbUnitToHex,
   setRetouchChoice,
 } from '@pixerate/editor/image-editor';
-import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
+import { DEFAULT_PAINT_GRADIENT, userErrorMessage } from '@pixerate/editor/image-editor';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
+import { imageChipClass, imageColorInputClass } from './styles';
 
 export interface BrushOptionsBarProps {
   controller: ImageEditorController;
   className?: string;
 }
 
-const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+
 
 /**
  * The paint tools: Move / Brush / Mixer / Eraser, the brush's size, hardness, opacity, flow and
@@ -50,12 +51,12 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
       setError(null);
       fn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(userErrorMessage(err));
     }
   };
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="brush-options">
+    <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="brush-options">
       <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
         {PAINT_TOOLS.map((t) => (
           <button
@@ -63,7 +64,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
             type="button"
             aria-pressed={state.activeTool === t.id}
             title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
-            className={chip(state.activeTool === t.id)}
+            className={imageChipClass(state.activeTool === t.id)}
             onClick={() => controller.setTool(t.id)}
           >
             {t.label}
@@ -78,9 +79,9 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
             aria-label="Foreground colour"
             value={foreground}
             onChange={(e) => controller.setPaintOptions({ foreground: e.target.value })}
-            className="h-6 w-8 rounded border border-slate-700 bg-transparent"
+            className={imageColorInputClass}
           />
-          <span className="text-slate-400">FG</span>
+          <span className="text-muted-foreground">FG</span>
         </label>
         <label className="flex items-center gap-1">
           <input
@@ -88,14 +89,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
             aria-label="Background colour"
             value={background}
             onChange={(e) => controller.setPaintOptions({ background: e.target.value })}
-            className="h-6 w-8 rounded border border-slate-700 bg-transparent"
+            className={imageColorInputClass}
           />
-          <span className="text-slate-400">BG</span>
+          <span className="text-muted-foreground">BG</span>
         </label>
-        <button type="button" title="Swap colours (X)" className={chip(false)} onClick={() => controller.swapPaintColors()}>
+        <button type="button" title="Swap colours (X)" className={imageChipClass(false)} onClick={() => controller.swapPaintColors()}>
           Swap
         </button>
-        <button type="button" title="Default colours (D)" className={chip(false)} onClick={() => controller.resetPaintColors()}>
+        <button type="button" title="Default colours (D)" className={imageChipClass(false)} onClick={() => controller.resetPaintColors()}>
           Default
         </button>
         {state.activeTool === 'brush' && (
@@ -103,7 +104,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
             type="button"
             aria-pressed={paint.type === 'gradient'}
             title="Gradient paint: the brush changes colour as the stroke goes"
-            className={chip(paint.type === 'gradient')}
+            className={imageChipClass(paint.type === 'gradient')}
             onClick={() => attempt(() => controller.setPaintOptions(paint.type === 'gradient' ? { foreground } : { paint: DEFAULT_PAINT_GRADIENT }))}
           >
             Gradient
@@ -124,18 +125,18 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
       ))}
 
       {state.activeTool === 'mixer' && (
-        <div className="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
+        <div className="flex flex-col gap-2 border-t border-border pt-2" role="group" aria-label="Mixer Brush" data-testid="mixer-options">
           <div className="flex items-center gap-2">
             <span
               aria-label="Brush load"
               title={mixerLoad.reservoir ? `Loaded ${rgbUnitToHex(mixerLoad.reservoir)}, ${Math.round(mixerLoad.amount * 100)}% left` : 'Unloaded'}
-              className="h-6 w-6 rounded border border-slate-700"
+              className="h-6 w-6 rounded border border-border"
               style={{ background: mixerLoad.reservoir ? rgbUnitToHex(mixerLoad.reservoir) : 'transparent' }}
             />
-            <button type="button" title="Fill the reservoir with the foreground colour" className={chip(false)} onClick={() => controller.loadMixerBrush()}>
+            <button type="button" title="Fill the reservoir with the foreground colour" className={imageChipClass(false)} onClick={() => controller.loadMixerBrush()}>
               Load brush
             </button>
-            <button type="button" title="Empty the picked-up colour" className={chip(false)} onClick={() => controller.cleanMixerBrush()}>
+            <button type="button" title="Empty the picked-up colour" className={imageChipClass(false)} onClick={() => controller.cleanMixerBrush()}>
               Clean brush
             </button>
           </div>
@@ -146,7 +147,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
                 type="button"
                 aria-pressed={mixer.mixing === m.id}
                 title={m.title}
-                className={chip(mixer.mixing === m.id)}
+                className={imageChipClass(mixer.mixing === m.id)}
                 onClick={() => controller.setPaintOptions({ mixer: { mixing: m.id } })}
               >
                 {m.label}
@@ -156,14 +157,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           {MIXER_OPTION_CONTROLS.map((spec) => (
             <ControlSlider key={spec.id} spec={spec} value={mixer[spec.id]} onChange={(v) => controller.setPaintOptions({ mixer: { [spec.id]: v } })} />
           ))}
-          <div className="flex flex-wrap gap-3 text-slate-300">
+          <div className="flex flex-wrap gap-3 text-foreground">
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
                 aria-label="Load the brush after each stroke"
                 checked={mixer.loadEachStroke}
                 onChange={(e) => controller.setPaintOptions({ mixer: { loadEachStroke: e.target.checked } })}
-                className="accent-indigo-500"
+                className="accent-primary"
               />
               Load each stroke
             </label>
@@ -173,7 +174,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
                 aria-label="Clean the brush after each stroke"
                 checked={mixer.cleanEachStroke}
                 onChange={(e) => controller.setPaintOptions({ mixer: { cleanEachStroke: e.target.checked } })}
-                className="accent-indigo-500"
+                className="accent-primary"
               />
               Clean each stroke
             </label>
@@ -182,14 +183,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
       )}
 
       {isRetouchPaintTool(tool) && (
-        <div className="flex flex-col gap-2 border-t border-slate-800 pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
+        <div className="flex flex-col gap-2 border-t border-border pt-2" role="group" aria-label="Retouch options" data-testid="retouch-options">
           {(tool === 'clone' || tool === 'heal') && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-400" data-testid="clone-source">
+              <span className="text-muted-foreground" data-testid="clone-source">
                 {cloneSourceLabel(controller)}
               </span>
               {cloneSource && (
-                <button type="button" title="Forget the source point" className={chip(false)} onClick={() => controller.setCloneSource(null)}>
+                <button type="button" title="Forget the source point" className={imageChipClass(false)} onClick={() => controller.setCloneSource(null)}>
                   Clear source
                 </button>
               )}
@@ -201,14 +202,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
                 <ControlSlider key={spec.id} spec={spec} value={cloneTransformView(controller)[spec.id]} onChange={(v) => setCloneTransformValue(controller, spec.id, v)} />
               ))}
               <div className="flex items-center gap-1">
-                <button type="button" aria-pressed={cloneTransformView(controller).flipH} title="Mirror the source left to right" className={chip(cloneTransformView(controller).flipH)} onClick={() => setCloneTransformValue(controller, 'flipH')}>
+                <button type="button" aria-pressed={cloneTransformView(controller).flipH} title="Mirror the source left to right" className={imageChipClass(cloneTransformView(controller).flipH)} onClick={() => setCloneTransformValue(controller, 'flipH')}>
                   Flip H
                 </button>
-                <button type="button" aria-pressed={cloneTransformView(controller).flipV} title="Mirror the source top to bottom" className={chip(cloneTransformView(controller).flipV)} onClick={() => setCloneTransformValue(controller, 'flipV')}>
+                <button type="button" aria-pressed={cloneTransformView(controller).flipV} title="Mirror the source top to bottom" className={imageChipClass(cloneTransformView(controller).flipV)} onClick={() => setCloneTransformValue(controller, 'flipV')}>
                   Flip V
                 </button>
                 {!cloneTransformView(controller).identity && (
-                  <button type="button" title="Back to 100 %, no flip, 0°" className={chip(false)} onClick={() => controller.setCloneTransform(null)}>
+                  <button type="button" title="Back to 100 %, no flip, 0°" className={imageChipClass(false)} onClick={() => controller.setCloneTransform(null)}>
                     Reset transform
                   </button>
                 )}
@@ -217,14 +218,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           )}
           {RETOUCH_CHOICES.filter((c) => c.tools.includes(tool)).map((choice) => (
             <div key={choice.id} className="flex flex-wrap items-center gap-1" role="group" aria-label={choice.label}>
-              <span className="text-slate-400">{choice.label}</span>
+              <span className="text-muted-foreground">{choice.label}</span>
               {choice.options.map((o) => (
                 <button
                   key={o.id}
                   type="button"
                   aria-pressed={retouch[choice.id] === o.id}
                   title={o.title}
-                  className={chip(retouch[choice.id] === o.id)}
+                  className={imageChipClass(retouch[choice.id] === o.id)}
                   onClick={() => setRetouchChoice(controller, choice.id, o.id)}
                 >
                   {o.label}
@@ -235,7 +236,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
           {RETOUCH_OPTION_CONTROLS.filter((c) => c.tools.includes(tool)).map((spec) => (
             <ControlSlider key={spec.id} spec={spec} value={retouch[spec.id]} onChange={(v) => controller.setPaintOptions({ retouch: { [spec.id]: v } })} />
           ))}
-          <div className="flex flex-wrap gap-3 text-slate-300">
+          <div className="flex flex-wrap gap-3 text-foreground">
             {RETOUCH_TOGGLES.filter((t) => t.tools.includes(tool)).map((t) => (
               <label key={t.id} className="flex items-center gap-1.5">
                 <input
@@ -243,7 +244,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
                   aria-label={t.label}
                   checked={retouch[t.id]}
                   onChange={(e) => controller.setPaintOptions({ retouch: { [t.id]: e.target.checked } })}
-                  className="accent-indigo-500"
+                  className="accent-primary"
                 />
                 {t.label}
               </label>
@@ -252,14 +253,14 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3 text-slate-300" role="group" aria-label="Pressure">
+      <div className="flex flex-wrap gap-3 text-foreground" role="group" aria-label="Pressure">
         <label className="flex items-center gap-1.5">
           <input
             type="checkbox"
             aria-label="Pressure controls size"
             checked={brush.pressureSize}
             onChange={(e) => controller.setPaintOptions({ brush: { pressureSize: e.target.checked } })}
-            className="accent-indigo-500"
+            className="accent-primary"
           />
           Pressure size
         </label>
@@ -269,22 +270,22 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
             aria-label="Pressure controls opacity"
             checked={brush.pressureOpacity}
             onChange={(e) => controller.setPaintOptions({ brush: { pressureOpacity: e.target.checked } })}
-            className="accent-indigo-500"
+            className="accent-primary"
           />
           Pressure opacity
         </label>
       </div>
 
       <div className="flex gap-1">
-        <button type="button" className={chip(false)} onClick={() => attempt(() => controller.fillPixels())}>
+        <button type="button" className={imageChipClass(false)} onClick={() => attempt(() => controller.fillPixels())}>
           Fill
         </button>
-        <button type="button" className={chip(false)} onClick={() => attempt(() => controller.clearPixels())}>
+        <button type="button" className={imageChipClass(false)} onClick={() => attempt(() => controller.clearPixels())}>
           Clear
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}

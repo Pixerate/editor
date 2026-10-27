@@ -155,6 +155,18 @@ refuse.
 | `remove_effect` | Remove an applied effect: its commands, shots it alone filled and a vector effect's group. |
 | `add_vector_effect` | Add a vector effect's own picture as an artwork group (fitted into `box`) with its motion as new shots. Returns the instance and group ids. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). An animation document is the `MotionScene` (artwork, shots, clips, drivers); the playhead is not part of it.
+
+| Tool | Use |
+| --- | --- |
+| `get_animation_document` | Take a copy of the whole animation as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the animation, use `get_animation`: it is smaller and says more. Refuses very large documents. |
+| `load_animation_document` | Put back a copy from `get_animation_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_animation` brings the previous scene back). Refused while the editor is read-only. To edit part of a scene use `edit_animation`. |
+| `save_animation_document` | Save the animation under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_animation_documents` | List saved animations (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_animation_document` | Replace the animation with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Pitfalls
 
 - With agent playback on, the cursor clicks the shot a call names in the timeline and visits the stage elements its commands target. Results are unchanged.

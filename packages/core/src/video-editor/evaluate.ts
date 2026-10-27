@@ -1,6 +1,7 @@
 import { videoClipAnimated } from './clip-animation.js';
 import { videoClipSourceTime, videoClipSpeedAt } from './remap.js';
 import { normalizeVideoGrade } from './grade.js';
+import { videoLayerMask, type VideoLayerMask } from './mask.js';
 import { videoValueAt } from './keyframes.js';
 import { sortedVideoClips, videoAssetMap, videoClipAfter, videoClipBefore, videoClipEnd, videoClipSpeed, videoAssetHasSound, videoSequenceMap } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
@@ -62,6 +63,13 @@ export interface VideoLayer {
 	grade?: VideoGrade;
 	/** The clip's enabled provider effects, in order, with values at this moment (see `VideoClipEffect`). */
 	effects?: VideoLayerEffect[];
+	/** The clip's mask, resolved to an outline in frame pixels (before `rotation`): only what it keeps shows. */
+	mask?: VideoLayerMask;
+	/**
+	 * For an adjustment clip: the scope it changed (`layers` holds the pictures it changed, drawn as
+	 * one picture like a compound's, which its grade, effects and mask then apply to).
+	 */
+	adjustment?: { scope: 'underneath' | 'all' | 'track'; track?: string };
 	/** For an effect clip: the provider effect drawing the picture, at `time` ms into the clip. */
 	generator?: { effect: string; name?: string; values: Record<string, EffectValue>; time: number };
 	/**
@@ -247,8 +255,10 @@ interface Scope {
 /** The layers and sounds of `tracks` at `time` (in their own timeline). */
 function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: number, scope: Scope): { layers: VideoLayer[]; audio: VideoAudioSource[] } {
 	const { assets, prefix } = scope;
-	const layers: VideoLayer[] = [];
+	let layers: VideoLayer[] = [];
 	const audio: VideoAudioSource[] = [];
+	/** Adjustment clips whose scope reaches tracks not drawn yet: applied once every track is. */
+	const deferred: { layer: VideoLayer; keepBase: boolean }[] = [];
 	// Later tracks are further back, so draw from the last track to the first.
 	for (let ti = tracks.length - 1; ti >= 0; ti--) {
 		const track = tracks[ti];
@@ -285,6 +295,8 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 			}
 			if (track.kind !== 'video' || track.hidden) continue;
 			if (clip.type === 'media' && (!asset || asset.kind === 'audio')) continue;
+			// An adjustment clip with nothing to apply changes nothing.
+			if (clip.type === 'adjustment' && !normalizeVideoGrade(clip.grade) && !clip.mask && !(clip.effects ?? []).some((e) => e.enabled !== false)) continue;
 			if (nested && !nested.layers.length) continue;
 			// Entrance and exit animations are keyframes on the picture's opacity and transform.
 			const shown = videoClipAnimated(clip, project);
@@ -334,6 +346,24 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 				.map((e): VideoLayerEffect => ({ id: e.id, effect: e.effect, ...(e.name ? { name: e.name } : {}), opacity: clamp01(videoValueAt(e.opacity, clipTime, 1)), values: videoEffectValuesAt(e.values, clipTime), time: clipTime }))
 				.filter((e) => e.opacity > 0);
 			if (effects.length) layer.effects = effects;
+			if (clip.type === 'adjustment') {
+				// The whole frame, unmoved: an adjustment changes pictures, it does not place one.
+				layer.rect = { x: 0, y: 0, width: project.width, height: project.height };
+				layer.rotation = 0;
+				const adjScope = clip.scope ?? 'underneath';
+				layer.adjustment = { scope: adjScope, ...(clip.targetTrack ? { track: clip.targetTrack } : {}) };
+				if (clip.mask) layer.mask = videoLayerMask(clip.mask, layer.rect);
+				// The unadjusted pictures stay beneath where the adjusted copy does not cover them fully.
+				const keepBase = layer.opacity < 1 || !!layer.blend || !!layer.mask || !!layer.wipe || !!layer.iris;
+				if (layer.opacity <= 0) continue;
+				if (adjScope === 'underneath') {
+					if (!layers.length) continue;
+					layer.layers = keepBase ? [...layers] : layers.splice(0);
+					layers.push(layer);
+				} else deferred.push({ layer, keepBase });
+				continue;
+			}
+			if (clip.mask) layer.mask = videoLayerMask(clip.mask, layer.rect);
 			if (effectIn) {
 				// The outgoing clip's layer is drawn by the transition instead of on its own.
 				const before = videoClipBefore(track, clip);
@@ -345,6 +375,23 @@ function tracksAt(project: VideoProject, tracks: readonly VideoTrack[], time: nu
 			if (layer.opacity > 0) layers.push(layer);
 			if (dip && dip.opacity > 0) layers.push({ clip: `transition:${prefix}${incoming ? clip.id : outgoing!.next.id}`, track: track.id, type: 'color', color: dip.color, opacity: clamp01(dip.opacity), rect: { x: 0, y: 0, width: project.width, height: project.height }, rotation: 0 });
 		}
+	}
+	for (const { layer, keepBase } of deferred) {
+		if (layer.adjustment!.scope === 'all') {
+			if (!layers.length) continue;
+			layer.layers = [...layers];
+			layers = keepBase ? [...layers, layer] : [layer];
+			continue;
+		}
+		// Scope "track": the target track's pictures, which sit together in the draw order.
+		const target = layer.adjustment!.track;
+		const first = layers.findIndex((l) => l.track === target);
+		if (first < 0) continue;
+		let last = first;
+		while (last + 1 < layers.length && layers[last + 1].track === target) last++;
+		const run = layers.slice(first, last + 1);
+		layer.layers = run;
+		layers = [...layers.slice(0, first), ...(keepBase ? run : []), layer, ...layers.slice(last + 1)];
 	}
 	return { layers, audio };
 }

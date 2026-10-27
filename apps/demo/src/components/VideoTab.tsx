@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Film } from "lucide-react";
-import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools } from "@pixerate/editor-react/video-editor";
+import { VideoEditor, useVideoDialogueTools, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools, useVideoMusicTools } from "@pixerate/editor-react/video-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
-import { VideoFrameCache } from "@pixerate/editor/video-editor";
+import { createVideoEditorDocument, VideoFrameCache } from "@pixerate/editor/video-editor";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
 import { sampleProject } from "../videoSample";
@@ -73,6 +74,10 @@ export function VideoTab() {
   // The effects turn names effect ids, so play the one written for the selected provider.
   const scripts = useMemo(() => VIDEO_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "video-effects" : "video-effects-flair")), [effectsSource]);
   useVideoEffectsTools(demoToolRegistry, controller, { id: "video-effects", namespace: "videofx" });
+  // Talking-head cleanup (skill pixerate-talking-head-edit) and music and the mix (pixerate-bgm-alignment).
+  useVideoDialogueTools(demoToolRegistry, controller, { id: "video-dialogue", namespace: "videodialogue" });
+  useVideoMusicTools(demoToolRegistry, controller, { id: "video-music", namespace: "videomusic" });
+  const editorDocument = useDemoEditorDocument(controller, createVideoEditorDocument, { namespace: "video", skill: "pixerate-video-editor", history: false });
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -117,14 +122,17 @@ export function VideoTab() {
           <p className="text-xs text-slate-400">
             Headless <code>VideoEditorController</code> (<code>@pixerate/editor/video-editor</code>) with the React components from{" "}
             <code>@pixerate/editor-react/video-editor</code>. Drag clips to move them (they snap to edges, markers and the playhead), drag their edges to trim (Alt to
-            ripple), press S to split at the playhead and Delete to remove (Shift to ripple). Drop your own video, audio or images on the media bin. Every change is one
-            undo step (⌘Z), and agents make the same edits through the <code>video__*</code> tools.
+            ripple), press S to split at the playhead and Delete to remove (Shift to ripple). Drop your own video, audio or images on the media bin. "Adjustment" adds a clip
+            whose grade, effects and mask change every track underneath; the inspector masks clips and protects skin under a LUT. With a transcript, the transcript marks
+            fillers, pauses and stutters and proposes cleanups as plans you accept or discard. Every change is one undo step (⌘Z), and agents make the same edits through the{" "}
+            <code>video__*</code>, <code>videodialogue__*</code> and <code>videomusic__*</code> tools.
           </p>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Video project" />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <EffectsProviderSwitch />
-        <VideoEditor controller={controller} showScopes effects={effects} playback={demoPlayback} />
+        <VideoEditor controller={controller} showScopes transcriptMode="editor" effects={effects} playback={demoPlayback} />
       </div>
       <AgentScriptPanel
         scripts={scripts}

@@ -24,6 +24,15 @@ import {
   videoTransitionAudioCurve,
   videoKeyframeToggleEdit,
   videoKeyframeValueEdit,
+  videoClipHeading,
+  videoMaskEdit,
+  videoSkinProtectionEdits,
+  VIDEO_ADJUSTMENT_SCOPES,
+  VIDEO_ADJUSTMENT_SCOPE_LABELS,
+  VIDEO_MASK_SHAPES,
+  VIDEO_MASK_SHAPE_LABELS,
+  type VideoAdjustmentScope,
+  type VideoMaskShape,
   type VideoClip,
   type VideoClipAnimationEffect,
   type VideoEditorController,
@@ -132,6 +141,27 @@ function LutControls({ controller, clip, disabled }: { controller: VideoEditorCo
           />
         </Row>
       )}
+      {lut && (
+        <Row label="Protect skin" name="grade.lut.preserveSkinTones">
+          <Commit
+            type="number"
+            min={0}
+            max={1}
+            step={0.1}
+            value={String(lut.preserveSkinTones ?? 0)}
+            aria-label="Protect skin tones"
+            title="How much of the LUT to hold back on skin tones (0 to 1)"
+            disabled={disabled}
+            onCommit={(raw) => {
+              const n = Number(raw);
+              if (raw.trim() && Number.isFinite(n)) {
+                const r = controller.apply(videoSkinProtectionEdits(controller.getProject(), [clip.id], n), n > 0 ? 'Protect skin tones' : 'Stop protecting skin tones');
+                setMessage(r.ok ? null : r.error);
+              }
+            }}
+          />
+        </Row>
+      )}
       {message && (
         <p className="text-xs text-red-500" role="alert" data-lut-error="">
           {message}
@@ -196,7 +226,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
   return (
     <div className={`flex flex-col gap-1.5 ${className}`} data-clip-inspector="" data-clip-id={clip.id}>
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium">{clip.type === 'media' ? 'Media clip' : clip.type === 'text' ? 'Title' : clip.type === 'sequence' ? 'Compound clip' : 'Colour clip'}</span>
+        <span className="font-medium">{videoClipHeading(clip)}</span>
         <code className="text-muted-foreground">{clip.id}</code>
         {at.track.locked && <span className="text-amber-500">locked track</span>}
       </div>
@@ -305,6 +335,114 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
             </Row>
           ))}
           <LutControls controller={controller} clip={clip} disabled={disabled} />
+        </>
+      )}
+      {clip.type === 'adjustment' && (
+        <>
+          <Row label="Changes" name="scope">
+            <select
+              className={field}
+              value={clip.scope ?? 'underneath'}
+              disabled={disabled}
+              aria-label="Adjustment scope"
+              onChange={(e) => {
+                const scope = e.target.value as VideoAdjustmentScope;
+                const target = project.tracks.find((t) => t.kind === 'video' && t.id !== at.track.id)?.id;
+                if (scope === 'track') controller.apply({ op: 'update_clip', clip: clip.id, set: { scope, targetTrack: clip.targetTrack ?? target ?? at.track.id } }, 'Change adjustment scope');
+                else controller.apply({ op: 'update_clip', clip: clip.id, ...(scope === 'underneath' ? { remove: ['scope', 'targetTrack'] } : { set: { scope }, remove: ['targetTrack'] }) }, 'Change adjustment scope');
+              }}
+            >
+              {VIDEO_ADJUSTMENT_SCOPES.map((s) => (
+                <option key={s} value={s}>
+                  {VIDEO_ADJUSTMENT_SCOPE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </Row>
+          {clip.scope === 'track' && (
+            <Row label="Track" name="targetTrack">
+              <select className={field} value={clip.targetTrack ?? ''} disabled={disabled} aria-label="Adjusted track" onChange={(e) => set('targetTrack', e.target.value, 'Change adjusted track')}>
+                {project.tracks
+                  .filter((t) => t.kind === 'video')
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name ?? t.id}
+                    </option>
+                  ))}
+              </select>
+            </Row>
+          )}
+        </>
+      )}
+      {at.track.kind === 'video' && (
+        <>
+          <Row label="Mask" name="mask">
+            <select
+              className={field}
+              value={clip.mask?.shape ?? ''}
+              disabled={disabled}
+              aria-label="Mask shape"
+              onChange={(e) => {
+                const shape = e.target.value as VideoMaskShape | '';
+                const points = [
+                  { x: 0.5, y: 0.2 },
+                  { x: 0.8, y: 0.8 },
+                  { x: 0.2, y: 0.8 },
+                ];
+                const { points: _p, cornerRadius: _c, ...rest } = clip.mask ?? { shape: 'ellipse' as const };
+                controller.apply(videoMaskEdit(clip.id, shape ? { ...rest, shape, ...(shape === 'polygon' ? { points } : {}) } : null), shape ? 'Mask clip' : 'Remove mask');
+              }}
+            >
+              <option value="">None</option>
+              {VIDEO_MASK_SHAPES.map((s) => (
+                <option key={s} value={s}>
+                  {VIDEO_MASK_SHAPE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </Row>
+          {clip.mask &&
+            (
+              [
+                ['width', 'Mask width', 0.05],
+                ['height', 'Mask height', 0.05],
+                ['feather', 'Feather (px)', 5],
+                ['rotation', 'Mask angle', 5],
+              ] as const
+            ).map(([key, label, step]) => (
+              <Row key={key} label={label} name={`mask.${key}`}>
+                <Commit
+                  type="number"
+                  step={step}
+                  min={key === 'rotation' ? undefined : 0}
+                  value={clip.mask![key] === undefined ? '' : String(clip.mask![key])}
+                  placeholder={key === 'feather' || key === 'rotation' ? '0' : '0.5'}
+                  aria-label={label}
+                  disabled={disabled}
+                  onCommit={(raw) => {
+                    const n = Number(raw);
+                    if (raw.trim() && !Number.isFinite(n)) return;
+                    const { [key]: _old, ...rest } = clip.mask!;
+                    controller.apply(videoMaskEdit(clip.id, raw.trim() ? { ...rest, [key]: n } : rest), 'Change mask');
+                  }}
+                />
+              </Row>
+            ))}
+          {clip.mask && (
+            <Row label="Invert mask" name="mask.inverted">
+              <input
+                type="checkbox"
+                className="justify-self-start"
+                checked={!!clip.mask.inverted}
+                disabled={disabled}
+                aria-label="Invert mask"
+                onChange={(e) => {
+                  const { inverted: _i, ...rest } = clip.mask!;
+                  controller.apply(videoMaskEdit(clip.id, e.target.checked ? { ...rest, inverted: true } : rest), 'Invert mask');
+                }}
+              />
+            </Row>
+          )}
         </>
       )}
       {at.track.kind === 'video' &&

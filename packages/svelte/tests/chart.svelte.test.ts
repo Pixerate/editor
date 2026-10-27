@@ -229,6 +229,21 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("sets radar rings and grid shape", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "radar" } });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    type(q<HTMLInputElement>('[data-option="radarTicks"]'), "4");
+    expect(controller.getSpec().radarTicks).toBe(4);
+    type(q<HTMLInputElement>('[data-option="radarTicks"]'), "");
+    expect(controller.getSpec().radarTicks).toBeNull();
+    type(q<HTMLSelectElement>('[data-option="radarGraticule"]'), "circle");
+    expect(controller.getSpec().radarGraticule).toBe("circle");
+    controller.setType("bar");
+    flushSync();
+    expect(q('[data-option="radarGraticule"]')).toBeNull();
+  });
+
   it("reverses axes, makes value axes logarithmic and edits error bars", () => {
     const controller = new ChartController({ spec: sales });
     const el = render(ChartInspector, { controller });

@@ -1,6 +1,7 @@
 import {
   parseEditorDocument,
   toEditorDocumentFile,
+  withEditorAssets,
   type EditorDocument,
   type EditorDocumentFile,
   type LoadReport,
@@ -27,6 +28,8 @@ export interface SvelteEditorAutosave extends Omit<SvelteAutosave<EditorDocument
 export function createEditorAutosave(doc: EditorDocument, options: CreateEditorAutosaveOptions): SvelteEditorAutosave {
   const autosave = createAutosave<EditorDocumentFile>({
     ...options,
+    // Image and paint documents hold asset references: their bytes are saved and read with them.
+    storage: doc.assets ? withEditorAssets(options.storage, doc.assets) : options.storage,
     key: options.key ?? doc.kind,
     getSnapshot: () => toEditorDocumentFile(doc),
     deserialize: (text) => parseEditorDocument(text, { kind: doc.kind }),

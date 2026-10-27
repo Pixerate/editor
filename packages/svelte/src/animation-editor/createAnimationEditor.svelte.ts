@@ -7,11 +7,16 @@ import {
   type AnimationEditorOptions,
   type AnimationEditorState,
   type AnimationEditorToolProviderOptions,
+  createAnimationEditorDocument,
+  type MotionScene,
 } from "@pixerate/editor/animation-editor";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 import type { ToolRegistry } from "@pixerate/editor/tools";
 
 export interface SvelteAnimationEditor {
   readonly controller: AnimationEditorController;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<MotionScene>;
   /** The controller's state (reactive, including each played frame). */
   readonly state: AnimationEditorState;
   play(): void;
@@ -37,8 +42,10 @@ export function createAnimationEditor(controllerOrOptions: AnimationEditorContro
   const unsubscribe = controller.subscribe((next) => {
     state = next;
   });
+  const editorDocument = createAnimationEditorDocument(controller);
   return {
     controller,
+    editorDocument,
     get state() {
       return state;
     },
@@ -51,6 +58,7 @@ export function createAnimationEditor(controllerOrOptions: AnimationEditorContro
     toSvg: () => controller.toSvg(),
     destroy: () => {
       unsubscribe();
+      editorDocument.destroy();
       if (owned) controller.destroy();
     },
   };

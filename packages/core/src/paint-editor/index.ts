@@ -47,3 +47,4 @@ export { wetSupport, type WetSupport } from '../paint/wet/wasm';
 export type { WetBackendInfo } from '../paint/wet/world';
 export * from '../paint/gradient-paint';
 export * from './playback';
+export * from './editorDocument';

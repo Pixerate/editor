@@ -37,7 +37,7 @@ export const Histogram: React.FC<HistogramProps> = ({ histogram, channel = 'rgb'
       role="img"
       aria-label={histogram ? `Histogram of ${histogram.samples} pixels` : 'Histogram (no data)'}
       data-testid="image-editor-histogram"
-      className={`w-full rounded bg-slate-950/60 ${className}`}
+      className={`w-full rounded bg-muted/40 ${className}`}
       style={{ height, ...style }}
     >
       {paths.map(({ c, d }) => (

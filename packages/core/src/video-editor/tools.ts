@@ -7,15 +7,16 @@ import { VIDEO_EDIT_OPS, type VideoEdit, type VideoEditOutcome, type VideoEditRe
 import { findVideoAudioSilences, videoAudioLevels } from './audio.js';
 import { findVideoFillers, findVideoTranscriptPauses, findVideoTranscriptText, mergeVideoRanges, parseVideoTranscript, VIDEO_DEFAULT_FILLERS, videoRemoveRangesEdits, videoTimelineTranscript, videoTranscriptTrack, type VideoTranscriptRange } from './transcript.js';
 import { videoFreezeFrameEdit, videoSpeedRampEdit, videoSpeedRampKeys } from './remap.js';
-import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradeLook } from './grade.js';
+import { VIDEO_GRADE_CONTROLS, VIDEO_GRADE_PRESET_NAMES, videoGradeLook, videoGradePreset } from './grade.js';
+import { describeVideoEditPlan, type VideoEditPlan } from './plan.js';
 import { videoLutEdits } from './ui.js';
 import { videoFrameAt } from './evaluate.js';
 import { summarizeVideoScopes, type VideoPixels } from './scopes.js';
 import { videoAssetProxy, videoProxyPlan } from './proxy.js';
 import { VIDEO_EASE_NAMES, VIDEO_KEYFRAME_PROPERTIES, VIDEO_TRANSFORM_PROPERTIES, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { videoContactSheetSvg, videoProjectSvg } from './render.js';
-import { allVideoTracks, findVideoClip, findVideoGaps, findVideoSequenceCycle, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration, videoSequenceChildren, videoSequenceDuration } from './timeline.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject, type VideoSequence, type VideoTrack } from './types.js';
+import { videoClipTypeLabel, allVideoTracks, findVideoClip, findVideoGaps, findVideoSequenceCycle, formatVideoSeconds, formatVideoTimecode, sortedVideoClips, VIDEO_TIME_EPSILON, videoClipEnd, videoClipSourceRange, videoProjectDuration, videoSequenceChildren, videoSequenceDuration } from './timeline.js';
+import { VIDEO_ADJUSTMENT_SCOPES, VIDEO_MASK_SHAPES, VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_PLACEMENT_MODES, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoProject, type VideoSequence, type VideoTrack } from './types.js';
 
 /** Times in results, to a tenth of a millisecond. */
 const round = (ms: number) => Math.round(ms * 10) / 10;
@@ -37,6 +38,11 @@ export interface VideoEditorToolProviderOptions {
 	framePixels?: (time: number) => VideoPixels | null | Promise<VideoPixels | null>;
 	/** How long `get_video_scopes` waits for the preview to finish drawing a frame (ms, default 5000). */
 	framePixelsTimeout?: number;
+	/**
+	 * The agent playback surface its calls are acted out on (default `video`, where `VideoTimeline` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -94,10 +100,11 @@ const TRANSITION = object(
 );
 const LUT_SRC = { type: 'string', minLength: 1, description: 'A .cube 3D LUT file the host can load and ffmpeg can read: a URL or path, often from the user (e.g. "luts/teal-orange.cube").' } as const;
 const LUT_STRENGTH = { type: 'number', minimum: 0, maximum: 1, description: 'How much of the LUT\'s change to apply, 0 (none) to 1 (full, the default); 0.3-0.7 for a subtler look.' } as const;
+const SKIN = { type: 'number', minimum: 0, maximum: 1, description: 'How much of the LUT\'s change to hold back on skin tones, 0 (none, the default) to 1 (skin keeps its colour); 0.5-0.8 keeps faces natural under a heavy look. Applied in the preview and frame renders; ffmpeg\'s lut3d cannot, so the export notes it.' } as const;
 const GRADE = object(
 	{
 		...Object.fromEntries(VIDEO_GRADE_CONTROLS.map((c) => [c.key, { type: 'number', minimum: c.min, maximum: c.max, description: c.description }])),
-		lut: object({ src: LUT_SRC, strength: LUT_STRENGTH, name: { type: 'string', minLength: 1, description: 'A label for the look.' } }, ['src'], 'A 3D LUT applied after the other settings (set_video_lut checks the file first).')
+		lut: object({ src: LUT_SRC, strength: LUT_STRENGTH, name: { type: 'string', minLength: 1, description: 'A label for the look.' }, preserveSkinTones: SKIN }, ['src'], 'A 3D LUT applied after the other settings (set_video_lut checks the file first).')
 	},
 	[],
 	'Colour correction of the picture, applied in order: exposure, contrast, saturation, hue, white balance (temperature, tint), then a LUT. Leave a setting out for no change; the object replaces the clip\'s whole grade.'
@@ -639,12 +646,12 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		name: 'update_video_clip',
 		title: 'Change a clip',
 		description:
-			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, colour grade, entrance and exit animations, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for compound clips in point, volume, mute and fade curves (no speed); for titles text and style; for colours the colour. Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
+			'Changes a clip\'s properties (one undo step): opacity, transform, fit, blend mode, colour grade, entrance and exit animations, fades, name; for media volume, mute, the sound\'s fade curves, speed (keeps the stretch of source, so the length changes) or asset; for compound clips in point, volume, mute and fade curves (no speed); for titles text and style; for colours the colour; for adjustment clips the scope and target track (masks: set_video_clip_mask). Fields in "remove" go back to their defaults. Use move / trim for timing. Returns the clip.',
 		inputSchema: object(
 			{
 				clip: CLIP_ID,
-				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill') }, [], 'Fields to replace (only those that fit the clip\'s type).'),
-				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background'] }, description: 'Fields to reset to their defaults.' }
+				set: object({ ...CLIP_COMMON, ...MEDIA_FIELDS, asset: { ...ASSET_ID, description: 'For media: play another asset (same in point).' }, ...TEXT_FIELDS, color: COLOR('Text colour, or a colour clip\'s fill'), scope: { type: 'string', enum: [...VIDEO_ADJUSTMENT_SCOPES], description: 'For adjustment clips: which pictures it changes, underneath (default), all or track.' }, targetTrack: { ...TRACK_ID, description: 'For adjustment clips with scope "track": the track whose pictures it changes.' } }, [], 'Fields to replace (only those that fit the clip\'s type).'),
+				remove: { type: 'array', items: { type: 'string', enum: ['name', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'in', 'speed', 'volume', 'muted', 'fontSize', 'fontFamily', 'fontWeight', 'background', 'scope', 'targetTrack'] }, description: 'Fields to reset to their defaults (an adjustment clip going from scope "track" to another scope must also remove targetTrack).' }
 			},
 			['clip']
 		),
@@ -723,17 +730,18 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 				clips: { type: 'array', items: CLIP_ID, minItems: 1, uniqueItems: true, description: 'Clips on video tracks to grade.' },
 				src: LUT_SRC,
 				strength: LUT_STRENGTH,
-				name: { type: 'string', minLength: 1, description: 'A label for the look (default the file\'s TITLE).' }
+				name: { type: 'string', minLength: 1, description: 'A label for the look (default the file\'s TITLE).' },
+				preserve_skin_tones: SKIN
 			},
 			['clips', 'src']
 		),
 		annotations: { title: 'Apply a LUT', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-		handler: async ({ clips, src, strength, name }) => {
+		handler: async ({ clips, src, strength, name, preserve_skin_tones }) => {
 			if (strength === 0) throw new Error('A strength of 0 changes nothing; pass a strength above 0, or remove the LUT with remove_video_lut.');
 			gradeTargets(clips);
 			const lut = await controller.luts.load(src);
 			const label = name ?? lut.title;
-			const setting = { src, ...(strength !== undefined && strength !== 1 ? { strength } : {}), ...(label ? { name: label } : {}) };
+			const setting = { src, ...(strength !== undefined && strength !== 1 ? { strength } : {}), ...(label ? { name: label } : {}), ...(preserve_skin_tones ? { preserveSkinTones: preserve_skin_tones } : {}) };
 			return apply(videoLutEdits(project(), clips, setting), 'Apply LUT', (r) => ({ lut: { src, ...(lut.title ? { title: lut.title } : {}), size: lut.size }, clips: clips.map((id: string) => ({ id, grade: findVideoClip(r.project, id)?.clip.grade ?? null })) }));
 		}
 	};
@@ -971,7 +979,7 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
 		const { clip } = at;
 		if (clip.type === 'sequence') throw new Error(`Clip "${id}" is a compound clip, which plays its sequence at normal speed; change the speed of the clips inside the sequence instead.`);
-		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to change the speed of; use a video or audio clip.`);
+		if (clip.type !== 'media') throw new Error(`Clip "${id}" is a ${videoClipTypeLabel(clip)}, so it has no source to change the speed of; use a video or audio clip.`);
 		if (project().assets.find((a) => a.id === clip.asset)?.kind === 'image') throw new Error(`Clip "${id}" is a still, so it has no motion to change the speed of.`);
 		return clip;
 	};
@@ -1349,8 +1357,191 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 		}
 	};
 
-	const reads = [getProject, listSequences, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
-	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
+	// -----------------------------------------------------------------------------------------
+	// Adjustment clips, masks and skin-tone protection
+	// -----------------------------------------------------------------------------------------
+
+	const MASK_FIELDS: Record<string, JsonSchema> = {
+		shape: { type: 'string', enum: [...VIDEO_MASK_SHAPES], description: 'rectangle (with corner_radius), ellipse, linear (a straight split: the side above the line at rotation 0 shows) or polygon (points).' },
+		x: { type: 'number', description: 'Centre across the clip\'s picture, 0 (left edge) to 1 (right edge); default 0.5.' },
+		y: { type: 'number', description: 'Centre down the clip\'s picture, 0 (top) to 1 (bottom); default 0.5.' },
+		width: { type: 'number', minimum: 0, description: 'Width as a fraction of the picture\'s width (default 0.5). Unused by linear.' },
+		height: { type: 'number', minimum: 0, description: 'Height as a fraction of the picture\'s height (default 0.5). Unused by linear.' },
+		rotation: { type: 'number', description: 'Degrees clockwise (default 0).' },
+		feather: { type: 'number', minimum: 0, description: 'Soft edge width in frame pixels (default 0 = hard edge).' },
+		corner_radius: { type: 'number', minimum: 0, maximum: 1, description: 'For rectangle: corner rounding as a fraction of half the shorter side (default 0).' },
+		inverted: { type: 'boolean', description: 'Show the outside of the shape instead of the inside (default false).' },
+		points: { type: 'array', minItems: 3, maxItems: 200, items: object({ x: { type: 'number', description: 'Across the picture, 0–1.' }, y: { type: 'number', description: 'Down the picture, 0–1.' } }, ['x', 'y'], 'A corner of the polygon.'), description: 'For polygon (required): its corners in order, as fractions of the clip\'s picture.' }
+	};
+
+	const addAdjustment: AgentTool = {
+		name: 'add_video_adjustment_clip',
+		title: 'Add an adjustment clip',
+		description:
+			'Adds an adjustment clip to a video track (one undo step): it has no picture, but while it plays its grade (and any effects added later with apply_effect, and a mask from set_video_clip_mask) change the composite of the pictures in its scope: "underneath" (every video track below its own, the default), "all" (the whole frame) or "track" (only target_track). Put it on a track above what it should change, usually a new top track. Give the look as "grade" and/or "preset" (a named look at "amount"). Returns the clip (id, start, duration, end, scope).',
+		inputSchema: object(
+			{
+				track: { ...TRACK_ID, description: 'A video track to put it on; tracks below it are "underneath".' },
+				start: MS('Where it starts on the timeline (default: the end of the track)'),
+				duration: { type: 'number', exclusiveMinimum: 0, description: 'How long it lasts, in ms (default 3000).' },
+				scope: { type: 'string', enum: [...VIDEO_ADJUSTMENT_SCOPES], description: 'Which pictures it changes: underneath (default), all or track.' },
+				target_track: { ...TRACK_ID, description: 'For scope "track" (required then): the track whose pictures it changes.' },
+				grade: GRADE,
+				preset: { type: 'string', enum: [...VIDEO_GRADE_PRESET_NAMES], description: 'A named look to start from (grade settings given override it).' },
+				amount: { type: 'number', minimum: 0, maximum: 1, description: 'Strength of the preset, 0–1 (default 1).' },
+				name: { type: 'string', minLength: 1, description: 'A label for the clip (e.g. "Night look").' },
+				id: { type: 'string', minLength: 1, description: 'Your own id for the clip (default: a fresh one such as "c7").' },
+				mode: MODE
+			},
+			['track']
+		),
+		annotations: { title: 'Add an adjustment clip', ...WRITE },
+		handler: ({ track, start, duration, scope, target_track, grade, preset, amount, name, id, mode }) => {
+			const t = project().tracks.find((x) => x.id === track);
+			if (t && t.kind !== 'video') throw new Error(`Track "${track}" is an audio track; adjustment clips change pictures, so put it on a video track.`);
+			if (scope === 'track' && !target_track) throw new Error('Scope "track" needs target_track: the id of the track whose pictures it changes.');
+			if (target_track !== undefined && scope !== 'track') throw new Error('target_track is only for scope "track"; leave it out or set scope to "track".');
+			const look = { ...(preset ? videoGradePreset(preset, amount ?? 1) : {}), ...(grade ?? {}) };
+			const clip = { type: 'adjustment' as const, ...(id ? { id } : {}), ...(name ? { name } : {}), ...(start !== undefined ? { start } : {}), duration: duration ?? 3000, ...(scope ? { scope } : {}), ...(target_track ? { targetTrack: target_track } : {}), ...(Object.keys(look).length ? { grade: look } : {}) };
+			return apply({ op: 'add_clip', track, clip, mode }, 'Add adjustment clip', (r) => ({ clip: clipOut(r.project, r.outcomes[0].clip!), ...placed(r.outcomes[0]), ...(Object.keys(look).length ? {} : { hint: 'It changes nothing yet: give it a grade (update_video_clip), effects (apply_effect) or a mask.' }) }));
+		}
+	};
+
+	const maskTarget = (id: string) => {
+		const at = findVideoClip(project(), id);
+		if (!at) throw new Error(`There is no clip "${id}"; get_video_project lists the clips.`);
+		if (at.track.kind !== 'video') throw new Error(`Clip "${id}" is on audio track "${at.track.id}"; masks cut pictures, so pass a clip on a video track.`);
+		return at;
+	};
+
+	const setMask: AgentTool = {
+		name: 'set_video_clip_mask',
+		title: 'Mask a clip',
+		description:
+			'Cuts a clip\'s picture to a shape (one undo step): only the inside shows, or the outside when inverted, with a soft edge of "feather" pixels. Positions are fractions of the clip\'s placed picture, so the mask follows the clip\'s transform. On an adjustment clip it limits the adjustment to the shape (e.g. brighten a face). Replaces any mask the clip had. Returns the clip with its mask. ffmpeg exports need rendered frames for masks.',
+		inputSchema: object({ clip: CLIP_ID, ...MASK_FIELDS }, ['clip', 'shape']),
+		annotations: { title: 'Mask a clip', ...WRITE_IDEMPOTENT },
+		handler: ({ clip, corner_radius, ...fields }) => {
+			maskTarget(clip);
+			if (fields.shape === 'polygon' && !fields.points) throw new Error('A polygon mask needs "points": at least 3 { x, y } corners as fractions of the picture.');
+			if (fields.shape !== 'polygon' && fields.points) throw new Error('"points" is only for shape "polygon".');
+			if (corner_radius !== undefined && fields.shape !== 'rectangle') throw new Error('"corner_radius" is only for shape "rectangle".');
+			const mask = { ...fields, ...(corner_radius !== undefined ? { cornerRadius: corner_radius } : {}) };
+			return apply({ op: 'update_clip', clip, set: { mask } }, 'Mask clip', (r) => ({ clip: clipOut(r.project, clip) }));
+		}
+	};
+
+	const removeMask: AgentTool = {
+		name: 'remove_video_clip_mask',
+		title: 'Remove a clip\'s mask',
+		description: 'Takes a clip\'s mask off, so its whole picture shows again (one undo step). Fails if it has none. Returns the clip.',
+		inputSchema: object({ clip: CLIP_ID }, ['clip']),
+		annotations: { title: 'Remove a clip\'s mask', ...DESTRUCTIVE },
+		handler: ({ clip }) => {
+			const at = maskTarget(clip);
+			if (!at.clip.mask) throw new Error(`Clip "${clip}" has no mask.`);
+			return apply({ op: 'update_clip', clip, remove: ['mask'] }, 'Remove mask', (r) => ({ clip: clipOut(r.project, clip) }));
+		}
+	};
+
+	const setSkin: AgentTool = {
+		name: 'set_video_skin_protection',
+		title: 'Protect skin tones from a LUT',
+		description:
+			'Holds a LUT back on skin tones for clips that already have one (one undo step): at "amount" 1 skin keeps its colour while the rest of the picture takes the full look; 0 turns the protection off. Skin is found by colour, so warm orange or beige objects are protected too. Fails for clips without a LUT (add one with set_video_lut first). Returns each clip\'s LUT setting.',
+		inputSchema: object({ clips: { type: 'array', items: CLIP_ID, minItems: 1, uniqueItems: true, description: 'Clips with a LUT.' }, amount: { ...SKIN, description: 'How much of the LUT to hold back on skin, 0 (off) to 1 (all of it).' } }, ['clips', 'amount']),
+		annotations: { title: 'Protect skin tones from a LUT', ...WRITE_IDEMPOTENT },
+		handler: ({ clips, amount }) => {
+			gradeTargets(clips);
+			const edits: VideoEdit[] = [];
+			for (const id of clips as string[]) {
+				const clip = findVideoClip(project(), id)!.clip;
+				const lut = clip.grade?.lut;
+				if (!lut) throw new Error(`Clip "${id}" has no LUT to protect skin from; add one with set_video_lut first.`);
+				const { preserveSkinTones: _p, ...rest } = lut;
+				edits.push({ op: 'update_clip', clip: id, set: { grade: { ...clip.grade, lut: amount > 0 ? { ...rest, preserveSkinTones: amount } : rest } } });
+			}
+			return apply(edits, amount > 0 ? 'Protect skin tones' : 'Stop protecting skin tones', (r) => ({ clips: clips.map((id: string) => ({ id, lut: findVideoClip(r.project, id)?.clip.grade?.lut ?? null })) }));
+		}
+	};
+
+	// -----------------------------------------------------------------------------------------
+	// Edit plans: propose, review, apply
+	// -----------------------------------------------------------------------------------------
+
+	const planOut = (plan: VideoEditPlan) => ({
+		id: plan.id,
+		title: plan.title,
+		...(plan.description ? { description: plan.description } : {}),
+		...(plan.source ? { source: plan.source } : {}),
+		summary: { ...plan.summary, newIssues: issueSummary(plan.summary.newIssues) },
+		...(plan.ranges ? { ranges: plan.ranges.map((r) => ({ ...r, from: round(r.from), to: round(r.to) })) } : {}),
+		edits: plan.edits.length,
+		stale: controller.isPlanStale(plan.id),
+		text: describeVideoEditPlan(plan)
+	});
+	const PLAN_ID = { type: 'string', minLength: 1, description: 'A plan id from plan_video_edits, a plan_* tool or list_video_edit_plans (e.g. "plan1").' } as const;
+
+	const planEdits: AgentTool = {
+		name: 'plan_video_edits',
+		title: 'Propose edits for review',
+		description:
+			'Works out a batch of edits without applying them and keeps it as a plan for review: the project does not change. The plan says what it would do (length before and after, clips added, removed and changed, problems it would add) and shows in the editor for the user to accept or discard. Use it for anything the user should see before it happens (a rough cut, a cleanup, a re-time). Fails, keeping nothing, if the edits do not apply. Apply it with apply_video_edit_plan. Returns the plan.',
+		inputSchema: object(
+			{
+				title: { type: 'string', minLength: 1, maxLength: 120, description: 'What the plan does, shown to the user and used as the undo label (e.g. "Tighten the intro").' },
+				description: { type: 'string', maxLength: 2000, description: 'Why, and anything the reviewer should check.' },
+				ops: { type: 'array', items: EDIT_OP, minItems: 1, maxItems: 500, description: 'The edits, in order, as for edit_video.' },
+				ranges: { type: 'array', maxItems: 500, items: object({ from: MS('Start, on the timeline'), to: MS('End, on the timeline'), text: { type: 'string', description: 'What is said there.' }, reason: { type: 'string', description: 'Why it is in the plan (e.g. "filler").' } }, ['from', 'to'], 'A stretch the plan cuts or changes.'), description: 'The stretches it cuts or changes, for the review view (optional).' }
+			},
+			['title', 'ops']
+		),
+		annotations: { title: 'Propose edits for review', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+		handler: ({ title, description, ops, ranges }) => {
+			if (ops.some((o: { op: string }) => o.op === 'replace_project')) throw new Error('A plan cannot replace the whole project; use the individual ops.');
+			const r = controller.proposePlan({ title, description, edits: ops as VideoEdit[], ranges, source: 'agent' });
+			if (!r.ok) throw new Error(r.error);
+			return { plan: planOut(r.plan), hint: `Nothing changed yet. Ask the user to review it, then call apply_video_edit_plan with plan "${r.plan.id}" (or discard_video_edit_plan).` };
+		}
+	};
+
+	const listPlans: AgentTool = {
+		name: 'list_video_edit_plans',
+		title: 'List proposed edit plans',
+		description: 'Lists the plans waiting for review, oldest first: id, title, summary (length change, clips added, removed and changed, new problems), the stretches they cut, and whether the project changed since each was made (stale: it is checked again when applied).',
+		inputSchema: object({}),
+		annotations: { title: 'List proposed edit plans', ...READ },
+		handler: () => ({ plans: controller.getState().plans.map(planOut) })
+	};
+
+	const applyPlan: AgentTool = {
+		name: 'apply_video_edit_plan',
+		title: 'Apply an edit plan',
+		description:
+			'Applies a proposed plan as one undo step (labelled with its title) and closes it. A plan made before the project changed is checked again first and refused, changing nothing, if its edits no longer apply. Returns what it did (each op\'s outcome), the new length and issues, and whether it was stale.',
+		inputSchema: object({ plan: PLAN_ID }, ['plan']),
+		annotations: { title: 'Apply an edit plan', ...DESTRUCTIVE },
+		handler: ({ plan }) => {
+			const r = controller.applyPlan(plan);
+			if (!r.ok) throw new Error(r.error);
+			return { plan: r.plan.id, title: r.plan.title, stale: r.stale, outcomes: r.outcomes, duration: videoProjectDuration(r.project), issues: issueSummary(r.issues) };
+		}
+	};
+
+	const discardPlan: AgentTool = {
+		name: 'discard_video_edit_plan',
+		title: 'Discard an edit plan',
+		description: 'Closes a proposed plan without applying it; the project is unchanged. Returns the plans still open.',
+		inputSchema: object({ plan: PLAN_ID }, ['plan']),
+		annotations: { title: 'Discard an edit plan', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+		handler: ({ plan }) => {
+			if (!controller.discardPlan(plan)) throw new Error(`There is no open plan "${plan}"; the open plans are ${controller.getState().plans.map((p) => `"${p.id}"`).join(', ') || 'none'}.`);
+			return { discarded: plan, open: controller.getState().plans.map((p) => p.id) };
+		}
+	};
+
+	const reads = [getProject, listPlans, listSequences, getFrame, getTranscript, findText, findFillers, findPauses, findGaps, checkProject, renderFrame, getScopes, previewCache, planProxies, exportFfmpeg, exportLoudnessMeasure, exportEdl, audioLevels, findSilences, seek, setPreviewScale];
+	const writes = [setSettings, addAsset, updateAsset, removeAsset, setProxies, addTrack, updateTrack, removeTrack, moveTrack, addClip, moveClip, trimClip, splitClip, deleteClips, updateClip, setTransition, setSpeedRamp, addFreeze, removeRamp, setTranscript, removeRanges, applyGradePreset, copyGrade, setLut, removeLut, setSkin, addAdjustment, setMask, removeMask, planEdits, applyPlan, discardPlan, setKeyframes, removeKeyframes, slipClip, rollEdit, slideClip, liftRange, extractRange, splitAt, closeGaps, addMarker, removeMarker, editVideo, undo, redo];
 
 	return withVideoPlayback({
 		id: options.id ?? 'video',
@@ -1369,5 +1560,5 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 				}
 			});
 		}
-	});
+	}, options.playbackSurface);
 }

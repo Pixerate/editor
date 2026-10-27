@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.148.0",
+  "version": "0.160.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -366,7 +366,7 @@
     "@tiptap/suggestion": "^2.27.3",
     "markdown-it": "^15.0.3",
     "markdown-it-task-lists": "^2.1.1",
-    "prosemirror-markdown": "^1.13.8"
+    "prosemirror-markdown": "^1.13.9"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.137.0",

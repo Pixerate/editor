@@ -11,6 +11,7 @@
   import {
     CHART_COLOR_SCHEMES,
     CHART_CURVES,
+    CHART_RADAR_GRATICULES,
     CHART_ERROR_BAR_DIRECTIONS,
     CHART_ERROR_BAR_LABELS,
     CHART_ERROR_BAR_TYPES,
@@ -406,6 +407,22 @@
           <div class="min-w-0 flex-1">
             <ChartCommitInput id="{idPrefix}-bins" value={spec.bins === null ? '' : String(spec.bins)} placeholder="Auto" inputmode="numeric" data-option="bins" oncommit={(text) => controller.update({ bins: text.trim() === '' ? null : Number(text) }).ok} />
           </div>
+        </div>
+      {/if}
+      {#if spec.type === 'radar'}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-radar-ticks" class="{chartLabelClass} w-20 shrink-0">Rings</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-radar-ticks" value={spec.radarTicks === null ? '' : String(spec.radarTicks)} placeholder="Auto" inputmode="numeric" data-option="radarTicks" oncommit={(text) => controller.update({ radarTicks: text.trim() === '' ? null : Number(text) }).ok} />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-radar-graticule" class="{chartLabelClass} w-20 shrink-0">Grid</label>
+          <select id="{idPrefix}-radar-graticule" class={chartInputClass} value={spec.radarGraticule} data-option="radarGraticule" onchange={(e) => controller.update({ radarGraticule: e.currentTarget.value as (typeof CHART_RADAR_GRATICULES)[number] })}>
+            {#each CHART_RADAR_GRATICULES as g (g)}
+              <option value={g}>{g === 'polygon' ? 'Polygons' : 'Circles'}</option>
+            {/each}
+          </select>
         </div>
       {/if}
       {#if spec.type === 'donut'}

@@ -1,47 +1,28 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
-import { useAgentPlayback } from '../playback/AgentPlaybackContext';
-import { usePlaybackSurface } from '../playback/usePlaybackSurface';
-import { PresenceLayer } from '../playback/PresenceLayer';
+import React, { useRef, useEffect, useState } from 'react';
+import type { AgentPlayback, PlaybackRef } from '@pixerate/editor/tools';
 import type {
-  Annotation,
-  CropBox,
-  CropHandle,
   ExportOptions,
+  ImageEditorFit,
   ImageEditorTool,
-  ImagePoint,
   InpaintHook,
   RemoveBackgroundHook,
   ImageEditorAIHooks,
+  TextEditSession,
 } from '@pixerate/editor/image-editor';
 import {
-  canvasToImagePoint,
-  imageToCanvasPoint,
-  createImagePlaybackLocator,
-  hitTestCrop,
-  getCropCursor,
-  calculateCropDrag,
-  hitTestAnnotation,
   normalizeProcessVersion,
   LATEST_PROCESS_VERSION,
   IMAGE_ADJUSTMENT_CONTROLS,
   readAdjustmentControls,
   DEFAULT_SELECTION_TOOL_OPTIONS,
-  SelectionGesture,
-  PaintGesture,
-  handlePaintShortcut,
-  pointerPressure,
   FreeTransformTool,
-  getViewportProjection,
-  ShapeDrawGesture,
-  TypeToolGesture,
   DEFAULT_SHAPE_TOOL_OPTIONS,
   DEFAULT_TYPE_TOOL_OPTIONS,
   type SelectionToolOptions,
   type ShapeToolOptions,
   type TypeToolOptions,
-  type TransformHandle,
 } from '@pixerate/editor/image-editor';
+import { ImageEditorCanvas, type ImageEditorCanvasErrorSource, type ImageEditorCanvasMode } from './ImageEditorCanvas';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 import { ControlSlider } from './ControlSlider';
 import { Histogram } from './Histogram';
@@ -57,6 +38,7 @@ import { RefineEdgePanel } from './RefineEdgePanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
 import { ShapeOptionsBar } from './ShapeOptionsBar';
 import { TypeOptionsBar } from './TypeOptionsBar';
+import { imageDividerClass, imageEditorFrameClass, imageEditorHeaderClass, imageErrorBannerClass, imageHeaderButtonClass, imagePrimaryButtonClass, imageRangeClass, imageSectionClass, imageSectionTitleClass, imageSelectClass, imageSidebarClass, imageSmallButtonClass, imageSpinnerClass, imageTabClass, imageTabListClass } from './styles';
 
 export interface ImageEditorProps {
   editor?: UseImageEditorReturn;
@@ -68,6 +50,8 @@ export interface ImageEditorProps {
   onInpaint?: InpaintHook;
   onRemoveBackground?: RemoveBackgroundHook;
   aiHooks?: ImageEditorAIHooks;
+  /** How the image fits the canvas (default: the renderer's). */
+  fit?: ImageEditorFit;
   /**
    * An effects provider (see `@pixerate/editor/effects`), registered with the controller while
    * mounted: filter effects as smart filters and generator or overlay effects as effect layers,
@@ -97,6 +81,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   onInpaint,
   onRemoveBackground,
   aiHooks,
+  fit,
   effects,
   playback,
   playbackId = 'image',
@@ -111,101 +96,39 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   });
   const legacyProcess = normalizeProcessVersion(state.adjustments.process) < LATEST_PROCESS_VERSION;
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<TabType>('crop');
   const rootRef = useRef<HTMLDivElement>(null);
+  /** The tabs with canvas gestures drive the canvas mode; the others only view. */
+  const canvasMode: ImageEditorCanvasMode =
+    activeTab === 'crop' || activeTab === 'select' || activeTab === 'paint' || activeTab === 'annotate' ? activeTab : 'none';
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
-
-  // Agent playback: the agent's cursor in document pixels, over the whole editor (canvas and panels).
-  const ambientPlayback = useAgentPlayback();
-  const playing = (playback === undefined ? ambientPlayback : playback) ?? null;
-  const [locateLayer] = useState(() => createImagePlaybackLocator(controller));
-  /** Document pixels → pixels in the editor's root element, through the canvas projection. */
-  const docToRoot = (p: PlaybackPoint): PlaybackPoint => {
-    const canvas = canvasRef.current;
-    const root = rootRef.current;
-    if (!canvas || !root || !canvas.width) return p;
-    const r = canvas.getBoundingClientRect();
-    const box = root.getBoundingClientRect();
-    const c = imageToCanvasPoint(p, controller.getState(), canvas.width, canvas.height, activeTabRef.current === 'crop');
-    return { x: r.left - box.left + (c.x * r.width) / canvas.width, y: r.top - box.top + (c.y * r.height) / canvas.height };
+  /** Agent playback opens a panel by clicking its tab, unless it is already open. */
+  const openPanel = async (ref: PlaybackRef) => {
+    if (ref.kind !== 'panel' || activeTabRef.current === ref.id) return;
+    rootRef.current?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
+    // Let the panel render before the cursor looks for its controls.
+    await new Promise((resolve) => setTimeout(resolve, 60));
   };
-  /** Viewport (client) pixels → document pixels. */
-  const clientToDoc = (p: PlaybackPoint): PlaybackPoint => {
-    const canvas = canvasRef.current;
-    if (!canvas || !canvas.width) return p;
-    const r = canvas.getBoundingClientRect();
-    const sx = r.width > 0 ? canvas.width / r.width : 1;
-    const sy = r.height > 0 ? canvas.height / r.height : 1;
-    return canvasToImagePoint({ x: (p.x - r.left) * sx, y: (p.y - r.top) * sy }, controller.getState(), canvas.width, canvas.height, activeTabRef.current === 'crop');
-  };
-  /** An element of the editor (a tab, slider or layer row) as a rectangle in document pixels. */
-  const elementRect = (selector: string): PlaybackRect | null => {
-    const el = rootRef.current?.querySelector(selector);
-    const r = el?.getBoundingClientRect();
-    if (!r || r.width <= 0) return null;
-    const a = clientToDoc({ x: r.left, y: r.top });
-    const b = clientToDoc({ x: r.right, y: r.bottom });
-    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
-  };
-  const agentPresence = usePlaybackSurface(playing, playbackId, {
-    defaultKind: 'layer',
-    locate: (ref: PlaybackRef) => {
-      if (ref.kind === 'panel') return elementRect(`[data-image-tab="${CSS.escape(ref.id)}"]`);
-      if (ref.kind === 'control') return elementRect(`[data-control-id="${CSS.escape(ref.id)}"]`);
-      return locateLayer(ref) ?? (ref.kind === 'layer' || ref.kind === 'item' ? elementRect(`[data-layer-id="${CSS.escape(ref.id)}"]`) : null);
-    },
-    open: async (ref: PlaybackRef) => {
-      if (ref.kind !== 'panel' || activeTabRef.current === ref.id) return;
-      rootRef.current?.querySelector<HTMLElement>(`[data-image-tab="${CSS.escape(ref.id)}"]`)?.click();
-      // Let the panel render before the cursor looks for its controls.
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    },
-    bounds: () => {
-      const r = canvasRef.current?.getBoundingClientRect();
-      if (!r || r.width <= 0) return null;
-      const a = clientToDoc({ x: r.left, y: r.top });
-      const b = clientToDoc({ x: r.right, y: r.bottom });
-      return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
-    },
-    visible: () => {
-      const r = rootRef.current?.getBoundingClientRect();
-      return !!r && r.width > 0 && r.height > 0 && !(typeof document !== 'undefined' && document.visibilityState === 'hidden');
-    },
-    toViewport: (p) => {
-      const box = rootRef.current?.getBoundingClientRect();
-      const q = docToRoot(p);
-      return { x: (box?.left ?? 0) + q.x, y: (box?.top ?? 0) + q.y };
-    },
-    fromViewport: clientToDoc,
-    reveal: () => onPlaybackReveal?.(),
-  });
   const [activeCropRatio, setActiveCropRatio] = useState<number | null>(null);
 
-  // Selection tools (magic wand, marquees, lasso): options bar state and the pointer gesture.
+  // Tool options for the canvas, set by the options bars.
   const [selectionOptions, setSelectionOptions] = useState<SelectionToolOptions>(DEFAULT_SELECTION_TOOL_OPTIONS);
-  const selectionOptionsRef = useRef(selectionOptions);
-  selectionOptionsRef.current = selectionOptions;
-  const selectionGestureRef = useRef<SelectionGesture | null>(null);
-  if (!selectionGestureRef.current || selectionGestureRef.current.controller !== controller) {
-    selectionGestureRef.current = new SelectionGesture(controller, () => selectionOptionsRef.current);
-  }
-  const selectionDraftRef = useRef<ImagePoint[] | null>(null);
+  const [shapeOptions, setShapeOptions] = useState<ShapeToolOptions>(DEFAULT_SHAPE_TOOL_OPTIONS);
+  const [typeOptions, setTypeOptions] = useState<TypeToolOptions>(DEFAULT_TYPE_TOOL_OPTIONS);
+  const [typeSession, setTypeSession] = useState<TextEditSession | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-
-  // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
-  const paintGestureRef = useRef<PaintGesture | null>(null);
-  const paintControllerRef = useRef(controller);
-  if (!paintGestureRef.current || paintControllerRef.current !== controller) {
-    paintGestureRef.current = new PaintGesture(controller);
-    paintControllerRef.current = controller;
-  }
-  const brushCursorRef = useRef<ImagePoint | null>(null);
   const [paintError, setPaintError] = useState<string | null>(null);
+  const [shapeTypeError, setShapeTypeError] = useState<string | null>(null);
+  const handleCanvasError = (source: ImageEditorCanvasErrorSource, message: string | null) => {
+    if (source === 'paint') setPaintError(message);
+    else if (source === 'select') setSelectionError(message);
+    else setShapeTypeError(message);
+  };
+  // The canvas finishes the edit when its session is cleared.
+  const finishTyping = () => setTypeSession(null);
 
-  // Free Transform (Ctrl/Cmd+T): the shared tool drives a session; its overlay is drawn by the renderer.
+  // Free Transform (Ctrl/Cmd+T): shared with the canvas, which drives and draws it.
   const transformToolRef = useRef<FreeTransformTool | null>(null);
   const transformControllerRef = useRef(controller);
   if (!transformToolRef.current || transformControllerRef.current !== controller) {
@@ -217,27 +140,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   }
   const transformTool = transformToolRef.current;
   const [, setTransformTick] = useState(0);
-  const [transformCursor, setTransformCursor] = useState('default');
-
-  // Shape and type tools: their options and gestures; type is edited on the canvas through a hidden textarea.
-  const [shapeOptions, setShapeOptions] = useState<ShapeToolOptions>(DEFAULT_SHAPE_TOOL_OPTIONS);
-  const shapeOptionsRef = useRef(shapeOptions);
-  shapeOptionsRef.current = shapeOptions;
-  const [typeOptions, setTypeOptions] = useState<TypeToolOptions>(DEFAULT_TYPE_TOOL_OPTIONS);
-  const typeOptionsRef = useRef(typeOptions);
-  typeOptionsRef.current = typeOptions;
-  const shapeGestureRef = useRef<ShapeDrawGesture | null>(null);
-  const typeToolRef = useRef<TypeToolGesture | null>(null);
-  const shapeTypeControllerRef = useRef(controller);
-  if (!shapeGestureRef.current || !typeToolRef.current || shapeTypeControllerRef.current !== controller) {
-    typeToolRef.current?.finish();
-    shapeGestureRef.current = new ShapeDrawGesture(controller, () => shapeOptionsRef.current);
-    typeToolRef.current = new TypeToolGesture(controller, () => typeOptionsRef.current);
-    shapeTypeControllerRef.current = controller;
-  }
-  const typeInputRef = useRef<HTMLTextAreaElement>(null);
-  const [typeSession, setTypeSession] = useState(typeToolRef.current.session);
-  const [shapeTypeError, setShapeTypeError] = useState<string | null>(null);
+  useEffect(() => transformTool.subscribe(() => setTransformTick((n) => n + 1)), [transformTool]);
+  useEffect(() => () => transformToolRef.current?.cancel(), []);
 
   // AI Tools state
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -323,656 +227,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const [fontSize, setFontSize] = useState(24);
   const [textInput, setTextInput] = useState('');
 
-  // Live draft and drag references
-  const draftAnnotationRef = useRef<Annotation | null>(null);
-  const draftCropRef = useRef<CropBox | null>(null);
-  const cropDragInfoRef = useRef<{
-    handle: CropHandle | 'new';
-    startCanvasPt: ImagePoint;
-    startImgPt: ImagePoint;
-    startCrop: CropBox;
-  } | null>(null);
-  const annotationDragInfoRef = useRef<{
-    annId: string;
-    startImgPt: ImagePoint;
-    initialAnn: Annotation;
-  } | null>(null);
-  const isDrawingRef = useRef(false);
-  const currentPathRef = useRef<ImagePoint[]>([]);
-  const dragStartPointRef = useRef<ImagePoint | null>(null);
-
-  // Canvas viewport sizing and re-render
-  const renderCanvas = useCallback(
-    async (draftAnnotation?: Annotation | null, draftCrop?: CropBox | null) => {
-      const canvas = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-
-      const vpWidth = container.clientWidth || 800;
-      const vpHeight = container.clientHeight || 500;
-
-      await controller.render(canvas, {
-        viewportWidth: vpWidth,
-        viewportHeight: vpHeight,
-        showCropOverlay: activeTab === 'crop',
-        showSelectionOverlay: true,
-        interactive: true,
-        draftAnnotation: draftAnnotation !== undefined ? draftAnnotation : draftAnnotationRef.current,
-        draftCrop: draftCrop !== undefined ? draftCrop : draftCropRef.current,
-        draftSelectionPath: selectionDraftRef.current,
-        brushCursor:
-          activeTab === 'paint' && brushCursorRef.current && controller.getState().activeTool !== 'move' && !transformTool.active
-            ? { ...brushCursorRef.current, diameter: controller.getState().paint.brush.size }
-            : null,
-        freeTransform: transformTool.overlay(),
-        textEdit: typeToolRef.current?.session?.alive ? typeToolRef.current.session.overlay() : null,
-      });
-    },
-    [controller, activeTab, transformTool]
-  );
-
-  // The text being edited: re-render on every change, and end it when the tool or tab changes.
-  useEffect(() => typeSession?.subscribe(() => void renderCanvas()), [typeSession, renderCanvas]);
-  useEffect(() => {
-    if (activeTab === 'annotate' && state.activeTool === 'type') return;
-    if (typeToolRef.current?.session) {
-      typeToolRef.current.finish();
-      setTypeSession(null);
-      void renderCanvas();
-    }
-  }, [activeTab, state.activeTool, renderCanvas]);
-  const finishTyping = () => {
-    typeToolRef.current?.finish();
-    setTypeSession(null);
-    void renderCanvas();
-  };
-  const handleTypeKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const session = typeToolRef.current?.session;
-    if (!session || e.nativeEvent.isComposing) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      finishTyping();
-      return;
-    }
-    if ((e.metaKey || e.ctrlKey) && ['z', 'y', 'c', 'x', 'v'].includes(e.key.toLowerCase())) return;
-    if (session.handleKey(e)) {
-      e.preventDefault();
-      setShapeTypeError(session.error);
-    }
-  };
-  const handleTypeInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
-    // Composed (IME) and pasted text arrives here; plain keys were handled on keydown.
-    const el = e.currentTarget;
-    const session = typeToolRef.current?.session;
-    if (session && el.value && !(e.nativeEvent as InputEvent).isComposing) {
-      session.insert(el.value);
-      el.value = '';
-    }
-  };
-
-  useEffect(() => transformTool.subscribe(() => {
-    setTransformTick((n) => n + 1);
-    void renderCanvas();
-  }), [transformTool, renderCanvas]);
-
-  /** The canvas point of a pointer event, its document point, and the screen scale. */
-  const transformPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
-    const s = controller.getState();
-    const cropping = activeTab === 'crop';
-    const projection = getViewportProjection(s, canvas.width, canvas.height, cropping);
-    const pt = canvasToImagePoint({ x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy }, s, canvas.width, canvas.height, cropping);
-    transformTool.setView(projection.scale);
-    return { pt, tolerance: 6 / (projection.scale || 1) };
-  };
-  const handleTransformPointerDown = (e: React.PointerEvent<HTMLCanvasElement>): boolean => {
-    if (!transformTool.active) return false;
-    if (e.button !== 0) return true;
-    e.preventDefault();
-    try {
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Synthetic events have no active pointer to capture.
-    }
-    const { pt, tolerance } = transformPoint(e);
-    transformTool.down(pt, tolerance);
-    return true;
-  };
-  const handleTransformPointerMove = (e: React.PointerEvent<HTMLCanvasElement>): boolean => {
-    if (!transformTool.active) return false;
-    const { pt, tolerance } = transformPoint(e);
-    if (e.buttons & 1) transformTool.move(pt, e);
-    else {
-      const over: TransformHandle | null = transformTool.hit(pt, tolerance);
-      setTransformCursor(transformTool.cursor(over));
-    }
-    return true;
-  };
-  const handleTransformPointerUp = (): boolean => {
-    if (!transformTool.active) return false;
-    transformTool.up();
-    return true;
-  };
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (transformTool.key(e)) e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [transformTool]);
-
-
-  useEffect(() => {
-    const raf =
-      typeof requestAnimationFrame !== 'undefined'
-        ? requestAnimationFrame
-        : (cb: () => void) => setTimeout(cb, 0) as unknown as number;
-    const caf =
-      typeof cancelAnimationFrame !== 'undefined'
-        ? cancelAnimationFrame
-        : (id: number) => clearTimeout(id);
-
-    const animId = raf(() => {
-      renderCanvas();
-    });
-    return () => caf(animId);
-  }, [renderCanvas, state]);
-
   // Synchronize initial tool with activeTab
   useEffect(() => {
     if (activeTab === 'crop' && editor.state.activeTool !== 'crop') {
       editor.setTool('crop');
     }
   }, [activeTab, editor]);
-
-  // Container resize observer to safely adapt viewport without feedback loops
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => {
-        renderCanvas();
-      });
-      observer.observe(container);
-      return () => observer.disconnect();
-    } else {
-      const handleResize = () => renderCanvas();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  }, [renderCanvas]);
-
-  // Convert mouse event coordinates to internal canvas pixel space
-  const getCanvasEventPoint = (e: React.MouseEvent<HTMLCanvasElement>): ImagePoint => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
-    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
-  };
-
-  // Paint tools: pointer events (coalesced samples, pointer capture) into strokes and moves.
-  const paintSamples = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current!;
-    const native = e.nativeEvent as PointerEvent;
-    const events = typeof native.getCoalescedEvents === 'function' ? native.getCoalescedEvents() : [];
-    const list = events.length ? events : [native];
-    const rect = canvas.getBoundingClientRect();
-    const sx = rect.width > 0 ? canvas.width / rect.width : 1;
-    const sy = rect.height > 0 ? canvas.height / rect.height : 1;
-    const s = controller.getState();
-    return list.map((ev) => ({
-      ...canvasToImagePoint({ x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy }, s, canvas.width, canvas.height, false),
-      pressure: pointerPressure(ev),
-    }));
-  };
-  const handlePaintPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (handleTransformPointerDown(e)) return;
-    if (activeTab !== 'paint' || e.button !== 0) return;
-    e.preventDefault();
-    try {
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Synthetic events have no active pointer to capture.
-    }
-    const [first] = paintSamples(e);
-    setPaintError(paintGestureRef.current!.down({ ...first, altKey: e.altKey }));
-  };
-  const handlePaintPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (handleTransformPointerMove(e)) return;
-    if (activeTab !== 'paint') return;
-    const samples = paintSamples(e);
-    brushCursorRef.current = samples[samples.length - 1] ?? null;
-    if (paintGestureRef.current!.active) paintGestureRef.current!.moveTo(samples);
-    else void renderCanvas();
-  };
-  const handlePaintPointerUp = () => {
-    if (handleTransformPointerUp()) return;
-    if (activeTab !== 'paint') return;
-    const g = paintGestureRef.current!;
-    if (g.active) {
-      g.up();
-      if (g.error) setPaintError(g.error);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab !== 'paint' || typeof window === 'undefined') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (handlePaintShortcut(controller, e)) e.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [activeTab, controller]);
-
-  // Pointer event handlers for drawing and annotations
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGestureRef.current!;
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-      void gesture.begin(imgPt, e).then(() => setSelectionError(gesture.error));
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      const activeCrop = draftCropRef.current || state.crop || {
-        x: 0,
-        y: 0,
-        width: state.imageDimensions.width,
-        height: state.imageDimensions.height,
-      };
-      const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
-      const startImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, true);
-
-      if (handle) {
-        cropDragInfoRef.current = {
-          handle,
-          startCanvasPt: canvasPt,
-          startImgPt,
-          startCrop: activeCrop,
-        };
-      } else {
-        // Clicked outside crop box: start new crop selection
-        cropDragInfoRef.current = {
-          handle: 'new',
-          startCanvasPt: canvasPt,
-          startImgPt,
-          startCrop: { x: startImgPt.x, y: startImgPt.y, width: 0, height: 0 },
-        };
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && (state.activeTool === 'shape' || state.activeTool === 'type')) {
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-      setShapeTypeError(null);
-      if (state.activeTool === 'shape') shapeGestureRef.current!.down(imgPt);
-      else {
-        typeToolRef.current!.down(imgPt, { shift: e.shiftKey });
-        setTypeSession(typeToolRef.current!.session);
-        void renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-      dragStartPointRef.current = imgPt;
-
-      if (state.activeTool === 'select') {
-        for (let i = state.annotations.length - 1; i >= 0; i--) {
-          const ann = state.annotations[i];
-          if (hitTestAnnotation(imgPt, ann)) {
-            editor.selectAnnotation(ann.id);
-            annotationDragInfoRef.current = {
-              annId: ann.id,
-              startImgPt: imgPt,
-              initialAnn: { ...ann },
-            };
-            return;
-          }
-        }
-        editor.selectAnnotation(null);
-        return;
-      }
-
-      if (state.activeTool === 'pen') {
-        isDrawingRef.current = true;
-        currentPathRef.current = [imgPt];
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'pen',
-          x: 0,
-          y: 0,
-          points: [imgPt],
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      }
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGestureRef.current!;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false))) {
-        selectionDraftRef.current = gesture.draftPath;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      const drag = cropDragInfoRef.current;
-      if (drag) {
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, true);
-        let newCrop: CropBox;
-
-        if (drag.handle === 'new') {
-          const minX = Math.max(0, Math.min(drag.startImgPt.x, currentImgPt.x));
-          const minY = Math.max(0, Math.min(drag.startImgPt.y, currentImgPt.y));
-          const maxX = Math.min(state.imageDimensions.width, Math.max(drag.startImgPt.x, currentImgPt.x));
-          const maxY = Math.min(state.imageDimensions.height, Math.max(drag.startImgPt.y, currentImgPt.y));
-          newCrop = {
-            x: Math.round(minX),
-            y: Math.round(minY),
-            width: Math.round(Math.max(20, maxX - minX)),
-            height: Math.round(Math.max(20, maxY - minY)),
-          };
-        } else {
-          newCrop = calculateCropDrag(
-            drag.startCrop,
-            drag.handle,
-            drag.startImgPt,
-            currentImgPt,
-            state.imageDimensions.width,
-            state.imageDimensions.height,
-            activeCropRatio,
-            state.transform
-          );
-        }
-
-        draftCropRef.current = newCrop;
-        renderCanvas(null, newCrop);
-      } else {
-        const activeCrop = draftCropRef.current || state.crop || {
-          x: 0,
-          y: 0,
-          width: state.imageDimensions.width,
-          height: state.imageDimensions.height,
-        };
-        const handle = hitTestCrop(canvasPt, state, canvas.width, canvas.height, 14, activeCrop);
-        canvas.style.cursor = getCropCursor(handle, state.transform);
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && state.activeTool === 'shape') {
-      const g = shapeGestureRef.current!;
-      if (g.active) {
-        g.move(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), { shift: e.shiftKey, alt: e.altKey });
-        if (g.error) setShapeTypeError(g.error);
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      // If moving selected annotation
-      if (annotationDragInfoRef.current) {
-        const drag = annotationDragInfoRef.current;
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-        const dx = currentImgPt.x - drag.startImgPt.x;
-        const dy = currentImgPt.y - drag.startImgPt.y;
-        editor.updateAnnotation(drag.annId, {
-          x: Math.round(drag.initialAnn.x + dx),
-          y: Math.round(drag.initialAnn.y + dy),
-        });
-        return;
-      }
-
-      const startPt = dragStartPointRef.current;
-      if (!startPt) {
-        // Update cursor for hover on select tool
-        if (state.activeTool === 'select') {
-          const imgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-          let hovered = false;
-          for (let i = state.annotations.length - 1; i >= 0; i--) {
-            if (hitTestAnnotation(imgPt, state.annotations[i])) {
-              hovered = true;
-              break;
-            }
-          }
-          canvas.style.cursor = hovered ? 'move' : 'default';
-        } else {
-          canvas.style.cursor = 'crosshair';
-        }
-        return;
-      }
-
-      const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-
-      if (state.activeTool === 'pen' && isDrawingRef.current) {
-        currentPathRef.current.push(currentImgPt);
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'pen',
-          x: 0,
-          y: 0,
-          points: [...currentPathRef.current],
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      } else if (state.activeTool === 'rect') {
-        const w = currentImgPt.x - startPt.x;
-        const h = currentImgPt.y - startPt.y;
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'rect',
-          x: Math.min(startPt.x, currentImgPt.x),
-          y: Math.min(startPt.y, currentImgPt.y),
-          width: Math.abs(w),
-          height: Math.abs(h),
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      } else if (state.activeTool === 'circle') {
-        const rx = Math.abs(currentImgPt.x - startPt.x) / 2;
-        const ry = Math.abs(currentImgPt.y - startPt.y) / 2;
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'circle',
-          x: Math.min(startPt.x, currentImgPt.x) + rx,
-          y: Math.min(startPt.y, currentImgPt.y) + ry,
-          radiusX: rx,
-          radiusY: ry,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      } else if (state.activeTool === 'arrow') {
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'arrow',
-          x: startPt.x,
-          y: startPt.y,
-          endX: currentImgPt.x,
-          endY: currentImgPt.y,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      } else if (state.activeTool === 'line') {
-        const draft: Annotation = {
-          id: 'draft',
-          type: 'line',
-          x: startPt.x,
-          y: startPt.y,
-          endX: currentImgPt.x,
-          endY: currentImgPt.y,
-          strokeColor: activeColor,
-          strokeWidth,
-        };
-        draftAnnotationRef.current = draft;
-        renderCanvas(draft);
-      }
-    }
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || transformTool.active) return;
-    const canvasPt = getCanvasEventPoint(e);
-
-    if (activeTab === 'select') {
-      const gesture = selectionGestureRef.current!;
-      if (gesture.active) {
-        gesture.end(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false), e);
-        selectionDraftRef.current = null;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'crop') {
-      if (cropDragInfoRef.current) {
-        if (
-          draftCropRef.current &&
-          draftCropRef.current.width >= 20 &&
-          draftCropRef.current.height >= 20
-        ) {
-          editor.setCrop(draftCropRef.current, true);
-        }
-        cropDragInfoRef.current = null;
-        draftCropRef.current = null;
-        renderCanvas();
-      }
-      return;
-    }
-
-    if (activeTab === 'annotate' && state.activeTool === 'shape') {
-      shapeGestureRef.current!.up();
-      return;
-    }
-    if (activeTab === 'annotate' && state.activeTool === 'type') {
-      const tool = typeToolRef.current!;
-      tool.up(canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false));
-      setTypeSession(tool.session);
-      if (tool.error) setShapeTypeError(tool.error);
-      void renderCanvas();
-      // Keystrokes go to the hidden textarea while text is being edited.
-      if (tool.session) setTimeout(() => typeInputRef.current?.focus(), 0);
-      return;
-    }
-
-    if (activeTab === 'annotate') {
-      if (annotationDragInfoRef.current) {
-        annotationDragInfoRef.current = null;
-        return;
-      }
-
-      const startPt = dragStartPointRef.current;
-      if (startPt) {
-        const currentImgPt = canvasToImagePoint(canvasPt, state, canvas.width, canvas.height, false);
-
-        if (state.activeTool === 'pen' && isDrawingRef.current) {
-          if (currentPathRef.current.length > 1) {
-            editor.addAnnotation({
-              type: 'pen',
-              x: 0,
-              y: 0,
-              points: [...currentPathRef.current],
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-          isDrawingRef.current = false;
-          currentPathRef.current = [];
-        } else if (state.activeTool === 'rect') {
-          const w = Math.abs(currentImgPt.x - startPt.x);
-          const h = Math.abs(currentImgPt.y - startPt.y);
-          if (w > 4 && h > 4) {
-            editor.addAnnotation({
-              type: 'rect',
-              x: Math.min(startPt.x, currentImgPt.x),
-              y: Math.min(startPt.y, currentImgPt.y),
-              width: w,
-              height: h,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (state.activeTool === 'circle') {
-          const rx = Math.abs(currentImgPt.x - startPt.x) / 2;
-          const ry = Math.abs(currentImgPt.y - startPt.y) / 2;
-          if (rx > 4 && ry > 4) {
-            editor.addAnnotation({
-              type: 'circle',
-              x: Math.min(startPt.x, currentImgPt.x) + rx,
-              y: Math.min(startPt.y, currentImgPt.y) + ry,
-              radiusX: rx,
-              radiusY: ry,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (state.activeTool === 'arrow') {
-          if (Math.hypot(currentImgPt.x - startPt.x, currentImgPt.y - startPt.y) > 4) {
-            editor.addAnnotation({
-              type: 'arrow',
-              x: startPt.x,
-              y: startPt.y,
-              endX: currentImgPt.x,
-              endY: currentImgPt.y,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        } else if (state.activeTool === 'line') {
-          if (Math.hypot(currentImgPt.x - startPt.x, currentImgPt.y - startPt.y) > 4) {
-            editor.addAnnotation({
-              type: 'line',
-              x: startPt.x,
-              y: startPt.y,
-              endX: currentImgPt.x,
-              endY: currentImgPt.y,
-              strokeColor: activeColor,
-              strokeWidth,
-            });
-          }
-        }
-
-        draftAnnotationRef.current = null;
-        dragStartPointRef.current = null;
-        renderCanvas();
-      }
-    }
-  };
 
   const handleAddText = () => {
     if (!textInput.trim()) return;
@@ -1003,14 +263,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   return (
     <div
       ref={rootRef}
-      className={`relative flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl text-slate-100 ${className}`}
+      className={`${imageEditorFrameClass} ${className}`}
       style={style}
     >
-      {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} />}
       {/* Top Action Header */}
-      <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800 gap-3">
+      <div className={imageEditorHeaderClass}>
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+        <div role="tablist" className={imageTabListClass}>
           <button
             type="button"
             data-image-tab="crop"
@@ -1018,9 +277,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('crop');
               editor.setTool('crop');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'crop' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'crop'} className={`${imageTabClass(activeTab === 'crop')}`}
           >
             Transform & Crop
           </button>
@@ -1031,9 +288,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('adjust');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'adjust' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'adjust'} className={`${imageTabClass(activeTab === 'adjust')}`}
           >
             Adjustments
           </button>
@@ -1044,9 +299,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('layers');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'layers' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'layers'} className={`${imageTabClass(activeTab === 'layers')}`}
           >
             Layers
           </button>
@@ -1057,9 +310,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('paint');
               editor.setTool('brush');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'paint' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'paint'} className={`${imageTabClass(activeTab === 'paint')}`}
           >
             Paint
           </button>
@@ -1070,9 +321,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('select');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'select' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'select'} className={`${imageTabClass(activeTab === 'select')}`}
           >
             Select & Mask
           </button>
@@ -1083,9 +332,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('annotate');
               editor.setTool('pen');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'annotate' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'annotate'} className={`${imageTabClass(activeTab === 'annotate')}`}
           >
             Annotations
           </button>
@@ -1096,9 +343,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('depth');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'depth' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'depth'} className={`${imageTabClass(activeTab === 'depth')}`}
           >
             Depth Mask
           </button>
@@ -1109,9 +354,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               setActiveTab('ai');
               editor.setTool('select');
             }}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5 ${
-              activeTab === 'ai' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
+            role="tab" aria-selected={activeTab === 'ai'} className={`${imageTabClass(activeTab === 'ai')} flex items-center gap-1.5`}
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -1126,7 +369,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             type="button"
             disabled={!editor.canUndo}
             onClick={() => editor.undo()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Undo"
           >
             ↩
@@ -1135,7 +378,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             type="button"
             disabled={!editor.canRedo}
             onClick={() => editor.redo()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Redo"
           >
             ↪
@@ -1143,33 +386,33 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={() => editor.reset()}
-            className="px-2 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            className={`${imageHeaderButtonClass} px-2 text-muted-foreground`}
           >
             Reset
           </button>
 
-          <div className="h-4 w-px bg-slate-800 mx-1" />
+          <div className="h-4 w-px bg-muted mx-1" />
 
           {/* Zoom */}
           <button
             type="button"
             onClick={() => editor.zoomOut()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Zoom Out"
           >
             -
           </button>
-          <span className="font-mono text-slate-400 w-10 text-center">{Math.round(state.zoom * 100)}%</span>
+          <span className="font-mono text-muted-foreground w-10 text-center">{Math.round(state.zoom * 100)}%</span>
           <button
             type="button"
             onClick={() => editor.zoomIn()}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"
+            className={imageHeaderButtonClass}
             title="Zoom In"
           >
             +
           </button>
 
-          <div className="h-4 w-px bg-slate-800 mx-1" />
+          <div className="h-4 w-px bg-muted mx-1" />
 
           {/* Live Compare */}
           <button
@@ -1177,7 +420,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             onMouseDown={() => editor.setComparing(true)}
             onMouseUp={() => editor.setComparing(false)}
             onMouseLeave={() => editor.setComparing(false)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-amber-400 hover:bg-slate-800 select-none active:bg-amber-950/40"
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-background text-amber-600 hover:bg-muted select-none active:bg-amber-500/10"
           >
             Hold Compare
           </button>
@@ -1186,7 +429,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           <button
             type="button"
             onClick={handleExport}
-            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-md shadow-emerald-900/30 transition-colors"
+            className={`${imagePrimaryButtonClass} px-4 py-1.5`}
           >
             Export Image
           </button>
@@ -1194,9 +437,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       </div>
 
       {/* Free Transform options bar (Ctrl/Cmd+T), above the viewport while a transform is open */}
-      {transformTool.active && <FreeTransformOptionsBar tool={transformTool} className="border-b border-slate-800 bg-slate-900/95 px-4 py-2" />}
+      {transformTool.active && <FreeTransformOptionsBar tool={transformTool} className="border-b border-border bg-background/95 px-4 py-2" />}
       {!transformTool.active && transformTool.error && (
-        <div role="alert" className="border-b border-rose-900 bg-rose-950/80 px-4 py-1.5 text-xs text-rose-200">
+        <div role="alert" className={imageErrorBannerClass}>
           {transformTool.error}
         </div>
       )}
@@ -1204,51 +447,34 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
       {/* Main Viewport + Sidebar Layout */}
       <div className="flex flex-col md:flex-row flex-1 min-h-[520px] md:h-[560px]">
         {/* Canvas Area */}
-        <div
-          ref={containerRef}
-          className="relative flex-1 h-[360px] md:h-full min-h-[320px] bg-slate-950 overflow-hidden select-none"
-        >
-          <canvas
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onPointerDown={handlePaintPointerDown}
-            onPointerMove={handlePaintPointerMove}
-            onPointerUp={handlePaintPointerUp}
-            onPointerCancel={() => paintGestureRef.current?.cancel()}
-            data-testid="image-editor-canvas"
-            style={transformTool.active ? { cursor: transformCursor } : undefined}
-            className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : activeTab === 'paint' ? 'touch-none cursor-crosshair' : activeTab === 'annotate' && state.activeTool === 'type' ? 'cursor-text' : activeTab === 'annotate' && state.activeTool === 'shape' ? 'cursor-crosshair' : ''}`}
-          />
-          {typeSession && (
-            <textarea
-              ref={typeInputRef}
-              aria-label="Edit text"
-              data-testid="type-input"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              onKeyDown={handleTypeKeyDown}
-              onInput={handleTypeInput}
-              onCompositionEnd={(e) => {
-                const session = typeToolRef.current?.session;
-                if (session && e.data) session.insert(e.data);
-                e.currentTarget.value = '';
-              }}
-              className="absolute left-0 top-0 h-px w-px opacity-0"
-            />
-          )}
-
-        </div>
+        <ImageEditorCanvas
+          editor={editor}
+          mode={canvasMode}
+          fit={fit}
+          selectionOptions={selectionOptions}
+          shapeOptions={shapeOptions}
+          typeOptions={typeOptions}
+          annotationColor={activeColor}
+          annotationWidth={strokeWidth}
+          cropRatio={activeCropRatio}
+          onError={handleCanvasError}
+          typeSession={typeSession}
+          onTypeSessionChange={setTypeSession}
+          transformTool={transformTool}
+          playback={playback}
+          playbackId={playbackId}
+          onPlaybackReveal={onPlaybackReveal}
+          chromeRoot={rootRef}
+          open={openPanel}
+          className="flex-1 h-[360px] md:h-full min-h-[320px] bg-muted"
+        />
 
         {/* Tab Controls Sidebar */}
-        <div className="w-full md:w-80 bg-slate-900/90 border-t md:border-t-0 md:border-l border-slate-800 p-4 overflow-y-auto h-auto md:h-full md:max-h-[560px]">
+        <div className={imageSidebarClass}>
           {/* TAB 1: CROP & TRANSFORM */}
           {activeTab === 'crop' && (
             <div className="flex flex-col gap-4 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Aspect Ratio Presets
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -1260,8 +486,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === null && state.crop
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   Freeform
@@ -1274,8 +500,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 1
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   1:1 Square
@@ -1288,8 +514,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 4 / 3
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   4:3 Standard
@@ -1302,8 +528,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 16 / 9
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   16:9 Wide
@@ -1316,8 +542,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   }}
                   className={`px-2.5 py-2 rounded-lg border font-medium ${
                     activeCropRatio === 3 / 2
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-accent text-foreground border-border'
                   }`}
                 >
                   3:2 Photo
@@ -1328,29 +554,29 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     setActiveCropRatio(null);
                     editor.resetCrop();
                   }}
-                  className="px-2.5 py-2 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 font-medium"
+                  className="px-2.5 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/40 font-medium"
                 >
                   Clear Crop
                 </button>
               </div>
 
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Orientation & Flips
               </span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => editor.rotate(-90)}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                  className="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
                 >
                   Rotate -90°
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.rotate(90)}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                  className="px-3 py-2 rounded-lg bg-muted hover:bg-accent text-foreground border border-border"
                 >
                   Rotate +90°
                 </button>
@@ -1359,8 +585,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   onClick={() => editor.flipHorizontal()}
                   className={`px-3 py-2 rounded-lg border transition-colors ${
                     state.transform.flipH
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted border-border text-foreground hover:bg-accent'
                   }`}
                 >
                   Flip Horizontal
@@ -1370,8 +596,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   onClick={() => editor.flipVertical()}
                   className={`px-3 py-2 rounded-lg border transition-colors ${
                     state.transform.flipV
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'bg-muted border-border text-foreground hover:bg-accent'
                   }`}
                 >
                   Flip Vertical
@@ -1384,13 +610,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {activeTab === 'adjust' && (
             <div className="flex flex-col gap-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+                <span className={imageSectionTitleClass}>
                   Color Adjustments
                 </span>
                 <button
                   type="button"
                   onClick={() => editor.resetAdjustments()}
-                  className="text-[10px] text-rose-400 hover:underline"
+                  className="text-[10px] text-destructive hover:underline"
                 >
                   Reset Sliders
                 </button>
@@ -1408,7 +634,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   />
                   {spec.id === 'tint' && legacyProcess && (
                     <div
-                      className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200"
+                      className="flex items-center justify-between gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-600"
                       data-testid="image-editor-process-notice"
                     >
                       <span>Legacy rendering (process 1). Tint needs the current process.</span>
@@ -1424,7 +650,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 </React.Fragment>
               ))}
 
-              <div className="border-t border-slate-700/60 pt-3">
+              <div className={imageSectionClass}>
                 <AdjustmentLayersPanel
                   controller={controller}
                   layers={state.adjustments.layers}
@@ -1437,19 +663,19 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB: LAYERS */}
           {activeTab === 'layers' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Layers</span>
+              <span className={imageSectionTitleClass}>Layers</span>
               <button
                 type="button"
                 title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin()}
               >
                 Free Transform
               </button>
               <LayersPanel controller={controller} />
-              {effectsShown && <ImageProviderEffectsPanel controller={controller} className="border-t border-slate-700/60 pt-3" />}
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Colour</span>
+              {effectsShown && <ImageProviderEffectsPanel controller={controller} className={imageSectionClass} />}
+              <span className={imageSectionTitleClass}>Colour</span>
               <ColorProfilePanel controller={controller} />
             </div>
           )}
@@ -1457,23 +683,23 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB: PAINT */}
           {activeTab === 'paint' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Paint</span>
+              <span className={imageSectionTitleClass}>Paint</span>
               <BrushOptionsBar controller={controller} />
               <button
                 type="button"
                 title="Edit › Free Transform (Ctrl/Cmd+T): the selected pixels, or the whole active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start"
+                className="px-2 py-1 rounded text-[11px] bg-muted text-foreground hover:bg-accent hover:text-accent-foreground self-start"
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin()}
               >
                 Free Transform
               </button>
               {paintError && (
-                <p role="alert" className="text-rose-400" data-testid="paint-error">
+                <p role="alert" className="text-destructive" data-testid="paint-error">
                   {paintError}
                 </p>
               )}
-              <div className="border-t border-slate-700/60 pt-3">
+              <div className={imageSectionClass}>
                 <LayersPanel controller={controller} />
               </div>
             </div>
@@ -1482,7 +708,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 3: ANNOTATIONS */}
           {activeTab === 'annotate' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Shape & Type Layers</span>
+              <span className={imageSectionTitleClass}>Shape & Type Layers</span>
               <div className="grid grid-cols-2 gap-1.5">
                 {(['shape', 'type'] as ImageEditorTool[]).map((t) => (
                   <button
@@ -1491,7 +717,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     aria-pressed={state.activeTool === t}
                     onClick={() => editor.setTool(t)}
                     className={`py-1.5 px-2 rounded-lg font-medium border transition-colors ${
-                      state.activeTool === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      state.activeTool === t ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
                     {t === 'shape' ? 'Shape' : 'Type'}
@@ -1503,18 +729,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <TypeOptionsBar controller={controller} options={typeOptions} onChange={setTypeOptions} session={typeSession} />
               )}
               {state.activeTool === 'type' && typeSession && (
-                <button type="button" onClick={finishTyping} className="self-start rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700">
+                <button type="button" onClick={finishTyping} className="self-start rounded bg-muted px-2 py-1 text-[11px] text-foreground hover:bg-accent">
                   Done editing text
                 </button>
               )}
               {shapeTypeError && (
-                <p role="alert" className="text-rose-400" data-testid="shape-type-error">
+                <p role="alert" className="text-destructive" data-testid="shape-type-error">
                   {shapeTypeError}
                 </p>
               )}
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+              <span className={imageSectionTitleClass}>
                 Draw & Annotate
               </span>
 
@@ -1527,8 +753,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     onClick={() => editor.setTool(t)}
                     className={`py-1.5 px-2 rounded-lg font-medium capitalize border transition-colors ${
                       state.activeTool === t
-                        ? 'bg-indigo-600 border-indigo-500 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
                     {t}
@@ -1538,15 +764,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
 
               {/* Color & Size */}
               <div className="flex items-center gap-2 mt-2">
-                <label className="text-slate-400">Color:</label>
+                <label className="text-muted-foreground">Color:</label>
                 <input
                   type="color"
                   value={activeColor}
                   onChange={(e) => setActiveColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-slate-700 cursor-pointer bg-transparent"
+                  className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
                 />
                 <div className="flex-1 ml-2">
-                  <div className="flex justify-between text-slate-400 mb-0.5">
+                  <div className="flex justify-between text-muted-foreground mb-0.5">
                     <span>Width:</span>
                     <span className="font-mono">{strokeWidth}px</span>
                   </div>
@@ -1556,15 +782,15 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     max="20"
                     value={strokeWidth}
                     onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                    className="w-full accent-indigo-500"
+                    className={imageRangeClass}
                   />
                 </div>
               </div>
 
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
 
               {/* Text Tool */}
-              <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Add Text</span>
+              <span className={imageSectionTitleClass}>Add Text</span>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1572,17 +798,17 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddText()}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
                 <button
                   type="button"
                   onClick={handleAddText}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow"
+                  className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow"
                 >
                   Add
                 </button>
               </div>
-              <div className="flex items-center justify-between text-slate-400">
+              <div className="flex items-center justify-between text-muted-foreground">
                 <span>Font Size:</span>
                 <span className="font-mono">{fontSize}px</span>
               </div>
@@ -1592,18 +818,18 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 max="72"
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-full accent-indigo-500"
+                className={imageRangeClass}
               />
 
               {/* Layers & Selected Annotation */}
-              <div className="h-px bg-slate-800 my-1" />
+              <div className={imageDividerClass} />
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Layers ({state.annotations.length})</span>
+                <span className="text-muted-foreground">Layers ({state.annotations.length})</span>
                 {state.selectedAnnotationId && (
                   <button
                     type="button"
                     onClick={() => editor.removeAnnotation(state.selectedAnnotationId!)}
-                    className="text-rose-400 hover:underline text-[11px]"
+                    className="text-destructive hover:underline text-[11px]"
                   >
                     Delete Selected
                   </button>
@@ -1612,7 +838,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => editor.clearAnnotations()}
-                    className="text-slate-400 hover:text-slate-200 text-[11px]"
+                    className="text-muted-foreground hover:text-foreground text-[11px]"
                   >
                     Clear All
                   </button>
@@ -1625,24 +851,24 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {activeTab === 'depth' && (
             <div className="flex flex-col gap-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
+                <span className={imageSectionTitleClass}>
                   Depth Masking
                 </span>
                 <button
                   type="button"
                   onClick={() => editor.resetDepthMask()}
-                  className="text-[10px] text-rose-400 hover:underline"
+                  className="text-[10px] text-destructive hover:underline"
                 >
                   Reset Mask
                 </button>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <label className="flex items-center gap-2 cursor-pointer text-foreground">
                 <input
                   type="checkbox"
                   checked={state.depthMask.enabled}
                   onChange={(e) => editor.setDepthMask({ enabled: e.target.checked })}
-                  className="rounded accent-indigo-500"
+                  className="rounded accent-primary"
                 />
                 <span>Enable Depth / Alpha Mask</span>
               </label>
@@ -1650,13 +876,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               {state.depthMask.enabled && (
                 <>
                   <div>
-                    <label className="text-slate-400 block mb-1">Mask Image URL:</label>
+                    <label className="text-muted-foreground block mb-1">Mask Image URL:</label>
                     <input
                       type="text"
                       placeholder="https://.../depthmap.png"
                       value={state.depthMask.maskSource || ''}
                       onChange={(e) => editor.setDepthMask({ maskSource: e.target.value || null })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500"
+                      className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
 
@@ -1666,8 +892,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => editor.setDepthMask({ mode: 'threshold' })}
                       className={`flex-1 py-1.5 rounded-lg border text-xs font-medium ${
                         state.depthMask.mode === 'threshold'
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-300'
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-muted border-border text-foreground'
                       }`}
                     >
                       Threshold Mode
@@ -1677,8 +903,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => editor.setDepthMask({ mode: 'brightness' })}
                       className={`flex-1 py-1.5 rounded-lg border text-xs font-medium ${
                         state.depthMask.mode === 'brightness'
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-300'
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'bg-muted border-border text-foreground'
                       }`}
                     >
                       Brightness Mode
@@ -1686,7 +912,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Depth Start (Lower):</span>
                       <span className="font-mono">{state.depthMask.depthRange[0]}</span>
                     </div>
@@ -1700,12 +926,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                           depthRange: [Number(e.target.value), state.depthMask.depthRange[1]],
                         })
                       }
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Depth Stop (Upper):</span>
                       <span className="font-mono">{state.depthMask.depthRange[1]}</span>
                     </div>
@@ -1719,12 +945,12 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                           depthRange: [state.depthMask.depthRange[0], Number(e.target.value)],
                         })
                       }
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
                   <div>
-                    <div className="flex justify-between text-slate-400 mb-1">
+                    <div className="flex justify-between text-muted-foreground mb-1">
                       <span>Softness:</span>
                       <span className="font-mono">{state.depthMask.softness}</span>
                     </div>
@@ -1734,16 +960,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       max="50"
                       value={state.depthMask.softness}
                       onChange={(e) => editor.setDepthMask({ softness: Number(e.target.value) })}
-                      className="w-full accent-indigo-500"
+                      className={imageRangeClass}
                     />
                   </div>
 
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-foreground mt-1">
                     <input
                       type="checkbox"
                       checked={state.depthMask.invert}
                       onChange={(e) => editor.setDepthMask({ invert: e.target.checked })}
-                      className="rounded accent-indigo-500"
+                      className="rounded accent-primary"
                     />
                     <span>Invert Mask</span>
                   </label>
@@ -1763,7 +989,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 quickMask={Boolean(state.quickMask)}
               />
               {selectionError && (
-                <p role="alert" className="text-rose-400">
+                <p role="alert" className="text-destructive">
                   {selectionError}
                 </p>
               )}
@@ -1771,7 +997,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <button
                 type="button"
                 title="Select › Transform Selection: the outline only"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin({ content: 'selection-outline' })}
               >
@@ -1780,7 +1006,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <button
                 type="button"
                 title="Edit › Free Transform: the selected pixels of the active layer"
-                className="px-2 py-1 rounded text-[11px] bg-slate-800 text-slate-300 hover:text-white self-start disabled:opacity-40"
+                className={imageSmallButtonClass}
                 disabled={transformTool.active}
                 onClick={() => transformTool.begin({ content: 'selection' })}
               >
@@ -1794,13 +1020,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 5: AI TOOLS / INPAINTING & BACKGROUND REMOVAL */}
           {activeTab === 'ai' && (
             <div className="flex flex-col gap-4 text-xs">
-              <label className="flex items-center justify-between gap-2 text-slate-300">
+              <label className="flex items-center justify-between gap-2 text-foreground">
                 <span>Results go to</span>
                 <select
                   aria-label="AI result target"
                   value={aiTarget}
                   onChange={(e) => setAiTarget(e.target.value as typeof aiTarget)}
-                  className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+                  className={imageSelectClass}
                 >
                   <option value="auto">{controller.isMultiLayer ? 'Auto (new layer)' : 'Auto (replace image)'}</option>
                   <option value="new-layer">New layer / mask</option>
@@ -1808,22 +1034,22 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 </select>
               </label>
               {/* Background Removal Section */}
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+              <div className="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
                     </svg>
                     Background Removal
                   </span>
                   {isRemovingBg && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-900/60 text-indigo-300 animate-pulse">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                       Removing...
                     </span>
                   )}
                 </div>
 
-                <p className="text-slate-400 text-[11px] leading-relaxed">
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
                   Isolate foreground subject with AI alpha transparency segmentation.
                 </p>
 
@@ -1831,11 +1057,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   type="button"
                   onClick={handleRemoveBackground}
                   disabled={isRemovingBg || isInpainting}
-                  className="mt-1 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                  className="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
                 >
                   {isRemovingBg ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className={imageSpinnerClass} />
                       Removing Background...
                     </>
                   ) : (
@@ -1850,48 +1076,48 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               </div>
 
               {/* AI Inpainting / Generative Fill Section */}
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col gap-2.5">
+              <div className="p-3 rounded-lg bg-muted/40 border border-border flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m21.64 3.64-1.28-1.28a1.2 1.2 0 0 0-1.7 0l-9.72 9.72-1.94 4.86 4.86-1.94 9.72-9.72a1.2 1.2 0 0 0 .06-1.64z" />
                       <path d="m14 7 3 3" />
                     </svg>
                     Generative Inpainting
                   </span>
                   {isInpainting && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/60 text-purple-300 animate-pulse">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary animate-pulse">
                       Inpainting...
                     </span>
                   )}
                 </div>
 
-                <p className="text-slate-400 text-[11px] leading-relaxed">
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
                   Replace, modify, or fill selected regions using prompt-guided generative inpainting.
                 </p>
 
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="ai-inpaint-prompt-react" className="text-slate-300 text-[11px] font-medium">Prompt</label>
+                  <label htmlFor="ai-inpaint-prompt-react" className="text-foreground text-[11px] font-medium">Prompt</label>
                   <textarea
                     id="ai-inpaint-prompt-react"
                     value={inpaintPrompt}
                     onChange={(e) => setInpaintPrompt(e.target.value)}
                     placeholder="e.g. replace sunglasses with steampunk goggles, remove person in background..."
                     rows={3}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <span className="text-slate-300 text-[11px] font-medium">Target Mask Region</span>
+                  <span className="text-foreground text-[11px] font-medium">Target Mask Region</span>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
                       onClick={() => setInpaintMaskMode('annotations')}
                       className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
                         inpaintMaskMode === 'annotations'
-                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                          ? 'bg-primary/30 border-primary text-primary'
+                          : 'bg-background border-border text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       Drawn Shapes ({state.annotations.length})
@@ -1901,8 +1127,8 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       onClick={() => setInpaintMaskMode('crop')}
                       className={`px-2 py-1.5 rounded border text-[11px] font-medium text-left transition-colors ${
                         inpaintMaskMode === 'crop'
-                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
-                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                          ? 'bg-primary/30 border-primary text-primary'
+                          : 'bg-background border-border text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       Crop Box ({state.crop ? 'Selected' : 'Full'})
@@ -1914,11 +1140,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                   type="button"
                   onClick={handleInpaint}
                   disabled={isInpainting || isRemovingBg || !inpaintPrompt.trim()}
-                  className="mt-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium shadow transition-colors flex items-center justify-center gap-2"
+                  className="mt-1 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-medium shadow transition-colors flex items-center justify-center gap-2"
                 >
                   {isInpainting ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className={imageSpinnerClass} />
                       Generating Inpaint...
                     </>
                   ) : (
@@ -1933,13 +1159,13 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               </div>
 
               {aiError && (
-                <div className="p-2.5 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/40 text-destructive text-[11px]">
                   {aiError}
                 </div>
               )}
 
               {aiSuccess && (
-                <div className="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-[11px]">
                   {aiSuccess}
                 </div>
               )}

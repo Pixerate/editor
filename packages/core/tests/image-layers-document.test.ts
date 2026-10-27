@@ -207,7 +207,8 @@ describe('schema v3 and migration', () => {
     } as SerializedLayeredImageEditorState);
     expect(c.getLayers().map((l) => l.id)).toEqual(['a', 'b', 'n']);
     expect(c.lastLoadProblems).toHaveLength(3);
-    expect(c.getState().activeLayerId).toBeNull();
+    // The saved active layer is gone, so the document opens on the topmost paintable pixel layer.
+    expect(c.getState().activeLayerId).toBe('b');
     expect(c.getState().annotations.map((a) => a.id)).toEqual(['n']);
   });
 

@@ -48,8 +48,8 @@ export function planPaintToolPlayback(tool: string, _args: Record<string, any>):
 const DIRECTED = new Set(['paint_stroke', 'fill_layer', 'replay_strokes']);
 
 /**
- * Gives a paint tool provider agent playback on `surface` (default `paint`, where `PaintEditor`
- * attaches). With a director, strokes, fills and replays play through it (`playback: 'self'`).
+ * Gives a paint tool provider agent playback on `surface`. An explicit `surface` wins over the
+ * provider's own `playbackSurface`; with neither, it is `paint` (where `PaintEditor` attaches). With a director, strokes, fills and replays play through it (`playback: 'self'`).
  */
 export function withPaintPlayback(provider: AgentToolProvider, options: { director: boolean; surface?: string }): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool => {
@@ -60,7 +60,7 @@ export function withPaintPlayback(provider: AgentToolProvider, options: { direct
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? options.surface ?? 'paint',
+		playbackSurface: options.surface ?? provider.playbackSurface ?? 'paint',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
 }
