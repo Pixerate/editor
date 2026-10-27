@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.158.0
+
+### Minor Changes
+
+- a0085ab: Support hit testing, canvas resize, dynamic layer panel descriptors, and transform mode gestures in image editor
+
 ## 0.157.0
 
 ### Minor Changes

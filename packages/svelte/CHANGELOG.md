@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.116.0
+
+### Minor Changes
+
+- a0085ab: Support hit testing, canvas resize, dynamic layer panel descriptors, and transform mode gestures in image editor
+
+### Patch Changes
+
+- Updated dependencies [a0085ab]
+  - @pixerate/editor@0.158.0
+
 ## 0.115.0
 
 ### Minor Changes
