@@ -143,7 +143,7 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 | `recommend_chart` | Ranked chart types with a reason each, from `csv` when given, else the current data (series count, points, dates, negative values). Use before choosing a type. |
 | `get_chart_trendline` | Read a trendline's fit (`series`, `index`): coefficients, R2, equation and point count, or the moving-average points. Fails when the fit needs more or positive values. |
 | `list_chart_presets` | List the quick layouts (`standard`, `minimal`, `labelled`, `legend-right`, `presentation`, `analysis`) and colour schemes (such as `default`, `okabe-ito`, `office`, monochrome) with what each changes. |
-| `export_chart_mermaid` | Get the chart as Mermaid `xychart-beta`, `pie` or `radar-beta` for Markdown or chat. With `meta` (default true) a `%% @pixerate` comment keeps everything Mermaid cannot express so `import_chart_mermaid` restores it exactly. |
+| `export_chart_mermaid` | Get the chart as Mermaid for Markdown or chat: `xychart-beta`, `pie` or `radar-beta`, `sankey-beta` for Sankey diagrams with flows (title in frontmatter), `treemap-beta` for treemaps and sunbursts with their levels. With `meta` (default true) a `%% @pixerate` comment keeps everything Mermaid cannot express so `import_chart_mermaid` restores it exactly. |
 | `export_chart_ooxml` | Get a DrawingML `c:chartSpace` part for Word or PowerPoint, plus sentences for anything that could not be written. |
 | `list_open_files` | List the Office files the user opened (name, size in bytes). Only registered when the host shares open files; otherwise the file tools take the whole file as base64 `data`. |
 | `list_file_charts` | List every chart in an `.xlsx`, `.pptx` or `.docx` (`file` name or base64 `data`) in file order: id (such as `chart-1`), place (sheet and anchor cell, or slide number), title, type, series names, category count, read problems, unsupported features and whether it reads losslessly. |
@@ -165,7 +165,7 @@ it changed.
 | `add_chart_category` | Insert a category (`label`, `at`; default the end) as a gap in every series. Returns its index; fill it with `set_chart_values`. |
 | `remove_chart_category` | Delete a category (index or label) and its value in every series. |
 | `import_chart_csv` | Replace the data with CSV or TSV text. Default: first row series names, first column categories (`seriesIn`, `header` change that). `chartType: "auto"` also picks the recommended type (two unlabelled numeric columns become a scatter). Returns the table, the type and cells that were not numbers. |
-| `import_chart_mermaid` | Replace the chart with Mermaid `xychart-beta`, `pie` or `radar-beta` text (fenced or bare). Unreadable lines are skipped and listed with line numbers. |
+| `import_chart_mermaid` | Replace the chart with Mermaid `xychart-beta`, `pie`, `radar-beta`, `sankey-beta` (becomes flows) or `treemap-beta` (becomes grouped data: one level of sections is a treemap, deeper nesting a sunburst) text (fenced or bare). Unreadable lines are skipped and listed with line numbers. |
 | `import_chart_ooxml` | Replace the chart with a raw Office chart part (`c:chartSpace` or chartex XML). Only listed when the host has a `DOMParser` (every browser does). Prefer `load_file_chart` when you have the whole file. |
 | `load_file_chart` | Replace the editor's chart with one from an Office file (`file` or `data`, `chartId`). Returns the spec, read problems and the features the editor could not keep; tell the user about any. |
 | `add_chart_trendline` | Fit a trendline to a series (`type`: linear, exponential, logarithmic, power, polynomial with `order` 2-6, moving-average with `period`; `forward` / `backward` in x units, `intercept`, `showEquation`, `showR2`). Unstacked bar, line, area, scatter and bubble charts only. Returns its index, coefficients, R2 and equation. |
@@ -300,6 +300,9 @@ several charts may register them with another prefix.
   the secondary axis. A line outside a fixed `min` / `max` is not drawn.
 - Callouts and highlight names follow the data: removing a category drops its callouts and
   its highlight entry, renaming a category or series keeps it highlighted.
+- Mermaid `treemap-beta` names cannot hold both kinds of quote and `sankey-beta` has no
+  colours or node order; keep the `%% @pixerate` comment (`meta`, the default) when the text
+  comes back to a Pixerate editor, and it restores them exactly.
 - Office export has no reference lines, bands, callouts, highlight or note; `export_chart_ooxml`
   lists them as not written. `varyColors` is kept.
 - Radar `radarTicks` and `radarGraticule` are Mermaid's `ticks` and `graticule`. A

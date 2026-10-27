@@ -209,7 +209,7 @@ chart.setAxis("y", { reverse: true }); // values from the top down
 ## Mermaid and Office files
 
 ```ts
-const text = chartToMermaid(spec); // xychart-beta, pie or radar-beta + one "%% @pixerate {…}" comment
+const text = chartToMermaid(spec); // xychart-beta, pie, radar-beta, sankey-beta or treemap-beta + one "%% @pixerate {…}" comment
 const { spec, issues } = chartFromMermaid(text); // issues carry 1-based line numbers; never throws
 findMermaidCharts(markdownOrChat); // fenced or bare charts
 
@@ -219,7 +219,7 @@ const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // a
 
 Office round trips include error bars (`c:errBars`, with `c:errDir` on scatter and bubble series), logarithmic axes (`c:logBase`) and reversed axes (`c:orientation val="maxMin"`).
 
-The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. Radar `ticks` and `graticule` map to `radarTicks` and `radarGraticule`; a `radar-beta` block without `graticule` reads as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
+The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. Sankey diagrams with flows are written as `sankey-beta` CSV records (fields with commas or quotes quoted, the title in frontmatter) and treemaps and sunbursts as `treemap-beta` with their levels; both read back with the diagram module's `parseSankey` / `parseTreemap`, and a treemap follows Ursula's rule: one section round everything is the whole (its name becomes the title), items or one level of sections make a treemap, deeper nesting a sunburst. Radar `ticks` and `graticule` map to `radarTicks` and `radarGraticule`; a `radar-beta` block without `graticule` reads as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
 
 ### Charts in Excel, PowerPoint and Word files
 

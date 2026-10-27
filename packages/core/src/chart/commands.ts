@@ -539,11 +539,11 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			id: `${prefix}importMermaid`,
 			label: 'Import Mermaid Chart…',
 			keywords: ['chart', 'mermaid', 'markdown', 'xychart', 'pie', 'radar', 'import'],
-			description: 'Replaces the chart with Mermaid xychart-beta, pie or radar-beta text (one undo step). Unreadable lines are listed with line numbers.',
+			description: 'Replaces the chart with Mermaid xychart-beta, pie, radar-beta, sankey-beta or treemap-beta text (one undo step). Unreadable lines are listed with line numbers.',
 			params: object({ mermaid: { type: 'string', description: 'Mermaid text.' } }, ['mermaid']),
 			run: (_ctx: unknown, params: { mermaid: string }) => {
 				const read = chartFromMermaid(params.mermaid);
-				if (!read.family) fail(read.issues.map((i) => i.message).join(' ') || 'Expected Mermaid starting with xychart-beta, pie or radar-beta.');
+				if (!read.family) fail(read.issues.map((i) => i.message).join(' ') || 'Expected Mermaid starting with xychart-beta, pie, radar-beta, sankey-beta or treemap-beta.');
 				check(controller.update({ ...read.spec } as ChartSpecPatch, { label: 'Import Mermaid chart' }));
 				return { spec: controller.toJSON(), issues: read.issues };
 			}
