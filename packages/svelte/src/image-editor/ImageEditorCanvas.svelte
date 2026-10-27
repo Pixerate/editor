@@ -555,9 +555,9 @@
     if (mode === 'transform') {
       const canvasPt = getCanvasEventPoint(e);
       const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
-      const hit = editor.controller.layerAt(imgPt);
-      if (hit) {
-        editor.controller.setActiveLayer(hit.id);
+      const hitLayerId = editor.controller.layerAt(imgPt);
+      if (hitLayerId) {
+        editor.controller.setActiveLayer(hitLayerId);
         if (!transformTool.active) {
           transformTool.begin();
         }

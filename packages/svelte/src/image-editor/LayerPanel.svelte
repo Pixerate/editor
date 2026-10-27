@@ -1,5 +1,11 @@
 <script lang="ts">
   import type { ImageEditorController, ImageLayer } from '@pixerate/editor/image-editor';
+  import {
+    ADJUSTMENT_LAYER_OPACITY_CONTROL,
+    DEFAULT_SHAPE_TOOL_OPTIONS,
+    DEFAULT_TYPE_TOOL_OPTIONS,
+    DEFAULT_SELECTION_TOOL_OPTIONS,
+  } from '@pixerate/editor/image-editor';
   import CanvasSizePanel from './CanvasSizePanel.svelte';
   import ControlSlider from './ControlSlider.svelte';
   import LayerEffectsPanel from './LayerEffectsPanel.svelte';
@@ -18,6 +24,9 @@
   let { controller, panelId, class: className = '' }: Props = $props();
 
   const activeLayer = $derived(controller.getActiveLayer());
+  let shapeOptions = $state({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
+  let typeOptions = $state({ ...DEFAULT_TYPE_TOOL_OPTIONS });
+  let selectionOptions = $state({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
 </script>
 
 <div class="layer-panel-container {className}" data-image-panel={panelId} data-testid="layer-panel-{panelId}">
@@ -41,13 +50,9 @@
             <span class="capitalize">{activeLayer.blend}</span>
           </div>
           <ControlSlider
-            id="layer-opacity"
+            spec={ADJUSTMENT_LAYER_OPACITY_CONTROL}
             label="Opacity"
             value={Math.round(activeLayer.opacity * 100)}
-            min={0}
-            max={100}
-            step={1}
-            unit="%"
             onchange={(val) => controller.setLayerProperties(activeLayer.id, { opacity: val / 100 })}
           />
         </div>
@@ -70,12 +75,12 @@
   {:else if panelId === 'type'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Typography</div>
-      <TypeOptionsBar {controller} />
+      <TypeOptionsBar {controller} options={typeOptions} onchange={(o) => (typeOptions = o)} />
     </div>
   {:else if panelId === 'shape'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Shape Options</div>
-      <ShapeOptionsBar {controller} />
+      <ShapeOptionsBar {controller} options={shapeOptions} onchange={(o) => (shapeOptions = o)} />
     </div>
   {:else if panelId === 'smart-filters'}
     <div class="flex flex-col gap-3">
@@ -85,7 +90,7 @@
   {:else if panelId === 'selection'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Selection</div>
-      <SelectionOptionsBar {controller} />
+      <SelectionOptionsBar {controller} options={selectionOptions} onOptionsChange={(o) => (selectionOptions = o)} />
     </div>
   {:else}
     <div class="text-xs text-muted-foreground">Panel {panelId}</div>

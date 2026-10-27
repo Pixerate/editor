@@ -58,13 +58,14 @@
 
   function onPresetSelect(e: Event) {
     const target = e.currentTarget as HTMLSelectElement;
-    const name = target.value;
+    const presetId = target.value;
     target.value = '';
-    const preset = CANVAS_SIZE_PRESETS.find((p) => p.name === name);
+    const preset = CANVAS_SIZE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     width = preset.width;
     height = preset.height;
   }
+
 
   function apply() {
     error = null;
@@ -92,8 +93,8 @@
       aria-label="Preset canvas sizes"
     >
       <option value="">Choose preset…</option>
-      {#each CANVAS_SIZE_PRESETS as preset (preset.name)}
-        <option value={preset.name}>{preset.name} ({preset.width} × {preset.height})</option>
+      {#each CANVAS_SIZE_PRESETS as preset (preset.id)}
+        <option value={preset.id}>{preset.label} ({preset.width} × {preset.height})</option>
       {/each}
     </select>
   </div>
