@@ -34,7 +34,7 @@ pnpm add @pixerate/editor-svelte @xyflow/svelte
 | [`getLayoutedNodes` / `centerNodes`](#layout-and-viewport-math) | Dagre hierarchical auto-layout, viewport centering, and bounding box math. |
 | [`createCanvasShortcuts`](#createcanvasshortcutsoptions) | Global keyboard shortcut binding with automatic suppression during active text editing. |
 | [`createCanvasInteractions`](#createcanvasinteractionsoptions) | Spacebar panning toggle, trackpad pinch detection, and SvelteFlow interaction presets. |
-| [`createCanvasExplosion`](#createcanvasexplosiongraph-options) | Multi-node explosion, fan-out/bezier trajectory animation, spatial displacement ("make space"), and reversible collapse. |
+| [`createCanvasExplosionState` / `createCanvasExplosion`](#node-explosion-declarative-state-layout-and-createcanvasexplosiongraph-options) | Node explosion: pure displacement and layout (`minY` / `maxY`, row lanes, dagre), declarative explode / collapse state, an animated coordinator with reversible collapse, and agent tools. |
 | [`createCanvasArrange`](#createcanvasarrangeoptions) | Align, distribute, make same size, lock / unlock, layer order and smart guides with snap-to-shape. |
 | [`createCanvasScenes`](#createcanvasscenesoptions) | Named saved viewports (Freeform "Scenes") with next / previous, reorder, rename and JSON persistence. |
 | [`ShapeNode` / shape operations](#shape-nodes-and-boolean-operations) | Shape nodes (rect, ellipse, polygon, star, SVG path), curve-preserving Unite / Intersect / Subtract / Exclude / Divide, Offset Path and Outline Stroke. |
@@ -202,47 +202,81 @@ Manages viewport interaction modes:
 
 ---
 
-### `createCanvasExplosion(graph, options?)`
+### Node explosion: declarative state, layout and `createCanvasExplosion(graph, options?)`
 
-Headless Svelte 5 rune orchestrating node expansion/explosion into sub-nodes, parametric trajectory paths, spatial layout displacement ("make space"), and reversible collapsing.
+Exploding a node shows its child nodes (subtasks, steps, metrics) next to it while surrounding nodes move aside; collapsing removes them and puts everything back. It is built in three layers, and the same layers exist in React:
 
-#### Features
-- **Spatial Displacement**: Automatically shifts downstream and sibling nodes using directional (`'right'`, `'down'`, `'left'`, `'up'`) or Dagre hierarchical reflow strategies.
-- **Parametric Trajectories**: Built-in `createFanOutTrajectory` (smooth bezier fan arc), `linearTrajectory`, and custom `(origin, target, progress, index, total) => { position, scale, opacity }`.
-- **Reversible Collapse**: Automatically records an `ExplosionSnapshot` caching pre-explosion node positions and edges. Collapsing smoothly retracts child nodes to origin and returns displaced nodes to their baseline positions without graph drift.
-- **High Performance**: Mutates coordinates in-place during `requestAnimationFrame` to avoid per-frame garbage collection.
+| Layer | Core (`@pixerate/editor/canvas`) | Svelte | React |
+| :--- | :--- | :--- | :--- |
+| 1. Pure geometry | `calculateDirectionalDisplacement`, `calculateReflowDisplacement`, `computeCanvasExplosionLayout`, `computeNodesBoundingBox` | re-exported | re-exported |
+| 2. Headless state (which node is exploded / collapsing, the collapse timer) | `createCanvasExplosionStateController` | `createCanvasExplosionState` | `useCanvasExplosionState` |
+| 3. Animated coordinator for a mutable graph | | `createCanvasExplosion` | `useCanvasExplosion` |
+| Agent tools (`list_explodable_nodes`, `explode_node`, `collapse_node`) | `createCanvasExplosionToolProvider`, `canvasExplosionToolTarget` | re-exported | re-exported |
 
-#### Usage Example
+#### Displacement options (`DirectionalDisplacementOptions`)
+- `direction`: `'right'` / `'left'` push nodes on that side by the cluster width + `gap` (Y preserved); `'up'` / `'down'` push by the cluster height + `gap` (X preserved); `'vertical'` opens the origin's row, moving rows above up and rows below down by the same amount (X preserved, the origin row stays).
+- `gap` (default 40), `spreadSiblingLanes` (with `right`, push the origin's column apart), `siblingTolerance` (default 50).
+- `minY` / `maxY`: a band moved rows stay inside, e.g. `minY: HEADER_HEIGHT + 8` below a pinned timeline header. Rows pushed into the floor stack from `minY` down `rowSpacing` apart and never move below where they started; `maxY` does the same for the bottom edge.
+- `layoutMode: 'row-lane'` with `rowSpacing`: nodes are bucketed into lanes relative to the origin row and vertical deltas round up to whole lanes, so Gantt rows glide apart by exact lane heights.
+
+Bad options (`rowSpacing <= 0`, `minY > maxY`, non-finite numbers) throw a `RangeError`. `computeCanvasExplosionLayout` also throws when a child id is already on the canvas.
+
+#### Declarative (timeline / Gantt): derive the canvas from state
 
 ```svelte
 <script lang="ts">
-  import {
-    createCanvasGraph,
-    createCanvasExplosion,
-    createFanOutTrajectory
-  } from '@pixerate/editor-svelte/canvas';
+  import { calculateDirectionalDisplacement, createCanvasExplosionState } from '@pixerate/editor-svelte/canvas';
+
+  const explosion = createCanvasExplosionState({ collapseDurationMs: 380 });
+
+  const displaced = $derived.by(() => {
+    const origin = baseNodes.find((n) => n.id === explosion.activeId);
+    if (!origin) return new Map();
+    return calculateDirectionalDisplacement({
+      existingNodes: baseNodes,
+      originNode: origin,
+      childNodes: buildChildren(origin),
+      options: { direction: 'vertical', layoutMode: 'row-lane', rowSpacing: ROW_HEIGHT, minY: HEADER_HEIGHT + 8, gap: 24 }
+    });
+  });
+  // Render children while explosion.shouldRenderChildren(id): during the collapse they can play
+  // a CSS exit animation; call explosion.finishCollapse() from animationend to unmount early.
+</script>
+```
+
+React is the same with `useCanvasExplosionState` and `useMemo(() => ..., [explosion.activeId])`. Only one node is exploded at a time; exploding another collapses the first. The rune clears its timer when its component unmounts (call `destroy()` when created outside a component); the hook ends a running collapse on unmount.
+
+#### Imperative (whiteboard / diagram): `createCanvasExplosion` / `useCanvasExplosion`
+
+Adds the children and edges to the graph, animates them out along a trajectory (staggered) while displaced nodes slide, and records an `ExplosionSnapshot` so collapsing restores every moved node exactly. Several nodes can be exploded at once. Parent-to-child edges are added by default (`connectParentToChildren: 'all'`, ids `explode:<parent>:<child>` unless the graph has `createEdge`). The caller's child objects are never mutated.
+
+```svelte
+<script lang="ts">
+  import { createCanvasGraph, createCanvasExplosion, createFanOutTrajectory } from '@pixerate/editor-svelte/canvas';
 
   const graph = createCanvasGraph({ initialNodes: [...], initialEdges: [...] });
   const explosion = createCanvasExplosion(graph);
 
   function handleNodeClick(nodeId: string) {
-    if (explosion.isExploded(nodeId)) {
-      explosion.collapseNode(nodeId, { duration: 400 });
-    } else {
-      explosion.explodeNode(nodeId, {
-        childNodes: [
-          { id: 'sub-1', position: { x: 300, y: 50 }, data: { label: 'Task 1' } },
-          { id: 'sub-2', position: { x: 300, y: 150 }, data: { label: 'Task 2' } }
-        ],
-        displacementStrategy: 'directional', // or 'dagre'
-        directionalOptions: { direction: 'right', gap: 50 },
-        trajectory: createFanOutTrajectory({ curvature: 0.4 }),
-        duration: 500
-      });
-    }
+    explosion.toggleExplode(nodeId, {
+      childNodes: [
+        { id: 'sub-1', position: { x: 300, y: 50 }, data: { label: 'Task 1' } },
+        { id: 'sub-2', position: { x: 300, y: 150 }, data: { label: 'Task 2' } }
+      ],
+      displacementStrategy: 'directional', // 'dagre' or 'none'
+      directionalOptions: { direction: 'right', gap: 50 },
+      trajectory: createFanOutTrajectory({ curvature: 0.4 }),
+      duration: 500
+    }, { duration: 400 });
   }
 </script>
 ```
+
+`useCanvasExplosion({ nodes, edges, setNodes, setEdges }, { getNodesBounds?, onSave? })` returns the same `explodeNode`, `collapseNode`, `toggleExplode`, `isExploded`, `explodedNodeIds` and `getSnapshot`.
+
+#### Agent tools
+
+Register `createCanvasExplosionToolProvider(target)` with `useAgentToolProvider`. For the declarative state use `canvasExplosionToolTarget(explosion, { getNodes, canExplode })`; for a coordinator, pass `{ getNodes, exploded: () => explosion.explodedNodeIds, explode: (id) => explosion.explodeNode(id, buildOptions(id)), collapse: (id) => explosion.collapseNode(id), multiple: true }`. See the `pixerate-canvas` skill.
 
 ---
 

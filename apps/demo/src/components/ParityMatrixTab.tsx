@@ -258,6 +258,13 @@ const FEATURES: ParityRow[] = [
     note: "@pixerate/editor/canvas: Dagre layout, centering, and displacements",
   },
   {
+    feature: "Node Explosion (declarative state, coordinator, agent tools)",
+    core: true,
+    react: true,
+    svelte: true,
+    note: "computeCanvasExplosionLayout + createCanvasExplosionStateController; useCanvasExplosionState / createCanvasExplosionState; explode_node tools",
+  },
+  {
     feature: "Incremental Layout & Collision Avoidance",
     core: true,
     react: true,

@@ -290,7 +290,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Canvas</strong> (38)</summary>
+<summary><strong>Canvas</strong> (41)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -332,6 +332,9 @@ Every feature is available from core and from both framework packages, except wh
 | Canvas Animation Playback & Export (injected clock, loop / ping-pong, CSS / Web Animations, frames) | `AnimationPlayer`, `exportCssAnimation`, `toWebAnimations` & `sampleAnimationFrames` | `useCanvasAnimation` | `createCanvasAnimation` |
 | Canvas Animation Commands & Agent Tools | `createCanvasAnimationCommands` | Via core & `useRegisterCommands` | Via core & `useRegisterCommands` |
 | Standalone Keyframe Model (tracks, easing, OKLab colours, evaluation, player and clock with no canvas nodes or dagre) | `evaluateTrack`, `evaluateEasing` & `AnimationPlayer` (`/animation`) | Via core | Via core |
+| Canvas Node Explosion: Displacement (directional with `minY` / `maxY`, row lanes, dagre reflow) | `calculateDirectionalDisplacement`, `calculateReflowDisplacement` & `computeCanvasExplosionLayout` | Via core | Via core |
+| Canvas Node Explosion: Declarative State (active / collapsing, collapse timer) | `createCanvasExplosionStateController` | `useCanvasExplosionState` | `createCanvasExplosionState` |
+| Canvas Node Explosion: Animated Coordinator & Agent Tools (`explode_node`, `collapse_node`) | `createCanvasExplosionToolProvider` | `useCanvasExplosion` | `createCanvasExplosion` |
 
 </details>
 

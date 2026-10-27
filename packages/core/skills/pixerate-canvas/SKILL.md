@@ -107,6 +107,19 @@ batching and error codes.
 | `canvas_select` | Replace the selection (an empty list clears it). Use it to show the user a result and to target commands that act on the selection. |
 | `canvas_highlight` | Flash nodes to point the user at them: `color` (default `#3b82f6`), `durationMs` (default 2000, max 60000). Changes nothing. |
 
+### Explode and collapse
+
+Hosts with expandable nodes (a task that opens into subtasks, a Gantt bar into its steps) add these.
+Exploding shows the node's child nodes and moves the surrounding nodes to make room; collapsing
+removes the children and puts the moved nodes back. It is a view change, not an edit: it is not an
+undo step and is not saved with the document. The host decides what the children are.
+
+| Tool | Use it to |
+| --- | --- |
+| `list_explodable_nodes` | List the nodes that can explode (`id`, `label`, `exploded`, `collapsing`), the ids `exploded` and `collapsing` now, whether several can be open at once (`multiple`), and the `readOnly` reason if exploding is disabled. Call it first: it is the only source of explodable ids. |
+| `explode_node` | Explode `node` (an id from `list_explodable_nodes`). Unless `multiple`, the node exploded before collapses (it comes back in `collapsed`). Exploding an exploded node changes nothing (`changed: false`). Returns the ids now `exploded`. Then use `get_editor_state` or `capture_view` to read or see the children. |
+| `collapse_node` | Collapse an exploded `node`. Returns the ids still `exploded` and those still `collapsing` (their children leave when the collapse animation ends). Fails when the node is not exploded. |
+
 ### Write: components
 
 These are strict-schema tools. Each returns `{ ids }` of what it created or changed, or fails with
@@ -288,6 +301,9 @@ effects provider (for example Flair); without one the read tools say so and the 
 - With agent playback on, the cursor clicks where `canvas_add_node` will place the node, drags
   `canvas_connect` from source to target, and rings the nodes a layout or arrange command moved.
   Nothing about the calls changes: still read ids with `get_editor_state` and pass them back.
+- **Exploded children are temporary.** Do not edit, connect or lay out nodes that only exist
+  while a node is exploded: they vanish on collapse. Collapse before `canvas_layout`, and do not
+  save positions read while a node is exploded (the moved nodes return to their old places).
 - `canvas_update_node` changes `data` only. Move nodes with layout, align or distribute commands,
   or by the host's own means; do not expect `position` inside `data` to move anything.
 - Align needs at least two nodes and distribute at least three; locked nodes never move. Shape

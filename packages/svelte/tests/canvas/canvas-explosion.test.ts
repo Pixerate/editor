@@ -10,7 +10,7 @@ import {
   computeNodesBoundingBox,
   calculateDirectionalDisplacement,
   calculateReflowDisplacement,
-} from "../../src/canvas/createCanvasDisplacement.js";
+} from "@pixerate/editor/canvas";
 import { createCanvasExplosion } from "../../src/canvas/createCanvasExplosion.svelte.js";
 import { createCanvasGraph } from "../../src/canvas/createCanvasGraph.svelte.js";
 import type { CanvasNode, CanvasEdge } from "../../src/canvas/types.js";
