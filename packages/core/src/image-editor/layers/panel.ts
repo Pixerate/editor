@@ -4,7 +4,8 @@
  * and the menu of layer operations with whether each one applies to the active layer.
  */
 
-import { adjustmentKindLabel } from '../adjustment-layers';
+import { ADJUSTMENT_KINDS, adjustmentKindLabel, isAdjustmentKind } from '../adjustment-layers';
+import type { AdjustmentKind } from '../types';
 import type { ImageEditorController } from '../controller';
 import { findLayer, type ImageLayer, type SmartFilter, type SmartObjectLayer } from './model';
 import type { LayerPlacement } from './ops';
@@ -355,3 +356,153 @@ export const BIT_DEPTH_OPTIONS: readonly { depth: 8 | 16 | 32; label: string; ti
   { depth: 16, label: '16-bit', title: '16 bits per channel: smooth gradients, no banding under strong adjustments' },
   { depth: 32, label: '32-bit', title: '32-bit float per channel, linear light (HDR)' },
 ];
+
+export interface NewLayerOption {
+  id: string;
+  label: string;
+  icon: string;
+  group?: string;
+  disabled?: boolean;
+  reason?: string;
+}
+
+/**
+ * Catalogue of layer types and adjustment layers that can be added dynamically to the controller.
+ */
+export function newLayerOptions(_controller: ImageEditorController): NewLayerOption[] {
+  const options: NewLayerOption[] = [
+    { id: 'pixel', label: 'Empty Layer', icon: 'square-dashed', group: 'Basic' },
+    { id: 'text', label: 'Text Layer', icon: 'type', group: 'Basic' },
+    { id: 'shape-rect', label: 'Rectangle Shape', icon: 'square', group: 'Shapes' },
+    { id: 'shape-ellipse', label: 'Ellipse Shape', icon: 'circle', group: 'Shapes' },
+    { id: 'group', label: 'Group Folder', icon: 'folder', group: 'Basic' },
+  ];
+
+  for (const { kind, label } of ADJUSTMENT_KINDS) {
+    options.push({
+      id: `adjustment-${kind}`,
+      label,
+      icon: 'sliders',
+      group: 'Adjustments',
+    });
+  }
+
+  return options;
+}
+
+/**
+ * Adds a new layer of the specified catalogue kind to the controller.
+ */
+export async function addLayerOfKind(
+  controller: ImageEditorController,
+  id: string,
+  init?: Record<string, unknown>
+): Promise<string> {
+  if (id === 'pixel') {
+    return controller.addPixelLayer(init as Parameters<ImageEditorController['addPixelLayer']>[0]);
+  }
+  if (id === 'group') {
+    return controller.addGroup(init as Parameters<ImageEditorController['addGroup']>[0]);
+  }
+  if (id === 'text') {
+    const canvas = controller.getCanvasSize();
+    const cx = Math.round(canvas.width / 2);
+    const cy = Math.round(canvas.height / 2);
+    return controller.addTextLayer({
+      text: (init?.text as string) || 'New Text',
+      x: typeof init?.x === 'number' ? init.x : cx - 100,
+      y: typeof init?.y === 'number' ? init.y : cy,
+      ...(init as object),
+    });
+  }
+  if (id === 'shape-rect') {
+    const canvas = controller.getCanvasSize();
+    const cx = Math.round(canvas.width / 2);
+    const cy = Math.round(canvas.height / 2);
+    const w = 200;
+    const h = 150;
+    return controller.addShapeLayer({
+      shape: {
+        kind: 'rect',
+        x: typeof init?.x === 'number' ? init.x : cx - Math.round(w / 2),
+        y: typeof init?.y === 'number' ? init.y : cy - Math.round(h / 2),
+        width: typeof init?.width === 'number' ? init.width : w,
+        height: typeof init?.height === 'number' ? init.height : h,
+      },
+      name: 'Rectangle',
+      ...(init as object),
+    });
+  }
+  if (id === 'shape-ellipse') {
+    const canvas = controller.getCanvasSize();
+    const cx = Math.round(canvas.width / 2);
+    const cy = Math.round(canvas.height / 2);
+    const w = 200;
+    const h = 200;
+    return controller.addShapeLayer({
+      shape: {
+        kind: 'ellipse',
+        x: typeof init?.x === 'number' ? init.x : cx - Math.round(w / 2),
+        y: typeof init?.y === 'number' ? init.y : cy - Math.round(h / 2),
+        width: typeof init?.width === 'number' ? init.width : w,
+        height: typeof init?.height === 'number' ? init.height : h,
+      },
+      name: 'Ellipse',
+      ...(init as object),
+    });
+  }
+  if (id.startsWith('adjustment-')) {
+    const kind = id.slice('adjustment-'.length) as AdjustmentKind;
+    if (isAdjustmentKind(kind)) {
+      return controller.addAdjustmentLayer({
+        kind,
+        ...(init as object),
+      });
+    }
+  }
+
+  throw new Error(`Unknown layer kind "${id}"`);
+}
+
+export interface LayerPanelDescriptor {
+  id: string;
+  title: string;
+}
+
+/**
+ * Returns contextual panels that apply to the currently active layer (or layer-independent panels if null).
+ */
+export function layerPanels(layer: ImageLayer | null): LayerPanelDescriptor[] {
+  if (!layer) {
+    return [
+      { id: 'canvas-size', title: 'Composition Size' },
+      { id: 'selection', title: 'Selection' },
+    ];
+  }
+
+  const panels: LayerPanelDescriptor[] = [
+    { id: 'properties', title: 'Layer Properties' },
+  ];
+
+  if (layer.type === 'pixel') {
+    panels.push({ id: 'paint', title: 'Brush Options' });
+    panels.push({ id: 'effects', title: 'Layer Effects' });
+  } else if (layer.type === 'adjustment') {
+    panels.push({ id: 'adjustment', title: adjustmentKindLabel(layer.kind) });
+  } else if (layer.type === 'type') {
+    panels.push({ id: 'type', title: 'Typography' });
+    panels.push({ id: 'effects', title: 'Layer Effects' });
+  } else if (layer.type === 'shape') {
+    panels.push({ id: 'shape', title: 'Shape Options' });
+    panels.push({ id: 'effects', title: 'Layer Effects' });
+  } else if (layer.type === 'smart') {
+    panels.push({ id: 'smart-filters', title: 'Smart Filters' });
+    panels.push({ id: 'effects', title: 'Layer Effects' });
+  }
+
+  if (layer.mask) {
+    panels.push({ id: 'mask', title: 'Mask Options' });
+  }
+
+  return panels;
+}

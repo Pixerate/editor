@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatVideoTimecode, parseVideoPreviewScale, VIDEO_PREVIEW_SCALE_OPTIONS, videoProjectHasProxies, type VideoEditorController } from '@pixerate/editor/video-editor';
+import { formatVideoTimecode, parseVideoPreviewScale, VIDEO_PREVIEW_SCALE_OPTIONS, videoAddAdjustmentEdits, videoProjectHasProxies, type VideoEditorController } from '@pixerate/editor/video-editor';
 import { useVideoEditorState } from './useVideoEditor';
 
 export interface VideoTransportProps {
@@ -13,7 +13,8 @@ const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-4
 
 /**
  * Play / pause, a frame back and forward, the playhead and total length as timecode, and the
- * edits that work on the playhead and the selection: split, delete, ripple delete, undo and redo.
+ * edits that work on the playhead and the selection: split, delete, ripple delete, add an
+ * adjustment clip at the playhead, undo and redo.
  * When any asset has proxies, a preview-size control picks what the preview plays (a view setting).
  */
 export function VideoTransport({ controller, editable = true, className = '' }: VideoTransportProps) {
@@ -68,6 +69,22 @@ export function VideoTransport({ controller, editable = true, className = '' }: 
             data-ripple-delete=""
           >
             Ripple delete
+          </button>
+          <button
+            type="button"
+            className={btn}
+            onClick={() => {
+              const r = controller.apply(videoAddAdjustmentEdits(project, time), 'Add adjustment clip');
+              if (r.ok) {
+                const added = r.outcomes[r.outcomes.length - 1].clip;
+                if (added) controller.select([added]);
+              }
+            }}
+            disabled={!canEdit}
+            title="Add an adjustment clip at the playhead over every track: its grade, effects and mask change the pictures underneath"
+            data-add-adjustment=""
+          >
+            Adjustment
           </button>
           <button type="button" className={btn} onClick={() => controller.undo()} disabled={!canEdit || !state.canUndo} title={state.canUndo ? `Undo ${state.undoLabel}` : 'Nothing to undo'} data-undo="">
             Undo

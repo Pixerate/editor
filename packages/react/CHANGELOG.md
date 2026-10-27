@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.105.0
+
+### Minor Changes
+
+- 475ff71: Chart editor: radar charts keep Mermaid's `ticks` and `graticule`. New `radarTicks` (an even ring count, or `null` for round-number rings) and `radarGraticule` (`polygon` or `circle`) spec fields are drawn by the radar layout, read and written by `chartFromMermaid` / `chartToMermaid`, settable through `update_chart` / `chart.update`, and shown as Rings and Grid in the React and Svelte inspectors. A `radar-beta` block without `graticule` now imports as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`.
+
+### Patch Changes
+
+- Updated dependencies [475ff71]
+  - @pixerate/editor@0.157.0
+
 ## 0.104.0
 
 ### Minor Changes

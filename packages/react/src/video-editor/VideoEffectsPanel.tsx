@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   findVideoClip,
   isVideoKeyframes,
+  openVideoClipEffectAuthoring,
   type VideoClip,
+  type VideoClipEffectAuthoring,
   type VideoEditorController,
   type VideoEffectEditResult,
   type VideoEffectValues,
 } from '@pixerate/editor/video-editor';
 import type { EffectProvider } from '@pixerate/editor/effects';
-import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
+import { EffectAuthoringEditor, EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
 import { useVideoEditorState } from './useVideoEditor';
 
 export interface VideoEffectsPanelProps {
@@ -56,6 +58,8 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
   const [browse, setBrowse] = useState<null | 'clip' | 'transition' | 'generator'>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [authoring, setAuthoring] = useState<VideoClipEffectAuthoring | null>(null);
+  useEffect(() => () => authoring?.dispose(), [authoring]);
   const selected = state.selection[0];
   const at = selected ? findVideoClip(state.project, selected) : null;
   const clip: VideoClip | null = at?.clip ?? null;
@@ -150,6 +154,22 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
                     <button type="button" className={btn} disabled={disabled || i === all.length - 1} aria-label="Move down" onClick={() => report(controller.updateClipEffect(clip.id, e.id, { index: i + 1 }))}>
                       ↓
                     </button>
+                    <button
+                      type="button"
+                      className={btn}
+                      disabled={disabled || !provider}
+                      aria-label={`Author ${e.name ?? e.effect}`}
+                      title="Tune and keyframe it in the effect authoring editor"
+                      data-author-effect={e.id}
+                      onClick={() =>
+                        void openVideoClipEffectAuthoring(controller, clip.id, e.id).then(
+                          (a) => setAuthoring(a),
+                          (err: unknown) => setMessage(err instanceof Error ? err.message : String(err)),
+                        )
+                      }
+                    >
+                      ✎
+                    </button>
                     <button type="button" className={btn} disabled={disabled} aria-label={`Remove ${e.name ?? e.effect}`} onClick={() => report(controller.removeClipEffect(clip.id, e.id))}>
                       ✕
                     </button>
@@ -187,6 +207,30 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
             {!clip.effects?.length && <p className="text-[11px] text-muted-foreground">No effects on this clip.</p>}
           </div>
         </>
+      )}
+      {authoring && (
+        <div className="space-y-1 rounded border border-border p-1" data-effect-authoring={authoring.instance}>
+          <EffectAuthoringEditor session={authoring.session} showSource={false} previewSize={{ width: 240, height: 135 }} />
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className={btn}
+              disabled={disabled}
+              data-apply-authoring=""
+              onClick={() =>
+                void authoring.commit().then((r) => {
+                  setMessage(r.ok ? (r.notes?.join(' ') ?? null) : r.error);
+                  if (r.ok) setAuthoring(null);
+                })
+              }
+            >
+              Apply to clip
+            </button>
+            <button type="button" className={btn} onClick={() => setAuthoring(null)}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
       {message && (
         <p role="alert" className="text-[11px] text-destructive">

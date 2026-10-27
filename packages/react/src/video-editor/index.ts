@@ -6,5 +6,8 @@ export * from './VideoTimeline';
 export * from './ClipInspector';
 export * from './MediaBin';
 export * from './TranscriptPanel';
+export * from './TranscriptEditor';
+export * from './EditPlanPreview';
+export * from './useTranscriptVideo';
 export * from './VideoEditor';
 export * from './VideoEffectsPanel';

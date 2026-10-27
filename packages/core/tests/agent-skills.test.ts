@@ -47,7 +47,7 @@ import { DiagramController, createDiagramEditorDocument, createDiagramToolProvid
 import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
 import { HistoryManager } from '../src/history';
 import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
+import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider, createVideoDialogueToolProvider, createVideoMusicToolProvider } from '../src/video-editor';
 import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
 import { ParametersController, createParameterCommands, createParametersEditorDocument } from '../src/parameters';
 import { createColorToolProvider } from '../src/color';
@@ -168,6 +168,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createVideoEffectsToolProvider(new VideoEditorController(), { id: 'video-effects' })),
 			...toolNames(createDocumentToolProvider(createVideoEditorDocument(new VideoEditorController()), { history: false, store: documentStore() }))
 		],
+		'pixerate-talking-head-edit': toolNames(createVideoDialogueToolProvider(new VideoEditorController(), { id: 'video-dialogue' })),
+		'pixerate-bgm-alignment': toolNames(createVideoMusicToolProvider(new VideoEditorController(), { id: 'video-music' })),
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -236,6 +238,8 @@ const FACTORIES: Record<string, string> = {
 	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',
 	createVideoEffectsToolProvider: 'pixerate-video-editor',
+	createVideoDialogueToolProvider: 'pixerate-talking-head-edit',
+	createVideoMusicToolProvider: 'pixerate-bgm-alignment',
 	// The shared effect tools; each editor that hosts them documents them in its own skill.
 	createEffectToolProvider: 'pixerate-video-editor, pixerate-image-editor, pixerate-animation-editor, pixerate-vector, pixerate-canvas, pixerate-paint-editor',
 	createGenerationToolProvider: 'pixerate-generation',

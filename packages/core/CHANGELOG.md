@@ -1,5 +1,29 @@
 # @pixerate/editor
 
+## 0.160.0
+
+### Minor Changes
+
+- ab63ed6: Image editor transform mode frames shape, type and smart object layers too (`ImageEditorController.getLayerFrame`, `quadFrameOverlay`), and a press anywhere inside a frame moves the layer, its centre included (`FreeTransformTool.down` option `reference: false`).
+
+## 0.159.0
+
+### Minor Changes
+
+- cec991d: Image editor transform mode: the canvas draws the active layer's frame and opens a Free Transform only for the length of a drag (one undo step when something changed), so other edits never meet an open transform. Pressing away from the frame picks the layer there, or none. Adds `boxFrameOverlay`, `boxFrameHit` and `FreeTransformTool.modified`.
+
+## 0.158.0
+
+### Minor Changes
+
+- a0085ab: Support hit testing, canvas resize, dynamic layer panel descriptors, and transform mode gestures in image editor
+
+## 0.157.0
+
+### Minor Changes
+
+- 475ff71: Chart editor: radar charts keep Mermaid's `ticks` and `graticule`. New `radarTicks` (an even ring count, or `null` for round-number rings) and `radarGraticule` (`polygon` or `circle`) spec fields are drawn by the radar layout, read and written by `chartFromMermaid` / `chartToMermaid`, settable through `update_chart` / `chart.update`, and shown as Rings and Grid in the React and Svelte inspectors. A `radar-beta` block without `graticule` now imports as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`.
+
 ## 0.156.0
 
 ### Minor Changes
