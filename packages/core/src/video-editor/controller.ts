@@ -21,6 +21,7 @@ import { isEffectError } from '../effects/errors.js';
 import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
 import { checkVideoEffectPlace, checkVideoEffectValues, VideoEffectsEngine, type VideoEffectPlace } from './effects.js';
 import { isVideoKeyframes, type VideoAnimatable, type VideoKey } from './keyframes.js';
+import { planVideoEdits, type VideoEditPlan, type VideoEditPlanInput } from './plan.js';
 
 export interface VideoEditorOptions {
 	/** The project to open (default: an empty 1920 × 1080, 30 fps project with tracks v1 and a1). */
@@ -83,9 +84,14 @@ export interface VideoEditorState {
 	previewScale: VideoPreviewScale;
 	/** The registered effects provider, or `null` (effects are then drawn as placeholders and cannot be added). */
 	effectsProvider: EffectProvider | null;
+	/** Proposed edit plans waiting for review, oldest first (see `proposePlan`). Not part of the project or its undo history. */
+	plans: readonly VideoEditPlan[];
 	/** Bumped on every change. */
 	revision: number;
 }
+
+/** What `applyPlan` returns: the edit result, the plan applied and whether the project had changed since it was made. */
+export type VideoPlanApplyResult = (VideoEditResult & { ok: true; plan: VideoEditPlan; stale: boolean }) | { ok: false; error: string };
 
 /**
  * Headless non-linear video editor: a `VideoProject` of assets and tracks of clips, edited with
@@ -122,6 +128,10 @@ export class VideoEditorController {
 	private readonly listeners = new Set<(state: VideoEditorState) => void>();
 	private readonly unsubscribers: (() => void)[] = [];
 	private state!: VideoEditorState;
+	private plans: VideoEditPlan[] = [];
+	/** The project each open plan was worked out against. */
+	private readonly planBasis = new Map<string, VideoProject>();
+	private planCount = 0;
 
 	constructor(options: VideoEditorOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
@@ -194,6 +204,7 @@ export class VideoEditorController {
 			redoLabel: h.redoName,
 			previewScale: this.previewScale,
 			effectsProvider: this.effects.provider,
+			plans: this.plans,
 			revision: this.revision
 		};
 	}
@@ -267,6 +278,95 @@ export class VideoEditorController {
 		if (!result.ok) return options.dryRun ? result : this.refuse(result.error);
 		if (!options.dryRun) this.commit(label, result.project, options.merge);
 		return result;
+	}
+
+	// -----------------------------------------------------------------------------------------
+	// Edit plans: propose, review, apply or discard
+	// -----------------------------------------------------------------------------------------
+
+	/** Most plans kept open at once; proposing another drops the oldest. */
+	static readonly MAX_PLANS = 20;
+
+	/**
+	 * Works out a batch of edits without applying it and keeps it for review (see `VideoEditPlan`):
+	 * the result says what it would do. Allowed while read-only (nothing changes); applying is not.
+	 * A plan with the id of an open one replaces it.
+	 */
+	proposePlan(input: VideoEditPlanInput): { ok: true; plan: VideoEditPlan } | { ok: false; error: string } {
+		const ids = new Set(this.plans.map((p) => p.id));
+		let id = input.id;
+		let count = this.planCount;
+		if (id === undefined) {
+			do id = `plan${++count}`;
+			while (ids.has(id));
+		}
+		const result = planVideoEdits(this.project, { ...input, id });
+		if (!result.ok) return result;
+		this.planCount = count;
+		const kept = this.plans.filter((p) => p.id !== id);
+		while (kept.length >= VideoEditorController.MAX_PLANS) this.planBasis.delete(kept.shift()!.id);
+		this.plans = [...kept, result.plan];
+		this.planBasis.set(id, this.project);
+		this.notify();
+		return { ok: true, plan: result.plan };
+	}
+
+	/** An open plan, or `undefined`. */
+	getPlan(id: string): VideoEditPlan | undefined {
+		return this.plans.find((p) => p.id === id);
+	}
+
+	/** Whether the project changed since a plan was made (its summary may then be out of date). */
+	isPlanStale(id: string): boolean {
+		const basis = this.planBasis.get(id);
+		return !!basis && basis !== this.project;
+	}
+
+	/** The project as an open plan would leave it, worked out against the current project; `null` when it no longer applies. */
+	planPreview(id: string): VideoProject | null {
+		const plan = this.getPlan(id);
+		if (!plan) return null;
+		const result = applyVideoEdits(this.project, plan.edits);
+		return result.ok ? result.project : null;
+	}
+
+	/**
+	 * Applies an open plan as one undo step labelled with its title and closes it. If the project
+	 * changed since it was made, its edits are checked again against the project as it is now and
+	 * refused (the plan stays open) when they no longer apply.
+	 */
+	applyPlan(id: string): VideoPlanApplyResult {
+		const plan = this.getPlan(id);
+		if (!plan) return this.refused(`There is no open plan "${id}"; the open plans are ${this.plans.map((p) => `"${p.id}"`).join(', ') || 'none'}.`);
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		const stale = this.isPlanStale(id);
+		const result = applyVideoEdits(this.project, plan.edits);
+		if (!result.ok) return this.refused(stale ? `The project changed since plan "${id}" was made and it no longer applies (${result.error}); discard it and make a new plan.` : result.error);
+		this.dropPlan(id);
+		this.commit(plan.title, result.project);
+		return { ...result, plan, stale };
+	}
+
+	/** Closes an open plan without applying it. False when there is no such plan. */
+	discardPlan(id: string): boolean {
+		if (!this.getPlan(id)) return false;
+		this.dropPlan(id);
+		this.notify();
+		return true;
+	}
+
+	/** Closes every open plan. */
+	discardPlans(): void {
+		if (!this.plans.length) return;
+		this.plans = [];
+		this.planBasis.clear();
+		this.notify();
+	}
+
+	private dropPlan(id: string) {
+		this.plans = this.plans.filter((p) => p.id !== id);
+		this.planBasis.delete(id);
 	}
 
 	/** Opens a project (JSON or object). `clearHistory` drops the undo stack (opening a file); otherwise it is one undo step. */
