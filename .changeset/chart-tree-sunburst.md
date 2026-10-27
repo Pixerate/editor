@@ -1,7 +1,0 @@
----
-"@pixerate/editor": minor
-"@pixerate/editor-react": minor
-"@pixerate/editor-svelte": minor
----
-
-Chart editor: grouped data, nested treemaps and sunburst charts, for parity with Ursula's chart documents. New `spec.tree` (groups and items up to six levels, sibling names unique) is the chart's data when set: the categories become its top-level names and the first series their totals. A treemap with a tree nests each group's rectangles under a header; the new `sunburst` type draws a ring per level (or the first series as one ring) with `sunburstLabel` under the total. New controller methods `setTree`, `setTreeRows`, `importTreeTable`, `addTreeNode`, `updateTreeNode`, `removeTreeNode`, helpers in `@pixerate/editor/chart` (`normalizeChartTree`, `chartTreeToRows`, `chartTreeFromRows`, `chartTreeFromTable`, `chartTreeFromSeries` and the row-editing helpers), and agent tools `set_chart_tree`, `import_chart_tree_csv`, `add_chart_tree_node`, `update_chart_tree_node`, `remove_chart_tree_node` with matching `chart.*` commands; `get_chart` returns `treeTable`. Cell edits are refused while the data is grouped; `setData` and imports replace it. The React and Svelte data grids show grouped data as a Group / Level / Item / Value table (`ChartTreeGrid`, with `+ Level`, Ungroup, and Group items for treemaps and sunbursts). Office chartex treemaps and sunbursts now import with their levels (sunbursts were drawn as flat treemaps); exports write group totals. `addCategory` now returns `{ ok: false, message }` when it is refused.

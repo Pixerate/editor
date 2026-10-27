@@ -1,7 +1,0 @@
----
-"@pixerate/editor": minor
-"@pixerate/editor-react": minor
-"@pixerate/editor-svelte": minor
----
-
-Chart editor: annotations from Ursula's chart documents. New spec fields `referenceLines` and `referenceBands` (targets and ranges on the value, secondary or numeric x axis), `series.callouts` (a boxed label with a leader line pinned to a bar or point), `highlight` (named categories and series stay bright, the rest are muted), `note` (a source line under the chart) and `varyColors` (one palette colour per category on a one-series chart, read from and written to Office `c:varyColors`). Bar, line, area, scatter and bubble charts draw the references and callouts; highlight and the note work on every type. New controller methods (`addReferenceLine`, `updateReferenceLine`, `removeReferenceLine`, the same for bands, `setCallout`, `setHighlight`, `setNote`) and `suggestChartReferences`; new agent tools `add_chart_reference_line`, `update_chart_reference_line`, `remove_chart_reference_line`, the same for bands, `set_chart_callout` and `highlight_chart`, with matching `chart.*` commands; `update_chart` takes the new fields. The React and Svelte inspectors gain a Note field, a Colour by category toggle, an Annotations section and a Callout field for the selected point. Fix: point colours, x values, bubble sizes and custom error amounts now move with their category when categories are added, removed or reordered.
