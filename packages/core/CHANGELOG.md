@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.159.0
+
+### Minor Changes
+
+- cec991d: Image editor transform mode: the canvas draws the active layer's frame and opens a Free Transform only for the length of a drag (one undo step when something changed), so other edits never meet an open transform. Pressing away from the frame picks the layer there, or none. Adds `boxFrameOverlay`, `boxFrameHit` and `FreeTransformTool.modified`.
+
 ## 0.158.0
 
 ### Minor Changes

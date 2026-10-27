@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.117.0
+
+### Minor Changes
+
+- cec991d: Image editor transform mode: the canvas draws the active layer's frame and opens a Free Transform only for the length of a drag (one undo step when something changed), so other edits never meet an open transform. Pressing away from the frame picks the layer there, or none. Adds `boxFrameOverlay`, `boxFrameHit` and `FreeTransformTool.modified`.
+
+### Patch Changes
+
+- Updated dependencies [cec991d]
+  - @pixerate/editor@0.159.0
+
 ## 0.116.0
 
 ### Minor Changes
