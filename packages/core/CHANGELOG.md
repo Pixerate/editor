@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.162.1
+
+### Patch Changes
+
+- 53d9906: Fix wet paint color mixing on overlapping strokes by sampling settled pigment alongside suspended pigment and tuning gouache moisture retention and pickup parameters.
+
 ## 0.162.0
 
 ### Minor Changes
