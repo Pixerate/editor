@@ -8,14 +8,10 @@ import type {
 	ExplosionSnapshot,
 	NodeTransition
 } from './types.js';
-import {
-	calculateDirectionalDisplacement,
-	calculateReflowDisplacement
-} from './createCanvasDisplacement.js';
+import { computeCanvasExplosionLayout } from '@pixerate/editor/canvas';
 import {
 	createFanOutTrajectory,
 	linearPositionTrajectory,
-	linearTrajectory,
 	runMultiNodeTransition
 } from './createCanvasTrajectory.js';
 
@@ -41,8 +37,13 @@ export interface CreateCanvasExplosionOptions<TNode extends CanvasNode = CanvasN
 }
 
 /**
- * Headless Svelte 5 rune managing canvas node explosion, spatial layout displacement,
- * coordinated multi-node animation paths, and reversible collapsing.
+ * Imperative explosion coordinator for a mutable graph (whiteboards, diagrams): adds child
+ * nodes and edges, animates them out along a trajectory while surrounding nodes slide aside,
+ * and collapses back exactly. The layout math is `computeCanvasExplosionLayout` from
+ * `@pixerate/editor/canvas`; several nodes can be exploded at once. For a canvas derived from
+ * state (`$derived`), use `createCanvasExplosionState` and the layout functions instead.
+ *
+ * `explodeNode` throws when a child id is already on the canvas or repeated.
  */
 export function createCanvasExplosion<
 	TNode extends CanvasNode = CanvasNode,
@@ -84,7 +85,8 @@ export function createCanvasExplosion<
 		parentId: string,
 		explodeOptions: ExplodeNodeOptions<TNode, TEdge>
 	): boolean {
-		if (isExploded(parentId)) {
+		// Already exploded, or its explosion is still animating
+		if (isExploded(parentId) || snapshots.has(parentId)) {
 			return false;
 		}
 
@@ -94,7 +96,7 @@ export function createCanvasExplosion<
 		}
 
 		const {
-			childNodes,
+			childNodes: requestedChildren,
 			childEdges = [],
 			connectParentToChildren = 'all',
 			displacementStrategy = 'directional',
@@ -107,93 +109,45 @@ export function createCanvasExplosion<
 			onComplete
 		} = explodeOptions;
 
-		if (childNodes.length === 0) {
+		if (requestedChildren.length === 0) {
 			return false;
 		}
 
-		// 1. Calculate displacement for existing nodes
-		let displacementMap: Map<string, XYPosition>;
-		if (displacementStrategy === 'dagre') {
-			displacementMap = calculateReflowDisplacement({
-				existingNodes: graph.nodes,
-				existingEdges: graph.edges,
-				originNode: parentNode,
-				childNodes,
-				childEdges,
-				getNodesBounds: options.getNodesBounds,
-				options: {
-					...reflowOptions,
-					direction: (reflowOptions.direction as any) ?? 'LR'
-				}
-			});
-		} else if (displacementStrategy === 'none') {
-			displacementMap = new Map();
-		} else {
-			displacementMap = calculateDirectionalDisplacement({
-				existingNodes: graph.nodes,
-				originNode: parentNode,
-				childNodes,
-				getNodesBounds: options.getNodesBounds,
-				options: directionalOptions
-			});
-		}
-
-		// 2. Build snapshot of displaced nodes before mutating positions
-		const displacedNodesSnapshot = Array.from(displacementMap.entries()).map(([id]) => {
-			const node = graph.nodes.find((n) => n.id === id);
-			return {
-				id,
-				originalPosition: { ...(node?.position ?? { x: 0, y: 0 }) }
-			};
+		// 1-3. Pure layout: displacement of existing nodes, child copies and the edges to add
+		// Loose type parameter: SvelteFlow `class` is ClassValue, core `CanvasNode.class` is a string (see GOTCHAS).
+		const layout = computeCanvasExplosionLayout<any, TEdge>({
+			existingNodes: graph.nodes,
+			existingEdges: graph.edges,
+			originNode: parentNode,
+			childNodes: requestedChildren,
+			childEdges,
+			strategy: displacementStrategy,
+			options: directionalOptions,
+			reflowOptions,
+			connectParentToChildren,
+			createEdge: graph.createEdge ? (source, target) => graph.createEdge!(source, target) : undefined,
+			getNodesBounds: options.getNodesBounds as ((nodes: any[]) => Rect) | undefined
 		});
-
-		// 3. Prepare child edges & parent connection edges
-		const edgesToAdd: TEdge[] = [...childEdges];
-		const defaultCreateEdge = (sourceId: string, targetId: string): TEdge => {
-			if (graph.createEdge) {
-				return graph.createEdge(sourceId, targetId);
-			}
-			return {
-				id: crypto.randomUUID(),
-				type: 'default',
-				source: sourceId,
-				target: targetId
-			} as unknown as TEdge;
-		};
-
-		if (connectParentToChildren === 'all' || connectParentToChildren === true) {
-			childNodes.forEach((child) => {
-				const exists = edgesToAdd.some((e) => e.source === parentId && e.target === child.id);
-				if (!exists) {
-					edgesToAdd.push(defaultCreateEdge(parentId, child.id));
-				}
-			});
-		} else if (connectParentToChildren === 'first' && childNodes.length > 0) {
-			const firstChild = childNodes[0];
-			const exists = edgesToAdd.some((e) => e.source === parentId && e.target === firstChild.id);
-			if (!exists) {
-				edgesToAdd.push(defaultCreateEdge(parentId, firstChild.id));
-			}
-		}
+		const displacementMap = layout.displacedPositions;
+		const childNodes = layout.childNodes as TNode[];
+		const edgesToAdd: TEdge[] = layout.childEdges.map((edge) => ({ ...edge }));
 
 		const snapshot: ExplosionSnapshot<TNode, TEdge> = {
 			parentId,
 			childNodeIds: childNodes.map((n) => n.id),
 			childEdgeIds: edgesToAdd.map((e) => e.id),
-			displacedNodes: displacedNodesSnapshot,
+			displacedNodes: [...layout.originalPositions].map(([id, originalPosition]) => ({ id, originalPosition })),
 			timestamp: Date.now()
 		};
 		snapshots.set(parentId, snapshot);
 
-		// 4. Position child nodes initially at origin node coordinate
+		// 4. Position child nodes (copies, so the caller's objects stay untouched) at the origin
 		const originPos = { ...parentNode.position };
 		const targetPositions = childNodes.map((child) => ({ ...child.position }));
 
 		childNodes.forEach((child) => {
 			child.position = { ...originPos };
-			if (!child.data) child.data = {} as any;
-			(child.data as any).scale = 0;
-			(child.data as any).opacity = 0;
+			child.data = { ...(child.data ?? {}), scale: 0, opacity: 0 } as TNode['data'];
 			const currentStyle = (child.style || '').replace(/opacity:\s*[^;]+;?/g, '').trim();
 			child.style = `${currentStyle ? currentStyle + '; ' : ''}opacity: 0;`;
 		});
@@ -435,7 +389,7 @@ export function createCanvasExplosion<
 		explodeOptions: ExplodeNodeOptions<TNode, TEdge>,
 		collapseOptions?: CollapseNodeOptions
 	): boolean {
-		if (isExploded(parentId)) {
+		if (snapshots.has(parentId)) {
 			return collapseNode(parentId, collapseOptions);
 		}
 		return explodeNode(parentId, explodeOptions);
