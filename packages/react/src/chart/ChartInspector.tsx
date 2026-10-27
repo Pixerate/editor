@@ -15,6 +15,8 @@ import {
   CHART_CURVES,
   CHART_RADAR_GRATICULES,
   CHART_LEGEND_POSITIONS,
+  CHART_LIKERT_NEUTRALS,
+  CHART_LIKERT_SORTS,
   CHART_NUMBER_STYLES,
   CHART_SERIES_TYPES,
   CHART_STACKINGS,
@@ -28,6 +30,7 @@ import {
   parseChartAmountList,
   chartSeriesType,
   isCartesianChart,
+  suggestChartReferences,
   type ChartAxis,
   type ChartController,
   type ChartErrorBars,
@@ -46,7 +49,7 @@ export interface ChartInspectorProps {
   className?: string;
 }
 
-export type ChartInspectorSection = 'type' | 'style' | 'titles' | 'options' | 'legend' | 'axes' | 'series';
+export type ChartInspectorSection = 'type' | 'style' | 'titles' | 'options' | 'legend' | 'axes' | 'annotations' | 'series';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -264,7 +267,7 @@ function ErrorBarFields({ controller, series, which, idBase }: { controller: Cha
  * axes and the selected series. Every change is one undo step.
  */
 export function ChartInspector({ controller, sections, className }: ChartInspectorProps) {
-  const { spec, selectedSeries } = useChartState(controller);
+  const { spec, selectedSeries, selection } = useChartState(controller);
   const idBase = useId();
   const show = (section: ChartInspectorSection) => !sections || sections.includes(section);
   const cartesian = isCartesianChart(spec.type);
@@ -278,6 +281,10 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
   const seriesIndex = selectedSeries ? spec.series.findIndex((s) => s.id === selectedSeries.id) : -1;
   // Log and reversed axes and error bars are drawn by the bar / line / area / scatter layouts.
   const scales = family === 'cartesian' || family === 'xy';
+  // Reference lines and bands, callouts and colour by category are drawn by the same layouts.
+  const annotated = scales;
+  const oneSeries = cartesian && spec.series.filter((s) => !s.hidden).length === 1;
+  const calloutIndex = selection?.kind === 'point' && selection.seriesId === selectedSeries?.id ? selection.index : null;
 
   return (
     <div className={`space-y-3 text-xs ${className ?? ''}`} data-chart-inspector="">
@@ -333,6 +340,9 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
           </Field>
           <Field label="Subtitle" htmlFor={`${idBase}-subtitle`}>
             <ChartCommitInput id={`${idBase}-subtitle`} value={spec.subtitle} data-option="subtitle" className={chartInputClass} onCommit={(subtitle) => void controller.setSubtitle(subtitle)} />
+          </Field>
+          <Field label="Note" htmlFor={`${idBase}-note`}>
+            <ChartCommitInput id={`${idBase}-note`} value={spec.note} placeholder="Source or footnote" data-option="note" className={chartInputClass} onCommit={(note) => void controller.setNote(note)} />
           </Field>
         </div>
       )}
@@ -394,6 +404,48 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               />
             </Field>
           )}
+          {spec.type === 'sunburst' && (
+            <Field label="Caption" htmlFor={`${idBase}-sunburst-label`}>
+              <ChartCommitInput id={`${idBase}-sunburst-label`} value={spec.sunburstLabel} placeholder="Under the total" data-option="sunburstLabel" className={chartInputClass} onCommit={(sunburstLabel) => controller.update({ sunburstLabel }).ok} />
+            </Field>
+          )}
+          {spec.type === 'likert' && (
+            <Field label="Neutral" htmlFor={`${idBase}-likert-neutral`}>
+              <Select id={`${idBase}-likert-neutral`} name="likertNeutral" value={spec.likertNeutral} options={CHART_LIKERT_NEUTRALS} labels={{ split: 'Across the centre', separate: 'In its own column' }} onChange={(likertNeutral) => controller.update({ likertNeutral })} />
+            </Field>
+          )}
+          {spec.type === 'likert' && (
+            <Field label="Order" htmlFor={`${idBase}-likert-sort`}>
+              <Select id={`${idBase}-likert-sort`} name="likertSort" value={spec.likertSort} options={CHART_LIKERT_SORTS} labels={{ none: 'As entered', positive: 'Most agreement first', negative: 'Most disagreement first' }} onChange={(likertSort) => controller.update({ likertSort })} />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Sweep" htmlFor={`${idBase}-parliament-arc`}>
+              <input
+                id={`${idBase}-parliament-arc`}
+                type="range"
+                min={90}
+                max={360}
+                step={10}
+                value={spec.parliamentArc}
+                data-option="parliamentArc"
+                className="w-full accent-primary"
+                onPointerDown={() => controller.beginGesture('parliamentArc')}
+                onPointerUp={() => controller.endGesture()}
+                onChange={(e) => controller.update({ parliamentArc: Number(e.currentTarget.value) })}
+              />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Majority" htmlFor={`${idBase}-parliament-majority`}>
+              <ChartCommitInput id={`${idBase}-parliament-majority`} value={spec.parliamentMajority === null ? '' : String(spec.parliamentMajority)} placeholder="Half plus one" inputMode="numeric" data-option="parliamentMajority" className={chartInputClass} onCommit={(text) => controller.update({ parliamentMajority: text.trim() === '' ? null : Number(text) }).ok} />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Caption" htmlFor={`${idBase}-parliament-label`}>
+              <ChartCommitInput id={`${idBase}-parliament-label`} value={spec.parliamentLabel} placeholder="seats" data-option="parliamentLabel" className={chartInputClass} onCommit={(parliamentLabel) => controller.update({ parliamentLabel }).ok} />
+            </Field>
+          )}
           {spec.type === 'radar' && (
             <Field label="Rings" htmlFor={`${idBase}-radar-ticks`}>
               <ChartCommitInput id={`${idBase}-radar-ticks`} value={spec.radarTicks === null ? '' : String(spec.radarTicks)} placeholder="Auto" inputMode="numeric" data-option="radarTicks" className={chartInputClass} onCommit={(text) => controller.update({ radarTicks: text.trim() === '' ? null : Number(text) }).ok} />
@@ -417,6 +469,7 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {spec.type === 'waterfall' && <Toggle label="Total bar" name="showTotal" checked={spec.showTotal} onChange={(showTotal) => controller.update({ showTotal })} />}
             {hasLines && <Toggle label="Points" name="points" checked={spec.points} onChange={(points) => controller.update({ points })} />}
+            {oneSeries && <Toggle label="Colour by category" name="varyColors" checked={spec.varyColors} onChange={(varyColors) => controller.update({ varyColors })} />}
             <Toggle label="Data labels" name="dataLabels" checked={spec.dataLabels} onChange={(dataLabels) => controller.update({ dataLabels })} />
           </div>
         </div>
@@ -446,6 +499,49 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
           <AxisSection controller={controller} axis="y" value={spec.yAxis} idBase={idBase} horizontal={spec.orientation === 'horizontal'} scales={scales} />
           {usesSecondary && <AxisSection controller={controller} axis="y2" value={spec.yAxis2} idBase={idBase} horizontal={spec.orientation === 'horizontal'} scales={scales} />}
         </>
+      )}
+
+      {show('annotations') && annotated && (
+        <div className={chartSectionClass} data-section="annotations">
+          <h4 className="text-xs font-semibold text-foreground">Annotations</h4>
+          <Field label="Highlight" htmlFor={`${idBase}-highlight`}>
+            <ChartCommitInput
+              id={`${idBase}-highlight`}
+              value={spec.highlight.join(', ')}
+              placeholder="Categories or series"
+              data-option="highlight"
+              className={chartInputClass}
+              onCommit={(text) => controller.setHighlight(text.split(',').map((n) => n.trim()).filter(Boolean)).ok}
+            />
+          </Field>
+          {spec.referenceLines.map((line, i) => (
+            <div key={`line-${i}`} className="flex items-center gap-1" data-reference-line={i}>
+              <ChartCommitInput value={String(line.value)} aria-label="Line value" inputMode="decimal" data-option={`referenceLine.${i}.value`} className={`${chartInputClass} w-16 shrink-0`} onCommit={(text) => controller.updateReferenceLine(i, { value: Number(text) }).ok} />
+              <ChartCommitInput value={line.label ?? ''} aria-label="Line label" placeholder="Label" data-option={`referenceLine.${i}.label`} className={`${chartInputClass} flex-1`} onCommit={(text) => controller.updateReferenceLine(i, { label: text || null }).ok} />
+              <button type="button" className={chartButtonClass} aria-label="Delete reference line" data-action="reference-line-delete" onClick={() => controller.removeReferenceLine(i)}>
+                ×
+              </button>
+            </div>
+          ))}
+          {spec.referenceBands.map((band, i) => (
+            <div key={`band-${i}`} className="flex items-center gap-1" data-reference-band={i}>
+              <ChartCommitInput value={String(band.from)} aria-label="Band from" inputMode="decimal" data-option={`referenceBand.${i}.from`} className={`${chartInputClass} w-14 shrink-0`} onCommit={(text) => controller.updateReferenceBand(i, { from: Number(text) }).ok} />
+              <ChartCommitInput value={String(band.to)} aria-label="Band to" inputMode="decimal" data-option={`referenceBand.${i}.to`} className={`${chartInputClass} w-14 shrink-0`} onCommit={(text) => controller.updateReferenceBand(i, { to: Number(text) }).ok} />
+              <ChartCommitInput value={band.label ?? ''} aria-label="Band label" placeholder="Label" data-option={`referenceBand.${i}.label`} className={`${chartInputClass} flex-1`} onCommit={(text) => controller.updateReferenceBand(i, { label: text || null }).ok} />
+              <button type="button" className={chartButtonClass} aria-label="Delete reference band" data-action="reference-band-delete" onClick={() => controller.removeReferenceBand(i)}>
+                ×
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-1">
+            <button type="button" className={chartButtonClass} data-option="referenceLine.add" onClick={() => controller.addReferenceLine(suggestChartReferences(spec).line)}>
+              Add line
+            </button>
+            <button type="button" className={chartButtonClass} data-option="referenceBand.add" onClick={() => controller.addReferenceBand(suggestChartReferences(spec).band)}>
+              Add band
+            </button>
+          </div>
+        </div>
       )}
 
       {show('series') && selectedSeries && (
@@ -507,6 +603,18 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                   </option>
                 ))}
               </select>
+            </Field>
+          )}
+          {annotated && calloutIndex !== null && (
+            <Field label="Callout" htmlFor={`${idBase}-series-callout`}>
+              <ChartCommitInput
+                id={`${idBase}-series-callout`}
+                value={selectedSeries.callouts?.[calloutIndex] ?? ''}
+                placeholder={`Label for ${spec.categories[calloutIndex] ?? 'this point'}`}
+                data-option="series.callout"
+                className={chartInputClass}
+                onCommit={(text) => controller.setCallout(selectedSeries.id, calloutIndex, text || null).ok}
+              />
             </Field>
           )}
           {scales && <ErrorBarFields controller={controller} series={selectedSeries} which="errorBars" idBase={idBase} />}

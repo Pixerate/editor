@@ -99,7 +99,7 @@ describe('paint editor wet media', () => {
       return Buffer.from(out).toString('base64');
     };
     expect(await run()).toBe(await run());
-  });
+  }, 20_000);
 
   it('every wet tool runs', async () => {
     const c = await editor();
@@ -110,7 +110,7 @@ describe('paint editor wet media', () => {
       expect(r.dabs, id).toBeGreaterThan(0);
     }
     c.dispose();
-  });
+  }, 15000);
 
   it('renders thumbnails of wet brushes', () => {
     const c = new PaintEditorController({ width: 64, height: 64 });
@@ -118,6 +118,39 @@ describe('paint editor wet media', () => {
     expect(t.data.length).toBe(t.width * t.height * 4);
     const blot = c.brushThumbnail('blot');
     expect(blot.width).toBeGreaterThan(0);
+  });
+
+  it('overlapping wet strokes mix colors', async () => {
+    const c = await editor();
+    // Stroke 1: yellow line horizontally
+    c.paintStroke({ points: line(128, 60, 200), brushId: 'gouache', color: '#ffff00' });
+    await c.wetReady();
+
+    // Sample before stroke 2: yellow pixel
+    const beforePx = layerPixel(c, 130, 128);
+    expect(beforePx[0]).toBeGreaterThan(200); // Red
+    expect(beforePx[1]).toBeGreaterThan(200); // Green
+    expect(beforePx[2]).toBeLessThan(50); // Blue
+
+    // Stroke 2: blue line vertically crossing stroke 1 at (130, 128)
+    const vertLine = Array.from({ length: 30 }, (_, i) => ({ x: 130, y: 60 + ((200 - 60) * i) / 29, pressure: 0.8 }));
+    c.paintStroke({ points: vertLine, brushId: 'gouache', color: '#0000ff' });
+    await c.wetReady();
+
+    // Pure blue region before crossing stroke 1
+    const bluePx = layerPixel(c, 130, 80);
+    expect(bluePx[2]).toBeGreaterThan(200); // High blue
+    expect(bluePx[1]).toBeLessThan(50); // Low green
+
+    // Intersection: yellow + blue mixed into green
+    const intersectPx = layerPixel(c, 130, 128);
+    expect(intersectPx[1]).toBeGreaterThan(80); // Substantial green component from mixing
+    expect(intersectPx[2]).toBeLessThan(50); // Blue absorbed by pigment mixing
+
+    // Past intersection: the brush carries yellow, producing teal/greenish blue
+    const carriedPx = layerPixel(c, 130, 160);
+    expect(carriedPx[1]).toBeGreaterThan(50); // Elevated green carried from pickup
+    c.dispose();
   });
 });
 

@@ -10,6 +10,12 @@
  * - `waterfall` draws the first series as running increases and decreases.
  * - `histogram` bins every value of the visible series; `box` draws one box and whiskers per series.
  * - `funnel` and `treemap` draw the first series, one bar or rectangle per category.
+ * - `slope` joins each category's value in the first series (before) to the second (after).
+ * - `likert` draws each category (a question) as one diverging bar of the series (answers,
+ *   most negative first), as shares of the question's total.
+ * - `parliament` draws the first series as seats in a hemicycle, one colour per category.
+ * - `sunburst` draws `tree` as rings from the centre out (or, without a tree, the first series
+ *   as one ring); a `treemap` with a `tree` nests each group's rectangles inside it.
  */
 export type ChartType =
 	| 'bar'
@@ -24,7 +30,11 @@ export type ChartType =
 	| 'histogram'
 	| 'box'
 	| 'funnel'
-	| 'treemap';
+	| 'treemap'
+	| 'slope'
+	| 'likert'
+	| 'parliament'
+	| 'sunburst';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -122,6 +132,45 @@ export interface ChartSeries {
 	errorBars?: ChartErrorBars;
 	/** Error bars along the numeric x axis (scatter charts with x values). */
 	xErrorBars?: ChartErrorBars;
+	/** A label pinned to each point that matters, one per category (null: none). Bar, line, area and scatter charts. */
+	callouts?: (string | null)[];
+}
+
+/**
+ * One node of a chart's hierarchy: a leaf with a `value`, or a group with `children` (whose
+ * value is the sum of its leaves). Sibling names are unique, so a path of names finds a node.
+ */
+export interface ChartTreeNode {
+	name: string;
+	/** Leaves only: 0 or more. */
+	value?: number;
+	children?: ChartTreeNode[];
+	/** CSS colour (default: the palette colour of its top-level group, lighter further in). */
+	color?: string;
+}
+
+/** Which axis a reference line or band is measured on: the value axis, the secondary value axis, or the numeric x axis of a scatter or bubble chart. */
+export type ChartReferenceAxis = 'y' | 'y2' | 'x';
+
+/** A line across the plot at one value: a target, a floor, an average. */
+export interface ChartReferenceLine {
+	value: number;
+	label?: string;
+	/** Default `y`. */
+	axis?: ChartReferenceAxis;
+	/** CSS colour (default: the theme's text colour). */
+	color?: string;
+}
+
+/** A band across the plot between two values: a target range. */
+export interface ChartReferenceBand {
+	from: number;
+	to: number;
+	label?: string;
+	/** Default `y`. */
+	axis?: ChartReferenceAxis;
+	/** CSS colour (default: the theme's text colour, faint). */
+	color?: string;
 }
 
 export interface ChartNumberFormat {
@@ -183,6 +232,8 @@ export type ChartStacking = 'none' | 'stacked' | 'percent';
 export type ChartOrientation = 'vertical' | 'horizontal';
 export type ChartCurve = 'linear' | 'smooth' | 'step';
 export type ChartRadarGraticule = 'polygon' | 'circle';
+export type ChartLikertNeutral = 'split' | 'separate';
+export type ChartLikertSort = 'none' | 'positive' | 'negative';
 /** Where bar labels go: `auto` puts them outside, or centred on stacked segments, and drops ones that do not fit. */
 export type ChartLabelPosition = 'auto' | 'inside' | 'outside' | 'center';
 
@@ -230,6 +281,37 @@ export interface ChartSpec {
 	radarTicks: number | null;
 	/** Radar: rings drawn as polygons through the spokes or as circles. */
 	radarGraticule: ChartRadarGraticule;
+	/** A source or footnote, written under the chart. */
+	note: string;
+	/**
+	 * The marks the chart is about; the rest are drawn muted. Each entry names a category
+	 * (label) or a series (name or id). A point stays bright when its category or its series
+	 * is named; whole lines and areas are muted only when another series is named.
+	 */
+	highlight: string[];
+	/** Targets, floors and averages across the plot (bar, line, area, scatter and bubble charts). */
+	referenceLines: ChartReferenceLine[];
+	/** Target ranges across the plot (bar, line, area, scatter and bubble charts). */
+	referenceBands: ChartReferenceBand[];
+	/** A one-series bar, line, area or scatter chart colours each category from the palette (and the legend lists categories). */
+	varyColors: boolean;
+	/** Likert, with an odd number of answers: the middle one straddles the centre line (`split`) or is drawn apart on the right (`separate`). */
+	likertNeutral: ChartLikertNeutral;
+	/** Likert: order the questions by agreement (`positive`), by disagreement (`negative`) or as given (`none`). */
+	likertSort: ChartLikertSort;
+	/** Parliament: the sweep of the hemicycle in degrees, 90–360. */
+	parliamentArc: number;
+	/** Parliament: seats needed for a majority, drawn as a line (`null`: half of the seats plus one). */
+	parliamentMajority: number | null;
+	/** Parliament: the caption under the seat total ("" writes "seats"). */
+	parliamentLabel: string;
+	/**
+	 * Grouped data (treemaps and sunbursts). When set it is the chart's data: the categories are
+	 * its top-level names and the first series holds their totals, so other types draw the totals.
+	 */
+	tree: ChartTreeNode[];
+	/** Sunburst: the caption under the total in the centre ("" for none). */
+	sunburstLabel: string;
 }
 
 /** What a click selects. */
@@ -299,6 +381,11 @@ export type ChartMarkRole =
 	| 'legend-swatch'
 	| 'legend-label'
 	| 'drag-readout'
+	| 'reference-line'
+	| 'reference-band'
+	| 'reference-label'
+	| 'callout'
+	| 'note'
 	| 'selection'
 	| 'empty';
 
@@ -385,7 +472,7 @@ export interface ChartValueScale {
 
 /** Something the layout had to leave out or shorten, as a sentence (for agents and screen readers). */
 export interface ChartWarning {
-	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback';
+	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback' | 'annotations-skipped' | 'highlight-unmatched';
 	message: string;
 }
 

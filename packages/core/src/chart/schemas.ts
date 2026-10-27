@@ -6,10 +6,13 @@ import {
 	CHART_CURVES,
 	CHART_LABEL_POSITIONS,
 	CHART_LEGEND_POSITIONS,
+	CHART_LIKERT_NEUTRALS,
+	CHART_LIKERT_SORTS,
 	CHART_MARKERS,
 	CHART_NUMBER_STYLES,
 	CHART_ORIENTATIONS,
 	CHART_RADAR_GRATICULES,
+	CHART_REFERENCE_AXES,
 	CHART_SERIES_TYPES,
 	CHART_STACKINGS,
 	CHART_TRENDLINE_TYPES,
@@ -75,6 +78,56 @@ export const TRENDLINE_PROPS: Record<string, JsonSchema> = {
 	color: { type: 'string', description: 'CSS colour (default: the series colour).' }
 };
 
+const REFERENCE_COMMON: Record<string, JsonSchema> = {
+	label: { type: 'string', description: 'Text written on it, e.g. "Target" (default none).' },
+	axis: {
+		type: 'string',
+		enum: [...CHART_REFERENCE_AXES],
+		description: 'Axis it is measured on: y (default) is the value axis, y2 the secondary value axis (needs a series there), x the numeric x axis of a scatter or bubble chart.'
+	},
+	color: { type: 'string', description: 'CSS colour (default: the text colour).' }
+};
+
+/** A reference line's fields; `value` is required when adding. */
+export const REFERENCE_LINE_PROPS: Record<string, JsonSchema> = {
+	value: { type: 'number', description: 'Where the line crosses its axis, in data units.' },
+	...REFERENCE_COMMON
+};
+
+/** A reference band's fields; `from` and `to` are required when adding. */
+export const REFERENCE_BAND_PROPS: Record<string, JsonSchema> = {
+	from: { type: 'number', description: 'One end of the band on its axis, in data units.' },
+	to: { type: 'number', description: 'The other end of the band, in data units (ends may come in either order).' },
+	...REFERENCE_COMMON
+};
+
+/** In a change, label, axis and color take null to remove them. */
+const REFERENCE_COMMON_PATCH: Record<string, JsonSchema> = {
+	label: { type: ['string', 'null'], description: 'Text written on it; null removes it.' },
+	axis: { type: ['string', 'null'], enum: [...CHART_REFERENCE_AXES, null], description: 'Axis it is measured on (y, y2 or x); null goes back to y.' },
+	color: { type: ['string', 'null'], description: 'CSS colour; null goes back to the text colour.' }
+};
+export const REFERENCE_LINE_PATCH: Record<string, JsonSchema> = { value: REFERENCE_LINE_PROPS.value, ...REFERENCE_COMMON_PATCH };
+export const REFERENCE_BAND_PATCH: Record<string, JsonSchema> = { from: REFERENCE_BAND_PROPS.from, to: REFERENCE_BAND_PROPS.to, ...REFERENCE_COMMON_PATCH };
+
+export const REFERENCE_INDEX = (what: string): JsonSchema => ({ type: 'integer', minimum: 0, description: `${what} index (0 = first), as get_chart lists them in spec.${what === 'Reference line' ? 'referenceLines' : 'referenceBands'}.` });
+
+/** A tree node, recursive through `#/$defs/chartTreeNode` (tool schemas that use it carry `TREE_DEFS`). */
+export const TREE_NODE: JsonSchema = {
+	type: 'object',
+	description: 'An item ({"name", "value"}) or a group ({"name", "children": [nodes]}, whose value is the sum of its items).',
+	properties: {
+		name: { type: 'string', description: 'Label; unique among its siblings.' },
+		value: { type: 'number', minimum: 0, description: 'Items only: the amount, 0 or more.' },
+		children: { type: 'array', items: { $ref: '#/$defs/chartTreeNode' }, description: 'Groups only: the nodes inside it (up to 6 levels in all).' },
+		color: { type: 'string', description: 'CSS colour (default: the palette colour of its top-level group, lighter further in).' }
+	},
+	required: ['name'],
+	additionalProperties: false
+};
+export const TREE_DEFS = { chartTreeNode: TREE_NODE };
+export const TREE_PATH: JsonSchema = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Names from the top level down to the node, e.g. ["Europe", "France"] (from get_chart treeTable or spec.tree).' };
+
 export const ERROR_BARS = (what: string): JsonSchema => ({
 	type: ['object', 'null'],
 	description: `${what} null removes them.`,
@@ -104,6 +157,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 	x: { type: ['array', 'null'], items: VALUE, description: 'Numeric x per category, for scatter and bubble charts.' },
 	sizes: { type: ['array', 'null'], items: VALUE, description: 'Bubble sizes per category (area is proportional to size).' },
 	pointColors: { type: ['array', 'null'], items: { type: ['string', 'null'] }, description: 'Colour per category (null keeps the series colour).' },
+	callouts: { type: ['array', 'null'], items: { type: ['string', 'null'] }, description: 'A label pinned to each point that matters, one per category (null: none); null removes them all. Bar, line, area and scatter charts. set_chart_callout sets one.' },
 	marker: { type: ['string', 'null'], enum: [...CHART_MARKERS, null], description: 'Point marker shape for line, area and scatter series.' },
 	curve: { type: ['string', 'null'], enum: [...CHART_CURVES, null], description: 'Line shape for this series: linear, smooth or step.' },
 	dataLabels: { type: ['boolean', 'null'], description: 'Value labels for this series (null follows the chart).' },
@@ -114,7 +168,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type.' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups.' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -139,5 +193,16 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				bins: { type: ['integer', 'null'], minimum: 1, maximum: 500, description: 'Histogram bin count, or null for √n.' },
 				showTotal: { type: 'boolean', description: 'Waterfall: append a total bar.' },
 				radarTicks: { type: ['integer', 'null'], minimum: 1, maximum: 50, description: 'Radar: number of evenly spaced rings from the value axis min to max, or null for round-number rings (default null).' },
-				radarGraticule: { type: 'string', enum: [...CHART_RADAR_GRATICULES], description: 'Radar: draw rings as polygons through the spokes or as circles (default polygon).' }
+				radarGraticule: { type: 'string', enum: [...CHART_RADAR_GRATICULES], description: 'Radar: draw rings as polygons through the spokes or as circles (default polygon).' },
+				note: { type: 'string', description: 'A source or footnote written under the chart ("" for none).' },
+				highlight: { type: 'array', items: { type: 'string' }, description: 'Category labels and series names (or ids) to draw normally while the rest are muted; [] shows everything. highlight_chart checks the names.' },
+				referenceLines: { type: 'array', items: { type: 'object', properties: REFERENCE_LINE_PROPS, required: ['value'], additionalProperties: false }, description: 'Replaces every reference line (targets, floors, averages across the plot). add_chart_reference_line adds one.' },
+				referenceBands: { type: 'array', items: { type: 'object', properties: REFERENCE_BAND_PROPS, required: ['from', 'to'], additionalProperties: false }, description: 'Replaces every reference band (target ranges across the plot). add_chart_reference_band adds one.' },
+				varyColors: { type: 'boolean', description: 'A one-series bar, line, area or scatter chart colours each category from the palette, and its legend lists the categories (default false).' },
+				likertNeutral: { type: 'string', enum: [...CHART_LIKERT_NEUTRALS], description: 'Likert with an odd number of answers: split (default) puts the middle answer across the centre line; separate draws it in its own column on the right.' },
+				likertSort: { type: 'string', enum: [...CHART_LIKERT_SORTS], description: 'Likert: order the questions by agreement (positive), by disagreement (negative) or as given (none, default).' },
+				parliamentArc: { type: 'number', minimum: 90, maximum: 360, description: 'Parliament: sweep of the hemicycle in degrees (default 180).' },
+				parliamentMajority: { type: ['integer', 'null'], minimum: 1, description: 'Parliament: seats needed for a majority, drawn as a dashed line (null: half of the seats plus one).' },
+				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' },
+				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' }
 			};

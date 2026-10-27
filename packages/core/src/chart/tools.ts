@@ -27,15 +27,35 @@ import {
 	CHART_STACKINGS,
 	CHART_TRENDLINE_TYPES,
 	CHART_TYPES,
-	chartColorsByCategory,
+	chartSpecColorsByCategory,
 	chartDataToTable,
 	chartSeriesColor,
 	chartSliceColor
 } from './spec.js';
-import { AXIS, CATEGORY_REF, CHART_UPDATE_PROPERTIES, FORMAT, HEIGHT, SERIES_PROPS, SERIES_REF, TRENDLINE_PROPS, VALUE, WIDTH } from './schemas.js';
+import {
+	AXIS,
+	CATEGORY_REF,
+	CHART_UPDATE_PROPERTIES,
+	FORMAT,
+	HEIGHT,
+	REFERENCE_BAND_PATCH,
+	REFERENCE_BAND_PROPS,
+	REFERENCE_INDEX,
+	REFERENCE_LINE_PATCH,
+	REFERENCE_LINE_PROPS,
+	SERIES_PROPS,
+	SERIES_REF,
+	TREE_DEFS,
+	TREE_NODE,
+	TREE_PATH,
+	TRENDLINE_PROPS,
+	VALUE,
+	WIDTH
+} from './schemas.js';
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
-import type { ChartSelection, ChartTrendline } from './types.js';
+import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
+import type { ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
 
@@ -94,7 +114,7 @@ function resolve<T>(result: { ok: boolean; message?: string } & T): T {
  * Agent tools for a chart editor, for a `ToolRegistry`: one tool per operation with strict
  * schemas. Reads (`get_chart`, `render_chart`, `check_chart_colors`, `recommend_chart`,
  * `get_chart_trendline`, `list_chart_presets`, `export_chart_mermaid`, `export_chart_ooxml`)
- * are always there; writes (data, series, categories, presentation, trendlines, presets,
+ * are always there; writes (data, series, categories, presentation, trendlines, reference lines and bands, callouts, highlight, presets,
  * imports, selection, pointer and key input, undo / redo) are hidden while the chart is
  * read-only. Every write is one undo step and returns what it changed.
  */
@@ -119,13 +139,20 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		return index;
 	};
 	const table = () => chartDataToTable(spec());
+	/** Grouped data as rows: the path of names to each item, then its value. */
+	const treeTable = () => {
+		const rows = chartTreeToRows(spec().tree);
+		const depth = chartTreeDepth(spec().tree);
+		return [[...Array.from({ length: depth }, (_, k) => (k === 0 ? 'Group' : k === depth - 1 ? 'Item' : `Level ${k + 1}`)), 'Value'], ...rows.map((r) => [...r.path, ...Array(depth - r.path.length).fill(''), r.value])];
+	};
+	const treeSummary = () => ({ tree: spec().tree, groups: spec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })), depth: chartTreeDepth(spec().tree) });
 	const Parser = (): ParserCtor | undefined => options.DOMParser ?? (globalThis as { DOMParser?: ParserCtor }).DOMParser;
 
 	const getChart: AgentTool = {
 		name: 'get_chart',
 		title: 'Read the chart',
 		description:
-			'Returns the chart spec (type, titles, axes, legend, series with ids and settings), its data as a table (header row of series names, then one row per category), the current selection, and a summary at the given size: per-series min / max / mean / trend, the axes as drawn, layout warnings (hidden labels, thinned lines), a colour check and a plain-language description. Use the series ids and category indexes it returns with the write tools.',
+			'Returns the chart spec (type, titles, axes, legend, series with ids and settings), its data as a table (header row of series names, then one row per category), grouped data as treeTable (path of names to each item, then its value) when the chart has a tree, the current selection, and a summary at the given size: per-series min / max / mean / trend, the axes as drawn, layout warnings (hidden labels, thinned lines), a colour check and a plain-language description. Use the series ids and category indexes it returns with the write tools.',
 		inputSchema: { type: 'object', properties: { width: WIDTH, height: HEIGHT }, additionalProperties: false },
 		annotations: { title: 'Read the chart', ...READ },
 		handler: ({ width = size.width, height = size.height }) => {
@@ -135,6 +162,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				table: table(),
 				selection: controller.getState().selection,
 				summary: summarizeChart(controller.toJSON(), { width, height }),
+				...(spec().tree.length ? { treeTable: treeTable() } : {}),
 				issues: controller.getState().issues,
 				...(reason ? { readOnly: reason } : {})
 			};
@@ -181,7 +209,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'check_chart_colors',
 		title: 'Check chart colours',
 		description:
-			'Checks that colours can be told apart with normal vision and with protanopia, deuteranopia and tritanopia (OKLab distance after simulation), and that they stand out from the background. Checks the chart\'s own series (or slice) colours unless colours are given. Returns the closest pair per vision, contrast ratios and problems as sentences.',
+			'Checks whether the chart\'s colours are accessible: that colour-blind readers can tell them apart (protanopia, deuteranopia and tritanopia, by OKLab distance after simulation) as well as people with normal vision, and that they stand out from the background. Checks the chart\'s own series (or slice) colours unless colours are given. Returns the closest pair per vision, contrast ratios and problems as sentences.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -194,7 +222,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		handler: ({ colors, surface }) => {
 			const s = spec();
 			const visible = s.series.filter((x) => !x.hidden);
-			const own = chartColorsByCategory(s.type) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
+			const own = chartSpecColorsByCategory(s) ? s.categories.map((_, i) => visible[0]?.pointColors?.[i] || chartSliceColor(s, i)) : visible.map((x) => chartSeriesColor(s, s.series.indexOf(x)));
 			return { colors: colors ?? own, ...checkChartColors(colors ?? own, { surface }) };
 		}
 	};
@@ -273,7 +301,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'update_chart',
 		title: 'Change chart presentation',
 		description:
-			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule). All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
+			'Changes how the chart looks, as one undo step: type, titles, axes (xAxis = categories or numeric x, yAxis = values, yAxis2 = secondary values; each can be reversed, and value axes can be logarithmic with scale "log"), legend, stacking, orientation, curve, points, data labels and their position, palette, donut hole, bar spacing, histogram bins, waterfall total, radar rings (radarTicks) and grid shape (radarGraticule), note, highlight, reference lines and bands (whole lists), and varyColors. All-or-nothing: invalid values change nothing and come back as sentences. Returns the new spec.',
 		inputSchema: {
 			type: 'object',
 			properties: CHART_UPDATE_PROPERTIES,
@@ -404,7 +432,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		},
 		annotations: { title: 'Add a category', ...WRITE },
 		handler: ({ label, at }) => {
-			const result = controller.addCategory(label, { at });
+			const result = resolve(controller.addCategory(label, { at })) as { index: number };
 			return { index: result.index, categories: spec().categories };
 		}
 	};
@@ -510,6 +538,183 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			const s = seriesById(series);
 			resolve(controller.removeTrendline(s.id, index));
 			return { series: s.id, trendlines: controller.getSeries(s.id)?.trendlines ?? [] };
+		}
+	};
+
+	const referenceTools = (what: 'line' | 'band') => {
+		const Kind = what === 'line' ? 'Reference line' : 'Reference band';
+		const list = (): readonly (ChartReferenceLine | ChartReferenceBand)[] => (what === 'line' ? spec().referenceLines : spec().referenceBands);
+		const listKey = what === 'line' ? 'referenceLines' : 'referenceBands';
+		const add: AgentTool = {
+			name: `add_chart_reference_${what}`,
+			title: `Add a reference ${what}`,
+			description:
+				what === 'line'
+					? 'Draws a dashed line across the plot at one value: a target, a floor, an average (bar, line, area, scatter and bubble charts). The axis grows to keep it in view. Returns its index and the reference lines.'
+					: 'Shades a band across the plot between two values: a target or normal range (bar, line, area, scatter and bubble charts), drawn under the data. The axis grows to keep it in view. Returns its index and the reference bands.',
+			inputSchema: { type: 'object', properties: what === 'line' ? REFERENCE_LINE_PROPS : REFERENCE_BAND_PROPS, required: what === 'line' ? ['value'] : ['from', 'to'], additionalProperties: false },
+			annotations: { title: `Add a reference ${what}`, ...WRITE },
+			handler: (args) => {
+				const result = resolve(what === 'line' ? controller.addReferenceLine(args as ChartReferenceLine) : controller.addReferenceBand(args as ChartReferenceBand)) as { index: number };
+				return { index: result.index, [listKey]: list() };
+			}
+		};
+		const update: AgentTool = {
+			name: `update_chart_reference_${what}`,
+			title: `Change a reference ${what}`,
+			description: `Changes a reference ${what} by index (all-or-nothing); label, axis and color take null to remove them. Returns the ${what} as stored.`,
+			inputSchema: { type: 'object', properties: { index: REFERENCE_INDEX(Kind), ...(what === 'line' ? REFERENCE_LINE_PATCH : REFERENCE_BAND_PATCH) }, required: ['index'], additionalProperties: false },
+			annotations: { title: `Change a reference ${what}`, ...WRITE_IDEMPOTENT },
+			handler: ({ index, ...patch }) => {
+				if (!Object.keys(patch).length) fail(`Nothing to change: pass at least one field besides index, e.g. {"index": ${index}, "label": "Target"}.`);
+				resolve(what === 'line' ? controller.updateReferenceLine(index, patch) : controller.updateReferenceBand(index, patch));
+				return { index, [`reference${what === 'line' ? 'Line' : 'Band'}`]: list()[index] };
+			}
+		};
+		const remove: AgentTool = {
+			name: `remove_chart_reference_${what}`,
+			title: `Delete a reference ${what}`,
+			description: `Deletes a reference ${what} by index; the ones after it move up one. Returns the reference ${what}s left.`,
+			inputSchema: { type: 'object', properties: { index: REFERENCE_INDEX(Kind) }, required: ['index'], additionalProperties: false },
+			annotations: { title: `Delete a reference ${what}`, ...DESTRUCTIVE },
+			handler: ({ index }) => {
+				resolve(what === 'line' ? controller.removeReferenceLine(index) : controller.removeReferenceBand(index));
+				return { [listKey]: list() };
+			}
+		};
+		return [add, update, remove];
+	};
+	const [addReferenceLine, updateReferenceLine, removeReferenceLine] = referenceTools('line');
+	const [addReferenceBand, updateReferenceBand, removeReferenceBand] = referenceTools('band');
+
+	const setCallout: AgentTool = {
+		name: 'set_chart_callout',
+		title: 'Pin a label to a point',
+		description:
+			'Pins a short label to one bar or point, with a leader line, to say why it matters ("Record quarter", "Launch"); label null or "" removes it. Bar, line, area, scatter and bubble charts; the point must have a value. Selects the point and returns the series id, category index and label.',
+		inputSchema: {
+			type: 'object',
+			properties: { series: SERIES_REF, category: CATEGORY_REF, label: { type: ['string', 'null'], description: 'The label (keep it to a few words), or null to remove it.' } },
+			required: ['series', 'category', 'label'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Pin a label to a point', ...WRITE_IDEMPOTENT },
+		handler: ({ series, category, label }) => {
+			const s = seriesById(series);
+			const index = categoryIndex(category);
+			resolve(controller.setCallout(s.id, index, label));
+			return { series: s.id, index, category: spec().categories[index], label: controller.getSeries(s.id)?.callouts?.[index] ?? null };
+		}
+	};
+
+	const highlight: AgentTool = {
+		name: 'highlight_chart',
+		title: 'Highlight categories or series',
+		description:
+			'Draws the named categories (labels) and series (names or ids) normally and mutes the rest, to draw attention to the marks the chart is about; [] shows everything again. A point stays bright when its category or its series is named. Unknown names change nothing and are reported. Returns the category indexes and series ids that matched.',
+		inputSchema: {
+			type: 'object',
+			properties: { names: { type: 'array', items: { type: 'string' }, description: 'Category labels and / or series names or ids, exactly as get_chart shows them. [] clears the highlight.' } },
+			required: ['names'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Highlight categories or series', ...WRITE_IDEMPOTENT },
+		handler: ({ names }) => {
+			const result = resolve(controller.setHighlight(names)) as { categories: number[]; series: string[] };
+			const s = spec();
+			return { highlight: s.highlight, categories: result.categories.map((index) => ({ index, label: s.categories[index] })), series: result.series.map((id) => ({ id, name: s.series.find((x) => x.id === id)!.name })) };
+		}
+	};
+
+	const setTree: AgentTool = {
+		name: 'set_chart_tree',
+		title: 'Replace grouped data',
+		description:
+			'Replaces the chart\'s data with groups of items (a tree) for treemaps and sunbursts, as one undo step: items {"name", "value"} and groups {"name", "children"}, up to 6 levels, names unique among siblings. The top-level groups become the categories and their totals the first series, so other chart types draw the totals. [] goes back to plain data (the totals stay as values). Returns the tree, each group\'s total and the depth.',
+		inputSchema: { type: 'object', properties: { tree: { type: 'array', items: { $ref: '#/$defs/chartTreeNode' }, description: 'The top-level nodes; [] removes the grouping.' } }, required: ['tree'], additionalProperties: false, $defs: TREE_DEFS },
+		annotations: { title: 'Replace grouped data', ...WRITE_IDEMPOTENT },
+		handler: ({ tree }) => {
+			resolve(controller.setTree(tree));
+			return treeSummary();
+		}
+	};
+
+	const importTreeCsv: AgentTool = {
+		name: 'import_chart_tree_csv',
+		title: 'Import grouped data from CSV',
+		description:
+			'Replaces the data with grouped data from CSV or TSV: every column but the last holds names (group, subgroup, …, item), the last holds the value. A blank group name repeats the one above, as spreadsheets lay out groups. One undo step. Returns the tree, group totals and depth.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				csv: { type: 'string', description: 'CSV or TSV text, e.g. "Region,Country,Customers\\nEurope,France,40\\n,Spain,25".' },
+				header: { type: ['boolean', 'string'], enum: [true, false, 'auto'], description: 'The first row holds column names (default auto: when its last cell is not a number).' }
+			},
+			required: ['csv'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Import grouped data from CSV', ...WRITE },
+		handler: ({ csv, header }) => {
+			resolve(controller.importTreeTable(parseCsv(csv, { delimiter: csv.includes('\t') ? '\t' : ',' }), { header }));
+			return treeSummary();
+		}
+	};
+
+	const addTreeNode: AgentTool = {
+		name: 'add_chart_tree_node',
+		title: 'Add an item or group',
+		description: 'Adds an item or a group (with children) under a group of the grouped data, or at the top level. Returns its path and its parent\'s new total.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				parent: { type: 'array', items: { type: 'string' }, description: 'Path of the group to add to; [] or omitted for the top level.' },
+				node: { $ref: '#/$defs/chartTreeNode', description: 'The item ({"name", "value"}) or group ({"name", "children"}) to add.' },
+				at: { type: 'integer', minimum: 0, description: 'Position among its siblings (default: the end).' }
+			},
+			required: ['node'],
+			additionalProperties: false,
+			$defs: TREE_DEFS
+		},
+		annotations: { title: 'Add an item or group', ...WRITE },
+		handler: ({ parent = [], node, at }) => {
+			const result = resolve(controller.addTreeNode(parent, node, { at })) as { path: string[] };
+			const group = parent.length ? findChartTreeNode(spec().tree, parent) : null;
+			return { path: result.path, parentTotal: group ? chartTreeTotal(group) : spec().tree.reduce((t, n) => t + chartTreeTotal(n), 0) };
+		}
+	};
+
+	const updateTreeNode: AgentTool = {
+		name: 'update_chart_tree_node',
+		title: 'Change an item or group',
+		description: 'Renames a node, sets an item\'s value, or sets a node\'s colour (null goes back to the palette). Groups have no value of their own. Returns the node\'s path (new if renamed) and the node.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				path: TREE_PATH,
+				name: { type: 'string', description: 'New name (unique among its siblings).' },
+				value: { type: 'number', minimum: 0, description: 'Items only: the new amount.' },
+				color: { type: ['string', 'null'], description: 'CSS colour, or null for the palette colour.' }
+			},
+			required: ['path'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Change an item or group', ...WRITE_IDEMPOTENT },
+		handler: ({ path, ...patch }) => {
+			if (!Object.keys(patch).length) fail('Nothing to change: pass name, value or color with the path.');
+			const result = resolve(controller.updateTreeNode(path, patch)) as { path: string[] };
+			return { path: result.path, node: findChartTreeNode(spec().tree, result.path) };
+		}
+	};
+
+	const removeTreeNode: AgentTool = {
+		name: 'remove_chart_tree_node',
+		title: 'Delete an item or group',
+		description: 'Deletes a node of the grouped data with everything under it (a group left empty becomes an item with value 0). Returns the group totals left.',
+		inputSchema: { type: 'object', properties: { path: TREE_PATH }, required: ['path'], additionalProperties: false },
+		annotations: { title: 'Delete an item or group', ...DESTRUCTIVE },
+		handler: ({ path }) => {
+			resolve(controller.removeTreeNode(path));
+			return { groups: treeSummary().groups };
 		}
 	};
 
@@ -688,13 +893,46 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 	};
 
 	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, listPresets, exportMermaid, exportOoxml];
-	const writes = [updateChart, setData, setValues, addSeries, updateSeries, removeSeries, addCategory, removeCategory, importCsv, importMermaid, addTrendline, removeTrendline, applyPreset, transpose, select, drag, key, undo, redo];
+	const writes = [
+		updateChart,
+		setData,
+		setValues,
+		addSeries,
+		updateSeries,
+		removeSeries,
+		addCategory,
+		removeCategory,
+		importCsv,
+		importMermaid,
+		addTrendline,
+		removeTrendline,
+		addReferenceLine,
+		updateReferenceLine,
+		removeReferenceLine,
+		addReferenceBand,
+		updateReferenceBand,
+		removeReferenceBand,
+		setCallout,
+		highlight,
+		setTree,
+		importTreeCsv,
+		addTreeNode,
+		updateTreeNode,
+		removeTreeNode,
+		applyPreset,
+		transpose,
+		select,
+		drag,
+		key,
+		undo,
+		redo
+	];
 
 	return withChartPlayback({
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
-		description: 'One chart: its spec, data and values, series and categories, trendlines and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
 		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;
