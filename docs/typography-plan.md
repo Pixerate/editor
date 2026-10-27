@@ -1,262 +1,174 @@
-# Shared typography module and font management: implementation plan
+# Shared typography module and font management
 
-Status: **draft / not started.** This plan covers the architectural design and step-by-step implementation of a centralized, DOM-free typography engine in `@pixerate/editor/typography`, with React and Svelte UI controls, agent tools, cross-domain integration, and parity across all editors (including the recently merged dedicated effect authoring editor).
+Status: **phases 1–5 and 7 built; phase 6 built for effects, the rest is follow-up work** (see
+[What is left](#what-is-left)). This document started as the implementation plan for a
+centralized, DOM-free typography engine in `@pixerate/editor/typography`; it now records what
+was built, where it differs from the plan and why.
 
 ---
 
 ## Why
 
-Typography is currently fragmented across the repository in isolated, uneven silos:
+Typography was fragmented across the editors:
 
-1. **Unequal capabilities & asymmetric font introspection**:
-   - The **vector editor** is the only surface with font shaper queries (`vector.listFonts`), full OpenType/DTP metrics (`fontSize`, `tracking`, `leading`, `baselineShift`), inline UTF-16 style runs, overflow tracking, and vector outline conversion (`vector.createOutlines`).
-   - The **video editor** supports title clips with only flat, crude font properties (`fontSize`, `fontFamily`, `fontWeight`, `color`, `background`)—lacking tracking, leading, styled text runs, and title-safe wrapping/overflow checks.
-   - The **canvas editor** treats text as an opaque property on component instances or node labels (`data.label`), with no font discovery, styling commands, or hierarchy tokens.
-   - The **chart editor** treats text solely as plain strings for titles and axis labels without font scaling, truncation, or minimum legibility rules.
-   - The **rich text editor** depends entirely on browser DOM/CSS inheritance and cannot inspect visual line bounds, character measures, or text overflow.
-   - The newly merged **effects authoring editor** (`@pixerate/editor/effects`, PR #326) and effect parameter system handle shaders and motion generators, including `title` effects (`use: 'title'`), but represent text controls merely as unconstrained strings (`{ type: 'text', default: '', maxLength }`), lacking font family pickers, weights, or scale tokens.
+- The **vector editor** is the only surface with font shaper queries (`vector.listFonts`), full
+  metrics (size, tracking, leading, baseline shift), styled runs and outline conversion.
+- The **video editor**'s title clips have flat font properties (`fontSize`, `fontFamily`,
+  `fontWeight`, `color`, `background`) without tracking, leading or title-safe checks.
+- The **canvas** and **chart** editors treat text as plain strings, with no font discovery,
+  hierarchy tokens or minimum legible sizes.
+- The **rich text editor** relies on DOM/CSS inheritance.
+- **Effect authoring** (`@pixerate/editor/effects`) exposed text controls as unconstrained strings,
+  with no font selector for `title` effects.
+- [`pixerate-color`](../packages/core/src/color) checks WCAG contrast but had to be told whether
+  text is "large"; nothing checked measure or line spacing.
+- The **animation editor** had to convert text to outlines before splitting it into letters or words.
 
-2. **Typography & accessibility disconnect**:
-   - [`pixerate-color`](../packages/core/src/color) audits WCAG 2 contrast (`check_color_contrast`) and provides OKLCH lightness suggestions. However, real-world legibility depends simultaneously on **contrast, font size, and font weight** (e.g., WCAG 2 large-text thresholds: $\ge 18\text{pt} / 24\text{px}$ or $14\text{pt} / 18.5\text{px}$ bold).
-   - Currently, color tools must be manually instructed whether text is "large". There are no automated tools to check whether typography complies with WCAG 1.4.12 (text spacing: 1.5× line height, letter spacing $\ge 0.12\text{em}$, word spacing $\ge 0.16\text{em}$) or whether line measures fall within comfortable reading ranges (45–75 characters per line).
+## Architecture (the colour blueprint)
 
-3. **Motion and animation hurdles**:
-   - The **animation editor** requires converting text into vector outlines (`vector.createOutlines`) before calling `get_text_layout` to split words and letters for staggered animations (`cascade`). A host-agnostic text segmenter would allow live text in video titles, animation shots, and canvas nodes to be animated without destructive outline conversion.
-
----
-
-## Validation against the latest codebase (including Effects Editor)
-
-The repository recently merged general-purpose effect authoring (`@pixerate/editor/effects`, PR #326), introducing:
-- `EffectAuthoringEditor` in React and Svelte.
-- `EffectAuthoringSession` in core (`packages/core/src/effects/authoring.ts`).
-- Effect authoring agent tools (`pixerate-effect-authoring` skill).
-- Control descriptors via `createEffectControlDescriptors` in `ui.ts` (`enum`, `color`, `vector2..4`, `text`).
-- Dedicated support for `title` effects (`use: 'title'`) and `overlay` effects (`use: 'overlay'`).
-
-### How this plan integrates with the effects editor:
-1. **Semantic font controls for effects**: Extend effect parameter schemas and `createEffectControlDescriptors` to recognize semantic typography controls (`format: "font"` or `type: "font"`). Shaders and procedural title generators in effect authoring can now expose rich font selectors rather than raw text strings.
-2. **Deterministic previewing & font preloading**: Effect authoring preview renders into WebGL / 2D canvases via `EffectRendererPool`. When rendering `title` effects, font metrics and web font loading states must be resolved before rasterizing preview frames to prevent Flash of Unstyled Text (FOUT) or black fallback frames.
-3. **Pluggable shaper & runtime isolation**: In accordance with `AGENTS.md` and `tests/entry-isolation.test.ts`, `@pixerate/editor/typography` must remain **100% dependency-free in core**. It must not import DOM APIs, Node canvas, or heavy binary font engines directly. The core module defines pure mathematical models, token scales, fallback chains, and pluggable font shaper/provider interfaces (`FontProvider`), mirroring how `@pixerate/editor/effects` defines `EffectProvider` without bundling Flair.
-
----
-
-## Architectural Principles (The "Color" Blueprint)
-
-Following the proven architecture of [`pixerate-color`](../packages/core/src/color/):
+Built exactly on the [`pixerate-color`](../packages/core/src/color) pattern:
 
 ```
-packages/core/src/
-├── color/       # DOM-free: spaces, contrast, harmonies, palettes, gradients
-└── typography/  # DOM-free: font tokens, modular scales, measure audits, text segmentation
+packages/core/src/typography/      DOM-free, no third-party imports (entry-isolation tested)
+  types.ts        FontSpec, FontWeight, FontCategory, scale and audit result types, labels
+  weight.ts       normalizeFontWeight, nearestFontWeight (CSS font-matching order), isFontWeight
+  scale.ts        modular ratios, computeTypeScale, generateTypeHierarchy, typeHierarchyToCss,
+                  computeFluidSize, recommendedLineHeight / recommendedLetterSpacing
+  metrics.ts      auditTextReadability, estimateCharactersPerLine
+  stack.ts        FONT_STACKS, parseFontFamily, quoteFontFamily, formatFontFamily, resolveFontFallback
+  segment.ts      segmentText (grapheme / word / sentence / line), graphemes, countGraphemes
+  accessibility.ts isLargeText, checkTypographyAccessibility (uses color/contrast + color/suggest)
+  registry.ts     FontSummary, FontProvider, filterFonts, findFont, combineFontProviders, ensureFontsLoaded
+  catalog.ts      SYSTEM_FONT_CATALOG, guessFontCategory, createCatalogFontProvider,
+                  createSystemFontProvider, createWebFontProvider, fontFaceCss, webFontSummary
+  picker.ts       FontPickerModel, createFontPicker, offeredWeights
+  tools.ts        createTypographyToolProvider, createFontPickerToolProvider
 ```
 
-1. **Pure logic & DOM-free core**: No DOM access, no ProseMirror, no TipTap, and no framework dependencies in `packages/core/src/typography`.
-2. **Strict separation of concerns**:
-   - **Centralized**: Token definitions (`FontSpec`), modular scale generation, line-length/measure audits, readability rules, text segmentation (`Intl.Segmenter`), font stack fallbacks, and agent inspection tools.
-   - **Decentralized (editor-specific)**: Document ASTs (ProseMirror tree vs. Vector Bezier shapes vs. Video tracks vs. Mermaid strings) and runtime renderers (Canvas2D vs. HarfBuzz vs. DOM layout).
-3. **Cross-framework parity**: React (`@pixerate/editor-react`) and Svelte (`@pixerate/editor-svelte`) both provide identical headless bindings and UI components (`FontPicker`, `TypographyControls`).
-4. **Agent tools as first-class citizens**: All capabilities are exposed via `createTypographyToolProvider`, covered by the `pixerate-typography` skill, and validated in `tests/agent-skills.test.ts` and `tests/command-tools.test.ts`.
+| Core | React | Svelte |
+| --- | --- | --- |
+| `@pixerate/editor/typography` | `@pixerate/editor-react/typography` | `@pixerate/editor-svelte/typography` |
+| `FontPickerModel` | `useFontPicker`, `<FontPicker>`, `<TypographyControl>` | `fontPickerOf`, `<FontPicker>`, `<TypographyControl>` |
 
----
+Each package has a `./typography` export, a build entry, and an entry-isolation test row;
+`pnpm check:packages` type-checks and imports the new subpaths (it reads `exports`, so no script
+change was needed). The React and Svelte entries re-export the core module, like `/color`.
 
-## Phased Implementation Plan
+## What was built
 
-### Phase 1: Core Typography Types, Scales & Math (`packages/core/src/typography`)
+### Phase 1: types, scales, measure, stacks, segmentation, accessibility
 
-Create `packages/core/src/typography/`:
+- **Types.** `FontSpec { family, weight?, style?, size (px), lineHeight? (unitless), letterSpacing? (em), category? }`.
+- **Scales.** The eight named ratios (`minor-second` 1.067 … `golden-ratio` 1.618) or a custom
+  ratio above 1 and at most 4. Each step carries a recommended line-height (1.5 up to 16px, easing
+  to 1.1 at 64px) and tracking (+0.01em below 14px, down to −0.03em at 64px and above).
+  `generateTypeHierarchy` names steps −2…5 `caption`, `body-sm`, `body`, `h4`, `h3`, `h2`, `h1`,
+  `display`; `typeHierarchyToCss` writes `--<prefix>-<name>-size` (rem), `-line-height` and
+  `-letter-spacing` custom properties.
+- **Fluid sizes.** `computeFluidSize` returns `clamp(min, slope·vw ± intercept, max)` with rem
+  bounds, plus `slope`, `intercept` and `evaluateAt(viewport)`; shrinking type keeps the clamp
+  bounds ordered.
+- **Readability.** `auditTextReadability(text, { size, lineHeight, letterSpacing, width, category })`
+  measures characters per line from the text's own lines, or estimates it from a column `width`
+  and `size` (average glyph advance per category). It reports line spacing against 1.5, all-caps
+  runs, tiny sizes, very tight tracking, word count and reading time (238 wpm), with an `issues` list.
+- **Stacks.** `FONT_STACKS` has the plan's six stacks plus `handwriting` and `display`.
+  `parseFontFamily` handles quotes, escapes and commas inside quotes; `resolveFontFallback` appends
+  the category's stack, drops duplicates, and leaves a stack that already ends in a generic family alone.
+- **Segmentation.** `segmentText(text, granularity, { locale, wordsOnly, maxCharacters })` with
+  UTF-16 `start` / `end` offsets, using `Intl.Segmenter` with a regex fallback.
+- **Accessibility.** `checkTypographyAccessibility({ font, foreground, background })` decides large
+  text (24px, or 18.67px at weight 700+), reports the ratio, level and required ratios, flags tiny
+  and thin type, and suggests a passing foreground.
 
-#### 1.1 Types (`types.ts`)
-```ts
-export type FontWeight = 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 'normal' | 'bold';
-export type FontStyle = 'normal' | 'italic' | 'oblique';
-export type FontCategory = 'sans-serif' | 'serif' | 'monospace' | 'display' | 'handwriting';
+### Phase 2: pluggable providers and catalog
 
-/** Normalized specification for a typographic style. */
-export interface FontSpec {
-	family: string;
-	weight?: FontWeight;
-	style?: FontStyle;
-	size: number;              // in px (or pt where indicated)
-	lineHeight?: number;       // unitless multiplier (e.g. 1.5) or px
-	letterSpacing?: number;    // tracking in em or px
-	category?: FontCategory;
-}
+- `FontProvider { id, listFonts(), hasFont(), loadFont?() }` and `FontSummary` as planned, plus
+  `platforms` on summaries, `filterFonts`, `combineFontProviders` (merge by family, first wins)
+  and `ensureFontsLoaded` (load every face a set of specs needs, once each).
+- `SYSTEM_FONT_CATALOG`: metadata for 63 common system fonts on macOS, Windows, iOS, Android and
+  Linux; no font files.
+- `createSystemFontProvider({ platform?, catalog?, queryLocalFonts? })` and
+  `createWebFontProvider({ fonts, fontFaceSet?, createFontFace? })`; see deviations.
 
-/** Predefined modular scale ratios. */
-export type ModularScaleRatio =
-	| 'minor-second'    // 1.067
-	| 'major-second'    // 1.125
-	| 'minor-third'     // 1.200
-	| 'major-third'     // 1.250
-	| 'perfect-fourth'  // 1.333
-	| 'augmented-fourth'// 1.414
-	| 'perfect-fifth'   // 1.500
-	| 'golden-ratio';   // 1.618
+### Phase 3: agent tools and skill
 
-export interface TypeScaleStep {
-	name: string;           // e.g. "caption", "body", "h4", "h3", "h2", "h1", "display"
-	step: number;           // integer exponent from base 0
-	size: number;           // computed size in px
-	lineHeight: number;     // recommended unitless line-height
-	letterSpacing: number;  // recommended tracking in em
-}
+`createTypographyToolProvider({ provider? })` (namespace `typography`): `list_fonts`,
+`resolve_font_stack`, `suggest_type_scale`, `generate_type_hierarchy`, `compute_fluid_type_size`,
+`audit_text_readability`, `check_typography_accessibility`, `segment_text`, and `load_font` (listed
+only when the provider can load). `createFontPickerToolProvider(model, { readOnly? })` (namespace
+`fontpicker`): `get_font_selection`, `list_picker_fonts`, `set_font_selection`. All have strict
+schemas, titles, four annotations and described arguments; they are in the conformance test
+(`tests/command-tools.test.ts`), the skill map (`tests/agent-skills.test.ts`) and the new
+[`pixerate-typography`](../packages/core/skills/pixerate-typography/SKILL.md) skill.
 
-export interface TypeHierarchy {
-	ratio: number;
-	baseSize: number;
-	steps: Record<string, TypeScaleStep>;
-}
+### Phase 4: headless picker
 
-export interface ReadabilityAuditResult {
-	lineLength: {
-		characters: number;
-		words: number;
-		status: 'optimal' | 'too-short' | 'too-long'; // optimal is 45-75 chars
-		recommendation?: string;
-	};
-	lineSpacing: {
-		ratio: number;
-		passesWCAG1412: boolean; // line-height >= 1.5x body font size
-		recommendation?: string;
-	};
-	allCaps: boolean;
-	estimatedReadingTimeSeconds: number;
-}
-```
+`FontPickerModel` keeps the value (family, weight, style, size, line height, tracking, category),
+category filter, search (prefix matches first), recents, the highlighted option with combobox key
+handling (`handleKey`: arrows, Home, End, Enter, Escape), per-family load status, preview text and
+CSS for the selection. `getState()` returns the same object until something changes
+(`useSyncExternalStore`-safe). `setValue` is for controlled components and does not notify
+`onValueChange`; user and agent changes do.
 
-#### 1.2 Modular Scales & Hierarchy (`scale.ts`)
-- Implement `getScaleRatio(name: ModularScaleRatio): number`.
-- `computeTypeScale(baseSize: number, ratio: number | ModularScaleRatio, steps: number[]): TypeScaleStep[]`.
-- `generateTypeHierarchy(options: { baseSize?: number; ratio?: ModularScaleRatio }): TypeHierarchy`: Generates tokens for `caption`, `body-sm`, `body`, `h4`, `h3`, `h2`, `h1`, `display` with appropriate tracking (tighter for large headings, looser for captions).
-- `computeFluidSize(options: { minSize: number; maxSize: number; minViewport: number; maxViewport: number }): { clampCss: string; evaluateAt: (viewport: number) => number }`.
+### Phase 5: React and Svelte UI
 
-#### 1.3 Measure, Line-Length & Readability (`metrics.ts`)
-- `auditTextReadability(text: string, font: Partial<FontSpec>): ReadabilityAuditResult`:
-  - Evaluates average line lengths against the 45–75 character standard.
-  - Checks line-height ratio against WCAG 1.4.12 ($\ge 1.5$).
-  - Detects all-caps body text and flags readability penalties.
+`<FontPicker>` (combobox over a listbox of families shown in their own face, category filter,
+weight and style selects, preview, status) and `<TypographyControl>` (the picker plus size, line
+height and letter spacing inputs) in both frameworks, themeable through `--pixerate-font-picker-*`
+custom properties, with `useFontPicker` (React) and `fontPickerOf` (Svelte). Both accept a shared
+`model`, so the agent's font picker tools and the person edit the same control.
 
-#### 1.4 Fallback Font Stacks (`stack.ts`)
-- Standardized, cross-platform font stacks:
-  - `system-ui`: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`
-  - `humanist-sans`: `Optima, Candara, Calibri, "Trebuchet MS", sans-serif`
-  - `geometric-sans`: `"Century Gothic", Futura, AvantGarde, "URW Gothic L", sans-serif`
-  - `editorial-serif`: `Charter, "Bitstream Charter", "Sitka Text", Cambria, serif`
-  - `transitional-serif`: `"Baskerville Old Face", "Hoefler Text", Garamond, Times, serif`
-  - `code-mono`: `ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace`
-- `parseFontFamily(stack: string): string[]`: Tokenizes CSS font-family strings safely.
-- `resolveFontFallback(family: string, category?: FontCategory): string`: Provides a robust fallback stack.
+### Phase 6: cross-editor integration (effects)
 
-#### 1.5 Host-Agnostic Text Segmentation (`segment.ts`)
-- `segmentText(text: string, granularity: 'grapheme' | 'word' | 'line'): { text: string; start: number; end: number }[]`:
-  - Uses standard `Intl.Segmenter` (supported in modern JS/Node).
-  - Enables breaking live text into letters, words, and lines for animation sequencing without requiring Bezier outlines.
+- `effectControlField` / `effectParameterFields` turn string controls with `format: "font"` or
+  `"x-pixerate-control": "font"` into a font choice (families from `options.fonts`, default the
+  system catalog; an unlisted current family is kept). React and Svelte `EffectParameters` take a
+  `fonts` prop.
+- `effectFontFamilies(description, values)` lists the families a title effect uses, to pass to
+  `ensureFontsLoaded` before rendering preview frames.
 
-#### 1.6 Unified Typography & Accessibility Audit (`accessibility.ts`)
-- Connects directly with `packages/core/src/color/contrast.ts`:
-  - `checkTypographyAccessibility(options: { font: FontSpec; foreground: string; background: string })`:
-    - Evaluates whether text meets WCAG 2 AA/AAA using exact font metrics (determining large-text eligibility automatically from `size` and `weight`).
-    - Reports required contrast ratio ($3:1$ vs. $4.5:1$ vs. $7:1$) and returns adjusted OKLCH color suggestions via `check_color_contrast`.
+### Phase 7: verification
 
----
+Unit tests: `packages/core/tests/typography.test.ts`, `typography-tools.test.ts` (every tool
+through `ToolRegistry.callTool`, valid and invalid arguments), `typography-picker.test.ts` (model
+and effect font controls); `packages/react/tests/typography.test.tsx`;
+`packages/svelte/tests/typography.svelte.test.ts`. Font loading is tested with injected
+`createFontFace` / `fontFaceSet` / `queryLocalFonts` fakes, so nothing touches the network.
+The demo has a **Typography** tab that registers both tool providers.
 
-### Phase 2: Pluggable Font Registry & Catalog Interface
+## Deviations from the plan
 
-#### 2.1 Interface Definition (`registry.ts`)
-```ts
-export interface FontSummary {
-	family: string;
-	category: FontCategory;
-	weights: FontWeight[];
-	styles: FontStyle[];
-	isVariable?: boolean;
-	source: 'system' | 'web' | 'custom';
-}
+1. **`lineHeight` is unitless only, `letterSpacing` is em only.** The plan allowed "multiplier or
+   px" and "em or px"; mixing units in one field is ambiguous, so px leading must be divided by the size.
+2. **Readability result shape.** `lineSpacing.passesWCAG1412` became `meetsRecommended` (with
+   `assumed`), because WCAG 1.4.12 does not require authors to set 1.5 line spacing: it requires
+   content to survive users setting it. The 1.5 target is WCAG 1.4.8 (AAA). The result also has
+   `lineLength.source`, `wordCount` and `issues`.
+3. **Large bold text is 18.67px**, not 18.5px: 14pt × 4/3. Values rounded to 18.66 still count.
+4. **`segmentText` adds `sentence`**; `line` splits on breaks and wraps by `maxCharacters`
+   (`Intl.Segmenter` has no line granularity and the module cannot see the renderer's measure).
+5. **The system provider never calls `document.fonts.check()`**, which returns `true` for fonts
+   that are not installed, and never calls `queryLocalFonts()` unless the host passes it (it asks
+   the user for permission). Without it, the catalog lists commonly installed fonts, not detected ones.
+6. **Extra tools**: `compute_fluid_type_size` (the plan had `computeFluidSize` but no tool, and every
+   capability needs an agent path), `load_font`, and the three font picker tools (the picker is a
+   user-facing control, so agents get it too).
+7. **Accessibility suggestion** reuses a new shared `suggestAccessibleForeground` in `/color`
+   instead of calling the `check_color_contrast` tool; it now measures candidates after rounding to hex.
+8. **Changesets**: the docs-only changeset was replaced by minor changesets for `@pixerate/editor`,
+   `@pixerate/editor-react` and `@pixerate/editor-svelte`.
 
-export interface FontProvider {
-	readonly id: string;
-	listFonts(): Promise<FontSummary[]>;
-	hasFont(family: string): boolean | Promise<boolean>;
-	loadFont?(family: string, weight?: FontWeight, style?: FontStyle): Promise<boolean>;
-}
-```
+## What is left
 
-#### 2.2 Standard Font Catalog (`catalog.ts`)
-- Bundle zero binary files; provide a metadata catalog of universal system fonts across macOS, Windows, iOS, Android, and Linux.
-- Provide a `SystemFontProvider` using browser `document.fonts.check()` / `queryLocalFonts()` when available, falling back gracefully to catalog matching in headless/Node environments.
+Phase 6 beyond effects is not done; each is an editor-specific change with its own document
+model, tools and skill updates:
 
----
-
-### Phase 3: Agent Tools & Skill (`pixerate-typography`)
-
-#### 3.1 Agent Tools Factory (`tools.ts`)
-Implement `createTypographyToolProvider(options?: { provider?: FontProvider })`:
-- `list_fonts`: Lists available fonts filtered by category, weight, or source.
-- `resolve_font_stack`: Takes a font family and returns a resilient cross-platform fallback stack.
-- `suggest_type_scale`: Computes a modular type scale given a base size and ratio.
-- `generate_type_hierarchy`: Generates standardized typographic tokens (Display $\dots$ Caption).
-- `audit_text_readability`: Audits line-length measure, line-height ratio, and all-caps penalties.
-- `check_typography_accessibility`: Evaluates font size, weight, and foreground/background colors against WCAG standards.
-- `segment_text`: Splits text into graphemes, words, or lines with character indices.
-
-#### 3.2 Agent Skill (`packages/core/skills/pixerate-typography/SKILL.md`)
-- Create the domain skill adhering to `AGENTS.md` §4:
-  - Mental model, working method, best practices, tool reference table, and pitfalls.
-- Register factory in `packages/core/tests/agent-skills.test.ts` (`FACTORIES` and `expectedBySkill()`).
-
----
-
-### Phase 4: Headless FontPicker Model (`packages/core/src/typography/picker.ts`)
-
-Implement `FontPickerModel`:
-- Manages selected family, weight, style, size, and category filter.
-- In-memory search and recent font history.
-- Preview text rendering state.
-- Emits clean change events for UI bindings.
-
----
-
-### Phase 5: React and Svelte UI Components
-
-#### 5.1 React (`@pixerate/editor-react/typography`)
-- `FontPicker`: Dropdown/combobox with category filters, font weight selector, and live preview.
-- `TypographyControl`: Composite inspector control (Family, Weight, Size, Line Height, Letter Spacing).
-- `useFontPicker` / `useTypography`: Hooks wrapping `FontPickerModel`.
-
-#### 5.2 Svelte (`@pixerate/editor-svelte/typography`)
-- `FontPicker.svelte` and `TypographyControl.svelte` with full reactive store / runes parity.
-- `fontPickerOf` helper.
-
----
-
-### Phase 6: Cross-Editor Integration
-
-1. **Effects Editor & Authoring (`@pixerate/editor/effects`)**:
-   - Update `packages/core/src/effects/ui.ts` (`createEffectControlDescriptors`):
-     - Support `{ type: 'font' }` or schemas with `format: 'font'` / `x-pixerate-control: 'font'`.
-     - Allow title effects (`use: 'title'`) to display rich font pickers in `EffectParameters.tsx` and `EffectParameters.svelte`.
-     - In `EffectAuthoringEditor`, ensure fonts used in title shaders/generators are loaded prior to preview frame rendering.
-2. **Video Editor (`@pixerate/editor/video`)**:
-   - Upgrade `add_video_clip` and `update_video_clip` title configurations to accept `FontSpec`.
-   - Add title-safe measure and legibility checks.
-3. **Vector Editor (`@pixerate/editor/vector`)**:
-   - Align `vector.listFonts` and `vector.setTextStyle` with `FontSpec` tokens.
-4. **Animation Editor (`@pixerate/editor/animation`)**:
-   - Integrate `segmentText` with shot timing and `get_timing_grid` so text can be animated without requiring vector outlines first.
-5. **Canvas & Chart Editors**:
-   - Expose typography tokens in component instance property panels.
-   - Enforce minimum readable font sizes in chart axis labels.
-
----
-
-### Phase 7: Verification & Quality Assurance
-
-1. **Entry Isolation Test**:
-   - Verify `packages/core/tests/entry-isolation.test.ts` passes with zero runtime dependencies.
-2. **Agent Skills & Command Tools Tests**:
-   - Verify `packages/core/tests/agent-skills.test.ts` and `tests/command-tools.test.ts` pass with full tool title, description, and annotation coverage.
-3. **Framework Parity**:
-   - Verify test suites in `packages/core`, `packages/react`, `packages/svelte`, and `apps/demo`.
-4. **Changeset**:
-   - Add documentation changeset `.changeset/typography-plan-docs.md`.
+1. **Effect preview font preloading in `EffectAuthoringEditor`**: the helpers exist
+   (`effectFontFamilies` + `ensureFontsLoaded`), but the editors don't take a `FontProvider` yet.
+2. **Video titles**: accept `FontSpec` (tracking, leading) in `add_video_clip` / `update_video_clip`
+   and add title-safe measure and legibility checks.
+3. **Vector**: align `vector.listFonts` / `vector.setTextStyle` with `FontSpec` and `FontProvider`.
+4. **Animation**: use `segmentText` for live-text `split` / `cascade` without outlines.
+5. **Canvas and chart**: typography tokens in component property panels; minimum readable sizes
+   for chart axis labels.
