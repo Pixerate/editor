@@ -284,7 +284,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'export_chart_mermaid',
 		title: 'Export chart as Mermaid',
 		description:
-			'Returns the chart as Mermaid text (xychart-beta, pie or radar-beta) for Markdown or chat. With meta (default true) one "%% @pixerate {…}" comment keeps what Mermaid cannot express, so import_chart_mermaid gets the chart back exactly.',
+			'Returns the chart as Mermaid text for Markdown or chat: xychart-beta, pie or radar-beta, sankey-beta for Sankey diagrams with flows, treemap-beta for treemaps and sunbursts (with their levels). With meta (default true) one "%% @pixerate {…}" comment keeps what Mermaid cannot express, so import_chart_mermaid gets the chart back exactly.',
 		inputSchema: { type: 'object', properties: { meta: { type: 'boolean', description: 'Include the round-trip comment (default true).' } }, additionalProperties: false },
 		annotations: { title: 'Export chart as Mermaid', ...READ },
 		handler: ({ meta = true }) => ({ mermaid: chartToMermaid(controller.toJSON(), { meta }) })
@@ -487,13 +487,13 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'import_chart_mermaid',
 		title: 'Import a Mermaid chart',
 		description:
-			'Replaces the chart with Mermaid xychart-beta, pie or radar-beta text as one undo step (a "%% @pixerate" comment from export_chart_mermaid restores everything else). Lines that cannot be read are skipped and listed with their line numbers. Returns the spec.',
+			'Replaces the chart with Mermaid xychart-beta, pie, radar-beta, sankey-beta or treemap-beta text as one undo step (a "%% @pixerate" comment from export_chart_mermaid restores everything else). Lines that cannot be read are skipped and listed with their line numbers. Returns the spec.',
 		inputSchema: { type: 'object', properties: { mermaid: { type: 'string', description: 'Mermaid text, optionally inside a ```mermaid fence.' } }, required: ['mermaid'], additionalProperties: false },
 		annotations: { title: 'Import a Mermaid chart', ...DESTRUCTIVE },
 		handler: ({ mermaid }) => {
 			const fenced = /```(?:mermaid)?\s*\n([\s\S]*?)```/.exec(mermaid);
 			const read = chartFromMermaid(fenced ? fenced[1] : mermaid);
-			if (!read.family) fail(read.issues.map((i) => i.message).join(' ') || 'Expected Mermaid starting with xychart-beta, pie or radar-beta.');
+			if (!read.family) fail(read.issues.map((i) => i.message).join(' ') || 'Expected Mermaid starting with xychart-beta, pie, radar-beta, sankey-beta or treemap-beta.');
 			resolve(controller.update({ ...read.spec } as ChartSpecPatch, { label: 'Import Mermaid chart' }));
 			return { spec: controller.toJSON(), issues: read.issues };
 		}

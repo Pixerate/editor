@@ -226,7 +226,7 @@ describe("grouped data in files and agent tools", () => {
   it("round-trips through Mermaid and is written to Office as group totals", () => {
     const spec = createChartSpec({ type: "sunburst", tree, sunburstLabel: "customers" });
     expect(chartFromMermaid(chartToMermaid(spec)).spec).toEqual(spec);
-    expect(chartToMermaid(spec, { meta: false })).toContain('"Europe" : 95');
+    expect(chartToMermaid(spec, { meta: false })).toContain('treemap-beta\n    "Europe"\n        "France": 40\n');
     const out = chartToOoxml(spec);
     expect(out.issues[0]).toBe("Sunburst charts are written as doughnut charts of the top-level group totals: DrawingML has no sunburst type (Office 2016 stores it as chartex).");
     expect(out.xml).toContain("<c:doughnutChart>");

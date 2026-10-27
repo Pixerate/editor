@@ -1,12 +1,15 @@
 // The xychart-beta, pie and radar-beta grammars follow Ursula's statement adapters (src/xychart, src/pie,
 // src/radar), and the metadata comment follows its `%% @ursula` line (src/source/metadata.ts).
+import { parseSankey } from '../diagram/sankey/index.js';
+import { parseTreemap, type TreemapItem } from '../diagram/treemap/index.js';
 import { chartFamily, defaultChartAxis, normalizeChartSpec } from './spec.js';
-import type { ChartAxis, ChartIssue, ChartSeries, ChartSpec, ChartValue } from './types.js';
+import { chartTreeFromSeries, chartTreeTotal } from './tree.js';
+import type { ChartAxis, ChartIssue, ChartSeries, ChartSpec, ChartTreeNode, ChartValue } from './types.js';
 
 /** The comment line that carries what Mermaid cannot express. Every Mermaid tool ignores `%%` comments. */
 export const CHART_MERMAID_META_PREFIX = '%% @pixerate ';
 
-export type ChartMermaidFamily = 'xychart' | 'pie' | 'radar';
+export type ChartMermaidFamily = 'xychart' | 'pie' | 'radar' | 'sankey' | 'treemap';
 
 export interface ChartMermaidOptions {
 	/** Write the `%% @pixerate {…}` line so the chart round-trips exactly (default `true`). */
@@ -42,10 +45,22 @@ function splitOutside(text: string, sep: string): string[] {
 	return out;
 }
 
+/** A sankey-beta CSV field: quoted (with `""` for a quote) when it holds a comma, quote or edge spaces. */
+const csvField = (text: string) => (/[",\n]|^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+/**
+ * A treemap-beta name: in double quotes, or single quotes when it holds a double quote. Names
+ * with both cannot be written (Mermaid has no escape), so their double quotes become single.
+ */
+const treemapName = (name: string) => (!name.includes('"') ? `"${name}"` : !name.includes("'") ? `'${name}'` : `"${name.replace(/"/g, "'")}"`);
+/** A frontmatter value, quoted when YAML would read it as something else. */
+const yamlText = (text: string) => (/^[\w][\w .,!?()/&+-]*$/.test(text) && !/:\s/.test(text) ? text : JSON.stringify(text));
+
 /** The Mermaid family a chart is written as. */
-export function chartMermaidFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartMermaidFamily {
+export function chartMermaidFamily(spec: Pick<ChartSpec, 'type' | 'series'> & { links?: ChartSpec['links'] }): ChartMermaidFamily {
 	const family = chartFamily(spec);
-	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'parliament' || family === 'sunburst') return 'pie';
+	if (family === 'sankey' && (spec as Partial<ChartSpec>).links?.length) return 'sankey';
+	if (family === 'treemap' || family === 'sunburst') return 'treemap';
+	if (family === 'pie' || family === 'funnel' || family === 'parliament') return 'pie';
 	if (family === 'radar') return 'radar';
 	return 'xychart';
 }
@@ -88,8 +103,9 @@ function metaFor(spec: ChartSpec, text: string): Record<string, unknown> | null 
 /**
  * Writes a chart as Mermaid: `xychart-beta` for bar, line, area and scatter charts (areas and
  * scatters drawn as lines; slopes and Likert charts as lines and bars), `pie` for pies, donuts,
- * funnels, treemaps and parliaments, `radar-beta` for
- * radars. Anything Mermaid cannot hold (stacking, colours, formats, gaps, trendlines, other
+ * funnels and parliaments, `radar-beta` for radars, `sankey-beta` for Sankey diagrams with
+ * flows, and `treemap-beta` for treemaps and sunbursts (their groups, or one item per category).
+ * Sankey titles go in frontmatter, which `sankey-beta` needs. Anything Mermaid cannot hold (stacking, colours, formats, gaps, trendlines, other
  * chart types) goes into one `%% @pixerate {…}` comment so `chartFromMermaid` gets the chart
  * back exactly, while any Mermaid renderer still draws the basic chart.
  */
@@ -99,7 +115,28 @@ export function chartToMermaid(spec: ChartSpec, options: ChartMermaidOptions = {
 	const visible = spec.series.filter((s) => !s.hidden);
 	const lines: string[] = [];
 	const v = (x: ChartValue) => (x === null || !Number.isFinite(x) ? '0' : num(x));
-	if (family === 'pie') {
+	// Lines written before the header (frontmatter), kept out of the metadata placement below.
+	const front: string[] = [];
+	if (family === 'sankey') {
+		if (spec.title) front.push('---', `title: ${yamlText(spec.title)}`, '---');
+		lines.push('sankey-beta');
+		for (const l of spec.links) lines.push(`${csvField(l.source)},${csvField(l.target)},${num(l.value)}`);
+	} else if (family === 'treemap') {
+		lines.push('treemap-beta');
+		if (spec.title) lines.push(`title ${spec.title}`);
+		const first = visible[0] ?? spec.series[0];
+		const tree = spec.tree.length ? spec.tree : chartTreeFromSeries(spec.categories, first?.values ?? []);
+		const write = (nodes: readonly ChartTreeNode[], depth: number) => {
+			for (const n of nodes) {
+				const pad = ind.repeat(depth);
+				if (n.children) {
+					lines.push(`${pad}${treemapName(n.name)}`);
+					write(n.children, depth + 1);
+				} else lines.push(`${pad}${treemapName(n.name)}: ${num(n.value ?? 0)}`);
+			}
+		};
+		write(tree, 1);
+	} else if (family === 'pie') {
 		const s = visible[0] ?? spec.series[0];
 		lines.push(`pie${spec.dataLabels ? ' showData' : ''}`);
 		if (spec.title) lines.push(`${ind}title ${spec.title}`);
@@ -147,12 +184,12 @@ export function chartToMermaid(spec: ChartSpec, options: ChartMermaidOptions = {
 			lines.push(`${ind}${kind} ${quote(s.name)} [${s.values.map(v).join(', ')}]`);
 		}
 	}
-	let text = `${lines.join('\n')}\n`;
+	let text = `${[...front, ...lines].join('\n')}\n`;
 	if (options.meta !== false) {
 		const meta = metaFor(spec, text);
 		if (meta) {
 			const [header, ...rest] = lines;
-			text = `${[header, `${CHART_MERMAID_META_PREFIX}${JSON.stringify({ v: 1, ...meta })}`, ...rest].join('\n')}\n`;
+			text = `${[...front, header, `${CHART_MERMAID_META_PREFIX}${JSON.stringify({ v: 1, ...meta })}`, ...rest].join('\n')}\n`;
 		}
 	}
 	return text;
@@ -203,7 +240,7 @@ function parseList(text: string, partial: boolean): string[] | undefined {
 }
 
 /**
- * Reads Mermaid `xychart-beta`, `pie` or `radar-beta` text as a chart. Never throws: lines it
+ * Reads Mermaid `xychart-beta`, `pie`, `radar-beta`, `sankey-beta` or `treemap-beta` text as a chart. Never throws: lines it
  * cannot read are reported with their line numbers and skipped, and the result always draws.
  * A `%% @pixerate {…}` line written by `chartToMermaid` restores everything Mermaid cannot hold.
  */
@@ -241,7 +278,9 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 			showData = !!m[1];
 			if (m[2]) frontTitle = m[2].trim();
 		} else if (/^radar(?:-beta)?\s*$/i.test(t)) family = 'radar';
-		else issues.push({ path: 'header', line: i + 1, message: `Line ${i + 1}: expected a chart header (xychart-beta, pie or radar-beta), got "${t.slice(0, 40)}".` });
+		else if (/^sankey(?:-beta)?\s*$/i.test(t)) family = 'sankey';
+		else if (/^treemap(?:-beta)?\s*$/i.test(t)) family = 'treemap';
+		else issues.push({ path: 'header', line: i + 1, message: `Line ${i + 1}: expected a chart header (xychart-beta, pie, radar-beta, sankey-beta or treemap-beta), got "${t.slice(0, 40)}".` });
 		headerLine = i;
 		break;
 	}
@@ -258,6 +297,7 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 	let graticule: 'circle' | 'polygon' = 'circle';
 	const counts = { bar: 0, line: 0 };
 	const lineIssue = (i: number, message: string) => issues.push({ path: `line ${i + 1}`, line: i + 1, message: `Line ${i + 1}: ${message}` });
+	const whole = family === 'sankey' || family === 'treemap';
 	for (let i = headerLine + 1; family && i < all.length; i++) {
 		const raw = all[i];
 		const t = raw.trim();
@@ -273,7 +313,7 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 			}
 			continue;
 		}
-		if (t.startsWith('%%')) continue;
+		if (t.startsWith('%%') || whole) continue;
 		const isLast = i === all.length - 1 || all.slice(i + 1).every((l) => !l.trim());
 		let m: RegExpExecArray | null;
 		if ((m = /^title\s+(.+)$/i.exec(t))) {
@@ -376,7 +416,8 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 	}
 
 	let input: Record<string, unknown>;
-	if (family === 'pie') {
+	if (whole) input = readWholeMermaid(family as 'sankey' | 'treemap', all, headerLine, partial, title, issues);
+	else if (family === 'pie') {
 		input = {
 			type: 'pie',
 			title,
@@ -412,8 +453,47 @@ export function chartFromMermaid(text: string, options: ChartMermaidParseOptions
 		}
 	}
 	const { spec, issues: specIssues } = normalizeChartSpec(input);
-	if (!family && !partial && !issues.length) issues.push({ path: 'header', message: 'The text is empty: expected a chart header (xychart-beta, pie or radar-beta).' });
+	if (!family && !partial && !issues.length) issues.push({ path: 'header', message: 'The text is empty: expected a chart header (xychart-beta, pie, radar-beta, sankey-beta or treemap-beta).' });
 	return { spec, issues: [...issues, ...specIssues], family, hasMeta: !!meta };
+}
+
+/**
+ * A `sankey-beta` or `treemap-beta` body as chart input, read with the diagram module's parsers
+ * (the same ones Ursula uses). Treemaps follow Ursula's `chartFromMermaid`: one section round
+ * everything is the whole (its name becomes the title when there is none); items alone or one
+ * level of sections make a treemap, deeper nesting a sunburst. While streaming (`partial`), a
+ * last line that does not read yet is left out.
+ */
+function readWholeMermaid(family: 'sankey' | 'treemap', all: string[], headerLine: number, partial: boolean, title: string, issues: ChartIssue[]): Record<string, unknown> {
+	// The metadata line becomes a plain comment, so the parsers' line numbers still match the text.
+	const body = all.slice(headerLine).map((l) => (l.trim().startsWith(CHART_MERMAID_META_PREFIX.trim()) ? '%%' : l));
+	const parse = (lines: string[]) => (family === 'sankey' ? parseSankey(lines.join('\n')) : parseTreemap(lines.join('\n')));
+	let read = parse(body);
+	if ('error' in read && partial && body.length > 1) read = parse(body.slice(0, -1));
+	const lineOf = (n: number | undefined) => (n === undefined ? undefined : n + headerLine);
+	if ('error' in read) {
+		const line = lineOf(read.line);
+		// An empty body while streaming is a chart still arriving, not a mistake.
+		if (!(partial && body.length <= 2)) issues.push({ path: family, ...(line ? { line } : {}), message: line ? `Line ${line}: ${read.error}` : read.error });
+		return { type: family === 'sankey' ? 'sankey' : 'treemap', title };
+	}
+	if (family === 'sankey') {
+		const data = read.data as { nodes: string[]; links: { source: string; target: string; value: number }[] };
+		// A first series for the metadata line's series settings to land on (its values come from the flows).
+		return { type: 'sankey', title, links: data.links, sankeyNodes: data.nodes, series: [{ id: 'series-1', name: 'Values', values: [] }] };
+	}
+	const data = read.data as { title?: string; items: TreemapItem[] };
+	let items = data.items;
+	let name = data.title ?? title;
+	if (items.length === 1 && items[0].children?.length) {
+		name ||= items[0].name;
+		items = items[0].children;
+	}
+	const toNode = (item: TreemapItem): ChartTreeNode => (item.children?.length ? { name: item.name, children: item.children.map(toNode) } : { name: item.name, value: item.value ?? 0 });
+	const tree = items.map(toNode);
+	const leaf = (n: ChartTreeNode) => !n.children;
+	const flatOrOneLevel = tree.every(leaf) || tree.every((n) => n.children?.every(leaf));
+	return { type: flatOrOneLevel ? 'treemap' : 'sunburst', title: name, tree, categories: tree.map((n) => n.name), series: [{ id: 'series-1', name: 'Values', values: tree.map(chartTreeTotal) }] };
 }
 
 export interface FoundChartMermaid {
@@ -425,17 +505,26 @@ export interface FoundChartMermaid {
 
 /**
  * Finds Mermaid charts in Markdown or chat text: fenced ```mermaid blocks (and unlabelled
- * fences) whose header is xychart-beta, pie or radar-beta, else the whole text when it is one.
+ * fences) whose header is xychart-beta, pie, radar-beta, sankey-beta or treemap-beta, else the whole text when it is one.
  */
 export function findMermaidCharts(text: string): FoundChartMermaid[] {
 	const lines = text.replace(/^﻿/, '').split(/\r?\n/);
 	const found: FoundChartMermaid[] = [];
 	const familyOf = (body: string): ChartMermaidFamily | null => {
-		const header = body.split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith('%%') && l.trim() !== '---');
+		let rows = body.split(/\r?\n/);
+		// Skip frontmatter (--- … ---), where sankey-beta keeps its title.
+		const firstRow = rows.findIndex((l) => l.trim());
+		if (rows[firstRow]?.trim() === '---') {
+			const end = rows.findIndex((l, i) => i > firstRow && l.trim() === '---');
+			if (end > 0) rows = rows.slice(end + 1);
+		}
+		const header = rows.find((l) => l.trim() && !l.trim().startsWith('%%'));
 		if (!header) return null;
 		if (/^\s*xychart(-beta)?\b/.test(header)) return 'xychart';
 		if (/^\s*pie\b/.test(header)) return 'pie';
 		if (/^\s*radar(-beta)?\b/.test(header)) return 'radar';
+		if (/^\s*sankey(-beta)?\s*$/.test(header)) return 'sankey';
+		if (/^\s*treemap(-beta)?\s*$/.test(header)) return 'treemap';
 		return null;
 	};
 	for (let i = 0; i < lines.length; i++) {
