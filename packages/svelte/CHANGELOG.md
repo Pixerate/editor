@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.117.1
+
+### Patch Changes
+
+- ab63ed6: Image editor transform mode frames shape, type and smart object layers too (`ImageEditorController.getLayerFrame`, `quadFrameOverlay`), and a press anywhere inside a frame moves the layer, its centre included (`FreeTransformTool.down` option `reference: false`).
+- Updated dependencies [ab63ed6]
+  - @pixerate/editor@0.160.0
+
 ## 0.117.0
 
 ### Minor Changes

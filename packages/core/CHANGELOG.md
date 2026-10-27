@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.160.0
+
+### Minor Changes
+
+- ab63ed6: Image editor transform mode frames shape, type and smart object layers too (`ImageEditorController.getLayerFrame`, `quadFrameOverlay`), and a press anywhere inside a frame moves the layer, its centre included (`FreeTransformTool.down` option `reference: false`).
+
 ## 0.159.0
 
 ### Minor Changes
