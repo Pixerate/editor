@@ -20,8 +20,9 @@ import {
   SerializedImageEditorState,
 } from './types';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
-import { clampCropToImage, isQuarterTurnSwapped } from './geometry';
+import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
 import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
+import { typeLayerAt } from './layers/shape-type-ui';
 import { createAdjustmentLayer, normalizeAdjustmentLayer, normalizeAdjustmentLayers } from './adjustment-layers';
 import { isBlendMode, type BlendMode } from './blend';
 import type { ImageHistogram } from './histogram';
@@ -52,6 +53,7 @@ import {
   flattenLayers,
   insertLayer,
   isActiveFilter,
+  isLayerLocked,
   mapLayer,
   newLayerId,
   type AdjustmentLayerNode,
@@ -155,6 +157,7 @@ import {
   activeEffectSmartFilters,
   isSmartSurfaceIncomplete,
   rerender as rerenderSmartObject,
+  translateLayer,
 } from './layers/smart';
 import { EffectsSlot, resolveEffectValues } from '../effects/helpers';
 import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types';
@@ -311,6 +314,10 @@ import {
   transformedBox,
   isValidWarp,
   presetWarp,
+  TRANSFORM_ANCHORS,
+  ANCHOR_FRACTION,
+  type TransformAnchor,
+  isTransformAnchor,
   type AffineMatrix,
   type Quad,
   type TransformParams,
@@ -2015,6 +2022,83 @@ export class ImageEditorController {
       this.boundsCache.set(surface, b);
     }
     return b ? { x: b.x + layer.offset.x, y: b.y + layer.offset.y, width: b.width, height: b.height } : null;
+  }
+
+  /**
+   * Hit-tests the layer stack at `point` (in document space) and returns the id of the topmost
+   * matching visible layer, or `null`. Skips adjustment layers.
+   */
+  public layerAt(
+    point: ImagePoint,
+    opts: { includeHidden?: boolean; includeLocked?: boolean; alphaThreshold?: number } = {}
+  ): string | null {
+    const { includeHidden = false, includeLocked = false, alphaThreshold = 1 } = opts;
+    const layers = this.state.layers;
+
+    const testLayer = (layer: ImageLayer): string | null => {
+      if (!includeHidden && !layer.visible) return null;
+      if (!includeLocked && isLayerLocked(layer, 'all')) return null;
+
+      if (layer.type === 'group') {
+        for (let i = layer.children.length - 1; i >= 0; i--) {
+          const hit = testLayer(layer.children[i]);
+          if (hit) return hit;
+        }
+        return null;
+      }
+
+      if (layer.type === 'adjustment') {
+        return null;
+      }
+
+      if (layer.type === 'type') {
+        const hitId = typeLayerAt(this, point);
+        if (hitId === layer.id) return layer.id;
+        return null;
+      }
+
+      if (layer.type === 'annotation') {
+        if (hitTestAnnotation(point, layer.annotation)) return layer.id;
+        return null;
+      }
+
+      if (layer.type === 'shape') {
+        const bounds = this.getLayerBounds(layer.id);
+        if (bounds && point.x >= bounds.x && point.x <= bounds.x + bounds.width && point.y >= bounds.y && point.y <= bounds.y + bounds.height) {
+          const surface = this.surfaceOf(layer);
+          const px = Math.floor(point.x - layer.offset.x);
+          const py = Math.floor(point.y - layer.offset.y);
+          const pixel = readPixel(surface, px, py);
+          if (pixel.length >= 4 && pixel[3] >= alphaThreshold) return layer.id;
+        }
+        return null;
+      }
+
+      if (layer.type === 'pixel' || layer.type === 'smart') {
+        const bounds = this.getLayerBounds(layer.id);
+        if (!bounds) return null;
+        if (point.x < bounds.x || point.x > bounds.x + bounds.width || point.y < bounds.y || point.y > bounds.y + bounds.height) {
+          return null;
+        }
+        const surface = this.surfaceOf(layer);
+        const px = Math.floor(point.x - layer.offset.x);
+        const py = Math.floor(point.y - layer.offset.y);
+        const pixel = readPixel(surface, px, py);
+        if (pixel.length >= 4 && pixel[3] >= alphaThreshold) {
+          return layer.id;
+        }
+        return null;
+      }
+
+      return null;
+    };
+
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const hit = testLayer(layers[i]);
+      if (hit) return hit;
+    }
+
+    return null;
   }
 
   /**
@@ -4146,6 +4230,78 @@ export class ImageEditorController {
 
   public get hasSelection(): boolean {
     return Boolean(this.state.selection?.bounds);
+  }
+
+  /** Returns the current canvas (composition) dimensions. */
+  public getCanvasSize(): { width: number; height: number } {
+    return { ...this.naturalSize };
+  }
+
+  /**
+   * Resizes the composition canvas (one undo step). Layers are shifted according to `anchor`
+   * (default 'center'), and the new dimensions are saved into document state.
+   */
+  public resizeCanvas(options: { width: number; height: number; anchor?: TransformAnchor }): void {
+    const { width, height, anchor = 'center' } = options;
+    if (!Number.isFinite(width) || width < 1 || !Number.isFinite(height) || height < 1) {
+      throw new LayerOperationError('Canvas width and height must be numbers at least 1 pixel.');
+    }
+    const targetWidth = Math.round(width);
+    const targetHeight = Math.round(height);
+    const prev = this.naturalSize;
+    if (prev.width === targetWidth && prev.height === targetHeight) return;
+
+    this.recordHistory();
+
+    const [fx, fy] = ANCHOR_FRACTION[anchor];
+    const dx = Math.round((targetWidth - prev.width) * fx);
+    const dy = Math.round((targetHeight - prev.height) * fy);
+
+    // Materialize any layers using the source image before imageDimensions updates
+    this.state.layers = this.state.layers.map((l) => {
+      if (l.type === 'pixel' && l.source === 'document') {
+        const materialized: PixelLayer = {
+          ...l,
+          surface: this.surfaceOf(l),
+        };
+        delete materialized.source;
+        return materialized;
+      }
+      return l;
+    });
+
+    this.state.imageDimensions = { width: targetWidth, height: targetHeight };
+
+    if (this.state.crop) {
+      this.state.crop = {
+        x: this.state.crop.x + dx,
+        y: this.state.crop.y + dy,
+        width: this.state.crop.width,
+        height: this.state.crop.height,
+      };
+    }
+
+    if (this.state.selection) {
+      const prevSel = this.state.selection;
+      const nextData = new Uint8Array(targetWidth * targetHeight);
+      for (let y = 0; y < prevSel.height; y++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= targetHeight) continue;
+        for (let x = 0; x < prevSel.width; x++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= targetWidth) continue;
+          nextData[ny * targetWidth + nx] = prevSel.data[y * prevSel.width + x];
+        }
+      }
+      this.state.selection = normalizeSelection(
+        createSelectionMask(targetWidth, targetHeight, nextData)
+      );
+    }
+
+    this.state.layers = this.state.layers.map((l) => translateLayer(l, dx, dy));
+
+    this.docRevision++;
+    this.notify();
   }
 
   private get naturalSize(): { width: number; height: number } {
