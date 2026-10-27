@@ -2,7 +2,7 @@ import type { VideoEdit } from './edit.js';
 import { normalizeVideoGrade } from './grade.js';
 import { isVideoKeyframes, removeVideoKey, setVideoKey, VIDEO_KEYFRAME_LIMITS, VIDEO_TRANSFORM_PROPERTIES, videoValueAt, type VideoAnimatable, type VideoKeyframeProperty } from './keyframes.js';
 import { findVideoClip, formatVideoTimecode, videoClipEnd, videoClipSpeed, videoAssetMap, videoAssetHasSound } from './timeline.js';
-import type { VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoGradeLut, VideoPlacementMode, VideoProject, VideoSequence } from './types.js';
+import type { VideoAdjustmentScope, VideoClipMask, VideoMaskShape, VideoClipAnimationEffect, VideoTransitionType, VideoAsset, VideoAssetKind, VideoBlendMode, VideoClip, VideoFadeCurve, VideoGradeLut, VideoPlacementMode, VideoProject, VideoSequence } from './types.js';
 
 // Framework-free helpers the React and Svelte timelines share, so both draw and drag alike.
 
@@ -99,6 +99,7 @@ export function videoClipTint(clip: VideoClip, asset?: VideoAsset): string {
 	if (clip.type === 'sequence') return '#0d9488';
 	if (clip.type === 'color') return clip.color;
 	if (clip.type === 'effect') return '#db2777';
+	if (clip.type === 'adjustment') return '#64748b';
 	if (!asset) return '#ef4444';
 	return asset.kind === 'audio' ? '#10b981' : asset.kind === 'image' ? '#f59e0b' : '#3b82f6';
 }
@@ -110,6 +111,7 @@ export function videoClipLabel(clip: VideoClip, asset?: VideoAsset, sequence?: V
 	if (clip.type === 'color') return clip.color;
 	if (clip.type === 'sequence') return `Compound: ${sequence?.name ?? clip.sequence}`;
 	if (clip.type === 'effect') return `Effect: ${clip.effect}`;
+	if (clip.type === 'adjustment') return `Adjustment${clip.scope === 'all' ? ' (all tracks)' : clip.scope === 'track' ? ` (${clip.targetTrack})` : ''}`;
 	const base = asset?.name ?? asset?.src.replace(/^.*[\\/]/, '') ?? clip.asset;
 	const speed = videoClipSpeed(clip);
 	return speed !== 1 ? `${base} (${Math.round(speed * 100)}%)` : base;
@@ -379,6 +381,67 @@ export function videoLutEdits(project: VideoProject, clips: readonly string[], l
 		if (!lut && !current) continue;
 		const grade = normalizeVideoGrade(lut ? { ...rest, lut } : rest);
 		edits.push(grade ? { op: 'update_clip', clip: id, set: { grade } } : { op: 'update_clip', clip: id, remove: ['grade'] });
+	}
+	return edits;
+}
+
+/** Labels for adjustment scopes, for inspectors. */
+export const VIDEO_ADJUSTMENT_SCOPE_LABELS: Readonly<Record<VideoAdjustmentScope, string>> = {
+	underneath: 'Tracks underneath',
+	all: 'Whole frame',
+	track: 'One track'
+};
+
+/** Labels for mask shapes, for inspectors. */
+export const VIDEO_MASK_SHAPE_LABELS: Readonly<Record<VideoMaskShape, string>> = {
+	rectangle: 'Rectangle',
+	ellipse: 'Ellipse',
+	linear: 'Split',
+	polygon: 'Polygon'
+};
+
+/** What a clip is, for an inspector's heading. */
+export const videoClipHeading = (clip: Pick<VideoClip, 'type'>): string =>
+	({ media: 'Media clip', text: 'Title', sequence: 'Compound clip', color: 'Colour clip', effect: 'Effect clip', adjustment: 'Adjustment clip' })[clip.type];
+
+/**
+ * The edits that add an adjustment clip at `time` (default 3 s long) over everything: on the top
+ * track when it is a video track free there, else on a new video track added at the top. The clip
+ * starts with no look; give it a grade, effects or a mask.
+ */
+export function videoAddAdjustmentEdits(project: VideoProject, time: number, options: { duration?: number; id?: string; grade?: VideoClip['grade'] } = {}): VideoEdit[] {
+	const duration = options.duration ?? 3000;
+	const start = Math.max(0, time);
+	const top = project.tracks[0];
+	const free = top && top.kind === 'video' && !top.locked && !top.clips.some((c) => c.start < start + duration && videoClipEnd(c) > start);
+	const edits: VideoEdit[] = [];
+	let track = top?.id;
+	if (!free) {
+		const ids = new Set(project.tracks.map((t) => t.id));
+		let n = 1;
+		while (ids.has(n === 1 ? 'adj' : `adj${n}`)) n++;
+		track = n === 1 ? 'adj' : `adj${n}`;
+		edits.push({ op: 'add_track', track: { id: track, kind: 'video', name: 'Adjustments' }, at: 0 });
+	}
+	edits.push({ op: 'add_clip', track: track!, clip: { type: 'adjustment', ...(options.id ? { id: options.id } : {}), start, duration, ...(options.grade ? { grade: options.grade } : {}) } });
+	return edits;
+}
+
+/** The edit that sets (or with `null` removes) a clip's mask. */
+export function videoMaskEdit(clip: string, mask: VideoClipMask | null): VideoEdit {
+	return mask ? { op: 'update_clip', clip, set: { mask } } : { op: 'update_clip', clip, remove: ['mask'] };
+}
+
+/** The edits that set how much clips' LUTs hold back on skin (0 turns it off); clips without a LUT are skipped. */
+export function videoSkinProtectionEdits(project: VideoProject, clips: readonly string[], amount: number): VideoEdit[] {
+	const edits: VideoEdit[] = [];
+	for (const id of clips) {
+		const clip = findVideoClip(project, id)?.clip;
+		const lut = clip?.grade?.lut;
+		if (!clip || !lut) continue;
+		const { preserveSkinTones: _p, ...rest } = lut;
+		const k = Math.min(1, Math.max(0, amount));
+		edits.push({ op: 'update_clip', clip: id, set: { grade: { ...clip.grade, lut: k > 0 ? { ...rest, preserveSkinTones: k } : rest } } });
 	}
 	return edits;
 }

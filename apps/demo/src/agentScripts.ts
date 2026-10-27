@@ -917,6 +917,42 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "video-night-look",
+    prompt: "Give the ocean and forest a night-look vignette, and propose ending on the forest sooner for me to review",
+    steps: [
+      { say: "Reading the project first.", tool: "video__get_video_project", args: {} },
+      {
+        say: "One adjustment clip over both shots instead of grading each: it changes every track below it while it plays, titles excluded.",
+        tool: "video__add_video_track",
+        args: { id: "looks", kind: "video", name: "Looks", at: 1 },
+      },
+      {
+        say: "A cool day-for-night look from 4 s to the end.",
+        tool: "video__add_video_adjustment_clip",
+        args: { track: "looks", id: "night", start: 4000, duration: 8000, preset: "day-for-night", amount: 0.6, name: "Night look" },
+      },
+      {
+        say: "Limiting the look to the edges with an inverted, feathered ellipse: the middle stays natural and the edges fall off like a vignette.",
+        tool: "video__set_video_clip_mask",
+        args: { clip: "night", shape: "ellipse", width: 0.8, height: 0.8, feather: 80, inverted: true },
+      },
+      {
+        say: "The score is one bed under the whole cut, so it should stay put when the picture closes up: taking it out of sync lock.",
+        tool: "video__update_video_track",
+        args: { track: "a1", set: { syncLocked: false } },
+      },
+      {
+        say: "Proposing the trim as a plan rather than doing it: the last second of the ocean shot goes and the forest moves up with its dip.",
+        tool: "video__plan_video_edits",
+        args: { title: "End on the forest sooner", description: "Shortens the ocean shot by 1 s; the forest and its dip move up with it.", ops: [{ op: "extract_range", from: 7000, to: 8000, tracks: ["titles", "looks", "v1"] }], ranges: [{ from: 7000, to: 8000, reason: "trim" }] },
+      },
+      { say: "It is waiting for review under the timeline. Listing what is open.", tool: "video__list_video_edit_plans", args: {} },
+      { say: "Applying it as one undo step.", tool: "video__apply_video_edit_plan", args: { plan: "plan1" } },
+      { say: "Checking for problems.", tool: "video__check_video_project", args: {} },
+      { say: "Playing the new look from the ocean shot.", tool: "video__seek_video", args: { time: 4000, play: true } },
+    ],
+  },
+  {
     id: "video-vertical",
     prompt: "Make a vertical 9:16 version for social",
     steps: [

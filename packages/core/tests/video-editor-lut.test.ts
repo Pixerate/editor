@@ -115,7 +115,7 @@ describe('grades with a LUT', () => {
 		expect(normalizeVideoGrade({ lut: { src: 'a.cube', strength: 0.25, name: 'Look' } })).toEqual({ lut: { src: 'a.cube', strength: 0.25, name: 'Look' } });
 		const project = (grade: unknown) => ({ version: 1, width: 10, height: 10, fps: 25, assets: [], tracks: [{ id: 'v1', kind: 'video', clips: [{ id: 'c', type: 'color', color: '#fff', start: 0, duration: 100, grade }] }] });
 		expect(() => parseVideoProject(project({ lut: { src: 'a.cube', strength: 2 } }))).toThrow('tracks[0].clips[0].grade.lut.strength must be at most 1.');
-		expect(() => parseVideoProject(project({ lut: { file: 'a.cube' } }))).toThrow('tracks[0].clips[0].grade.lut.file is not a LUT setting; use src, strength, name.');
+		expect(() => parseVideoProject(project({ lut: { file: 'a.cube' } }))).toThrow('tracks[0].clips[0].grade.lut.file is not a LUT setting; use src, strength, name, preserveSkinTones.');
 		expect(() => parseVideoProject(project({ lut: 'a.cube' }))).toThrow(/grade\.lut must be an object/);
 		const g = { exposure: 1, lut: { src: 'a.cube', strength: 0.5 } };
 		const graded = applyVideoGrade({ exposure: 1 }, [60, 90, 30]);

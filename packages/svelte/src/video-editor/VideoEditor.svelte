@@ -5,6 +5,8 @@
   import ClipInspector from './ClipInspector.svelte';
   import MediaBin from './MediaBin.svelte';
   import TranscriptPanel from './TranscriptPanel.svelte';
+  import TranscriptEditor from './TranscriptEditor.svelte';
+  import EditPlanPreview from './EditPlanPreview.svelte';
   import VideoPreview from './VideoPreview.svelte';
   import VideoScopes from './VideoScopes.svelte';
   import VideoTimeline from './VideoTimeline.svelte';
@@ -30,6 +32,12 @@
     showIssues?: boolean;
     /** Show the transcript panel for editing by text (default true). */
     showTranscript?: boolean;
+    /**
+     * How the transcript is shown: `panel` (default) is `TranscriptPanel`, which also loads
+     * transcript files; `editor` marks fillers, pauses and stutters and plans cleanups for review
+     * (`TranscriptEditor`).
+     */
+    transcriptMode?: 'editor' | 'panel';
     /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
     showScopes?: boolean;
     /**
@@ -47,7 +55,7 @@
     onplaybackreveal?: () => void | Promise<void>;
   }
 
-  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, class: className = '', playback, onplaybackreveal }: Props = $props();
+  let { controller, options, editable = true, pxPerSecond = $bindable(100), showIssues = true, showTranscript = true, transcriptMode = 'panel', showScopes = false, effects, showEffects, class: className = '', playback, onplaybackreveal }: Props = $props();
   let owned: VideoEditorController | null = null;
   // A controller is made only when none is passed, and kept for the component's lifetime.
   const ctl = $derived(controller ?? (owned ??= new VideoEditorController(options)));
@@ -55,7 +63,7 @@
   const view = videoEditorStateOf(() => ctl);
   const editor = $derived(view.current);
   useEffects(() => ctl, () => effects);
-  const effectsShown = $derived(showEffects ?? !!(editor.effectsProvider || editor.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.effects?.length || c.transition?.type === 'effect'))));
+  const effectsShown = $derived(showEffects ?? !!(editor.effectsProvider || editor.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.type === 'adjustment' || c.effects?.length || c.transition?.type === 'effect'))));
 </script>
 
 {#snippet issueList()}
@@ -79,7 +87,8 @@
     <VideoTransport controller={ctl} editable={false} />
     {#if showScopes}<VideoScopes controller={ctl} />{/if}
     <VideoTimeline controller={ctl} bind:pxPerSecond editable={false} {playback} {onplaybackreveal} />
-    {#if showTranscript}<TranscriptPanel controller={ctl} editable={false} />{/if}
+    <EditPlanPreview controller={ctl} editable={false} />
+    {#if showTranscript}{#if transcriptMode === 'editor'}<TranscriptEditor controller={ctl} editable={false} />{:else}<TranscriptPanel controller={ctl} editable={false} />{/if}{/if}
     {@render issueList()}
   </div>
 {:else}
@@ -96,7 +105,8 @@
     </div>
     <div class="flex min-w-0 flex-col gap-2 lg:col-span-3">
       <VideoTimeline controller={ctl} bind:pxPerSecond {playback} {onplaybackreveal} />
-      {#if showTranscript}<TranscriptPanel controller={ctl} />{/if}
+      <EditPlanPreview controller={ctl} />
+      {#if showTranscript}{#if transcriptMode === 'editor'}<TranscriptEditor controller={ctl} />{:else}<TranscriptPanel controller={ctl} />{/if}{/if}
       {@render issueList()}
     </div>
   </div>

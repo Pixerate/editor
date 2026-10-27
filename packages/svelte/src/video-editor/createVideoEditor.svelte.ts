@@ -3,6 +3,13 @@ import {
   VideoEditorController,
   createVideoEditorToolProvider,
   createVideoEffectsToolProvider,
+  createVideoDialogueToolProvider,
+  createVideoMusicToolProvider,
+  TranscriptVideoController,
+  type TranscriptVideoOptions,
+  type TranscriptVideoState,
+  type VideoDialogueToolProviderOptions,
+  type VideoMusicToolProviderOptions,
   type VideoEffectsToolProviderOptions,
   type VideoEditorOptions,
   type VideoEditorState,
@@ -124,4 +131,76 @@ export function useVideoEffectsTools(
     if (!target) return;
     return target.register(createVideoEffectsToolProvider(controller, options));
   });
+}
+
+/**
+ * Registers the talking-head cleanup tools (`find_video_disfluencies`, `plan_video_dialogue_cleanup`)
+ * for the lifetime of the calling component (skill `pixerate-talking-head-edit`).
+ */
+export function useVideoDialogueTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: VideoEditorController,
+  options: VideoDialogueToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createVideoDialogueToolProvider(controller, options));
+  });
+}
+
+/**
+ * Registers the music and mix tools (`find_video_beats`, `plan_video_beat_snap`, `duck_video_music`,
+ * `measure_video_loudness`, `normalize_video_loudness`) for the lifetime of the calling component
+ * (skill `pixerate-bgm-alignment`).
+ */
+export function useVideoMusicTools(
+  registry: ToolRegistry | null | undefined | (() => ToolRegistry | null | undefined),
+  controller: VideoEditorController,
+  options: VideoMusicToolProviderOptions = {},
+): void {
+  $effect(() => {
+    const target = typeof registry === "function" ? registry() : registry;
+    if (!target) return;
+    return target.register(createVideoMusicToolProvider(controller, options));
+  });
+}
+
+
+/**
+ * Svelte 5 rune: a `TranscriptVideoController` over a video editor and its reactive state. It is
+ * rebuilt when the editor, track or `planFirst` change, and destroyed with the calling component.
+ */
+export function transcriptVideoOf(
+  getController: () => VideoEditorController,
+  getOptions: () => TranscriptVideoOptions = () => ({}),
+): { readonly current: TranscriptVideoState; readonly transcript: TranscriptVideoController } {
+  const initial = untrack(() => ({ controller: getController(), ...getOptions() }));
+  let built = initial;
+  let transcript: TranscriptVideoController = $state.raw(new TranscriptVideoController(initial.controller, initial));
+  let view: TranscriptVideoState = $state.raw(untrack(() => transcript.getState()));
+  $effect(() => {
+    const next = { controller: getController(), ...getOptions() };
+    untrack(() => {
+      if (next.controller !== built.controller || next.track !== built.track || !!next.planFirst !== !!built.planFirst) {
+        transcript.destroy();
+        transcript = new TranscriptVideoController(next.controller, next);
+        built = next;
+      }
+    });
+    const current = untrack(() => transcript);
+    view = current.getState();
+    return current.subscribe((state) => {
+      view = state;
+    });
+  });
+  $effect(() => () => untrack(() => transcript).destroy());
+  return {
+    get current() {
+      return view;
+    },
+    get transcript() {
+      return transcript;
+    },
+  };
 }

@@ -5,6 +5,10 @@ export const VIDEO_TIME_EPSILON = 0.5;
 
 export const videoClipEnd = (clip: VideoClip): number => clip.start + clip.duration;
 
+/** What a clip is called in messages: "title", "colour", "effect clip", "adjustment clip", "compound clip" or "media clip". */
+export const videoClipTypeLabel = (clip: Pick<VideoClip, 'type'>): string =>
+	({ text: 'title', color: 'colour', effect: 'effect clip', adjustment: 'adjustment clip', sequence: 'compound clip', media: 'media clip' })[clip.type];
+
 /** Whether a track moves with ripple edits on other tracks (`syncLocked`, default true). */
 export const videoTrackSyncLocked = (track: VideoTrack): boolean => track.syncLocked !== false;
 
