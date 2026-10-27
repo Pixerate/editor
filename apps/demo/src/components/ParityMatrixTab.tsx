@@ -158,6 +158,12 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Gradient Data Model & Controller (linear, radial, conic, stops, midpoints, interpolation)", "GradientController, createGradient, gradientToCss (/gradient)", "useGradientController", "createGradientController", "Undoable edits, validated geometry, dual stops"),
   row("Interactive Gradient Editor & Fill Picker", "stopFromTrackPosition, gradientKeyStep, angleFromPointer (/gradient)", "<GradientEditor />, <FillPicker />", "<GradientEditor />, <FillPicker />", "Stops bar with drag and keyboard, angle dial, presets, reverse, distribute"),
   row("Colour & Gradient Agent Tools (inspect, contrast, palette, harmony, blend, dual colours, gradient edits)", "createColorToolProvider, createGradientToolProvider", "useAgentToolProvider", "useAgentToolProvider", "8 colour tools and 11 gradient tools with strict schemas"),
+  row("Type Scales, Hierarchies & Fluid Sizes (modular ratios, caption…display tokens, CSS custom properties, clamp())", "computeTypeScale, generateTypeHierarchy, typeHierarchyToCss, computeFluidSize (/typography)", "Via core", "Via core", "Recommended line-height and tracking per size"),
+  row("Readability & Type-Aware Contrast (measure, line spacing, all caps, large-text detection)", "auditTextReadability, checkTypographyAccessibility (/typography)", "Via core", "Via core", "WCAG large text decided from size and weight"),
+  row("Font Stacks, Providers & Loading (system catalog, Local Font Access opt-in, web fonts, @font-face)", "resolveFontFallback, createSystemFontProvider, createWebFontProvider, ensureFontsLoaded (/typography)", "Via core", "Via core", "No font files bundled; loaders injectable"),
+  row("Text Segmentation for Animation (graphemes, words, sentences, lines)", "segmentText (/typography)", "Via core", "Via core", "UTF-16 offsets; Intl.Segmenter with fallback"),
+  row("Font Picker & Typography Control (search, categories, weights, styles, preview, size, leading, tracking)", "FontPickerModel (/typography)", "<FontPicker />, <TypographyControl />, useFontPicker", "<FontPicker />, <TypographyControl />, fontPickerOf", "Combobox keys; agent edits show live"),
+  row("Typography Agent Tools (fonts, stacks, scales, fluid sizes, readability, contrast, segments, font picker)", "createTypographyToolProvider, createFontPickerToolProvider", "useAgentToolProvider", "useAgentToolProvider", "9 typography tools and 3 font picker tools"),
 ];
 
 const FEATURES: ParityRow[] = [

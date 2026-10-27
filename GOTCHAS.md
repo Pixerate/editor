@@ -21,6 +21,35 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [paint/wet] Wet Paint Mixing Samples Only Suspended Pigment While Settled Pigment Carries Visible Color
+
+- **Issue / Symptom**: Overlapping wet paint strokes (such as Gouache or Watercolor) fail to mix; subsequent strokes paint with their raw color without picking up underlying wet strokes, behaving as opaque dry coats.
+- **Root Cause**: In the wet simulation grid (`world.ts`), pigment deposits from water suspension (`P_P0`) into settled grain (`P_D0`) within seconds, and re-wetted dry paint is directly placed into `settled`. `WetMedium.sample` was only reading `s.pigment`, meaning once pigment settled onto the paper substrate (even while paper remained completely wet), the sampler returned zero pigment density. Additionally, gouache presets lacked evaporation damping, causing moisture to dissipate before a user could pick another color.
+- **Solution / Workaround**: In `WetMedium.sample`, sum both suspended (`s.pigment`) and settled (`s.settled`) absorption channels ($K$), matching visual shader rendering (`shadeTile`). Ensure wet brush definitions specify proper `pickup` and `mixing: 'pigment'` behavior with appropriate evaporation rates to permit natural inter-stroke mixing.
+### [core/typography] `document.fonts.check()` Says Yes for Fonts That Are Not Installed
+
+- **Issue / Symptom**: A system font provider that answered `hasFont` with `document.fonts.check('16px "Some Font"')` reported every family as available, including made-up names.
+- **Root Cause**: `FontFaceSet.check()` answers whether loading the matching faces *in the set* would be needed. When no `@font-face` in the set matches the family, nothing needs loading, so it returns `true`. It says nothing about installed system fonts.
+- **Solution / Workaround**: `createSystemFontProvider` never uses `check()`. It answers from the metadata catalog (what is commonly installed), or from `queryLocalFonts()` when the host opts in (it prompts for permission, so it is only called when passed in). Web fonts report their own load state through `createWebFontProvider(...).loaded()`. Always ship a family inside a `resolveFontFallback` stack.
+
+### [core/color] Accessible Colour Suggestions Must Be Judged After Rounding to Hex
+
+- **Issue / Symptom**: `check_color_contrast` (and the new typography check) sometimes suggested a foreground that failed AA when checked again, e.g. 4.48:1 for a 4.5:1 target.
+- **Root Cause**: The OKLCH lightness search tested the unrounded candidate, which just passed, then returned `formatHex(candidate)`. Rounding each channel to 8 bits moves luminance enough (about 0.02 in ratio near mid-greys) to drop it below the threshold.
+- **Solution / Workaround**: `suggestAccessibleForeground` (`color/suggest.ts`, shared by the colour and typography tools) parses each candidate back from its hex string before measuring it, so the returned colour is the one that was checked.
+
+### [core/typography] `Intl.Segmenter` Has No Line Granularity, and Not Every Runtime Has `Intl.Segmenter`
+
+- **Issue / Symptom**: Splitting text "into lines" for animation cannot use `Intl.Segmenter` (it offers `grapheme`, `word` and `sentence` only), and older runtimes throw on `new Intl.Segmenter`.
+- **Root Cause**: Where a line wraps depends on the renderer's measure, which a DOM-free module does not know.
+- **Solution / Workaround**: `segmentText(text, 'line')` splits on hard breaks (`\r\n`, `\n`, `\r`, U+2028/2029) and, with `maxCharacters`, wraps greedily at word boundaries, keeping UTF-16 offsets into the original string. Without `Intl.Segmenter` it falls back to code points and Unicode-property regexes. Hosts that know their layout should split by their own line boxes.
+
+### [react|svelte/typography] A Controlled Font Picker Must Not Echo `value` Back Through `onChange`
+
+- **Issue / Symptom**: Passing a new `value` to `FontPicker` called `onChange` with the same value, which a parent that normalises values can turn into a render loop; and a parent passing its own `model` never heard about changes made through that model (UI or agent tools), because the model's constructor `onChange` belonged to whoever created it.
+- **Root Cause**: Both changes went through one notification path.
+- **Solution / Workaround**: `FontPickerModel.setValue` (used for controlled updates) only updates state; user and agent changes go through `commit`, which calls `onValueChange` listeners. The React hook and the Svelte component subscribe with `onValueChange` (always calling the latest callback), so a shared model also reports agent edits made with `createFontPickerToolProvider`.
+
 ### [paint-editor] Moving the Picture Means Moving Every Document-Space Coordinate
 
 - **Issue / Symptom**: Growing the paint canvas to the left or top by bumping layer offsets alone left the paper grain, symmetry centre, stencils and recorded strokes behind. Paint no longer sat in its grain, guides pointed at the wrong place, and replays painted shifted. Undo after a later wet stroke threw "The wet world is the wrong size".

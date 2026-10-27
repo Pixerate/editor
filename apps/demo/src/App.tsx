@@ -16,6 +16,7 @@ const AnimationTab = lazy(() => import("./components/AnimationTab").then((m) => 
 const VideoTab = lazy(() => import("./components/VideoTab").then((m) => ({ default: m.VideoTab })));
 const ChartTab = lazy(() => import("./components/ChartTab").then((m) => ({ default: m.ChartTab })));
 const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ default: m.ColorTab })));
+const TypographyTab = lazy(() => import("./components/TypographyTab").then((m) => ({ default: m.TypographyTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 const EffectAuthoringTab = lazy(() => import("./components/EffectAuthoringTab").then((m) => ({ default: m.EffectAuthoringTab })));
 import { AgentToolsPanel } from "./components/AgentToolsPanel";
@@ -34,9 +35,10 @@ import {
   Brush,
   Palette,
   Wand2,
+  Type,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "params" | "effects" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "typography" | "params" | "effects" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -78,6 +80,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
     label: "Reference",
     tabs: [
       { id: "color", label: "Colour & A11y", icon: Palette, hint: "Perceptual spaces, WCAG, CVD" },
+      { id: "typography", label: "Typography", icon: Type, hint: "Fonts, scales, readability" },
       { id: "params", label: "Parameters", icon: SlidersHorizontal, hint: "Typed controls from a schema" },
       { id: "parity", label: "Feature parity", icon: CheckCircle2, hint: "Core, React and Svelte" },
     ],
@@ -233,6 +236,7 @@ export default function App() {
           {activeTab === "video" && <VideoTab />}
           {activeTab === "chart" && <ChartTab />}
           {activeTab === "color" && <ColorTab />}
+          {activeTab === "typography" && <TypographyTab />}
           {activeTab === "effects" && <EffectAuthoringTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
