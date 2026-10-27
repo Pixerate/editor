@@ -5,6 +5,76 @@ Perform a deep reverse-engineering analysis of `/Applications/CapCut.app` using 
 
 This plan integrates directly with `@pixerate/editor`'s latest architecture, specifically the newly introduced **Effects Authoring Editor** (`@pixerate/editor/effects`, `EffectAuthoringSession`, `EffectAuthoringEditor`), keyframe animation system (`@pixerate/editor/animation`), and color & gradient subsystems (`@pixerate/editor/color`, `@pixerate/editor/gradient`).
 
+
+## Implementation Status
+
+Everything in **section 4 (Proposed Changes)** is built natively in this library. Nothing calls,
+embeds or depends on CapCut: the analysis above only informed which capabilities to build. Where
+the plan conflicted with the code, the code won; the deviations are listed below.
+
+| Plan item | Status | Where |
+| :--- | :--- | :--- |
+| Adjustment clips with scope (`all` / `underneath` / `track`) | Built | `VideoAdjustmentClip` (`types.ts`), `evaluate.ts` (group layer of the pictures in scope), canvas and SVG through the compound path in `render.ts`, ffmpeg in `export.ts`, `add_video_adjustment_clip`, `<VideoTransport>` Adjustment button, `<ClipInspector>` scope rows |
+| Adjustment clips in the effect authoring editor, keyframe alignment with `@pixerate/editor/animation` | Built | `effect-authoring.ts` (`openVideoClipEffectAuthoring`, `videoClipEffectDocument`, `videoEffectValuesFromDocument`, ease conversion both ways), `<VideoEffectsPanel>` author button in React and Svelte |
+| `VideoClipMask` (shape, position, size, rotation, feather, corner radius, invert) | Built | `mask.ts`, `evaluate.ts`, `render.ts`, `set_video_clip_mask` / `remove_video_clip_mask`, `<ClipInspector>` mask rows |
+| Skin-tone protection for grades and LUTs | Built (on the LUT) | `preserveSkinTones` on `VideoGradeLut`, `videoSkinToneWeight` (`lut.ts`), `applyVideoLutToPixels`, `applyVideoGrade`, `set_video_skin_protection`, `preserve_skin_tones` on `set_video_lut`, `<ClipInspector>` Protect skin |
+| `speedCurve` (Bezier speed ramping) | Already in the code | `VideoMediaClip.timeRemap` with eased keys (`remap.ts`, `set_video_speed_ramp`); no second field added |
+| `VideoEditPlan` | Built | `plan.ts` (`planVideoEdits`, `diffVideoProjects`, `describeVideoEditPlan`), controller `proposePlan` / `applyPlan` / `discardPlan` / `planPreview` / `isPlanStale`, `state.plans` |
+| Audio ducking keyframes | Built | `mix.ts` (`videoSpeechRanges`, `videoDuckingKeys`), `duck_video_music` |
+| Loudness gain to a target (-14 LUFS) | Built | `mix.ts` (BS.1770 K-weighting and gating, `measureVideoLoudness`, `videoAudioLoudness`, `videoLoudnessGain`), `VideoAudioPeaks.loudness`, `measure_video_loudness`, `normalize_video_loudness` |
+| `createTranscriptEditPlan`, `detectTranscriptDisfluencies` | Built (renamed) | `detectVideoDisfluencies`, `findVideoRepetitions`, `videoCutsWithMargin` (`transcript.ts`); plans come from `TranscriptVideoController.planCleanup` / `deleteSelection({ plan: true })` and `plan_video_dialogue_cleanup` |
+| `TranscriptVideoController` | Built | `transcript-controller.ts` |
+| Skills `pixerate-talking-head-edit`, `pixerate-bgm-alignment` | Built | `packages/core/skills/`, mapped in `tests/agent-skills.test.ts` |
+| Tools `plan_video_edits`, `apply_video_edit_plan`, `find_video_disfluencies`, `duck_background_music`, `add_adjustment_clip`, `set_video_clip_mask` | Built (some renamed) | See the tool list below |
+| Beat detection and cuts on the beat (bgm skill) | Built | `findVideoAudioBeats`, `nearestVideoBeat` (`mix.ts`), `find_video_beats`, `plan_video_beat_snap` |
+| `TranscriptEditor`, `EditPlanPreview` in React and Svelte | Built | `packages/react/src/video-editor/`, `packages/svelte/src/video-editor/` |
+| Demo | Built | Video tab registers the dialogue and music providers; new agent script "video-night-look" (adjustment clip, mask, plan, apply) |
+
+**Tools added.** Main video provider (`createVideoEditorToolProvider`, skill `pixerate-video-editor`):
+`add_video_adjustment_clip`, `set_video_clip_mask`, `remove_video_clip_mask`,
+`set_video_skin_protection`, `plan_video_edits`, `list_video_edit_plans`, `apply_video_edit_plan`,
+`discard_video_edit_plan`, plus `preserve_skin_tones` on `set_video_lut`. Dialogue provider
+(`createVideoDialogueToolProvider`, skill `pixerate-talking-head-edit`): `find_video_disfluencies`,
+`plan_video_dialogue_cleanup`. Music provider (`createVideoMusicToolProvider`, skill
+`pixerate-bgm-alignment`): `find_video_beats`, `plan_video_beat_snap`, `duck_video_music`,
+`measure_video_loudness`, `normalize_video_loudness`.
+
+**Deviations from the plan (the code wins).**
+
+- The clip type union already has `media | text | color | sequence | effect`; there are no `video`,
+  `audio`, `image` or `title` clip types. The adjustment clip is a sixth type, `adjustment`, and
+  extends the shared clip base, so it has fades, opacity, blend, grade, effects and mask like any clip.
+- Its target is `targetTrack`, not `targetTrackId`: clip fields are spread next to `track` in tool
+  results, and the project's ids have no `Id` suffix. Scope names are `underneath`, `all` and `track`.
+- `VideoColorGrade` and `VideoLutRef` do not exist. Skin protection is `preserveSkinTones` on the
+  grade's LUT (`VideoGradeLut`), because the grade's other steps are colour matrices (CSS, SVG and
+  ffmpeg filters) that cannot be masked per pixel; the LUT already runs per pixel on the CPU.
+- No `speedCurve`: speed ramps already exist as `timeRemap` keys with cubic-bezier eases.
+- Tool names follow the `*_video_*` convention: `duck_video_music` (not `duck_background_music`),
+  `add_video_adjustment_clip` (not `add_adjustment_clip`). Talking-head and music tools are their
+  own providers, so each skill documents exactly its tools.
+- `createTranscriptEditPlan` became `TranscriptVideoController.planCleanup` and the dialogue tool:
+  a plan needs the controller to keep it, so the pure part is `detectVideoDisfluencies` plus
+  `planVideoEdits`.
+- ffmpeg exports draw an adjustment clip's grade or full-strength LUT at full opacity over what is
+  underneath or the whole frame. Masks, fades, part opacity, blends, transitions and scope `track`
+  are refused with a message unless the host passes rendered frames (`renderVideoFrameExact`), as
+  provider effects already were. Skin protection is noted, not applied, by `lut3d`.
+- Speech recognition is the host's job: transcripts still come in as Whisper JSON, SRT or VTT
+  (`parseVideoTranscript`, `set_video_transcript`). No speech-to-text service or voice cloning is
+  built in. A pluggable speech-to-text interface was not needed, because every cleanup tool works
+  on any attached transcript.
+
+**Not built (section 2 opportunities outside the proposed changes):** kinetic word-by-word
+captions, the node-based AIGC workflow, C2PA manifests on export, overdub and voice cloning. They
+need product decisions (caption design system, provenance signing keys, a voice model) and are
+left for follow-up plans.
+
+**Tests:** `tests/video-adjustment-effects.test.ts`, `tests/video-audio-ducking.test.ts`,
+`tests/video-transcript-cleanup.test.ts`, `tests/video-edit-plan.test.ts` (core), plus
+`tests/video-production.test.tsx` (React) and `tests/video-production.svelte.test.ts` (Svelte). All
+use synthetic samples and transcripts: no media decoding or network.
+
 ---
 
 ## 1. REA & Shipped Target Evidence
@@ -208,7 +278,7 @@ The concepts in `@pixerate/editor` are exceptionally well-positioned to both lea
    ```
 3. **Transcript & Disfluency Detection**:
    ```bash
-   pnpm --filter @pixerate/editor test tests/video-transcript.test.ts
+   pnpm --filter @pixerate/editor test tests/video-transcript-cleanup.test.ts
    ```
 4. **Edit Plan Generation & Application**:
    ```bash
