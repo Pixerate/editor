@@ -60,3 +60,27 @@ describe('image editor panel controls', () => {
     ]);
   });
 });
+
+describe('LayerPanel', () => {
+  it('follows changes to the active layer', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    const id = controller.addPixelLayer({ name: 'Paint' });
+    controller.setActiveLayer(id);
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'properties' } });
+    flushSync();
+    const opacity = () => (target.querySelector('input[type="range"][aria-label="Opacity"]') as HTMLInputElement).value;
+    expect(opacity()).toBe('1');
+    controller.setLayerProperties(id, { opacity: 0.4, name: 'Renamed' });
+    flushSync();
+    expect(opacity()).toBe('0.4');
+    expect(target.textContent).toContain('40%');
+    // The slider works in the control's 0-1 range.
+    const input = target.querySelector('input[type="range"][aria-label="Opacity"]') as HTMLInputElement;
+    input.value = '0.25';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(controller.getLayer(id)?.opacity).toBe(0.25);
+    expect(target.textContent).toContain('Renamed');
+  });
+});
