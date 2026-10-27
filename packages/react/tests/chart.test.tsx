@@ -336,6 +336,37 @@ describe("ChartInspector", () => {
     expect(controller.getSpec().links).toEqual([]);
   });
 
+  it("plays, pauses and scrubs a bar race, and the canvas draws the moment", async () => {
+    let now = 0;
+    let queued: (() => void)[] = [];
+    const raceTicker = { now: () => now, next: (step: () => void) => (queued.push(step), () => (queued = queued.filter((q) => q !== step))) };
+    const controller = new ChartController({ spec: { ...sales, type: "barrace" }, raceTicker });
+    await render(
+      <>
+        <ChartInspector controller={controller} />
+        <ChartCanvas controller={controller} />
+      </>,
+    );
+    await act(async () => q('[data-action="race-play"]').click());
+    expect(controller.getState().racePlaying).toBe(true);
+    expect(q('[data-action="race-play"]').textContent).toBe("Pause");
+    await act(async () => {
+      now += 500;
+      const run = queued;
+      queued = [];
+      run.forEach((step) => step());
+    });
+    expect(controller.getState().raceFrame).toBeCloseTo(0.5, 6);
+    await act(async () => q('[data-action="race-play"]').click());
+    expect(controller.getState().racePlaying).toBe(false);
+    await type(q<HTMLInputElement>('[data-option="raceFrame"]'), "0", "change");
+    expect(controller.getState().raceFrame).toBe(0);
+    expect(q("[data-race-time]").textContent).toBe("Q1");
+    expect(container.querySelector("svg")!.textContent).toContain("Q1");
+    await type(q<HTMLInputElement>('[data-option="raceTopN"]'), "1");
+    expect(controller.getSpec().raceTopN).toBe(1);
+  });
+
   it("sets radar rings and grid shape", async () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     await render(<ChartInspector controller={controller} />);

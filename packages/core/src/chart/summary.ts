@@ -9,6 +9,7 @@ import { formatChartNumber } from './scale.js';
 import { chartSpecColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
 import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
+import { chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeToRows } from './tree.js';
 
 /** An axis as drawn. `logBase` is set on a logarithmic axis, `reversed` when it runs the other way. */
@@ -84,6 +85,13 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 			parts.push(`The data is grouped ${depth} level${depth === 1 ? '' : 's'} deep with ${items} item${items === 1 ? '' : 's'}.`);
 		}
 		return parts.join(' ');
+	}
+	if (family === 'barrace') {
+		const n = spec.categories.length;
+		const first = chartRaceRanking(spec, 0)[0];
+		const last = chartRaceRanking(spec, n - 1)[0];
+		const lead = (e: typeof first | undefined, at: string) => (e ? `${e.name} leads at ${at} with ${fmt(e.value)}` : '');
+		return `${head} of ${series.length} names over ${n} time points (${spec.categories[0]} to ${spec.categories[n - 1]}), showing the top ${Math.min(spec.raceTopN, series.length)}. ${lead(first, spec.categories[0])}; ${lead(last, spec.categories[n - 1])}.`;
 	}
 	if (family === 'sankey') {
 		if (!spec.links.length) return `${head} with no flows yet.`;

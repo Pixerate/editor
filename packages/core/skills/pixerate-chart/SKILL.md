@@ -1,6 +1,6 @@
 ---
 name: pixerate-chart
-description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap (flat or grouped), sunburst, Sankey, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
+description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap (flat or grouped), sunburst, Sankey, slope, Likert (survey), parliament and bar chart race charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
 ---
 
 # Charts
@@ -23,6 +23,11 @@ levels). When a tree is set it *is* the data: the categories are its top-level g
 and the first series their totals, so a treemap nests the groups, a sunburst draws them as
 rings, and any other type draws the totals. Nodes are addressed by `path`, the names from the
 top down (`["Europe", "France"]`); `get_chart` returns them as `treeTable`.
+
+A bar race (`barrace`) reads the ordinary table differently: each category is a time point
+and each series a name, and it draws the top `raceTopN` names at one moment as ranked bars.
+Which moment is shown is view state (`set_chart_race_frame`, `play_chart_race`), not part of
+the chart.
 
 Flows live in `spec.links` (`{source, target, value}` between named nodes). They work the same
 way: when set they are the data, the categories are the nodes (stacked in `sankeyNodes`
@@ -81,6 +86,8 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
   total in the middle). Load the levels with `import_chart_tree_csv` or `set_chart_tree`.
   Flows from stage to stage (a pipeline, a budget, energy or traffic sources): sankey; load
   rows of source, target, value with `import_chart_links_csv` or `set_chart_links`.
+  A ranking that changes over time (sales by product per year, top cities per decade): barrace,
+  with time points as categories and one series per name; keep `raceTopN` to about 10.
   Seats or votes per group with a majority: parliament (`parliamentMajority`,
   `parliamentArc`, `parliamentLabel`).
 - **Bars start at zero.** Bar length encodes the value, so never set a non-zero `min` on the
@@ -142,6 +149,7 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 | `check_chart_colors` | Check the chart's series (or slice) colours, or a `colors` list, for normal vision, protanopia, deuteranopia and tritanopia, and contrast against `surface` (default white). Returns the closest pair per vision and problems as sentences. Run after any colour change. |
 | `recommend_chart` | Ranked chart types with a reason each, from `csv` when given, else the current data (series count, points, dates, negative values). Use before choosing a type. |
 | `get_chart_trendline` | Read a trendline's fit (`series`, `index`): coefficients, R2, equation and point count, or the moving-average points. Fails when the fit needs more or positive values. |
+| `get_chart_race_ranking` | Read who leads a bar race at a moment (`time`: a category label or index, fractional between time points; default the moment shown): the top `raceTopN` with rank, series id and value. Read-only; use it to describe the race instead of rendering frames. |
 | `list_chart_presets` | List the quick layouts (`standard`, `minimal`, `labelled`, `legend-right`, `presentation`, `analysis`) and colour schemes (such as `default`, `okabe-ito`, `office`, monochrome) with what each changes. |
 | `export_chart_mermaid` | Get the chart as Mermaid for Markdown or chat: `xychart-beta`, `pie` or `radar-beta`, `sankey-beta` for Sankey diagrams with flows (title in frontmatter), `treemap-beta` for treemaps and sunbursts with their levels. With `meta` (default true) a `%% @pixerate` comment keeps everything Mermaid cannot express so `import_chart_mermaid` restores it exactly. |
 | `export_chart_ooxml` | Get a DrawingML `c:chartSpace` part for Word or PowerPoint, plus sentences for anything that could not be written. |
@@ -156,7 +164,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total), `sunburstLabel` (caption under a sunburst's total), `sankeyLinkColor` (`source` / `target` / `gray`), `sankeyNodes` (node stacking order). Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total), `sunburstLabel` (caption under a sunburst's total), `sankeyLinkColor` (`source` / `target` / `gray`), `sankeyNodes` (node stacking order), `raceTopN` (bars per moment, 1-30). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -188,6 +196,8 @@ it changed.
 | `add_chart_link` | Add one flow (new names add nodes). Refused for a repeated pair or a loop. Returns its `index` and its two nodes' throughput. |
 | `update_chart_link` | Change a flow's source, target, value or colour by `index` (from `spec.links`). |
 | `remove_chart_link` | Delete a flow by `index`; nodes no flow uses any more go. Returns the flows left. |
+| `set_chart_race_frame` | Show the bar race at a moment (`time`, or null for the last) and stop playback. View state, not an undo step. Returns the moment and the ranking shown. |
+| `play_chart_race` | Start playing the race for the user from the moment shown, one time point every `msPerStep` ms; returns at once with the duration. |
 | `apply_chart_preset` | Apply a quick `layout` and / or a `colors` scheme from `list_chart_presets` in one step. |
 | `transpose_chart` | Swap series and categories. Drops per-series colours and settings, so restyle afterwards. |
 | `select_chart_element` | Select part of the chart (`kind`: none, chart, title, subtitle, legend, axis, series, point, category, trendline) for the user to see or before `press_chart_key`. |
@@ -249,6 +259,10 @@ several charts may register them with another prefix.
 | `chart.addLink` | Add a flow; returns its index. |
 | `chart.updateLink` | Change a flow by index. |
 | `chart.removeLink` | Delete a flow by index. |
+| `chart.raceRanking` | Read a bar race ranking (as `get_chart_race_ranking`). |
+| `chart.setRaceFrame` | Show a bar race moment. |
+| `chart.playRace` | Play the bar race. |
+| `chart.pauseRace` | Pause bar race playback (the palette command people use; agents use `set_chart_race_frame`). |
 | `chart.applyPreset` | Apply a quick layout and / or colour scheme. |
 | `chart.transpose` | Swap series and categories. |
 | `chart.importCsv` | Replace data from CSV / TSV (no automatic chart type). |
@@ -283,6 +297,10 @@ several charts may register them with another prefix.
   categories, `transpose_chart`) are refused, because the totals come from the tree or flows.
   Edit the nodes or flows, or replace the data (`set_chart_data`, `import_chart_csv`), which
   clears them.
+- A bar race fills gaps with the last known value (0 before a name's first), and values and
+  places ease between time points, so a name can sit between two places mid-swap. `render_chart`
+  takes `time` to draw one moment. Office and Mermaid export cannot animate: they get every
+  name at every time point as clustered bars.
 - Sankey columns come from the flows: a node sits one column after the furthest node that
   flows into it, and nodes with no outgoing flow line up on the right. Within a column nodes
   stack in `sankeyNodes` order; if flows cross badly, reorder `sankeyNodes` (for instance,

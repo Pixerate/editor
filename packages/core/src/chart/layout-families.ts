@@ -3,10 +3,11 @@
 // `treemap`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { categoryFrame, toValueScale } from './layout-cartesian.js';
 import { arcPath, axisScale, contrastingTextColor, r2, truncate, type FamilyResult, type LayoutCtx } from './layout-shared.js';
-import { formatChartNumber, linearMap, stepDecimals } from './scale.js';
+import { formatChartNumber, linearMap, niceScale, stepDecimals } from './scale.js';
 import { chartSeriesColor, chartSliceColor } from './spec.js';
 import { shadeChartColor } from './color.js';
 import { chartBoxStats, chartHistogram, chartSquarify } from './stats.js';
+import { chartRaceMoment, chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeFromSeries, chartTreeTotal } from './tree.js';
 import type { ChartMark, ChartRect, ChartSelection, ChartSeries, ChartTreeNode } from './types.js';
 
@@ -839,4 +840,52 @@ export function layoutSankey(ctx: LayoutCtx, area: ChartRect, series: ChartSerie
 	});
 	if (hidden) ctx.warn('labels-truncated', `${hidden} node label${hidden === 1 ? ' was' : 's were'} shortened to fit between the columns.`);
 	return { plot: area };
+}
+
+/**
+ * Bar race: the top `raceTopN` names at one moment (`frame`, a fractional category index;
+ * default the last time point) as ranked horizontal bars. Values ease between time points and
+ * places slide from one ranking to the next, so drawing frame after frame (or blending scenes,
+ * which match bars by series) animates the race. The time point is written large in a corner.
+ */
+export function layoutBarRace(ctx: LayoutCtx, area: ChartRect, frame: number | null | undefined): FamilyResult {
+	const { spec, theme, marks, fs, measure } = ctx;
+	const top = spec.raceTopN;
+	const moment = chartRaceMoment(spec.categories.length, frame);
+	const ranking = chartRaceRanking(spec, frame);
+	const shown = ranking.filter((e) => e.position < top);
+	const labelW = Math.min(area.width * 0.3, Math.max(0, ...ranking.map((e) => measure(e.name, fs)))) + 8;
+	const tickH = spec.yAxis.show ? fs * 1.6 : 4;
+	const plot: ChartRect = { x: area.x + labelW, y: area.y + tickH, width: Math.max(1, area.width - labelW - fs * 4), height: Math.max(1, area.height - tickH) };
+	// A plain linear scale keeps bars from jumping when the leader crosses a round number.
+	const lead = Math.max(1e-9, ...shown.map((e) => e.value));
+	const max = spec.yAxis.max !== null && spec.yAxis.max > 0 ? spec.yAxis.max : lead * 1.08;
+	const xOf = (v: number) => plot.x + (Math.max(0, Math.min(max, v)) / max) * plot.width;
+	const ticks = niceScale(0, max, 5).ticks.filter((t) => t <= max);
+	const axisTarget: ChartSelection = { kind: 'axis', axis: 'y' };
+	const format = spec.yAxis.format;
+	ticks.forEach((t, k) => {
+		if (spec.yAxis.gridlines) marks.push({ kind: 'line', key: `grid-y-${k}`, role: 'grid', x1: xOf(t), y1: plot.y, x2: xOf(t), y2: plot.y + plot.height, stroke: theme.grid, strokeWidth: 1 });
+		if (spec.yAxis.show) marks.push({ kind: 'text', key: `tick-y-${k}`, role: 'tick-label', x: xOf(t), y: area.y, text: formatChartNumber(t, format, format.decimals ?? stepDecimals(ticks[1] - ticks[0] || 1)), anchor: 'middle', baseline: 'top', size: fs - 1, fill: theme.mutedText, target: axisTarget });
+	});
+	const label = spec.categories[moment.t < 0.5 ? moment.from : moment.to] ?? '';
+	const timeSize = Math.min(theme.titleSize * 3, plot.height * 0.2, (plot.width * 0.5) / Math.max(1, label.length * 0.6));
+	marks.push({ kind: 'text', key: 'race-time', role: 'race-time', x: plot.x + plot.width, y: plot.y + plot.height - 4, text: label, anchor: 'end', baseline: 'bottom', size: timeSize, weight: 700, fill: theme.mutedText, opacity: 0.55, target: { kind: 'category', index: moment.t < 0.5 ? moment.from : moment.to } });
+	const band = plot.height / top;
+	const barH = Math.max(2, band * (1 - Math.min(0.8, spec.gapWidth)));
+	const index = Math.round(moment.at);
+	for (const e of shown) {
+		const si = spec.series.findIndex((s) => s.id === e.seriesId);
+		const s = spec.series[si];
+		const y = plot.y + e.position * band + (band - barH) / 2;
+		const target: ChartSelection = { kind: 'point', seriesId: e.seriesId, index };
+		const selected = ctx.isSelected(target) || ctx.seriesSelected(e.seriesId);
+		const width = Math.max(0, xOf(e.value) - plot.x);
+		// Keys follow the series, so blending two frames moves each bar to its new place.
+		marks.push({ kind: 'rect', key: `bar-${e.seriesId}`, role: 'bar', x: plot.x, y, width, height: barH, fill: chartSeriesColor(spec, si), radius: Math.min(3, barH / 4), target, selected, ...(selected ? { stroke: theme.selection, strokeWidth: 1.5 } : {}) });
+		marks.push({ kind: 'text', key: `label-name-${e.seriesId}`, role: 'tick-label', x: plot.x - 6, y: y + barH / 2, text: truncate(e.name, labelW - 8, fs, measure), anchor: 'end', baseline: 'middle', size: fs, fill: selected ? theme.selection : theme.text, target: { kind: 'series', seriesId: e.seriesId } });
+		if (s.dataLabels ?? true) marks.push({ kind: 'text', key: `label-${e.seriesId}`, role: 'data-label', x: plot.x + width + 5, y: y + barH / 2, text: formatChartNumber(e.value, s.format ?? format, (s.format ?? format).decimals ?? (Math.abs(e.value) >= 100 ? 0 : undefined)), anchor: 'start', baseline: 'middle', size: fs - 1, fill: theme.text, target });
+	}
+	if (ranking.length > top) ctx.warn('values-skipped', `The race shows the top ${top} of ${ranking.length} names at each moment (raceTopN).`);
+	return { plot, valueScale: { axis: 'x', domain: [0, max], range: [plot.x, plot.x + plot.width], ticks } };
 }

@@ -268,7 +268,7 @@ function ErrorBarFields({ controller, series, which, idBase }: { controller: Cha
  * axes and the selected series. Every change is one undo step.
  */
 export function ChartInspector({ controller, sections, className }: ChartInspectorProps) {
-  const { spec, selectedSeries, selection } = useChartState(controller);
+  const { spec, selectedSeries, selection, raceFrame, racePlaying } = useChartState(controller);
   const idBase = useId();
   const show = (section: ChartInspectorSection) => !sections || sections.includes(section);
   const cartesian = isCartesianChart(spec.type);
@@ -403,6 +403,35 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 onPointerUp={() => controller.endGesture()}
                 onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
               />
+            </Field>
+          )}
+          {spec.type === 'barrace' && (
+            <Field label="Bars" htmlFor={`${idBase}-race-top`}>
+              <ChartCommitInput id={`${idBase}-race-top`} value={String(spec.raceTopN)} inputMode="numeric" data-option="raceTopN" className={chartInputClass} onCommit={(text) => controller.update({ raceTopN: Number(text) }).ok} />
+            </Field>
+          )}
+          {spec.type === 'barrace' && spec.categories.length > 1 && (
+            <Field label="Time" htmlFor={`${idBase}-race-frame`}>
+              <div className="flex items-center gap-1">
+                <button type="button" className={chartButtonClass} data-action="race-play" aria-label={racePlaying ? 'Pause the race' : 'Play the race'} onClick={() => (racePlaying ? controller.pauseRace() : controller.playRace())}>
+                  {racePlaying ? 'Pause' : 'Play'}
+                </button>
+                <input
+                  id={`${idBase}-race-frame`}
+                  type="range"
+                  min={0}
+                  max={spec.categories.length - 1}
+                  step={0.01}
+                  value={raceFrame ?? spec.categories.length - 1}
+                  data-option="raceFrame"
+                  aria-valuetext={spec.categories[Math.round(raceFrame ?? spec.categories.length - 1)]}
+                  className="min-w-0 flex-1 accent-primary"
+                  onChange={(e) => controller.setRaceFrame(Number(e.currentTarget.value))}
+                />
+                <span className="w-12 shrink-0 truncate text-right tabular-nums text-muted-foreground" data-race-time="">
+                  {spec.categories[Math.round(raceFrame ?? spec.categories.length - 1)]}
+                </span>
+              </div>
             </Field>
           )}
           {spec.type === 'sankey' && (

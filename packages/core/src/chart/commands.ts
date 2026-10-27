@@ -12,6 +12,7 @@ import {
 	HEIGHT,
 	LINK_INDEX,
 	LINK_PROPS,
+	RACE_TIME,
 	REFERENCE_BAND_PATCH,
 	REFERENCE_BAND_PROPS,
 	REFERENCE_INDEX,
@@ -28,6 +29,7 @@ import {
 import { chartSpecColorsByCategory, chartDataToTable, chartSeriesColor, chartSliceColor } from './spec.js';
 import { summarizeChart } from './summary.js';
 import { chartToSvg } from './svg.js';
+import { chartRaceRanking } from './race.js';
 import { chartTreeTotal } from './tree.js';
 import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
 
@@ -73,6 +75,12 @@ export function createChartCommands(controller: ChartController, options: ChartC
 		const index = typeof ref === 'number' ? ref : categories.indexOf(ref);
 		if (index < 0 || index >= categories.length || !Number.isInteger(index)) fail(`There is no category ${JSON.stringify(ref)}; expected an index from 0 to ${categories.length - 1} or one of the labels.`);
 		return index;
+	};
+	const raceFrame = (time: string | number) => {
+		const cats = controller.getSpec().categories;
+		const frame = typeof time === 'number' ? time : cats.indexOf(time);
+		if (!(Number.isFinite(frame) && frame >= 0 && frame <= cats.length - 1)) fail(`There is no time point ${JSON.stringify(time)}; expected an index from 0 to ${Math.max(0, cats.length - 1)} or a category label.`);
+		return frame;
 	};
 	const object = (properties: Record<string, unknown>, required?: string[]) => ({ type: 'object' as const, properties, ...(required ? { required } : {}), additionalProperties: false }) as any;
 
@@ -486,6 +494,57 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			run: (_ctx: unknown, params: { index: number }) => {
 				check(controller.removeLink(params.index));
 				return { links: controller.getSpec().links };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}raceRanking`,
+			label: 'Bar Race Ranking',
+			readOnly: true,
+			keywords: ['chart', 'race', 'ranking', 'leader', 'time'],
+			description: 'Returns the top names of a bar race at a moment (default: the one shown).',
+			params: object({ time: RACE_TIME }),
+			run: (_ctx: unknown, params: { time?: string | number } = {}) => {
+				const spec = controller.getSpec();
+				const frame = params?.time !== undefined ? raceFrame(params.time) : (controller.getState().raceFrame ?? spec.categories.length - 1);
+				return { frame, ranking: chartRaceRanking(spec, frame).slice(0, spec.raceTopN).map((e) => ({ rank: e.rank + 1, series: e.seriesId, name: e.name, value: e.value })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setRaceFrame`,
+			label: 'Show Bar Race Moment…',
+			keywords: ['chart', 'race', 'frame', 'time', 'scrub'],
+			description: 'Shows the bar race at a time point (null for the last) and stops playback. View state, not an undo step.',
+			params: object({ time: { ...RACE_TIME, type: ['string', 'number', 'null'], description: `${RACE_TIME.description} null shows the last time point.` } }, ['time']),
+			run: (_ctx: unknown, params: { time: string | number | null }) => {
+				const frame = params.time === null ? null : raceFrame(params.time);
+				check(controller.setRaceFrame(frame));
+				return { frame };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}playRace`,
+			label: 'Play Bar Race',
+			keywords: ['chart', 'race', 'play', 'animate'],
+			description: 'Plays the bar race from the moment shown, one time point every msPerStep ms.',
+			params: object({ msPerStep: { type: 'number', minimum: 50, maximum: 10000, description: 'Milliseconds per time point (default 1000).' } }),
+			run: (_ctx: unknown, params: { msPerStep?: number } = {}) => {
+				check(controller.playRace({ msPerStep: params?.msPerStep }));
+				return { playing: true };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}pauseRace`,
+			label: 'Pause Bar Race',
+			keywords: ['chart', 'race', 'pause', 'stop'],
+			description: 'Pauses bar race playback where it is.',
+			enabled: () => controller.getState().racePlaying || 'The race is not playing',
+			run: () => {
+				controller.pauseRace();
+				return { frame: controller.getState().raceFrame };
 			}
 		},
 		{

@@ -326,6 +326,29 @@ describe("ChartInspector", () => {
     expect(controller.getSpec().links).toEqual([]);
   });
 
+  it("plays, pauses and scrubs a bar race", () => {
+    let now = 0;
+    let queued: (() => void)[] = [];
+    const raceTicker = { now: () => now, next: (step: () => void) => (queued.push(step), () => (queued = queued.filter((q) => q !== step))) };
+    const controller = new ChartController({ spec: { ...sales, type: "barrace" }, raceTicker });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    click(q('[data-action="race-play"]'));
+    expect(controller.getState().racePlaying).toBe(true);
+    expect(q('[data-action="race-play"]').textContent).toBe("Pause");
+    now += 500;
+    queued.splice(0).forEach((step) => step());
+    flushSync();
+    expect(controller.getState().raceFrame).toBeCloseTo(0.5, 6);
+    click(q('[data-action="race-play"]'));
+    expect(controller.getState().racePlaying).toBe(false);
+    type(q<HTMLInputElement>('[data-option="raceFrame"]'), "0");
+    expect(controller.getState().raceFrame).toBe(0);
+    expect(q("[data-race-time]").textContent).toBe("Q1");
+    const canvas = render(ChartCanvas, { controller });
+    expect(canvas.querySelector("svg")!.textContent).toContain("Q1");
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });

@@ -136,6 +136,8 @@ export const LINK_PROPS: Record<string, JsonSchema> = {
 	value: { type: 'number', exclusiveMinimum: 0, description: 'How much flows, above 0 (its width).' },
 	color: { type: 'string', description: 'CSS colour (default: by sankeyLinkColor).' }
 };
+/** A moment of a bar race: a time point by label, or a category index (fractional between time points). */
+export const RACE_TIME: JsonSchema = { type: ['string', 'number'], description: 'Time point label (a category, e.g. "2023") or index from 0; an index may be fractional, 2.5 being halfway between the third and fourth time points.' };
 export const LINK_INDEX: JsonSchema = { type: 'integer', minimum: 0, description: 'Flow index (0 = first), as get_chart lists them in spec.links.' };
 
 export const ERROR_BARS = (what: string): JsonSchema => ({
@@ -178,7 +180,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links).' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links); barrace reads categories as time points and series as names, and animates their ranking.' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -216,5 +218,6 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' },
 				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' },
 				sankeyLinkColor: { type: 'string', enum: [...CHART_SANKEY_LINK_COLORS], description: 'Sankey: colour each flow by its source node (default), its target node, or grey.' },
+				raceTopN: { type: 'integer', minimum: 1, maximum: 30, description: 'Bar race: how many bars each moment shows (default 10).' },
 				sankeyNodes: { type: 'array', items: { type: 'string' }, description: 'Sankey: node names in the order to stack them within their columns (reorder to untangle crossing flows); nodes left out follow in the order the flows name them.' }
 			};

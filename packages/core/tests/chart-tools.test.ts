@@ -41,11 +41,11 @@ describe("chart agent tools", () => {
     const { registry, call } = setup();
     const tools = registry.listTools().tools;
     expect(tools.map((t) => baseToolName(t.name))).toEqual([
-      "get_chart", "render_chart", "check_chart_colors", "recommend_chart", "get_chart_trendline", "list_chart_presets", "export_chart_mermaid", "export_chart_ooxml",
+      "get_chart", "render_chart", "check_chart_colors", "recommend_chart", "get_chart_trendline", "get_chart_race_ranking", "list_chart_presets", "export_chart_mermaid", "export_chart_ooxml",
       "update_chart", "set_chart_data", "set_chart_values", "add_chart_series", "update_chart_series", "remove_chart_series", "add_chart_category", "remove_chart_category",
       "import_chart_csv", "import_chart_mermaid", "import_chart_ooxml", "add_chart_trendline", "remove_chart_trendline",
       "add_chart_reference_line", "update_chart_reference_line", "remove_chart_reference_line", "add_chart_reference_band", "update_chart_reference_band", "remove_chart_reference_band",
-      "set_chart_callout", "highlight_chart", "set_chart_tree", "import_chart_tree_csv", "add_chart_tree_node", "update_chart_tree_node", "remove_chart_tree_node", "set_chart_links", "import_chart_links_csv", "add_chart_link", "update_chart_link", "remove_chart_link", "apply_chart_preset", "transpose_chart",
+      "set_chart_callout", "highlight_chart", "set_chart_tree", "import_chart_tree_csv", "add_chart_tree_node", "update_chart_tree_node", "remove_chart_tree_node", "set_chart_links", "import_chart_links_csv", "add_chart_link", "update_chart_link", "remove_chart_link", "set_chart_race_frame", "play_chart_race", "apply_chart_preset", "transpose_chart",
       "select_chart_element", "drag_chart_point", "press_chart_key", "undo_chart", "redo_chart",
     ]);
     for (const tool of tools) {

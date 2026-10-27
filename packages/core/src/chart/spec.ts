@@ -31,7 +31,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'slope', 'likert', 'parliament'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'slope', 'likert', 'parliament', 'barrace'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -68,11 +68,12 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	likert: 'Likert',
 	parliament: 'Parliament',
 	sunburst: 'Sunburst',
-	sankey: 'Sankey'
+	sankey: 'Sankey',
+	barrace: 'Bar race'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst' | 'sankey';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst' | 'sankey' | 'barrace';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -138,6 +139,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'parliament':
 		case 'sunburst':
 		case 'sankey':
+		case 'barrace':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -677,6 +679,12 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		if (Number.isInteger(m) && m >= 1) parliamentMajority = m;
 		else issues.push({ path: 'parliamentMajority', message: 'parliamentMajority must be a whole number of seats, 1 or more, or null for half plus one.' });
 	}
+	let raceTopN = 10;
+	if (value.raceTopN !== undefined) {
+		const n = Number(value.raceTopN);
+		if (value.raceTopN !== null && Number.isInteger(n) && n >= 1 && n <= 30) raceTopN = n;
+		else issues.push({ path: 'raceTopN', message: 'raceTopN must be a whole number of bars from 1 to 30.' });
+	}
 	let radarTicks: number | null = null;
 	if (value.radarTicks !== undefined && value.radarTicks !== null) {
 		const t = Number(value.radarTicks);
@@ -723,7 +731,8 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		sunburstLabel: text(value.sunburstLabel, '', 'sunburstLabel', issues),
 		links,
 		sankeyNodes: links.length ? sankeyNodes : [],
-		sankeyLinkColor: pick(value.sankeyLinkColor, CHART_SANKEY_LINK_COLORS, 'source', 'sankeyLinkColor', issues)
+		sankeyLinkColor: pick(value.sankeyLinkColor, CHART_SANKEY_LINK_COLORS, 'source', 'sankeyLinkColor', issues),
+		raceTopN
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {

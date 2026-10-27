@@ -164,8 +164,9 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
         valueDomain2: frozen?.valueDomain2,
         xDomain: frozen?.xDomain,
         readout: frozen?.readout,
+        raceFrame: state.raceFrame,
       }),
-    [state.spec, state.selection, sceneWidth, height, fullTheme, editable, measureText, emptyMessage, frozen],
+    [state.spec, state.selection, state.raceFrame, sceneWidth, height, fullTheme, editable, measureText, emptyMessage, frozen],
   );
   if (sceneRef) sceneRef.current = scene;
   const byKey = useMemo(() => new Map(scene.marks.map((m) => [m.key, m])), [scene]);

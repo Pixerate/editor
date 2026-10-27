@@ -17,6 +17,8 @@
  * - `sunburst` draws `tree` as rings from the centre out (or, without a tree, the first series
  *   as one ring); a `treemap` with a `tree` nests each group's rectangles inside it.
  * - `sankey` draws `links` as flows between columns of nodes.
+ * - `barrace` reads each category as a time point and each series as a name, and draws the
+ *   top `raceTopN` names at one moment as ranked horizontal bars (an animated ranking).
  */
 export type ChartType =
 	| 'bar'
@@ -36,7 +38,8 @@ export type ChartType =
 	| 'likert'
 	| 'parliament'
 	| 'sunburst'
-	| 'sankey';
+	| 'sankey'
+	| 'barrace';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -337,6 +340,8 @@ export interface ChartSpec {
 	sankeyNodes: string[];
 	/** Sankey: what colours each flow. */
 	sankeyLinkColor: ChartSankeyLinkColor;
+	/** Bar race: how many bars each moment shows, 1–30. */
+	raceTopN: number;
 }
 
 /** What a click selects. */
@@ -411,6 +416,7 @@ export type ChartMarkRole =
 	| 'reference-label'
 	| 'callout'
 	| 'node'
+	| 'race-time'
 	| 'link'
 	| 'note'
 	| 'selection'
