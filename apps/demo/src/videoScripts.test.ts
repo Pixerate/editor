@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { ManualClock } from "@pixerate/editor/animation";
-import { createVideoEditorToolProvider, createVideoEffectsToolProvider, VideoEditorController, videoClipEnd } from "@pixerate/editor/video-editor";
+import { createVideoDialogueToolProvider, createVideoEditorToolProvider, createVideoEffectsToolProvider, createVideoMusicToolProvider, VideoEditorController, videoClipEnd } from "@pixerate/editor/video-editor";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
 import { flairEffects } from "@pixerate/flair/integrations";
 import { runAgentScript } from "./agentScript";
@@ -16,6 +16,8 @@ function setup(script?: string) {
   const registry = new ToolRegistry();
   registry.register(createVideoEditorToolProvider(controller, { id: "video", namespace: "video" }));
   registry.register(createVideoEffectsToolProvider(controller, { id: "video-effects", namespace: "videofx" }));
+  registry.register(createVideoDialogueToolProvider(controller, { id: "video-dialogue", namespace: "videodialogue" }));
+  registry.register(createVideoMusicToolProvider(controller, { id: "video-music", namespace: "videomusic" }));
   return { controller, registry };
 }
 

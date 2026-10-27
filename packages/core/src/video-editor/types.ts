@@ -177,6 +177,12 @@ export interface VideoGradeLut {
 	strength?: number;
 	/** A label for the look (default the file's TITLE or name). */
 	name?: string;
+	/**
+	 * How much of the LUT's change to hold back on skin tones, 0–1 (default 0): at 1 a pixel that
+	 * looks like skin keeps its graded-but-un-LUT'd colour, so a heavy creative look leaves faces
+	 * natural. Skin is found by chroma (see `videoSkinToneWeight`), with a soft edge.
+	 */
+	preserveSkinTones?: number;
 }
 
 /**
@@ -243,6 +249,40 @@ interface VideoClipBase {
 	transition?: VideoTransition;
 	/** Provider effects on the picture, applied in order (see `VideoClipEffect`). */
 	effects?: VideoClipEffect[];
+	/** A shape that cuts the picture out (see `VideoClipMask`). */
+	mask?: VideoClipMask;
+}
+
+/**
+ * The shape of a clip mask: `rectangle` (with `cornerRadius`), `ellipse`, `linear` (a straight
+ * split: what is on the side the angle points away from shows) or `polygon` (`points`).
+ */
+export type VideoMaskShape = 'rectangle' | 'ellipse' | 'linear' | 'polygon';
+export const VIDEO_MASK_SHAPES = ['rectangle', 'ellipse', 'linear', 'polygon'] as const;
+
+/**
+ * A parametric mask on a clip's picture: only the inside of the shape shows (the outside with
+ * `inverted`). Positions and sizes are fractions of the clip's placed picture (0–1 across its
+ * width and height), so the mask moves, scales and turns with the clip.
+ */
+export interface VideoClipMask {
+	shape: VideoMaskShape;
+	/** Centre of the shape (or a point on a linear split's edge), as fractions of the picture (default 0.5, 0.5). */
+	x?: number;
+	y?: number;
+	/** Size as fractions of the picture's width and height (default 0.5 each; unused by linear). */
+	width?: number;
+	height?: number;
+	/** Degrees clockwise (default 0). For linear, 0 shows the top half. */
+	rotation?: number;
+	/** Soft edge width, in frame pixels (default 0). */
+	feather?: number;
+	/** Rectangle corners, as a fraction of half the shorter side (0–1, default 0). */
+	cornerRadius?: number;
+	/** Show the outside of the shape instead. */
+	inverted?: boolean;
+	/** For polygon: at least 3 points, as fractions of the picture. */
+	points?: { x: number; y: number }[];
 }
 
 /**
@@ -334,7 +374,28 @@ export interface VideoEffectClip extends VideoClipBase, VideoEffectRef {
 	type: 'effect';
 }
 
-export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip | VideoSequenceClip | VideoEffectClip;
+/**
+ * Which pictures an adjustment clip changes: `underneath` (every video track below its own, the
+ * default, as adjustment layers work in most editors), `all` (the whole frame, tracks above it
+ * included) or `track` (only the pictures of `targetTrack`).
+ */
+export type VideoAdjustmentScope = 'underneath' | 'all' | 'track';
+export const VIDEO_ADJUSTMENT_SCOPES = ['underneath', 'all', 'track'] as const;
+
+/**
+ * An adjustment clip: no picture of its own, but while it plays its grade, provider effects and
+ * mask apply to the composite of the pictures in its scope (see `VideoAdjustmentScope`). Its
+ * opacity (and fades) mix the adjusted picture over the unadjusted one. Lives on a video track.
+ */
+export interface VideoAdjustmentClip extends VideoClipBase {
+	type: 'adjustment';
+	/** Default `underneath`. */
+	scope?: VideoAdjustmentScope;
+	/** For scope `track`: the id of the track whose pictures it changes. */
+	targetTrack?: string;
+}
+
+export type VideoClip = VideoMediaClip | VideoTextClip | VideoColorClip | VideoSequenceClip | VideoEffectClip | VideoAdjustmentClip;
 export type VideoClipType = VideoClip['type'];
 
 /**
@@ -344,7 +405,7 @@ export type VideoClipType = VideoClip['type'];
  */
 export type VideoPlacementMode = 'refuse' | 'overwrite' | 'insert';
 export const VIDEO_PLACEMENT_MODES = ['refuse', 'overwrite', 'insert'] as const;
-export const VIDEO_CLIP_TYPES = ['media', 'text', 'color', 'sequence', 'effect'] as const;
+export const VIDEO_CLIP_TYPES = ['media', 'text', 'color', 'sequence', 'effect', 'adjustment'] as const;
 
 export interface VideoMarker {
 	id: string;

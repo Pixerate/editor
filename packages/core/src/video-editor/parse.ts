@@ -1,7 +1,7 @@
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipEffect, type VideoEffectRef, type VideoEffectValues, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_ADJUSTMENT_SCOPES, VIDEO_MASK_SHAPES, type VideoClipMask, VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipEffect, type VideoEffectRef, type VideoEffectValues, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -115,9 +115,41 @@ export function parseVideoGrade(v: unknown, path: string): VideoGrade | undefine
 export function parseVideoGradeLut(v: unknown, path: string): VideoGradeLut | undefined {
 	if (v === undefined) return undefined;
 	if (!isObject(v)) return fail(path, 'must be an object { src, strength } naming a .cube file');
-	const unknown = Object.keys(v).find((k) => !['src', 'strength', 'name'].includes(k));
-	if (unknown) fail(`${path}.${unknown}`, 'is not a LUT setting; use src, strength, name');
-	return compact({ src: str(v.src, `${path}.src`)!, strength: num(v.strength, `${path}.strength`, { optional: true, min: 0, max: 1 }), name: str(v.name, `${path}.name`, true) });
+	const unknown = Object.keys(v).find((k) => !['src', 'strength', 'name', 'preserveSkinTones'].includes(k));
+	if (unknown) fail(`${path}.${unknown}`, 'is not a LUT setting; use src, strength, name, preserveSkinTones');
+	return compact({ src: str(v.src, `${path}.src`)!, strength: num(v.strength, `${path}.strength`, { optional: true, min: 0, max: 1 }), name: str(v.name, `${path}.name`, true), preserveSkinTones: num(v.preserveSkinTones, `${path}.preserveSkinTones`, { optional: true, min: 0, max: 1 }) });
+}
+
+const MASK_KEYS = ['shape', 'x', 'y', 'width', 'height', 'rotation', 'feather', 'cornerRadius', 'inverted', 'points'];
+
+/** A clip mask `{ shape, x, y, width, height, rotation, feather, cornerRadius, inverted, points }` (see `VideoClipMask`). */
+export function parseVideoClipMask(v: unknown, path: string): VideoClipMask | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object such as { shape: "ellipse", x: 0.5, y: 0.5, width: 0.4, height: 0.6, feather: 20 }');
+	const unknown = Object.keys(v).find((k) => !MASK_KEYS.includes(k));
+	if (unknown) fail(`${path}.${unknown}`, `is not a mask setting; use ${MASK_KEYS.join(', ')}`);
+	const shape = oneOf(v.shape, VIDEO_MASK_SHAPES, `${path}.shape`, false)!;
+	let points: { x: number; y: number }[] | undefined;
+	if (v.points !== undefined) {
+		if (shape !== 'polygon') fail(`${path}.points`, 'is only for polygon masks');
+		if (!Array.isArray(v.points) || v.points.length < 3) fail(`${path}.points`, 'must be a list of at least 3 { x, y } points');
+		points = (v.points as unknown[]).map((p, i) => {
+			if (!isObject(p)) return fail(`${path}.points[${i}]`, 'must be an object { x, y }');
+			return { x: num(p.x, `${path}.points[${i}].x`)!, y: num(p.y, `${path}.points[${i}].y`)! };
+		});
+	} else if (shape === 'polygon') fail(`${path}.points`, 'is required for a polygon mask: at least 3 { x, y } points as fractions of the picture');
+	return compact({
+		shape,
+		x: num(v.x, `${path}.x`, { optional: true }),
+		y: num(v.y, `${path}.y`, { optional: true }),
+		width: num(v.width, `${path}.width`, { optional: true, min: 0 }),
+		height: num(v.height, `${path}.height`, { optional: true, min: 0 }),
+		rotation: num(v.rotation, `${path}.rotation`, { optional: true }),
+		feather: num(v.feather, `${path}.feather`, { optional: true, min: 0 }),
+		cornerRadius: num(v.cornerRadius, `${path}.cornerRadius`, { optional: true, min: 0, max: 1 }),
+		inverted: bool(v.inverted, `${path}.inverted`),
+		points
+	});
 }
 
 export function parseVideoTransition(v: unknown, path: string): VideoTransition | undefined {
@@ -256,7 +288,8 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		fadeIn: num(v.fadeIn, `${path}.fadeIn`, { optional: true, min: 0 }),
 		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
 		transition: parseVideoTransition(v.transition, `${path}.transition`),
-		effects: parseVideoClipEffects(v.effects, `${path}.effects`)
+		effects: parseVideoClipEffects(v.effects, `${path}.effects`),
+		mask: parseVideoClipMask(v.mask, `${path}.mask`)
 	};
 	if (type === 'media')
 		return compact({
@@ -297,6 +330,13 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 			fontWeight: num(v.fontWeight, `${path}.fontWeight`, { optional: true, min: 100, max: 1000 }),
 			background: str(v.background, `${path}.background`, true)
 		});
+	if (type === 'adjustment') {
+		const scope = oneOf(v.scope, VIDEO_ADJUSTMENT_SCOPES, `${path}.scope`);
+		const targetTrack = str(v.targetTrack, `${path}.targetTrack`, true);
+		if (scope === 'track' && !targetTrack) fail(`${path}.targetTrack`, 'is required when scope is "track": the id of the track whose pictures the adjustment changes');
+		if (targetTrack !== undefined && scope !== 'track') fail(`${path}.targetTrack`, 'is only for scope "track"');
+		return compact({ type, ...base, scope, targetTrack });
+	}
 	if (type === 'effect') {
 		const ref = parseVideoEffectRef({ effect: v.effect, provider: v.provider, name: v.name === undefined ? undefined : v.name, values: v.values }, path);
 		return compact({ type, ...base, ...ref, name: base.name });

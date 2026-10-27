@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatVideoTimecode, parseVideoPreviewScale, VIDEO_PREVIEW_SCALE_OPTIONS, videoProjectHasProxies, type VideoEditorController } from '@pixerate/editor/video-editor';
+  import { formatVideoTimecode, parseVideoPreviewScale, VIDEO_PREVIEW_SCALE_OPTIONS, videoAddAdjustmentEdits, videoProjectHasProxies, type VideoEditorController } from '@pixerate/editor/video-editor';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
   interface Props {
@@ -15,9 +15,16 @@
   const fps = $derived(editor.project.fps);
   const btn = 'rounded border border-border px-2 py-0.5 text-xs disabled:opacity-40';
   const locked = $derived(editor.readOnly);
+  function addAdjustment() {
+    const r = controller.apply(videoAddAdjustmentEdits(editor.project, editor.time), 'Add adjustment clip');
+    if (r.ok) {
+      const added = r.outcomes[r.outcomes.length - 1].clip;
+      if (added) controller.select([added]);
+    }
+  }
 </script>
 
-<!-- Play / pause, frame steps, the playhead's timecode, a preview size when there are proxies, and split, delete, undo and redo. -->
+<!-- Play / pause, frame steps, the playhead's timecode, a preview size when there are proxies, and split, delete, add an adjustment clip, undo and redo. -->
 <div class="flex flex-wrap items-center gap-1.5 text-xs {className}" data-video-transport="">
   <button type="button" class={btn} aria-label="Step back one frame" onclick={() => controller.step(-1)} data-step-back="">◀︎|</button>
   <button type="button" class={btn} aria-label={editor.playing ? 'Pause' : 'Play'} onclick={() => controller.toggle()} disabled={editor.duration <= 0} data-play="">
@@ -37,6 +44,7 @@
       <button type="button" class={btn} disabled={locked} onclick={() => controller.splitAtPlayhead()} title="Split at the playhead (S)" data-split="">Split</button>
       <button type="button" class={btn} disabled={locked || !editor.selection.length} onclick={() => controller.deleteSelection()} title="Delete the selected clips (Delete)" data-delete="">Delete</button>
       <button type="button" class={btn} disabled={locked || !editor.selection.length} onclick={() => controller.deleteSelection({ ripple: true })} title="Delete and close the gaps (Shift+Delete)" data-ripple-delete="">Ripple delete</button>
+      <button type="button" class={btn} disabled={locked} onclick={addAdjustment} title="Add an adjustment clip at the playhead over every track: its grade, effects and mask change the pictures underneath" data-add-adjustment="">Adjustment</button>
       <button type="button" class={btn} disabled={locked || !editor.canUndo} onclick={() => controller.undo()} title={editor.canUndo ? `Undo ${editor.undoLabel}` : 'Nothing to undo'} data-undo="">Undo</button>
       <button type="button" class={btn} disabled={locked || !editor.canRedo} onclick={() => controller.redo()} title={editor.canRedo ? `Redo ${editor.redoLabel}` : 'Nothing to redo'} data-redo="">Redo</button>
     </span>
