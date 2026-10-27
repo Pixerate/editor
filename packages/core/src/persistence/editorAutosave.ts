@@ -5,7 +5,7 @@ import {
   type AutosaveRecovery,
 } from "./autosave";
 import { parseEditorDocument, toEditorDocumentFile, type EditorDocument, type EditorDocumentFile } from "./editorDocument";
-import { withEditorAssets } from "./assets";
+import { collectRetiredEditorAssets, withEditorAssets, type EditorAssetGarbageOptions } from "./assets";
 import type { LoadReport } from "./migrate";
 import { createRevisionTracker, type DirtyFlagSource, type RevisionTracker } from "./revisions";
 
@@ -18,6 +18,12 @@ export interface EditorAutosaveOptions
    * saved state needs no snapshot. Without it, every change counts until `markClean()`.
    */
   dirty?: DirtyFlagSource;
+  /**
+   * For documents with `assets`: after `markClean` or `discard` retire a snapshot, delete the
+   * stored assets nothing refers to any more (`collectEditorAssetGarbage`, best effort, keeping
+   * the assets the document uses now; default `true`). Needs `storage.keys`; `false` turns it off.
+   */
+  collectAssetGarbage?: boolean | Omit<EditorAssetGarbageOptions, "dryRun" | "only">;
 }
 
 export interface EditorAutosave {
@@ -41,7 +47,8 @@ export interface EditorAutosave {
  * `controller.ready()` when nothing was found, or `restore` / `discard`.
  */
 export function createEditorAutosave(doc: EditorDocument, options: EditorAutosaveOptions): EditorAutosave {
-  const { dirty, key, ...rest } = options;
+  const { dirty, key, collectAssetGarbage, ...rest } = options;
+  const collect = () => collectRetiredEditorAssets(rest.storage, doc, collectAssetGarbage);
   const revisions = createRevisionTracker({ history: doc, dirty });
   const controller = createAutosaveController<EditorDocumentFile>({
     ...rest,
@@ -67,10 +74,12 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
     async discard() {
       await controller.discardRecovery();
       controller.ready();
+      await collect();
     },
     async markClean() {
       revisions.markSaved();
       await controller.markClean();
+      await collect();
     },
     destroy() {
       unsubscribe();

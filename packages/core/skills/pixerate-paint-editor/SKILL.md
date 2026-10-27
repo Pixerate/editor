@@ -432,6 +432,8 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
 | `save_paint_document` | Save the painting and its assets under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
 | `list_saved_paint_documents` | List saved paintings (`key`, `name`, `savedAt`), newest first. |
 | `open_saved_paint_document` | Replace the painting with a saved one by `key`; its assets are read from storage first. Ask before opening over changes the user has not saved. |
+| `find_unreferenced_paint_assets` | See how much stored image data (assets of any saved image or paint document) nothing refers to any more, without deleting it. Returns `unreferenced`, `unreferencedChars` and up to 100 `refs`. The open document's assets always count as used. Only listed when the host's storage can list keys. Call it before `delete_unreferenced_paint_assets`. |
+| `delete_unreferenced_paint_assets` | Free storage by deleting that data, all of it or only the `refs` from `find_unreferenced_paint_assets`. Saved documents and autosave snapshots keep everything they use. Returns `removed`, `freedChars`, `kept`, `remaining`. Use it when the user asks to clean up or free space, not after every save: removing a saved document already collects its assets. A ref that is no longer unreferenced makes the call fail with nothing deleted; find again. |
 
 ## Pitfalls
 

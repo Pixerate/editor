@@ -5,7 +5,14 @@ import {
   type EditorDocument,
   type EditorDocumentFile,
 } from "./editorDocument";
-import { persistEditorAssets, preloadEditorAssets } from "./assets";
+import {
+  collectEditorAssetGarbage,
+  preloadEditorAssets,
+  tryCollectEditorAssetGarbage,
+  withEditorAssets,
+  type EditorAssetGarbageOptions,
+  type EditorAssetGarbageReport,
+} from "./assets";
 import type { LoadReport } from "./migrate";
 import type { StorageAdapter } from "./storage";
 
@@ -26,6 +33,12 @@ export interface EditorDocumentStoreOptions {
   namespace?: string;
   /** Wall clock for `savedAt` (default `Date.now`). */
   now?: () => number;
+  /**
+   * After `remove`, delete the stored assets nothing refers to any more
+   * (`collectEditorAssetGarbage`, best effort; default `true`). Needs `storage.keys`; pass
+   * options (e.g. `keep` with open editors' registries) or `false` to turn it off.
+   */
+  collectAssetGarbage?: boolean | Omit<EditorAssetGarbageOptions, "dryRun" | "only">;
 }
 
 export interface EditorDocumentStore {
@@ -43,8 +56,17 @@ export interface EditorDocumentStore {
    * returns its entry with the load report. Throws when `key` is unknown.
    */
   open(doc: EditorDocument, key: string, options?: { history?: "reset" | "record" }): Promise<SavedEditorDocument & { report: LoadReport }>;
-  /** Deletes a saved document; `false` when there was none. */
+  /**
+   * Deletes a saved document; `false` when there was none. Then deletes the assets nothing
+   * refers to any more, unless `collectAssetGarbage: false`.
+   */
   remove(key: string): Promise<boolean>;
+  /**
+   * Deletes (or with `dryRun`, finds) the stored assets nothing refers to, queued after the
+   * store's other operations (see `collectEditorAssetGarbage`). Only present when the storage
+   * can list its keys.
+   */
+  collectAssetGarbage?(options?: EditorAssetGarbageOptions): Promise<EditorAssetGarbageReport>;
 }
 
 /** `"Release flow v2"` → `"release-flow-v2"` (the key part of a saved name). */
@@ -70,6 +92,7 @@ export function createEditorDocumentStore(options: EditorDocumentStoreOptions): 
   const now = options.now ?? Date.now;
   const indexKey = `${ns}:index`;
   const fileKey = (key: string) => `${ns}:file:${key}`;
+  const gc = options.collectAssetGarbage ?? true;
   let index: SavedEditorDocument[] | null = null;
   let queue: Promise<unknown> = Promise.resolve();
 
@@ -118,8 +141,8 @@ export function createEditorDocumentStore(options: EditorDocumentStoreOptions): 
         };
         const text = JSON.stringify(toEditorDocumentFile(doc, trimmed));
         // Assets, then the file, then the index: a crash in between leaves unlisted data, never a dangling entry.
-        if (doc.assets) await persistEditorAssets(storage, doc.assets, text);
-        await storage.set(fileKey(entry.key), text);
+        // `withEditorAssets` also keeps a concurrent asset collection away from them.
+        await (doc.assets ? withEditorAssets(storage, doc.assets) : storage).set(fileKey(entry.key), text);
         await saveIndex([...(await loadIndex()).filter((item) => item.key !== entry.key), entry]);
         return entry;
       }),
@@ -148,7 +171,9 @@ export function createEditorDocumentStore(options: EditorDocumentStoreOptions): 
         if (!items.some((item) => item.key === key)) return false;
         await saveIndex(items.filter((item) => item.key !== key));
         await storage.remove(fileKey(key));
+        if (gc) await tryCollectEditorAssetGarbage(storage, gc === true ? {} : gc);
         return true;
       }),
+    ...(storage.keys ? { collectAssetGarbage: (gcOptions?: EditorAssetGarbageOptions) => run(() => collectEditorAssetGarbage(storage, gcOptions)) } : {}),
   };
 }

@@ -6,7 +6,7 @@
  * failure mode for tests.
  */
 
-export type StorageOperation = "get" | "set" | "remove";
+export type StorageOperation = "get" | "set" | "remove" | "keys";
 
 /**
  * Injected failure: return `true` (or an `Error`) to make that operation fail.
@@ -25,6 +25,12 @@ export interface StorageAdapter {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   remove(key: string): Promise<void>;
+  /**
+   * Every stored key that starts with `prefix` (default: every key), in no particular order.
+   * Optional: custom adapters may leave it out, but asset garbage collection
+   * (`collectEditorAssetGarbage`) needs it. All built-in adapters have it.
+   */
+  keys?(prefix?: string): Promise<string[]>;
 }
 
 export interface StorageAdapterOptions {
@@ -78,6 +84,14 @@ export function withStorageFailures(
       checkFailure(failure, "remove", key);
       return inner.remove(key);
     },
+    ...(inner.keys
+      ? {
+          async keys(prefix = "") {
+            checkFailure(failure, "keys", prefix);
+            return inner.keys!(prefix);
+          },
+        }
+      : {}),
   };
 }
 
@@ -85,7 +99,7 @@ function guarded(
   kind: string,
   isAvailable: () => boolean,
   failure: StorageFailureMode | undefined,
-  impl: Omit<StorageAdapter, "kind" | "available">,
+  impl: Omit<StorageAdapter, "kind" | "available" | "keys"> & { keys?(prefix: string): Promise<string[]> },
 ): StorageAdapter {
   const check = (operation: StorageOperation, key: string) => {
     if (!isAvailable()) throw new StorageUnavailableError(kind);
@@ -108,6 +122,14 @@ function guarded(
       check("remove", key);
       return impl.remove(key);
     },
+    ...(impl.keys
+      ? {
+          async keys(prefix = "") {
+            check("keys", prefix);
+            return impl.keys!(prefix);
+          },
+        }
+      : {}),
   };
 }
 
@@ -133,6 +155,9 @@ export function createMemoryStorage(
     async remove(key) {
       entries.delete(key);
     },
+    async keys(prefix) {
+      return [...entries.keys()].filter((key) => key.startsWith(prefix));
+    },
   });
   return Object.assign(adapter, { entries });
 }
@@ -144,6 +169,10 @@ export interface WebStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /** Number of stored items (with `key`, lets the adapter list its keys). */
+  readonly length?: number;
+  /** The key at `index` (with `length`, lets the adapter list its keys). */
+  key?(index: number): string | null;
 }
 
 export interface LocalStorageAdapterOptions extends StorageAdapterOptions {
@@ -186,6 +215,19 @@ export function createLocalStorageAdapter(
     async remove(key) {
       storage!.removeItem(prefix + key);
     },
+    // Listing needs `length` and `key()` (real Web Storage has both).
+    ...(!storage || (typeof storage.key === "function" && typeof storage.length === "number")
+      ? {
+          async keys(start: string) {
+            const out: string[] = [];
+            for (let i = 0; i < storage!.length!; i++) {
+              const key = storage!.key!(i);
+              if (key !== null && key.startsWith(prefix + start)) out.push(key.slice(prefix.length));
+            }
+            return out;
+          },
+        }
+      : {}),
   });
 }
 
@@ -272,6 +314,12 @@ export function createIndexedDbAdapter(
     },
     set: (key, value) => write((store) => store.put(value, key)),
     remove: (key) => write((store) => store.delete(key)),
+    async keys(prefix) {
+      const db = await open();
+      const tx = db.transaction(storeName, "readonly");
+      const all = await requestToPromise<unknown[]>(tx.objectStore(storeName).getAllKeys());
+      return all.filter((key): key is string => typeof key === "string" && key.startsWith(prefix));
+    },
   });
 }
 
@@ -282,6 +330,8 @@ export interface OpfsDirectoryLike {
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<OpfsDirectoryLike>;
   getFileHandle(name: string, options?: { create?: boolean }): Promise<OpfsFileLike>;
   removeEntry(name: string): Promise<void>;
+  /** Entry names (real directory handles have it); lets the adapter list its keys. */
+  keys?(): AsyncIterable<string>;
 }
 
 export interface OpfsFileLike {
@@ -404,6 +454,31 @@ export function createOpfsAdapter(
       for (const name of [`${base}.ptr`, base, `${base}.a`, `${base}.b`, `${base}.tmp`]) {
         await removeFile(d, name);
       }
+    },
+    async keys(prefix) {
+      const d = await directory();
+      if (typeof d.keys !== "function") throw new StorageUnavailableError("opfs (directory listing)");
+      const names = new Set<string>();
+      for await (const name of d.keys()) names.add(name);
+      const keys = new Set<string>();
+      for (const name of names) {
+        // A value is `<file>`, or `<file>.ptr` with its `.a` / `.b` slots; `.tmp` files are unfinished writes.
+        if (name.endsWith(".tmp")) continue;
+        if (name.endsWith(".ptr")) keys.add(name.slice(0, -4));
+        else if (/\.[ab]$/.test(name) && names.has(`${name.slice(0, -2)}.ptr`)) continue;
+        else keys.add(name);
+      }
+      const out: string[] = [];
+      for (const name of keys) {
+        let key: string;
+        try {
+          key = decodeURIComponent(name);
+        } catch {
+          continue;
+        }
+        if (key.startsWith(prefix)) out.push(key);
+      }
+      return out;
     },
   });
 }

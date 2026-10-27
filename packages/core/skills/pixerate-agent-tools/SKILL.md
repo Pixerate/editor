@@ -81,6 +81,10 @@ Every editor can share the same document tools, named after its kind (`diagram`,
   `list_saved_<kind>_documents`, then `open_saved_<kind>_document` with a `key` from either.
   Save when the user asks. Opening replaces the current document, so ask first when it has
   changes the user has not saved.
+- Image and paint documents keep their pixels as shared assets in host storage. When the user
+  asks to free space, `find_unreferenced_<kind>_assets` reports what no saved document or
+  autosave snapshot uses, and `delete_unreferenced_<kind>_assets` deletes it (all, or the `refs`
+  the find returned). Saved documents and the open document are never affected.
 
 A read-only document keeps its read tools; its write tools fail with the reason. `revision`
 goes up on every change, so comparing two results tells you whether the document changed.

@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
-import { createMemoryStorage, toEditorDocumentFile, type EditorDocument, type MemoryStorage } from "@pixerate/editor/persistence";
+import { createEditorAssetRegistry, createMemoryStorage, defineEditorDocument, toEditorDocumentFile, type EditorDocument, type MemoryStorage } from "@pixerate/editor/persistence";
 import { useEditorAutosave, type UseEditorAutosaveResult } from "../src/persistence";
 import { useCanvasEditorDocument, useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
 import { HistoryManager } from "@pixerate/editor/history";
@@ -45,11 +45,62 @@ afterEach(async () => {
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const source = "flowchart TD\n  A --> B\n";
 
-function Harness(props: { storage: MemoryStorage; doc: EditorDocument; onResult: (r: UseEditorAutosaveResult) => void }) {
-  const autosave = useEditorAutosave(props.doc, { storage: props.storage, debounceMs: 5, interval: 20 });
+function Harness(props: { storage: MemoryStorage; doc: EditorDocument; onResult: (r: UseEditorAutosaveResult) => void; collectAssetGarbage?: boolean }) {
+  const autosave = useEditorAutosave(props.doc, { storage: props.storage, debounceMs: 5, interval: 20, collectAssetGarbage: props.collectAssetGarbage });
   props.onResult(autosave);
   return <span data-status>{autosave.status.status}</span>;
 }
+
+describe("useEditorAutosave asset garbage collection", () => {
+  const big = (seed: number) => `data:image/png;base64,${Array.from({ length: 800 }, (_, i) => "ABCDEFGHIJKLMNOP"[(i * seed) % 16]).join("")}`;
+  const assetKey = (data: string) => `pixerate.assets:${createEditorAssetRegistry().put(data).slice("pixerate-asset:".length)}`;
+  const assetKeys = (storage: MemoryStorage) => [...storage.entries.keys()].filter((k) => /^pixerate\.assets:[0-9a-z]+-/.test(k));
+
+  function pictureDoc() {
+    const history = new HistoryManager();
+    return defineEditorDocument<{ png: string }>({
+      kind: "picture",
+      assets: createEditorAssetRegistry(),
+      get: () => ({ png: big(3) }),
+      load: () => {},
+      subscribe: () => () => {},
+      history: { undo: () => history.undo(), redo: () => history.redo(), getState: () => history.getState() },
+    });
+  }
+
+  /** An earlier session's dirty snapshot whose only asset nothing else refers to. */
+  async function seed() {
+    const storage = createMemoryStorage();
+    const ref = createEditorAssetRegistry().put(big(5));
+    await storage.set(assetKey(big(5)), big(5));
+    await storage.set("picture", JSON.stringify({ format: "pixerate-editor-document", kind: "picture", formatVersion: 1, document: { png: ref } }));
+    await storage.set("picture:meta", JSON.stringify({ dirty: true, time: 1 }));
+    return storage;
+  }
+
+  it("collects assets left behind when a snapshot is discarded or retired, unless turned off", async () => {
+    const kept = await seed();
+    let result!: UseEditorAutosaveResult;
+    await act(async () => root.render(<Harness storage={kept} doc={pictureDoc()} collectAssetGarbage={false} onResult={(r) => (result = r)} />));
+    await act(async () => void (await wait(5)));
+    expect(result.pendingRecovery).toBe(true);
+    await act(async () => result.discard());
+    expect(kept.entries.has("picture")).toBe(false);
+    expect(assetKeys(kept)).toHaveLength(1);
+    await act(async () => root.unmount());
+
+    root = createRoot(container);
+    const storage = await seed();
+    await act(async () => root.render(<Harness storage={storage} doc={pictureDoc()} onResult={(r) => (result = r)} />));
+    await act(async () => void (await wait(5)));
+    await act(async () => result.discard());
+    expect(assetKeys(storage)).toHaveLength(0);
+    // markClean collects too.
+    await storage.set(assetKey(big(7)), big(7));
+    await act(async () => result.markClean());
+    expect(assetKeys(storage)).toHaveLength(0);
+  });
+});
 
 describe("useEditorAutosave", () => {
   it("snapshots an editor document and restores it into a new editor", async () => {

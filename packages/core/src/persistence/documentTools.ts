@@ -20,7 +20,11 @@ export interface DocumentToolProviderOptions {
    * whose own provider already has them.
    */
   history?: boolean;
-  /** Saved documents: adds `save_<kind>_document`, `list_saved_<kind>_documents` and `open_saved_<kind>_document`. */
+  /**
+   * Saved documents: adds `save_<kind>_document`, `list_saved_<kind>_documents` and `open_saved_<kind>_document`.
+   * For documents with `assets` (image, paint) on a storage that lists keys, also
+   * `find_unreferenced_<kind>_assets` and `delete_unreferenced_<kind>_assets`.
+   */
   store?: EditorDocumentStore;
   /** Name `save_<kind>_document` uses when none is given (default "Untitled <noun>"). */
   name?: () => string | undefined;
@@ -195,12 +199,72 @@ export function createDocumentToolProvider(doc: EditorDocument, options: Documen
     },
   ];
 
+  const LIST_LIMIT = 100;
+  const assetTools = (s: EditorDocumentStore & Required<Pick<EditorDocumentStore, "collectAssetGarbage">>): AgentTool[] => [
+    {
+      name: `find_unreferenced_${kind}_assets`,
+      title: `Find unreferenced ${noun} assets`,
+      description:
+        `Finds the stored image data (layer pixels, masks and other assets of every image and paint document in the host's storage) that no saved document or autosave snapshot refers to any more, without deleting anything. ` +
+        `The open ${noun}'s own assets always count as used. Returns { assets, referenced, kept, unreferenced, unreferencedChars, refs, more }: ` +
+        `unreferenced is how many could be deleted, unreferencedChars the characters of data they hold, refs up to ${LIST_LIMIT} of their references for delete_unreferenced_${kind}_assets, and more how many were left out of refs.`,
+      inputSchema: object({}),
+      annotations: { title: `Find unreferenced ${noun} assets`, ...READ },
+      handler: async () => {
+        const report = await s.collectAssetGarbage({ dryRun: true, keep: [doc.getDocument()] });
+        return {
+          assets: report.assets,
+          referenced: report.referenced,
+          kept: report.kept,
+          unreferenced: report.unreferenced.length,
+          unreferencedChars: report.unreferencedChars,
+          refs: report.unreferenced.slice(0, LIST_LIMIT),
+          more: Math.max(0, report.unreferenced.length - LIST_LIMIT),
+        };
+      },
+    },
+    {
+      name: `delete_unreferenced_${kind}_assets`,
+      title: `Delete unreferenced ${noun} assets`,
+      description:
+        `Deletes stored image data that no saved document or autosave snapshot refers to, to free browser storage. Saved documents and the open ${noun} are never affected, and a write in progress is waited for. ` +
+        `Call find_unreferenced_${kind}_assets first to see what would go, and do it when the user asks to free space or clean up storage. It cannot be undone, but nothing refers to the deleted data. ` +
+        `Returns { removed, freedChars, kept, remaining }: how many assets were deleted, the characters of data freed, how many unreferenced ones were kept because a write was using them, and how many assets are left.`,
+      inputSchema: object({
+        refs: {
+          type: "array",
+          items: { type: "string", pattern: "^pixerate-asset:" },
+          minItems: 1,
+          uniqueItems: true,
+          description: `Delete only these references from find_unreferenced_${kind}_assets (refs). Default: every unreferenced asset. If any is no longer unreferenced, nothing is deleted and the error names it.`,
+        },
+      }),
+      annotations: { title: `Delete unreferenced ${noun} assets`, ...OVERWRITE },
+      handler: async ({ refs }) => {
+        writable();
+        const report = await s.collectAssetGarbage({ keep: [doc.getDocument()], ...(refs ? { only: refs as string[] } : {}) });
+        return {
+          removed: report.removed.length,
+          freedChars: report.freedChars,
+          kept: report.kept,
+          remaining: report.assets - report.removed.length,
+        };
+      },
+    },
+  ];
+
   return {
     id: options.id ?? `${kind}-document`,
     ...(options.namespace !== undefined ? { namespace: options.namespace } : {}),
     title: options.title ?? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} document`,
     description: `Get, load${options.history === false ? "" : ", undo, redo"}${store ? ", save and open" : ""} the whole ${noun}.`,
     ...(options.skill ? { skill: options.skill } : {}),
-    tools: [get, load, ...(options.history === false ? [] : [undo, redo]), ...(store ? storeTools(store) : [])],
+    tools: [
+      get,
+      load,
+      ...(options.history === false ? [] : [undo, redo]),
+      ...(store ? storeTools(store) : []),
+      ...(store?.collectAssetGarbage && doc.assets ? assetTools(store as Parameters<typeof assetTools>[0]) : []),
+    ],
   };
 }
