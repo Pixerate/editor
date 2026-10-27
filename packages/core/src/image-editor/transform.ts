@@ -44,7 +44,7 @@ export type TransformAnchor = 'top-left' | 'top' | 'top-right' | 'left' | 'cente
 
 export const TRANSFORM_ANCHORS: readonly TransformAnchor[] = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
 
-const ANCHOR_FRACTION: Record<TransformAnchor, [number, number]> = {
+export const ANCHOR_FRACTION: Record<TransformAnchor, [number, number]> = {
   'top-left': [0, 0],
   top: [0.5, 0],
   'top-right': [1, 0],

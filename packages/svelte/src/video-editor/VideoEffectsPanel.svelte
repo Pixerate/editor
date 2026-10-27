@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { findVideoClip, isVideoKeyframes, type VideoEditorController, type VideoEffectEditResult, type VideoEffectValues } from '@pixerate/editor/video-editor';
+  import { findVideoClip, isVideoKeyframes, openVideoClipEffectAuthoring, type VideoClipEffectAuthoring, type VideoEditorController, type VideoEffectEditResult, type VideoEffectValues } from '@pixerate/editor/video-editor';
+  import { onDestroy } from 'svelte';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
+  import EffectAuthoringEditor from '../effects/EffectAuthoringEditor.svelte';
   import EffectControls from './EffectControls.svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
 
@@ -35,6 +37,25 @@
     );
   }
   const merge = (gesture: string | null) => ({ merge: gesture ?? undefined });
+  let authoring = $state.raw<VideoClipEffectAuthoring | null>(null);
+  function closeAuthoring() {
+    authoring?.dispose();
+    authoring = null;
+  }
+  function author(clipId: string, instance: string) {
+    closeAuthoring();
+    openVideoClipEffectAuthoring(controller, clipId, instance).then(
+      (a) => (authoring = a),
+      (err: unknown) => (message = err instanceof Error ? err.message : String(err))
+    );
+  }
+  async function commitAuthoring() {
+    if (!authoring) return;
+    const r = await authoring.commit();
+    message = r.ok ? (r.notes?.join(' ') ?? null) : r.error;
+    if (r.ok) closeAuthoring();
+  }
+  onDestroy(closeAuthoring);
 </script>
 
 <!--
@@ -115,6 +136,7 @@
               <button type="button" class="min-w-0 flex-1 truncate text-left" aria-expanded={open === e.id} onclick={() => (open = open === e.id ? null : e.id)}>{label}</button>
               <button type="button" class={btn} disabled={disabled || i === 0} aria-label="Move up" onclick={() => report(controller.updateClipEffect(clip!.id, e.id, { index: i - 1 }))}>↑</button>
               <button type="button" class={btn} disabled={disabled || i === count - 1} aria-label="Move down" onclick={() => report(controller.updateClipEffect(clip!.id, e.id, { index: i + 1 }))}>↓</button>
+              <button type="button" class={btn} disabled={disabled || !provider} aria-label="Author {label}" title="Tune and keyframe it in the effect authoring editor" onclick={() => author(clip!.id, e.id)} data-author-effect={e.id}>✎</button>
               <button type="button" class={btn} {disabled} aria-label="Remove {label}" onclick={() => report(controller.removeClipEffect(clip!.id, e.id))}>✕</button>
             </div>
             {#if open === e.id}
@@ -148,6 +170,15 @@
         {/each}
       </ol>
       {#if !clip.effects?.length}<p class="text-[11px] text-muted-foreground">No effects on this clip.</p>{/if}
+    </div>
+  {/if}
+  {#if authoring}
+    <div class="space-y-1 rounded border border-border p-1" data-effect-authoring={authoring.instance}>
+      <EffectAuthoringEditor session={authoring.session} showSource={false} previewSize={{ width: 240, height: 135 }} />
+      <div class="flex gap-1">
+        <button type="button" class={btn} {disabled} onclick={commitAuthoring} data-apply-authoring="">Apply to clip</button>
+        <button type="button" class={btn} onclick={closeAuthoring}>Close</button>
+      </div>
     </div>
   {/if}
   {#if message}<p role="alert" class="text-[11px] text-destructive">{message}</p>{/if}

@@ -1,4 +1,5 @@
 import { videoClipSoundGain } from './evaluate.js';
+import { videoLoudnessEnergy } from './mix.js';
 import type { VideoAsset, VideoMediaClip } from './types.js';
 
 /**
@@ -17,6 +18,12 @@ export interface VideoAudioPeaks {
 	blockSize: number;
 	/** `levels[k]` is `[min, max, min, max, …]`, one pair per block of `blockSize × 4^k` samples. */
 	levels: Float32Array[];
+	/**
+	 * Loudness as ITU-R BS.1770 measures it: the K-weighted mean square of the channels, summed,
+	 * per `hop` ms of audio (100 ms). `videoAudioLoudness` gates it into LUFS for any stretch.
+	 * Absent from peaks built before it existed; `buildVideoAudioPeaks` always adds it.
+	 */
+	loudness?: { hop: number; energy: Float32Array };
 }
 
 /** Samples per level-0 block (well under a millisecond at common rates). */
@@ -60,7 +67,7 @@ export function buildVideoAudioPeaks(channels: readonly Float32Array[], sampleRa
 		}
 		levels.push(up);
 	}
-	return { sampleRate, length, blockSize, levels };
+	return { sampleRate, length, blockSize, levels, loudness: videoLoudnessEnergy(channels, sampleRate) };
 }
 
 /** Length of the audio (ms). */

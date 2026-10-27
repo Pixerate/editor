@@ -1,4 +1,4 @@
-import { applyVideoLut, videoLutSvgApproximation, type VideoLut } from './lut.js';
+import { applyVideoLut, videoLutSvgApproximation, videoSkinToneWeight, type VideoLut } from './lut.js';
 import type { VideoGrade, VideoGradeLut } from './types.js';
 
 /**
@@ -52,7 +52,8 @@ export function normalizeVideoGradeLut(lut: VideoGradeLut | undefined): VideoGra
 	if (!lut || typeof lut.src !== 'string' || !lut.src) return undefined;
 	const strength = typeof lut.strength === 'number' && Number.isFinite(lut.strength) ? Math.round(Math.min(1, Math.max(0, lut.strength)) * 1000) / 1000 : 1;
 	if (!strength) return undefined;
-	return { src: lut.src, ...(strength !== 1 ? { strength } : {}), ...(lut.name ? { name: lut.name } : {}) };
+	const skin = typeof lut.preserveSkinTones === 'number' && Number.isFinite(lut.preserveSkinTones) ? Math.round(Math.min(1, Math.max(0, lut.preserveSkinTones)) * 1000) / 1000 : 0;
+	return { src: lut.src, ...(strength !== 1 ? { strength } : {}), ...(lut.name ? { name: lut.name } : {}), ...(skin ? { preserveSkinTones: skin } : {}) };
 }
 
 /** A grade with every value clamped to its range and zero values left out; `undefined` when nothing is left. */
@@ -166,7 +167,7 @@ export function applyVideoGrade(grade: VideoGrade | undefined, rgb: readonly [nu
 	const setting = normalizeVideoGradeLut(grade?.lut);
 	if (setting && lut) {
 		const out = applyVideoLut(lut, v as [number, number, number]);
-		const s = setting.strength ?? 1;
+		const s = (setting.strength ?? 1) * (1 - (setting.preserveSkinTones ?? 0) * videoSkinToneWeight(v[0], v[1], v[2]));
 		v = v.map((x, k) => x + (out[k] - x) * s);
 	}
 	return v.map((x) => Math.round(x * 255)) as [number, number, number];

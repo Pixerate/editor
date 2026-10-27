@@ -271,3 +271,89 @@ export function videoWordAt(words: readonly VideoTimelineWord[], time: number): 
 	}
 	return -1;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Repetitions and disfluencies
+// ---------------------------------------------------------------------------------------------
+
+export interface VideoRepetitionOptions {
+	/** Longest phrase to look for repeated (words, default 3). */
+	maxPhrase?: number;
+	/** Longest gap between a phrase and its repeat that still counts as a stutter (ms, default 1000). */
+	maxGap?: number;
+}
+
+/**
+ * Words said twice in a row ("I I think", "we should we should"), as timeline ranges covering the
+ * first saying and the gap up to the repeat, so cutting them leaves the phrase said once. Longer
+ * phrases are tried first; "I I I" gives two ranges. Some repeats are meant ("very very"): check them.
+ */
+export function findVideoRepetitions(words: readonly VideoTimelineWord[], options: VideoRepetitionOptions = {}): VideoTranscriptRange[] {
+	const max = Math.max(1, options.maxPhrase ?? 3);
+	const maxGap = options.maxGap ?? 1000;
+	const norm = words.map((w) => normalizeVideoWord(w.word));
+	const out: VideoTranscriptRange[] = [];
+	for (let i = 0; i < norm.length; i++) {
+		for (let n = Math.min(max, Math.floor((norm.length - i) / 2)); n >= 1; n--) {
+			let same = true;
+			for (let k = 0; k < n && same; k++) same = !!norm[i + k] && norm[i + k] === norm[i + n + k];
+			if (!same || words[i + n].start - words[i + n - 1].end > maxGap) continue;
+			out.push({ from: words[i].start, to: words[i + n].start, text: words.slice(i, i + n).map((w) => w.word).join(' ') });
+			i += n - 1;
+			break;
+		}
+	}
+	return out;
+}
+
+export type VideoDisfluencyKind = 'filler' | 'pause' | 'repetition';
+export const VIDEO_DISFLUENCY_KINDS = ['filler', 'pause', 'repetition'] as const;
+
+/** Something to tidy out of speech: where it is (timeline ms), what kind and what was said. */
+export interface VideoDisfluency extends VideoTranscriptRange {
+	kind: VideoDisfluencyKind;
+	/** Indexes in the word list of the first and last word it covers (for a pause: the words either side). */
+	words: [number, number];
+}
+
+export interface VideoDisfluencyOptions {
+	/** Which kinds to look for (default all). */
+	kinds?: readonly VideoDisfluencyKind[];
+	/** Filler words and phrases (default `VIDEO_DEFAULT_FILLERS`). */
+	fillers?: readonly string[];
+	/** How pauses are measured (default: over 700 ms, keeping 150 ms of breath either side). */
+	pauses?: VideoPauseOptions;
+	repetitions?: VideoRepetitionOptions;
+}
+
+/**
+ * Fillers, long pauses and stutters in one pass, in time order, each with the words it covers, so
+ * a transcript can mark them and an agent can review them before cutting. Overlapping finds are
+ * all kept (a filler inside a repetition): `mergeVideoRanges` joins them when they are cut.
+ */
+export function detectVideoDisfluencies(words: readonly VideoTimelineWord[], options: VideoDisfluencyOptions = {}): VideoDisfluency[] {
+	const kinds = new Set(options.kinds ?? VIDEO_DISFLUENCY_KINDS);
+	const startIndex = (time: number) => Math.max(0, words.findIndex((w) => w.start >= time - VIDEO_TIME_EPSILON));
+	const out: VideoDisfluency[] = [];
+	if (kinds.has('filler'))
+		for (const r of findVideoFillers(words, options.fillers)) {
+			const first = startIndex(r.from);
+			out.push({ ...r, kind: 'filler', words: [first, first + r.text.split(' ').length - 1] });
+		}
+	if (kinds.has('repetition'))
+		for (const r of findVideoRepetitions(words, options.repetitions)) {
+			const first = startIndex(r.from);
+			out.push({ ...r, kind: 'repetition', words: [first, first + r.text.split(' ').length - 1] });
+		}
+	if (kinds.has('pause'))
+		for (const r of findVideoTranscriptPauses(words, options.pauses)) {
+			const after = words.findIndex((w) => w.start >= r.to - VIDEO_TIME_EPSILON);
+			out.push({ ...r, kind: 'pause', words: [Math.max(0, after - 1), Math.max(0, after)] });
+		}
+	return out.sort((a, b) => a.from - b.from || a.to - b.to);
+}
+
+/** Cut ranges shrunk by `keep` ms at each end, so a little breath stays either side; ranges that vanish are dropped. */
+export function videoCutsWithMargin<T extends { from: number; to: number }>(ranges: readonly T[], keep: number): T[] {
+	return ranges.map((r) => ({ ...r, from: r.from + keep, to: r.to - keep })).filter((r) => r.to - r.from > VIDEO_TIME_EPSILON);
+}

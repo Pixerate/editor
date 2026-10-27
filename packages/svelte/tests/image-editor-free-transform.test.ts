@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { DEFAULT_CANVAS_VIEWPORT, FreeTransformTool, ImageEditorController, imageToCanvasPoint } from '@pixerate/editor/image-editor';
-import { FreeTransformOptionsBar, ImageEditor, LayersPanel, createReactiveImageEditor } from '../src/image-editor';
+import { FreeTransformOptionsBar, ImageEditor, ImageEditorCanvas, LayersPanel, createReactiveImageEditor } from '../src/image-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -118,6 +118,72 @@ describe('Svelte Free Transform', () => {
     expect(after.height).toBeGreaterThanOrEqual(before.height * 2 - 1);
     expect(c.undo()).toBe(true);
     expect(c.getLayerBounds(id)).toEqual(before);
+  });
+
+  it('transform mode: drags the active layer by its frame, one undo step per drag, and picks layers by clicking', () => {
+    const editor = createReactiveImageEditor();
+    const c = editor.controller;
+    const { id } = setup(c);
+    const tool = new FreeTransformTool(c);
+    component = mount(ImageEditorCanvas, { target, props: { editor, mode: 'transform', transformTool: tool } });
+    flushSync();
+    const canvas = target.querySelector('[data-testid="image-editor-canvas"]') as HTMLCanvasElement;
+    // jsdom has no layout: the canvas projects through the fallback viewport and maps client pixels 1:1.
+    const at = (x: number, y: number) => imageToCanvasPoint({ x, y }, c.getState(), DEFAULT_CANVAS_VIEWPORT.width, DEFAULT_CANVAS_VIEWPORT.height, false);
+    const steps = () => (c as unknown as { undoStack: unknown[] }).undoStack.length;
+    expect(c.getState().activeLayerId).toBe(id);
+    const before = steps();
+    // Dragging inside the frame moves the layer; the transform closes on release as one step.
+    const from = at(30, 25);
+    const to = at(40, 35);
+    canvas.dispatchEvent(pointer('pointerdown', from.x, from.y));
+    expect(tool.active).toBe(true);
+    canvas.dispatchEvent(pointer('pointermove', to.x, to.y));
+    canvas.dispatchEvent(pointer('pointerup', to.x, to.y, 0));
+    flushSync();
+    expect(tool.active).toBe(false);
+    expect(steps()).toBe(before + 1);
+    expect(c.getLayerBounds(id)).toEqual({ x: 30, y: 30, width: 40, height: 20 });
+    // A click without a move leaves no step.
+    const inside = at(40, 35);
+    canvas.dispatchEvent(pointer('pointerdown', inside.x, inside.y));
+    canvas.dispatchEvent(pointer('pointerup', inside.x, inside.y, 0));
+    expect(steps()).toBe(before + 1);
+    // With no transform open, other edits go through.
+    const other = c.addPixelLayer({ name: 'Other', pixels: { width: 10, height: 10, data: new Uint8ClampedArray(400).fill(255) }, x: 150, y: 70 });
+    expect(c.getLayer(other)).toBeTruthy();
+    // Clicking the first layer, far from the active frame, picks it; clicking empty canvas picks none.
+    const first = at(50, 40);
+    canvas.dispatchEvent(pointer('pointerdown', first.x, first.y));
+    canvas.dispatchEvent(pointer('pointerup', first.x, first.y, 0));
+    expect(c.getState().activeLayerId).toBe(id);
+    c.setLayerProperties('background', { visible: false });
+    const empty = at(5, 95);
+    canvas.dispatchEvent(pointer('pointerdown', empty.x, empty.y));
+    canvas.dispatchEvent(pointer('pointerup', empty.x, empty.y, 0));
+    expect(c.getState().activeLayerId).toBeNull();
+  });
+
+  it('transform mode: a shape layer gets a frame and moves by it', () => {
+    const editor = createReactiveImageEditor();
+    const c = editor.controller;
+    setup(c);
+    const shape = c.addShapeLayer({ shape: { kind: 'rect', x: 120, y: 40, width: 30, height: 20 }, fill: '#00ff00' });
+    const tool = new FreeTransformTool(c);
+    component = mount(ImageEditorCanvas, { target, props: { editor, mode: 'transform', transformTool: tool } });
+    flushSync();
+    const canvas = target.querySelector('[data-testid="image-editor-canvas"]') as HTMLCanvasElement;
+    const at = (x: number, y: number) => imageToCanvasPoint({ x, y }, c.getState(), DEFAULT_CANVAS_VIEWPORT.width, DEFAULT_CANVAS_VIEWPORT.height, false);
+    expect(c.getState().activeLayerId).toBe(shape);
+    const from = at(135, 50);
+    const to = at(145, 60);
+    canvas.dispatchEvent(pointer('pointerdown', from.x, from.y));
+    expect(tool.active).toBe(true);
+    canvas.dispatchEvent(pointer('pointermove', to.x, to.y));
+    canvas.dispatchEvent(pointer('pointerup', to.x, to.y, 0));
+    flushSync();
+    expect(tool.active).toBe(false);
+    expect(c.getLayerFrame(shape)![0]).toEqual({ x: 130, y: 50 });
   });
 
   it('the layers panel links and unlinks masks', () => {
