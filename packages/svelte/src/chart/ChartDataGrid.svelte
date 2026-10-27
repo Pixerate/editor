@@ -1,6 +1,7 @@
 <script lang="ts">
   import { chartColorInputValue, chartSeriesColor, chartTreeFromSeries, formatChartNumber, type ChartController } from '@pixerate/editor/chart';
   import ChartCommitInput from './ChartCommitInput.svelte';
+  import ChartLinksGrid from './ChartLinksGrid.svelte';
   import ChartTreeGrid from './ChartTreeGrid.svelte';
   import { chartStateOf } from './createChartEditor.svelte.js';
   import { chartButtonClass, chartCellClass, chartIconButtonClass, chartInputClass } from './styles.js';
@@ -32,7 +33,9 @@
   };
 </script>
 
-{#if spec.tree.length}
+{#if spec.links.length || spec.type === 'sankey'}
+  <ChartLinksGrid {controller} {readOnly} class={className} />
+{:else if spec.tree.length}
   <ChartTreeGrid {controller} {readOnly} class={className} />
 {:else}
 <div class="overflow-auto rounded-md border border-border {className}" data-chart-grid="">

@@ -1,6 +1,6 @@
 ---
 name: pixerate-chart
-description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap (flat or grouped), sunburst, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
+description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap (flat or grouped), sunburst, Sankey, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
 ---
 
 # Charts
@@ -23,6 +23,11 @@ levels). When a tree is set it *is* the data: the categories are its top-level g
 and the first series their totals, so a treemap nests the groups, a sunburst draws them as
 rings, and any other type draws the totals. Nodes are addressed by `path`, the names from the
 top down (`["Europe", "France"]`); `get_chart` returns them as `treeTable`.
+
+Flows live in `spec.links` (`{source, target, value}` between named nodes). They work the same
+way: when set they are the data, the categories are the nodes (stacked in `sankeyNodes`
+order) and the first series how much passes through each. Flows are addressed by index in
+`spec.links`. A chart holds a tree or flows, not both.
 
 Read `pixerate-agent-tools` first for tool naming, errors and `run_commands` batching.
 Charts inside a rich-text document are not edited with these tools: use `insert_chart`,
@@ -70,6 +75,8 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
   Parts of parts (regions → countries, budget → departments → teams): a treemap with grouped
   data for comparing sizes, a sunburst for showing the levels (`sunburstLabel` captions the
   total in the middle). Load the levels with `import_chart_tree_csv` or `set_chart_tree`.
+  Flows from stage to stage (a pipeline, a budget, energy or traffic sources): sankey; load
+  rows of source, target, value with `import_chart_links_csv` or `set_chart_links`.
   Seats or votes per group with a majority: parliament (`parliamentMajority`,
   `parliamentArc`, `parliamentLabel`).
 - **Bars start at zero.** Bar length encodes the value, so never set a non-zero `min` on the
@@ -144,7 +151,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total), `sunburstLabel` (caption under a sunburst's total). Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total), `sunburstLabel` (caption under a sunburst's total), `sankeyLinkColor` (`source` / `target` / `gray`), `sankeyNodes` (node stacking order). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -171,6 +178,11 @@ it changed.
 | `add_chart_tree_node` | Add an item or a group (`node`) under the group at `parent` (a path; `[]` for the top level) at `at`. Returns its `path` and the parent's new total. |
 | `update_chart_tree_node` | Rename a node, set an item's `value`, or set a node's `color` (null for the palette) by `path`. Groups have no value of their own. Returns the path (new after a rename). |
 | `remove_chart_tree_node` | Delete a node and everything under it by `path`. Returns the group totals left. |
+| `set_chart_links` | Replace the data with flows (`links`: `{source, target, value}`, value above 0, no loops, each pair once) for a Sankey diagram, and optionally the node stacking order (`nodes`); `[]` goes back to plain data. Returns the flows and each node's throughput. |
+| `import_chart_links_csv` | Replace the data with flows from CSV / TSV rows of source, target, value (the Mermaid `sankey-beta` and spreadsheet layout). |
+| `add_chart_link` | Add one flow (new names add nodes). Refused for a repeated pair or a loop. Returns its `index` and its two nodes' throughput. |
+| `update_chart_link` | Change a flow's source, target, value or colour by `index` (from `spec.links`). |
+| `remove_chart_link` | Delete a flow by `index`; nodes no flow uses any more go. Returns the flows left. |
 | `apply_chart_preset` | Apply a quick `layout` and / or a `colors` scheme from `list_chart_presets` in one step. |
 | `transpose_chart` | Swap series and categories. Drops per-series colours and settings, so restyle afterwards. |
 | `select_chart_element` | Select part of the chart (`kind`: none, chart, title, subtitle, legend, axis, series, point, category, trendline) for the user to see or before `press_chart_key`. |
@@ -227,6 +239,11 @@ several charts may register them with another prefix.
 | `chart.addTreeNode` | Add an item or group; returns its path. |
 | `chart.updateTreeNode` | Rename, revalue or recolour a node by path. |
 | `chart.removeTreeNode` | Delete a node by path. |
+| `chart.setLinks` | Replace the flows (as `set_chart_links`). |
+| `chart.importLinksCsv` | Replace the data with flows from CSV / TSV. |
+| `chart.addLink` | Add a flow; returns its index. |
+| `chart.updateLink` | Change a flow by index. |
+| `chart.removeLink` | Delete a flow by index. |
 | `chart.applyPreset` | Apply a quick layout and / or colour scheme. |
 | `chart.transpose` | Swap series and categories. |
 | `chart.importCsv` | Replace data from CSV / TSV (no automatic chart type). |
@@ -257,9 +274,16 @@ several charts may register them with another prefix.
 - A slope chart needs exactly two visible series; with one it draws a line chart (a
   `type-fallback` warning), and a third is not drawn. Hide the extra series or move them.
 - Parliament seats are rounded to whole numbers; more than 2,000 seats are not drawn.
-- While a chart has grouped data, cell edits (`set_chart_values`, adding, renaming or deleting
-  categories, `transpose_chart`) are refused, because the totals come from the tree. Edit the
-  nodes, or replace the data (`set_chart_data`, `import_chart_csv`), which clears the tree.
+- While a chart has grouped data or flows, cell edits (`set_chart_values`, adding, renaming or deleting
+  categories, `transpose_chart`) are refused, because the totals come from the tree or flows.
+  Edit the nodes or flows, or replace the data (`set_chart_data`, `import_chart_csv`), which
+  clears them.
+- Sankey columns come from the flows: a node sits one column after the furthest node that
+  flows into it, and nodes with no outgoing flow line up on the right. Within a column nodes
+  stack in `sankeyNodes` order; if flows cross badly, reorder `sankeyNodes` (for instance,
+  put the nodes the big flows join next to each other) and render again. Without flows a
+  Sankey chart draws its table as bars (a `type-fallback` warning).
+- Highlighting a Sankey node keeps every flow into or out of it bright.
 - Highlight, selection and colours work per top-level group: every item in a group selects
   and highlights that group. Give a node its own `color` with `update_chart_tree_node`.
 - Office export writes a grouped treemap or sunburst as a pie or doughnut of the group totals

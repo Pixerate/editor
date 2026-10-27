@@ -12,6 +12,7 @@
     CHART_COLOR_SCHEMES,
     CHART_CURVES,
     CHART_RADAR_GRATICULES,
+    CHART_SANKEY_LINK_COLORS,
     CHART_ERROR_BAR_DIRECTIONS,
     CHART_ERROR_BAR_LABELS,
     CHART_ERROR_BAR_TYPES,
@@ -421,6 +422,16 @@
           <div class="min-w-0 flex-1">
             <ChartCommitInput id="{idPrefix}-bins" value={spec.bins === null ? '' : String(spec.bins)} placeholder="Auto" inputmode="numeric" data-option="bins" oncommit={(text) => controller.update({ bins: text.trim() === '' ? null : Number(text) }).ok} />
           </div>
+        </div>
+      {/if}
+      {#if spec.type === 'sankey'}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-sankey-color" class="{chartLabelClass} w-20 shrink-0">Flows</label>
+          <select id="{idPrefix}-sankey-color" class={chartInputClass} value={spec.sankeyLinkColor} data-option="sankeyLinkColor" onchange={(e) => controller.update({ sankeyLinkColor: e.currentTarget.value as (typeof CHART_SANKEY_LINK_COLORS)[number] })}>
+            {#each CHART_SANKEY_LINK_COLORS as c (c)}
+              <option value={c}>{c === 'source' ? 'Coloured by source' : c === 'target' ? 'Coloured by target' : 'Grey'}</option>
+            {/each}
+          </select>
         </div>
       {/if}
       {#if spec.type === 'sunburst'}

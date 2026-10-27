@@ -10,6 +10,8 @@ import {
 	CATEGORY_REF,
 	CHART_UPDATE_PROPERTIES,
 	HEIGHT,
+	LINK_INDEX,
+	LINK_PROPS,
 	REFERENCE_BAND_PATCH,
 	REFERENCE_BAND_PROPS,
 	REFERENCE_INDEX,
@@ -27,7 +29,7 @@ import { chartSpecColorsByCategory, chartDataToTable, chartSeriesColor, chartSli
 import { summarizeChart } from './summary.js';
 import { chartToSvg } from './svg.js';
 import { chartTreeTotal } from './tree.js';
-import type { ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
+import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
 
 export interface ChartCommandOptions {
 	/** Id prefix (default `chart.`); use one per chart when several are registered. */
@@ -410,6 +412,80 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			run: (_ctx: unknown, params: { path: string[] }) => {
 				check(controller.removeTreeNode(params.path));
 				return { groups: controller.getSpec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })) };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setLinks`,
+			label: 'Replace Flows…',
+			keywords: ['chart', 'sankey', 'flow', 'links', 'funnel', 'budget'],
+			description: 'Replaces the data with flows between named nodes for a Sankey diagram; [] goes back to plain data.',
+			params: object(
+				{
+					links: { type: 'array', items: { type: 'object', properties: LINK_PROPS, required: ['source', 'target', 'value'], additionalProperties: false }, description: 'All the flows; [] removes them.' },
+					nodes: { type: 'array', items: { type: 'string' }, description: 'Node names in stacking order.' }
+				},
+				['links']
+			),
+			run: (_ctx: unknown, params: { links: ChartLink[]; nodes?: string[] }) => {
+				check(controller.setLinks(params.links, { nodes: params.nodes }));
+				return { links: controller.getSpec().links, nodes: controller.getSpec().sankeyNodes };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}importLinksCsv`,
+			label: 'Import Flows from CSV…',
+			keywords: ['chart', 'sankey', 'flow', 'csv', 'import'],
+			description: 'Replaces the data with flows from CSV / TSV rows of source, target and value.',
+			params: object(
+				{
+					csv: { type: 'string', description: 'CSV or TSV text.' },
+					header: { type: ['boolean', 'string'], enum: [true, false, 'auto'], description: 'The first row holds column names (default auto).' }
+				},
+				['csv']
+			),
+			run: (_ctx: unknown, params: { csv: string; header?: boolean | 'auto' }) => {
+				check(controller.importLinksTable(parseCsv(params.csv, { delimiter: params.csv.includes('\t') ? '\t' : ',' }), { header: params.header }));
+				return { links: controller.getSpec().links };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}addLink`,
+			label: 'Add Flow…',
+			keywords: ['chart', 'sankey', 'flow', 'link', 'add'],
+			description: 'Adds a flow between two nodes. Returns its index.',
+			params: object(LINK_PROPS, ['source', 'target', 'value']),
+			run: (_ctx: unknown, params: ChartLink) => {
+				const result = controller.addLink(params);
+				check(result);
+				return { index: (result as { index: number }).index };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}updateLink`,
+			label: 'Change Flow…',
+			keywords: ['chart', 'sankey', 'flow', 'link', 'value'],
+			description: 'Changes a flow by index (color null for the default).',
+			params: object({ index: LINK_INDEX, ...LINK_PROPS, color: { type: ['string', 'null'], description: 'CSS colour, or null for the default.' } }, ['index']),
+			run: (_ctx: unknown, params: { index: number; source?: string; target?: string; value?: number; color?: string | null }) => {
+				const { index, ...patch } = params;
+				check(controller.updateLink(index, patch));
+				return { link: controller.getSpec().links[index] };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}removeLink`,
+			label: 'Delete Flow',
+			keywords: ['chart', 'sankey', 'flow', 'link', 'remove'],
+			description: 'Deletes a flow by index.',
+			params: object({ index: LINK_INDEX }, ['index']),
+			run: (_ctx: unknown, params: { index: number }) => {
+				check(controller.removeLink(params.index));
+				return { links: controller.getSpec().links };
 			}
 		},
 		{

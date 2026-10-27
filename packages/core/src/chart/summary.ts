@@ -85,6 +85,14 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 		}
 		return parts.join(' ');
 	}
+	if (family === 'sankey') {
+		if (!spec.links.length) return `${head} with no flows yet.`;
+		const total = spec.links.reduce((t, l) => t + l.value, 0);
+		const largest = [...spec.links].sort((a, b) => b.value - a.value)[0];
+		const sources = spec.sankeyNodes.filter((n) => !spec.links.some((l) => l.target === n));
+		const sinks = spec.sankeyNodes.filter((n) => !spec.links.some((l) => l.source === n));
+		return `${head} of ${spec.links.length} flows between ${spec.sankeyNodes.length} nodes, from ${sources.join(', ')} to ${sinks.join(', ')}. The largest flow is ${largest.source} → ${largest.target} (${fmt(largest.value)}); all flows add up to ${fmt(total)}.`;
+	}
 	if (family === 'parliament') {
 		const s = spec.series.find((x) => !x.hidden)!;
 		const seats = spec.categories.map((c, i) => ({ c, n: Math.max(0, Math.round(s.values[i] ?? 0)) }));

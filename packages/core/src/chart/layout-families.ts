@@ -738,3 +738,105 @@ export function layoutSunburst(ctx: LayoutCtx, area: ChartRect, series: ChartSer
 	}
 	return { plot };
 }
+
+/**
+ * Sankey: `spec.links` as flows between columns of nodes. A node's column is the longest chain
+ * of flows into it, and nodes nothing flows out of line up in the last column. Node heights and
+ * flow widths share one scale (the tightest column fills the height); flows leave and arrive
+ * in the order of the nodes at their other end, so they cross as little as the order allows.
+ */
+export function layoutSankey(ctx: LayoutCtx, area: ChartRect, series: ChartSeries | undefined): FamilyResult {
+	const { spec, theme, marks, fs, measure } = ctx;
+	const nodes = spec.sankeyNodes;
+	const links = spec.links;
+	const at = new Map(nodes.map((n, i) => [n, i] as const));
+	const incoming = nodes.map(() => [] as number[]);
+	const outgoing = nodes.map(() => [] as number[]);
+	links.forEach((l, k) => {
+		outgoing[at.get(l.source)!].push(k);
+		incoming[at.get(l.target)!].push(k);
+	});
+	// Columns: the longest chain of flows into each node (links have no loops).
+	const column: number[] = nodes.map(() => -1);
+	const depth = (i: number): number => {
+		if (column[i] >= 0) return column[i];
+		column[i] = 0;
+		column[i] = incoming[i].reduce((d, k) => Math.max(d, depth(at.get(links[k].source)!) + 1), 0);
+		return column[i];
+	};
+	nodes.forEach((_, i) => depth(i));
+	const last = Math.max(...column);
+	nodes.forEach((_, i) => {
+		if (!outgoing[i].length) column[i] = last;
+	});
+	const value = series?.values.map((v) => v ?? 0) ?? nodes.map(() => 0);
+	const nodeW = Math.max(6, Math.min(16, area.width * 0.02));
+	const gap = last > 0 ? (area.width - nodeW) / last : 0;
+	const xOf = (c: number) => (last > 0 ? area.x + c * gap : area.x + area.width / 2 - nodeW / 2);
+	const columns = Array.from({ length: last + 1 }, (_, c) => nodes.map((_, i) => i).filter((i) => column[i] === c));
+	const pad = Math.max(4, Math.min(fs * 1.2, area.height / Math.max(1, Math.max(...columns.map((c) => c.length))) / 3));
+	const ky = Math.min(...columns.filter((c) => c.length).map((c) => (area.height - pad * (c.length - 1)) / Math.max(1e-9, c.reduce((t, i) => t + value[i], 0))));
+	const top: number[] = nodes.map(() => 0);
+	for (const col of columns) {
+		const used = col.reduce((t, i) => t + value[i] * ky, 0) + pad * Math.max(0, col.length - 1);
+		let y = area.y + (area.height - used) / 2;
+		for (const i of col) {
+			top[i] = y;
+			y += value[i] * ky + pad;
+		}
+	}
+	const color = (i: number) => series?.pointColors?.[i] || chartSliceColor(spec, i);
+	// Highlight: a flow stays bright when either end is named.
+	const named = new Set(spec.highlight);
+	const lit = nodes.map((n) => named.has(n));
+	const dimLinks = lit.some(Boolean);
+	// Flows leave in the order of their targets' positions and arrive in the order of their sources'.
+	const outOffset = nodes.map(() => 0);
+	const inOffset = nodes.map(() => 0);
+	const startY = new Map<number, number>();
+	const endY = new Map<number, number>();
+	nodes.forEach((_, i) => {
+		for (const k of [...outgoing[i]].sort((a, b) => top[at.get(links[a].target)!] - top[at.get(links[b].target)!])) {
+			startY.set(k, top[i] + outOffset[i]);
+			outOffset[i] += links[k].value * ky;
+		}
+		for (const k of [...incoming[i]].sort((a, b) => top[at.get(links[a].source)!] - top[at.get(links[b].source)!])) {
+			endY.set(k, top[i] + inOffset[i]);
+			inOffset[i] += links[k].value * ky;
+		}
+	});
+	const selectedNode = (i: number) => ctx.isSelected({ kind: 'category', index: i }) || ctx.isSelected({ kind: 'point', seriesId: series?.id ?? '', index: i });
+	links.forEach((l, k) => {
+		const s = at.get(l.source)!;
+		const t = at.get(l.target)!;
+		const w = l.value * ky;
+		const x0 = xOf(column[s]) + nodeW;
+		const x1 = xOf(column[t]);
+		const y0 = startY.get(k)!;
+		const y1 = endY.get(k)!;
+		const xm = (x0 + x1) / 2;
+		const d = `M${r2(x0)},${r2(y0)}C${r2(xm)},${r2(y0)} ${r2(xm)},${r2(y1)} ${r2(x1)},${r2(y1)}L${r2(x1)},${r2(y1 + w)}C${r2(xm)},${r2(y1 + w)} ${r2(xm)},${r2(y0 + w)} ${r2(x0)},${r2(y0 + w)}Z`;
+		const fill = l.color ?? (spec.sankeyLinkColor === 'gray' ? theme.mutedText : color(spec.sankeyLinkColor === 'target' ? t : s));
+		const emphasis = selectedNode(s) || selectedNode(t) ? 0.6 : 0.35;
+		const opacity = dimLinks && !lit[s] && !lit[t] ? emphasis * 0.25 : emphasis;
+		marks.push({ kind: 'path', key: `link-${k}`, role: 'link', d, fill, opacity });
+	});
+	const labelsOn = series?.dataLabels ?? spec.dataLabels;
+	const format = series?.format ?? spec.yAxis.format;
+	let hidden = 0;
+	nodes.forEach((name, i) => {
+		const x = xOf(column[i]);
+		const h = Math.max(1, value[i] * ky);
+		const target: ChartSelection = { kind: 'category', index: i };
+		const selected = selectedNode(i);
+		marks.push({ kind: 'rect', key: `node-${i}`, role: 'node', x, y: top[i], width: nodeW, height: h, fill: color(i), radius: 1, ...(selected ? { stroke: theme.selection, strokeWidth: 2 } : {}), target, selected });
+		const text = labelsOn ? `${name} ${formatChartNumber(value[i], format)}` : name;
+		const room = (last > 0 ? gap : area.width / 2) - nodeW - 10;
+		const shown = truncate(text, Math.max(fs * 2, room), fs, measure);
+		if (shown !== text) hidden++;
+		const right = column[i] < last || last === 0;
+		marks.push({ kind: 'text', key: `label-node-${i}`, role: 'data-label', x: right ? x + nodeW + 5 : x - 5, y: top[i] + h / 2, text: shown, anchor: right ? 'start' : 'end', baseline: 'middle', size: fs, weight: selected ? 600 : undefined, fill: selected ? theme.selection : theme.text, target, selected });
+	});
+	if (hidden) ctx.warn('labels-truncated', `${hidden} node label${hidden === 1 ? ' was' : 's were'} shortened to fit between the columns.`);
+	return { plot: area };
+}

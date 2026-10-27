@@ -14,6 +14,7 @@ import {
   chartTrendlineName,
   CHART_CURVES,
   CHART_RADAR_GRATICULES,
+  CHART_SANKEY_LINK_COLORS,
   CHART_LEGEND_POSITIONS,
   CHART_LIKERT_NEUTRALS,
   CHART_LIKERT_SORTS,
@@ -402,6 +403,11 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 onPointerUp={() => controller.endGesture()}
                 onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
               />
+            </Field>
+          )}
+          {spec.type === 'sankey' && (
+            <Field label="Flows" htmlFor={`${idBase}-sankey-color`}>
+              <Select id={`${idBase}-sankey-color`} name="sankeyLinkColor" value={spec.sankeyLinkColor} options={CHART_SANKEY_LINK_COLORS} labels={{ source: 'Coloured by source', target: 'Coloured by target', gray: 'Grey' }} onChange={(sankeyLinkColor) => controller.update({ sankeyLinkColor })} />
             </Field>
           )}
           {spec.type === 'sunburst' && (

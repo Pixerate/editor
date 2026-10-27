@@ -306,6 +306,26 @@ describe("ChartInspector", () => {
     expect(q("[data-chart-tree-grid]")).toBeNull();
   });
 
+  it("edits Sankey flows as a table of source, target and value", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "sankey" } });
+    const el = render(ChartDataGrid, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    const qa = (sel: string) => Array.from(el.querySelectorAll(sel)) as HTMLElement[];
+    expect(q("[data-chart-links-grid]")).not.toBeNull();
+    click(q('[data-action="link-add"]'));
+    expect(controller.getSpec().links).toEqual([{ source: "Start", target: "Step 1", value: 1 }]);
+    click(q('[data-action="link-add"]'));
+    type(q<HTMLInputElement>('[data-link-cell="1:value"]'), "4");
+    type(q<HTMLInputElement>('[data-link-cell="0:target"]'), "Signup");
+    expect(controller.getSpec().links).toEqual([{ source: "Start", target: "Signup", value: 1 }, { source: "Step 1", target: "Step 3", value: 4 }]);
+    type(q<HTMLInputElement>('[data-link-cell="0:target"]'), "Start");
+    expect(q<HTMLInputElement>('[data-link-cell="0:target"]').value).toBe("Signup");
+    click(qa('[data-action="link-remove"]')[1]);
+    expect(qa("[data-link-row]")).toHaveLength(1);
+    click(q('[data-action="links-clear"]'));
+    expect(controller.getSpec().links).toEqual([]);
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });
