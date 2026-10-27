@@ -85,6 +85,26 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
       { id: "sa", name: "Strongly agree", values: [20, 15, 25, 12] },
     ],
   },
+  Customers: {
+    type: "sunburst",
+    title: "Customers by region",
+    sunburstLabel: "customers",
+    tree: [
+      { name: "Europe", children: [{ name: "France", value: 40 }, { name: "Spain", value: 25 }, { name: "Germany", children: [{ name: "Berlin", value: 18 }, { name: "Munich", value: 12 }] }] },
+      { name: "Americas", children: [{ name: "Canada", value: 30 }, { name: "USA", value: 55 }, { name: "Brazil", value: 14 }] },
+      { name: "Asia", children: [{ name: "Japan", value: 26 }, { name: "India", value: 20 }] },
+    ],
+  },
+  Budget: {
+    type: "treemap",
+    title: "Budget by department",
+    tree: [
+      { name: "Engineering", children: [{ name: "Web", value: 420 }, { name: "Apps", value: 310 }, { name: "Platform", value: 280 }] },
+      { name: "Sales", children: [{ name: "Field", value: 260 }, { name: "Inside", value: 140 }] },
+      { name: "Marketing", children: [{ name: "Brand", value: 120 }, { name: "Events", value: 90 }, { name: "Search", value: 110 }] },
+      { name: "Support", value: 150 },
+    ],
+  },
   Parliament: {
     type: "parliament",
     title: "Council seats",

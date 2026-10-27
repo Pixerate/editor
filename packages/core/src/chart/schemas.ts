@@ -112,6 +112,22 @@ export const REFERENCE_BAND_PATCH: Record<string, JsonSchema> = { from: REFERENC
 
 export const REFERENCE_INDEX = (what: string): JsonSchema => ({ type: 'integer', minimum: 0, description: `${what} index (0 = first), as get_chart lists them in spec.${what === 'Reference line' ? 'referenceLines' : 'referenceBands'}.` });
 
+/** A tree node, recursive through `#/$defs/chartTreeNode` (tool schemas that use it carry `TREE_DEFS`). */
+export const TREE_NODE: JsonSchema = {
+	type: 'object',
+	description: 'An item ({"name", "value"}) or a group ({"name", "children": [nodes]}, whose value is the sum of its items).',
+	properties: {
+		name: { type: 'string', description: 'Label; unique among its siblings.' },
+		value: { type: 'number', minimum: 0, description: 'Items only: the amount, 0 or more.' },
+		children: { type: 'array', items: { $ref: '#/$defs/chartTreeNode' }, description: 'Groups only: the nodes inside it (up to 6 levels in all).' },
+		color: { type: 'string', description: 'CSS colour (default: the palette colour of its top-level group, lighter further in).' }
+	},
+	required: ['name'],
+	additionalProperties: false
+};
+export const TREE_DEFS = { chartTreeNode: TREE_NODE };
+export const TREE_PATH: JsonSchema = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Names from the top level down to the node, e.g. ["Europe", "France"] (from get_chart treeTable or spec.tree).' };
+
 export const ERROR_BARS = (what: string): JsonSchema => ({
 	type: ['object', 'null'],
 	description: `${what} null removes them.`,
@@ -152,7 +168,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats.' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups.' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -187,5 +203,6 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				likertSort: { type: 'string', enum: [...CHART_LIKERT_SORTS], description: 'Likert: order the questions by agreement (positive), by disagreement (negative) or as given (none, default).' },
 				parliamentArc: { type: 'number', minimum: 90, maximum: 360, description: 'Parliament: sweep of the hemicycle in degrees (default 180).' },
 				parliamentMajority: { type: ['integer', 'null'], minimum: 1, description: 'Parliament: seats needed for a majority, drawn as a dashed line (null: half of the seats plus one).' },
-				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' }
+				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' },
+				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' }
 			};

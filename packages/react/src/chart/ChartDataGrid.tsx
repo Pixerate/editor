@@ -1,5 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { chartColorInputValue, chartSeriesColor, formatChartNumber, type ChartController } from '@pixerate/editor/chart';
+import {
+  addChartTreeRow,
+  chartColorInputValue,
+  chartSeriesColor,
+  chartTreeColumnLabels,
+  chartTreeDepth,
+  chartTreeFromSeries,
+  chartTreeToRows,
+  formatChartNumber,
+  removeChartTreeRow,
+  setChartTreeRowName,
+  setChartTreeRowValue,
+  type ChartController,
+} from '@pixerate/editor/chart';
 import { useChartState } from './useChartEditor';
 import { chartButtonClass, chartCellClass, chartIconButtonClass, chartInputClass } from './styles';
 
@@ -63,8 +76,92 @@ export interface ChartDataGridProps {
  * (name, colour, show / hide, delete). Cells take numbers as people type them (`1,200`,
  * `12%`, blank for a gap); pasting TSV or CSV fills and grows the grid from the cell.
  */
+/**
+ * Grouped data as a table: the names from the group down to each item, then its value. Editing
+ * a name moves the item (a new name starts a new group); `+ Level` adds a column for deeper groups.
+ */
+export function ChartTreeGrid({ controller, readOnly = false, className }: Omit<ChartDataGridProps, 'categoryHeader'>) {
+  const { spec } = useChartState(controller);
+  // `+ Level` raises the column count; it stays until the grid is unmounted, so a new column can be filled in.
+  const [columns, setColumns] = useState(1);
+  const rows = chartTreeToRows(spec.tree);
+  const depth = Math.max(columns, chartTreeDepth(spec.tree));
+  const labels = chartTreeColumnLabels(depth);
+  const commit = (next: Parameters<ChartController['setTreeRows']>[0]) => controller.setTreeRows(next).ok;
+  return (
+    <div className={`overflow-auto rounded-md border border-border ${className ?? ''}`} data-chart-grid="" data-chart-tree-grid="">
+      <table className="w-full border-collapse text-xs">
+        <thead className="bg-muted/50">
+          <tr>
+            {labels.map((label) => (
+              <th key={label} className="border-b border-r border-border px-2 py-1 text-left font-medium text-muted-foreground">
+                {label}
+              </th>
+            ))}
+            <th className="border-b border-r border-border px-2 py-1 text-right font-medium text-muted-foreground">Value</th>
+            {!readOnly && <th className="w-8 border-b border-border" />}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, r) => (
+            <tr key={r} data-tree-row={r}>
+              {labels.map((_, k) => (
+                <td key={k} className="border-b border-r border-border p-0">
+                  <ChartCommitInput
+                    value={row.path[k] ?? ''}
+                    aria-label={`${labels[k]}, row ${r + 1}`}
+                    data-tree-cell={`${r}:${k}`}
+                    readOnly={readOnly}
+                    onCommit={(name) => commit(setChartTreeRowName(rows, r, k, name))}
+                    className={`${chartCellClass} text-left`}
+                  />
+                </td>
+              ))}
+              <td className="border-b border-r border-border p-0">
+                <ChartCommitInput
+                  value={String(row.value)}
+                  inputMode="decimal"
+                  aria-label={`Value of ${row.path.join(' / ')}`}
+                  title={formatChartNumber(row.value, spec.yAxis.format)}
+                  data-tree-value={r}
+                  readOnly={readOnly}
+                  onCommit={(text) => commit(setChartTreeRowValue(rows, r, text))}
+                  className={chartCellClass}
+                />
+              </td>
+              {!readOnly && (
+                <td className="border-b border-border px-1">
+                  <button type="button" className={chartIconButtonClass} title="Delete item" aria-label={`Delete ${row.path.join(' / ')}`} data-action="tree-remove-row" onClick={() => commit(removeChartTreeRow(rows, r))}>
+                    ×
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!readOnly && (
+        <div className="flex flex-wrap gap-1 p-1">
+          <button type="button" className={`${chartButtonClass} h-6 border-dashed`} data-action="tree-add-row" onClick={() => commit(addChartTreeRow(rows))}>
+            + Add item
+          </button>
+          <button type="button" className={`${chartButtonClass} h-6 border-dashed`} data-action="tree-add-level" disabled={depth >= 6} onClick={() => setColumns(depth + 1)}>
+            + Level
+          </button>
+          <span className="flex-1" />
+          <button type="button" className={`${chartButtonClass} h-6`} data-action="tree-ungroup" title="Keep the group totals as plain data" onClick={() => controller.setTree([])}>
+            Ungroup
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChartDataGrid({ controller, categoryHeader = 'Category', readOnly = false, className }: ChartDataGridProps) {
   const { spec, selection } = useChartState(controller);
+  if (spec.tree.length) return <ChartTreeGrid controller={controller} readOnly={readOnly} className={className} />;
+  const canGroup = spec.type === 'treemap' || spec.type === 'sunburst';
   const paste = (row: number, column: number) => (e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData?.getData('text/plain') ?? '';
     if (!/[\t\n]/.test(text.replace(/\n$/, ''))) return;
@@ -182,6 +279,17 @@ export function ChartDataGrid({ controller, categoryHeader = 'Category', readOnl
           <button type="button" className={`${chartButtonClass} h-6 border-dashed`} data-action="add-category" onClick={() => controller.addCategory()}>
             + Add category
           </button>
+          {canGroup && (
+            <button
+              type="button"
+              className={`${chartButtonClass} ml-1 h-6`}
+              data-action="tree-from-table"
+              title="Edit the categories as groups of items"
+              onClick={() => controller.setTree(chartTreeFromSeries(spec.categories, spec.series.find((s) => !s.hidden)?.values ?? []))}
+            >
+              Group items
+            </button>
+          )}
         </div>
       )}
     </div>

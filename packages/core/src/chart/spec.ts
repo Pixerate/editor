@@ -1,5 +1,6 @@
 import { cyclePaletteColor } from './color.js';
 import { CHART_ERROR_BAR_DIRECTIONS, CHART_ERROR_BAR_TYPES } from './errorbars.js';
+import { chartTreeTotal, cloneChartTree, normalizeChartTree } from './tree.js';
 import type {
 	ChartAxis,
 	ChartCurve,
@@ -28,7 +29,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'slope', 'likert', 'parliament'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'slope', 'likert', 'parliament'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -62,11 +63,12 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	treemap: 'Treemap',
 	slope: 'Slope',
 	likert: 'Likert',
-	parliament: 'Parliament'
+	parliament: 'Parliament',
+	sunburst: 'Sunburst'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -130,6 +132,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'slope':
 		case 'likert':
 		case 'parliament':
+		case 'sunburst':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -140,7 +143,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 
 /** Chart types whose legend lists categories (one colour per category) rather than series. */
 export function chartColorsByCategory(type: ChartType): boolean {
-	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament';
+	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament' || type === 'sunburst';
 }
 
 /** Whether this chart colours by category: a pie-like type, or `varyColors` on a one-series chart. */
@@ -603,8 +606,16 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		categories = Array.from({ length: longest }, (_, i) => `${i + 1}`);
 	}
 
+	// A tree is the data: its top-level names are the categories and the first series holds their totals.
+	const tree = normalizeChartTree(value.tree, issues);
+	if (tree.length) categories = tree.map((n) => n.name);
+
 	const used = new Set<string>();
 	const series = rawSeries.map((s, i) => normalizeSeries(s, categories.length, used, i, issues)).filter((s): s is ChartSeries => s !== null);
+	if (tree.length) {
+		if (!series.length) series.push({ id: uniqueChartSeriesId(series), name: 'Values', values: [] });
+		series[0] = { ...series[0], values: tree.map(chartTreeTotal) };
+	}
 
 	let palette = [...DEFAULT_CHART_PALETTE];
 	if (Array.isArray(value.palette)) {
@@ -696,7 +707,9 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		likertSort: pick(value.likertSort, CHART_LIKERT_SORTS, 'none', 'likertSort', issues),
 		parliamentArc: fraction('parliamentArc', 180, 90, 360),
 		parliamentMajority,
-		parliamentLabel: text(value.parliamentLabel, '', 'parliamentLabel', issues)
+		parliamentLabel: text(value.parliamentLabel, '', 'parliamentLabel', issues),
+		tree,
+		sunburstLabel: text(value.sunburstLabel, '', 'sunburstLabel', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {
@@ -721,7 +734,8 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		palette: [...spec.palette],
 		highlight: [...spec.highlight],
 		referenceLines: spec.referenceLines.map((l) => ({ ...l })),
-		referenceBands: spec.referenceBands.map((b) => ({ ...b }))
+		referenceBands: spec.referenceBands.map((b) => ({ ...b })),
+		tree: cloneChartTree(spec.tree)
 	};
 }
 

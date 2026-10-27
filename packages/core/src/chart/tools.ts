@@ -45,12 +45,16 @@ import {
 	REFERENCE_LINE_PROPS,
 	SERIES_PROPS,
 	SERIES_REF,
+	TREE_DEFS,
+	TREE_NODE,
+	TREE_PATH,
 	TRENDLINE_PROPS,
 	VALUE,
 	WIDTH
 } from './schemas.js';
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
+import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
 import type { ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
@@ -135,13 +139,20 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		return index;
 	};
 	const table = () => chartDataToTable(spec());
+	/** Grouped data as rows: the path of names to each item, then its value. */
+	const treeTable = () => {
+		const rows = chartTreeToRows(spec().tree);
+		const depth = chartTreeDepth(spec().tree);
+		return [[...Array.from({ length: depth }, (_, k) => (k === 0 ? 'Group' : k === depth - 1 ? 'Item' : `Level ${k + 1}`)), 'Value'], ...rows.map((r) => [...r.path, ...Array(depth - r.path.length).fill(''), r.value])];
+	};
+	const treeSummary = () => ({ tree: spec().tree, groups: spec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })), depth: chartTreeDepth(spec().tree) });
 	const Parser = (): ParserCtor | undefined => options.DOMParser ?? (globalThis as { DOMParser?: ParserCtor }).DOMParser;
 
 	const getChart: AgentTool = {
 		name: 'get_chart',
 		title: 'Read the chart',
 		description:
-			'Returns the chart spec (type, titles, axes, legend, series with ids and settings), its data as a table (header row of series names, then one row per category), the current selection, and a summary at the given size: per-series min / max / mean / trend, the axes as drawn, layout warnings (hidden labels, thinned lines), a colour check and a plain-language description. Use the series ids and category indexes it returns with the write tools.',
+			'Returns the chart spec (type, titles, axes, legend, series with ids and settings), its data as a table (header row of series names, then one row per category), grouped data as treeTable (path of names to each item, then its value) when the chart has a tree, the current selection, and a summary at the given size: per-series min / max / mean / trend, the axes as drawn, layout warnings (hidden labels, thinned lines), a colour check and a plain-language description. Use the series ids and category indexes it returns with the write tools.',
 		inputSchema: { type: 'object', properties: { width: WIDTH, height: HEIGHT }, additionalProperties: false },
 		annotations: { title: 'Read the chart', ...READ },
 		handler: ({ width = size.width, height = size.height }) => {
@@ -151,6 +162,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 				table: table(),
 				selection: controller.getState().selection,
 				summary: summarizeChart(controller.toJSON(), { width, height }),
+				...(spec().tree.length ? { treeTable: treeTable() } : {}),
 				issues: controller.getState().issues,
 				...(reason ? { readOnly: reason } : {})
 			};
@@ -420,7 +432,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		},
 		annotations: { title: 'Add a category', ...WRITE },
 		handler: ({ label, at }) => {
-			const result = controller.addCategory(label, { at });
+			const result = resolve(controller.addCategory(label, { at })) as { index: number };
 			return { index: result.index, categories: spec().categories };
 		}
 	};
@@ -611,6 +623,98 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			const result = resolve(controller.setHighlight(names)) as { categories: number[]; series: string[] };
 			const s = spec();
 			return { highlight: s.highlight, categories: result.categories.map((index) => ({ index, label: s.categories[index] })), series: result.series.map((id) => ({ id, name: s.series.find((x) => x.id === id)!.name })) };
+		}
+	};
+
+	const setTree: AgentTool = {
+		name: 'set_chart_tree',
+		title: 'Replace grouped data',
+		description:
+			'Replaces the chart\'s data with groups of items (a tree) for treemaps and sunbursts, as one undo step: items {"name", "value"} and groups {"name", "children"}, up to 6 levels, names unique among siblings. The top-level groups become the categories and their totals the first series, so other chart types draw the totals. [] goes back to plain data (the totals stay as values). Returns the tree, each group\'s total and the depth.',
+		inputSchema: { type: 'object', properties: { tree: { type: 'array', items: { $ref: '#/$defs/chartTreeNode' }, description: 'The top-level nodes; [] removes the grouping.' } }, required: ['tree'], additionalProperties: false, $defs: TREE_DEFS },
+		annotations: { title: 'Replace grouped data', ...WRITE_IDEMPOTENT },
+		handler: ({ tree }) => {
+			resolve(controller.setTree(tree));
+			return treeSummary();
+		}
+	};
+
+	const importTreeCsv: AgentTool = {
+		name: 'import_chart_tree_csv',
+		title: 'Import grouped data from CSV',
+		description:
+			'Replaces the data with grouped data from CSV or TSV: every column but the last holds names (group, subgroup, …, item), the last holds the value. A blank group name repeats the one above, as spreadsheets lay out groups. One undo step. Returns the tree, group totals and depth.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				csv: { type: 'string', description: 'CSV or TSV text, e.g. "Region,Country,Customers\\nEurope,France,40\\n,Spain,25".' },
+				header: { type: ['boolean', 'string'], enum: [true, false, 'auto'], description: 'The first row holds column names (default auto: when its last cell is not a number).' }
+			},
+			required: ['csv'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Import grouped data from CSV', ...WRITE },
+		handler: ({ csv, header }) => {
+			resolve(controller.importTreeTable(parseCsv(csv, { delimiter: csv.includes('\t') ? '\t' : ',' }), { header }));
+			return treeSummary();
+		}
+	};
+
+	const addTreeNode: AgentTool = {
+		name: 'add_chart_tree_node',
+		title: 'Add an item or group',
+		description: 'Adds an item or a group (with children) under a group of the grouped data, or at the top level. Returns its path and its parent\'s new total.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				parent: { type: 'array', items: { type: 'string' }, description: 'Path of the group to add to; [] or omitted for the top level.' },
+				node: { $ref: '#/$defs/chartTreeNode', description: 'The item ({"name", "value"}) or group ({"name", "children"}) to add.' },
+				at: { type: 'integer', minimum: 0, description: 'Position among its siblings (default: the end).' }
+			},
+			required: ['node'],
+			additionalProperties: false,
+			$defs: TREE_DEFS
+		},
+		annotations: { title: 'Add an item or group', ...WRITE },
+		handler: ({ parent = [], node, at }) => {
+			const result = resolve(controller.addTreeNode(parent, node, { at })) as { path: string[] };
+			const group = parent.length ? findChartTreeNode(spec().tree, parent) : null;
+			return { path: result.path, parentTotal: group ? chartTreeTotal(group) : spec().tree.reduce((t, n) => t + chartTreeTotal(n), 0) };
+		}
+	};
+
+	const updateTreeNode: AgentTool = {
+		name: 'update_chart_tree_node',
+		title: 'Change an item or group',
+		description: 'Renames a node, sets an item\'s value, or sets a node\'s colour (null goes back to the palette). Groups have no value of their own. Returns the node\'s path (new if renamed) and the node.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				path: TREE_PATH,
+				name: { type: 'string', description: 'New name (unique among its siblings).' },
+				value: { type: 'number', minimum: 0, description: 'Items only: the new amount.' },
+				color: { type: ['string', 'null'], description: 'CSS colour, or null for the palette colour.' }
+			},
+			required: ['path'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Change an item or group', ...WRITE_IDEMPOTENT },
+		handler: ({ path, ...patch }) => {
+			if (!Object.keys(patch).length) fail('Nothing to change: pass name, value or color with the path.');
+			const result = resolve(controller.updateTreeNode(path, patch)) as { path: string[] };
+			return { path: result.path, node: findChartTreeNode(spec().tree, result.path) };
+		}
+	};
+
+	const removeTreeNode: AgentTool = {
+		name: 'remove_chart_tree_node',
+		title: 'Delete an item or group',
+		description: 'Deletes a node of the grouped data with everything under it (a group left empty becomes an item with value 0). Returns the group totals left.',
+		inputSchema: { type: 'object', properties: { path: TREE_PATH }, required: ['path'], additionalProperties: false },
+		annotations: { title: 'Delete an item or group', ...DESTRUCTIVE },
+		handler: ({ path }) => {
+			resolve(controller.removeTreeNode(path));
+			return { groups: treeSummary().groups };
 		}
 	};
 
@@ -810,6 +914,11 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		removeReferenceBand,
 		setCallout,
 		highlight,
+		setTree,
+		importTreeCsv,
+		addTreeNode,
+		updateTreeNode,
+		removeTreeNode,
 		applyPreset,
 		transpose,
 		select,
@@ -823,7 +932,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
-		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
 		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;

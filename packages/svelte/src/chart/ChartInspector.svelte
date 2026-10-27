@@ -423,6 +423,14 @@
           </div>
         </div>
       {/if}
+      {#if spec.type === 'sunburst'}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-sunburst-label" class="{chartLabelClass} w-20 shrink-0">Caption</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-sunburst-label" value={spec.sunburstLabel} placeholder="Under the total" data-option="sunburstLabel" oncommit={(sunburstLabel) => controller.update({ sunburstLabel }).ok} />
+          </div>
+        </div>
+      {/if}
       {#if spec.type === 'likert'}
         <div class="flex items-center gap-2">
           <label for="{idPrefix}-likert-neutral" class="{chartLabelClass} w-20 shrink-0">Neutral</label>

@@ -58,6 +58,11 @@ export function planChartToolPlayback(tool: string, args: Record<string, any>): 
 			if (args.kind === 'point' && typeof args.series === 'string' && args.category !== undefined) return click(chartPointRef(args.series, args.category));
 			return typeof args.kind === 'string' && args.kind !== 'none' ? click(control(args.kind)) : null;
 		case 'set_chart_data':
+		case 'set_chart_tree':
+		case 'import_chart_tree_csv':
+		case 'add_chart_tree_node':
+		case 'update_chart_tree_node':
+		case 'remove_chart_tree_node':
 		case 'import_chart_csv':
 		case 'import_chart_mermaid':
 		case 'import_chart_ooxml':

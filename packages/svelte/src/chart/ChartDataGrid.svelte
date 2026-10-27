@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { chartColorInputValue, chartSeriesColor, formatChartNumber, type ChartController } from '@pixerate/editor/chart';
+  import { chartColorInputValue, chartSeriesColor, chartTreeFromSeries, formatChartNumber, type ChartController } from '@pixerate/editor/chart';
   import ChartCommitInput from './ChartCommitInput.svelte';
+  import ChartTreeGrid from './ChartTreeGrid.svelte';
   import { chartStateOf } from './createChartEditor.svelte.js';
   import { chartButtonClass, chartCellClass, chartIconButtonClass, chartInputClass } from './styles.js';
 
@@ -18,6 +19,7 @@
   const view = chartStateOf(() => controller);
   const spec = $derived(view.current.spec);
   const selection = $derived(view.current.selection);
+  const canGroup = $derived(spec.type === 'treemap' || spec.type === 'sunburst');
 
   const cellText = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value));
 
@@ -30,6 +32,9 @@
   };
 </script>
 
+{#if spec.tree.length}
+  <ChartTreeGrid {controller} {readOnly} class={className} />
+{:else}
 <div class="overflow-auto rounded-md border border-border {className}" data-chart-grid="">
   <table class="w-full border-collapse text-xs">
     <thead class="bg-muted/50">
@@ -121,6 +126,15 @@
   {#if !readOnly}
     <div class="p-1">
       <button type="button" class="{chartButtonClass} h-6 border-dashed" data-action="add-category" onclick={() => controller.addCategory()}>+ Add category</button>
+      {#if canGroup}
+        <button
+          type="button"
+          class="{chartButtonClass} ml-1 h-6"
+          data-action="tree-from-table"
+          title="Edit the categories as groups of items"
+          onclick={() => controller.setTree(chartTreeFromSeries(spec.categories, spec.series.find((s) => !s.hidden)?.values ?? []))}>Group items</button>
+      {/if}
     </div>
   {/if}
 </div>
+{/if}

@@ -9,6 +9,7 @@ import { formatChartNumber } from './scale.js';
 import { chartSpecColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
 import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
+import { chartTreeDepth, chartTreeToRows } from './tree.js';
 
 /** An axis as drawn. `logBase` is set on a logarithmic axis, `reversed` when it runs the other way. */
 export interface ChartAxisSummary {
@@ -71,12 +72,17 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 	const fmt = (v: number | null) => (v === null ? 'blank' : formatChartNumber(v, format));
 	const head = spec.title ? `${spec.title}: a ${kind} chart` : `A ${kind} chart`;
 	if (!series.length || series.every((s) => s.count === 0)) return `${head} with no data.`;
-	if (family === 'pie' || family === 'funnel' || family === 'treemap') {
+	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'sunburst') {
 		const s = series[0];
 		const total = s.sum ?? 0;
 		const share = (v: number | null) => (total && v !== null ? ` (${Math.round((v / total) * 100)}%)` : '');
 		parts.push(`${head} of ${s.name} across ${spec.categories.length} categories, totalling ${fmt(s.sum)}.`);
 		parts.push(`The largest is ${s.maxAt} at ${fmt(s.max)}${share(s.max)}; the smallest is ${s.minAt} at ${fmt(s.min)}${share(s.min)}.`);
+		if (spec.tree.length) {
+			const depth = chartTreeDepth(spec.tree);
+			const items = chartTreeToRows(spec.tree).length;
+			parts.push(`The data is grouped ${depth} level${depth === 1 ? '' : 's'} deep with ${items} item${items === 1 ? '' : 's'}.`);
+		}
 		return parts.join(' ');
 	}
 	if (family === 'parliament') {

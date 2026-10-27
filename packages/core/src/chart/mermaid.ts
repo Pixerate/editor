@@ -45,7 +45,7 @@ function splitOutside(text: string, sep: string): string[] {
 /** The Mermaid family a chart is written as. */
 export function chartMermaidFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartMermaidFamily {
 	const family = chartFamily(spec);
-	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'parliament') return 'pie';
+	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'parliament' || family === 'sunburst') return 'pie';
 	if (family === 'radar') return 'radar';
 	return 'xychart';
 }

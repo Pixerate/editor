@@ -404,6 +404,11 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
               />
             </Field>
           )}
+          {spec.type === 'sunburst' && (
+            <Field label="Caption" htmlFor={`${idBase}-sunburst-label`}>
+              <ChartCommitInput id={`${idBase}-sunburst-label`} value={spec.sunburstLabel} placeholder="Under the total" data-option="sunburstLabel" className={chartInputClass} onCommit={(sunburstLabel) => controller.update({ sunburstLabel }).ok} />
+            </Field>
+          )}
           {spec.type === 'likert' && (
             <Field label="Neutral" htmlFor={`${idBase}-likert-neutral`}>
               <Select id={`${idBase}-likert-neutral`} name="likertNeutral" value={spec.likertNeutral} options={CHART_LIKERT_NEUTRALS} labels={{ split: 'Across the centre', separate: 'In its own column' }} onChange={(likertNeutral) => controller.update({ likertNeutral })} />

@@ -8,7 +8,7 @@
 import { createChartSpec, normalizeChartSpec } from "@pixerate/editor/chart";
 
 const spec = createChartSpec({
-  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap · slope · likert · parliament
+  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap · sunburst · slope · likert · parliament
   title: "Quarterly revenue",
   categories: ["Q1", "Q2", "Q3", "Q4"],
   series: [
@@ -120,6 +120,7 @@ function Revenue() {
 | `slope` | the first series (left) joined to the second (right) for each category, labelled at both ends | the series names are the column captions; needs two series (a line chart until then); draggable |
 | `likert` | each category as one diverging bar of the series, as shares of its total | series from most negative to most positive, coloured orange → grey → purple (`chartLikertColor`); `likertNeutral` `split` / `separate`, `likertSort` `none` / `positive` / `negative` |
 | `parliament` | the first series as seats in rows of dots, each category's seats together from the left | `parliamentArc` (90–360°), `parliamentMajority` (default half plus one, drawn as a dashed line), `parliamentLabel` under the total; seats are rounded, at most 2,000 |
+| `sunburst` | `tree` as rings from the centre out, each node inside its parent's arc (without a tree, the first series as one ring) | colours per top-level group, lighter further out; `sunburstLabel` captions the total in the centre |
 
 Other spec fields: `xAxis.kind: "date"` (categories read as dates, labelled with calendar steps that fit), `axis.step` (fixed tick distance), `format.code` (spreadsheet codes such as `#,##0.0,,"M"`, using the spreadsheet's own format engine), `gapWidth` / `overlap` (bar spacing), `labelPosition` (`auto` drops labels that do not fit and picks dark or white text by contrast), and per series `marker`, `curve`, `dataLabels`, `format`, `pointColors` and `trendlines`.
 
@@ -142,6 +143,22 @@ chart.updateSeries("sales", { errorBars: null }); // remove
 ```
 
 Bar, line, area and scatter series take `errorBars` along the value axis; scatter and bubble series with numeric x also take `xErrorBars`. The types follow Excel's `c:errValType`: `fixed` (`value`, default 1), `percent` (`value` percent of each point, default 5), `stddev` (`value` sample standard deviations, default 1, drawn around the series mean as Excel does), `stderr` (sample standard deviation / √n at every point) and `custom` (`plus` / `minus` per category, minus defaulting to plus). `direction` is `both`, `plus` or `minus`; `cap: false` drops the end caps. They are drawn as `error-bar` path marks that select their series, sit on the stack top of stacked series (scaled to shares when 100% stacked), and are included in the axis range. `chartErrorAmounts(bars, values)` gives the centre and reach at each point.
+
+## Grouped data
+
+```ts
+chart.setTree([
+  { name: "Europe", children: [{ name: "France", value: 40 }, { name: "Spain", value: 25 }] },
+  { name: "Asia", value: 20 },
+]);
+chart.addTreeNode(["Europe"], { name: "Italy", value: 18 }); // { ok: true, path: ["Europe", "Italy"] }
+chart.updateTreeNode(["Europe", "Spain"], { value: 30, color: "#c0392b" });
+chart.removeTreeNode(["Asia"]);
+chart.importTreeTable([["Region", "Country", "N"], ["Europe", "France", 40], ["", "Spain", 25]]); // blank names repeat the group above
+chart.setTree([]); // back to plain data; the totals stay as values
+```
+
+`spec.tree` holds groups (`{ name, children }`) and items (`{ name, value }`), up to six levels, with sibling names unique so a path of names (`["Europe", "France"]`) finds a node. When it is set it is the chart's data: normalisation makes the categories its top-level names and the first series their totals, so colours, the legend, highlight, selection, summaries, Mermaid and Office output all work per top-level group, a treemap nests each group's rectangles inside it under a header, a sunburst draws a ring per level, and any other type draws the totals. Cell-level table edits are refused while a tree is set; `setData` and the CSV / table imports replace it. `chartTreeToRows` / `chartTreeFromRows` turn it into rows of names and a value and back (the data grids show it that way, `ChartTreeGrid` in React and Svelte, with `+ Level` for deeper groups and Ungroup), and `chartTreeFromTable` reads spreadsheet tables where a group name is written only on its first row. Office chartex treemaps and sunbursts import with their levels (listed leaf first; a blank parent cell continues the group above); exports write the group totals as a pie or doughnut and say so.
 
 ## Annotations
 

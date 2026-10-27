@@ -14,6 +14,8 @@
  * - `likert` draws each category (a question) as one diverging bar of the series (answers,
  *   most negative first), as shares of the question's total.
  * - `parliament` draws the first series as seats in a hemicycle, one colour per category.
+ * - `sunburst` draws `tree` as rings from the centre out (or, without a tree, the first series
+ *   as one ring); a `treemap` with a `tree` nests each group's rectangles inside it.
  */
 export type ChartType =
 	| 'bar'
@@ -31,7 +33,8 @@ export type ChartType =
 	| 'treemap'
 	| 'slope'
 	| 'likert'
-	| 'parliament';
+	| 'parliament'
+	| 'sunburst';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -131,6 +134,19 @@ export interface ChartSeries {
 	xErrorBars?: ChartErrorBars;
 	/** A label pinned to each point that matters, one per category (null: none). Bar, line, area and scatter charts. */
 	callouts?: (string | null)[];
+}
+
+/**
+ * One node of a chart's hierarchy: a leaf with a `value`, or a group with `children` (whose
+ * value is the sum of its leaves). Sibling names are unique, so a path of names finds a node.
+ */
+export interface ChartTreeNode {
+	name: string;
+	/** Leaves only: 0 or more. */
+	value?: number;
+	children?: ChartTreeNode[];
+	/** CSS colour (default: the palette colour of its top-level group, lighter further in). */
+	color?: string;
 }
 
 /** Which axis a reference line or band is measured on: the value axis, the secondary value axis, or the numeric x axis of a scatter or bubble chart. */
@@ -289,6 +305,13 @@ export interface ChartSpec {
 	parliamentMajority: number | null;
 	/** Parliament: the caption under the seat total ("" writes "seats"). */
 	parliamentLabel: string;
+	/**
+	 * Grouped data (treemaps and sunbursts). When set it is the chart's data: the categories are
+	 * its top-level names and the first series holds their totals, so other types draw the totals.
+	 */
+	tree: ChartTreeNode[];
+	/** Sunburst: the caption under the total in the centre ("" for none). */
+	sunburstLabel: string;
 }
 
 /** What a click selects. */
