@@ -10,8 +10,9 @@ import { relativeLuminance, contrastRatio, contrastLevel } from './contrast.js';
 import { checkPaletteColors } from './vision.js';
 import { colorHarmony, HARMONY_KINDS, type ColorWheel, type HarmonyKind } from './harmony.js';
 import { mixColors } from './mix.js';
-import { rgbToHsl, rgbToOklab, oklabToOklch, oklchToOklab, oklabToRgb } from './convert.js';
+import { rgbToHsl, rgbToOklab, oklabToOklch } from './convert.js';
 import { inSrgbGamut, toSrgbGamut } from './gamut.js';
+import { suggestAccessibleForeground } from './suggest.js';
 import {
 	parseDualColor,
 	normalizeDualColor,
@@ -75,30 +76,7 @@ function requireDualColor(input: unknown, name: string): DualColor {
 	return parsed!;
 }
 
-function findAccessibleLightness(fg: Rgba, bg: Rgba, large: boolean): string | undefined {
-	const lab = rgbToOklab(fg);
-	const lch = oklabToOklch(lab);
-	for (let d = 0.01; d <= 1; d += 0.01) {
-		const downL = Math.max(0, lch.l - d);
-		const upL = Math.min(1, lch.l + d);
-		const downCand = toSrgbGamut(oklabToRgb(oklchToOklab({ ...lch, l: downL })));
-		const upCand = toSrgbGamut(oklabToRgb(oklchToOklab({ ...lch, l: upL })));
-
-		const downRatio = contrastRatio(downCand, bg);
-		const upRatio = contrastRatio(upCand, bg);
-		const downPass = contrastLevel(downRatio, { large }) !== 'fail';
-		const upPass = contrastLevel(upRatio, { large }) !== 'fail';
-
-		if (downPass && upPass) {
-			return formatHex(downRatio >= upRatio ? downCand : upCand);
-		} else if (downPass) {
-			return formatHex(downCand);
-		} else if (upPass) {
-			return formatHex(upCand);
-		}
-	}
-	return undefined;
-}
+const findAccessibleLightness = (fg: Rgba, bg: Rgba, large: boolean): string | undefined => suggestAccessibleForeground(fg, bg, { large });
 
 export interface ColorToolProviderOptions {
 	/** Provider id (unique per registry). Default 'color'. */
@@ -196,33 +174,7 @@ export function createColorToolProvider(options: ColorToolProviderOptions = {}):
 			const passesAA = level === 'AA' || level === 'AAA';
 			const passesAAA = level === 'AAA';
 
-			let suggestion: string | undefined;
-			if (!passesAA) {
-				const lab = rgbToOklab(fg);
-				const lch = oklabToOklch(lab);
-				for (let d = 0.01; d <= 1; d += 0.01) {
-					const downL = Math.max(0, lch.l - d);
-					const upL = Math.min(1, lch.l + d);
-					const downCand = toSrgbGamut(oklabToRgb(oklchToOklab({ ...lch, l: downL })));
-					const upCand = toSrgbGamut(oklabToRgb(oklchToOklab({ ...lch, l: upL })));
-
-					const downRatio = contrastRatio(downCand, bg);
-					const upRatio = contrastRatio(upCand, bg);
-					const downPass = contrastLevel(downRatio, { large }) !== 'fail';
-					const upPass = contrastLevel(upRatio, { large }) !== 'fail';
-
-					if (downPass && upPass) {
-						suggestion = formatHex(downRatio >= upRatio ? downCand : upCand);
-						break;
-					} else if (downPass) {
-						suggestion = formatHex(downCand);
-						break;
-					} else if (upPass) {
-						suggestion = formatHex(upCand);
-						break;
-					}
-				}
-			}
+			const suggestion = passesAA ? undefined : suggestAccessibleForeground(fg, bg, { large });
 
 			return {
 				ratio,

@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-svelte",
-  "version": "0.117.1",
+  "version": "0.118.0",
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -93,6 +93,11 @@
       "svelte": "./dist/color/index.js",
       "default": "./dist/color/index.js"
     },
+    "./typography": {
+      "types": "./dist/typography/index.d.ts",
+      "svelte": "./dist/typography/index.js",
+      "default": "./dist/typography/index.js"
+    },
     "./gradient": {
       "types": "./dist/gradient/index.d.ts",
       "svelte": "./dist/gradient/index.js",
@@ -143,6 +148,9 @@
       ],
       "color": [
         "./dist/color/index.d.ts"
+      ],
+      "typography": [
+        "./dist/typography/index.d.ts"
       ],
       "gradient": [
         "./dist/gradient/index.d.ts"
