@@ -18,6 +18,11 @@ export interface AnimationEffectsToolProviderOptions {
 	namespace?: string;
 	/** The scene cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
+	/**
+	 * The agent playback surface its calls are acted out on (default `animation`, where `AnimationEditor` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 const info = (e: AppliedMotionEffect): AppliedEffectInfo =>
@@ -103,5 +108,5 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 				}
 			}
 		]
-	}));
+	}), options.playbackSurface);
 }

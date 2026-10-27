@@ -182,6 +182,7 @@ export interface ChartLegend {
 export type ChartStacking = 'none' | 'stacked' | 'percent';
 export type ChartOrientation = 'vertical' | 'horizontal';
 export type ChartCurve = 'linear' | 'smooth' | 'step';
+export type ChartRadarGraticule = 'polygon' | 'circle';
 /** Where bar labels go: `auto` puts them outside, or centred on stacked segments, and drops ones that do not fit. */
 export type ChartLabelPosition = 'auto' | 'inside' | 'outside' | 'center';
 
@@ -225,6 +226,10 @@ export interface ChartSpec {
 	bins: number | null;
 	/** Waterfall: append a running-total bar (categories labelled "total" are always totals). */
 	showTotal: boolean;
+	/** Radar: number of evenly spaced rings from the value axis minimum to its maximum, 1–50 (`null`: round-number rings). */
+	radarTicks: number | null;
+	/** Radar: rings drawn as polygons through the spokes or as circles. */
+	radarGraticule: ChartRadarGraticule;
 }
 
 /** What a click selects. */

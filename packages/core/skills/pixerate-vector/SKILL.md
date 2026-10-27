@@ -455,6 +455,20 @@ the animation editor.
 | `update_effect` | Draw an effect group again with new `values` (`effect` "picture"); its place and transform are kept, but edits to its shapes are replaced. |
 | `remove_effect` | Keep the group's shapes as a plain group, detached from the effect. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A vector document is the `VectorDocument` (artboard size, nodes, symbols, constraints); the tool, selection and view are not part of it.
+
+| Tool | Use |
+| --- | --- |
+| `get_vector_document` | Take a copy of the whole vector document as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the vector document, use `vector.list`: it is smaller and says more. Refuses very large documents. |
+| `load_vector_document` | Put back a copy from `get_vector_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_vector` brings the previous document back). For SVG markup use `vector.importSvg`. |
+| `undo_vector` | Undo the last vector edit (one command, one batch or one user gesture). Returns `undone` (the step's name) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |
+| `redo_vector` | Redo the last undone vector edit. |
+| `save_vector_document` | Save the vector document under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_vector_documents` | List saved vector documents (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_vector_document` | Replace the vector document with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Pitfalls
 
 The most common ones are below. Read [references/pitfalls.md](references/pitfalls.md) before working with connectors, frames, masks, filters, text, symbols, constraints, blends, gradient meshes or live corners.

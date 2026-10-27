@@ -217,6 +217,8 @@ import { convertSurfaceDepth, deepTile, isBitDepth, keepDeepSamples, proxyOf, re
 import { workingToSamples } from '../raster/deep-compositor';
 import {
   LayerOperationError,
+  activeLayerAfterRemoval,
+  defaultActiveLayerId,
   addLayerEffect as addLayerEffectOp,
   addLayerFilter as addLayerFilterOp,
   layerEffectsOf,
@@ -1436,6 +1438,8 @@ export class ImageEditorController {
   private pendingDirty: CropBox[] | 'all' = 'all';
 
   private notify(strokeRects?: CropBox[]): void {
+    // Stroke frames change pixels after the stroke's history step was recorded.
+    if (strokeRects) this.docRevision++;
     if (strokeRects && this.pendingDirty !== 'all') this.pendingDirty.push(...strokeRects);
     else if (!strokeRects) this.pendingDirty = 'all';
     this.syncViews();
@@ -1768,6 +1772,7 @@ export class ImageEditorController {
 
   private recordHistory(): void {
     if (this.isApplyingHistory) return;
+    this.docRevision++;
     this.undoStack.push(this.captureHistoryEntry());
     if (this.undoStack.length > this.maxHistoryDepth) {
       this.undoStack.shift();
@@ -1799,6 +1804,23 @@ export class ImageEditorController {
     return this.undoStack.length > 0;
   }
 
+  private docRevision = 0;
+
+  /**
+   * Bumped on every change to the document (an undoable edit, a stroke, undo, redo), not on view
+   * or tool changes, nor on `loadImage` (the source image is the host's, not part of the document). `createImageEditorDocument` uses it to tell document changes apart.
+   */
+  public get documentRevision(): number {
+    return this.docRevision;
+  }
+
+  /** Drops the undo and redo steps (e.g. after opening a document). */
+  public clearHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.notify();
+  }
+
   public get canRedo(): boolean {
     return this.redoStack.length > 0;
   }
@@ -1809,6 +1831,7 @@ export class ImageEditorController {
     this.redoStack.push(this.captureHistoryEntry());
 
     const prev = this.undoStack.pop()!;
+    this.docRevision++;
     this.restoreHistoryEntry(prev);
     this.isApplyingHistory = false;
     this.notify();
@@ -1821,6 +1844,7 @@ export class ImageEditorController {
     this.undoStack.push(this.captureHistoryEntry());
 
     const next = this.redoStack.pop()!;
+    this.docRevision++;
     this.restoreHistoryEntry(next);
     this.isApplyingHistory = false;
     this.notify();
@@ -2131,8 +2155,9 @@ export class ImageEditorController {
     this.state.layers = next;
     extra?.();
     if (depth !== 8 && this.bitDepth === depth) this.state.layers = keepDeepLayers(prev, this.state.layers);
-    if (this.state.activeLayerId && !findLayer(next, this.state.activeLayerId)) {
-      this.state.activeLayerId = null;
+    // Removing the active layer moves to the nearest paintable layer below it, as Photoshop does.
+    if (this.state.activeLayerId && !findLayer(this.state.layers, this.state.activeLayerId)) {
+      this.state.activeLayerId = activeLayerAfterRemoval(prev, this.state.layers, this.state.activeLayerId);
       this.state.activeTarget = 'pixels';
     }
     this.notify();
@@ -3483,27 +3508,28 @@ export class ImageEditorController {
   /** Resolves and validates what a stroke, fill or clear paints into. */
   private paintTarget(layerId: string | undefined, channel: LayerTarget | undefined, action: string) {
     const id = layerId ?? this.state.activeLayerId;
-    if (!id) throw new LayerOperationError(`No layer given and none is active; pass layerId (see list_layers) to ${action}.`);
+    if (!id) throw new LayerOperationError(`No layer given and none is active; pass layerId (see list_layers) to ${action}.`, `Pick a layer to ${action} on in the Layers panel.`);
     const layer = requireLayer(this.state.layers, id).layer;
+    const name = layer.name || id;
     const ch: LayerTarget = channel ?? (id === this.state.activeLayerId ? this.state.activeTarget : 'pixels');
     if (ch === 'mask') {
-      if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask to ${action}; add one with add_layer_mask, or target pixels.`);
-      if (layer.mask.source) throw new LayerOperationError(`Layer "${layer.name || id}" has a depth mask, which is generated, not painted.`);
+      if (!layer.mask) throw new LayerOperationError(`Layer "${name}" has no mask to ${action}; add one with add_layer_mask, or target pixels.`, `Layer "${name}" has no mask; add a mask or ${action} on its pixels.`);
+      if (layer.mask.source) throw new LayerOperationError(`Layer "${name}" has a depth mask, which is generated, not painted.`);
       requireUnlocked(layer, 'all', action);
     } else if (ch === 'filter-mask') {
       if (layer.type !== 'smart' || !layer.smartFilters?.mask) {
-        throw new LayerOperationError(`Layer "${layer.name || id}" has no smart filter mask to ${action}; add one with set_smart_filter_mask, or target pixels or mask.`);
+        throw new LayerOperationError(`Layer "${name}" has no smart filter mask to ${action}; add one with set_smart_filter_mask, or target pixels or mask.`, `Layer "${name}" has no smart filter mask to ${action}.`);
       }
-      if (!isContentsDecoded(layer.contents)) throw new LayerOperationError(`The contents of "${layer.name || id}" are not decoded here, so its filter mask cannot be painted; run prepareSmartObjects() first.`);
+      if (!isContentsDecoded(layer.contents)) throw new LayerOperationError(`The contents of "${name}" are not decoded here, so its filter mask cannot be painted; run prepareSmartObjects() first.`, `The smart object "${name}" is still loading; try again in a moment.`);
       requireUnlocked(layer, 'all', action);
     } else {
-      if (layer.type === 'smart') throw new LayerOperationError(`Layer "${layer.name || id}" is a smart object; its pixels come from its contents. Rasterize it (rasterize_smart_object), edit its contents (edit_smart_object_contents), or ${action} on its mask or filter mask.`);
-      if (layer.type === 'shape') throw new LayerOperationError(`Layer "${layer.name || id}" is a shape layer; its pixels are drawn from its paths. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`);
-      if (layer.type === 'type') throw new LayerOperationError(`Layer "${layer.name || id}" is a type layer; its pixels are drawn from its text. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`);
-      if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`);
+      if (layer.type === 'smart') throw new LayerOperationError(`Layer "${name}" is a smart object; its pixels come from its contents. Rasterize it (rasterize_smart_object), edit its contents (edit_smart_object_contents), or ${action} on its mask or filter mask.`, `"${name}" is a smart object; rasterize it or edit its contents to ${action} on it.`);
+      if (layer.type === 'shape') throw new LayerOperationError(`Layer "${name}" is a shape layer; its pixels are drawn from its paths. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`, `"${name}" is a shape layer; rasterize it to ${action} on it.`);
+      if (layer.type === 'type') throw new LayerOperationError(`Layer "${name}" is a type layer; its pixels are drawn from its text. Rasterize it first (rasterize_layer), or ${action} on its mask (channel mask).`, `"${name}" is a type layer; rasterize it to ${action} on it.`);
+      if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${name}" is a ${layer.type} layer; ${action} on a pixel layer, or on this layer's mask (channel mask).`, `"${name}" is not a pixel layer; pick a pixel layer to ${action} on.`);
       requireUnlocked(layer, 'pixels', action);
     }
-    if (!layer.visible) throw new LayerOperationError(`Layer "${layer.name || id}" is hidden; show it before you ${action}.`);
+    if (!layer.visible) throw new LayerOperationError(`Layer "${name}" is hidden; show it before you ${action}.`);
     const offset = layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 };
     const surface = ch === 'mask' ? layer.mask!.surface : ch === 'filter-mask' ? (layer as SmartObjectLayer).smartFilters!.mask!.surface : this.surfaceOf(layer as PixelLayer);
     const lockTransparency = ch === 'pixels' && Boolean(layer.locks?.transparency);
@@ -3530,7 +3556,7 @@ export class ImageEditorController {
     if (!STROKE_TOOLS.includes(tool)) throw new LayerOperationError(`Unknown paint tool "${String(tool)}"; use one of ${STROKE_TOOLS.join(', ')}.`);
     const target = this.paintTarget(init.layerId, init.channel, tool === 'eraser' ? 'erase' : isRetouchTool(tool) ? 'retouch' : 'paint');
     if (tool === 'mixer' && target.channel !== 'pixels') {
-      throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.');
+      throw new LayerOperationError('The Mixer Brush paints colour on pixels, not on masks; target pixels (channel pixels), or paint the mask with the brush.', 'The Mixer Brush paints on pixels, not masks; target the layer\'s pixels, or paint the mask with the Brush.');
     }
     const brush = normalizeBrush({ ...this.state.paint.brush, ...(init.brush ?? {}) });
     // Gradient paint (the brush only): the stroke's own paint, else the paint options' unless a colour is given.
@@ -4052,8 +4078,12 @@ export class ImageEditorController {
     const loc = findLayer(this.state.layers, id);
     if (!loc || loc.layer.type !== 'adjustment') return false;
     this.recordHistory();
-    this.state.layers = mapLayer(this.state.layers, id, () => null);
-    if (this.state.activeLayerId === id) this.state.activeLayerId = null;
+    const prev = this.state.layers;
+    this.state.layers = mapLayer(prev, id, () => null);
+    if (this.state.activeLayerId === id) {
+      this.state.activeLayerId = activeLayerAfterRemoval(prev, this.state.layers, id);
+      this.state.activeTarget = 'pixels';
+    }
     this.notify();
     return true;
   }
@@ -4095,10 +4125,15 @@ export class ImageEditorController {
     const nodes = this.adjustmentNodes();
     if (!nodes.length) return;
     this.recordHistory();
-    let layers = this.state.layers;
+    const prev = this.state.layers;
+    let layers = prev;
     for (const n of nodes) layers = mapLayer(layers, n.id, () => null);
     this.state.layers = layers;
-    if (nodes.some((n) => n.id === this.state.activeLayerId)) this.state.activeLayerId = null;
+    const active = this.state.activeLayerId;
+    if (active && nodes.some((n) => n.id === active)) {
+      this.state.activeLayerId = activeLayerAfterRemoval(prev, layers, active);
+      this.state.activeTarget = 'pixels';
+    }
     this.notify();
   }
 
@@ -5584,8 +5619,7 @@ export class ImageEditorController {
     delete s.legacyOutputBlur;
     s.selection = null;
     s.selectedAnnotationId = null;
-    const pixels = flattenLayers(result.layers).filter((l) => l.type === 'pixel');
-    s.activeLayerId = pixels.length ? pixels[pixels.length - 1].id : null;
+    s.activeLayerId = defaultActiveLayerId(s.layers);
     s.activeTarget = 'pixels';
     this.psdResolution = result.resolution;
     if (result.patterns.length) s.patterns = result.patterns;
@@ -5952,7 +5986,8 @@ export class ImageEditorController {
       s.outputOpacity = data.opacity;
       if (typeof data.legacyOutputBlur === 'number' && data.legacyOutputBlur >= 0) s.legacyOutputBlur = data.legacyOutputBlur;
       else delete s.legacyOutputBlur;
-      s.activeLayerId = data.activeLayerId && findLayer(s.layers, data.activeLayerId) ? data.activeLayerId : null;
+      // A document saved without an active layer (or a missing one) opens on the default, so it can be painted at once.
+      s.activeLayerId = data.activeLayerId && findLayer(s.layers, data.activeLayerId) ? data.activeLayerId : defaultActiveLayerId(s.layers);
       const light = data.globalLight;
       if (light && Number.isFinite(light.angle) && Number.isFinite(light.altitude)) s.globalLight = { angle: light.angle, altitude: Math.min(90, Math.max(0, light.altitude)) };
       else delete s.globalLight;
@@ -5979,7 +6014,8 @@ export class ImageEditorController {
       else delete s.legacyOutputBlur;
       s.crop = data.crop ? { ...data.crop } : null;
       s.transform = { ...data.transform };
-      s.activeLayerId = null;
+      // A new image (or a v1 / v2 document) opens on its Background, so a stroke paints at once.
+      s.activeLayerId = defaultActiveLayerId(s.layers);
       delete s.globalLight;
       delete s.patterns;
       delete s.bitDepth;

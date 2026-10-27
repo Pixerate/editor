@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageChipClass, imageColorInputClass } from './styles.js';
   import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
   import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -30,7 +31,7 @@
     return untrack(() => s.subscribe(() => tick++));
   });
   const ALIGN_LABELS: Record<TextAlign, string> = { left: 'Left', center: 'Centre', right: 'Right', justify: 'Justify' };
-  const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+  
 
   const view = $derived.by(() => {
     void tick;
@@ -74,11 +75,11 @@
   const value = (e: Event) => (e.target as HTMLInputElement).value;
 </script>
 
-<div class="flex flex-col gap-2 text-xs text-slate-200 {className}" data-testid="type-options">
+<div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="type-options">
   <div class="flex flex-wrap items-center gap-2">
     <label class="flex items-center gap-1">
       Font
-      <input list="pixerate-type-fonts" aria-label="Font family" value={view.shown.fontFamily} oninput={(e) => value(e).trim() && style({ fontFamily: value(e) })} class="w-32 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+      <input list="pixerate-type-fonts" aria-label="Font family" value={view.shown.fontFamily} oninput={(e) => value(e).trim() && style({ fontFamily: value(e) })} class="w-32 rounded border border-border bg-background px-1 py-0.5" />
       <datalist id="pixerate-type-fonts">
         {#each view.fonts as f (f)}
           <option value={f}></option>
@@ -94,23 +95,23 @@
         max="2000"
         value={Math.round(view.shown.fontSize * 10) / 10}
         oninput={(e) => Number(value(e)) > 0 && style({ fontSize: Number(value(e)) })}
-        class="w-16 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+        class="w-16 rounded border border-border bg-background px-1 py-0.5"
       />
     </label>
-    <button type="button" aria-pressed={view.shown.fontWeight >= 600} class="{chip(view.shown.fontWeight >= 600)} font-bold" onclick={() => style({ fontWeight: view.shown.fontWeight >= 600 ? 400 : 700 })}>B</button>
-    <button type="button" aria-pressed={view.shown.italic} class="{chip(view.shown.italic)} italic" onclick={() => style({ italic: !view.shown.italic })}>I</button>
-    <input type="color" aria-label="Text colour" value={view.shown.color} oninput={(e) => style({ color: value(e) })} class="h-6 w-8 rounded border border-slate-700 bg-transparent" />
+    <button type="button" aria-pressed={view.shown.fontWeight >= 600} class="{imageChipClass(view.shown.fontWeight >= 600)} font-bold" onclick={() => style({ fontWeight: view.shown.fontWeight >= 600 ? 400 : 700 })}>B</button>
+    <button type="button" aria-pressed={view.shown.italic} class="{imageChipClass(view.shown.italic)} italic" onclick={() => style({ italic: !view.shown.italic })}>I</button>
+    <input type="color" aria-label="Text colour" value={view.shown.color} oninput={(e) => style({ color: value(e) })} class={imageColorInputClass} />
   </div>
   <div class="flex gap-1" role="toolbar" aria-label="Alignment">
     {#each TEXT_ALIGNS as a (a)}
-      <button type="button" aria-pressed={options.align === a} class={chip(options.align === a)} onclick={() => style({ align: a })}>{ALIGN_LABELS[a]}</button>
+      <button type="button" aria-pressed={options.align === a} class={imageChipClass(options.align === a)} onclick={() => style({ align: a })}>{ALIGN_LABELS[a]}</button>
     {/each}
   </div>
-  <p class="text-[10px] text-slate-500">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
+  <p class="text-[10px] text-muted-foreground">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
   {#if view.missing.length > 0}
-    <p role="status" class="text-amber-400" data-testid="type-missing-fonts">Missing {view.missing.length === 1 ? 'font' : 'fonts'}: {view.missing.join(', ')}</p>
+    <p role="status" class="text-amber-600" data-testid="type-missing-fonts">Missing {view.missing.length === 1 ? 'font' : 'fonts'}: {view.missing.join(', ')}</p>
   {/if}
   {#if error}
-    <p role="alert" class="text-rose-400">{error}</p>
+    <p role="alert" class="text-destructive">{error}</p>
   {/if}
 </div>

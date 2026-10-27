@@ -1,9 +1,15 @@
 import { useMemo, useRef, type RefObject } from 'react';
 import { createCanvasPlaybackLocator, type CanvasEdge, type CanvasNode, type NodeRectOptions } from '@pixerate/editor/canvas';
-import type { AgentPlayback, PlaybackPoint, PresenceStore } from '@pixerate/editor/tools';
+import { locatePlaybackChrome, type AgentPlayback, type PlaybackChromeOptions, type PlaybackPoint, type PlaybackRef, type PresenceStore } from '@pixerate/editor/tools';
 import { usePlaybackSurface } from '../playback/usePlaybackSurface.js';
 
-export interface UseCanvasPlaybackSurfaceOptions<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdge = CanvasEdge> {
+/**
+ * `locate`, `locateElement` and `open` (see `PlaybackChromeOptions`) let the host's own chrome over
+ * the canvas (a HUD, toolbar or panels) answer refs the canvas does not find, such as
+ * `{ kind: 'panel' | 'control', id }`: `locate` in flow coordinates, `locateElement` as an element
+ * whose client box is mapped into flow coordinates through the viewport.
+ */
+export interface UseCanvasPlaybackSurfaceOptions<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdge = CanvasEdge> extends PlaybackChromeOptions {
 	/** The flow's nodes and edges now (e.g. React Flow's `getNodes` / `getEdges`). */
 	getNodes: () => readonly TNode[];
 	getEdges?: () => readonly TEdge[];
@@ -31,7 +37,7 @@ export function useCanvasPlaybackSurface<TNode extends CanvasNode = CanvasNode, 
 ): PresenceStore {
 	const latest = useRef(options);
 	latest.current = options;
-	const locate = useMemo(
+	const locateFlow = useMemo(
 		() =>
 			createCanvasPlaybackLocator<TNode, TEdge>({
 				getNodes: () => latest.current.getNodes(),
@@ -43,9 +49,14 @@ export function useCanvasPlaybackSurface<TNode extends CanvasNode = CanvasNode, 
 		[]
 	);
 	const box = () => latest.current.container.current?.getBoundingClientRect() ?? null;
+	const fromViewport = (p: PlaybackPoint) => {
+		const r = box();
+		const { x, y, zoom } = latest.current.viewport;
+		return { x: (p.x - (r?.left ?? 0) - x) / zoom, y: (p.y - (r?.top ?? 0) - y) / zoom };
+	};
 	return usePlaybackSurface(playback, id, {
 		defaultKind: 'node',
-		locate,
+		locate: (ref) => locateFlow(ref) ?? locatePlaybackChrome(ref, latest.current, fromViewport),
 		bounds: () => {
 			const r = box();
 			const { x, y, zoom } = latest.current.viewport;
@@ -62,11 +73,10 @@ export function useCanvasPlaybackSurface<TNode extends CanvasNode = CanvasNode, 
 			const { x, y, zoom } = latest.current.viewport;
 			return { x: (r?.left ?? 0) + p.x * zoom + x, y: (r?.top ?? 0) + p.y * zoom + y };
 		},
-		fromViewport: (p: PlaybackPoint) => {
-			const r = box();
-			const { x, y, zoom } = latest.current.viewport;
-			return { x: (p.x - (r?.left ?? 0) - x) / zoom, y: (p.y - (r?.top ?? 0) - y) / zoom };
-		},
-		reveal: () => latest.current.reveal?.()
+		fromViewport,
+		reveal: () => latest.current.reveal?.(),
+		get open() {
+			return latest.current.open ? (ref: PlaybackRef) => latest.current.open?.(ref) : undefined;
+		}
 	});
 }

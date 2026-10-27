@@ -96,7 +96,7 @@ useAgentToolProvider(registry, provider);
 | :--- | :--- |
 | `@pixerate/editor-react` | `usePromptEditor`, `useEditor`, `EditorContent`, `BubbleMenu`, `TemplateRenderer`, `useHistory`, `useHistoryDirty`, `useHistoryShortcuts`, `useNavigationGuard`, `useDismissGuard`, `EditorSlotsProvider` / `useEditorSlots`, `SpreadsheetEditor` / `useSpreadsheetEditor`, `FormulaHints`, `DirtyTracker` |
 | `@pixerate/editor-react/spreadsheet` | `SpreadsheetEditor` (virtualised for large sheets, `virtualize` prop), `useSpreadsheetEditor`, `useSpreadsheetViewport`, `useSpreadsheetTableInteractions`, `FormulaHints`, `SpreadsheetContextMenu`, `SpreadsheetGroupRow`, `SheetTabs`, `NameManager` (also re-exported from the root entry) |
-| `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`: crop, rotate/flip, adjustments, annotations, depth masks, Select & Mask (`SelectionOptionsBar`, `RefineEdgePanel`: magic wand, marquees, lasso, Refine Edge, layer masks), and `onInpaint` / `onRemoveBackground` AI hooks |
+| `@pixerate/editor-react/image-editor` | `ImageEditor`, `useImageEditor`, `ImageEditorCanvas` (the canvas alone, for your own chrome; see `docs/image-editor-canvas.md`), `ImageEffectControls`: crop, rotate/flip, adjustments, annotations, depth masks, Select & Mask (`SelectionOptionsBar`, `RefineEdgePanel`: magic wand, marquees, lasso, Refine Edge, layer masks), and `onInpaint` / `onRemoveBackground` AI hooks |
 | `@pixerate/editor-react/paint-editor` | `PaintEditor`, `usePaintEditor`: natural-media painting with `PaintCanvas` (pen pressure, tilt and twist, coalesced and predicted events, palm rejection, view rotation and mirroring), `PaintToolbar` (tools, symmetry, perspective, tracing and reference images, save / open, PNG / JPEG / PSD), `BrushPanel` (library with thumbnails), `PaperPanel`, `ColorPanel` (wheel, harmonies, swatches, mixing pad) and `PaintLayersPanel` |
 | `@pixerate/editor-react/commands` | `CommandPalette`, `useCommandPalette` (`hotkey: "Mod+K"`), `useCommandShortcuts`, `useRegisterCommands` over a `CommandRegistry` from `@pixerate/editor/commands` (also re-exported from the root entry) |
 | `@pixerate/editor-react/persistence` | `useAutosave` (crash-recovery snapshots bound to a history / dirty flag, flushed on `pagehide`, with a recovery check on mount), `useEditorAutosave` (the same for any editor's `EditorDocument`, e.g. `useMermaidDiagram().editorDocument`; `restore` loads the snapshot into the editor) and `<RecoveryPrompt>` (also re-exported from the root entry) |
@@ -130,7 +130,7 @@ The components are styled with [Tailwind CSS](https://tailwindcss.com) utility c
 
 2. **Define the theme colors.** `SpreadsheetEditor`, `BubbleMenu`, `TemplateRenderer` and the slot components use [shadcn/ui](https://ui.shadcn.com)-style tokens: `background`, `foreground`, `muted`, `muted-foreground`, `border`, `input`, `primary`, `popover`, `popover-foreground` and `destructive`. Projects already using shadcn/ui have these. Otherwise, define them as colors in your Tailwind theme.
 
-`ImageEditor` uses a fixed dark (slate) palette and only needs step 1. Without Tailwind, the components work but render unstyled. Pass `className` to override.
+`ImageEditor`, `ImageEditorCanvas` and the image panels use the same theme tokens (plus `accent`, `primary-foreground` and `accent-foreground`), so they follow your light or dark theme; their shared classes are in `image-editor/styles.ts`. Without Tailwind, the components work but render unstyled. Pass `className` to override.
 
 ## License
 

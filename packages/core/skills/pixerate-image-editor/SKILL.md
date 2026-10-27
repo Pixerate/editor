@@ -57,9 +57,9 @@ batching.
 
 ### Working with layers
 
-1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background;
-   documents made elsewhere may have pixel layers, groups and masks. Note which layer is
-   `active`: `set_adjustments` base controls edit the active pixel layer's `develop` filter.
+1. **Read the stack** with `list_layers`. A photo opened in the editor has only the Background
+   (active); others may have pixel layers, groups and masks. Note which layer is `active`:
+   `set_adjustments` base controls edit the active pixel layer's `develop` filter.
 2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
    `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
    risky change. Name layers by intent.
@@ -96,30 +96,10 @@ batching.
 
 ### Smart objects
 
-1. **Convert before repeated or uncertain changes**: `convert_to_smart_object` (one pixel layer, or
-   several siblings that nest as a layer document). A converted pixel layer looks exactly the same
-   and keeps its id; its filters become smart filters. From then on every transform and filter is
-   re-rendered from the contents, so scaling down and back up, or rotating twelve times, loses
-   nothing.
-2. **Read it**: `get_smart_object` gives the contents (size, kind, instances), the placement
-   (corners, warp, and scale / rotate in percent and degrees of the contents' own size) and the
-   smart filters with their ids.
-3. **Transform**: `set_smart_object_transform` sets the transform absolutely (scale 100 = the
-   contents' own size, `x`, `y` = where its centre goes; or `corners`, `matrix`, and a `warp` in
-   contents pixels, `null` to remove). `transform_layer`, `warp_layer`, `flip_layer` and
-   `rotate_layer_90` also work on a smart object, relative to its current placement, and never
-   degrade it. `offset_layer` moves it by whole pixels.
-4. **Filter non-destructively**: `add_smart_filter` (`develop` or `blur`, each with its own
-   `blend` and `opacity`; kinds can repeat), then `update_smart_filter`, `move_smart_filter`,
-   `remove_smart_filter` and `set_smart_filters_enabled`. `set_smart_filter_mask` limits where the
-   filters show; paint it with `paint_stroke` / `fill_pixels` `channel: "filter-mask"`.
-5. **Contents**: `copy_smart_object` with `linked: true` shares the contents (edit once, both
-   change), `linked: false` makes them independent. `edit_smart_object_contents` opens the
-   contents as their own document: every tool then works inside them until
-   `close_smart_object_contents` (`save: false` discards). `replace_smart_object_contents` swaps
-   in a new image for every linked instance; `export_smart_object_contents` returns the file.
-6. **Finish**: `rasterize_smart_object` only when the user wants plain pixels to paint on; the
-   placement and filters are then gone.
+Convert a pixel layer with `convert_to_smart_object` before repeated or uncertain transforms and
+filters: from then on everything re-renders from the contents and nothing degrades. Read
+[references/smart-objects.md](references/smart-objects.md) for the steps (reading, transforming,
+smart filters, linked contents, rasterizing).
 
 ### Shapes and text
 
@@ -151,8 +131,8 @@ drawing or editing either.
 
 ### Painting
 
-1. **Paint on its own layer** (`add_pixel_layer`), never on the Background, unless asked: a
-   layer can be faded, masked, blended or deleted later. Painting the Background bakes it.
+1. **Paint on its own layer** (`add_pixel_layer`), not on the Background (active on a new image, so
+   strokes without `layerId` land there) unless asked: a layer can be faded, masked or deleted.
 2. **Retouch through masks**: to hide part of a layer, add a mask and paint black on it
    (`paint_stroke` with `channel: "mask"`, `color: "#000000"`); paint white to bring it back.
    A soft brush (`hardness` 0..0.3) gives soft transitions.
@@ -323,7 +303,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels`, `mask`, or a smart object's `filter-mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
 | `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
 | `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
-| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Returns the remaining top-level ids. |
+| `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Deleting the active layer makes the nearest paintable pixel layer below it active. Returns the remaining top-level ids and the new `activeLayerId`. |
 | `move_layer` | Reorder: give exactly one of `aboveId`, `belowId`, `parentId` (into a group, optional `index`) or `index` alone. Returns the new `parentId` and `index`. |
 | `set_layer_properties` | Change `name`, `visible`, `opacity`, `fillOpacity`, `blend` (`pass-through` for groups), `clipped`, `locks` or `collapsed`. Only given fields change. Returns the layer. |
 | `group_layers` | Put sibling layers (`layerIds`) into a new pass-through group at the topmost one's position. Returns the group and its children. |
@@ -412,6 +392,18 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `remove_effect` | Remove an effect smart filter, or (`generator`) keep an effect layer's pixels as a plain layer. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `name`, `aboveId` / `belowId`, `opacity`, `blend`). Returns the layer id. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
+
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). An image document is the saved state (layers, adjustments, crop, selection...) with layer pixels, masks and patterns as asset references; the source image stays the host's.
+
+| Tool | Use |
+| --- | --- |
+| `get_image_document` | Take a copy of the whole image document as `{ kind, formatVersion, revision, document }` before a risky change, or to hand it on. Images in it are asset references (`pixerate-asset:...`), never pixel data, so it stays small. To look at the pixels use `render_preview` or `capture_view`. |
+| `load_image_document` | Put back a copy from `get_image_document` in this session (its `document`, or the whole result). Checked first: a document whose assets are not loaded, or from a newer build, is refused and nothing changes. One undo step (`undo_image` brings the previous document back). To change part of the image use the layer and adjustment tools. |
+| `save_image_document` | Save the image document and its assets under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_image_documents` | List saved image documents (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_image_document` | Replace the image document with a saved one by `key`; its assets are read from storage first. Ask before opening over changes the user has not saved. |
 
 ## Pitfalls
 

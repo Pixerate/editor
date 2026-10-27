@@ -66,16 +66,17 @@ export function planVideoToolPlayback(tool: string, args: Record<string, any>): 
 
 /**
  * Gives a video tool provider agent playback: each write tool plans its steps with
- * `planVideoToolPlayback` and every call plays on `surface` (default `video`, where `VideoTimeline`
- * attaches itself). `seek_video` (a read in name only) and `edit_video` (a batch) play too.
+ * `planVideoToolPlayback` and every call plays on `surface`. An explicit `surface` wins over the
+ * provider's own `playbackSurface`; with neither, it is `video` (where `VideoTimeline` attaches
+ * itself). `seek_video` (a read in name only) and `edit_video` (a batch) play too.
  */
-export function withVideoPlayback(provider: AgentToolProvider, surface = 'video'): AgentToolProvider {
+export function withVideoPlayback(provider: AgentToolProvider, surface?: string): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool =>
 		tool.plan || tool.playback !== undefined ? tool : { ...tool, plan: (args) => planVideoToolPlayback(tool.name, args) };
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? surface,
+		playbackSurface: surface ?? provider.playbackSurface ?? 'video',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
 }

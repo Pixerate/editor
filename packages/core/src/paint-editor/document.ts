@@ -55,6 +55,11 @@ export interface PaintDocumentState {
   effectLayers?: Readonly<Record<string, PaintEffectSource>>;
   /** Effect paper: a provider generator drawn over the paper, under the paint. */
   paperEffect?: PaintPaperEffect;
+  /**
+   * Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
+   * `extendCanvas({ left: 100 })` moves it to x −100; a host maps its own coordinates with it.
+   */
+  origin?: { x: number; y: number };
 }
 
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */

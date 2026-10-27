@@ -243,6 +243,19 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("sets radar rings and grid shape", async () => {
+    const controller = new ChartController({ spec: { ...sales, type: "radar" } });
+    await render(<ChartInspector controller={controller} />);
+    await type(q<HTMLInputElement>('[data-option="radarTicks"]'), "4");
+    expect(controller.getSpec().radarTicks).toBe(4);
+    await type(q<HTMLInputElement>('[data-option="radarTicks"]'), "");
+    expect(controller.getSpec().radarTicks).toBeNull();
+    await type(q<HTMLSelectElement>('[data-option="radarGraticule"]'), "circle");
+    expect(controller.getSpec().radarGraticule).toBe("circle");
+    await act(async () => controller.setType("bar"));
+    expect(q('[data-option="radarGraticule"]')).toBeNull();
+  });
+
   it("reverses axes, makes value axes logarithmic and edits error bars", async () => {
     const controller = new ChartController({ spec: sales });
     await render(<ChartInspector controller={controller} />);

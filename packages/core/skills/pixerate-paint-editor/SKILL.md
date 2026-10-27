@@ -85,7 +85,7 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 9. **Watercolour** is its own way of working (see "Wet media" below): wet the paper or not,
    lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`), glaze.
 10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
-   `save_document` to keep the painting with its strokes.
+   `save_paint_document` to keep the painting with its strokes (when the host has storage).
 
 ## Best practices
 
@@ -133,6 +133,13 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
   PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow
   as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
+- **Grow the canvas instead of starting big**: when the picture needs more room, call
+  `extend_canvas` with the pixels to add on each side (nothing painted moves relative to
+  anything else). Adding on the `left` or `top` shifts every coordinate you hold (stroke points,
+  guide and stencil positions, layer bounds) by (+left, +top); re-read with `list_layers` or use
+  the returned `rect` (the new canvas in the old coordinates). Wet paint dries first, so finish
+  or dry a wash (`dry_paint`) before extending. `set_canvas` only crops or grows at the
+  bottom-right and never moves the picture.
 - **Save brushes you build** (`set_brush` then `save_brush`), and share them with
   `export_brushes` / `import_brushes`.
 
@@ -264,9 +271,10 @@ for the controls and presets.
 
 | Tool | Use |
 | --- | --- |
-| `get_canvas_info` | Read the canvas size and dpi, paper (preset, colour, depth), active layer, layer count, active brush id, colours, view, hand, number of recorded strokes, undo / redo labels and the blend modes. Call first. |
+| `get_canvas_info` | Read the canvas size and dpi, its `origin` (moved by `extend_canvas`), paper (preset, colour, depth), active layer, layer count, active brush id, colours, view, hand, number of recorded strokes, undo / redo labels and the blend modes. Call first. |
 | `new_canvas` | Start over with a blank canvas: one empty layer over the paper. `width`, `height` (1..16384 px), `dpi`, `paper` preset id; missing ones keep the current values. Undo brings the old painting back. Returns the size, paper and layer id. |
 | `set_canvas` | Resize the canvas (pixels stay put, anchored top-left) or change its `dpi`. Returns the canvas. |
+| `extend_canvas` | Add pixels on any side (`left`, `top`, `right`, `bottom`, default 0) keeping everything painted, the paper grain and the guides in place relative to each other. `left` / `top` move all document coordinates by that much. Wet paint dries first; one undo step. Returns `canvas`, `rect` (the new canvas in the previous coordinates) and `origin` (also in `get_canvas_info`). |
 | `list_papers` | Read the paper library: id, name, family, grain pattern, colour, depth and the wet-media properties (absorption, permeability, roughness, stored for later wet media). Call before `set_paper`. |
 | `get_paper` | Read every setting of the current paper (pattern, seed, scale, tiling, depth, shading, dry and wet tuning). |
 | `set_paper` | Change the paper: `preset`, then any of `color`, `depth` (0..1), `scale` (0.25..8), `seed` (another sheet), `pattern`, `tiling`, `shading`, `dry` / `wet` tuning (`contrast` 0..3, `invert`). Affects new strokes' grain and how the paper shows; strokes already painted keep their pixels. Returns the paper. |
@@ -412,8 +420,20 @@ for the controls and presets.
 | `export_psd` | Export a PSD with every layer, the paper as a locked bottom layer, and the composite. Pigment and painterly modes are written as their nearest standard mode (`list_blend_modes` `psd`). Returns base64, size, `psb` and `warnings`. |
 | `export_time_lapse` | Repaint the painting from its recorded strokes and events as a time-lapse: `frames` (about how many), `fps`, `maxSide`, `wetStepsPerFrame` (frames while wet paint flows), `holdMs`. Returns a contact sheet image, the frame count, size, duration, a video project of the frames and the ffmpeg command that renders `timelapse.mp4`; `includeFrames` adds every frame as base64 PNG. Changes nothing. |
 | `export_high_res` | Repaint the painting from its strokes at `scale` 1..8 (brushes, grain, fills and wet events scaled): a PNG with real detail instead of upscaled pixels. Returns base64, size. Layers not painted with strokes come out empty. |
-| `save_document` | Get the document JSON (canvas, paper, layers as PNG data URLs, strokes unless `strokes: false`). |
-| `open_document` | Open a saved document JSON, replacing the painting and clearing the undo history. Returns the canvas, layers and any `problems`. |
+| `save_document` | Deprecated, kept for one minor version: use `get_paint_document` or `save_paint_document`. Returns the document JSON with PNG data URLs inline (large). |
+| `open_document` | Deprecated, kept for one minor version: use `load_paint_document` or `open_saved_paint_document`. Opens a document JSON from `save_document`, clearing the undo history. |
+
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A paint document is the saved painting (canvas, paper, layers, thick paint, guides, swatches, mixing pad and recorded strokes) with every image as an asset reference; wet paint is saved dry.
+
+| Tool | Use |
+| --- | --- |
+| `get_paint_document` | Take a copy of the whole painting as `{ kind, formatVersion, revision, document }` before a risky change, or to hand it on. Images in it are asset references (`pixerate-asset:...`), never pixel data, so it stays small. To look at the pixels use `render_preview` or `export_image`. |
+| `load_paint_document` | Put back a copy from `get_paint_document` in this session (its `document`, or the whole result). Checked first: a document whose assets are not loaded, or from a newer build, is refused and nothing changes. Opening clears the undo history (`undoable: false`), so get a copy first if the user may want the current painting back. Refused while a stroke or a wet-paint step is in progress. To change part of the painting use the layer and painting tools. |
+| `save_paint_document` | Save the painting and its assets under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_paint_documents` | List saved paintings (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_paint_document` | Replace the painting with a saved one by `key`; its assets are read from storage first. Ask before opening over changes the user has not saved. |
 
 ## Pitfalls
 
@@ -458,5 +478,5 @@ for the controls and presets.
 - **Effects are pixels in replays.** Effect paper, effect layers, effect fills and baked light
   need the provider when they are made; replays and time-lapses do not repeat them. Add them
   after the painting, or keep the effect layer and redraw it.
-- **Recorded strokes are kept in saved documents**; `save_document` with `strokes: false` when
-  only the pixels matter (smaller JSON).
+- **Recorded strokes are kept in saved documents** (`save_paint_document`, `get_paint_document`),
+  so a painting can be replayed and repainted at a higher resolution.

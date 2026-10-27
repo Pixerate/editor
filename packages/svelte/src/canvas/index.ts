@@ -130,6 +130,7 @@ export {
 	type CreateCanvasScenesOptions
 } from './createCanvasScenes.svelte.js';
 export { createCanvasCapture, type CreateCanvasCaptureOptions } from './createCanvasCapture.js';
+export { createCanvasDocument, type CreateCanvasDocumentOptions } from './createCanvasDocument.svelte.js';
 export { createCanvasPlaybackSurface, type CreateCanvasPlaybackSurfaceOptions } from './createCanvasPlaybackSurface.svelte.js';
 export { default as PresenceLayer } from '../playback/PresenceLayer.svelte';
 export { default as CanvasGuidesLayer } from './CanvasGuidesLayer.svelte';

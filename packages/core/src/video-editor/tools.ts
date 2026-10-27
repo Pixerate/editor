@@ -37,6 +37,11 @@ export interface VideoEditorToolProviderOptions {
 	framePixels?: (time: number) => VideoPixels | null | Promise<VideoPixels | null>;
 	/** How long `get_video_scopes` waits for the preview to finish drawing a frame (ms, default 5000). */
 	framePixelsTimeout?: number;
+	/**
+	 * The agent playback surface its calls are acted out on (default `video`, where `VideoTimeline` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -1369,5 +1374,5 @@ export function createVideoEditorToolProvider(controller: VideoEditorController,
 				}
 			});
 		}
-	});
+	}, options.playbackSurface);
 }

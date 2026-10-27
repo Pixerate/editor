@@ -39,6 +39,11 @@ export interface ImageEditorToolProviderOptions {
   id?: string;
   /** Tool-name prefix (`<namespace>__<name>`); defaults to the provider id, `''` for bare names. */
   namespace?: string;
+  /**
+   * The agent playback surface its calls are acted out on (default `image`, where `ImageEditor` attaches).
+   * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+   */
+  playbackSurface?: string;
 }
 
 const LAYER_PATH = /^layers\.([^.]+)\.(.+)$/;
@@ -331,6 +336,6 @@ export function createImageEditorToolProvider(
       ...createPigmentTools(),
       ...createImagePsdTools(controller),
     ],
-  });
+  }, options.playbackSurface);
 }
 

@@ -9,11 +9,16 @@ import {
   type VectorEditorOptions,
   type VectorEditorState,
   type VectorTool,
+  createVectorEditorDocument,
+  type VectorDocument,
 } from "@pixerate/editor/vector";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 import type { ToolRegistry } from "@pixerate/editor/tools";
 
 export interface SvelteVectorEditor {
   readonly controller: VectorEditorController;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<VectorDocument>;
   /** The controller's state (reactive). */
   readonly state: VectorEditorState;
   setTool(tool: VectorTool): void;
@@ -37,8 +42,10 @@ export function createVectorEditor(controllerOrOptions: VectorEditorController |
   const unsubscribe = controller.subscribe((next) => {
     state = next;
   });
+  const editorDocument = createVectorEditorDocument(controller);
   return {
     controller,
+    editorDocument,
     get state() {
       return state;
     },
@@ -49,6 +56,7 @@ export function createVectorEditor(controllerOrOptions: VectorEditorController |
     toSvg: () => controller.toSvg(),
     destroy: () => {
       unsubscribe();
+      editorDocument.destroy();
       if (owned) controller.destroy();
     },
   };

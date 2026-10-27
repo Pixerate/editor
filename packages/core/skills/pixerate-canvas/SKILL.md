@@ -130,6 +130,20 @@ the reason (for example a variant combination that already exists, or a cycle).
 | `rename_variant_property` | Rename property `name` to `newName` across a set; instances keep their variant. |
 | `rename_variant_value` | Rename `value` of `property` to `newValue` across a set; instances keep their variant. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A canvas document is `{ nodes, edges, scenes }`: every node (`id`, `position`, `data`, `type`, `parentId`...) and edge without selection or measurement, plus the saved scenes.
+
+| Tool | Use |
+| --- | --- |
+| `get_canvas_document` | Take a copy of the whole canvas as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the canvas, use `get_editor_state`: it is smaller and says more. Refuses very large canvases. |
+| `load_canvas_document` | Put back a copy from `get_canvas_document` (its `document`, or the whole result). Checked first: duplicate ids, edges to missing nodes and parents that do not exist are refused and nothing changes. One undo step (`undo_canvas` brings the previous canvas back). To add or change a few nodes use `canvas_add_node` / `canvas_update_node`. |
+| `undo_canvas` | Undo the last canvas change (one tool call, command or user gesture such as a drag). Returns `undone` (the step's name) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |
+| `redo_canvas` | Redo the last undone canvas change. |
+| `save_canvas_document` | Save the canvas under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_canvas_documents` | List saved canvases (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_canvas_document` | Replace the canvas with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Commands
 
 Run these through `run_command` / `run_commands`. Each takes `ids` (default: the selection) unless

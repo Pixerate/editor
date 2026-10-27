@@ -9,6 +9,7 @@ import {
 	CHART_MARKERS,
 	CHART_NUMBER_STYLES,
 	CHART_ORIENTATIONS,
+	CHART_RADAR_GRATICULES,
 	CHART_SERIES_TYPES,
 	CHART_STACKINGS,
 	CHART_TRENDLINE_TYPES,
@@ -136,5 +137,7 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				gapWidth: { type: 'number', minimum: 0, maximum: 0.9, description: 'Space between bar groups as a fraction of the category (default 0.28).' },
 				overlap: { type: 'number', minimum: -1, maximum: 1, description: 'Bar overlap within a group as a fraction of a bar (negative: a gap; default -0.12).' },
 				bins: { type: ['integer', 'null'], minimum: 1, maximum: 500, description: 'Histogram bin count, or null for √n.' },
-				showTotal: { type: 'boolean', description: 'Waterfall: append a total bar.' }
+				showTotal: { type: 'boolean', description: 'Waterfall: append a total bar.' },
+				radarTicks: { type: ['integer', 'null'], minimum: 1, maximum: 50, description: 'Radar: number of evenly spaced rings from the value axis min to max, or null for round-number rings (default null).' },
+				radarGraticule: { type: 'string', enum: [...CHART_RADAR_GRATICULES], description: 'Radar: draw rings as polygons through the spokes or as circles (default polygon).' }
 			};

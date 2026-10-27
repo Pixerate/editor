@@ -11,7 +11,9 @@ import {
   type ChartSpec,
   type OfficeChartFile,
   type OfficeChartsResult,
+  createChartEditorDocument,
 } from "@pixerate/editor/chart";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { parseCsv } from "@pixerate/editor/spreadsheet";
 import {
   ChartEditor,
@@ -176,6 +178,7 @@ export function ChartTab() {
   const officeFilesRef = useRef(officeFiles);
   officeFilesRef.current = officeFiles;
   useOfficeChartToolProvider(demoToolRegistry, { id: "chart-files", namespace: "chart_files", controller, files: () => officeFilesRef.current });
+  const editorDocument = useDemoEditorDocument(controller, createChartEditorDocument, { namespace: "chart", skill: "pixerate-chart", history: false });
   const [officeCharts, setOfficeCharts] = useState<{ file: string; result?: OfficeChartsResult; error?: string } | null>(null);
   const openOfficeFile = async (file: File | undefined) => {
     if (!file) return;
@@ -253,6 +256,7 @@ export function ChartTab() {
           </button>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Chart" />
       <div className="flex flex-wrap gap-1.5">
         {Object.keys(SAMPLES).map((name) => (
           <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>

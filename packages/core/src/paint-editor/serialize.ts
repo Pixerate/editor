@@ -55,7 +55,7 @@ export interface SerializedPaintDocument {
   [extension: string]: unknown;
 }
 
-const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches', 'mixingPad', 'wet', 'wetEvents', 'paintEvents']);
+const KNOWN = new Set(['format', 'version', 'width', 'height', 'dpi', 'paper', 'layers', 'assets', 'activeLayerId', 'strokes', 'guides', 'swatches', 'mixingPad', 'wet', 'wetEvents', 'paintEvents', 'origin']);
 
 /** Fields of a saved document this version does not read, kept for writing back. */
 export function documentExtensions(raw: Record<string, unknown>): PaintDocumentExtensions {
@@ -96,6 +96,7 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
   if (options.wet !== undefined) (out as Record<string, unknown>).wet = JSON.parse(JSON.stringify(options.wet));
   if (state.wetEvents?.length) (out as Record<string, unknown>).wetEvents = JSON.parse(JSON.stringify(state.wetEvents));
   if (state.paintEvents?.length) (out as Record<string, unknown>).paintEvents = JSON.parse(JSON.stringify(state.paintEvents));
+  if (state.origin && (state.origin.x || state.origin.y)) (out as Record<string, unknown>).origin = { ...state.origin };
   return out;
 }
 
@@ -171,6 +172,8 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   if (wetEvents.length) state.wetEvents = wetEvents;
   const paintEvents = Array.isArray(r.paintEvents) ? (r.paintEvents as PaintEvent[]).filter((e) => e && typeof e === 'object' && Number.isInteger(e.at) && typeof e.layerId === 'string' && ['fill', 'clear', 'flatten', 'stickers'].includes(e.kind)) : [];
   if (paintEvents.length) state.paintEvents = paintEvents;
+  const o = r.origin as { x?: unknown; y?: unknown } | undefined;
+  if (o && typeof o === 'object' && Number.isFinite(o.x) && Number.isFinite(o.y) && (o.x || o.y)) state.origin = { x: Math.round(o.x as number), y: Math.round(o.y as number) };
   return { state, extensions: documentExtensions(r), guides: r.guides, swatches: r.swatches, mixingPad: r.mixingPad, wet: r.wet, problems };
 }
 

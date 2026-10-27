@@ -113,7 +113,7 @@ function Revenue() {
 | `bar`, `line`, `area`, `scatter` | one value per category per series | combos via `series.type`; `series.axis: "secondary"` uses `yAxis2` on the right (top for horizontal bars) |
 | `scatter` with `series.x`, `bubble` | `x`, `values` (y) and `sizes` per category | numeric x axis (`xAxis` min / max / step / format); bubble area ∝ size |
 | `pie`, `donut`, `funnel`, `treemap` | the first visible series, one item per category | colours per category; `pointColors` overrides |
-| `radar` | one spoke per category, one polygon per series | needs 3 categories (draws as a line chart until then) |
+| `radar` | one spoke per category, one polygon per series | needs 3 categories (draws as a line chart until then); `radarTicks` sets an even ring count (Mermaid `ticks`), `radarGraticule` draws rings as `polygon` or `circle` (Mermaid `graticule`) |
 | `waterfall` | the first series as increases / decreases | categories labelled "total" / "subtotal" are running totals; `showTotal` appends one |
 | `histogram` | every value of the visible series | `bins` (default √n, 1–100); right-inclusive bins |
 | `box` | one box per visible series | Tukey whiskers (1.5 × IQR), outliers, mean ✕ |
@@ -168,7 +168,7 @@ const { spec, unsupported, lossless } = chartFromOoxml(xml, { DOMParser }); // a
 
 Office round trips include error bars (`c:errBars`, with `c:errDir` on scatter and bubble series), logarithmic axes (`c:logBase`) and reversed axes (`c:orientation val="maxMin"`).
 
-The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
+The comment keeps what Mermaid cannot express, so text round-trips exactly while any Mermaid renderer still draws the basic chart. Radar `ticks` and `graticule` map to `radarTicks` and `radarGraticule`; a `radar-beta` block without `graticule` reads as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`. DOCX imports return embedded charts in `DocumentImport.charts` and write each as a `<div data-type="chart">` holding its spec: a live chart in editors with the chart node (below), otherwise a caption and a data table (see GOTCHAS for why not an SVG image).
 
 ### Charts in Excel, PowerPoint and Word files
 

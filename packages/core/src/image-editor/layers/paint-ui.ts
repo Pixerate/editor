@@ -9,6 +9,7 @@ import type { ControlSpec } from '../controls';
 import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
 import { shapeGeometryBounds } from './shape';
+import { userErrorMessage } from './ops';
 import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings, type RetouchSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
@@ -303,7 +304,7 @@ export class PaintGesture {
         return null;
       }
     } catch (err) {
-      this.error = err instanceof Error ? err.message : String(err);
+      this.error = userErrorMessage(err);
       this.stroke = null;
       this.move = null;
     }
@@ -327,7 +328,7 @@ export class PaintGesture {
         this.controller.offsetLayer(m.id, { x, y }, !m.moved);
         m.moved = true;
       } catch (err) {
-        this.error = err instanceof Error ? err.message : String(err);
+        this.error = userErrorMessage(err);
         this.move = null;
       }
     }
@@ -338,7 +339,7 @@ export class PaintGesture {
       try {
         this.stroke.end();
       } catch (err) {
-        this.error = err instanceof Error ? err.message : String(err);
+        this.error = userErrorMessage(err);
       }
     }
     this.stroke = null;

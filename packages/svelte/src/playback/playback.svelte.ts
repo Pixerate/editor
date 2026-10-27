@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import { PresenceStore, type AgentPlayback, type PlaybackSurface } from '@pixerate/editor/tools';
+import { PresenceStore, locatePlaybackChrome, type AgentPlayback, type PlaybackChromeOptions, type PlaybackPoint, type PlaybackRef, type PlaybackSurface } from '@pixerate/editor/tools';
 
 const KEY = Symbol.for('pixerate.agentPlayback');
 
@@ -50,7 +50,11 @@ export function createPlaybackSurface(
 			beginGesture: (key) => o().beginGesture?.(key),
 			endGesture: () => o().endGesture?.(),
 			reveal: () => o().reveal?.(),
-			open: (ref) => o().open?.(ref),
+			// Only a surface whose options can open things has `open`, so playback skips `open` steps
+			// (and their wait) everywhere else. Read per step, like the other options.
+			get open() {
+				return o().open ? (ref: PlaybackRef) => o().open?.(ref) : undefined;
+			},
 			get defaultKind() {
 				return o().defaultKind;
 			}
@@ -64,11 +68,14 @@ export function createPlaybackSurface(
 	return presence;
 }
 
-export interface ElementPlaybackSurfaceOptions {
+export interface ElementPlaybackSurfaceOptions extends PlaybackChromeOptions {
 	/** The kind of a bare `id` / `ids` argument (e.g. `parameter`). */
 	defaultKind?: string;
-	/** A CSS selector for each ref kind the surface can find inside the element. */
-	selectors: Record<string, (id: string) => string>;
+	/**
+	 * A CSS selector for each ref kind the surface can find inside the element. Refs they miss go to
+	 * `locate`, then `locateElement` (which may return an element outside this one).
+	 */
+	selectors?: Record<string, (id: string) => string>;
 	/** Bring the element on screen (switch to its tab) before the agent acts. */
 	reveal?: () => void | Promise<void>;
 }
@@ -85,15 +92,20 @@ export function createElementPlaybackSurface(
 	options: MaybeGetter<ElementPlaybackSurfaceOptions>
 ): PresenceStore {
 	const box = () => element()?.getBoundingClientRect() ?? null;
+	const fromViewport = (p: PlaybackPoint) => {
+		const r = box();
+		return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
+	};
 	return createPlaybackSurface(playback, id, () => {
 		const o = read(options);
 		return {
 			defaultKind: o.defaultKind,
 			locate: (ref) => {
-				const selector = o.selectors[ref.kind]?.(ref.id);
+				const selector = o.selectors?.[ref.kind]?.(ref.id);
 				const b = box();
 				const r = selector ? element()?.querySelector(selector)?.getBoundingClientRect() : null;
-				return b && r && r.width > 0 ? { x: r.left - b.left, y: r.top - b.top, width: r.width, height: r.height } : null;
+				if (b && r && r.width > 0) return { x: r.left - b.left, y: r.top - b.top, width: r.width, height: r.height };
+				return locatePlaybackChrome(ref, o, fromViewport);
 			},
 			bounds: () => {
 				const r = box();
@@ -107,11 +119,9 @@ export function createElementPlaybackSurface(
 				const r = box();
 				return { x: (r?.left ?? 0) + p.x, y: (r?.top ?? 0) + p.y };
 			},
-			fromViewport: (p) => {
-				const r = box();
-				return { x: p.x - (r?.left ?? 0), y: p.y - (r?.top ?? 0) };
-			},
-			reveal: () => o.reveal?.()
+			fromViewport,
+			reveal: () => o.reveal?.(),
+			open: o.open ? (ref) => o.open?.(ref) : undefined
 		};
 	});
 }

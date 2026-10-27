@@ -21,12 +21,15 @@ import {
 } from '@pixerate/editor/image-editor';
 import { ControlSlider } from './ControlSlider';
 import { CurvesEditor } from './CurvesEditor';
+import { imageSectionTitleClass, imageSelectClass } from './styles';
 
 export interface AdjustmentLayersPanelProps {
   controller: ImageEditorController;
   /** The current layers (`state.adjustments.layers`), bottom to top. Omit to follow the controller. */
   layers?: AdjustmentLayer[];
   histogram?: ImageHistogram | null;
+  /** Extra classes on the root element. */
+  className?: string;
 }
 
 type Channel = 'master' | 'red' | 'green' | 'blue';
@@ -41,10 +44,8 @@ const TONES = [
   { id: 'midtones', label: 'Midtones' },
   { id: 'highlights', label: 'Highlights' },
 ] as const;
-
-const selectClass = 'bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-slate-200';
 const chipClass = (on: boolean) =>
-  `px-2 py-0.5 rounded text-[10px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`;
+  `px-2 py-0.5 rounded text-[10px] ${on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`;
 
 /** Hue strip with the weight of one Hue/Saturation range drawn over it. */
 const HueRangeStrip: React.FC<{ bounds: [number, number, number, number] }> = ({ bounds }) => {
@@ -68,7 +69,7 @@ const HueRangeStrip: React.FC<{ bounds: [number, number, number, number] }> = ({
  * Adjustment-layer stack: add, reorder, show / hide and remove layers, and edit the selected
  * one (curves over the histogram, levels, hue/saturation ranges, colour balance, …).
  */
-export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ controller, layers: layersProp, histogram }) => {
+export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ controller, layers: layersProp, histogram, className = '' }) => {
   // Follows the controller when no `layers` prop is given.
   const follow = layersProp === undefined;
   const [, setTick] = useState(0);
@@ -98,12 +99,12 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
   const controlsOf = (layer: AdjustmentLayer, filter: (spec: ControlSpec) => boolean = () => true) =>
     ADJUSTMENT_LAYER_CONTROLS[layer.kind].filter(filter);
   const checkbox = (layer: AdjustmentLayer, path: string, label: string) => (
-    <label className="flex items-center gap-2 text-slate-300">
+    <label className="flex items-center gap-2 text-foreground">
       <input
         type="checkbox"
         checked={Boolean(getControlPath(layer.params, path))}
         onChange={(e) => setParam(layer, path, e.target.checked)}
-        className="accent-indigo-500"
+        className="accent-primary"
       />
       {label}
     </label>
@@ -180,12 +181,12 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
         return (
           <div className="flex flex-col gap-2">
             {controlsOf(layer).map((s) => slider(layer, s))}
-            <label className="flex items-center gap-2 text-slate-300">
+            <label className="flex items-center gap-2 text-foreground">
               <input
                 type="checkbox"
                 checked={layer.params.tint !== null}
                 onChange={(e) => setParam(layer, 'tint', e.target.checked ? '#e1d3b3' : null)}
-                className="accent-indigo-500"
+                className="accent-primary"
               />
               Tint
               {layer.params.tint && (
@@ -203,7 +204,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
       case 'photoFilter':
         return (
           <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-slate-300">
+            <label className="flex items-center gap-2 text-foreground">
               Filter colour
               <input
                 type="color"
@@ -218,21 +219,21 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
           </div>
         );
       case 'invert':
-        return <p className="text-slate-500 text-[11px]">Invert has no settings.</p>;
+        return <p className="text-muted-foreground text-[11px]">Invert has no settings.</p>;
       default:
         return <div className="flex flex-col gap-2">{controlsOf(layer).map((s) => slider(layer, s))}</div>;
     }
   };
 
   return (
-    <div className="flex flex-col gap-2 text-xs" data-testid="adjustment-layers-panel">
+    <div className={`flex flex-col gap-2 text-xs ${className}`.trim()} data-testid="adjustment-layers-panel">
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">Adjustment Layers</span>
+        <span className={imageSectionTitleClass}>Adjustment Layers</span>
       </div>
       <div className="flex gap-1.5">
         <select
           aria-label="New adjustment layer kind"
-          className={`${selectClass} flex-1`}
+          className={`${imageSelectClass} flex-1`}
           value={newKind}
           onChange={(e) => setNewKind(e.target.value as AdjustmentKind)}
         >
@@ -244,7 +245,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
         </select>
         <button
           type="button"
-          className="px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-500"
+          className="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={() => {
             setSelectedId(controller.addAdjustmentLayer(newKind));
             setChannel('master');
@@ -263,18 +264,18 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
             return (
               <li
                 key={layer.id}
-                className={`flex items-center gap-1.5 rounded px-1.5 py-1 ${layer.id === selectedId ? 'bg-indigo-600/20 ring-1 ring-indigo-500/50' : 'bg-slate-800/60'}`}
+                className={`flex items-center gap-1.5 rounded px-1.5 py-1 ${layer.id === selectedId ? 'bg-primary/20 ring-1 ring-primary/50' : 'bg-muted/60'}`}
               >
                 <input
                   type="checkbox"
                   aria-label={`Show ${label}`}
                   checked={layer.enabled}
                   onChange={() => controller.toggleAdjustmentLayer(layer.id)}
-                  className="accent-indigo-500"
+                  className="accent-primary"
                 />
                 <button
                   type="button"
-                  className={`flex-1 text-left truncate ${layer.enabled ? 'text-slate-200' : 'text-slate-500 line-through'}`}
+                  className={`flex-1 text-left truncate ${layer.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}`}
                   onClick={() => setSelectedId(layer.id === selectedId ? null : layer.id)}
                   aria-pressed={layer.id === selectedId}
                 >
@@ -285,7 +286,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
                   aria-label={`Move ${label} up`}
                   disabled={index === layers.length - 1}
                   onClick={() => controller.moveAdjustmentLayer(layer.id, index + 1)}
-                  className="px-1 text-slate-400 hover:text-slate-200 disabled:opacity-30"
+                  className="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   ↑
                 </button>
@@ -294,7 +295,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
                   aria-label={`Move ${label} down`}
                   disabled={index === 0}
                   onClick={() => controller.moveAdjustmentLayer(layer.id, index - 1)}
-                  className="px-1 text-slate-400 hover:text-slate-200 disabled:opacity-30"
+                  className="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   ↓
                 </button>
@@ -305,7 +306,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
                     controller.removeAdjustmentLayer(layer.id);
                     if (selectedId === layer.id) setSelectedId(null);
                   }}
-                  className="px-1 text-rose-400 hover:text-rose-300"
+                  className="px-1 text-destructive hover:text-destructive"
                 >
                   ✕
                 </button>
@@ -316,12 +317,12 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
       )}
 
       {selected && (
-        <div className="flex flex-col gap-2 rounded border border-slate-700/60 p-2" data-testid="adjustment-layer-editor">
+        <div className="flex flex-col gap-2 rounded border border-border p-2" data-testid="adjustment-layer-editor">
           <div className="flex items-center gap-2">
-            <span className="text-slate-400">Blend</span>
+            <span className="text-muted-foreground">Blend</span>
             <select
               aria-label="Blend mode"
-              className={`${selectClass} flex-1`}
+              className={`${imageSelectClass} flex-1`}
               value={selected.blend}
               onChange={(e) => controller.updateAdjustmentLayer(selected.id, { blend: e.target.value as BlendMode })}
             >
