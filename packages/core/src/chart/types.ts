@@ -19,6 +19,8 @@
  * - `sankey` draws `links` as flows between columns of nodes.
  * - `barrace` reads each category as a time point and each series as a name, and draws the
  *   top `raceTopN` names at one moment as ranked horizontal bars (an animated ranking).
+ * - `choropleth` shades the regions of a registered map (`map`) by the first series, each
+ *   category naming a region by id (ISO alpha-3 for countries) or name.
  */
 export type ChartType =
 	| 'bar'
@@ -39,7 +41,8 @@ export type ChartType =
 	| 'parliament'
 	| 'sunburst'
 	| 'sankey'
-	| 'barrace';
+	| 'barrace'
+	| 'choropleth';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -342,6 +345,12 @@ export interface ChartSpec {
 	sankeyLinkColor: ChartSankeyLinkColor;
 	/** Bar race: how many bars each moment shows, 1–30. */
 	raceTopN: number;
+	/** Choropleth: the registered map to draw (see `registerChartMap`; `@pixerate/editor/chart-maps` has `europe`). */
+	map: string;
+	/** Choropleth: number of equal colour classes between the smallest and largest value, 2–9. */
+	mapSteps: number;
+	/** Choropleth: class breaks in ascending order, instead of `mapSteps` ([] for none). */
+	mapThresholds: number[];
 }
 
 /** What a click selects. */
@@ -417,6 +426,8 @@ export type ChartMarkRole =
 	| 'callout'
 	| 'node'
 	| 'race-time'
+	| 'region'
+	| 'map-land'
 	| 'link'
 	| 'note'
 	| 'selection'

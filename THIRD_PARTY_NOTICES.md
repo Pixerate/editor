@@ -307,6 +307,17 @@ GridCraft. Apache POI is © The Apache Software Foundation, licensed under the A
 - `crates/engine/src/cmd/ink_shape.rs` (`recognise`, `ellipse_rms`, `snap_square`, `corners`, `turning`, `rdp`, `upright`, `MIN_SIZE`, `MAX_CORNERS`) → `recognizeInkShape` in `packages/core/src/vector/ink.ts`; its test cases re-expressed → `packages/core/tests/vector-path-edit.test.ts`
 - `crates/docx/src/chart_spec.rs` (a chart is editable only when it regenerates without loss) → `ChartOoxmlReadResult.lossless` and the DOCX chart import in `packages/core/src/import/docx.ts`
 
+## Map data (not from the craft apps)
+
+`packages/core/src/chart-maps/europe.ts` (the `@pixerate/editor/chart-maps` entry point) is generated
+by `packages/core/scripts/build-europe-chart-map.mjs` from `countries-50m.json` in
+[world-atlas](https://github.com/topojson/world-atlas) 2.0.2 by Mike Bostock (ISC License), a TopoJSON
+conversion of [Natural Earth](https://www.naturalearthdata.com) 1:50m Admin 0 – Countries. Natural
+Earth data is in the public domain; the maps carry the credit "Made with Natural Earth". The outlines
+were simplified, reprojected (Lambert azimuthal equal-area) and clipped to Europe. world-atlas is used
+under its ISC License: see https://github.com/topojson/world-atlas/blob/v2.0.2/LICENSE.md for its
+copyright notice and terms.
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and

@@ -2,8 +2,9 @@
 // (`legend`, `finalize`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { layoutCartesian, layoutXy, trendlineLegendItems } from './layout-cartesian.js';
 import { applyHighlight, chartAnnotationFamily, drawCallouts, drawNote, noteHeight } from './layout-annotations.js';
-import { layoutBarRace, layoutBox, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSankey, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
+import { layoutBarRace, layoutBox, layoutChoropleth, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSankey, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
 import { estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type FamilyResult, type LayoutCtx } from './layout-shared.js';
+import { getChartMap, matchChartMapRegions } from './maps.js';
 import { chartScaleFromPixel, formatChartNumber } from './scale.js';
 import { chartSpecColorsByCategory, chartFamily, chartVariesColors, chartSeriesColor, chartSeriesType, chartSliceColor, DEFAULT_CHART_THEME } from './spec.js';
 import type { ChartMark, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartWarning } from './types.js';
@@ -22,7 +23,7 @@ interface LegendItem {
 function legendItems(spec: ChartSpec, ctx: LayoutCtx): LegendItem[] {
 	const family = chartFamily(spec);
 	// Funnel bars and slope lines are labelled along the side already.
-	if (spec.type === 'funnel' || spec.type === 'slope' || spec.type === 'sankey' || spec.type === 'barrace') return [];
+	if (spec.type === 'funnel' || spec.type === 'slope' || spec.type === 'sankey' || spec.type === 'barrace' || spec.type === 'choropleth') return [];
 	if (chartSpecColorsByCategory(spec)) {
 		const first = spec.series.find((s) => !s.hidden);
 		const seats = (i: number) => Math.max(0, Math.round(first?.values[i] ?? 0));
@@ -178,6 +179,18 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 			return finish(layoutFunnel(ctx, area, visible[0]));
 		case 'treemap':
 			return finish(spec.tree.length ? layoutTreemapTree(ctx, area, spec.series[0]) : layoutTreemap(ctx, area, visible[0]));
+		case 'choropleth': {
+			const map = getChartMap(spec.map);
+			if (!map) {
+				ctx.warn('type-fallback', `The map "${spec.map}" is not registered, so the values are drawn as bars: register it with registerChartMap (the Europe outlines are EUROPE_CHART_MAP in @pixerate/editor/chart-maps).`);
+				return finish(layoutCartesian(ctx, area, visible));
+			}
+			if (!matchChartMapRegions(map, spec.categories).some(Boolean)) {
+				ctx.warn('type-fallback', `No category names a region of ${map.name}, so the values are drawn as bars: use codes (such as FRA) or names (France) as categories.`);
+				return finish(layoutCartesian(ctx, area, visible));
+			}
+			return finish(layoutChoropleth(ctx, area, visible[0]));
+		}
 		case 'barrace':
 			return finish(layoutBarRace(ctx, area, options.raceFrame));
 		case 'sankey':

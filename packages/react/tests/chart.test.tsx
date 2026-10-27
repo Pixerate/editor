@@ -3,7 +3,8 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { ChartController, type ChartSpec } from "@pixerate/editor/chart";
+import { ChartController, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
+import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 import {
   ChartCanvas,
   ChartDataGrid,
@@ -365,6 +366,24 @@ describe("ChartInspector", () => {
     expect(container.querySelector("svg")!.textContent).toContain("Q1");
     await type(q<HTMLInputElement>('[data-option="raceTopN"]'), "1");
     expect(controller.getSpec().raceTopN).toBe(1);
+  });
+
+  it("picks the map, its colour classes and breaks for a choropleth", async () => {
+    registerChartMap(EUROPE_CHART_MAP);
+    const controller = new ChartController({ spec: { type: "choropleth", map: "atlas", categories: ["FRA"], series: [{ name: "N", values: [1] }] } });
+    await render(<ChartInspector controller={controller} />);
+    const options = Array.from(q<HTMLSelectElement>('[data-option="map"]').options).map((o) => o.textContent);
+    expect(options).toEqual(expect.arrayContaining(["atlas (not loaded)", "Europe"]));
+    await type(q<HTMLSelectElement>('[data-option="map"]'), "europe");
+    await type(q<HTMLInputElement>('[data-option="mapSteps"]'), "4");
+    expect(controller.getSpec()).toMatchObject({ map: "europe", mapSteps: 4 });
+    await type(q<HTMLInputElement>('[data-option="mapThresholds"]'), "10, 50");
+    expect(controller.getSpec().mapThresholds).toEqual([10, 50]);
+    expect(q<HTMLInputElement>('[data-option="mapSteps"]').disabled).toBe(true);
+    await type(q<HTMLInputElement>('[data-option="mapThresholds"]'), "50, 10");
+    expect(controller.getSpec().mapThresholds).toEqual([10, 50]);
+    await type(q<HTMLInputElement>('[data-option="mapThresholds"]'), "");
+    expect(controller.getSpec().mapThresholds).toEqual([]);
   });
 
   it("sets radar rings and grid shape", async () => {

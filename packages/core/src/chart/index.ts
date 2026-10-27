@@ -3,6 +3,7 @@ export * from './spec.js';
 export * from './tree.js';
 export * from './links.js';
 export * from './race.js';
+export * from './maps.js';
 export * from './scale.js';
 export * from './numfmt.js';
 export * from './color.js';

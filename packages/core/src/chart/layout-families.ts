@@ -7,6 +7,7 @@ import { formatChartNumber, linearMap, niceScale, stepDecimals } from './scale.j
 import { chartSeriesColor, chartSliceColor } from './spec.js';
 import { shadeChartColor } from './color.js';
 import { chartBoxStats, chartHistogram, chartSquarify } from './stats.js';
+import { chartMapBreaks, chartMapClass, chartMapRamp, getChartMap, matchChartMapRegions } from './maps.js';
 import { chartRaceMoment, chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeFromSeries, chartTreeTotal } from './tree.js';
 import type { ChartMark, ChartRect, ChartSelection, ChartSeries, ChartTreeNode } from './types.js';
@@ -888,4 +889,76 @@ export function layoutBarRace(ctx: LayoutCtx, area: ChartRect, frame: number | n
 	}
 	if (ranking.length > top) ctx.warn('values-skipped', `The race shows the top ${top} of ${ranking.length} names at each moment (raceTopN).`);
 	return { plot, valueScale: { axis: 'x', domain: [0, max], range: [plot.x, plot.x + plot.width], ticks } };
+}
+
+/** Path data (absolute M / L / Z) scaled by `s` and moved by (`ox`, `oy`). */
+function placePath(d: string, s: number, ox: number, oy: number): string {
+	return d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (_, x: string, y: string) => `${r2(ox + Number(x) * s)},${r2(oy + Number(y) * s)}`);
+}
+
+/**
+ * Choropleth: the regions of a registered map (`spec.map`) shaded by the first series, one class
+ * per `mapSteps` (or `mapThresholds`), light to dark. Each category names a region by id or name;
+ * regions without data are grey and neighbouring land is drawn behind. Regions too small to see
+ * get a marker at their centre. The class legend runs along the bottom. The map must be
+ * registered and match a category (`layoutChart` draws bars otherwise).
+ */
+export function layoutChoropleth(ctx: LayoutCtx, area: ChartRect, series: ChartSeries): FamilyResult {
+	const { spec, theme, marks, fs, measure } = ctx;
+	const map = getChartMap(spec.map)!;
+	const matches = matchChartMapRegions(map, spec.categories);
+	const unmatched = spec.categories.filter((_, i) => !matches[i]);
+	if (unmatched.length)
+		ctx.warn('values-skipped', `${unmatched.length} categor${unmatched.length === 1 ? 'y names' : 'ies name'} no region of ${map.name}: ${unmatched.slice(0, 8).map((c) => `"${c}"`).join(', ')}${unmatched.length > 8 ? ', …' : ''}. Use codes (such as FRA) or names (France).`);
+	const indexOf = new Map<string, number>();
+	matches.forEach((r, i) => r && indexOf.set(r.id, i));
+	const valueAt = (i: number) => {
+		const v = series.values[i];
+		return v !== null && v !== undefined && Number.isFinite(v) ? v : null;
+	};
+	const present = [...indexOf.values()].map(valueAt).filter((v): v is number => v !== null);
+	const breaks = chartMapBreaks(present, spec.mapSteps, spec.mapThresholds);
+	const ramp = chartMapRamp(series.color ?? chartSeriesColor(spec, spec.series.indexOf(series)), breaks.length + 1);
+	const format = series.format ?? spec.yAxis.format;
+	const legendH = fs * 2.2;
+	const s = Math.max(1e-6, Math.min(area.width / map.width, (area.height - legendH) / map.height));
+	const ox = area.x + (area.width - map.width * s) / 2;
+	const oy = area.y;
+	if (map.land) marks.push({ kind: 'path', key: 'map-land', role: 'map-land', d: placePath(map.land, s, ox, oy), fill: theme.grid, opacity: 0.55 });
+	const markers: ChartMark[] = [];
+	const labels: ChartMark[] = [];
+	for (const region of map.regions) {
+		const i = indexOf.get(region.id);
+		const value = i === undefined ? null : valueAt(i);
+		const fill = i !== undefined && series.pointColors?.[i] ? series.pointColors[i]! : value === null ? theme.grid : ramp[chartMapClass(value, breaks)];
+		const target: ChartSelection | undefined = i === undefined ? undefined : { kind: 'category', index: i };
+		const selected = target ? ctx.isSelected(target) || ctx.isSelected({ kind: 'point', seriesId: series.id, index: i! }) : false;
+		const [cx, cy] = [ox + region.center[0] * s, oy + region.center[1] * s];
+		if (region.d) marks.push({ kind: 'path', key: `region-${region.id}`, role: 'region', d: placePath(region.d, s, ox, oy), fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2 : 0.6, ...(target ? { target, selected } : {}) });
+		// Too small to see (or to click): a marker on top.
+		if (!region.d || region.area * s * s < 30)
+			markers.push({ kind: 'circle', key: `region-marker-${region.id}`, role: 'region', cx, cy, r: 3.5, fill, stroke: selected ? theme.selection : theme.text, strokeWidth: selected ? 1.5 : 0.75, ...(target ? { target, selected } : {}) });
+		if (value !== null && target && (series.dataLabels ?? spec.dataLabels) && region.area * s * s > (fs * 3) ** 2) {
+			const text = formatChartNumber(value, format);
+			labels.push({ kind: 'text', key: `label-${region.id}`, role: 'data-label', x: cx, y: cy, text, anchor: 'middle', baseline: 'middle', size: fs - 1, weight: 600, fill: contrastingTextColor(fill), target });
+		}
+	}
+	marks.push(...markers, ...labels);
+	// Legend: one swatch per class, then "No data".
+	const fmt = (v: number) => formatChartNumber(v, format);
+	const items = ramp.map((color, k) => ({
+		color,
+		text: breaks.length === 0 ? (present.length ? fmt(present[0]) : '') : k === 0 ? `< ${fmt(breaks[0])}` : k === breaks.length ? `≥ ${fmt(breaks[k - 1])}` : `${fmt(breaks[k - 1])}–${fmt(breaks[k])}`
+	}));
+	items.push({ color: theme.grid, text: 'No data' });
+	let x = area.x;
+	const y = area.y + area.height - fs * 0.9;
+	items.forEach((item, k) => {
+		marks.push({ kind: 'rect', key: `legend-swatch-${k}`, role: 'legend-swatch', x, y: y - 5, width: 10, height: 10, radius: 2, fill: item.color });
+		marks.push({ kind: 'text', key: `legend-label-${k}`, role: 'legend-label', x: x + 14, y, text: item.text, anchor: 'start', baseline: 'middle', size: fs - 1, fill: theme.text });
+		x += 14 + measure(item.text, fs - 1) + 14;
+	});
+	if (x > area.x + area.width) ctx.warn('legend-truncated', 'The map legend is wider than the chart; widen the chart or use fewer classes.');
+	if (map.attribution) marks.push({ kind: 'text', key: 'map-attribution', role: 'note', x: area.x + area.width, y, text: map.attribution, anchor: 'end', baseline: 'middle', size: Math.max(7, fs - 3), fill: theme.mutedText });
+	return { plot: { x: ox, y: oy, width: map.width * s, height: map.height * s } };
 }

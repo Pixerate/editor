@@ -31,6 +31,7 @@ import {
   parseChartAmountList,
   chartSeriesType,
   isCartesianChart,
+  listChartMaps,
   suggestChartReferences,
   type ChartAxis,
   type ChartController,
@@ -402,6 +403,34 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 onPointerDown={() => controller.beginGesture('gapWidth')}
                 onPointerUp={() => controller.endGesture()}
                 onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
+              />
+            </Field>
+          )}
+          {spec.type === 'choropleth' && (
+            <Field label="Map" htmlFor={`${idBase}-map`}>
+              <select id={`${idBase}-map`} className={chartInputClass} value={spec.map} data-option="map" onChange={(e) => controller.update({ map: e.currentTarget.value })}>
+                {[...new Set([spec.map, ...listChartMaps().map((m) => m.id)])].map((id) => (
+                  <option key={id} value={id}>
+                    {listChartMaps().find((m) => m.id === id)?.name ?? `${id} (not loaded)`}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {spec.type === 'choropleth' && (
+            <Field label="Classes" htmlFor={`${idBase}-map-steps`}>
+              <ChartCommitInput id={`${idBase}-map-steps`} value={String(spec.mapSteps)} inputMode="numeric" data-option="mapSteps" disabled={spec.mapThresholds.length > 0} className={chartInputClass} onCommit={(text) => controller.update({ mapSteps: Number(text) }).ok} />
+            </Field>
+          )}
+          {spec.type === 'choropleth' && (
+            <Field label="Breaks" htmlFor={`${idBase}-map-breaks`}>
+              <ChartCommitInput
+                id={`${idBase}-map-breaks`}
+                value={spec.mapThresholds.join(', ')}
+                placeholder="Equal classes"
+                data-option="mapThresholds"
+                className={chartInputClass}
+                onCommit={(text) => controller.update({ mapThresholds: text.trim() ? text.split(',').map((t) => Number(t.trim())) : [] }).ok}
               />
             </Field>
           )}

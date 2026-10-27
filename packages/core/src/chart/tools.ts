@@ -58,6 +58,7 @@ import {
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
 import { chartSankeyNodeValues } from './links.js';
+import { listChartMaps, getChartMap, matchChartMapRegions } from './maps.js';
 import { chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
 import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
@@ -299,6 +300,29 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		inputSchema: { type: 'object', properties: { time: RACE_TIME }, additionalProperties: false },
 		annotations: { title: 'Read a bar race ranking', ...READ },
 		handler: ({ time }) => raceAt(time !== undefined ? raceFrameOf(time) : controller.getState().raceFrame)
+	};
+
+	const mapRegions: AgentTool = {
+		name: 'list_chart_map_regions',
+		title: 'List map regions',
+		description:
+			'Lists the maps a choropleth can draw and the regions of one (default: the chart\'s map), each with the id and name that categories may use, and how the chart\'s categories match them: matched (category → region id) and unmatched. Use it to pick category labels before set_chart_data, and to fix unmatched ones.',
+		inputSchema: { type: 'object', properties: { map: { type: 'string', description: 'Map id (default: the chart\'s map).' } }, additionalProperties: false },
+		annotations: { title: 'List map regions', ...READ },
+		handler: ({ map }) => {
+			const id = map ?? spec().map;
+			const maps = listChartMaps().map((m) => ({ id: m.id, name: m.name, regions: m.regions.length }));
+			const geometry = getChartMap(id);
+			if (!geometry) fail(maps.length ? `There is no map "${id}"; the host has ${maps.map((m) => `"${m.id}"`).join(', ')}.` : `There is no map "${id}": the host has not registered any maps (EUROPE_CHART_MAP in @pixerate/editor/chart-maps).`);
+			const matches = matchChartMapRegions(geometry!, spec().categories);
+			return {
+				maps,
+				map: id,
+				regions: geometry!.regions.map((r) => ({ id: r.id, name: r.name })),
+				matched: spec().categories.flatMap((c, i) => (matches[i] ? [{ category: c, region: matches[i]!.id }] : [])),
+				unmatched: spec().categories.filter((_, i) => !matches[i])
+			};
+		}
 	};
 
 	const listPresets: AgentTool = {
@@ -1037,7 +1061,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
-	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, raceRanking, listPresets, exportMermaid, exportOoxml];
+	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, raceRanking, mapRegions, listPresets, exportMermaid, exportOoxml];
 	const writes = [
 		updateChart,
 		setData,

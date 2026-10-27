@@ -15,7 +15,11 @@ import {
   createChartStyleToolProvider,
 } from "@pixerate/editor/chart";
 import { StyleFindings, useAgentToolProvider, useStyleFindings } from "@pixerate/editor-react";
-import type { ChartSelection } from "@pixerate/editor/chart";
+import { registerChartMap, type ChartSelection } from "@pixerate/editor/chart";
+import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
+
+// The Europe outlines live in their own entry point; the demo registers them once.
+registerChartMap(EUROPE_CHART_MAP);
 import { demoStyles } from "../houseStyles";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { parseCsv } from "@pixerate/editor/spreadsheet";
@@ -108,6 +112,16 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
       { name: "Marketing", children: [{ name: "Brand", value: 120 }, { name: "Events", value: 90 }, { name: "Search", value: 110 }] },
       { name: "Support", value: 150 },
     ],
+  },
+  Europe: {
+    type: "choropleth",
+    title: "Renewable share of energy",
+    subtitle: "Illustrative figures, per cent of final energy use",
+    dataLabels: true,
+    mapThresholds: [15, 25, 40, 60],
+    categories: ["SWE", "FIN", "LVA", "DNK", "EST", "PRT", "AUT", "LTU", "HRV", "SVN", "ROU", "ESP", "GRC", "FRA", "DEU", "ITA", "POL", "CZE", "SVK", "HUN", "BGR", "NLD", "BEL", "IRL", "LUX", "MLT", "CYP", "NOR", "ISL"],
+    series: [{ id: "share", name: "Renewable share", values: [66, 47.9, 43.3, 41.6, 38.5, 34.7, 33.8, 29.6, 29.4, 25, 24.1, 21.9, 22.7, 20.3, 20.8, 19.1, 16.9, 18.2, 17.5, 15.2, 19.1, 15, 13.8, 13.1, 9, 13.4, 19.4, 75.8, 86.8], format: { suffix: "%" } }],
+    yAxis: { show: true, title: "", min: null, max: null, step: null, gridlines: true, format: { suffix: "%" } },
   },
   Race: {
     type: "barrace",

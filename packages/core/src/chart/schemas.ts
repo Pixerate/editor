@@ -180,7 +180,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links); barrace reads categories as time points and series as names, and animates their ranking.' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links); barrace reads categories as time points and series as names, and animates their ranking; choropleth shades the regions of a map, each category naming a region by code (FRA) or name (France).' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -218,6 +218,9 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' },
 				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' },
 				sankeyLinkColor: { type: 'string', enum: [...CHART_SANKEY_LINK_COLORS], description: 'Sankey: colour each flow by its source node (default), its target node, or grey.' },
+				map: { type: 'string', description: 'Choropleth: the registered map to draw (list_chart_map_regions lists them; "europe" by default).' },
+				mapSteps: { type: 'integer', minimum: 2, maximum: 9, description: 'Choropleth: number of equal colour classes between the smallest and largest value (default 5).' },
+				mapThresholds: { type: 'array', items: { type: 'number' }, maxItems: 8, description: 'Choropleth: class breaks in ascending order, e.g. [100, 250, 500], used instead of mapSteps; [] goes back to equal classes.' },
 				raceTopN: { type: 'integer', minimum: 1, maximum: 30, description: 'Bar race: how many bars each moment shows (default 10).' },
 				sankeyNodes: { type: 'array', items: { type: 'string' }, description: 'Sankey: node names in the order to stack them within their columns (reorder to untangle crossing flows); nodes left out follow in the order the flows name them.' }
 			};
