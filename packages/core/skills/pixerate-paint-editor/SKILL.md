@@ -420,8 +420,6 @@ for the controls and presets.
 | `export_psd` | Export a PSD with every layer, the paper as a locked bottom layer, and the composite. Pigment and painterly modes are written as their nearest standard mode (`list_blend_modes` `psd`). Returns base64, size, `psb` and `warnings`. |
 | `export_time_lapse` | Repaint the painting from its recorded strokes and events as a time-lapse: `frames` (about how many), `fps`, `maxSide`, `wetStepsPerFrame` (frames while wet paint flows), `holdMs`. Returns a contact sheet image, the frame count, size, duration, a video project of the frames and the ffmpeg command that renders `timelapse.mp4`; `includeFrames` adds every frame as base64 PNG. Changes nothing. |
 | `export_high_res` | Repaint the painting from its strokes at `scale` 1..8 (brushes, grain, fills and wet events scaled): a PNG with real detail instead of upscaled pixels. Returns base64, size. Layers not painted with strokes come out empty. |
-| `save_document` | Deprecated, kept for one minor version: use `get_paint_document` or `save_paint_document`. Returns the document JSON with PNG data URLs inline (large). |
-| `open_document` | Deprecated, kept for one minor version: use `load_paint_document` or `open_saved_paint_document`. Opens a document JSON from `save_document`, clearing the undo history. |
 
 ### Save and open
 

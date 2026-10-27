@@ -60,14 +60,35 @@ export {
 	runMultiNodeTransition
 } from './createCanvasTrajectory.js';
 
-// Spatial layout displacement
+// Spatial layout displacement & pure explosion layout (core)
 export {
 	computeNodesBoundingBox,
+	nodeSizeOf,
 	calculateDirectionalDisplacement,
-	calculateReflowDisplacement
-} from './createCanvasDisplacement.js';
+	calculateReflowDisplacement,
+	calculateDagreReflowDisplacement,
+	computeCanvasExplosionLayout,
+	explosionEdgeId,
+	createCanvasExplosionStateController,
+	createCanvasExplosionToolProvider,
+	canvasExplosionToolTarget,
+	type ComputeCanvasExplosionLayoutParams,
+	type CanvasExplosionLayoutResult,
+	type CanvasExplosionStateController,
+	type CanvasExplosionStateSnapshot,
+	type CanvasExplosionToolTarget,
+	type CanvasExplosionToolProviderOptions
+} from '@pixerate/editor/canvas';
 
-// Node explosion & collapse rune
+// Declarative explosion state rune
+export {
+	createCanvasExplosionState,
+	type CanvasExplosionState,
+	type CanvasExplosionStateOptions,
+	type CanvasExplosionStateRune
+} from './createCanvasExplosionState.svelte.js';
+
+// Imperative explosion coordinator rune
 export {
 	createCanvasExplosion,
 	type CanvasGraphTarget,

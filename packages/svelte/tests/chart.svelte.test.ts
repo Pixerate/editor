@@ -229,6 +229,83 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("edits the note, highlight, reference lines and bands, callouts and colour by category", () => {
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    type(q<HTMLInputElement>('[data-option="note"]'), "Source: finance");
+    expect(controller.getSpec().note).toBe("Source: finance");
+    type(q<HTMLInputElement>('[data-option="highlight"]'), "Q2, South");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    type(q<HTMLInputElement>('[data-option="highlight"]'), "Nope");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    click(q('[data-option="referenceLine.add"]'));
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 12, label: "Average" }]);
+    type(q<HTMLInputElement>('[data-option="referenceLine.0.label"]'), "Target");
+    type(q<HTMLInputElement>('[data-option="referenceLine.0.value"]'), "15");
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 15, label: "Target" }]);
+    click(q('[data-option="referenceBand.add"]'));
+    type(q<HTMLInputElement>('[data-option="referenceBand.0.to"]'), "20");
+    expect(controller.getSpec().referenceBands[0].to).toBe(20);
+    click(q('[data-action="reference-band-delete"]'));
+    expect(controller.getSpec().referenceBands).toEqual([]);
+    expect(q('[data-option="series.callout"]')).toBeNull();
+    controller.select({ kind: "point", seriesId: "north", index: 1 });
+    flushSync();
+    type(q<HTMLInputElement>('[data-option="series.callout"]'), "Best month");
+    expect(controller.getSeries("north")!.callouts).toEqual([null, "Best month", null]);
+    expect(q('[data-option="varyColors"]')).toBeNull();
+    controller.updateSeries("south", { hidden: true });
+    flushSync();
+    click(q('[data-option="varyColors"]'));
+    expect(controller.getSpec().varyColors).toBe(true);
+    controller.setType("pie");
+    flushSync();
+    expect(q('[data-section="annotations"]')).toBeNull();
+  });
+
+  it("sets Likert and parliament options", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "likert" } });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    type(q<HTMLSelectElement>('[data-option="likertNeutral"]'), "separate");
+    type(q<HTMLSelectElement>('[data-option="likertSort"]'), "positive");
+    expect(controller.getSpec()).toMatchObject({ likertNeutral: "separate", likertSort: "positive" });
+    expect(q('[data-option="parliamentArc"]')).toBeNull();
+    controller.setType("parliament");
+    flushSync();
+    expect(q('[data-option="likertSort"]')).toBeNull();
+    type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "20");
+    type(q<HTMLInputElement>('[data-option="parliamentLabel"]'), "MPs");
+    expect(controller.getSpec()).toMatchObject({ parliamentMajority: 20, parliamentLabel: "MPs" });
+    type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "");
+    expect(controller.getSpec().parliamentMajority).toBeNull();
+  });
+
+  it("edits grouped data as a table of names and values", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "treemap" } });
+    const el = render(ChartDataGrid, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    const qa = (sel: string) => Array.from(el.querySelectorAll(sel)) as HTMLElement[];
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+    click(q('[data-action="tree-from-table"]'));
+    expect(controller.getSpec().tree).toEqual([{ name: "Q1", value: 12 }, { name: "Q2", value: 18 }, { name: "Q3", value: 9 }]);
+    expect(q("[data-chart-tree-grid]")).not.toBeNull();
+    click(q('[data-action="tree-add-level"]'));
+    type(q<HTMLInputElement>('[data-tree-cell="0:0"]'), "H1");
+    type(q<HTMLInputElement>('[data-tree-cell="0:1"]'), "Jan");
+    expect(controller.getSpec().tree[0]).toEqual({ name: "H1", children: [{ name: "Jan", value: 12 }] });
+    type(q<HTMLInputElement>('[data-tree-value="0"]'), "20");
+    expect(controller.getSpec().series[0].values[0]).toBe(20);
+    click(q('[data-action="tree-add-row"]'));
+    expect(qa("[data-tree-row]")).toHaveLength(4);
+    click(qa('[data-action="tree-remove-row"]')[3]);
+    expect(qa("[data-tree-row]")).toHaveLength(3);
+    click(q('[data-action="tree-ungroup"]'));
+    expect(controller.getSpec().tree).toEqual([]);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });

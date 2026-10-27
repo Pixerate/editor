@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
+import { createDocumentToolProvider } from '../src/persistence';
 import { decodePng } from '../src/raster/png';
 import { contentBounds, readPixel, readRegion } from '../src/raster/surface';
 import { importPsd } from '../src/image-editor/psd/import';
@@ -15,6 +16,7 @@ import {
   PaperGrain,
   PenDabWalker,
   PenSmoother,
+  createPaintEditorDocument,
   createPaintEditorToolProvider,
   documentToScreen,
   grainCatch,
@@ -658,7 +660,7 @@ describe('paint editor agent tools', () => {
   });
 
   it('renders previews, thumbnails and exports; saves and opens documents', async () => {
-    const { r } = setup();
+    const { c, r } = setup();
     await r.callTool('paint_stroke', { points: line(5, 5, 120, 90), brushId: 'marker' });
     const prev = await r.callTool('render_preview', { maxSide: 64 });
     expect(prev.content[0]).toMatchObject({ type: 'image', mimeType: 'image/png' });
@@ -672,12 +674,17 @@ describe('paint editor agent tools', () => {
     expect(jpeg.isError).toBe(true);
     const psd = ok(await r.callTool('export_psd', {}));
     expect(psd.psb).toBe(false);
-    const doc = ok(await r.callTool('save_document', { strokes: false }));
-    expect(doc.strokes).toBeUndefined();
+    // The deprecated save_document / open_document aliases are gone: the shared document tools replace them.
+    expect(r.hasTool('save_document')).toBe(false);
+    expect(r.hasTool('open_document')).toBe(false);
+    expect((await r.callTool('save_document', {})).isError).toBe(true);
+    r.register(createDocumentToolProvider(createPaintEditorDocument(c), { namespace: '', history: false }));
+    const saved = ok(await r.callTool('get_paint_document', {}));
+    expect(saved).toMatchObject({ kind: 'paint' });
     await r.callTool('new_canvas', { width: 10, height: 10, paper: 'gesso' });
     expect(ok(await r.callTool('get_canvas_info', {})).width).toBe(10);
-    const opened = ok(await r.callTool('open_document', { document: doc }));
-    expect(opened).toMatchObject({ width: 128, height: 96, problems: [] });
+    ok(await r.callTool('load_paint_document', { document: saved.document }));
+    expect(ok(await r.callTool('get_canvas_info', {}))).toMatchObject({ width: 128, height: 96 });
     expect(ok(await r.callTool('set_view', { rotation: -90, mirror: true }))).toMatchObject({ rotation: -90, mirror: true });
     expect(ok(await r.callTool('set_hand', { hand: 'left' }))).toEqual({ hand: 'left' });
     expect(ok(await r.callTool('set_canvas', { width: 200 }))).toMatchObject({ width: 200, height: 96 });

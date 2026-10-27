@@ -21,6 +21,11 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [paint/wet] Wet Paint Mixing Samples Only Suspended Pigment While Settled Pigment Carries Visible Color
+
+- **Issue / Symptom**: Overlapping wet paint strokes (such as Gouache or Watercolor) fail to mix; subsequent strokes paint with their raw color without picking up underlying wet strokes, behaving as opaque dry coats.
+- **Root Cause**: In the wet simulation grid (`world.ts`), pigment deposits from water suspension (`P_P0`) into settled grain (`P_D0`) within seconds, and re-wetted dry paint is directly placed into `settled`. `WetMedium.sample` was only reading `s.pigment`, meaning once pigment settled onto the paper substrate (even while paper remained completely wet), the sampler returned zero pigment density. Additionally, gouache presets lacked evaporation damping, causing moisture to dissipate before a user could pick another color.
+- **Solution / Workaround**: In `WetMedium.sample`, sum both suspended (`s.pigment`) and settled (`s.settled`) absorption channels ($K$), matching visual shader rendering (`shadeTile`). Ensure wet brush definitions specify proper `pickup` and `mixing: 'pigment'` behavior with appropriate evaporation rates to permit natural inter-stroke mixing.
 ### [core/typography] `document.fonts.check()` Says Yes for Fonts That Are Not Installed
 
 - **Issue / Symptom**: A system font provider that answered `hasFont` with `document.fonts.check('16px "Some Font"')` reported every family as available, including made-up names.
@@ -2915,6 +2920,30 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
 - **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.
 
+### [canvas] Dagre Explosion Reflow Ignored the Parent-to-Child Edges
+
+- **Issue / Symptom**: Exploding with `displacementStrategy: 'dagre'` barely moved downstream nodes: children landed in the same rank as the node that exploded, and nodes they connect to moved one rank instead of two.
+- **Root Cause**: The coordinators built the parent-to-child edges (`connectParentToChildren`) after computing the reflow, so dagre saw the children as unconnected roots.
+- **Solution / Workaround**: `computeCanvasExplosionLayout` builds the edges first and passes the child edges plus the generated parent edges to `calculateReflowDisplacement`. Both coordinators now go through it, so do not compute displacement before deciding the edges.
+
+### [canvas] Clamping Displaced Rows to `minY` Made Them Overlap or Move Backwards
+
+- **Issue / Symptom**: With a floor such as `minY` below a pinned timeline header, a plain `Math.max(minY, y)` piled every row pushed past it onto the same y, and rows that started above the floor were pulled down into it.
+- **Root Cause**: A per-node clamp knows nothing about the other rows or where the node started.
+- **Solution / Workaround**: `calculateDirectionalDisplacement` groups moved nodes into rows (lanes in `row-lane` mode, else equal original y), stacks clamped rows `rowSpacing` apart from `minY` (`maxY` stacks upward), and never moves a node past its starting y in the other direction. Rows clamped back to their start are dropped from the result.
+
+### [react/canvas] Destroying a Headless Controller in an Effect Cleanup Breaks StrictMode
+
+- **Issue / Symptom**: In `<StrictMode>`, a hook that created a controller once (in a ref) and called `controller.destroy()` from `useEffect`'s cleanup stopped responding: the first explode did nothing.
+- **Root Cause**: StrictMode runs effect cleanup and then the effect again on mount, without re-rendering, so the ref still holds the destroyed controller.
+- **Solution / Workaround**: `useCanvasExplosionState` only ends a running collapse in the cleanup (`finishCollapse()`, which clears the timer) and leaves the controller usable. `useSyncExternalStore` handles subscribe / unsubscribe. Use `destroy()` only where the owner really goes away (the Svelte rune calls it from its `$effect` teardown).
+
+### [react/canvas] React Flow `Edge` Is Not Assignable to Core `CanvasEdge`
+
+- **Issue / Symptom**: `useCanvasExplosion<BoxNode, Edge>(...)` fails to typecheck with `Types of property 'label' are incompatible`.
+- **Root Cause**: React Flow's `Edge.label` is a `ReactNode`; core's structural `CanvasEdge.label` is a string.
+- **Solution / Workaround**: Pass a loose edge type parameter (`useCanvasExplosion<BoxNode, any>`), as the demo does. The coordinator only reads `id`, `source`, `target` and `style` of edges.
+
 ### [core/video-editor] An Adjustment Clip at Part Opacity Must Mix Over the Unadjusted Picture
 
 - **Issue / Symptom**: Drawn naively, an adjustment clip at 50% opacity (or fading in) fades the pictures beneath it towards the background, instead of mixing the adjusted look with the unadjusted picture.
@@ -2962,3 +2991,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `svelte-check` failed with "Cannot use 'state' as a store" and "Untyped function calls may not accept type arguments" on `let anchor = $state<number | null>(null)` in a component that also declared `const state = $derived(...)`.
 - **Root Cause**: In Svelte 5, a top-level variable named `state` makes `$state` look like an auto-subscription to a store called `state`, not the rune.
 - **Solution / Workaround**: Never name a component-level variable `state` (or `derived`, `effect`, `props`) when the component uses runes. `TranscriptEditor.svelte` uses `ts` for the transcript state.
+
+### [chart] Per-Category Lists Drifted When Categories Were Added, Removed or Moved
+
+- **Issue / Symptom**: After inserting, deleting or reordering a category, a series' point colours (and its numeric x values, bubble sizes and custom error amounts) stayed where they were while the values moved, so colours and sizes landed on the wrong bars. Callouts, which are also one per category, would have done the same.
+- **Root Cause**: `addCategory`, `removeCategory` and `moveCategory` spliced only `series.values`. Normalising afterwards pads or trims the other lists to the category count, which hides the mismatch instead of fixing it.
+- **Solution / Workaround**: The controller edits every per-category list of a series together (`pointLists`: values, x, sizes, pointColors, callouts and custom error-bar plus / minus). Any new per-category series field must be added to `pointLists`. Names in `highlight` are kept in step the same way: renaming a category or series renames its entry, and removing one drops it.

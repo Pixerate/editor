@@ -1096,28 +1096,6 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
   });
 
-  add({
-    name: 'save_document',
-    title: 'Save the document',
-    description: 'Deprecated (kept for one minor version): use get_paint_document, which returns the painting with images as asset references, or save_paint_document to store it. Returns the document as JSON (format pixerate-paint, version 1): canvas, paper, layers with PNG data URLs, and the recorded strokes unless strokes is false. Changes nothing.',
-    inputSchema: { type: 'object', properties: { strokes: { type: 'boolean', description: 'Include the recorded strokes (default true).' } }, additionalProperties: false },
-    annotations: { title: 'Save the document', ...READ },
-    handler: ({ strokes }) => c.toJSON({ strokes }),
-  });
-
-  add({
-    name: 'open_document',
-    title: 'Open a document',
-    description: 'Deprecated (kept for one minor version): use load_paint_document or open_saved_paint_document. Opens a saved paint document (as save_document returns), replacing the painting and clearing the undo history. Returns the canvas, the layers and anything that could not be read.',
-    inputSchema: { type: 'object', properties: { document: { type: 'object', description: 'The saved document JSON.' } }, required: ['document'], additionalProperties: false },
-    annotations: { title: 'Open a document', ...DESTRUCTIVE },
-    handler: ({ document }) => {
-      const problems = c.loadJSON(document);
-      const d = c.document;
-      return { width: d.canvas.width, height: d.canvas.height, layers: c.listLayers(), strokes: d.strokes.length, problems };
-    },
-  });
-
   tools.push(...createPaintGuideTools(c));
   tools.push(...createPaintWetTools(c));
   tools.push(...createPaintThickTools(c));

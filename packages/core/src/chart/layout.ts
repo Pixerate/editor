@@ -1,10 +1,11 @@
 // The legend height cap and the final non-finite pass follow gridcraft-main/crates/chart/src/render.rs
 // (`legend`, `finalize`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { layoutCartesian, layoutXy, trendlineLegendItems } from './layout-cartesian.js';
-import { layoutBox, layoutFunnel, layoutHistogram, layoutPie, layoutRadar, layoutTreemap, layoutWaterfall } from './layout-families.js';
+import { applyHighlight, chartAnnotationFamily, drawCallouts, drawNote, noteHeight } from './layout-annotations.js';
+import { layoutBox, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
 import { estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type FamilyResult, type LayoutCtx } from './layout-shared.js';
 import { chartScaleFromPixel, formatChartNumber } from './scale.js';
-import { chartColorsByCategory, chartFamily, chartSeriesColor, chartSeriesType, chartSliceColor, DEFAULT_CHART_THEME } from './spec.js';
+import { chartSpecColorsByCategory, chartFamily, chartVariesColors, chartSeriesColor, chartSeriesType, chartSliceColor, DEFAULT_CHART_THEME } from './spec.js';
 import type { ChartMark, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartWarning } from './types.js';
 
 export { contrastingTextColor, estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type ChartTextMeasure } from './layout-shared.js';
@@ -20,12 +21,13 @@ interface LegendItem {
 
 function legendItems(spec: ChartSpec, ctx: LayoutCtx): LegendItem[] {
 	const family = chartFamily(spec);
-	// Funnel bars are labelled along the side already.
-	if (spec.type === 'funnel') return [];
-	if (chartColorsByCategory(spec.type)) {
+	// Funnel bars and slope lines are labelled along the side already.
+	if (spec.type === 'funnel' || spec.type === 'slope') return [];
+	if (chartSpecColorsByCategory(spec)) {
 		const first = spec.series.find((s) => !s.hidden);
+		const seats = (i: number) => Math.max(0, Math.round(first?.values[i] ?? 0));
 		return spec.categories.map((c, i) => ({
-			label: c,
+			label: spec.type === 'parliament' ? `${c} ${seats(i)}` : c,
 			color: first?.pointColors?.[i] || chartSliceColor(spec, i),
 			target: { kind: 'category', index: i },
 			faded: false,
@@ -119,13 +121,20 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 
 	// Legend ----------------------------------------------------------------
 	const items = legendItems(spec, ctx);
-	let area: ChartRect = { x: pad, y: top, width: width - pad * 2, height: height - top - pad };
+	let area: ChartRect = { x: pad, y: top, width: width - pad * 2, height: height - top - pad - noteHeight(spec, fs) };
 	const seriesLegend = family === 'cartesian' || family === 'xy' || family === 'radar' || family === 'histogram';
 	const hasTrend = items.some((i) => i.shape === 'dash');
-	const showLegend = spec.legend.show && items.length > 0 && (!seriesLegend || spec.series.length > 1 || spec.series.some((s) => s.hidden) || hasTrend);
+	const showLegend = spec.legend.show && items.length > 0 && (!seriesLegend || chartVariesColors(spec) || spec.series.length > 1 || spec.series.some((s) => s.hidden) || hasTrend);
 	if (showLegend) area = layoutLegend(items, spec.legend.position, area, ctx, ctx.isSelected({ kind: 'legend' }));
 
 	const finish = (result: FamilyResult): ChartScene => {
+		if (result.plot.width > 0) {
+			if (chartAnnotationFamily(chartFamily(spec))) drawCallouts(ctx, result.plot);
+			else if (spec.referenceLines.length || spec.referenceBands.length || spec.series.some((s) => s.callouts))
+				ctx.warn('annotations-skipped', `Reference lines, bands and callouts are drawn on bar, line, area, scatter and bubble charts; this ${spec.type} chart leaves them out.`);
+		}
+		applyHighlight(ctx);
+		drawNote(ctx, pad);
 		if (options.readout) addReadout(ctx, options.readout, result.plot);
 		const kept = finalizeMarks(marks, width, height);
 		if (kept.length < marks.length) ctx.warn('values-skipped', `${marks.length - kept.length} mark${marks.length - kept.length === 1 ? ' was' : 's were'} left out: their values are not finite numbers.`);
@@ -168,7 +177,19 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 		case 'funnel':
 			return finish(layoutFunnel(ctx, area, visible[0]));
 		case 'treemap':
-			return finish(layoutTreemap(ctx, area, visible[0]));
+			return finish(spec.tree.length ? layoutTreemapTree(ctx, area, spec.series[0]) : layoutTreemap(ctx, area, visible[0]));
+		case 'sunburst':
+			return finish(layoutSunburst(ctx, area, spec.tree.length ? spec.series[0] : visible[0]));
+		case 'slope':
+			if (visible.length < 2) {
+				ctx.warn('type-fallback', 'A slope chart needs two series (before and after); it is drawn as a line chart until then.');
+				return finish(layoutCartesian(ctx, area, visible));
+			}
+			return finish(layoutSlope(ctx, area, visible));
+		case 'likert':
+			return finish(layoutLikert(ctx, area, visible));
+		case 'parliament':
+			return finish(layoutParliament(ctx, area, visible[0]));
 		case 'xy':
 			return finish(layoutXy(ctx, area, visible));
 		default:

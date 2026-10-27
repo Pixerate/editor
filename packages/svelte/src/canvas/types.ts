@@ -1,4 +1,5 @@
 import type { Node, Edge, XYPosition, Rect, ColorMode, Position } from '@xyflow/svelte';
+import type { DirectionalDisplacementOptions, ExplosionDisplacementStrategy, ReflowDisplacementOptions } from '@pixerate/editor/canvas';
 
 /**
  * Generic node interface representing an element on the canvas.
@@ -152,28 +153,13 @@ export interface NodeTransition<TNode extends CanvasNode = CanvasNode> {
 	total?: number;
 }
 
-/**
- * Displacement axis / direction.
- */
-export type DisplacementDirection = 'right' | 'left' | 'down' | 'up' | 'vertical';
-
-/**
- * Options for directional displacement calculation.
- */
-export interface DirectionalDisplacementOptions {
-	direction?: DisplacementDirection;
-	gap?: number;
-	spreadSiblingLanes?: boolean;
-	siblingTolerance?: number;
-	minY?: number;
-}
-
-/**
- * Options for Dagre reflow displacement calculation.
- */
-export interface ReflowDisplacementOptions extends CanvasLayoutOptions {
-	anchorNodeId: string;
-}
+// Displacement options live in core with the displacement math (one source of truth).
+export type {
+	DisplacementDirection,
+	DirectionalDisplacementOptions,
+	ReflowDisplacementOptions,
+	ExplosionDisplacementStrategy
+} from '@pixerate/editor/canvas';
 
 /**
  * Snapshot of canvas graph state prior to node explosion, enabling exact reversibility.
@@ -199,8 +185,7 @@ export interface ExplodeNodeOptions<
 	childNodes: TNode[];
 	childEdges?: TEdge[];
 	connectParentToChildren?: boolean | 'first' | 'all';
-	connectChildrenToDownstream?: boolean;
-	displacementStrategy?: 'directional' | 'dagre' | 'none';
+	displacementStrategy?: ExplosionDisplacementStrategy;
 	directionalOptions?: DirectionalDisplacementOptions;
 	reflowOptions?: Partial<ReflowDisplacementOptions>;
 	trajectory?: TrajectoryFunction;

@@ -243,6 +243,81 @@ describe("ChartInspector", () => {
     expect(q('[data-section="series"]')).toBeNull();
   });
 
+  it("edits the note, highlight, reference lines and bands, callouts and colour by category", async () => {
+    const controller = new ChartController({ spec: sales });
+    await render(<ChartInspector controller={controller} />);
+    await type(q<HTMLInputElement>('[data-option="note"]'), "Source: finance");
+    expect(controller.getSpec().note).toBe("Source: finance");
+    await type(q<HTMLInputElement>('[data-option="highlight"]'), "Q2, South");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    await type(q<HTMLInputElement>('[data-option="highlight"]'), "Nope");
+    expect(controller.getSpec().highlight).toEqual(["Q2", "South"]);
+    await act(async () => q('[data-option="referenceLine.add"]').click());
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 12, label: "Average" }]);
+    await type(q<HTMLInputElement>('[data-option="referenceLine.0.label"]'), "Target");
+    await type(q<HTMLInputElement>('[data-option="referenceLine.0.value"]'), "15");
+    expect(controller.getSpec().referenceLines).toEqual([{ value: 15, label: "Target" }]);
+    await act(async () => q('[data-option="referenceBand.add"]').click());
+    await type(q<HTMLInputElement>('[data-option="referenceBand.0.to"]'), "20");
+    expect(controller.getSpec().referenceBands[0].to).toBe(20);
+    await act(async () => q('[data-action="reference-band-delete"]').click());
+    expect(controller.getSpec().referenceBands).toEqual([]);
+    // A callout field appears for the selected point.
+    expect(q('[data-option="series.callout"]')).toBeNull();
+    await act(async () => controller.select({ kind: "point", seriesId: "north", index: 1 }));
+    await type(q<HTMLInputElement>('[data-option="series.callout"]'), "Best month");
+    expect(controller.getSeries("north")!.callouts).toEqual([null, "Best month", null]);
+    // Colour by category needs exactly one visible series.
+    expect(q('[data-option="varyColors"]')).toBeNull();
+    await act(async () => controller.updateSeries("south", { hidden: true }));
+    await act(async () => q<HTMLInputElement>('[data-option="varyColors"]').click());
+    expect(controller.getSpec().varyColors).toBe(true);
+    await act(async () => controller.setType("pie"));
+    expect(q('[data-section="annotations"]')).toBeNull();
+  });
+
+  it("sets Likert and parliament options", async () => {
+    const controller = new ChartController({ spec: { ...sales, type: "likert" } });
+    await render(<ChartInspector controller={controller} />);
+    await type(q<HTMLSelectElement>('[data-option="likertNeutral"]'), "separate");
+    await type(q<HTMLSelectElement>('[data-option="likertSort"]'), "positive");
+    expect(controller.getSpec()).toMatchObject({ likertNeutral: "separate", likertSort: "positive" });
+    expect(q('[data-option="parliamentArc"]')).toBeNull();
+    await act(async () => controller.setType("parliament"));
+    expect(q('[data-option="likertSort"]')).toBeNull();
+    await type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "20");
+    await type(q<HTMLInputElement>('[data-option="parliamentLabel"]'), "MPs");
+    expect(controller.getSpec()).toMatchObject({ parliamentMajority: 20, parliamentLabel: "MPs" });
+    await type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "");
+    expect(controller.getSpec().parliamentMajority).toBeNull();
+    await type(q<HTMLInputElement>('[data-option="parliamentArc"]'), "270", "change");
+    expect(controller.getSpec().parliamentArc).toBe(270);
+  });
+
+  it("edits grouped data as a table of names and values", async () => {
+    const controller = new ChartController({ spec: { ...sales, type: "treemap" } });
+    await render(<ChartDataGrid controller={controller} />);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+    await act(async () => q('[data-action="tree-from-table"]').click());
+    expect(controller.getSpec().tree).toEqual([{ name: "Q1", value: 12 }, { name: "Q2", value: 18 }, { name: "Q3", value: 9 }]);
+    expect(q("[data-chart-tree-grid]")).not.toBeNull();
+    await act(async () => q('[data-action="tree-add-level"]').click());
+    await type(q<HTMLInputElement>('[data-tree-cell="0:0"]'), "H1");
+    await type(q<HTMLInputElement>('[data-tree-cell="0:1"]'), "Jan");
+    expect(controller.getSpec().tree[0]).toEqual({ name: "H1", children: [{ name: "Jan", value: 12 }] });
+    await type(q<HTMLInputElement>('[data-tree-value="0"]'), "20");
+    expect(controller.getSpec().series[0].values[0]).toBe(20);
+    await type(q<HTMLInputElement>('[data-tree-value="1"]'), "lots");
+    expect(q<HTMLInputElement>('[data-tree-value="1"]').value).toBe("18");
+    await act(async () => q('[data-action="tree-add-row"]').click());
+    expect(qa("[data-tree-row]")).toHaveLength(4);
+    await act(async () => qa('[data-action="tree-remove-row"]')[3].click());
+    expect(qa("[data-tree-row]")).toHaveLength(3);
+    await act(async () => q('[data-action="tree-ungroup"]').click());
+    expect(controller.getSpec().tree).toEqual([]);
+    expect(q("[data-chart-tree-grid]")).toBeNull();
+  });
+
   it("sets radar rings and grid shape", async () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     await render(<ChartInspector controller={controller} />);

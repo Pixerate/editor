@@ -5,8 +5,10 @@ import { categoryFrame, toValueScale } from './layout-cartesian.js';
 import { arcPath, axisScale, contrastingTextColor, r2, truncate, type FamilyResult, type LayoutCtx } from './layout-shared.js';
 import { formatChartNumber, linearMap, stepDecimals } from './scale.js';
 import { chartSeriesColor, chartSliceColor } from './spec.js';
+import { shadeChartColor } from './color.js';
 import { chartBoxStats, chartHistogram, chartSquarify } from './stats.js';
-import type { ChartMark, ChartRect, ChartSelection, ChartSeries } from './types.js';
+import { chartTreeDepth, chartTreeFromSeries, chartTreeTotal } from './tree.js';
+import type { ChartMark, ChartRect, ChartSelection, ChartSeries, ChartTreeNode } from './types.js';
 
 const sliceColor = (ctx: LayoutCtx, series: ChartSeries, i: number) => series.pointColors?.[i] || chartSliceColor(ctx.spec, i);
 
@@ -368,3 +370,371 @@ export function layoutTreemap(ctx: LayoutCtx, area: ChartRect, series: ChartSeri
 }
 
 export type { ChartMark };
+
+/** Spreads label centres (sorted top to bottom) at least `gap` apart, kept within [top, bottom]. */
+function dodge(ys: number[], gap: number, top: number, bottom: number): number[] {
+	const out = [...ys];
+	for (let k = 1; k < out.length; k++) out[k] = Math.max(out[k], out[k - 1] + gap);
+	const over = out.length ? out[out.length - 1] - bottom : 0;
+	if (over > 0) for (let k = out.length - 1; k >= 0; k--) out[k] = Math.max(top, Math.min(out[k] - over, k < out.length - 1 ? out[k + 1] - gap : Infinity));
+	return out;
+}
+
+/** Slope: each category's value in the first series (left) joined to the second (right), labelled at both ends. */
+export function layoutSlope(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]): FamilyResult {
+	const { spec, theme, marks, fs, measure } = ctx;
+	const [a, b] = visible;
+	if (visible.length > 2) ctx.warn('values-skipped', `A slope chart joins two series; ${visible.length - 2} more ${visible.length === 3 ? 'is' : 'are'} not drawn.`);
+	const at = (s: ChartSeries, i: number) => {
+		const v = s.values[i];
+		return v !== null && Number.isFinite(v) ? v : null;
+	};
+	const all = spec.categories.flatMap((_, i) => [at(a, i), at(b, i)]).filter((v): v is number => v !== null);
+	const lo = Math.min(...all);
+	const hi = Math.max(...all);
+	const labelsOn = a.dataLabels ?? b.dataLabels ?? spec.dataLabels;
+	const fmtA = (v: number) => formatChartNumber(v, a.format ?? spec.yAxis.format);
+	const fmtB = (v: number) => formatChartNumber(v, b.format ?? spec.yAxis.format);
+	const leftText = (i: number) => {
+		const v = at(a, i);
+		return labelsOn && v !== null ? `${spec.categories[i]}  ${fmtA(v)}` : spec.categories[i];
+	};
+	const rightText = (i: number) => {
+		const v = at(b, i);
+		return labelsOn && v !== null ? `${fmtB(v)}  ${spec.categories[i]}` : spec.categories[i];
+	};
+	const maxW = area.width * 0.3;
+	const leftW = Math.min(maxW, Math.max(0, ...spec.categories.map((_, i) => measure(leftText(i), fs))));
+	const rightW = Math.min(maxW, Math.max(0, ...spec.categories.map((_, i) => measure(rightText(i), fs))));
+	const headerH = fs * 1.8;
+	const plot: ChartRect = { x: area.x + leftW + 10, y: area.y + headerH + fs / 2, width: Math.max(1, area.width - leftW - rightW - 20), height: Math.max(1, area.height - headerH - fs) };
+	const scale = axisScale(lo, hi, plot.height, spec.yAxis, ctx.options.valueDomain, true);
+	const yOf = (v: number) => linearMap(Math.min(scale.max, Math.max(scale.min, v)), [scale.min, scale.max], [plot.y + plot.height, plot.y]);
+	const xL = plot.x;
+	const xR = plot.x + plot.width;
+	// Column captions: the series names, which say what "before" and "after" are.
+	for (const [s, x, anchor] of [[a, xL, 'end'], [b, xR, 'start']] as const) {
+		const target: ChartSelection = { kind: 'series', seriesId: s.id };
+		const selected = ctx.seriesSelected(s.id);
+		marks.push({ kind: 'line', key: `axis-slope-${s.id}`, role: 'axis', x1: x, y1: plot.y, x2: x, y2: plot.y + plot.height, stroke: theme.axis, strokeWidth: 1, target });
+		marks.push({ kind: 'text', key: `axis-title-${s.id}`, role: 'axis-title', x, y: area.y, text: truncate(s.name, maxW + plot.width / 2, fs + 1, measure), anchor: anchor === 'end' ? 'end' : 'start', baseline: 'top', size: fs + 1, weight: 600, fill: selected ? theme.selection : theme.text, target, selected });
+	}
+	const leftLabels: { i: number; y: number }[] = [];
+	const rightLabels: { i: number; y: number }[] = [];
+	spec.categories.forEach((_, i) => {
+		const va = at(a, i);
+		const vb = at(b, i);
+		const color = sliceColor(ctx, a, i);
+		const catTarget: ChartSelection = { kind: 'category', index: i };
+		const catSelected = ctx.isSelected(catTarget);
+		if (va !== null && vb !== null)
+			marks.push({ kind: 'line', key: `line-slope-${i}`, role: 'line', x1: xL, y1: yOf(va), x2: xR, y2: yOf(vb), stroke: color, strokeWidth: catSelected ? 3.5 : 2, target: catTarget, selected: catSelected });
+		for (const [s, v, x, labels] of [[a, va, xL, leftLabels], [b, vb, xR, rightLabels]] as const) {
+			if (v === null) continue;
+			const target: ChartSelection = { kind: 'point', seriesId: s.id, index: i };
+			const selected = ctx.isSelected(target);
+			marks.push({ kind: 'circle', key: `point-${s.id}-${i}`, role: 'point', cx: x, cy: yOf(v), r: 4, fill: color, stroke: theme.surface, strokeWidth: 1.5, target, selected: selected || catSelected || ctx.seriesSelected(s.id) });
+			if (selected) marks.push({ kind: 'circle', key: `point-${s.id}-${i}-selection`, role: 'selection', cx: x, cy: yOf(v), r: 7.5, fill: 'none', stroke: theme.selection, strokeWidth: 1.5 });
+			labels.push({ i, y: yOf(v) });
+		}
+	});
+	// Labels at both ends, pushed apart where values are close.
+	let moved = 0;
+	for (const [labels, x, anchor, text, width] of [[leftLabels, xL - 8, 'end', leftText, leftW], [rightLabels, xR + 8, 'start', rightText, rightW]] as const) {
+		labels.sort((p, q) => p.y - q.y);
+		const ys = dodge(labels.map((l) => l.y), fs * 1.15, plot.y - fs / 2, plot.y + plot.height + fs / 2);
+		labels.forEach((l, k) => {
+			if (Math.abs(ys[k] - l.y) > 0.5) moved++;
+			const target: ChartSelection = { kind: 'category', index: l.i };
+			const selected = ctx.isSelected(target);
+			marks.push({ kind: 'text', key: `label-slope-${anchor === 'end' ? 'left' : 'right'}-${l.i}`, role: 'data-label', x, y: ys[k], text: truncate(text(l.i), width, fs, measure), anchor, baseline: 'middle', size: fs, fill: selected ? theme.selection : theme.text, weight: selected ? 600 : undefined, target, selected });
+		});
+	}
+	if (moved) ctx.warn('labels-truncated', `${moved} slope label${moved === 1 ? ' was' : 's were'} moved off its point so the labels do not overlap.`);
+	return { plot, valueScale: { axis: 'y', domain: [scale.min, scale.max], range: [plot.y + plot.height, plot.y], ticks: scale.ticks } };
+}
+
+/**
+ * Likert: one diverging bar per category (a question), the series (answers) from most negative
+ * to most positive, as shares of the question's total. Negative answers run left of the centre
+ * line, positive ones right; with an odd number of answers the middle one straddles the centre
+ * (`likertNeutral: 'split'`) or is drawn in its own column (`separate`).
+ */
+export function layoutLikert(ctx: LayoutCtx, area: ChartRect, visible: ChartSeries[]): FamilyResult {
+	const { spec, theme, marks, fs, measure } = ctx;
+	const n = visible.length;
+	const side = Math.floor(n / 2);
+	const neutral = n % 2 === 1 ? side : -1;
+	const separate = neutral >= 0 && spec.likertNeutral === 'separate';
+	if (spec.likertNeutral === 'separate' && neutral < 0) ctx.warn('type-fallback', 'A separate neutral column needs an odd number of answers; the middle answer is not set apart.');
+	const shares = spec.categories.map((_, i) => {
+		const raw = visible.map((s) => {
+			const v = s.values[i];
+			return v !== null && Number.isFinite(v) ? Math.max(0, v) : 0;
+		});
+		const total = raw.reduce((t, v) => t + v, 0);
+		return raw.map((v) => (total ? v / total : 0));
+	});
+	const sum = (p: number[], from: number, to: number) => p.slice(from, to).reduce((t, v) => t + v, 0);
+	const negOf = (p: number[]) => sum(p, 0, side) + (neutral >= 0 && !separate ? p[neutral] / 2 : 0);
+	const posOf = (p: number[]) => sum(p, n - side, n) + (neutral >= 0 && !separate ? p[neutral] / 2 : 0);
+	const rows = spec.categories.map((_, i) => i);
+	if (spec.likertSort === 'positive') rows.sort((p, q) => sum(shares[q], n - side, n) - sum(shares[p], n - side, n));
+	else if (spec.likertSort === 'negative') rows.sort((p, q) => sum(shares[q], 0, side) - sum(shares[p], 0, side));
+	const extent = Math.max(0.01, ...shares.map((p) => Math.max(negOf(p), posOf(p))));
+	const labelW = spec.xAxis.show ? Math.min(area.width * 0.35, Math.max(0, ...spec.categories.map((c) => measure(c, fs)))) + 10 : 4;
+	const neutralW = separate ? Math.max(40, area.width * 0.18) : 0;
+	const axisH = spec.yAxis.show ? fs * 1.6 : 2;
+	const headH = separate ? fs * 1.5 : 0;
+	const plot: ChartRect = { x: area.x + labelW, y: area.y + headH, width: Math.max(1, area.width - labelW - (separate ? neutralW + 14 : 0)), height: Math.max(1, area.height - axisH - headH) };
+	const half = axisScale(0, extent, plot.width / 2, { ...spec.yAxis, min: 0, max: null, scale: undefined, reverse: undefined });
+	const m = half.max;
+	const xOf = (v: number) => plot.x + ((v + m) / (2 * m)) * plot.width;
+	const percent = { style: 'percent' as const, decimals: spec.yAxis.format.decimals };
+	const ticks = [...half.ticks.slice(1).map((t) => -t).reverse(), ...half.ticks];
+	const axisTarget: ChartSelection = { kind: 'axis', axis: 'y' };
+	ticks.forEach((t, k) => {
+		const x = xOf(t);
+		if (spec.yAxis.gridlines && t !== 0) marks.push({ kind: 'line', key: `grid-y-${k}`, role: 'grid', x1: x, y1: plot.y, x2: x, y2: plot.y + plot.height, stroke: theme.grid, strokeWidth: 1 });
+		if (spec.yAxis.show) marks.push({ kind: 'text', key: `tick-y-${k}`, role: 'tick-label', x, y: plot.y + plot.height + 6, text: formatChartNumber(Math.abs(t), percent, percent.decimals ?? stepDecimals(half.step * 100)), anchor: 'middle', baseline: 'top', size: fs, fill: theme.mutedText, target: axisTarget });
+	});
+	const band = plot.height / Math.max(1, rows.length);
+	const barH = Math.max(2, band * (1 - Math.min(0.9, spec.gapWidth)));
+	const neutralMax = separate ? Math.max(0.01, ...shares.map((p) => p[neutral])) : 1;
+	const neutralX = plot.x + plot.width + 14;
+	if (separate) {
+		const s = visible[neutral];
+		marks.push({ kind: 'text', key: 'likert-neutral-title', role: 'axis-title', x: neutralX, y: area.y, text: truncate(s.name, neutralW, fs, measure), anchor: 'start', baseline: 'top', size: fs, weight: 600, fill: theme.mutedText, target: { kind: 'series', seriesId: s.id } });
+	}
+	let hidden = 0;
+	rows.forEach((i, r) => {
+		const p = shares[i];
+		const y = plot.y + r * band + (band - barH) / 2;
+		const catTarget: ChartSelection = { kind: 'category', index: i };
+		const catSelected = ctx.isSelected(catTarget);
+		if (spec.xAxis.show)
+			marks.push({ kind: 'text', key: `tick-x-${i}`, role: 'tick-label', x: plot.x - 8, y: y + barH / 2, text: truncate(spec.categories[i], labelW - 10, fs, measure), anchor: 'end', baseline: 'middle', size: fs, fill: catSelected ? theme.selection : theme.mutedText, target: catTarget, selected: catSelected });
+		const segment = (j: number, x0: number, x1: number, key: string) => {
+			const s = visible[j];
+			if (x1 - x0 <= 0) return;
+			const target: ChartSelection = { kind: 'point', seriesId: s.id, index: i };
+			const selected = ctx.isSelected(target);
+			const fill = s.pointColors?.[i] || chartSeriesColor(spec, spec.series.indexOf(s));
+			const rect = { x: x0, y, width: x1 - x0, height: barH };
+			marks.push({ kind: 'rect', key, role: 'bar', ...rect, fill, target, selected: selected || ctx.seriesSelected(s.id) || catSelected });
+			if (selected) ctx.outline(`${key}-selection`, { x: rect.x - 2, y: rect.y - 2, width: rect.width + 4, height: rect.height + 4 });
+			if (!(s.dataLabels ?? spec.dataLabels)) return;
+			const text = formatChartNumber(p[j], percent, percent.decimals ?? 0);
+			if (measure(text, fs - 1) + 6 > rect.width || barH < fs) {
+				hidden++;
+				return;
+			}
+			marks.push({ kind: 'text', key: `label-${s.id}-${i}`, role: 'data-label', x: rect.x + rect.width / 2, y: y + barH / 2, text, anchor: 'middle', baseline: 'middle', size: fs - 1, fill: contrastingTextColor(fill), target });
+		};
+		let cursor = -negOf(p);
+		visible.forEach((s, j) => {
+			if (separate && j === neutral) return;
+			segment(j, xOf(cursor), xOf(cursor + p[j]), `bar-${s.id}-${i}`);
+			cursor += p[j];
+		});
+		if (separate) segment(neutral, neutralX, neutralX + (p[neutral] / neutralMax) * neutralW, `bar-${visible[neutral].id}-${i}`);
+	});
+	marks.push({ kind: 'line', key: 'axis-likert-centre', role: 'axis', x1: xOf(0), y1: plot.y, x2: xOf(0), y2: plot.y + plot.height, stroke: theme.axis, strokeWidth: 1.25, target: axisTarget });
+	if (hidden) ctx.warn('data-labels-hidden', `${hidden} data label${hidden === 1 ? '' : 's'} did not fit and ${hidden === 1 ? 'is' : 'are'} hidden.`);
+	return { plot, percent: true };
+}
+
+/** Parliament: the first series as seats in a hemicycle (rows of dots), one colour per category, with the majority line and the total. */
+export function layoutParliament(ctx: LayoutCtx, area: ChartRect, series: ChartSeries): FamilyResult {
+	const { spec, theme, marks, fs } = ctx;
+	const seats = spec.categories.map((_, i) => {
+		const v = series.values[i];
+		return v !== null && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+	});
+	if (series.values.some((v) => v !== null && Number.isFinite(v) && (v < 0 || !Number.isInteger(v)))) ctx.warn('values-skipped', 'Seats are whole numbers of 0 or more; other values were rounded.');
+	const total = seats.reduce((t, v) => t + v, 0);
+	const empty = (text: string) => {
+		marks.push({ kind: 'text', key: 'empty', role: 'empty', x: area.x + area.width / 2, y: area.y + area.height / 2, text, anchor: 'middle', baseline: 'middle', size: fs + 1, fill: theme.mutedText });
+		return { plot: area };
+	};
+	if (!total) return empty('No seats');
+	if (total > 2000) return empty('Too many seats to draw (more than 2,000)');
+	const arc = (spec.parliamentArc * Math.PI) / 180;
+	const start = Math.PI / 2 + arc / 2;
+	// The unit sector's bounds (the centre included) fit it into the area.
+	const angles = [start, start - arc, ...[0, 0.5, 1, 1.5, 2, 2.5].map((k) => k * Math.PI).filter((t) => t < start && t > start - arc)];
+	const xs = [0, ...angles.map(Math.cos)];
+	const ys = [0, ...angles.map(Math.sin)];
+	const pad = fs * 1.2;
+	const radius = Math.max(8, Math.min((area.width - pad * 2) / (Math.max(...xs) - Math.min(...xs)), (area.height - pad * 2) / (Math.max(...ys) - Math.min(...ys))));
+	const cx = area.x + area.width / 2 - ((Math.max(...xs) + Math.min(...xs)) / 2) * radius;
+	const cy = area.y + area.height / 2 + ((Math.max(...ys) + Math.min(...ys)) / 2) * radius;
+	const inner = radius * 0.4;
+	// Fewest rows that space seats along each arc about as far apart as the rows are (more rows: closer rows, wider spacing).
+	let rows = 1;
+	for (; rows < 60; rows++) {
+		const gap = (radius - inner) / rows;
+		const length = Array.from({ length: rows }, (_, k) => (inner + gap * (k + 0.5)) * arc).reduce((t, l) => t + l, 0);
+		if (length / total >= gap * 0.9) break;
+	}
+	const gap = (radius - inner) / rows;
+	const radii = Array.from({ length: rows }, (_, k) => inner + gap * (k + 0.5));
+	const lengths = radii.map((r) => r * arc);
+	const all = lengths.reduce((t, l) => t + l, 0);
+	// Seats per row in proportion to its length (largest remainder).
+	const exact = lengths.map((l) => (l / all) * total);
+	const counts = exact.map(Math.floor);
+	exact.map((e, k) => ({ k, rest: e - counts[k] })).sort((p, q) => q.rest - p.rest).slice(0, total - counts.reduce((t, c) => t + c, 0)).forEach(({ k }) => counts[k]++);
+	const places: { angle: number; r: number }[] = [];
+	radii.forEach((r, k) => {
+		for (let j = 0; j < counts[k]; j++) places.push({ angle: counts[k] === 1 ? Math.PI / 2 : start - (arc * (j + 0.5)) / counts[k], r });
+	});
+	// Fill from the left: each group takes the next seats by angle.
+	places.sort((p, q) => q.angle - p.angle || p.r - q.r);
+	const dot = Math.max(1, Math.min(gap, all / total) * 0.42);
+	let next = 0;
+	seats.forEach((count, i) => {
+		const target: ChartSelection = { kind: 'point', seriesId: series.id, index: i };
+		const selected = ctx.isSelected(target) || ctx.isSelected({ kind: 'category', index: i }) || ctx.seriesSelected(series.id);
+		const fill = sliceColor(ctx, series, i);
+		for (let k = 0; k < count; k++, next++) {
+			const { angle, r } = places[next];
+			marks.push({ kind: 'circle', key: `seat-${i}-${k}`, role: 'point', cx: cx + r * Math.cos(angle), cy: cy - r * Math.sin(angle), r: dot, fill, ...(selected ? { stroke: theme.selection, strokeWidth: 1.5 } : {}), target, selected });
+		}
+	});
+	const majority = spec.parliamentMajority ?? Math.floor(total / 2) + 1;
+	if (majority <= total) {
+		const angle = start - arc * (majority / total);
+		const r0 = inner - gap * 0.3;
+		const r1 = radius + gap * 0.3;
+		marks.push({ kind: 'line', key: 'majority-line', role: 'reference-line', x1: cx + r0 * Math.cos(angle), y1: cy - r0 * Math.sin(angle), x2: cx + r1 * Math.cos(angle), y2: cy - r1 * Math.sin(angle), stroke: theme.text, strokeWidth: 1.25, dash: '4 3', opacity: 0.8 });
+		const lr = r1 + fs * 0.4;
+		const lx = cx + lr * Math.cos(angle);
+		const ly = cy - lr * Math.sin(angle);
+		marks.push({ kind: 'text', key: 'majority-label', role: 'reference-label', x: lx, y: ly, text: `Majority ${majority}`, anchor: Math.abs(Math.cos(angle)) < 0.25 ? 'middle' : Math.cos(angle) > 0 ? 'start' : 'end', baseline: Math.sin(angle) >= 0 ? 'bottom' : 'top', size: fs - 1, weight: 500, fill: theme.text });
+	} else ctx.warn('values-skipped', `The majority of ${majority} is more than the ${total} seats; the majority line is not drawn.`);
+	if (inner > fs * 2.2) {
+		const size = Math.min(theme.titleSize + 8, inner * 0.6);
+		// A half circle has its centre on the base line: the total sits just above it.
+		const ty = spec.parliamentArc <= 200 ? cy - size * 0.2 : cy;
+		const totalTarget: ChartSelection = { kind: 'series', seriesId: series.id };
+		marks.push({ kind: 'text', key: 'parliament-total', role: 'data-label', x: cx, y: ty, text: formatChartNumber(total, {}), anchor: 'middle', baseline: spec.parliamentArc <= 200 ? 'bottom' : 'middle', size, weight: 700, fill: theme.text, target: totalTarget });
+		marks.push({ kind: 'text', key: 'parliament-caption', role: 'data-label', x: cx, y: spec.parliamentArc <= 200 ? ty + 2 : ty + size * 0.6, text: spec.parliamentLabel || 'seats', anchor: 'middle', baseline: 'top', size: fs, fill: theme.mutedText, target: totalTarget });
+	}
+	return { plot: { x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2 } };
+}
+
+/** The colour of a tree node: its own, else its top-level group's palette colour, shaded by `shade`. */
+function treeColor(ctx: LayoutCtx, series: ChartSeries | undefined, node: ChartTreeNode, group: number, base: string | null, shade: number): string {
+	if (node.color) return node.color;
+	if (base === null) return series?.pointColors?.[group] || chartSliceColor(ctx.spec, group);
+	return shadeChartColor(base, shade);
+}
+
+/**
+ * Treemap of `spec.tree`: each group a rectangle sized by its total, its children squarified
+ * inside under a header with its name, down to the leaves. Everything in a top-level group is
+ * drawn in its colour (leaves in lighter and darker shades) and selects that category.
+ */
+export function layoutTreemapTree(ctx: LayoutCtx, area: ChartRect, series: ChartSeries | undefined): FamilyResult {
+	const { spec, marks, theme, fs, measure } = ctx;
+	const format = series?.format ?? spec.yAxis.format;
+	const labelsOn = series?.dataLabels ?? true;
+	let unlabelled = 0;
+	const draw = (nodes: readonly ChartTreeNode[], rect: ChartRect, key: string, group: number | null, base: string | null) => {
+		const rects = chartSquarify(nodes.map(chartTreeTotal), rect);
+		nodes.forEach((node, k) => {
+			const r = rects[k];
+			if (r.width <= 0.5 || r.height <= 0.5) return;
+			const g = group ?? k;
+			const target: ChartSelection = { kind: 'category', index: g };
+			const selected = ctx.isSelected(target) || ctx.isSelected({ kind: 'point', seriesId: series?.id ?? '', index: g });
+			const id = `${key}-${k}`;
+			// Leaves vary a little around their group's colour so neighbours stay apart.
+			const fill = treeColor(ctx, series, node, g, base, base === null ? 0 : ((k % 4) - 1.5) * 0.14);
+			if (node.children) {
+				const header = r.height > fs * 3.2 && r.width > fs * 3 ? fs * 1.5 : 0;
+				marks.push({ kind: 'rect', key: `group-${id}`, role: 'cell', ...r, fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2.5 : 2, target, selected });
+				if (header) marks.push({ kind: 'text', key: `label-group-${id}`, role: 'data-label', x: r.x + 5, y: r.y + 4, text: truncate(node.name, r.width - 10, fs, measure), anchor: 'start', baseline: 'top', size: fs, weight: 700, fill: contrastingTextColor(fill), target });
+				const inner = { x: r.x + 2, y: r.y + (header || 2), width: Math.max(0, r.width - 4), height: Math.max(0, r.height - (header || 2) - 2) };
+				draw(node.children, inner, id, g, base ?? fill);
+				return;
+			}
+			marks.push({ kind: 'rect', key: `cell-${id}`, role: 'cell', ...r, fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2.5 : 1, target, selected });
+			if (!labelsOn) return;
+			const room = r.width - 8;
+			if (room < fs * 2 || r.height < fs * 1.5) {
+				unlabelled++;
+				return;
+			}
+			const color = contrastingTextColor(fill);
+			marks.push({ kind: 'text', key: `label-cell-${id}`, role: 'data-label', x: r.x + 4, y: r.y + 4, text: truncate(node.name, room, fs, measure), anchor: 'start', baseline: 'top', size: fs, weight: 600, fill: color, target });
+			if (r.height >= fs * 3) marks.push({ kind: 'text', key: `label-value-${id}`, role: 'data-label', x: r.x + 4, y: r.y + 6 + fs * 1.2, text: truncate(formatChartNumber(node.value ?? 0, format), room, fs - 1, measure), anchor: 'start', baseline: 'top', size: fs - 1, fill: color, target });
+		});
+	};
+	draw(spec.tree, area, 'n', null, null);
+	if (unlabelled) ctx.warn('data-labels-hidden', `${unlabelled} treemap cell${unlabelled === 1 ? ' is' : 's are'} too small for a label.`);
+	return { plot: area };
+}
+
+/**
+ * Sunburst: `spec.tree` as rings from the centre out, each node an arc sized by its total
+ * inside its parent's arc (without a tree, the first series as one ring). Labels go on arcs
+ * wide enough for them; the total and `sunburstLabel` sit in the centre.
+ */
+export function layoutSunburst(ctx: LayoutCtx, area: ChartRect, series: ChartSeries | undefined): FamilyResult {
+	const { spec, marks, theme, fs, measure } = ctx;
+	const tree = spec.tree.length ? spec.tree : chartTreeFromSeries(spec.categories, series?.values ?? []);
+	const indexOf = new Map(spec.categories.map((c, i) => [c.trim() || `${i + 1}`, i] as const));
+	const depth = chartTreeDepth(tree);
+	const total = tree.reduce((t, n) => t + chartTreeTotal(n), 0);
+	const cx = area.x + area.width / 2;
+	const cy = area.y + area.height / 2;
+	const outer = Math.max(8, Math.min(area.width, area.height) / 2 - 4);
+	const plot = { x: cx - outer, y: cy - outer, width: outer * 2, height: outer * 2 };
+	if (!(total > 0)) {
+		marks.push({ kind: 'text', key: 'empty', role: 'empty', x: cx, y: cy, text: 'No positive values', anchor: 'middle', baseline: 'middle', size: fs + 1, fill: theme.mutedText });
+		return { plot };
+	}
+	const hole = outer * 0.28;
+	const ring = (outer - hole) / Math.max(1, depth);
+	const format = series?.format ?? spec.yAxis.format;
+	let unlabelled = 0;
+	const walk = (nodes: readonly ChartTreeNode[], start: number, sweep: number, level: number, key: string, group: number | null, base: string | null) => {
+		const sum = nodes.reduce((t, n) => t + chartTreeTotal(n), 0);
+		let at = start;
+		nodes.forEach((node, k) => {
+			const value = chartTreeTotal(node);
+			if (!(value > 0) || !sum) return;
+			const a0 = at;
+			const a1 = at + (sweep * value) / sum;
+			at = a1;
+			const g = group ?? indexOf.get(node.name) ?? k;
+			const target: ChartSelection = { kind: 'category', index: g };
+			const selected = ctx.isSelected(target) || ctx.isSelected({ kind: 'point', seriesId: series?.id ?? '', index: g });
+			const fill = treeColor(ctx, series, node, g, base, 0.22 * level);
+			const id = `${key}-${k}`;
+			const r0 = hole + ring * level;
+			const r1 = r0 + ring;
+			marks.push({ kind: 'path', key: `slice-${id}`, role: 'slice', d: arcPath(cx, cy, r1, r0, a0, a1), fill, stroke: selected ? theme.selection : theme.surface, strokeWidth: selected ? 2 : 1, target, selected });
+			const mid = (a0 + a1) / 2;
+			const rm = (r0 + r1) / 2;
+			const text = node.name;
+			const width = measure(text, fs - 1);
+			// Horizontal text fits where the arc's chord at mid radius is wider than the label.
+			if (ring >= fs * 1.3 && 2 * rm * Math.sin(Math.min(Math.PI / 2, (a1 - a0) / 2)) >= width + 6) marks.push({ kind: 'text', key: `label-slice-${id}`, role: 'data-label', x: cx + rm * Math.sin(mid), y: cy - rm * Math.cos(mid), text, anchor: 'middle', baseline: 'middle', size: fs - 1, weight: level === 0 ? 600 : undefined, fill: contrastingTextColor(fill), target });
+			else unlabelled++;
+			if (node.children) walk(node.children, a0, a1 - a0, level + 1, id, g, base ?? fill);
+		});
+	};
+	walk(tree, 0, Math.PI * 2, 0, 'n', null, null);
+	if (unlabelled) ctx.warn('data-labels-hidden', `${unlabelled} sunburst arc${unlabelled === 1 ? ' is' : 's are'} too narrow for a label.`);
+	if (hole > fs * 2) {
+		const size = Math.min(theme.titleSize + 4, hole * 0.45);
+		const centre: ChartSelection | undefined = series ? { kind: 'series', seriesId: series.id } : undefined;
+		const caption = spec.sunburstLabel;
+		marks.push({ kind: 'text', key: 'sunburst-total', role: 'data-label', x: cx, y: caption ? cy - 2 : cy, text: formatChartNumber(total, format), anchor: 'middle', baseline: caption ? 'bottom' : 'middle', size, weight: 700, fill: theme.text, ...(centre ? { target: centre } : {}) });
+		if (caption) marks.push({ kind: 'text', key: 'sunburst-caption', role: 'data-label', x: cx, y: cy + 2, text: truncate(caption, hole * 1.8, fs - 1, measure), anchor: 'middle', baseline: 'top', size: fs - 1, fill: theme.mutedText, ...(centre ? { target: centre } : {}) });
+	}
+	return { plot };
+}

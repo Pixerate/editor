@@ -1,7 +1,7 @@
 // Portions ported from gridcraft-main/crates/chart/src/render.rs (`histogram` binning, `quantile` and
 // `box_whisker` statistics, `squarify` treemap layout, `decimate`) (MIT OR Apache-2.0, © ArtCraft Team and
 // contributors). See THIRD_PARTY_NOTICES.md.
-import type { ChartRect, ChartValue } from './types.js';
+import type { ChartRect, ChartReferenceBand, ChartReferenceLine, ChartSpec, ChartValue } from './types.js';
 
 export interface ChartHistogramBin {
 	/** Lower edge (exclusive, except for the first bin). */
@@ -56,6 +56,25 @@ export function chartQuantile(sorted: readonly number[], q: number): number {
 	const a = sorted[i];
 	const b = sorted[i + 1] ?? a;
 	return a + (b - a) * (pos - i);
+}
+
+const roundish = (n: number) => Number(n.toPrecision(3));
+
+/**
+ * Starting points for a new reference line and band, from the visible values on the primary
+ * axis: a line at their average and a band over their middle half (first to third quartile).
+ */
+export function suggestChartReferences(spec: Pick<ChartSpec, 'series'>): { line: ChartReferenceLine; band: ChartReferenceBand } {
+	const values = spec.series
+		.filter((s) => !s.hidden && s.axis !== 'secondary')
+		.flatMap((s) => s.values)
+		.filter((v): v is number => v !== null && Number.isFinite(v))
+		.sort((a, b) => a - b);
+	if (!values.length) return { line: { value: 0, label: 'Target' }, band: { from: 0, to: 1, label: 'Target range' } };
+	const mean = values.reduce((t, v) => t + v, 0) / values.length;
+	const lo = roundish(chartQuantile(values, 0.25));
+	const hi = roundish(chartQuantile(values, 0.75));
+	return { line: { value: roundish(mean), label: 'Average' }, band: { from: lo, to: hi > lo ? hi : lo + 1, label: 'Middle half' } };
 }
 
 export interface ChartBoxStats {

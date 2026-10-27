@@ -44,7 +44,7 @@ import { TokenStore, createTokensEditorDocument } from '../src/tokens';
 import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
 import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
-import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider } from '../src/canvas';
 import { HistoryManager } from '../src/history';
 import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider, createVideoDialogueToolProvider, createVideoMusicToolProvider } from '../src/video-editor';
@@ -127,6 +127,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCanvasComponentToolProvider({ addVariant: () => {}, removeVariant: () => {} } as any)),
 			...toolNames(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {} }))),
 			...toolNames(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] })),
+			...toolNames(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }))),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
 			...commandIds(createDrawCommands(stub)),
@@ -246,7 +247,8 @@ const FACTORIES: Record<string, string> = {
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',
-	createCanvasEffectsToolProvider: 'pixerate-canvas'
+	createCanvasEffectsToolProvider: 'pixerate-canvas',
+	createCanvasExplosionToolProvider: 'pixerate-canvas'
 };
 
 function walk(dir: string): string[] {
