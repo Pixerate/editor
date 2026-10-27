@@ -356,6 +356,24 @@ export const IMAGE_CROP_PRESETS: readonly ImageCropPreset[] = [
   { id: '9:16', label: '9:16', aspectRatio: 9 / 16 },
 ];
 
+export interface CanvasSizePreset {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  aspectRatio?: string;
+}
+
+/** Standard composition and canvas size presets. */
+export const CANVAS_SIZE_PRESETS: readonly CanvasSizePreset[] = [
+  { id: 'square', label: 'Square (1:1)', width: 1080, height: 1080, aspectRatio: '1:1' },
+  { id: 'landscape-16-9', label: 'Landscape (16:9)', width: 1920, height: 1080, aspectRatio: '16:9' },
+  { id: 'portrait-9-16', label: 'Story / Reel (9:16)', width: 1080, height: 1920, aspectRatio: '9:16' },
+  { id: 'social-4-5', label: 'Portrait (4:5)', width: 1080, height: 1350, aspectRatio: '4:5' },
+  { id: 'standard-4-3', label: 'Standard (4:3)', width: 1440, height: 1080, aspectRatio: '4:3' },
+  { id: 'banner-3-1', label: 'Header / Banner (3:1)', width: 1500, height: 500, aspectRatio: '3:1' },
+];
+
 /** Numeric controls for depth-mask near/far threshold range. */
 export const DEPTH_MASK_CONTROLS: readonly ControlSpec[] = [
   {

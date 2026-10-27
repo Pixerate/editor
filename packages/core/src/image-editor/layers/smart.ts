@@ -524,7 +524,7 @@ export function offsetSmartObject(layers: readonly ImageLayer[], id: string, dx:
 // ---------------------------------------------------------------------------
 
 /** Moves a layer (and everything in it) by whole pixels, for nesting it in contents. */
-function translateLayer(layer: ImageLayer, dx: number, dy: number): ImageLayer {
+export function translateLayer(layer: ImageLayer, dx: number, dy: number): ImageLayer {
   if (!dx && !dy) return layer;
   const moveMask = (m: RasterMask | undefined): RasterMask | undefined => {
     if (!m) return m;

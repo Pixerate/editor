@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { ImageEditorController, dropPlacement, dropZone, layerMenu, layerPanelRows, runLayerMenuAction, type GroupLayer } from '../src/image-editor';
+import {
+  ImageEditorController,
+  dropPlacement,
+  dropZone,
+  layerMenu,
+  layerPanelRows,
+  runLayerMenuAction,
+  newLayerOptions,
+  addLayerOfKind,
+  layerPanels,
+  CANVAS_SIZE_PRESETS,
+  type GroupLayer,
+} from '../src/image-editor';
 
 function setup() {
   const fake = { width: 20, height: 10, naturalWidth: 20, naturalHeight: 10 } as unknown as HTMLImageElement;
@@ -49,5 +61,43 @@ describe('layers panel view model', () => {
     expect(await runLayerMenuAction(c, 'merge-down')).toBeNull();
     expect(c.getLayers()).toHaveLength(1);
     expect(await runLayerMenuAction(c, 'via-copy')).toMatch(/Nothing is selected/);
+  });
+
+  it('provides newLayerOptions and addLayerOfKind', async () => {
+    const c = setup();
+    const opts = newLayerOptions(c);
+    expect(opts.some((o) => o.id === 'pixel')).toBe(true);
+    expect(opts.some((o) => o.id === 'text')).toBe(true);
+    expect(opts.some((o) => o.id === 'shape-rect')).toBe(true);
+    expect(opts.some((o) => o.id === 'adjustment-curves')).toBe(true);
+
+    const pxId = await addLayerOfKind(c, 'pixel', { name: 'P1' });
+    expect(c.getLayer(pxId)?.name).toBe('P1');
+
+    const shapeId = await addLayerOfKind(c, 'shape-rect', { name: 'R1' });
+    expect(c.getLayer(shapeId)?.type).toBe('shape');
+
+    const adjId = await addLayerOfKind(c, 'adjustment-curves');
+    expect(c.getLayer(adjId)?.type).toBe('adjustment');
+  });
+
+  it('describes layer panels per layer type', async () => {
+    const c = setup();
+    expect(layerPanels(null)).toEqual([
+      { id: 'canvas-size', title: 'Composition Size' },
+      { id: 'selection', title: 'Selection' },
+    ]);
+
+    const pxId = c.addPixelLayer({ name: 'Pixel' });
+    const pxPanels = layerPanels(c.getLayer(pxId));
+    expect(pxPanels.map((p) => p.id)).toContain('properties');
+    expect(pxPanels.map((p) => p.id)).toContain('paint');
+    expect(pxPanels.map((p) => p.id)).toContain('effects');
+
+    const adjId = c.addAdjustmentLayer('curves');
+    const adjPanels = layerPanels(c.getLayer(adjId));
+    expect(adjPanels.map((p) => p.id)).toContain('adjustment');
+
+    expect(CANVAS_SIZE_PRESETS.length).toBeGreaterThan(0);
   });
 });

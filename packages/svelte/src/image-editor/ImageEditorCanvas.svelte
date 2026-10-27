@@ -86,8 +86,10 @@
     locate?: (ref: PlaybackRef) => PlaybackRect | null;
     /** Your own element for a playback ref, anywhere on the page; its box is mapped to document pixels. */
     locateElement?: (ref: PlaybackRef) => Element | null;
-    /** Show a panel for an `open` step (default: click its `[data-image-tab]` under `chromeRoot`). */
+    /** Show a panel for an `open` step (default: click its `[data-image-tab]` or `[data-image-panel]` under `chromeRoot`). */
     open?: (ref: PlaybackRef) => void | Promise<void>;
+    /** Whether wheel zoom and middle/space drag panning are enabled (default true). */
+    viewportGestures?: boolean;
     class?: string;
     style?: string;
   }
@@ -112,9 +114,15 @@
     locate,
     locateElement,
     open,
+    viewportGestures = true,
     class: className = '',
     style = '',
   }: Props = $props();
+
+  /** Fits the image to view, resetting zoom to 1 and pan to (0, 0). */
+  export function fitToView(): void {
+    editor.controller.resetZoom();
+  }
 
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -187,7 +195,64 @@
     reveal: () => onplaybackreveal?.(),
   }));
 
-  // Selection tools (magic wand, marquees, lasso): the pointer gesture.
+  let isSpacePressed = $state(false);
+  let isPanning = $state(false);
+  let panStartPoint: { clientX: number; clientY: number } | null = null;
+  let panStartOffset: { x: number; y: number } = { x: 0, y: 0 };
+
+  function handleWheel(e: WheelEvent) {
+    if (!viewportGestures || !canvasEl) return;
+    e.preventDefault();
+
+    const rect = canvasEl.getBoundingClientRect();
+    const sx = rect.width > 0 ? view.width / rect.width : 1;
+    const sy = rect.height > 0 ? view.height / rect.height : 1;
+    const canvasPt = {
+      x: (e.clientX - rect.left) * sx,
+      y: (e.clientY - rect.top) * sy,
+    };
+
+    const s = editor.controller.getState();
+    const currentZoom = s.zoom || 1;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const nextZoom = Math.min(10, Math.max(0.1, currentZoom * factor));
+
+    // Zoom centered at cursor:
+    // in canvas coordinates: img = (canvasPt - pan - center) / zoom
+    // We want canvasPt to remain invariant after zoom:
+    // (canvasPt - center - newPan) / newZoom = (canvasPt - center - oldPan) / oldZoom
+    // newPan = canvasPt - center - (canvasPt - center - oldPan) * (newZoom / oldZoom)
+    const centerX = view.width / 2;
+    const centerY = view.height / 2;
+    const curPan = s.pan || { x: 0, y: 0 };
+    const ratio = nextZoom / currentZoom;
+
+    const newPanX = canvasPt.x - centerX - (canvasPt.x - centerX - curPan.x) * ratio;
+    const newPanY = canvasPt.y - centerY - (canvasPt.y - centerY - curPan.y) * ratio;
+
+    editor.controller.setZoom(nextZoom);
+    editor.controller.setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
+  }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        isSpacePressed = true;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        isSpacePressed = false;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  });
   const selectionGesture = $derived(new SelectionGesture(editor.controller, () => selectionOptions));
   let selectionDraft = $state.raw<ImagePoint[] | null>(null);
   // Paint tools (Move, Brush, Eraser): the pointer gesture and the brush cursor.
@@ -476,7 +541,36 @@
   }
 
   function handleMouseDown(e: MouseEvent) {
-    if (!canvasEl || transformTool.active) return;
+    if (!canvasEl) return;
+
+    if (viewportGestures && (e.button === 1 || (e.button === 0 && isSpacePressed))) {
+      e.preventDefault();
+      isPanning = true;
+      panStartPoint = { clientX: e.clientX, clientY: e.clientY };
+      const curPan = editor.controller.getState().pan || { x: 0, y: 0 };
+      panStartOffset = { ...curPan };
+      return;
+    }
+
+    if (mode === 'transform') {
+      const canvasPt = getCanvasEventPoint(e);
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
+      const hit = editor.controller.layerAt(imgPt);
+      if (hit) {
+        editor.controller.setActiveLayer(hit.id);
+        if (!transformTool.active) {
+          transformTool.begin();
+        }
+      } else {
+        editor.controller.setActiveLayer(null);
+        if (transformTool.active) {
+          transformTool.cancel();
+        }
+      }
+      return;
+    }
+
+    if (transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (mode === 'select') {
@@ -567,7 +661,23 @@
   }
 
   function handleMouseMove(e: MouseEvent) {
-    if (!canvasEl || transformTool.active) return;
+    if (!canvasEl) return;
+
+    if (isPanning && panStartPoint) {
+      const dx = e.clientX - panStartPoint.clientX;
+      const dy = e.clientY - panStartPoint.clientY;
+      editor.controller.setPan({
+        x: Math.round(panStartOffset.x + dx),
+        y: Math.round(panStartOffset.y + dy),
+      });
+      return;
+    }
+
+    if (viewportGestures && isSpacePressed) {
+      canvasEl.style.cursor = 'grab';
+    }
+
+    if (transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
     if (mode === 'select') {
@@ -713,6 +823,11 @@
   }
 
   function handleMouseUp(e: MouseEvent) {
+    if (isPanning) {
+      isPanning = false;
+      panStartPoint = null;
+      return;
+    }
     if (!canvasEl || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
@@ -822,7 +937,12 @@
   React's `<ImageEditorCanvas>`.
 -->
 <div bind:this={rootEl} class="relative {className}" {style} data-testid="image-editor-canvas-root">
-  <div bind:this={containerEl} class="absolute inset-0 overflow-hidden select-none">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    bind:this={containerEl}
+    onwheel={handleWheel}
+    class="absolute inset-0 overflow-hidden select-none"
+  >
     <canvas
       bind:this={canvasEl}
       onmousedown={handleMouseDown}
