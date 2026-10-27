@@ -134,6 +134,24 @@ export const SHEET_SCRIPTS: AgentScript[] = [
 /** Chart scripts: value drags go through the chart's director, everything else is played on the editor's controls. */
 export const CHART_SCRIPTS: AgentScript[] = [
   {
+    id: "chart-house-style",
+    prompt: "Bring this chart into the house style",
+    steps: [
+      { say: "Reading the house style for charts.", tool: "style__get_style", args: { domain: "chart" }, as: "style" },
+      { say: "Checking the chart against it.", tool: "chart__check_chart_style", args: {}, as: "before" },
+      {
+        say: "Switching to the house palette and the user's defaults.",
+        tool: "chart__update_chart",
+        args: (ctx) => {
+          const profile = ctx.results.style.profile ?? {};
+          if (!profile.palette) throw new Error("The house style has no chart palette.");
+          return { palette: profile.palette, ...(profile.defaults ?? {}) };
+        },
+      },
+      { say: "Checking again: it should come back clean.", tool: "chart__check_chart_style", args: {} },
+    ],
+  },
+  {
     id: "chart-compose",
     prompt: "Compose a quarterly revenue chart with a trend",
     steps: [

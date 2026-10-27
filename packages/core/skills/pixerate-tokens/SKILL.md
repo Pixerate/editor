@@ -25,6 +25,10 @@ naming and errors.
    variable in a missing collection, a value for a missing mode or a broken alias is refused and
    nothing changes. One load is one undo step.
 4. **Check.** Read the result's `revision`; if it did not change, nothing was different.
+5. **House style.** When the host has one, read its rules with `get_style` (`domain:
+   "tokens"`) before you change the set, and run `check_tokens_style` after loading. Each
+   finding names the variable, mode or collection to fix; fix them all in one more load, then
+   check again.
 
 ## Best practices
 
@@ -40,6 +44,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A token
 
 | Tool | Use |
 | --- | --- |
+| `check_tokens_style` | Check the token set against the house style: runs the checks its `tokens.json` profile turns on (`required-variables`, `name-pattern`, `required-modes`, `contrast-pairs`, the last in every mode). Returns `ok`, findings with a severity, a sentence saying how to fix it, a `target` (variable id or name, mode id, collection id) and the layer that asked, plus the checks that `ran` and those `skipped` with the reason. Run after each `load_tokens_document`. |
 | `get_tokens_document` | Take a copy of the whole token set as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the token set, use `get_tokens_document`: it is smaller and says more. Refuses very large documents. |
 | `load_tokens_document` | Put back a copy from `get_tokens_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_tokens` brings the previous token set back). Use it for every change: read the document, edit the JSON, load it back. |
 | `undo_tokens` | Undo the last token set edit (one tool call or one user gesture). Returns `undone` (the step's name, when it has one) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |

@@ -11,7 +11,10 @@ import {
 } from "@pixerate/editor-react/canvas";
 import { TokensPanel, useTokenStore, useTokens } from "@pixerate/editor-react/tokens";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
-import { createTokensEditorDocument, type TokenStore } from "@pixerate/editor/tokens";
+import { createTokensEditorDocument, createTokensStyleToolProvider, type TokenStore } from "@pixerate/editor/tokens";
+import { StyleFindings, useAgentToolProvider, useStyleFindings } from "@pixerate/editor-react";
+import { demoToolRegistry } from "../agentTools";
+import { demoStyles } from "../houseStyles";
 import { Moon, Palette, Sun } from "lucide-react";
 
 type DemoNode = Node<Record<string, any>, "card" | "label" | "shape">;
@@ -98,6 +101,8 @@ const TokensCanvas: React.FC = () => {
   // App theming from the same tokens: the panel takes the card's mode.
   const { cssVariables } = useTokens(store, { modes: { [theme.id]: cardMode } });
   const editorDocument = useDemoEditorDocument(store, createTokensEditorDocument, { namespace: "tokens", skill: "pixerate-tokens" });
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createTokensStyleToolProvider(store, demoStyles), [store]));
+  const houseStyle = useStyleFindings(demoStyles, "tokens", tokens.state);
 
   const btn = "flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200";
   return (
@@ -140,6 +145,9 @@ const TokensCanvas: React.FC = () => {
       </div>
       <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200">
         <TokensPanel store={store} />
+      </div>
+      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200" data-testid="tokens-house-style">
+        <StyleFindings report={houseStyle.report} title="House style (org: Acme)" />
       </div>
       <p className="text-xs text-slate-500">
         The card's fill, border, radius, padding, gap and text are bound to Theme variables; the button's fill aliases the

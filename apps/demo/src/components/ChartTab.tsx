@@ -12,7 +12,11 @@ import {
   type OfficeChartFile,
   type OfficeChartsResult,
   createChartEditorDocument,
+  createChartStyleToolProvider,
 } from "@pixerate/editor/chart";
+import { StyleFindings, useAgentToolProvider, useStyleFindings } from "@pixerate/editor-react";
+import type { ChartSelection } from "@pixerate/editor/chart";
+import { demoStyles } from "../houseStyles";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { parseCsv } from "@pixerate/editor/spreadsheet";
 import {
@@ -236,6 +240,9 @@ export function ChartTab() {
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
   useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" } });
+  // House style: `check_chart_style` joins the chart toolset (the `style` toolset is registered once in houseStyles.ts).
+  useAgentToolProvider(demoToolRegistry, useMemo(() => createChartStyleToolProvider(controller, demoStyles), [controller]));
+  const houseStyle = useStyleFindings(demoStyles, "chart", state.spec);
   // Office files the user opened: listed in the "Open an Office file" panel and readable by the agent.
   const [officeFiles, setOfficeFiles] = useState<OfficeChartFile[]>([]);
   const officeFilesRef = useRef(officeFiles);
@@ -331,6 +338,10 @@ export function ChartTab() {
       <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3">
         {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
         <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} playback={demoPlayback} />
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200" data-testid="chart-house-style">
+          <StyleFindings report={houseStyle.report} title="House style (org: Acme, locked · user: big labels)" onSelect={(f) => controller.select(f.target as ChartSelection)} />
+          {houseStyle.error && <p className="text-xs text-rose-400">{houseStyle.error}</p>}
+        </div>
       </div>
       <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place; every other call is acted out on the inspector, data grid and toolbar." />
 

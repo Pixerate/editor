@@ -30,6 +30,9 @@ import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSur
 import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider } from '../src/canvas';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
+import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
+import { chartStyleDomain, createChartStyleToolProvider } from '../src/chart';
+import { createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
 import { createTypographyToolProvider, createFontPickerToolProvider, FontPickerModel } from '../src/typography';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
@@ -258,6 +261,12 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			createGenerationHistoryToolProvider({ namespace: 'genhistory', store: createGenerationRecordStore({ storage: createMemoryStorage() }) })
 		);
 		registry.register(createColorToolProvider({ id: 'color', namespace: 'color' }));
+		{
+			const styles = createStyleResolver({ layers: [{ id: 'org', store: memoryStyleStore() }], domains: [chartStyleDomain, tokensStyleDomain] });
+			registry.register(createStyleToolProvider(styles));
+			registry.register(createChartStyleToolProvider(new ChartController(), styles, { namespace: 'chartstyle' }));
+			registry.register(createTokensStyleToolProvider(new TokenStore(), styles, { namespace: 'tokenstyle' }));
+		}
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
 		registry.register(createTypographyToolProvider({ id: 'typography', namespace: 'typography' }));
 		registry.register(createFontPickerToolProvider(new FontPickerModel(), { id: 'font-picker', namespace: 'fontpicker' }));
