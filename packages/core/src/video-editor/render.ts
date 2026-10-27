@@ -2,6 +2,7 @@ import { videoFrameAt, videoLayersWithoutTransitionEffects, type VideoFrame, typ
 import { videoGradeCssFilter, videoGradeSvgDefs, videoGradeSvgFilter } from './grade.js';
 import { applyVideoLutToPixels, type VideoLut } from './lut.js';
 import { formatVideoTimecode } from './timeline.js';
+import { videoMaskSvgPath, type VideoLayerMask } from './mask.js';
 import type { VideoProject } from './types.js';
 import { videoEffectFrameTime, videoEffectLayerKey, type VideoEffectJob, type VideoEffectsEngine } from './effects.js';
 import type { EffectPixels } from '../effects/types.js';
@@ -95,6 +96,15 @@ export function videoFrameToSvg(frame: VideoFrame, options: VideoSvgOptions = {}
 						inner = `<rect ${box} fill="#334155" stroke="#94a3b8" stroke-width="2"/><text x="${n(rect.x + rect.width / 2)}" y="${n(rect.y + rect.height / 2)}" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="${n(size)}" fill="#e2e8f0">${esc(label)}</text>`;
 					}
 				}
+				if (layer.mask) {
+					// Inside the layer's rotation, so the mask turns with the picture; feathered with a blur.
+					const m = layer.mask;
+					const blur = m.feather > 0 ? `<filter id="mf${i}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${n(m.feather / 2)}"/></filter>` : '';
+					if (blur) defs.push(blur);
+					const shape = `<path d="${videoMaskSvgPath(m)}" fill="${m.inverted ? 'black' : 'white'}"${blur ? ` filter="url(#mf${i})"` : ''}/>`;
+					defs.push(`<mask id="m${i}" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000">${m.inverted ? '<rect x="-100000" y="-100000" width="200000" height="200000" fill="white"/>' : ''}${shape}</mask>`);
+					inner = `<g mask="url(#m${i})">${inner}</g>`;
+				}
 				let item = attrs.length ? `<g ${attrs.join(' ')}>${inner}</g>` : inner;
 				if (layer.iris) {
 					// Outside the layer's own transform, so the circle stays on the frame's centre.
@@ -144,7 +154,25 @@ export type VideoCanvasContext = Pick<
  */
 export interface VideoScratchCanvas {
 	canvas: CanvasImageSource;
-	ctx: VideoCanvasContext & Pick<CanvasRenderingContext2D, 'getImageData' | 'putImageData' | 'clearRect'>;
+	ctx: VideoCanvasContext & Pick<CanvasRenderingContext2D, 'getImageData' | 'putImageData' | 'clearRect'> & Partial<Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo' | 'closePath' | 'fill'>>;
+}
+
+/**
+ * Cuts a scratch canvas's picture to a mask: everything outside the outline (inside, when
+ * inverted) is cleared, with a blurred edge for feather. The context must be in frame pixels at
+ * `scale` with the layer's rotation applied. False when the context cannot draw paths.
+ */
+function applyVideoMask(g: VideoScratchCanvas['ctx'], mask: VideoLayerMask, scale: number): boolean {
+	if (!g.moveTo || !g.lineTo || !g.closePath || !g.fill || mask.points.length < 3) return false;
+	g.globalAlpha = 1;
+	g.globalCompositeOperation = mask.inverted ? 'destination-out' : 'destination-in';
+	g.filter = mask.feather > 0 ? `blur(${Math.max(0.5, (mask.feather * scale) / 2)}px)` : 'none';
+	g.fillStyle = '#000000';
+	g.beginPath();
+	mask.points.forEach(([x, y], i) => (i ? g.lineTo!(x, y) : g.moveTo!(x, y)));
+	g.closePath();
+	g.fill();
+	return true;
 }
 
 export interface VideoDrawOptions {
@@ -415,10 +443,10 @@ function drawVideoLayers(ctx: VideoCanvasContext, frame: VideoFrame, layers: rea
 		}
 		const setting = layer.grade?.lut;
 		const lut = setting ? options.lutFor?.(setting.src) : null;
-		const scratch = lut ? options.scratch?.(cw, ch, 2 * depth + 1) : null;
+		const scratch = lut || layer.mask ? options.scratch?.(cw, ch, 2 * depth + 1) : null;
 		ctx.save();
 		ctx.setTransform(scale, 0, 0, scale, 0, 0);
-		if (lut && scratch) {
+		if (scratch) {
 			const s = scratch.ctx;
 			s.save();
 			s.setTransform(1, 0, 0, 1, 0, 0);
@@ -428,9 +456,23 @@ function drawVideoLayers(ctx: VideoCanvasContext, frame: VideoFrame, layers: rea
 			s.globalCompositeOperation = 'source-over';
 			paintVideoLayer(s, frame, layer, source, options);
 			s.restore();
-			const img = s.getImageData(0, 0, cw, ch);
-			applyVideoLutToPixels(lut, img.data, setting!.strength ?? 1);
-			s.putImageData(img, 0, 0);
+			if (lut) {
+				const img = s.getImageData(0, 0, cw, ch);
+				applyVideoLutToPixels(lut, img.data, setting!.strength ?? 1, setting!.preserveSkinTones ?? 0);
+				s.putImageData(img, 0, 0);
+			}
+			if (layer.mask) {
+				s.save();
+				s.setTransform(scale, 0, 0, scale, 0, 0);
+				const { rect } = layer;
+				if (layer.rotation) {
+					s.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
+					s.rotate((layer.rotation * Math.PI) / 180);
+					s.translate(-(rect.x + rect.width / 2), -(rect.y + rect.height / 2));
+				}
+				applyVideoMask(s, layer.mask, scale);
+				s.restore();
+			}
 			ctx.setTransform(1, 0, 0, 1, 0, 0);
 			ctx.globalAlpha = layer.opacity;
 			if (layer.blend && layer.blend !== 'normal') ctx.globalCompositeOperation = layer.blend === 'add' ? 'lighter' : layer.blend;

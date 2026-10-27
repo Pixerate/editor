@@ -7,7 +7,7 @@ import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeyframeFfmpegExpr, 
 import { allVideoTracks, formatVideoTimecode, formatVideoTimecodeFrames, isVideoDropFrameRate, videoHourFrames, videoTimecodeFrames, sortedVideoClips, videoAssetMap, videoClipBefore, videoClipEnd, videoClipOverhang, videoClipSpeed, videoProjectDuration, videoAssetHasSound, videoSequenceDuration, videoSequenceMap } from './timeline.js';
 import { videoTransitionAudioCurve } from './types.js';
 import { videoClipEffectUses, type VideoEffectUse } from './effects.js';
-import type { VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
+import type { VideoAdjustmentClip, VideoWipeDirection, VideoAsset, VideoBlendMode, VideoClip, VideoFadeCurve, VideoProject, VideoTextClip, VideoTrack } from './types.js';
 
 // ---------------------------------------------------------------------------------------------
 // CMX 3600 EDL
@@ -31,7 +31,7 @@ const reelName = (asset: VideoAsset | undefined) => (asset?.name ?? asset?.id ??
  * One track as a CMX 3600 edit decision list, for conforming in another NLE: an event per clip with
  * source and record timecode at the project's frame rate (drop-frame at 29.97 and 59.94), dissolves (`D`) for crossfades, dips and
  * wipes (`W001`), `M2` lines for speed changes, and `* FROM CLIP NAME` comments. Titles, colour
- * clips and compound clips (not flattened yet) become black (`BL`) events.
+ * clips and compound clips (not flattened yet) become black (`BL`) events; adjustment clips are left out.
  */
 export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {}): string {
 	const track = options.track !== undefined ? project.tracks.find((t) => t.id === options.track) : [...project.tracks].reverse().find((t) => t.kind === 'video');
@@ -51,6 +51,8 @@ export function toVideoEdl(project: VideoProject, options: VideoEdlOptions = {})
 	const row = (n: string, reel: string, kind: string, srcIn: number, srcOut: number, recIn: number, recOut: number) =>
 		`${n}  ${reel.padEnd(8)} ${channel.padEnd(5)} ${kind.padEnd(8)} ${tc(srcIn)} ${tc(srcOut)} ${rtc(recIn)} ${rtc(recOut)}`;
 	for (const clip of sortedVideoClips(track)) {
+		// An adjustment clip has no picture of its own to cut to: CMX 3600 cannot carry it.
+		if (clip.type === 'adjustment') continue;
 		const asset = clip.type === 'media' ? assets.get(clip.asset) : undefined;
 		const reel = clip.type === 'media' ? reelName(asset) : 'BL';
 		const end = videoClipEnd(clip);
@@ -128,6 +130,33 @@ export function videoFfmpegUnsupportedEffects(project: VideoProject): VideoEffec
 		.filter(({ track }) => track.kind === 'video' && !track.hidden)
 		.flatMap(({ track }) => track.clips.flatMap(videoClipEffectUses))
 		.filter((u) => u.enabled);
+}
+
+/**
+ * What ffmpeg's filters cannot draw besides provider effects: clip masks, and adjustment clips
+ * other than a plain grade (and LUT at full strength) over what is underneath or the whole frame
+ * at full opacity. Each is one sentence naming the clip. Exports refuse them unless given `frames`.
+ */
+export function videoFfmpegUnsupportedFeatures(project: VideoProject): string[] {
+	const out: string[] = [];
+	for (const { track } of allVideoTracks(project)) {
+		if (track.kind !== 'video' || track.hidden) continue;
+		for (const clip of track.clips) {
+			if (clip.mask) out.push(`clip "${clip.id}" has a mask`);
+			if (clip.type !== 'adjustment') continue;
+			const why: string[] = [];
+			if ((clip.scope ?? 'underneath') === 'track') why.push('changes one track only');
+			if (clip.opacity !== undefined && clip.opacity !== 1) why.push('is not at full opacity');
+			if (clip.fadeIn || clip.fadeOut) why.push('fades');
+			if (clip.blend && clip.blend !== 'normal') why.push('blends');
+			if (clip.transition) why.push('has a transition');
+			if (clip.animateIn || clip.animateOut) why.push('is animated');
+			const lut = normalizeVideoGradeLut(clip.grade?.lut);
+			if (lut && (lut.strength ?? 1) < 1) why.push('mixes its LUT at part strength');
+			if (why.length) out.push(`adjustment clip "${clip.id}" ${why.join(', ')}`);
+		}
+	}
+	return out;
 }
 
 /** A loudness to normalise the mix to (`loudnorm`'s I, TP and LRA). */
@@ -300,6 +329,13 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 			);
 		}
 	}
+	if (!measure && !frames) {
+		const features = videoFfmpegUnsupportedFeatures(project);
+		if (features.length)
+			throw new Error(
+				`ffmpeg's filters cannot draw ${features.slice(0, 5).join('; ')}${features.length > 5 ? '; ...' : ''}. Render the picture frame by frame with renderVideoFrameExact (the preview's drawing) to PNGs or raw RGBA and pass them as frames: { input: "frames/%06d.png" }; ffmpeg still mixes the sound. Or remove the mask, or keep adjustment clips to a full-opacity grade over what is underneath or the whole frame.`
+			);
+	}
 	if (frames) {
 		if (frames.format === 'rawvideo') inputs.push(['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${W}x${H}`, '-framerate', String(fps), '-i', frames.input]);
 		else inputs.push(['-framerate', String(fps), '-i', frames.input]);
@@ -396,12 +432,39 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 	 * when no picture is needed) and makes each clip's sound, delayed into place in that time. A
 	 * compound clip builds its sequence the same way, one level in.
 	 */
+	/**
+	 * An adjustment clip's grade (and LUT) on the composite so far, only while it plays: each filter
+	 * gets `enable`, so the stream passes unchanged outside the clip.
+	 */
+	const adjust = (cur: string, clip: VideoAdjustmentClip): string => {
+		const enable = `enable='between(t,${sec(clip.start)},${sec(videoClipEnd(clip))})'`;
+		const steps = videoGradeFfmpegFilters(clip.grade).map((f) => `${f}:${enable}`);
+		const lut = normalizeVideoGradeLut(clip.grade?.lut);
+		if (lut) {
+			const path = options.resolveLut ? options.resolveLut(lut.src) : lut.src;
+			if (/^(blob|data|https?):/i.test(path)) notes.push(`ffmpeg's lut3d reads only local files, and adjustment clip "${clip.id}"'s LUT is "${path.slice(0, 80)}"; save it and pass resolveLut to give its path.`);
+			steps.push('format=gbrap', `lut3d=file=${ffmpegFilterValue(path)}:interp=tetrahedral:${enable}`);
+			if (lut.preserveSkinTones) notes.push(`Adjustment clip "${clip.id}"'s LUT protects skin tones in the preview, which ffmpeg's lut3d cannot; render frames with renderVideoFrameExact to keep it.`);
+		}
+		if (!steps.length) return cur;
+		const next = `adj${k++}`;
+		graph.push(`[${cur}]format=rgba,${steps.join(',')},format=yuva420p[${next}]`);
+		return next;
+	};
 	const compose = (tracks: readonly VideoTrack[], base: string | null, length: number, scope: { within: string[]; picture: boolean; sound: boolean }): { video: string | null; audio: string[] } => {
 		let cur = base;
 		const sounds: string[] = [];
+		/** Adjustment clips over the whole frame: applied once every track is laid. */
+		const adjustAll: VideoAdjustmentClip[] = [];
 		// Back to front: later tracks are further back.
 		for (const track of [...tracks].reverse()) {
 			for (const raw of sortedVideoClips(track)) {
+				if (raw.type === 'adjustment') {
+					if (!scope.picture || track.kind !== 'video' || track.hidden) continue;
+					if ((raw.scope ?? 'underneath') === 'all') adjustAll.push(raw);
+					else if (cur) cur = adjust(cur, raw);
+					continue;
+				}
 				// Entrance and exit animations go out as keyframes on opacity and the transform.
 				const clip = videoClipAnimated(raw, project);
 				const { lead, tail } = videoClipOverhang(track, clip);
@@ -542,6 +605,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 					const into = `q${next}`;
 					graph.push(`${source.startsWith('[') ? source : `${source},`}${chain.join(',')}[${into}]`);
 					const lut3d = `lut3d=file=${file}:interp=tetrahedral`;
+					if (lut.preserveSkinTones) notes.push(`Clip "${clip.id}"'s LUT protects skin tones in the preview, which ffmpeg's lut3d cannot; render frames with renderVideoFrameExact to keep it.`);
 					if ((lut.strength ?? 1) >= 1) graph.push(`[${into}]${lut3d}[r${next}]`);
 					else graph.push(`[${into}]split[o${next}][p${next}]`, `[p${next}]${lut3d}[s${next}]`, `[s${next}][o${next}]blend=all_mode=normal:all_opacity=${lut.strength}[r${next}]`);
 					source = `[r${next}]`;
@@ -632,6 +696,7 @@ function buildFfmpeg(project: VideoProject, options: VideoFfmpegOptions, measure
 				}
 			}
 		}
+		for (const clip of adjustAll) if (cur) cur = adjust(cur, clip);
 		return { video: cur, audio: sounds };
 	};
 	const top = compose(project.tracks, measure || frames ? null : 'base', D, { within: [], picture: !measure && !frames, sound: true });

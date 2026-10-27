@@ -4,6 +4,7 @@ import { parseVideoAnimatable, parseVideoAsset, parseVideoClip, parseVideoMarker
 import { checkVideoTimeRemap, videoTimeRemapSpan } from './remap.js';
 import {
 	allVideoClipIds,
+	videoClipTypeLabel,
 	allVideoTracks,
 	findVideoClip,
 	findVideoSequenceClip,
@@ -183,7 +184,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'effects', 'values', 'provider', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'effects', 'mask', 'scope', 'targetTrack', 'values', 'provider', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
@@ -226,6 +227,13 @@ class Editor {
 			const free = nextFreeVideoSlot(track, start, duration, ignore);
 			refuse(`${what} at ${formatVideoSeconds(start)}–${formatVideoSeconds(start + duration)} would overlap clip "${hit.id}" (${formatVideoSeconds(hit.start)}–${formatVideoSeconds(videoClipEnd(hit))}) on track "${track.id}"; the next free place is ${formatVideoSeconds(free)}, or use mode "insert" to push later clips along or "overwrite" to replace what is there.`);
 		}
+	}
+
+	/** An adjustment clip's target track must exist. */
+	adjustmentTarget(clip: VideoClip) {
+		if (clip.type !== 'adjustment' || clip.targetTrack === undefined) return;
+		const ids = allVideoTracks(this.p).map(({ track }) => track.id);
+		if (!ids.includes(clip.targetTrack)) refuse(`Adjustment clip "${clip.id}" targets track ${namedWithSuggestion(clip.targetTrack, ids)}, which does not exist; the tracks are ${ids.map((t) => `"${t}"`).join(', ')}.`);
 	}
 
 	kindFits(track: VideoTrack, clip: { type: string; asset?: string; sequence?: string }) {
@@ -513,6 +521,7 @@ class Editor {
 				const end = sortedVideoClips(track).reduce((m, c) => Math.max(m, videoClipEnd(c)), 0);
 				draft.start ??= end;
 				const clip = parseVideoClip(draft, 'clip');
+				this.adjustmentTarget(clip);
 				const outcome: VideoEditOutcome = { op: e.op, clip: clip.id, track: track.id };
 				this.place(track, clip, mode, outcome);
 				return this.outcomes.push(outcome);
@@ -654,6 +663,7 @@ class Editor {
 				if (stretch !== 1) retimeClipKeys(next, (v) => retimeVideoAnimatable(v, 0, stretch));
 				for (const k of e.remove ?? []) delete next[k];
 				const clip = parseVideoClip(next, 'set');
+				this.adjustmentTarget(clip);
 				if (clip.type === 'media' && clip.asset !== (at.clip as any).asset) this.kindFits(at.track, clip);
 				if (clip.start !== at.clip.start || clip.duration !== at.clip.duration) this.fits(at.track, clip.start, clip.duration, new Set([clip.id]), `Clip "${clip.id}"`);
 				at.track.clips[at.index] = clip;
@@ -664,7 +674,7 @@ class Editor {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
 				if (clip.type === 'sequence') refuse(`Clip "${clip.id}" is a compound clip, which plays its sequence at normal speed; ramp the clips inside the sequence instead.`);
-				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to ramp; only video and audio clips change speed.`);
+				if (clip.type !== 'media') refuse(`Clip "${clip.id}" is a ${videoClipTypeLabel(clip)}, so it has no source to ramp; only video and audio clips change speed.`);
 				const asset = this.asset((clip as VideoMediaClip).asset);
 				if (asset.kind === 'image') refuse(`Clip "${clip.id}" is a still ("${asset.id}"), so it has no motion to ramp.`);
 				const media = clip as VideoMediaClip;
@@ -722,7 +732,7 @@ class Editor {
 			case 'slip_clip': {
 				const { track, clip } = this.clip(e.clip);
 				this.unlocked(track);
-				if (clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${clip.type === 'text' ? 'title' : clip.type === 'effect' ? 'effect clip' : 'colour'}, so it has no source to slip; only video, audio and compound clips slip.`);
+				if (clip.type !== 'media' && clip.type !== 'sequence') refuse(`Clip "${clip.id}" is a ${videoClipTypeLabel(clip)}, so it has no source to slip; only video, audio and compound clips slip.`);
 				const source = clip.type === 'sequence' ? `sequence "${clip.sequence}"` : `"${this.asset((clip as { asset: string }).asset).id}"`;
 				if (clip.type === 'media' && this.asset(clip.asset).kind === 'image') refuse(`Clip "${clip.id}" is a still ("${clip.asset}"), so it has no source to slip; only video and audio clips slip.`);
 				// Keep the media a transition at either edge plays past the cut.

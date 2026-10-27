@@ -138,10 +138,38 @@ export function applyVideoLut(lut: VideoLut, rgb: readonly [number, number, numb
 	return out;
 }
 
-/** Runs RGBA pixels (0–255, as `ImageData` has them) through a LUT in place, mixed with the originals by `strength` (0–1). Transparent pixels are left alone. */
-export function applyVideoLutToPixels(lut: VideoLut, data: { length: number; [i: number]: number }, strength = 1): void {
+/**
+ * How much a colour (0–1 sRGB) looks like skin, 0–1: its chroma (BT.601 Cb / Cr) against the
+ * skin cluster, which holds for every complexion because skin differs mostly in lightness, not in
+ * hue. Full weight inside the cluster, falling smoothly to 0 just outside it, and faded out near
+ * black and white, where chroma means little. Used by `preserveSkinTones`.
+ */
+export function videoSkinToneWeight(r: number, g: number, b: number): number {
+	const R = r * 255;
+	const G = g * 255;
+	const B = b * 255;
+	const y = 0.299 * R + 0.587 * G + 0.114 * B;
+	if (y < 20 || y > 250) return 0;
+	const cb = 128 - 0.168736 * R - 0.331264 * G + 0.5 * B;
+	const cr = 128 + 0.5 * R - 0.418688 * G - 0.081312 * B;
+	const d = Math.hypot((cb - 108) / 20, (cr - 154) / 18);
+	let w = d <= 1 ? 1 : d >= 1.5 ? 0 : 1 - smooth((d - 1) / 0.5);
+	// Fade out over the darkest and brightest few steps.
+	if (y < 40) w *= (y - 20) / 20;
+	else if (y > 235) w *= (250 - y) / 15;
+	return w;
+}
+
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * Runs RGBA pixels (0–255, e.g. `ImageData.data`) through a LUT in place, mixed by `strength`.
+ * With `preserveSkinTones` (0–1) the mix is held back by that much on skin (see `videoSkinToneWeight`).
+ */
+export function applyVideoLutToPixels(lut: VideoLut, data: { length: number; [i: number]: number }, strength = 1, preserveSkinTones = 0): void {
 	const s = clamp01(strength);
 	if (!s) return;
+	const skin = clamp01(preserveSkinTones);
 	const rgb: [number, number, number] = [0, 0, 0];
 	const out: [number, number, number] = [0, 0, 0];
 	for (let i = 0; i < data.length; i += 4) {
@@ -150,7 +178,8 @@ export function applyVideoLutToPixels(lut: VideoLut, data: { length: number; [i:
 		rgb[1] = data[i + 1] / 255;
 		rgb[2] = data[i + 2] / 255;
 		applyVideoLut(lut, rgb, out);
-		for (let k = 0; k < 3; k++) data[i + k] = Math.round((rgb[k] + (out[k] - rgb[k]) * s) * 255);
+		const k = skin ? s * (1 - skin * videoSkinToneWeight(rgb[0], rgb[1], rgb[2])) : s;
+		for (let c = 0; c < 3; c++) data[i + c] = Math.round((rgb[c] + (out[c] - rgb[c]) * k) * 255);
 	}
 }
 

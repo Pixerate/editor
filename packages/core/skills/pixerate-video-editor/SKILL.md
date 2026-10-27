@@ -1,6 +1,6 @@
 ---
 name: pixerate-video-editor
-description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, overwriting, moving, trimming, splitting and ripple-deleting clips, slip, slide and roll edits, lift and extract of a time range, razor cuts across tracks, sync-locked tracks, keyframed opacity, volume and transform, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, provider effects (clip effects, effect clips, effect transitions), rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
+description: How to edit video projects in the Pixerate non-linear video editor through its agent tools - adding video, audio and image assets, building a rough cut on video and audio tracks, inserting, overwriting, moving, trimming, splitting and ripple-deleting clips, slip, slide and roll edits, lift and extract of a time range, razor cuts across tracks, sync-locked tracks, keyframed opacity, volume and transform, closing gaps, titles and colour clips, fades, volume and speed, crossfade, dip and wipe transitions with handles, J and L cuts, markers, checking the project, adjustment clips over tracks, clip masks, skin-tone protected LUTs, edit plans proposed for review before they apply, provider effects (clip effects, effect clips, effect transitions), rendering frames and contact sheets, and exporting an ffmpeg command or a CMX 3600 EDL. Use when video tools such as get_video_project, add_video_clip or edit_video are available, or when asked to cut, trim, assemble, sequence or export footage on a timeline.
 ---
 
 # Pixerate video editor
@@ -60,7 +60,13 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
    `export_video_edl` (one track) for finishing elsewhere. Read the returned notes. For a
    delivery loudness, have the host run `export_video_loudness_measure` first and pass what it
    prints as `loudness.measured`; one pass (`loudness` without `measured`) is fine for a draft.
-10. **Effects** (only when the host registered an effects provider; `search_effects` says
+10. **Plan first when the user should see it.** For anything big or judgement-heavy (a rough cut,
+    a cleanup, cutting to music), propose it with `plan_video_edits` (or a `plan_*` tool from
+    the dialogue and music skills) instead of applying it: the project does not change, the
+    editor shows the plan with its length change and the stretches it cuts, and you apply it
+    with `apply_video_edit_plan` once the user agrees (or `discard_video_edit_plan`).
+    `list_video_edit_plans` shows what is waiting and whether the project changed since.
+11. **Effects** (only when the host registered an effects provider; `search_effects` says
     `available: false` otherwise): `search_effects` with a `use`, then `describe_effect` for its
     controls, then `apply_effect` (filters and overlays on a clip), `set_video_effect_transition`
     or `add_video_effect_clip` (generators and titles). Tune with `update_effect` and
@@ -135,6 +141,21 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
   full strength). A LUT runs after the grade's settings, so correct exposure and white balance
   first; LUTs built for log footage expect a flat picture and look crushed on normal video. Check with `render_video_frame` at a
   few times side by side. Skin tones are the reference: avoid strong `hue` or `tint` on people.
+- **Adjustment clips for looks across shots.** Rather than grading every clip of a scene the
+  same, `add_video_adjustment_clip` on a track above them with the look (`grade`, a `preset` at
+  an `amount`, or effects with `apply_effect` on the adjustment clip): it changes everything
+  underneath while it plays, so trims and new shots pick the look up. Scope `all` includes
+  titles and tracks above it; scope `track` limits it to one track. Fade it in and out
+  (`fadeIn` / `fadeOut`) to ease a look on, and give it a mask to limit it to part of the frame.
+- **Masks for spot changes.** `set_video_clip_mask` cuts a clip to a shape (`ellipse` for a
+  face or a vignette, `rectangle` with `corner_radius` for picture-in-picture, `linear` for a
+  split screen or a graduated sky, `polygon` for anything else) with a `feather` of 20-80 px so
+  the edge does not show. On an adjustment clip the mask limits the adjustment, so a feathered
+  ellipse over a face brightens just the face.
+- **Protect skin under heavy looks.** Creative LUTs push faces orange or green. Give the LUT
+  `preserve_skin_tones` (0.5-0.8) in `set_video_lut`, or `set_video_skin_protection` afterwards,
+  so skin keeps its colour while the rest takes the look. Skin is found by colour, so warm
+  beige props are protected too; check with `render_video_frame`.
 - **Measure, don't eyeball.** Where the host shows a preview, `get_video_scopes` reads the real
   picture: keep `clipped.highlights` under about 1% and `clipped.shadows` under about 2% unless
   the look calls for it, and aim for a mean luma of roughly 0.35-0.55 for ordinary scenes. A
@@ -219,6 +240,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `delete_video_clips` | Remove `clips`; `ripple: true` pulls later clips up to close the gaps (a ripple delete). |
 | `update_video_clip` | Change properties via `set`: opacity, transform (`x`, `y` px from centre, `scale`, `rotation`), `fit` (contain default for media, cover, fill, none), `animateIn` / `animateOut` (`{ effect: fade, rise, drop, slide-left, slide-right, zoom or pop, duration ms default 500 }`), `grade` (`exposure` stops -3-3, `contrast`, `saturation`, `temperature`, `tint` -1-1, `hue` degrees; replaces the whole grade), `blend` (normal, multiply, screen, overlay, darken, lighten, color-dodge, color-burn, hard-light, soft-light, difference, exclusion, add), `fadeIn` / `fadeOut`, name; media `volume` (0-4), `muted`, `fadeInCurve` / `fadeOutCurve` (the sound's fade shape: linear, equal-power, s-curve, exponential, logarithmic), `speed` (0.05-20, keeps the source range so the length changes), `asset`; title text and style; colour. `remove` resets to defaults. Not for timing. |
 | `set_video_lut` | Give `clips` (on video tracks) a 3D LUT: `src` a `.cube` file the host can load and ffmpeg can read, `strength` 0-1 (default 1). Reads the file first and fails without changing anything if it cannot be loaded or is not a 3D `.cube`. Keeps the clips' other grade settings; the LUT runs after them. One undo step; returns the LUT's `title` and `size` and each clip's grade. Copies with `copy_video_grade`. |
+| `set_video_skin_protection` | Hold the LUT back on skin tones for `clips` that already have one: `amount` 0-1 (0 turns protection off). Fails for clips without a LUT (add one with `set_video_lut`). One undo step; returns each clip's LUT setting. The preview and frame renders apply it; ffmpeg's `lut3d` cannot, so the export notes it. |
+| `add_video_adjustment_clip` | Add an adjustment clip on a video `track` (`start`, `duration` default 3000 ms): no picture of its own, but its `grade` (or a `preset` at `amount`), effects (`apply_effect` on it) and mask change the pictures in its `scope` while it plays: `underneath` (tracks below it, default), `all` (the whole frame) or `track` with `target_track`. Returns the clip; a hint says when it has nothing to apply yet. Edit it like any clip (`update_video_clip` `grade`, `scope`, `targetTrack`; trims; fades). |
+| `set_video_clip_mask` | Cut a clip's picture to a `shape` (`rectangle`, `ellipse`, `linear`, `polygon` with `points`): `x`, `y` centre and `width`, `height` as fractions of the clip's placed picture (default 0.5 each), `rotation` degrees, `feather` px, `corner_radius` 0-1 (rectangles), `inverted` to keep the outside. Replaces any mask; one undo step; returns the clip. On an adjustment clip it limits the adjustment. ffmpeg exports then need rendered frames. |
+| `remove_video_clip_mask` | Take a clip's mask off (one undo step). Fails if it has none. |
 | `remove_video_lut` | Take the LUT off `clips`' grades, keeping their other settings (one undo step). Fails if none has one. |
 | `apply_video_grade_preset` | Give `clips` (on video tracks) a named look at an `amount` 0-1 (default 1), replacing their grade settings (a LUT stays): warm, cool, punchy, faded, black-and-white, bleach-bypass, day-for-night. One undo step; returns each clip's grade to fine-tune with `update_video_clip`. |
 | `copy_video_grade` | Match shots: give the `to` clips the grade of the `from` clip (one undo step; a source with no grade clears theirs). Returns the grade copied. |
@@ -231,6 +256,10 @@ For errors, namespaced tool names and undo conventions, see `pixerate-agent-tool
 | `close_video_gaps` | Slide clips on a `track` earlier so no gaps remain, from time `from` (default the start). Returns the clips that moved. |
 | `add_video_marker` | Add a marker at `time` with `label`, `color` and optional `id`, for beats, sections or review notes. Returns its id. |
 | `remove_video_marker` | Remove a `marker` by id. |
+| `plan_video_edits` | Propose `ops` (as for `edit_video`) with a `title` (also the undo label), an optional `description` and the `ranges` it cuts, without applying them. Fails, keeping nothing, if they do not apply. Returns the plan: id, summary (`durationBefore`, `durationAfter`, `durationDelta`, `clipsAdded`, `clipsRemoved`, `clipsChanged`, `newIssues`), ranges and a one-line `text`. The editor shows it for review. Follow with `apply_video_edit_plan` or `discard_video_edit_plan`. |
+| `list_video_edit_plans` | The plans waiting for review, oldest first, each with its summary, ranges and `stale` (the project changed since it was made; it is re-checked when applied). |
+| `apply_video_edit_plan` | Apply an open `plan` as one undo step labelled with its title and close it. A stale plan is checked again and refused, changing nothing, if its edits no longer apply. Returns the outcomes, length, issues and `stale`. |
+| `discard_video_edit_plan` | Close an open `plan` without applying it. Returns the plans still open. |
 | `edit_video` | Apply up to 200 ops in order as one all-or-nothing undo step: `set_settings`, `add_asset { asset }`, `update_asset`, `remove_asset`, `add_track { track: { kind, id }, at }`, `update_track`, `remove_track`, `move_track`, `add_clip { track, clip, mode }`, `move_clip { clip, start, track, mode }`, `trim_clip`, `split_clip`, `delete_clips`, `update_clip`, `set_transition`, `slip_clip`, `roll_edit`, `slide_clip`, `lift_range`, `extract_range`, `split_at`, `set_keyframes { clip, property, keys }` (null keys remove), `set_time_remap { clip, keys (clip ms to source ms after the in point; null removes), duration, ripple }`, `close_gaps`, `add_marker { marker: { time, label } }`, `update_marker`, `remove_marker`; other fields match the single tools. `dry_run: true` validates only. The default for a rough cut. |
 | `undo_video` | Undo your last edit (one tool call or one `edit_video` batch). |
 | `redo_video` | Redo the edit you just undid. |
@@ -267,6 +296,15 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A video
 | `open_saved_video_document` | Replace the video project with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
 
 ## Pitfalls
+
+- **An adjustment clip changes only tracks below it** (scope `underneath`). Put it on a new top
+  track (`add_video_track` with `at: 0`), or use scope `all`. Adjustment clips have no sound and
+  are left out of EDLs; ffmpeg exports draw a plain grade or full-strength LUT at full opacity
+  over what is underneath or the whole frame, and refuse anything else (fades, part opacity,
+  scope `track`, masks) unless the host renders frames with `renderVideoFrameExact`.
+- **Plans go stale.** A plan is worked out against the project as it was. Applying it after
+  other edits re-checks it; if it no longer applies, discard it and plan again rather than
+  forcing the old ops through `edit_video`.
 
 - With agent playback on, the cursor drags a moved or trimmed clip to its new time, clicks a track where a clip goes in, and clicks the ruler where a split, seek or marker lands. Give real `start` / `at` times in ms; results are unchanged.
 - **Effects need rendered frames to export.** ffmpeg cannot draw provider effects, so

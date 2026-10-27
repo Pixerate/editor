@@ -25,6 +25,16 @@
     videoTransitionAudioCurve,
     videoKeyframeToggleEdit,
     videoKeyframeValueEdit,
+    videoClipHeading,
+    videoMaskEdit,
+    videoSkinProtectionEdits,
+    VIDEO_ADJUSTMENT_SCOPES,
+    VIDEO_ADJUSTMENT_SCOPE_LABELS,
+    VIDEO_MASK_SHAPES,
+    VIDEO_MASK_SHAPE_LABELS,
+    type VideoAdjustmentScope,
+    type VideoClipMask,
+    type VideoMaskShape,
     type VideoEdit,
     type VideoEditorController,
     type VideoFadeCurve,
@@ -166,6 +176,46 @@
     // A strength of 0 changes nothing, so it takes the LUT off.
     setLut(n > 0 ? { ...lut, strength: Math.min(1, n) } : null, n > 0 ? 'Change LUT strength' : 'Remove LUT');
   }
+  function skinProtection(raw: string) {
+    const n = Number(raw);
+    if (!clip || !raw.trim() || !Number.isFinite(n)) return;
+    const r = controller.apply(videoSkinProtectionEdits(editor.project, [clip.id], n), n > 0 ? 'Protect skin tones' : 'Stop protecting skin tones');
+    if (!r.ok) localError = { text: r.error, revision: editor.revision };
+  }
+  function setScope(scope: VideoAdjustmentScope) {
+    if (!clip || !at) return;
+    const target = editor.project.tracks.find((t) => t.kind === 'video' && t.id !== at.track.id)?.id;
+    if (scope === 'track') apply({ op: 'update_clip', clip: clip.id, set: { scope, targetTrack: (clip.type === 'adjustment' ? clip.targetTrack : undefined) ?? target ?? at.track.id } }, 'Change adjustment scope');
+    else apply({ op: 'update_clip', clip: clip.id, ...(scope === 'underneath' ? { remove: ['scope', 'targetTrack'] } : { set: { scope }, remove: ['targetTrack'] }) }, 'Change adjustment scope');
+  }
+  function setMaskShape(shape: VideoMaskShape | '') {
+    if (!clip) return;
+    const { points: _p, cornerRadius: _c, ...rest } = clip.mask ?? ({ shape: 'ellipse' } as VideoClipMask);
+    const points = [
+      { x: 0.5, y: 0.2 },
+      { x: 0.8, y: 0.8 },
+      { x: 0.2, y: 0.8 }
+    ];
+    apply(videoMaskEdit(clip.id, shape ? { ...rest, shape, ...(shape === 'polygon' ? { points } : {}) } : null), shape ? 'Mask clip' : 'Remove mask');
+  }
+  function setMaskValue(key: 'width' | 'height' | 'feather' | 'rotation', raw: string) {
+    if (!clip?.mask) return;
+    const n = Number(raw);
+    if (raw.trim() && !Number.isFinite(n)) return;
+    const { [key]: _old, ...rest } = clip.mask;
+    apply(videoMaskEdit(clip.id, raw.trim() ? { ...rest, [key]: n } : rest), 'Change mask');
+  }
+  function invertMask(on: boolean) {
+    if (!clip?.mask) return;
+    const { inverted: _i, ...rest } = clip.mask;
+    apply(videoMaskEdit(clip.id, on ? { ...rest, inverted: true } : rest), 'Invert mask');
+  }
+  const MASK_FIELDS = [
+    { key: 'width', label: 'Mask width', step: 0.05, placeholder: '0.5' },
+    { key: 'height', label: 'Mask height', step: 0.05, placeholder: '0.5' },
+    { key: 'feather', label: 'Feather (px)', step: 5, placeholder: '0' },
+    { key: 'rotation', label: 'Mask angle', step: 5, placeholder: '0' }
+  ] as const;
   function transitionAudioCurve(curve: string) {
     if (!clip?.transition) return;
     const { audioCurve: _, ...rest } = clip.transition;
@@ -198,9 +248,8 @@
     </p>
   {:else}
     <div class="flex items-center gap-1">
-      <span class="font-medium">Clip</span>
+      <span class="font-medium">{videoClipHeading(clip)}</span>
       <code class="text-[10px] text-muted-foreground">{clip.id}</code>
-      <span class="text-[10px] text-muted-foreground">{clip.type}</span>
       {#if at?.track.locked}<span class="ml-auto text-[10px] text-amber-500">Track {at.track.name ?? at.track.id} is locked</span>{/if}
     </div>
     <div class="grid grid-cols-[5.5rem_1fr] items-center gap-x-2 gap-y-1">
@@ -244,6 +293,41 @@
         {#if clip.grade?.lut}
           <span class="text-muted-foreground">LUT strength</span>
           <input class={input} type="number" min="0" max="1" step="0.05" aria-label="LUT strength" {disabled} value={clip.grade.lut.strength ?? 1} onchange={(e) => lutStrength(e.currentTarget.value)} data-field="grade.lut.strength" />
+          <span class="text-muted-foreground">Protect skin</span>
+          <input class={input} type="number" min="0" max="1" step="0.1" aria-label="Protect skin tones" title="How much of the LUT to hold back on skin tones (0 to 1)" {disabled} value={clip.grade.lut.preserveSkinTones ?? 0} onchange={(e) => skinProtection(e.currentTarget.value)} data-field="grade.lut.preserveSkinTones" />
+        {/if}
+      {/if}
+      {#if clip.type === 'adjustment'}
+        <span class="text-muted-foreground">Changes</span>
+        <select class={input} aria-label="Adjustment scope" {disabled} value={clip.scope ?? 'underneath'} onchange={(e) => setScope(e.currentTarget.value as VideoAdjustmentScope)} data-field="scope">
+          {#each VIDEO_ADJUSTMENT_SCOPES as s (s)}
+            <option value={s}>{VIDEO_ADJUSTMENT_SCOPE_LABELS[s]}</option>
+          {/each}
+        </select>
+        {#if clip.scope === 'track'}
+          <span class="text-muted-foreground">Track</span>
+          <select class={input} aria-label="Adjusted track" {disabled} value={clip.targetTrack ?? ''} onchange={(e) => set('targetTrack', e.currentTarget.value, 'Change adjusted track')} data-field="targetTrack">
+            {#each editor.project.tracks.filter((t) => t.kind === 'video') as t (t.id)}
+              <option value={t.id}>{t.name ?? t.id}</option>
+            {/each}
+          </select>
+        {/if}
+      {/if}
+      {#if at?.track.kind === 'video'}
+        <span class="text-muted-foreground">Mask</span>
+        <select class={input} aria-label="Mask shape" {disabled} value={clip.mask?.shape ?? ''} onchange={(e) => setMaskShape(e.currentTarget.value as VideoMaskShape | '')} data-field="mask">
+          <option value="">none</option>
+          {#each VIDEO_MASK_SHAPES as s (s)}
+            <option value={s}>{VIDEO_MASK_SHAPE_LABELS[s]}</option>
+          {/each}
+        </select>
+        {#if clip.mask}
+          {#each MASK_FIELDS as f (f.key)}
+            <span class="text-muted-foreground">{f.label}</span>
+            <input class={input} type="number" step={f.step} min={f.key === 'rotation' ? undefined : 0} placeholder={f.placeholder} aria-label={f.label} {disabled} value={clip.mask[f.key] ?? ''} onchange={(e) => setMaskValue(f.key, e.currentTarget.value)} data-field="mask.{f.key}" />
+          {/each}
+          <span class="text-muted-foreground">Invert mask</span>
+          <input type="checkbox" class="justify-self-start" aria-label="Invert mask" {disabled} checked={!!clip.mask.inverted} onchange={(e) => invertMask(e.currentTarget.checked)} data-field="mask.inverted" />
         {/if}
       {/if}
       {#if at?.track.kind === 'video'}
@@ -325,7 +409,7 @@
       {:else if clip.type === 'effect'}
         <span class="text-muted-foreground">Effect</span>
         <span class="truncate" title="Change its controls in the Effects panel" data-field="effect">{clip.name ?? clip.effect}</span>
-      {:else}
+      {:else if clip.type === 'color'}
         <span class="text-muted-foreground">Colour</span>
         <input class={input} aria-label="Clip colour" {disabled} value={clip.color} onchange={(e) => text('color', e.currentTarget.value, 'Change colour', true)} data-field="color" />
       {/if}
