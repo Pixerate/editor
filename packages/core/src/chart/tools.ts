@@ -209,7 +209,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'check_chart_colors',
 		title: 'Check chart colours',
 		description:
-			'Checks that colours can be told apart with normal vision and with protanopia, deuteranopia and tritanopia (OKLab distance after simulation), and that they stand out from the background. Checks the chart\'s own series (or slice) colours unless colours are given. Returns the closest pair per vision, contrast ratios and problems as sentences.',
+			'Checks whether the chart\'s colours are accessible: that colour-blind readers can tell them apart (protanopia, deuteranopia and tritanopia, by OKLab distance after simulation) as well as people with normal vision, and that they stand out from the background. Checks the chart\'s own series (or slice) colours unless colours are given. Returns the closest pair per vision, contrast ratios and problems as sentences.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -611,7 +611,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		name: 'highlight_chart',
 		title: 'Highlight categories or series',
 		description:
-			'Draws the named categories (labels) and series (names or ids) normally and mutes everything else, to point the reader at what matters; [] shows everything again. A point stays bright when its category or its series is named. Unknown names change nothing and are reported. Returns the category indexes and series ids that matched.',
+			'Draws the named categories (labels) and series (names or ids) normally and mutes the rest, to draw attention to the marks the chart is about; [] shows everything again. A point stays bright when its category or its series is named. Unknown names change nothing and are reported. Returns the category indexes and series ids that matched.',
 		inputSchema: {
 			type: 'object',
 			properties: { names: { type: 'array', items: { type: 'string' }, description: 'Category labels and / or series names or ids, exactly as get_chart shows them. [] clears the highlight.' } },
