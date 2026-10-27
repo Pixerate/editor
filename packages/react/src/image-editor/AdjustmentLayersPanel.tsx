@@ -22,6 +22,7 @@ import {
 import { ControlSlider } from './ControlSlider';
 import { CurvesEditor } from './CurvesEditor';
 import { imageSectionTitleClass, imageSelectClass } from './styles';
+import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface AdjustmentLayersPanelProps {
   controller: ImageEditorController;
@@ -100,12 +101,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
     ADJUSTMENT_LAYER_CONTROLS[layer.kind].filter(filter);
   const checkbox = (layer: AdjustmentLayer, path: string, label: string) => (
     <label className="flex items-center gap-2 text-foreground">
-      <input
-        type="checkbox"
-        checked={Boolean(getControlPath(layer.params, path))}
-        onChange={(e) => setParam(layer, path, e.target.checked)}
-        className="accent-primary"
-      />
+      <ImageCheckbox label={label} checked={Boolean(getControlPath(layer.params, path))} onChange={(on) => setParam(layer, path, on)} />
       {label}
     </label>
   );
@@ -182,12 +178,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
           <div className="flex flex-col gap-2">
             {controlsOf(layer).map((s) => slider(layer, s))}
             <label className="flex items-center gap-2 text-foreground">
-              <input
-                type="checkbox"
-                checked={layer.params.tint !== null}
-                onChange={(e) => setParam(layer, 'tint', e.target.checked ? '#e1d3b3' : null)}
-                className="accent-primary"
-              />
+              <ImageCheckbox label="Tint" checked={layer.params.tint !== null} onChange={(on) => setParam(layer, 'tint', on ? '#e1d3b3' : null)} />
               Tint
               {layer.params.tint && (
                 <input
@@ -231,18 +222,13 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
         <span className={imageSectionTitleClass}>Adjustment Layers</span>
       </div>
       <div className="flex gap-1.5">
-        <select
-          aria-label="New adjustment layer kind"
-          className={`${imageSelectClass} flex-1`}
+        <ImageSelect
+          label="New adjustment layer kind"
+          className="flex-1"
           value={newKind}
-          onChange={(e) => setNewKind(e.target.value as AdjustmentKind)}
-        >
-          {ADJUSTMENT_KINDS.map((k) => (
-            <option key={k.kind} value={k.kind}>
-              {k.label}
-            </option>
-          ))}
-        </select>
+          options={ADJUSTMENT_KINDS.map((k) => ({ value: k.kind, label: k.label }))}
+          onChange={(v) => setNewKind(v as AdjustmentKind)}
+        />
         <button
           type="button"
           className="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
@@ -266,13 +252,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
                 key={layer.id}
                 className={`flex items-center gap-1.5 rounded px-1.5 py-1 ${layer.id === selectedId ? 'bg-primary/20 ring-1 ring-primary/50' : 'bg-muted/60'}`}
               >
-                <input
-                  type="checkbox"
-                  aria-label={`Show ${label}`}
-                  checked={layer.enabled}
-                  onChange={() => controller.toggleAdjustmentLayer(layer.id)}
-                  className="accent-primary"
-                />
+                <ImageCheckbox label={`Show ${label}`} checked={layer.enabled} onChange={() => controller.toggleAdjustmentLayer(layer.id)} />
                 <button
                   type="button"
                   className={`flex-1 text-left truncate ${layer.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}`}
@@ -320,18 +300,13 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
         <div className="flex flex-col gap-2 rounded border border-border p-2" data-testid="adjustment-layer-editor">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Blend</span>
-            <select
-              aria-label="Blend mode"
-              className={`${imageSelectClass} flex-1`}
+            <ImageSelect
+              label="Blend mode"
+              className="flex-1"
               value={selected.blend}
-              onChange={(e) => controller.updateAdjustmentLayer(selected.id, { blend: e.target.value as BlendMode })}
-            >
-              {BLEND_MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+              options={BLEND_MODES.map((m) => ({ value: m.id, label: m.label }))}
+              onChange={(v) => controller.updateAdjustmentLayer(selected.id, { blend: v as BlendMode })}
+            />
           </div>
           <ControlSlider
             spec={ADJUSTMENT_LAYER_OPACITY_CONTROL}

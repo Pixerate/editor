@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { imageSectionTitleClass, imageSelectClass } from './styles.js';
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
+  import ImageSelect from './controls/ImageSelect.svelte';
+  import { imageSectionTitleClass } from './styles.js';
   import type {
     AdjustmentKind,
     AdjustmentLayer,
@@ -109,11 +111,13 @@
     <span class={imageSectionTitleClass}>Adjustment Layers</span>
   </div>
   <div class="flex gap-1.5">
-    <select aria-label="New adjustment layer kind" class="{imageSelectClass} flex-1" bind:value={newKind}>
-      {#each ADJUSTMENT_KINDS as k (k.kind)}
-        <option value={k.kind}>{k.label}</option>
-      {/each}
-    </select>
+    <ImageSelect
+      label="New adjustment layer kind"
+      class="flex-1"
+      value={newKind}
+      options={ADJUSTMENT_KINDS.map((k) => ({ value: k.kind, label: k.label }))}
+      onchange={(v) => (newKind = v as typeof newKind)}
+    />
     <button type="button" class="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90" onclick={addLayer}>
       Add Layer
     </button>
@@ -129,13 +133,7 @@
             ? 'bg-primary/20 ring-1 ring-primary/50'
             : 'bg-muted/60'}"
         >
-          <input
-            type="checkbox"
-            aria-label="Show {label}"
-            checked={layer.enabled}
-            onchange={() => controller.toggleAdjustmentLayer(layer.id)}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Show {label}" checked={layer.enabled} onchange={() => controller.toggleAdjustmentLayer(layer.id)} />
           <button
             type="button"
             class="flex-1 text-left truncate {layer.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}"
@@ -183,16 +181,13 @@
     <div class="flex flex-col gap-2 rounded border border-border p-2" data-testid="adjustment-layer-editor">
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">Blend</span>
-        <select
-          aria-label="Blend mode"
-          class="{imageSelectClass} flex-1"
+        <ImageSelect
+          label="Blend mode"
+          class="flex-1"
           value={layer.blend}
-          onchange={(e) => controller.updateAdjustmentLayer(layer.id, { blend: (e.target as HTMLSelectElement).value as BlendMode })}
-        >
-          {#each BLEND_MODES as m (m.id)}
-            <option value={m.id}>{m.label}</option>
-          {/each}
-        </select>
+          options={BLEND_MODES.map((m) => ({ value: m.id, label: m.label }))}
+          onchange={(v) => controller.updateAdjustmentLayer(layer.id, { blend: v as BlendMode })}
+        />
       </div>
       <ControlSlider
         spec={ADJUSTMENT_LAYER_OPACITY_CONTROL}
@@ -265,34 +260,19 @@
 
       {#if layer.kind === 'hueSaturation' && range === -1}
         <label class="flex items-center gap-2 text-foreground">
-          <input
-            type="checkbox"
-            checked={layer.params.colorize}
-            onchange={(e) => setParam(layer, 'colorize', (e.target as HTMLInputElement).checked)}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Colorize" checked={layer.params.colorize} onchange={(on) => setParam(layer, 'colorize', on)} />
           Colorize
         </label>
       {/if}
       {#if layer.kind === 'colorBalance' || layer.kind === 'photoFilter'}
         <label class="flex items-center gap-2 text-foreground">
-          <input
-            type="checkbox"
-            checked={layer.params.preserveLuminosity}
-            onchange={(e) => setParam(layer, 'preserveLuminosity', (e.target as HTMLInputElement).checked)}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Preserve luminosity" checked={layer.params.preserveLuminosity} onchange={(on) => setParam(layer, 'preserveLuminosity', on)} />
           Preserve luminosity
         </label>
       {/if}
       {#if layer.kind === 'blackWhite'}
         <label class="flex items-center gap-2 text-foreground">
-          <input
-            type="checkbox"
-            checked={layer.params.tint !== null}
-            onchange={(e) => setParam(layer, 'tint', (e.target as HTMLInputElement).checked ? '#e1d3b3' : null)}
-            class="accent-primary"
-          />
+          <ImageCheckbox label="Tint" checked={layer.params.tint !== null} onchange={(on) => setParam(layer, 'tint', on ? '#e1d3b3' : null)} />
           Tint
           {#if layer.params.tint}
             <input

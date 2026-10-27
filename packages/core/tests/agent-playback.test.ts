@@ -158,6 +158,76 @@ describe('AgentPlayback', () => {
 		expect(calls).toBe(1);
 	});
 
+	it('lands a staged change part by part as the cursor reaches each stage', async () => {
+		const log: string[] = [];
+		const add = tool('add_many', {
+			plan: () => [
+				{ type: 'commit' },
+				{ type: 'move', to: { x: 10, y: 10 } },
+				{ type: 'stage' },
+				{ type: 'move', to: { x: 20, y: 20 } },
+				{ type: 'stage' }
+			],
+			handler: async (_args, context) => {
+				for (const part of ['first', 'second', 'third']) {
+					await context.stage?.();
+					log.push(`add ${part}`);
+				}
+				return { added: 3 };
+			}
+		});
+		const { registry, playback } = setup([add]);
+		const surface = fakeSurface();
+		playback.attach('canvas', surface);
+		const steps = playback.record();
+		const original = surface.presence.set.bind(surface.presence);
+		surface.presence.set = (patch) => {
+			if ((patch.x === 10 || patch.x === 20) && log.at(-1) !== `move ${patch.x}` && !log.includes(`move ${patch.x}`)) log.push(`move ${patch.x}`);
+			return original(patch);
+		};
+		const result = await registry.callTool('canvas__add_many', {});
+		expect(result.structuredContent).toEqual({ added: 3 });
+		expect(steps.map((r) => r.step.type)).toEqual(['commit', 'move', 'stage', 'move', 'stage']);
+		// Each part lands after the cursor reached its stage; the last (unplanned) one at the end.
+		expect(log).toEqual(['move 10', 'add first', 'move 20', 'add second', 'add third']);
+	});
+
+	it('runs a staged handler straight through without playback', async () => {
+		const seen: boolean[] = [];
+		const registry = new ToolRegistry();
+		registry.register({
+			id: 'canvas',
+			tools: [
+				tool('add_many', {
+					plan: () => [{ type: 'commit' }, { type: 'stage' }],
+					handler: async (_args, context) => {
+						seen.push(typeof context.stage === 'function');
+						await context.stage?.();
+						return 'ok';
+					}
+				})
+			]
+		});
+		const result = await registry.callTool('canvas__add_many', {});
+		expect(result.isError).toBeFalsy();
+		expect(seen).toEqual([false]);
+	});
+
+	it('reports a staged handler failure after its steps', async () => {
+		const add = tool('add_many', {
+			plan: () => [{ type: 'commit' }, { type: 'stage' }, { type: 'stage' }],
+			handler: async (_args, context) => {
+				await context.stage?.();
+				throw new Error('second part failed');
+			}
+		});
+		const { registry, playback } = setup([add]);
+		playback.attach('canvas', fakeSurface());
+		const result = await registry.callTool('canvas__add_many', {});
+		expect(result.isError).toBe(true);
+		expect(result.content[0]).toEqual({ type: 'text', text: 'second part failed' });
+	});
+
 	it('plays a plan and points at what the result created', async () => {
 		const add = tool('add', {
 			plan: (args) => [{ type: 'move', to: { x: 450, y: 20 } }, { type: 'press' }, { type: 'release' }, { type: 'type', text: String(args.label) }],

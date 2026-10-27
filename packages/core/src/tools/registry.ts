@@ -48,6 +48,12 @@ export interface ToolCallContext {
 	signal?: AbortSignal;
 	/** Who is calling (an MCP client, a scripted agent), for agent playback's cursors and queues. */
 	actor?: PresenceActorInfo;
+	/**
+	 * Set by agent playback when the tool's plan has `stage` steps: resolves when the cursor
+	 * reaches the next one. A handler that adds several things awaits it before each
+	 * (`await context.stage?.()`), so they appear one by one; without playback it is absent.
+	 */
+	stage?: () => Promise<void>;
 }
 
 /** Options for `callTool`. */

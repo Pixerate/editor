@@ -17,3 +17,15 @@ export * from './TypeOptionsBar';
 export * from './ImageProviderEffectsPanel';
 export * from './ImageEffectControls';
 export * from './PaintGradientEditor';
+export {
+  ImageEditorControlsProvider,
+  useImageEditorControls,
+  ImageCheckbox,
+  ImageRange,
+  ImageSelect,
+  type ImageEditorControls,
+  type ImageCheckboxProps,
+  type ImageRangeProps,
+  type ImageSelectProps,
+  type ImageSelectOption,
+} from './controls/controls.js';

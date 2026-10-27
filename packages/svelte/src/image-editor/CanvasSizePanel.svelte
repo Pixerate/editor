@@ -1,8 +1,10 @@
 <script lang="ts">
+  import ImageSelect from './controls/ImageSelect.svelte';
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import type { ImageEditorController, TransformAnchor } from '@pixerate/editor/image-editor';
   import { CANVAS_SIZE_PRESETS, isTransformAnchor } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
-  import { imagePrimaryButtonClass, imageSelectClass } from './styles.js';
+  import { imagePrimaryButtonClass } from './styles.js';
 
   interface Props {
     controller: ImageEditorController;
@@ -56,10 +58,7 @@
     height = val;
   }
 
-  function onPresetSelect(e: Event) {
-    const target = e.currentTarget as HTMLSelectElement;
-    const presetId = target.value;
-    target.value = '';
+  function onPresetSelect(presetId: string) {
     const preset = CANVAS_SIZE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     width = preset.width;
@@ -85,18 +84,15 @@
   {/if}
 
   <div class="flex flex-col gap-1.5">
-    <label for="canvas-size-preset" class="text-muted-foreground text-[11px]">Preset</label>
-    <select
-      id="canvas-size-preset"
-      class="{imageSelectClass} w-full"
+    <span class="text-muted-foreground text-[11px]">Preset</span>
+    <ImageSelect
+      class="w-full"
+      label="Preset canvas sizes"
+      value=""
+      placeholder="Choose preset…"
+      options={CANVAS_SIZE_PRESETS.map((preset) => ({ value: preset.id, label: `${preset.label} (${preset.width} × ${preset.height})` }))}
       onchange={onPresetSelect}
-      aria-label="Preset canvas sizes"
-    >
-      <option value="">Choose preset…</option>
-      {#each CANVAS_SIZE_PRESETS as preset (preset.id)}
-        <option value={preset.id}>{preset.label} ({preset.width} × {preset.height})</option>
-      {/each}
-    </select>
+    />
   </div>
 
   <div class="grid grid-cols-2 gap-2 items-center">
@@ -129,12 +125,7 @@
 
   <div class="flex items-center gap-2">
     <label class="flex items-center gap-1.5 cursor-pointer text-muted-foreground select-none">
-      <input
-        type="checkbox"
-        class="rounded border-border text-primary focus:ring-primary"
-        checked={lockAspect}
-        onchange={(e) => (lockAspect = (e.currentTarget as HTMLInputElement).checked)}
-      />
+      <ImageCheckbox label="Lock aspect ratio" checked={lockAspect} onchange={(on) => (lockAspect = on)} />
       <span>Lock aspect ratio</span>
     </label>
   </div>

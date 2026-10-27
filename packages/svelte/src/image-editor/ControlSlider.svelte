@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageRange from './controls/ImageRange.svelte';
   import type { ControlSpec } from '@pixerate/editor/image-editor';
   import { controlTrackBackground, formatControlValue } from '@pixerate/editor/image-editor';
 
@@ -24,17 +25,7 @@
     <span>{name}</span>
     <span class="font-mono">{formatControlValue(spec, value)}</span>
   </div>
-  <input
-    type="range"
-    min={spec.min}
-    max={spec.max}
-    step={spec.step}
-    aria-label={name}
-    {disabled}
-    {value}
-    oninput={(e) => onchange(Number((e.target as HTMLInputElement).value))}
-    class="w-full accent-primary disabled:opacity-40"
-  />
+  <ImageRange min={spec.min} max={spec.max} step={spec.step} label={name} {disabled} {value} oninput={onchange} />
   {#if track}
     <div class="h-0.5 rounded-full opacity-70" style="background: {track}"></div>
   {/if}

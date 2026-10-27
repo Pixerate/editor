@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
 import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
 import { imageIconButtonClass, imageSelectClass } from './styles';
+import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface LayerEffectsPanelProps {
   controller: ImageEditorController;
@@ -34,12 +35,6 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
       setError(err instanceof Error ? err.message : String(err));
     }
   };
-  const sliderEvents = {
-    onPointerDown: () => (commitNext.current = true),
-    onPointerUp: () => (commitNext.current = true),
-    onKeyDown: () => (commitNext.current = true),
-  };
-
   if (!model.available || !id) {
     return (
       <div className={`text-xs text-muted-foreground ${className ?? ''}`} data-testid="layer-effects">
@@ -68,17 +63,16 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
               {label} {shown}
               {c.unit}
             </span>
-            <input
-              type="range"
-              aria-label={label}
+            <ImageRange
+              label={label}
               min={c.min * k}
               max={c.max * k}
               step={c.step * k}
               value={shown}
               disabled={model.readOnly}
-              {...sliderEvents}
-              onChange={(e) => change(effectId, c, Number(e.target.value) / k, true)}
-              className="accent-primary"
+              onStart={() => (commitNext.current = true)}
+              onEnd={() => (commitNext.current = true)}
+              onChange={(v) => change(effectId, c, v / k, true)}
             />
           </label>
         );
@@ -93,7 +87,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
       case 'checkbox':
         return (
           <label key={c.key} className="flex items-center gap-1.5 text-foreground">
-            <input type="checkbox" aria-label={label} checked={c.value} disabled={model.readOnly} onChange={(e) => change(effectId, c, e.target.checked)} className="accent-primary" />
+            <ImageCheckbox label={label} checked={c.value} disabled={model.readOnly} onChange={(on) => change(effectId, c, on)} />
             {label}
           </label>
         );
@@ -101,19 +95,13 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
         return (
           <label key={c.key} className="flex flex-col gap-0.5">
             <span className="text-muted-foreground">{label}</span>
-            <select
-              aria-label={label}
-              value={c.value}
+            <ImageSelect
+              label={label}
+              value={String(c.value)}
               disabled={model.readOnly}
-              onChange={(e) => change(effectId, c, e.target.value)}
-              className={imageSelectClass}
-            >
-              {c.options.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              options={c.options.map((o) => ({ value: String(o.value), label: o.label }))}
+              onChange={(v) => change(effectId, c, v)}
+            />
           </label>
         );
     }
@@ -124,14 +112,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-foreground">fx Effects</span>
         <label className="flex items-center gap-1 text-foreground">
-          <input
-            type="checkbox"
-            aria-label="Effects on"
-            checked={model.enabled}
-            disabled={model.readOnly}
-            onChange={(e) => attempt(() => controller.setLayerEffectsEnabled(id, e.target.checked))}
-            className="accent-primary"
-          />
+          <ImageCheckbox label="Effects on" checked={model.enabled} disabled={model.readOnly} onChange={(on) => attempt(() => controller.setLayerEffectsEnabled(id, on))} />
           On
         </label>
         <label className="flex items-center gap-1 text-muted-foreground">
@@ -152,24 +133,18 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
           />
           %
         </label>
-        <select
-          aria-label="Add effect"
+        <ImageSelect
+          label="Add effect"
           value=""
+          placeholder="Add effect…"
           disabled={model.readOnly}
-          onChange={(e) => {
-            const kind = e.target.value as LayerEffectKind;
+          options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
+          onChange={(v) => {
+            const kind = v as LayerEffectKind;
             if (!kind) return;
             attempt(() => setOpen(controller.addLayerEffect(id, kind).effect.id));
           }}
-          className={imageSelectClass}
-        >
-          <option value="">Add effect…</option>
-          {LAYER_EFFECT_MENU.map((m) => (
-            <option key={m.kind} value={m.kind}>
-              {m.label}
-            </option>
-          ))}
-        </select>
+        />
       </div>
       {model.readOnly && model.reason && <p className="text-muted-foreground">{model.reason}</p>}
       <ul className="flex flex-col gap-1" aria-label="Effects">
@@ -179,14 +154,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
           return (
             <li key={row.id} data-effect-id={row.id} className="rounded bg-background/60 ring-1 ring-border">
               <div className="flex items-center gap-1.5 px-1.5 py-1">
-                <input
-                  type="checkbox"
-                  aria-label={`${row.label} on`}
-                  checked={row.enabled}
-                  disabled={model.readOnly}
-                  onChange={(e) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: e.target.checked }))}
-                  className="accent-primary"
-                />
+                <ImageCheckbox label={`${row.label} on`} checked={row.enabled} disabled={model.readOnly} onChange={(on) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: on }))} />
                 <button
                   type="button"
                   aria-expanded={expanded}

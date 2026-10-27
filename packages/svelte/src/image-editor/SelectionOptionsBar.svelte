@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { imageRangeClass } from './styles.js';
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
+  import ImageRange from './controls/ImageRange.svelte';
+  import ImageSelect from './controls/ImageSelect.svelte';
   import type {
     ImageEditorController,
     SelectionMask,
@@ -83,41 +85,32 @@
           <span>Tolerance</span>
           <span class="font-mono">{options.tolerance}</span>
         </span>
-        <input
-          type="range"
-          min="0"
-          max="255"
-          step="1"
-          aria-label="Tolerance"
-          value={options.tolerance}
-          oninput={(e) => set({ tolerance: Number((e.currentTarget as HTMLInputElement).value) })}
-          class={imageRangeClass}
-        />
+        <ImageRange label="Tolerance" min={0} max={255} step={1} value={options.tolerance} oninput={(v) => set({ tolerance: v })} />
       </label>
       <label class="flex items-center gap-2 text-foreground">
-        <input type="checkbox" checked={options.contiguous} onchange={(e) => set({ contiguous: (e.currentTarget as HTMLInputElement).checked })} />
+        <ImageCheckbox label="Contiguous" checked={options.contiguous} onchange={(on) => set({ contiguous: on })} />
         Contiguous
       </label>
       <label class="flex items-center gap-2 text-foreground">
-        <input type="checkbox" checked={options.sampleMerged} onchange={(e) => set({ sampleMerged: (e.currentTarget as HTMLInputElement).checked })} />
+        <ImageCheckbox label="Sample adjusted image" checked={options.sampleMerged} onchange={(on) => set({ sampleMerged: on })} />
         Sample adjusted image
       </label>
       <label class="flex items-center gap-2 text-foreground">
         Sample
-        <select
-          aria-label="Sample from"
+        <ImageSelect
+          label="Sample from"
           value={options.sample ?? 'composite'}
-          onchange={(e) => set({ sample: (e.currentTarget as HTMLSelectElement).value as 'composite' | 'active-layer' })}
-          class="bg-muted border border-border rounded px-1 py-0.5"
-        >
-          <option value="composite">All layers</option>
-          <option value="active-layer">Active layer</option>
-        </select>
+          options={[
+            { value: 'composite', label: 'All layers' },
+            { value: 'active-layer', label: 'Active layer' },
+          ]}
+          onchange={(v) => set({ sample: v as 'composite' | 'active-layer' })}
+        />
       </label>
     </div>
   {/if}
   <label class="flex items-center gap-2 text-foreground">
-    <input type="checkbox" checked={options.antiAlias} onchange={(e) => set({ antiAlias: (e.currentTarget as HTMLInputElement).checked })} />
+    <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onchange={(on) => set({ antiAlias: on })} />
     Anti-alias
   </label>
   <div class="flex flex-wrap gap-1">

@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { imageIconButtonClass, imageSelectClass } from './styles.js';
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
+  import ImageRange from './controls/ImageRange.svelte';
+  import ImageSelect from './controls/ImageSelect.svelte';
+  import { imageIconButtonClass } from './styles.js';
   import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
   import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -57,10 +60,8 @@
     });
   }
 
-  function add(e: Event) {
-    const select = e.currentTarget as HTMLSelectElement;
-    const kind = select.value as LayerEffectKind;
-    select.value = '';
+  function add(value: string) {
+    const kind = value as LayerEffectKind;
     const id = view.id;
     if (!kind || !id) return;
     attempt(() => (open = controller.addLayerEffect(id, kind).effect.id));
@@ -84,13 +85,11 @@
     <div class="flex flex-wrap items-center gap-2">
       <span class="font-semibold text-foreground">fx Effects</span>
       <label class="flex items-center gap-1 text-foreground">
-        <input
-          type="checkbox"
-          aria-label="Effects on"
+        <ImageCheckbox
+          label="Effects on"
           checked={view.model.enabled}
           disabled={view.model.readOnly}
-          onchange={(e) => attempt(() => controller.setLayerEffectsEnabled(id, (e.currentTarget as HTMLInputElement).checked))}
-          class="accent-primary"
+          onchange={(on) => attempt(() => controller.setLayerEffectsEnabled(id, on))}
         />
         On
       </label>
@@ -109,12 +108,14 @@
         />
         %
       </label>
-      <select aria-label="Add effect" value="" disabled={view.model.readOnly} onchange={add} class={imageSelectClass}>
-        <option value="">Add effect…</option>
-        {#each LAYER_EFFECT_MENU as m (m.kind)}
-          <option value={m.kind}>{m.label}</option>
-        {/each}
-      </select>
+      <ImageSelect
+        label="Add effect"
+        value=""
+        placeholder="Add effect…"
+        disabled={view.model.readOnly}
+        options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
+        onchange={add}
+      />
     </div>
     {#if view.model.readOnly && view.model.reason}<p class="text-muted-foreground">{view.model.reason}</p>{/if}
     <ul class="flex flex-col gap-1" aria-label="Effects">
@@ -123,13 +124,11 @@
         {@const expanded = open === row.id}
         <li data-effect-id={row.id} class="rounded bg-background/60 ring-1 ring-border">
           <div class="flex items-center gap-1.5 px-1.5 py-1">
-            <input
-              type="checkbox"
-              aria-label="{row.label} on"
+            <ImageCheckbox
+              label="{row.label} on"
               checked={row.enabled}
               disabled={view.model.readOnly}
-              onchange={(e) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: (e.currentTarget as HTMLInputElement).checked }))}
-              class="accent-primary"
+              onchange={(on) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: on }))}
             />
             <button type="button" aria-expanded={expanded} class="flex-1 text-left {row.enabled && view.model.enabled ? '' : 'text-muted-foreground'}" onclick={() => (open = expanded ? null : row.id)}>
               {row.label}
@@ -142,19 +141,16 @@
                 {#if c.type === 'range'}
                   <label class="flex flex-col gap-0.5">
                     <span class="text-muted-foreground">{c.label} {shown(c)}{c.unit ?? ''}</span>
-                    <input
-                      type="range"
-                      aria-label={c.label}
+                    <ImageRange
+                      label={c.label}
                       min={c.min * k(c)}
                       max={c.max * k(c)}
                       step={c.step * k(c)}
                       value={shown(c)}
                       disabled={view.model.readOnly}
-                      onpointerdown={() => (commitNext = true)}
-                      onpointerup={() => (commitNext = true)}
-                      onkeydown={() => (commitNext = true)}
-                      oninput={(e) => change(row.id, c, Number((e.currentTarget as HTMLInputElement).value) / k(c), true)}
-                      class="accent-primary"
+                      onstart={() => (commitNext = true)}
+                      onend={() => (commitNext = true)}
+                      oninput={(v) => change(row.id, c, v / k(c), true)}
                     />
                   </label>
                 {:else if c.type === 'color'}
@@ -164,17 +160,13 @@
                   </label>
                 {:else if c.type === 'checkbox'}
                   <label class="flex items-center gap-1.5 text-foreground">
-                    <input type="checkbox" aria-label={c.label} checked={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLInputElement).checked)} class="accent-primary" />
+                    <ImageCheckbox label={c.label} checked={c.value} disabled={view.model.readOnly} onchange={(on) => change(row.id, c, on)} />
                     {c.label}
                   </label>
                 {:else}
                   <label class="flex flex-col gap-0.5">
                     <span class="text-muted-foreground">{c.label}</span>
-                    <select aria-label={c.label} value={c.value} disabled={view.model.readOnly} onchange={(e) => change(row.id, c, (e.currentTarget as HTMLSelectElement).value)} class={imageSelectClass}>
-                      {#each c.options as o (o.value)}
-                        <option value={o.value}>{o.label}</option>
-                      {/each}
-                    </select>
+                    <ImageSelect label={c.label} value={String(c.value)} disabled={view.model.readOnly} options={c.options.map((o) => ({ value: String(o.value), label: o.label }))} onchange={(v) => change(row.id, c, v)} />
                   </label>
                 {/if}
               {/each}

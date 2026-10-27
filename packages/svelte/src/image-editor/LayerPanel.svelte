@@ -6,6 +6,7 @@
     DEFAULT_TYPE_TOOL_OPTIONS,
     DEFAULT_SELECTION_TOOL_OPTIONS,
   } from '@pixerate/editor/image-editor';
+  import { untrack } from 'svelte';
   import CanvasSizePanel from './CanvasSizePanel.svelte';
   import ControlSlider from './ControlSlider.svelte';
   import LayerEffectsPanel from './LayerEffectsPanel.svelte';
@@ -23,7 +24,17 @@
 
   let { controller, panelId, class: className = '' }: Props = $props();
 
-  const activeLayer = $derived(controller.getActiveLayer());
+  let tick = $state(0);
+  $effect(() => {
+    const c = controller;
+    // `subscribe` calls the listener at once: untracked, or the effect would depend on `tick`.
+    return untrack(() => c.subscribe(() => tick++));
+  });
+  // The controller isn't reactive: re-read the active layer after every change.
+  const activeLayer = $derived.by(() => {
+    void tick;
+    return controller.getActiveLayer();
+  });
   let shapeOptions = $state({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
   let typeOptions = $state({ ...DEFAULT_TYPE_TOOL_OPTIONS });
   let selectionOptions = $state({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
@@ -52,8 +63,8 @@
           <ControlSlider
             spec={ADJUSTMENT_LAYER_OPACITY_CONTROL}
             label="Opacity"
-            value={Math.round(activeLayer.opacity * 100)}
-            onchange={(val) => controller.setLayerProperties(activeLayer.id, { opacity: val / 100 })}
+            value={activeLayer.opacity}
+            onchange={(val) => controller.setLayerProperties(activeLayer.id, { opacity: val })}
           />
         </div>
       {:else}
