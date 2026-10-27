@@ -1,8 +1,10 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
+  collectRetiredEditorAssets,
   parseEditorDocument,
   toEditorDocumentFile,
   withEditorAssets,
+  type EditorAssetGarbageOptions,
   type EditorDocument,
   type EditorDocumentFile,
   type LoadReport,
@@ -13,6 +15,12 @@ export interface UseEditorAutosaveOptions
   extends Omit<UseAutosaveOptions<EditorDocumentFile>, 'key' | 'getSnapshot' | 'serialize' | 'deserialize' | 'history'> {
   /** Snapshot key (default the document's `kind`). */
   key?: string;
+  /**
+   * For documents with `assets`: after `markClean` or `discard` retire a snapshot, delete the
+   * stored assets nothing refers to any more (`collectEditorAssetGarbage`, best effort, keeping
+   * the assets the document uses now; default `true`). Needs `storage.keys`; `false` turns it off.
+   */
+  collectAssetGarbage?: boolean | Omit<EditorAssetGarbageOptions, 'dryRun' | 'only'>;
 }
 
 export interface UseEditorAutosaveResult extends Omit<UseAutosaveResult<EditorDocumentFile>, 'restore'> {
@@ -26,7 +34,7 @@ export interface UseEditorAutosaveResult extends Omit<UseAutosaveResult<EditorDo
  * recovered snapshot straight into the editor. Render `<RecoveryPrompt>` with
  * `recovery`, `restore` and `discard`. Pass a stable `doc`.
  */
-export function useEditorAutosave(doc: EditorDocument, options: UseEditorAutosaveOptions): UseEditorAutosaveResult {
+export function useEditorAutosave(doc: EditorDocument, { collectAssetGarbage, ...options }: UseEditorAutosaveOptions): UseEditorAutosaveResult {
   // Image and paint documents hold asset references: their bytes are saved and read with them.
   const storage = useMemo(
     () => (doc.assets ? withEditorAssets(options.storage, doc.assets) : options.storage),
@@ -45,5 +53,18 @@ export function useEditorAutosave(doc: EditorDocument, options: UseEditorAutosav
     const snapshot = take();
     return snapshot ? doc.loadDocument(snapshot, { history: 'reset' }) : undefined;
   }, [take, doc]);
-  return { ...autosave, restore };
+  const { markClean: clean, discard: drop } = autosave;
+  const rawStorage = options.storage;
+  const gcRef = useRef(collectAssetGarbage);
+  gcRef.current = collectAssetGarbage;
+  // Retiring a snapshot can leave assets nothing refers to any more.
+  const markClean = useCallback(async () => {
+    await clean();
+    await collectRetiredEditorAssets(rawStorage, doc, gcRef.current);
+  }, [clean, rawStorage, doc]);
+  const discard = useCallback(async () => {
+    await drop();
+    await collectRetiredEditorAssets(rawStorage, doc, gcRef.current);
+  }, [drop, rawStorage, doc]);
+  return { ...autosave, restore, markClean, discard };
 }

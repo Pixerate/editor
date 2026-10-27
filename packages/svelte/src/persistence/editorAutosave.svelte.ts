@@ -1,7 +1,9 @@
 import {
+  collectRetiredEditorAssets,
   parseEditorDocument,
   toEditorDocumentFile,
   withEditorAssets,
+  type EditorAssetGarbageOptions,
   type EditorDocument,
   type EditorDocumentFile,
   type LoadReport,
@@ -12,6 +14,12 @@ export interface CreateEditorAutosaveOptions
   extends Omit<CreateAutosaveOptions<EditorDocumentFile>, "key" | "getSnapshot" | "serialize" | "deserialize" | "history"> {
   /** Snapshot key (default the document's `kind`). */
   key?: string;
+  /**
+   * For documents with `assets`: after `markClean` or `discard` retire a snapshot, delete the
+   * stored assets nothing refers to any more (`collectEditorAssetGarbage`, best effort, keeping
+   * the assets the document uses now; default `true`). Needs `storage.keys`; `false` turns it off.
+   */
+  collectAssetGarbage?: boolean | Omit<EditorAssetGarbageOptions, "dryRun" | "only">;
 }
 
 export interface SvelteEditorAutosave extends Omit<SvelteAutosave<EditorDocumentFile>, "restore"> {
@@ -25,7 +33,9 @@ export interface SvelteEditorAutosave extends Omit<SvelteAutosave<EditorDocument
  * `EditorDocumentFile` after each change, and `restore` loads a recovered
  * snapshot straight into the editor. Status and recovery stay reactive.
  */
-export function createEditorAutosave(doc: EditorDocument, options: CreateEditorAutosaveOptions): SvelteEditorAutosave {
+export function createEditorAutosave(doc: EditorDocument, { collectAssetGarbage, ...options }: CreateEditorAutosaveOptions): SvelteEditorAutosave {
+  // Retiring a snapshot can leave assets nothing refers to any more.
+  const collect = () => collectRetiredEditorAssets(options.storage, doc, collectAssetGarbage);
   const autosave = createAutosave<EditorDocumentFile>({
     ...options,
     // Image and paint documents hold asset references: their bytes are saved and read with them.
@@ -49,10 +59,16 @@ export function createEditorAutosave(doc: EditorDocument, options: CreateEditorA
       const snapshot = autosave.restore();
       return snapshot ? doc.loadDocument(snapshot, { history: "reset" }) : undefined;
     },
-    discard: () => autosave.discard(),
+    async discard() {
+      await autosave.discard();
+      await collect();
+    },
     ready: () => autosave.ready(),
     flushNow: () => autosave.flushNow(),
-    markClean: () => autosave.markClean(),
+    async markClean() {
+      await autosave.markClean();
+      await collect();
+    },
     notifyChange: () => autosave.notifyChange(),
     checked: autosave.checked,
     controller: autosave.controller,

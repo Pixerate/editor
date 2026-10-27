@@ -1,4 +1,5 @@
 import type { StorageAdapter } from "./storage";
+import { leaseAssetRefs, watchAssetLeases, withAssetLock } from "./assetWrites";
 
 /** Prefix of an asset reference in a document (`pixerate-asset:<length>-<hash>`). */
 export const EDITOR_ASSET_PREFIX = "pixerate-asset:";
@@ -22,6 +23,11 @@ export interface EditorAssetRegistry {
   /** Puts data read back from storage under its reference. */
   set(ref: string, data: string): void;
   readonly size: number;
+  /**
+   * Every reference the registry holds. Optional for custom registries, but
+   * `collectEditorAssetGarbage({ keep })` needs it to protect a registry's assets.
+   */
+  refs?(): string[];
 }
 
 /** Whether a string is inline binary data worth keeping out of the document. */
@@ -68,6 +74,7 @@ export function createEditorAssetRegistry(): EditorAssetRegistry {
     get size() {
       return byRef.size;
     },
+    refs: () => [...byRef.keys()],
   };
 }
 
@@ -120,10 +127,18 @@ export interface EditorAssetStorageOptions {
   prefix?: string;
 }
 
-/** Asset keys each storage already holds (written in this session). */
-const persisted = new WeakMap<StorageAdapter, Set<string>>();
+/**
+ * Asset keys each storage already holds (written in this session), valid while the storage's
+ * collection marker is `marker`: a garbage collection changes the marker, so every session
+ * (and every tab) writes its assets again instead of trusting a cache of deleted keys.
+ */
+const persisted = new WeakMap<StorageAdapter, { marker: string | null | undefined; keys: Set<string> }>();
 
-const assetKey = (ref: string, options: EditorAssetStorageOptions) => `${options.prefix ?? "pixerate.assets:"}${ref.slice(EDITOR_ASSET_PREFIX.length)}`;
+const assetPrefix = (options: EditorAssetStorageOptions) => options.prefix ?? "pixerate.assets:";
+const assetKey = (ref: string, options: EditorAssetStorageOptions) => `${assetPrefix(options)}${ref.slice(EDITOR_ASSET_PREFIX.length)}`;
+/** Changed by every collection that deletes something; never matches an asset key. */
+const markerKey = (options: EditorAssetStorageOptions) => `${assetPrefix(options)}#collected`;
+const ASSET_ID = /^[0-9a-z]+-[0-9a-z]+(?:~[0-9]+)?$/;
 
 /**
  * Writes the assets `document` (or its JSON text) refers to into `storage`, skipping those
@@ -135,9 +150,18 @@ export async function persistEditorAssets(
   document: unknown,
   options: EditorAssetStorageOptions = {},
 ): Promise<void> {
-  const written = persisted.get(storage) ?? new Set<string>();
-  persisted.set(storage, written);
-  for (const ref of collectAssetRefs(document)) {
+  const refs = collectAssetRefs(document);
+  if (!refs.length) return;
+  const cache = persisted.get(storage) ?? { marker: undefined, keys: new Set<string>() };
+  persisted.set(storage, cache);
+  // `undefined` (unreadable) never matches, so the cache is dropped and assets are written again.
+  const marker = await storage.get(markerKey(options)).catch(() => undefined);
+  if (marker === undefined || marker !== cache.marker) {
+    cache.keys.clear();
+    cache.marker = marker;
+  }
+  const written = cache.keys;
+  for (const ref of refs) {
     const key = assetKey(ref, options);
     if (written.has(key)) continue;
     const data = registry.get(ref);
@@ -183,9 +207,221 @@ export function withEditorAssets(storage: StorageAdapter, registry: EditorAssetR
       return value;
     },
     async set(key, value) {
-      if (value.includes(EDITOR_ASSET_PREFIX)) await persistEditorAssets(storage, registry, value, options);
-      await storage.set(key, value);
+      if (!value.includes(EDITOR_ASSET_PREFIX)) return storage.set(key, value);
+      await writeWithAssets(storage, registry, value, options, () => storage.set(key, value));
     },
     remove: (key) => storage.remove(key),
+    ...(storage.keys ? { keys: (prefix?: string) => storage.keys!(prefix) } : {}),
   };
+}
+
+/**
+ * Persists the assets `document` refers to, then runs `write` (which stores the document), with
+ * the references protected from a concurrent `collectEditorAssetGarbage` throughout.
+ */
+async function writeWithAssets(
+  storage: StorageAdapter,
+  registry: EditorAssetRegistry | undefined,
+  document: string,
+  options: EditorAssetStorageOptions,
+  write: () => Promise<void>,
+): Promise<void> {
+  const release = leaseAssetRefs(collectAssetRefs(document));
+  try {
+    await withAssetLock(assetPrefix(options), "shared", async () => {
+      if (registry) await persistEditorAssets(storage, registry, document, options);
+      await write();
+    });
+  } finally {
+    release();
+  }
+}
+
+// ---------------------------------------------------------------- garbage collection
+
+export interface EditorAssetGarbageOptions extends EditorAssetStorageOptions {
+  /**
+   * More assets to keep although no stored value refers to them: asset registries (e.g. an open
+   * editor's `doc.assets`), editor documents with `assets`, asset references, or documents /
+   * JSON text whose references to keep.
+   */
+  keep?: ReadonlyArray<unknown>;
+  /** Report what would be deleted without deleting anything (default `false`). */
+  dryRun?: boolean;
+  /**
+   * Delete only these references (e.g. from a dry run). Every one must still be unreferenced,
+   * or nothing is deleted and the call throws naming them.
+   */
+  only?: ReadonlyArray<string>;
+}
+
+export interface EditorAssetGarbageReport {
+  /** Assets found in storage. */
+  assets: number;
+  /** Stored values read for references (documents, the index, autosave snapshots, anything else). */
+  scannedKeys: number;
+  /** Assets a stored value refers to. */
+  referenced: number;
+  /** Unreferenced assets kept because of `keep` or a write in flight. */
+  kept: number;
+  /** References of the assets nothing refers to (limited by `only`); deleted unless `dryRun`. */
+  unreferenced: string[];
+  /** Characters of data the unreferenced assets hold. */
+  unreferencedChars: number;
+  /** References deleted (empty on a dry run). */
+  removed: string[];
+  /** Characters of data deleted. */
+  freedChars: number;
+  dryRun: boolean;
+}
+
+const isRegistry = (value: unknown): value is EditorAssetRegistry =>
+  !!value && typeof value === "object" && ["put", "get", "has", "set"].every((k) => typeof (value as Record<string, unknown>)[k] === "function");
+
+/** Data length encoded in a reference (`pixerate-asset:<length>-<hash>`). */
+const refChars = (ref: string) => parseInt(ref.slice(EDITOR_ASSET_PREFIX.length).split("-")[0], 36) || 0;
+
+function keptRefs(keep: ReadonlyArray<unknown>): Set<string> {
+  const out = new Set<string>();
+  const addRegistry = (registry: EditorAssetRegistry) => {
+    if (typeof registry.refs !== "function") {
+      throw new Error("A registry passed in keep cannot list its references (it has no refs()). Use createEditorAssetRegistry, or pass the documents to keep instead.");
+    }
+    for (const ref of registry.refs()) out.add(ref);
+  };
+  for (const item of keep) {
+    if (isRegistry(item)) addRegistry(item);
+    else if (item && typeof item === "object" && isRegistry((item as { assets?: unknown }).assets)) addRegistry((item as { assets: EditorAssetRegistry }).assets);
+    else for (const ref of collectAssetRefs(item)) out.add(ref);
+  }
+  return out;
+}
+
+/**
+ * Deletes the stored assets that nothing refers to. Every other value in `storage` (named
+ * documents, the document index, autosave snapshots, anything else) is read and its
+ * `pixerate-asset:` references are kept, so pass the whole storage the editors write to (a
+ * `withEditorAssets` wrapper works too, but reads assets into its registry). Assets in `keep`,
+ * and assets a write in flight in this realm is about to refer to, are never deleted; where the
+ * Web Locks API exists, writes in other tabs are waited for too. Needs `storage.keys` (every
+ * built-in adapter has it) and throws without it.
+ *
+ * Run it after removing documents, after an autosave snapshot was retired (`markClean`), or on
+ * demand. Deleting an asset that an open editor's registry still holds is safe: the collection
+ * invalidates every session's "already written" cache, so its next save writes the asset again.
+ */
+export async function collectEditorAssetGarbage(storage: StorageAdapter, options: EditorAssetGarbageOptions = {}): Promise<EditorAssetGarbageReport> {
+  if (typeof storage.keys !== "function") {
+    throw new Error(
+      `This ${storage.kind} storage cannot list its keys, so unreferenced assets cannot be found. Give the adapter a keys(prefix) method (every built-in adapter has one).`,
+    );
+  }
+  const listKeys = storage.keys.bind(storage);
+  const prefix = assetPrefix(options);
+  const keep = keptRefs(options.keep ?? []);
+  const dryRun = options.dryRun === true;
+  return withAssetLock(prefix, "exclusive", async () => {
+    const watch = watchAssetLeases();
+    try {
+      const assetKeys = (await listKeys(prefix)).filter((key) => ASSET_ID.test(key.slice(prefix.length)));
+      const others = (await listKeys("")).filter((key) => !key.startsWith(prefix));
+      const live = new Set<string>();
+      for (const key of others) {
+        const value = await storage.get(key);
+        if (value !== null && value.includes(EDITOR_ASSET_PREFIX)) for (const ref of collectAssetRefs(value)) live.add(ref);
+      }
+      const toRef = (key: string) => `${EDITOR_ASSET_PREFIX}${key.slice(prefix.length)}`;
+      let referenced = 0;
+      let kept = 0;
+      const candidates: string[] = [];
+      for (const key of assetKeys) {
+        const ref = toRef(key);
+        if (live.has(ref)) referenced++;
+        else if (keep.has(ref) || watch.touched.has(ref)) kept++;
+        else candidates.push(ref);
+      }
+      let unreferenced = candidates;
+      if (options.only) {
+        const wanted = new Set(options.only);
+        const stale = [...wanted].filter((ref) => !candidates.includes(ref));
+        if (stale.length) {
+          throw new Error(
+            `${stale.length} of the given asset${stale.length === 1 ? " is" : "s are"} not unreferenced in storage now (${stale.slice(0, 3).join(", ")}${stale.length > 3 ? ", …" : ""}): unknown, already deleted, referenced or in use. Nothing was deleted; find the unreferenced assets again.`,
+          );
+        }
+        unreferenced = candidates.filter((ref) => wanted.has(ref));
+      }
+      const report: EditorAssetGarbageReport = {
+        assets: assetKeys.length,
+        scannedKeys: others.length,
+        referenced,
+        kept,
+        unreferenced,
+        unreferencedChars: unreferenced.reduce((n, ref) => n + refChars(ref), 0),
+        removed: [],
+        freedChars: 0,
+        dryRun,
+      };
+      if (dryRun || !unreferenced.length) return report;
+      // Change the marker first: every session's "already written" cache is now stale.
+      await storage.set(markerKey(options), `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+      for (const ref of unreferenced) {
+        // A write that started meanwhile is about to refer to it.
+        if (watch.touched.has(ref)) {
+          report.kept++;
+          continue;
+        }
+        try {
+          await storage.remove(assetKey(ref, options));
+        } catch (error) {
+          throw new Error(
+            `Deleted ${report.removed.length} of ${unreferenced.length} unreferenced assets, then storage failed: ${error instanceof Error ? error.message : String(error)}. The rest are still stored and nothing refers to the deleted ones; run the collection again.`,
+          );
+        }
+        report.removed.push(ref);
+        report.freedChars += refChars(ref);
+      }
+      return report;
+    } finally {
+      watch.stop();
+    }
+  });
+}
+
+/**
+ * `collectEditorAssetGarbage` for automatic, best-effort runs: resolves `null` instead of
+ * throwing when the storage cannot list keys or the collection fails.
+ */
+export async function tryCollectEditorAssetGarbage(storage: StorageAdapter, options: EditorAssetGarbageOptions = {}): Promise<EditorAssetGarbageReport | null> {
+  if (typeof storage.keys !== "function") return null;
+  try {
+    return await collectEditorAssetGarbage(storage, options);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The collection an editor autosave runs after retiring a snapshot (`markClean`, `discard`):
+ * best effort, keeping the assets `doc` uses now, and only for documents with `assets`.
+ * `setting` is the autosave's `collectAssetGarbage` option (default on). Pass the unwrapped storage.
+ *
+ * Not the whole registry: a recovery check reads the old snapshot's assets into it, so keeping
+ * it would keep exactly what `discard` throws away. Assets only the registry (e.g. undo) still
+ * holds are written again by the next save.
+ */
+export async function collectRetiredEditorAssets(
+  storage: StorageAdapter,
+  doc: { assets?: EditorAssetRegistry; getDocument(): unknown },
+  setting: boolean | Omit<EditorAssetGarbageOptions, "dryRun" | "only"> = true,
+): Promise<EditorAssetGarbageReport | null> {
+  if (!doc.assets || setting === false) return null;
+  const extra = setting === true ? {} : setting;
+  let current: unknown;
+  try {
+    current = doc.getDocument();
+  } catch {
+    return null;
+  }
+  return tryCollectEditorAssetGarbage(storage, { ...extra, keep: [current, ...(extra.keep ?? [])] });
 }

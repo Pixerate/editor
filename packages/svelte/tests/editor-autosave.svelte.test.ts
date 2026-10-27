@@ -1,7 +1,57 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
-import { createMemoryStorage, toEditorDocumentFile } from "@pixerate/editor/persistence";
+import { createEditorAssetRegistry, createMemoryStorage, defineEditorDocument, toEditorDocumentFile } from "@pixerate/editor/persistence";
 import { createEditorAutosave } from "../src/persistence";
+
+describe("createEditorAutosave asset garbage collection", () => {
+  const big = (seed: number) => `data:image/png;base64,${Array.from({ length: 800 }, (_, i) => "ABCDEFGHIJKLMNOP"[(i * seed) % 16]).join("")}`;
+  const assetKey = (data: string) => `pixerate.assets:${createEditorAssetRegistry().put(data).slice("pixerate-asset:".length)}`;
+  const assetKeys = (storage: { entries: Map<string, string> }) => [...storage.entries.keys()].filter((k) => /^pixerate\.assets:[0-9a-z]+-/.test(k));
+
+  function pictureDoc() {
+    const history = new HistoryManager();
+    return defineEditorDocument<{ png: string }>({
+      kind: "picture",
+      assets: createEditorAssetRegistry(),
+      get: () => ({ png: big(3) }),
+      load: () => {},
+      subscribe: () => () => {},
+      history: { undo: () => history.undo(), redo: () => history.redo(), getState: () => history.getState() },
+    });
+  }
+
+  /** An earlier session's dirty snapshot whose only asset nothing else refers to. */
+  async function seed() {
+    const storage = createMemoryStorage();
+    const ref = createEditorAssetRegistry().put(big(5));
+    await storage.set(assetKey(big(5)), big(5));
+    await storage.set("picture", JSON.stringify({ format: "pixerate-editor-document", kind: "picture", formatVersion: 1, document: { png: ref } }));
+    await storage.set("picture:meta", JSON.stringify({ dirty: true, time: 1 }));
+    return storage;
+  }
+
+  it("collects assets left behind when a snapshot is discarded or retired, unless turned off", async () => {
+    const kept = await seed();
+    const off = createEditorAutosave(pictureDoc(), { storage: kept, collectAssetGarbage: false });
+    cleanup.push(() => off.destroy());
+    await off.checked;
+    await off.discard();
+    expect(kept.entries.has("picture")).toBe(false);
+    expect(assetKeys(kept)).toHaveLength(1);
+
+    const storage = await seed();
+    const on = createEditorAutosave(pictureDoc(), { storage });
+    cleanup.push(() => on.destroy());
+    await on.checked;
+    expect(on.pendingRecovery).toBe(true);
+    await on.discard();
+    expect(assetKeys(storage)).toHaveLength(0);
+    // markClean collects too.
+    await storage.set(assetKey(big(7)), big(7));
+    await on.markClean();
+    expect(assetKeys(storage)).toHaveLength(0);
+  });
+});
 import { createCanvasDocument, createMermaidDiagram } from "../src/canvas";
 import { HistoryManager } from "@pixerate/editor/history";
 import { flushSync } from "svelte";
