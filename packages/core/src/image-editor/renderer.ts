@@ -62,6 +62,13 @@ export interface RenderOptions {
    * `measureCanvasViewport`.
    */
   pixelRatio?: number;
+  /**
+   * Screen pixels per CSS pixel from a host's CSS transform (default 1; see
+   * `measureCanvasViewport().hostScale`). Overlay chrome (crop and transform frames and handles, the
+   * brush cursor, markers, the text caret) is drawn that much smaller, so it keeps its size on
+   * screen when a host shows the canvas zoomed (e.g. inside a scaled canvas node).
+   */
+  hostScale?: number;
   showCropOverlay?: boolean;
   showSelectionOverlay?: boolean;
   interactive?: boolean;
@@ -168,12 +175,12 @@ export const globalImageCache = new ImageCache();
 /** The blue edge of the crop and transform handles. */
 const OVERLAY_HANDLE_EDGE = '#0284c7';
 
-/** The crop box's square handles (screen pixels), shared by the crop and transform overlays. */
-function drawOverlayHandles(ctx: CanvasRenderingContext2D, points: readonly { x: number; y: number }[]): void {
-  const size = 10;
+/** The crop box's square handles, shared by the crop and transform overlays (`u`: one screen pixel). */
+function drawOverlayHandles(ctx: CanvasRenderingContext2D, points: readonly { x: number; y: number }[], u = 1): void {
+  const size = 8 * u;
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.5 * u;
   for (const h of points) {
     ctx.fillRect(h.x - size / 2, h.y - size / 2, size, size);
     ctx.strokeRect(h.x - size / 2, h.y - size / 2, size, size);
@@ -288,6 +295,8 @@ export class ImageEditorRenderer {
     const vpHeight = options.viewportHeight || targetCanvas.height;
 
     const ratio = options.pixelRatio && Number.isFinite(options.pixelRatio) && options.pixelRatio > 0 ? options.pixelRatio : 1;
+    // One screen pixel of overlay chrome, in the CSS pixels everything is drawn in.
+    const u = options.hostScale && Number.isFinite(options.hostScale) && options.hostScale > 0 ? 1 / options.hostScale : 1;
     targetCanvas.width = Math.max(1, Math.round(vpWidth * ratio));
     targetCanvas.height = Math.max(1, Math.round(vpHeight * ratio));
     // Everything below draws in CSS pixels; the base scale maps them onto the backing store.
@@ -409,7 +418,7 @@ export class ImageEditorRenderer {
       ctx.save();
       try {
         applyImageProjectionToContext(ctx, projection);
-        const px = 1 / (projection.scale || 1);
+        const px = u / (projection.scale || 1);
         ctx.beginPath();
         ctx.arc(b.x, b.y, Math.max(px, b.diameter / 2), 0, Math.PI * 2);
         ctx.lineWidth = 2 * px;
@@ -429,17 +438,17 @@ export class ImageEditorRenderer {
       const m = projectImagePoint(options.cloneSourceMarker, projection);
       ctx.save();
       try {
-        const r = 7;
+        const r = 7 * u;
         ctx.beginPath();
         ctx.arc(m.x, m.y, r, 0, Math.PI * 2);
-        ctx.moveTo(m.x - r - 4, m.y);
-        ctx.lineTo(m.x + r + 4, m.y);
-        ctx.moveTo(m.x, m.y - r - 4);
-        ctx.lineTo(m.x, m.y + r + 4);
-        ctx.lineWidth = 3;
+        ctx.moveTo(m.x - r - 4 * u, m.y);
+        ctx.lineTo(m.x + r + 4 * u, m.y);
+        ctx.moveTo(m.x, m.y - r - 4 * u);
+        ctx.lineTo(m.x, m.y + r + 4 * u);
+        ctx.lineWidth = 3 * u;
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.stroke();
-        ctx.lineWidth = 1;
+        ctx.lineWidth = u;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       } catch {
@@ -461,8 +470,8 @@ export class ImageEditorRenderer {
         };
         if (t.frame) {
           poly(t.frame);
-          ctx.setLineDash([4, 3]);
-          ctx.lineWidth = 1;
+          ctx.setLineDash([4 * u, 3 * u]);
+          ctx.lineWidth = u;
           ctx.strokeStyle = 'rgba(99,102,241,0.9)';
           ctx.stroke();
           ctx.setLineDash([]);
@@ -477,10 +486,10 @@ export class ImageEditorRenderer {
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 3 * u;
           ctx.strokeStyle = '#ffffff';
           ctx.stroke();
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.5 * u;
           ctx.strokeStyle = '#111827';
           ctx.stroke();
         }
@@ -515,28 +524,28 @@ export class ImageEditorRenderer {
           outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
           ctx.closePath();
         }
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 3 * u;
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.stroke();
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5 * u;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
-        drawOverlayHandles(ctx, [...t.handles, ...(t.warp?.anchors ?? [])].map(scr));
+        drawOverlayHandles(ctx, [...t.handles, ...(t.warp?.anchors ?? [])].map(scr), u);
         for (const h of (t.warp?.handles ?? []).map((w) => scr(w.point))) {
           ctx.beginPath();
-          ctx.arc(h.x, h.y, 3.5, 0, Math.PI * 2);
+          ctx.arc(h.x, h.y, 3.5 * u, 0, Math.PI * 2);
           ctx.fillStyle = '#ffffff';
           ctx.fill();
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.5 * u;
           ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
           ctx.stroke();
         }
         const r = scr(t.reference);
         ctx.beginPath();
-        ctx.arc(r.x, r.y, 3.5, 0, Math.PI * 2);
+        ctx.arc(r.x, r.y, 3 * u, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.fill();
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.5 * u;
         ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
         ctx.stroke();
       } catch {
@@ -551,7 +560,7 @@ export class ImageEditorRenderer {
         options.draftCrop !== undefined && options.draftCrop !== null
           ? options.draftCrop
           : (crop ?? { x: 0, y: 0, width: naturalWidth, height: naturalHeight });
-      this.drawCropOverlay(ctx, getViewportMetrics(geoState, vpWidth, vpHeight, true, activeCrop));
+      this.drawCropOverlay(ctx, getViewportMetrics(geoState, vpWidth, vpHeight, true, activeCrop), u);
     }
   }
 
@@ -1142,7 +1151,7 @@ export class ImageEditorRenderer {
    * Draws a rule-of-thirds crop grid overlay. All rectangles come from
    * `getViewportMetrics`, i.e. the crop box projected through rotation/flip.
    */
-  private drawCropOverlay(ctx: CanvasRenderingContext2D, metrics: ViewportMetrics): void {
+  private drawCropOverlay(ctx: CanvasRenderingContext2D, metrics: ViewportMetrics, u = 1): void {
     const { imageRect, cropRect } = metrics;
     if (!cropRect) return;
 
@@ -1170,12 +1179,12 @@ export class ImageEditorRenderer {
 
     // Crop border
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * u;
     ctx.strokeRect(startX, startY, cropBoxW, cropBoxH);
 
     // Rule of thirds lines
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = u;
     ctx.beginPath();
     // Vertical lines
     ctx.moveTo(startX + cropBoxW / 3, startY);
@@ -1201,7 +1210,7 @@ export class ImageEditorRenderer {
       { x: startX + cropBoxW / 2, y: startY + cropBoxH },
       { x: startX, y: startY + cropBoxH / 2 },
       { x: startX + cropBoxW, y: startY + cropBoxH / 2 },
-    ]);
+    ], u);
 
     ctx.restore();
   }

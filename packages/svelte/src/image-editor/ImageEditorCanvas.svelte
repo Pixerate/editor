@@ -93,6 +93,11 @@
     open?: (ref: PlaybackRef) => void | Promise<void>;
     /** Whether wheel zoom and middle/space drag panning are enabled (default true). */
     viewportGestures?: boolean;
+    /**
+     * Pan mode (a host's hand tool): a primary drag pans the view in every mode, as holding Space
+     * does, and the canvas's own gestures pause. Needs `viewportGestures`. Default false.
+     */
+    panMode?: boolean;
     class?: string;
     style?: string;
   }
@@ -118,6 +123,7 @@
     locateElement,
     open,
     viewportGestures = true,
+    panMode = false,
     class: className = '',
     style = '',
   }: Props = $props();
@@ -200,6 +206,8 @@
 
   let isSpacePressed = $state(false);
   let isPanning = $state(false);
+  // A primary drag pans: Space held, or the host's pan mode.
+  const panning = $derived(viewportGestures && (isSpacePressed || panMode));
   let panStartPoint: { clientX: number; clientY: number } | null = null;
   let panStartOffset: { x: number; y: number } = { x: 0, y: 0 };
 
@@ -373,7 +381,7 @@
   function handleFramePointerDown(e: PointerEvent): boolean {
     if (mode !== 'transform' || transformTool.active || !canvasEl) return false;
     // Middle-button and Space drags pan (see handleMouseDown).
-    if (e.button !== 0 || (viewportGestures && isSpacePressed)) return false;
+    if (e.button !== 0 || panning) return false;
     const c = editor.controller;
     const { pt, tolerance } = transformPoint(e);
     const frame = layerFrame();
@@ -498,6 +506,7 @@
       viewportWidth: viewport.width,
       viewportHeight: viewport.height,
       pixelRatio: viewport.pixelRatio,
+      hostScale: viewport.hostScale,
       fit,
       showCropOverlay: mode === 'crop',
       showSelectionOverlay: true,
@@ -528,6 +537,8 @@
     }));
   }
   function handlePaintPointerDown(e: PointerEvent) {
+    // Panning: the drag moves the view (handleMouseDown), not the document.
+    if (panning && e.button === 0) return;
     if (handleTransformPointerDown(e)) return;
     if (handleFramePointerDown(e)) return;
     if (mode !== 'paint' || e.button !== 0 || !canvasEl) return;
@@ -540,6 +551,7 @@
     report('paint', paintGesture.down({ ...paintSamples(e)[0], altKey: e.altKey }));
   }
   function handlePaintPointerMove(e: PointerEvent) {
+    if (panning && !transformTool.active) return;
     if (handleTransformPointerMove(e)) return;
     if (mode === 'transform' && canvasEl) {
       const { pt, tolerance } = transformPoint(e);
@@ -614,7 +626,7 @@
   function handleMouseDown(e: MouseEvent) {
     if (!canvasEl) return;
 
-    if (viewportGestures && (e.button === 1 || (e.button === 0 && isSpacePressed))) {
+    if (viewportGestures && (e.button === 1 || (e.button === 0 && panning))) {
       e.preventDefault();
       isPanning = true;
       panStartPoint = { clientX: e.clientX, clientY: e.clientY };
@@ -729,8 +741,9 @@
       return;
     }
 
-    if (viewportGestures && isSpacePressed) {
+    if (panning) {
       canvasEl.style.cursor = 'grab';
+      return;
     }
 
     if (transformTool.active) return;
@@ -1013,7 +1026,7 @@
         endFrameDrag(true);
       }}
       data-testid="image-editor-canvas"
-      style="width: 100%; height: 100%;{transformActive || mode === 'transform' ? ` cursor: ${transformCursor};` : ''}"
+      style="width: 100%; height: 100%;{panning ? ` cursor: ${isPanning ? 'grabbing' : 'grab'};` : transformActive || mode === 'transform' ? ` cursor: ${transformCursor};` : ''}"
       class="absolute inset-0 w-full h-full block {transformActive || mode === 'transform' ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
     ></canvas>
     {#if typeSession}
