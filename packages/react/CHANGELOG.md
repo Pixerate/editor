@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.109.0
+
+### Minor Changes
+
+- 0bef573: Canvas node explosion: new `useCanvasExplosionState` hook (the same declarative state and lifecycle as the Svelte rune, StrictMode-safe). `useCanvasExplosion` reaches parity with the Svelte coordinator on core's `computeCanvasExplosionLayout`: `directional` displacement is now the default (it was off unless asked for), `dagre` and `none` strategies, parent-to-child edges (`connectParentToChildren`, default `all`), staggered fan-out and reverse collapse, `toggleExplode`, reactive `explodedNodeIds`, `explodeNode` / `collapseNode` return booleans, displaced nodes are restored exactly on collapse, and options `getNodesBounds` / `onSave`. The explosion layout, state controller and agent tools are re-exported.
+
+### Patch Changes
+
+- Updated dependencies [cc1ea14]
+  - @pixerate/editor@0.164.0
+
 ## 0.108.0
 
 ### Minor Changes
