@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FreeTransformTool, ImageEditorController, boxFrameHit, boxFrameOverlay, type PixelLayer } from '../src/image-editor';
+import { FreeTransformTool, ImageEditorController, boxFrameHit, boxFrameOverlay, quadFrameOverlay, type PixelLayer } from '../src/image-editor';
 
 const W = 200;
 const H = 160;
@@ -236,5 +236,27 @@ describe('FreeTransformTool', () => {
     expect(boxFrameHit(o, { x: 100, y: 60 }, 3, 12)).toBe('outside');
     expect(boxFrameHit(o, { x: 150, y: 120 }, 3, 12)).toBeNull();
     expect(boxFrameOverlay({ x: 0, y: 0, width: 10, height: 10 }, false).handles).toEqual([]);
+  });
+
+  it('frames pixel and shape layers and draws a frame from any four corners', () => {
+    const { c, id } = setup();
+    expect(c.getLayerFrame(id)).toEqual([{ x: 50, y: 50 }, { x: 90, y: 50 }, { x: 90, y: 70 }, { x: 50, y: 70 }]);
+    const shape = c.addShapeLayer({ shape: { kind: 'rect', x: 10, y: 10, width: 20, height: 10 }, fill: '#ff0000' });
+    expect(c.getLayerFrame(shape)).toEqual([{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 30, y: 20 }, { x: 10, y: 20 }]);
+    expect(c.getLayerFrame('nope')).toBeNull();
+    const o = quadFrameOverlay([{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 20 }, { x: -10, y: 10 }]);
+    expect(o.handles.find((h) => h.id === 'n')).toEqual({ id: 'n', x: 5, y: 5 });
+    expect(o.reference).toEqual({ x: 0, y: 10 });
+    expect(boxFrameHit(o, { x: 0, y: 10 }, 1, 4)).toBe('inside');
+  });
+
+  it('moves from the reference point when the host turns it off as a handle', () => {
+    const { c, id, tool } = setup();
+    tool.begin();
+    expect(tool.down({ x: 70, y: 60 }, 3, { reference: false })).toBe('inside');
+    tool.move({ x: 80, y: 70 });
+    tool.up();
+    tool.commit();
+    expect(c.getLayerBounds(id)).toEqual({ x: 60, y: 60, width: 40, height: 20 });
   });
 });

@@ -164,6 +164,28 @@ describe('Svelte Free Transform', () => {
     expect(c.getState().activeLayerId).toBeNull();
   });
 
+  it('transform mode: a shape layer gets a frame and moves by it', () => {
+    const editor = createReactiveImageEditor();
+    const c = editor.controller;
+    setup(c);
+    const shape = c.addShapeLayer({ shape: { kind: 'rect', x: 120, y: 40, width: 30, height: 20 }, fill: '#00ff00' });
+    const tool = new FreeTransformTool(c);
+    component = mount(ImageEditorCanvas, { target, props: { editor, mode: 'transform', transformTool: tool } });
+    flushSync();
+    const canvas = target.querySelector('[data-testid="image-editor-canvas"]') as HTMLCanvasElement;
+    const at = (x: number, y: number) => imageToCanvasPoint({ x, y }, c.getState(), DEFAULT_CANVAS_VIEWPORT.width, DEFAULT_CANVAS_VIEWPORT.height, false);
+    expect(c.getState().activeLayerId).toBe(shape);
+    const from = at(135, 50);
+    const to = at(145, 60);
+    canvas.dispatchEvent(pointer('pointerdown', from.x, from.y));
+    expect(tool.active).toBe(true);
+    canvas.dispatchEvent(pointer('pointermove', to.x, to.y));
+    canvas.dispatchEvent(pointer('pointerup', to.x, to.y, 0));
+    flushSync();
+    expect(tool.active).toBe(false);
+    expect(c.getLayerFrame(shape)![0]).toEqual({ x: 130, y: 50 });
+  });
+
   it('the layers panel links and unlinks masks', () => {
     const { c, id } = setup();
     c.addLayerMask(id, 'reveal-all');

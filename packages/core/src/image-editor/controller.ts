@@ -121,6 +121,7 @@ import {
   textOutlines,
   textMatrix,
   textRange,
+  typeFrame,
   toTextSpace,
   transformTypeLayer,
   typeAsPixelLayer,
@@ -2022,6 +2023,36 @@ export class ImageEditorController {
       this.boundsCache.set(surface, b);
     }
     return b ? { x: b.x + layer.offset.x, y: b.y + layer.offset.y, width: b.width, height: b.height } : null;
+  }
+
+  /**
+   * Where a layer's Free Transform frame lies now, corner to corner (top-left, top-right,
+   * bottom-right, bottom-left; document pixels): the content bounds of a pixel layer, a shape's
+   * path bounds, and the placed frame of a smart object or type layer. `null` when the layer has
+   * nothing to frame (empty, a group, an adjustment).
+   */
+  public getLayerFrame(id: string): Quad | null {
+    const layer = this.getLayer(id);
+    if (!layer) return null;
+    const rect = (b: CropBox): Quad => [
+      { x: b.x, y: b.y },
+      { x: b.x + b.width, y: b.y },
+      { x: b.x + b.width, y: b.y + b.height },
+      { x: b.x, y: b.y + b.height },
+    ];
+    if (layer.type === 'smart') return placementGeometry(layer).corners.map((p) => ({ x: p.x, y: p.y })) as unknown as Quad;
+    if (layer.type === 'type') {
+      const f = typeFrame(layer, this.textEnv().shaper);
+      const m = textMatrix(layer);
+      const at = (x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+      return [at(f.x, f.y), at(f.x + f.width, f.y), at(f.x + f.width, f.y + f.height), at(f.x, f.y + f.height)];
+    }
+    if (layer.type === 'shape') {
+      const g = shapeGeometryBounds(layer);
+      return g ? rect(g) : null;
+    }
+    const b = this.getLayerBounds(id);
+    return b ? rect(b) : null;
   }
 
   /**
