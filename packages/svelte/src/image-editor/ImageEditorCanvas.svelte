@@ -16,6 +16,8 @@
     handlePaintShortcut,
     pointerPressure,
     FreeTransformTool,
+    boxFrameHit,
+    boxFrameOverlay,
     getViewportProjection,
     measureCanvasViewport,
     watchCanvasViewport,
@@ -26,6 +28,7 @@
     type SelectionToolOptions,
     type ShapeToolOptions,
     type TextEditSession,
+    type TransformOverlay,
     type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -343,6 +346,63 @@
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  /** How far outside a frame (in hit tolerances) a drag rotates instead of picking a layer. */
+  const ROTATE_BAND = 4;
+
+  /**
+   * Transform mode, with no transform open: the active layer's frame, drawn as a transform's.
+   * A layer locked in place gets the outline without handles.
+   */
+  function layerFrame(): TransformOverlay | null {
+    if (mode !== 'transform' || transformTool.active) return null;
+    const c = editor.controller;
+    const id = c.getState().activeLayerId;
+    const layer = id ? c.getLayer(id) : undefined;
+    if (!layer || layer.visible === false) return null;
+    const bounds = c.getLayerBounds(layer.id);
+    if (!bounds) return null;
+    return boxFrameOverlay(bounds, !(layer.locks?.all || layer.locks?.position));
+  }
+
+  /**
+   * Transform mode: a drag on the active layer's frame transforms it, and a press elsewhere picks
+   * the layer there (or none) and drags that. Each drag opens a Free Transform and closes it on
+   * release, one undo step when it changed something, so other edits never meet an open one.
+   */
+  let frameDrag = false;
+  function handleFramePointerDown(e: PointerEvent): boolean {
+    if (mode !== 'transform' || transformTool.active || !canvasEl) return false;
+    // Middle-button and Space drags pan (see handleMouseDown).
+    if (e.button !== 0 || (viewportGestures && isSpacePressed)) return false;
+    const c = editor.controller;
+    const { pt, tolerance } = transformPoint(e);
+    const frame = layerFrame();
+    let target = frame && boxFrameHit(frame, pt, tolerance, tolerance * ROTATE_BAND) ? c.getState().activeLayerId : null;
+    if (!target) {
+      target = c.layerAt(pt);
+      c.setActiveLayer(target);
+    }
+    const layer = target ? c.getLayer(target) : undefined;
+    if (!layer || layer.locks?.all || layer.locks?.position) return true;
+    e.preventDefault();
+    if (transformTool.begin({ layerId: layer.id })) return true;
+    try {
+      canvasEl.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Synthetic events have no active pointer to capture.
+    }
+    transformTool.down(pt, tolerance);
+    frameDrag = true;
+    return true;
+  }
+  function endFrameDrag(cancelled = false) {
+    if (!frameDrag) return;
+    frameDrag = false;
+    if (!transformTool.active) return;
+    if (!cancelled && transformTool.modified) transformTool.commit();
+    else transformTool.cancel();
+  }
+
   /** The document point of a pointer event and the hit tolerance (6 screen px). */
   function transformPoint(e: PointerEvent) {
     const rect = canvasEl!.getBoundingClientRect();
@@ -448,7 +508,7 @@
         mode === 'paint' && brushCursor && editor.controller.getState().activeTool !== 'move' && !transformTool.active
           ? { ...brushCursor, diameter: editor.controller.getState().paint.brush.size }
           : null,
-      freeTransform: transformTool.overlay(),
+      freeTransform: transformTool.overlay() ?? layerFrame(),
       textEdit: typeTool.session?.alive ? typeTool.session.overlay() : null,
     });
   }
@@ -468,6 +528,7 @@
   }
   function handlePaintPointerDown(e: PointerEvent) {
     if (handleTransformPointerDown(e)) return;
+    if (handleFramePointerDown(e)) return;
     if (mode !== 'paint' || e.button !== 0 || !canvasEl) return;
     e.preventDefault();
     try {
@@ -479,6 +540,12 @@
   }
   function handlePaintPointerMove(e: PointerEvent) {
     if (handleTransformPointerMove(e)) return;
+    if (mode === 'transform' && canvasEl) {
+      const { pt, tolerance } = transformPoint(e);
+      const frame = layerFrame();
+      transformCursor = frame ? transformTool.cursor(boxFrameHit(frame, pt, tolerance, tolerance * ROTATE_BAND)) : 'default';
+      return;
+    }
     if (mode !== 'paint' || !canvasEl) return;
     const samples = paintSamples(e);
     brushCursor = samples[samples.length - 1] ?? null;
@@ -486,7 +553,10 @@
     else void renderCanvas();
   }
   function handlePaintPointerUp() {
-    if (handleTransformPointerUp()) return;
+    if (handleTransformPointerUp()) {
+      endFrameDrag();
+      return;
+    }
     if (mode !== 'paint' || !paintGesture.active) return;
     paintGesture.up();
     if (paintGesture.error) report('paint', paintGesture.error);
@@ -552,23 +622,8 @@
       return;
     }
 
-    if (mode === 'transform') {
-      const canvasPt = getCanvasEventPoint(e);
-      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
-      const hitLayerId = editor.controller.layerAt(imgPt);
-      if (hitLayerId) {
-        editor.controller.setActiveLayer(hitLayerId);
-        if (!transformTool.active) {
-          transformTool.begin();
-        }
-      } else {
-        editor.controller.setActiveLayer(null);
-        if (transformTool.active) {
-          transformTool.cancel();
-        }
-      }
-      return;
-    }
+    // Transform mode picks and drags layers on pointerdown (handleFramePointerDown).
+    if (mode === 'transform') return;
 
     if (transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
@@ -952,10 +1007,13 @@
       onpointerdown={handlePaintPointerDown}
       onpointermove={handlePaintPointerMove}
       onpointerup={handlePaintPointerUp}
-      onpointercancel={() => paintGesture.cancel()}
+      onpointercancel={() => {
+        paintGesture.cancel();
+        endFrameDrag(true);
+      }}
       data-testid="image-editor-canvas"
-      style="width: 100%; height: 100%;{transformActive ? ` cursor: ${transformCursor};` : ''}"
-      class="absolute inset-0 w-full h-full block {transformActive ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
+      style="width: 100%; height: 100%;{transformActive || mode === 'transform' ? ` cursor: ${transformCursor};` : ''}"
+      class="absolute inset-0 w-full h-full block {transformActive || mode === 'transform' ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
     ></canvas>
     {#if typeSession}
       <textarea

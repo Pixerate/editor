@@ -46,7 +46,7 @@ import {
 import type { WarpMesh, WarpStyle } from '../../geom/types';
 import type { Vec2 } from '../../geom/types';
 import type { Interpolation } from '../../raster/transform';
-import type { ImagePoint } from '../types';
+import type { CropBox, ImagePoint } from '../types';
 import { flattenLayers } from './model';
 import type { ShortcutEvent } from './paint-ui';
 
@@ -201,6 +201,50 @@ export interface FreeTransformToolOptions {
 }
 
 /**
+ * A Free Transform frame for a box with no transform open (a host's selected-layer frame): the
+ * outline, the eight handles (none with `handles = false`, e.g. for a layer locked in place) and
+ * the centre as the reference point. Same shape and handle order as `FreeTransformTool.overlay`.
+ */
+export function boxFrameOverlay(box: CropBox, handles = true): TransformOverlay {
+  const { x, y, width: w, height: h } = box;
+  const at = { nw: [x, y], ne: [x + w, y], se: [x + w, y + h], sw: [x, y + h], n: [x + w / 2, y], e: [x + w, y + h / 2], s: [x + w / 2, y + h], w: [x, y + h / 2] } as const;
+  return {
+    outline: CORNERS.map((id) => ({ x: at[id][0], y: at[id][1] })),
+    handles: handles ? [...CORNERS, ...SIDES].map((id) => ({ id, x: at[id][0], y: at[id][1] })) : [],
+    reference: { x: x + w / 2, y: y + h / 2 },
+  };
+}
+
+/**
+ * What a document point is over on a frame from `boxFrameOverlay`: a handle (within `tolerance`),
+ * `inside`, `outside` within `band` of the outline (where a drag rotates), or `null` beyond that.
+ */
+export function boxFrameHit(overlay: TransformOverlay, p: ImagePoint, tolerance: number, band: number): TransformHandle | null {
+  let best: TransformHandle | null = null;
+  let bestD = tolerance;
+  for (const h of overlay.handles) {
+    const d = Math.hypot(h.x - p.x, h.y - p.y);
+    if (d <= bestD) {
+      best = h.id;
+      bestD = d;
+    }
+  }
+  if (best) return best;
+  if (insideQuad(overlay.outline, p)) return 'inside';
+  const o = overlay.outline;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i];
+    const b = o[(i + 1) % o.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    if (Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) <= band) return 'outside';
+  }
+  return null;
+}
+
+/**
  * The interactive Free Transform (see the module comment). `begin` opens a session on the
  * controller; pointer and key methods drive it; `commit` / `cancel` close it.
  */
@@ -243,6 +287,15 @@ export class FreeTransformTool {
 
   get interpolation(): Interpolation {
     return this.sessionRef?.interpolation ?? 'bicubic';
+  }
+
+  /** Whether the open transform has changed anything yet (a commit would add an undo step). */
+  get modified(): boolean {
+    const s = this.session;
+    if (!s || !this.corners) return false;
+    if (this.mesh && this.mesh !== (s.startGeometry.warp ?? null)) return true;
+    const start = s.startGeometry.corners;
+    return this.corners.some((p, i) => p.x !== start[i].x || p.y !== start[i].y);
   }
 
   private readonly listeners = new Set<() => void>();
