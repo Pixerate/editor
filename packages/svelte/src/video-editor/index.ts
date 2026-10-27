@@ -7,6 +7,8 @@ import type VideoTimelineComponent from "./VideoTimeline.svelte";
 import type ClipInspectorComponent from "./ClipInspector.svelte";
 import type MediaBinComponent from "./MediaBin.svelte";
 import type TranscriptPanelComponent from "./TranscriptPanel.svelte";
+import type TranscriptEditorComponent from "./TranscriptEditor.svelte";
+import type EditPlanPreviewComponent from "./EditPlanPreview.svelte";
 import type VideoEffectsPanelComponent from "./VideoEffectsPanel.svelte";
 
 export { default as VideoEditor } from "./VideoEditor.svelte";
@@ -17,6 +19,8 @@ export { default as VideoTimeline } from "./VideoTimeline.svelte";
 export { default as ClipInspector } from "./ClipInspector.svelte";
 export { default as MediaBin } from "./MediaBin.svelte";
 export { default as TranscriptPanel } from "./TranscriptPanel.svelte";
+export { default as TranscriptEditor } from "./TranscriptEditor.svelte";
+export { default as EditPlanPreview } from "./EditPlanPreview.svelte";
 export { default as VideoEffectsPanel } from "./VideoEffectsPanel.svelte";
 export * from "./createVideoEditor.svelte.js";
 
@@ -28,4 +32,6 @@ export type VideoTimelineProps = ComponentProps<typeof VideoTimelineComponent>;
 export type ClipInspectorProps = ComponentProps<typeof ClipInspectorComponent>;
 export type MediaBinProps = ComponentProps<typeof MediaBinComponent>;
 export type TranscriptPanelProps = ComponentProps<typeof TranscriptPanelComponent>;
+export type TranscriptEditorProps = ComponentProps<typeof TranscriptEditorComponent>;
+export type EditPlanPreviewProps = ComponentProps<typeof EditPlanPreviewComponent>;
 export type VideoEffectsPanelProps = ComponentProps<typeof VideoEffectsPanelComponent>;

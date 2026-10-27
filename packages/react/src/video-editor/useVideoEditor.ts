@@ -3,6 +3,10 @@ import {
   VideoEditorController,
   createVideoEditorToolProvider,
   createVideoEffectsToolProvider,
+  createVideoDialogueToolProvider,
+  createVideoMusicToolProvider,
+  type VideoDialogueToolProviderOptions,
+  type VideoMusicToolProviderOptions,
   type VideoEffectsToolProviderOptions,
   type VideoEditResult,
   type VideoEditorOptions,
@@ -113,5 +117,38 @@ export function useVideoEffectsTools(
   useEffect(() => {
     if (!registry) return;
     return registry.register(createVideoEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
+}
+
+/**
+ * Registers the talking-head cleanup tools (`find_video_disfluencies`, `plan_video_dialogue_cleanup`)
+ * in `registry` while mounted (skill `pixerate-talking-head-edit`).
+ */
+export function useVideoDialogueTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VideoEditorController,
+  options: VideoDialogueToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly, playbackSurface } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVideoDialogueToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
+}
+
+/**
+ * Registers the music and mix tools (`find_video_beats`, `plan_video_beat_snap`, `duck_video_music`,
+ * `measure_video_loudness`, `normalize_video_loudness`) in `registry` while mounted (skill
+ * `pixerate-bgm-alignment`).
+ */
+export function useVideoMusicTools(
+  registry: ToolRegistry | null | undefined,
+  controller: VideoEditorController,
+  options: VideoMusicToolProviderOptions = {},
+): void {
+  const { id, namespace, readOnly, playbackSurface } = options;
+  useEffect(() => {
+    if (!registry) return;
+    return registry.register(createVideoMusicToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
   }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }
