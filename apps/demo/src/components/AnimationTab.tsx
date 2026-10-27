@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
-import { AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
+import { createAnimationEditorDocument, AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { AnimationEditor, useAnimationEditorController, useAnimationEditorState, useAnimationEditorTools, useAnimationEffectsTools } from "@pixerate/editor-react/animation-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
@@ -146,6 +147,7 @@ export function AnimationTab() {
   // The demo-wide effects provider (built-in test effects, or Flair).
   const { provider: effects } = useDemoEffects();
   useAnimationEffectsTools(demoToolRegistry, controller, { id: "animation-effects", namespace: "animationfx" });
+  const editorDocument = useDemoEditorDocument(controller, createAnimationEditorDocument, { namespace: "animation", skill: "pixerate-animation-editor", history: false });
   const [accent, setAccent] = useState("#f43f5e");
   const [exported, setExported] = useState<Exported | null>(null);
   const [message, setMessage] = useState<{ title: string; lines: string[] } | null>(null);
@@ -193,6 +195,7 @@ export function AnimationTab() {
           </p>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Vector animation" />
       <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <AnimationEditor controller={controller} values={accentControl ? { accent } : undefined} effects={effects} playback={demoPlayback} />

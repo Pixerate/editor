@@ -1,5 +1,6 @@
 export * from './useImageEditor';
 export * from './ImageEditor';
+export * from './ImageEditorCanvas';
 export * from './Histogram';
 export * from './ControlSlider';
 export * from './CurvesEditor';
@@ -14,4 +15,5 @@ export * from './FreeTransformOptionsBar';
 export * from './ShapeOptionsBar';
 export * from './TypeOptionsBar';
 export * from './ImageProviderEffectsPanel';
+export * from './ImageEffectControls';
 export * from './PaintGradientEditor';

@@ -3,7 +3,8 @@ import { Film } from "lucide-react";
 import { VideoEditor, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools } from "@pixerate/editor-react/video-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
-import { VideoFrameCache } from "@pixerate/editor/video-editor";
+import { createVideoEditorDocument, VideoFrameCache } from "@pixerate/editor/video-editor";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
 import { sampleProject } from "../videoSample";
@@ -73,6 +74,7 @@ export function VideoTab() {
   // The effects turn names effect ids, so play the one written for the selected provider.
   const scripts = useMemo(() => VIDEO_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "video-effects" : "video-effects-flair")), [effectsSource]);
   useVideoEffectsTools(demoToolRegistry, controller, { id: "video-effects", namespace: "videofx" });
+  const editorDocument = useDemoEditorDocument(controller, createVideoEditorDocument, { namespace: "video", skill: "pixerate-video-editor", history: false });
   const [output, setOutput] = useState<{ title: string; text: string } | null>(null);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -122,6 +124,7 @@ export function VideoTab() {
           </p>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Video project" />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <EffectsProviderSwitch />
         <VideoEditor controller={controller} showScopes effects={effects} playback={demoPlayback} />

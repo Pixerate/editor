@@ -36,3 +36,4 @@ export * from './capture.js';
 export * from './effects.js';
 export * from './effect-player.js';
 export * from './effect-tools.js';
+export * from './editorDocument.js';

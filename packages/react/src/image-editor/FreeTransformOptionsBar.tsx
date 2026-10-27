@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import type { FreeTransformField, FreeTransformTool, Interpolation, TransformAnchor, WarpBar } from '@pixerate/editor/image-editor';
 import { FREE_TRANSFORM_FIELDS, FREE_TRANSFORM_MODE_OPTIONS, INTERPOLATIONS, TRANSFORM_ANCHORS, WARP_GRID_OPTIONS, WARP_STYLE_OPTIONS } from '@pixerate/editor/image-editor';
+import { imageChipClass, imageFieldClass } from './styles';
 
 export interface FreeTransformOptionsBarProps {
   tool: FreeTransformTool;
   className?: string;
 }
 
-const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+
 const round = (v: number, unit: string) => (unit === 'px' ? Math.round(v * 10) / 10 : Math.round(v * 100) / 100);
 
 /**
@@ -33,24 +34,24 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
   };
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="free-transform-options" role="toolbar" aria-label="Free Transform options">
+    <div className={`flex flex-wrap items-center gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="free-transform-options" role="toolbar" aria-label="Free Transform options">
       <div className="flex gap-1" role="group" aria-label="Transform mode">
         {FREE_TRANSFORM_MODE_OPTIONS.map((m) => (
-          <button key={m.id} type="button" title={m.title} aria-pressed={tool.mode === m.id} className={chip(tool.mode === m.id)} onClick={() => tool.setMode(m.id)}>
+          <button key={m.id} type="button" title={m.title} aria-pressed={tool.mode === m.id} className={imageChipClass(tool.mode === m.id)} onClick={() => tool.setMode(m.id)}>
             {m.label}
           </button>
         ))}
       </div>
       <div className="grid grid-cols-3 gap-px" role="group" aria-label="Reference point">
         {TRANSFORM_ANCHORS.map((a: TransformAnchor) => (
-          <button key={a} type="button" aria-label={`Reference point ${a}`} title={`Reference point: ${a}`} className="h-2.5 w-2.5 rounded-sm bg-slate-700 hover:bg-indigo-500" onClick={() => tool.setReference(a)} />
+          <button key={a} type="button" aria-label={`Reference point ${a}`} title={`Reference point: ${a}`} className="h-2.5 w-2.5 rounded-sm bg-accent hover:bg-primary/90" onClick={() => tool.setReference(a)} />
         ))}
       </div>
       {tool.mode === 'warp' && (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Warp options">
           <label className="flex items-center gap-1">
-            <span className="text-slate-400">Warp</span>
-            <select aria-label="Warp style" value={warp.style} onChange={(e) => tool.setWarp({ style: e.target.value as WarpBar['style'] })} className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5">
+            <span className="text-muted-foreground">Warp</span>
+            <select aria-label="Warp style" value={warp.style} onChange={(e) => tool.setWarp({ style: e.target.value as WarpBar['style'] })} className={imageFieldClass}>
               {WARP_STYLE_OPTIONS.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
@@ -60,7 +61,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
           </label>
           {(['bend', 'horizontal', 'vertical'] as const).map((k) => (
             <label key={k} className="flex items-center gap-1">
-              <span className="text-slate-400">{k === 'bend' ? 'Bend' : k === 'horizontal' ? 'H' : 'V'}</span>
+              <span className="text-muted-foreground">{k === 'bend' ? 'Bend' : k === 'horizontal' ? 'H' : 'V'}</span>
               <input
                 key={`${k}:${warp[k]}`}
                 type="number"
@@ -69,7 +70,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
                 min={-100}
                 max={100}
                 disabled={warp.style === 'custom'}
-                className="w-14 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-right disabled:opacity-40"
+                className="w-14 rounded border border-border bg-background px-1 py-0.5 text-right disabled:opacity-40"
                 onBlur={(e) => warpNumber(k, e.currentTarget.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -79,7 +80,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
                   }
                 }}
               />
-              <span className="text-slate-500">%</span>
+              <span className="text-muted-foreground">%</span>
             </label>
           ))}
           <button
@@ -87,13 +88,13 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
             title="Bend along the vertical axis"
             aria-pressed={warp.orientation === 'vertical'}
             disabled={warp.style === 'custom'}
-            className={chip(warp.orientation === 'vertical')}
+            className={imageChipClass(warp.orientation === 'vertical')}
             onClick={() => tool.setWarp({ orientation: warp.orientation === 'vertical' ? 'horizontal' : 'vertical' })}
           >
             Vertical
           </button>
           <label className="flex items-center gap-1">
-            <span className="text-slate-400">Grid</span>
+            <span className="text-muted-foreground">Grid</span>
             <select
               aria-label="Warp grid"
               value={WARP_GRID_OPTIONS.find((g) => g.columns === warp.columns && g.rows === warp.rows)?.id ?? '1x1'}
@@ -101,7 +102,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
                 const g = WARP_GRID_OPTIONS.find((o) => o.id === e.target.value)!;
                 tool.setWarp({ columns: g.columns, rows: g.rows });
               }}
-              className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5"
+              className={imageFieldClass}
             >
               {WARP_GRID_OPTIONS.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -114,7 +115,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
       )}
       {tool.mode !== 'warp' && FREE_TRANSFORM_FIELDS.map((f) => (
         <label key={f.id} className="flex items-center gap-1" title={f.title}>
-          <span className="text-slate-400">{f.label}</span>
+          <span className="text-muted-foreground">{f.label}</span>
           <input
             key={`${f.id}:${round(bar[f.id], f.unit)}`}
             type="number"
@@ -122,7 +123,7 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
             defaultValue={round(bar[f.id], f.unit)}
             disabled={!bar.affine}
             step={f.unit === 'px' ? 1 : 0.1}
-            className="w-16 rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-right disabled:opacity-40"
+            className="w-16 rounded border border-border bg-background px-1 py-0.5 text-right disabled:opacity-40"
             onBlur={(e) => apply(f.id, e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -132,13 +133,13 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
               }
             }}
           />
-          <span className="text-slate-500">{f.unit}</span>
+          <span className="text-muted-foreground">{f.unit}</span>
           {f.id === 'scaleX' && (
             <button
               type="button"
               aria-label="Keep width and height proportional"
               aria-pressed={tool.proportional}
-              className={chip(tool.proportional)}
+              className={imageChipClass(tool.proportional)}
               onClick={() => {
                 tool.proportional = !tool.proportional;
                 setTick((n) => n + 1);
@@ -150,12 +151,12 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
         </label>
       ))}
       <label className="flex items-center gap-1">
-        <span className="text-slate-400">Interpolation</span>
+        <span className="text-muted-foreground">Interpolation</span>
         <select
           aria-label="Interpolation"
           value={tool.interpolation}
           onChange={(e) => tool.setInterpolation(e.target.value as Interpolation)}
-          className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5"
+          className={imageFieldClass}
         >
           {INTERPOLATIONS.map((i) => (
             <option key={i} value={i}>
@@ -164,14 +165,14 @@ export const FreeTransformOptionsBar: React.FC<FreeTransformOptionsBarProps> = (
           ))}
         </select>
       </label>
-      <button type="button" title="Commit (Enter)" className="px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => tool.commit()}>
+      <button type="button" title="Commit (Enter)" className="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => tool.commit()}>
         Commit
       </button>
-      <button type="button" title="Cancel (Esc)" className={chip(false)} onClick={() => tool.cancel()}>
+      <button type="button" title="Cancel (Esc)" className={imageChipClass(false)} onClick={() => tool.cancel()}>
         Cancel
       </button>
       {tool.error && (
-        <span role="alert" className="text-rose-400">
+        <span role="alert" className="text-destructive">
           {tool.error}
         </span>
       )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
 import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
+import { imageIconButtonClass, imageSelectClass } from './styles';
 
 export interface LayerEffectsPanelProps {
   controller: ImageEditorController;
@@ -8,8 +9,6 @@ export interface LayerEffectsPanelProps {
   layerId?: string | null;
   className?: string;
 }
-
-const button = 'px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 hover:text-white disabled:opacity-40';
 
 /**
  * A layer's effects (Photoshop's layer styles): the master switch, Scale Effects, an "Add effect"
@@ -43,7 +42,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
 
   if (!model.available || !id) {
     return (
-      <div className={`text-xs text-slate-500 ${className ?? ''}`} data-testid="layer-effects">
+      <div className={`text-xs text-muted-foreground ${className ?? ''}`} data-testid="layer-effects">
         {model.reason}
       </div>
     );
@@ -65,7 +64,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
         const shown = Math.round(c.value * k * 100) / 100;
         return (
           <label key={c.key} className="flex flex-col gap-0.5">
-            <span className="text-slate-400">
+            <span className="text-muted-foreground">
               {label} {shown}
               {c.unit}
             </span>
@@ -79,35 +78,35 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
               disabled={model.readOnly}
               {...sliderEvents}
               onChange={(e) => change(effectId, c, Number(e.target.value) / k, true)}
-              className="accent-indigo-500"
+              className="accent-primary"
             />
           </label>
         );
       }
       case 'color':
         return (
-          <label key={c.key} className="flex items-center gap-1.5 text-slate-300">
+          <label key={c.key} className="flex items-center gap-1.5 text-foreground">
             <input type="color" aria-label={label} value={c.value} disabled={model.readOnly} onChange={(e) => change(effectId, c, e.target.value)} />
             {label}
           </label>
         );
       case 'checkbox':
         return (
-          <label key={c.key} className="flex items-center gap-1.5 text-slate-300">
-            <input type="checkbox" aria-label={label} checked={c.value} disabled={model.readOnly} onChange={(e) => change(effectId, c, e.target.checked)} className="accent-indigo-500" />
+          <label key={c.key} className="flex items-center gap-1.5 text-foreground">
+            <input type="checkbox" aria-label={label} checked={c.value} disabled={model.readOnly} onChange={(e) => change(effectId, c, e.target.checked)} className="accent-primary" />
             {label}
           </label>
         );
       case 'select':
         return (
           <label key={c.key} className="flex flex-col gap-0.5">
-            <span className="text-slate-400">{label}</span>
+            <span className="text-muted-foreground">{label}</span>
             <select
               aria-label={label}
               value={c.value}
               disabled={model.readOnly}
               onChange={(e) => change(effectId, c, e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+              className={imageSelectClass}
             >
               {c.options.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -121,21 +120,21 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
   };
 
   return (
-    <div className={`flex flex-col gap-1.5 text-xs text-slate-200 ${className ?? ''}`} data-testid="layer-effects" aria-label="Layer effects" role="group">
+    <div className={`flex flex-col gap-1.5 text-xs text-foreground ${className ?? ''}`} data-testid="layer-effects" aria-label="Layer effects" role="group">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-slate-300">fx Effects</span>
-        <label className="flex items-center gap-1 text-slate-300">
+        <span className="font-semibold text-foreground">fx Effects</span>
+        <label className="flex items-center gap-1 text-foreground">
           <input
             type="checkbox"
             aria-label="Effects on"
             checked={model.enabled}
             disabled={model.readOnly}
             onChange={(e) => attempt(() => controller.setLayerEffectsEnabled(id, e.target.checked))}
-            className="accent-indigo-500"
+            className="accent-primary"
           />
           On
         </label>
-        <label className="flex items-center gap-1 text-slate-400">
+        <label className="flex items-center gap-1 text-muted-foreground">
           Scale
           <input
             type="number"
@@ -149,7 +148,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
               const v = Number(e.target.value);
               if (v >= 1 && v <= 1000) attempt(() => controller.setLayerEffectsEnabled(id, model.enabled, v / 100));
             }}
-            className="w-14 bg-slate-800 border border-slate-700 rounded px-1"
+            className="w-14 bg-muted border border-border rounded px-1"
           />
           %
         </label>
@@ -162,7 +161,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
             if (!kind) return;
             attempt(() => setOpen(controller.addLayerEffect(id, kind).effect.id));
           }}
-          className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1"
+          className={imageSelectClass}
         >
           <option value="">Add effect…</option>
           {LAYER_EFFECT_MENU.map((m) => (
@@ -172,13 +171,13 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
           ))}
         </select>
       </div>
-      {model.readOnly && model.reason && <p className="text-slate-500">{model.reason}</p>}
+      {model.readOnly && model.reason && <p className="text-muted-foreground">{model.reason}</p>}
       <ul className="flex flex-col gap-1" aria-label="Effects">
         {model.rows.map((row) => {
           const effect = effects.items.find((e) => e.id === row.id)!;
           const expanded = open === row.id;
           return (
-            <li key={row.id} data-effect-id={row.id} className="rounded bg-slate-900/60 ring-1 ring-slate-800">
+            <li key={row.id} data-effect-id={row.id} className="rounded bg-background/60 ring-1 ring-border">
               <div className="flex items-center gap-1.5 px-1.5 py-1">
                 <input
                   type="checkbox"
@@ -186,17 +185,17 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
                   checked={row.enabled}
                   disabled={model.readOnly}
                   onChange={(e) => attempt(() => controller.updateLayerEffect(id, row.id, { enabled: e.target.checked }))}
-                  className="accent-indigo-500"
+                  className="accent-primary"
                 />
                 <button
                   type="button"
                   aria-expanded={expanded}
-                  className={`flex-1 text-left ${row.enabled && model.enabled ? '' : 'text-slate-500'}`}
+                  className={`flex-1 text-left ${row.enabled && model.enabled ? '' : 'text-muted-foreground'}`}
                   onClick={() => setOpen(expanded ? null : row.id)}
                 >
                   {row.label}
                 </button>
-                <button type="button" className={button} aria-label={`Remove ${row.label}`} disabled={model.readOnly} onClick={() => attempt(() => controller.removeLayerEffect(id, row.id))}>
+                <button type="button" className={imageIconButtonClass} aria-label={`Remove ${row.label}`} disabled={model.readOnly} onClick={() => attempt(() => controller.removeLayerEffect(id, row.id))}>
                   ✕
                 </button>
               </div>
@@ -210,7 +209,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
         })}
       </ul>
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}

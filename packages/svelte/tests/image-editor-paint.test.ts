@@ -76,8 +76,15 @@ describe('Svelte paint tools', () => {
     flushSync();
     click(button('Swap'));
     expect(c.getState().paint.background).toBe('#112233');
+    // A new image starts on its Background, so Fill works at once.
     click(button('Fill'));
-    expect(target.querySelector('[role="alert"]')!.textContent).toMatch(/none is active/);
+    expect(target.querySelector('[role="alert"]')).toBeNull();
+    expect(c.getLayer('background')).not.toHaveProperty('source');
+    // With no pixel layer left there is nothing to fill, and the message is for a person.
+    c.removeLayer('background');
+    flushSync();
+    click(button('Fill'));
+    expect(target.querySelector('[role="alert"]')!.textContent).toBe('Pick a layer to fill on in the Layers panel.');
     c.addPixelLayer();
     flushSync();
     click(button('Fill'));

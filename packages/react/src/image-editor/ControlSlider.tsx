@@ -9,15 +9,17 @@ export interface ControlSliderProps {
   disabled?: boolean;
   /** Overrides `spec.label` (also the accessible name). */
   label?: string;
+  /** Extra classes on the root element. */
+  className?: string;
 }
 
 /** A labelled range input described by a control-table entry. */
-export const ControlSlider: React.FC<ControlSliderProps> = ({ spec, value, onChange, disabled, label }) => {
+export const ControlSlider: React.FC<ControlSliderProps> = ({ spec, value, onChange, disabled, label, className }) => {
   const name = label ?? spec.label;
   const track = controlTrackBackground(spec);
   return (
-    <div data-control-id={spec.id}>
-      <div className="flex justify-between text-slate-400 mb-1">
+    <div data-control-id={spec.id} className={className}>
+      <div className="flex justify-between text-muted-foreground mb-1">
         <span>{name}</span>
         <span className="font-mono">{formatControlValue(spec, value)}</span>
       </div>
@@ -30,7 +32,7 @@ export const ControlSlider: React.FC<ControlSliderProps> = ({ spec, value, onCha
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-indigo-500 disabled:opacity-40"
+        className="w-full accent-primary disabled:opacity-40"
       />
       {track && <div className="h-0.5 rounded-full opacity-70" style={{ background: track }} />}
     </div>

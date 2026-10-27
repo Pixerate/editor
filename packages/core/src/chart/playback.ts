@@ -85,8 +85,8 @@ export function planChartToolPlayback(tool: string, args: Record<string, any>): 
 const DIRECTED = new Set(['set_chart_values', 'select_chart_element']);
 
 /**
- * Gives a chart tool provider agent playback on `surface` (default `chart`, where `ChartEditor`
- * attaches). With a director, value changes and selections play through it (`playback: 'self'`).
+ * Gives a chart tool provider agent playback on `surface`. An explicit `surface` wins over the
+ * provider's own `playbackSurface`; with neither, it is `chart` (where `ChartEditor` attaches). With a director, value changes and selections play through it (`playback: 'self'`).
  */
 export function withChartPlayback(provider: AgentToolProvider, options: { director: boolean; surface?: string }): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool => {
@@ -97,7 +97,7 @@ export function withChartPlayback(provider: AgentToolProvider, options: { direct
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? options.surface ?? 'chart',
+		playbackSurface: options.surface ?? provider.playbackSurface ?? 'chart',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
 }

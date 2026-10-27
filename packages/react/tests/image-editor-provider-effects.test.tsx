@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ToolRegistry } from '@pixerate/editor/tools';
+import { PresenceStore, ToolRegistry, createAgentPlayback, createInstantPresenceClock } from '@pixerate/editor/tools';
 import { createFakeEffectProvider } from '@pixerate/editor/effects';
 import { ImageEditorController, type PixelLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
 import { ImageProviderEffectsPanel, useImageEffectsTools } from '../src/image-editor';
@@ -89,5 +89,23 @@ describe('ImageProviderEffectsPanel (React)', () => {
     await act(async () => root.render(<Probe />));
     const r = await act(async () => registry.callTool('imgfx__apply_effect', { target: id, effect: 'fake.tint' }));
     expect(r.isError).toBeFalsy();
+  });
+
+  it('useImageEffectsTools plays the tools on an explicit playbackSurface', async () => {
+    const { c, id } = setup();
+    const registry = new ToolRegistry();
+    const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+    playback.install(registry);
+    playback.attach('image4:surface', { presence: new PresenceStore(), locate: () => ({ x: 0, y: 0, width: 4, height: 4 }) });
+    const steps = playback.record();
+    function Probe() {
+      useImageEffectsTools(registry, c, { namespace: 'imgfx', playbackSurface: 'image4:surface' });
+      return null;
+    }
+    await act(async () => root.render(<Probe />));
+    const r = await act(async () => registry.callTool('imgfx__apply_effect', { target: id, effect: 'fake.tint' }));
+    expect(r.isError).toBeFalsy();
+    expect(steps.length).toBeGreaterThan(0);
+    expect(new Set(steps.map((s) => s.surface))).toEqual(new Set(['image4:surface']));
   });
 });

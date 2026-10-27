@@ -36,12 +36,52 @@ import {
   type RasterMask,
 } from './model';
 
-/** A refused layer operation; the message says why and how to fix it. */
+/**
+ * A refused layer operation; the message says why and how to fix it (written for agents: it names
+ * tools and arguments). `userMessage`, when given, says the same for a person at the canvas.
+ */
 export class LayerOperationError extends Error {
-  constructor(message: string) {
+  readonly userMessage?: string;
+  constructor(message: string, userMessage?: string) {
     super(message);
     this.name = 'LayerOperationError';
+    if (userMessage) this.userMessage = userMessage;
   }
+}
+
+/** The message of a refusal to show a person: a `LayerOperationError`'s `userMessage`, else the message. */
+export function userErrorMessage(err: unknown): string {
+  if (err instanceof LayerOperationError && err.userMessage) return err.userMessage;
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Whether brush strokes can go on a layer's pixels: a visible pixel layer without its pixels locked. */
+export function isPaintableLayer(layer: ImageLayer): layer is PixelLayer {
+  return layer.type === 'pixel' && layer.visible && !isLayerLocked(layer, 'pixels');
+}
+
+/**
+ * The layer a document with no active layer works on: the topmost paintable pixel layer (the
+ * Background of a newly loaded image), else the topmost pixel layer, else `null`.
+ */
+export function defaultActiveLayerId(layers: readonly ImageLayer[]): string | null {
+  const pixels = flattenLayers(layers).filter((l) => l.type === 'pixel');
+  for (let i = pixels.length - 1; i >= 0; i--) if (isPaintableLayer(pixels[i])) return pixels[i].id;
+  return pixels[pixels.length - 1]?.id ?? null;
+}
+
+/**
+ * The layer to make active when the active layer `removedId` left the stack (`prev` → `next`):
+ * the nearest paintable layer that was below it, else `defaultActiveLayerId(next)`.
+ */
+export function activeLayerAfterRemoval(prev: readonly ImageLayer[], next: readonly ImageLayer[], removedId: string): string | null {
+  const before = flattenLayers(prev);
+  const at = before.findIndex((l) => l.id === removedId);
+  for (let i = at - 1; i >= 0; i--) {
+    const loc = findLayer(next, before[i].id);
+    if (loc && isPaintableLayer(loc.layer)) return loc.layer.id;
+  }
+  return defaultActiveLayerId(next);
 }
 
 const fail = (message: string): never => {

@@ -22,6 +22,7 @@ import {
   useCanvasArrange,
   useCanvasArrangeShortcuts,
   useCanvasScenes,
+  useCanvasEditorDocument,
   useCanvasCapture,
   useCanvasMeasure,
   useCanvasDraw,
@@ -42,7 +43,7 @@ import {
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
-import type { CanvasEdge } from "@pixerate/editor/canvas";
+import { createCanvasGestureRecorder, type CanvasEdge } from "@pixerate/editor/canvas";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
 import { createEditorMcpToolProvider, type AgentStep } from "@pixerate/editor/agent";
@@ -86,6 +87,7 @@ import {
   type CanvasGradientDef,
 } from "@pixerate/editor-react/canvas";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
+import { EditorDocumentAutosave, useDemoDocumentTools } from "./EditorDocumentAutosave";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { CanvasPaintLayerRecipe } from "./CanvasPaintLayerRecipe";
@@ -295,6 +297,24 @@ const CanvasDemo: React.FC = () => {
   });
   const canvasEffects = useCanvasEffects<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager, scenes: scenes.store, effects });
   useCanvasEffectsTools(demoToolRegistry, canvasEffects, { id: "canvas-effects", namespace: "canvasfx" });
+
+  // Save / load / undo for the whole canvas (canvas__get_canvas_document, …) and autosave.
+  const canvasDocument = useCanvasEditorDocument<BoxNode, Edge>({ nodes, edges, setNodes, setEdges, history: history.manager, scenes: scenes.store });
+  useDemoDocumentTools(canvasDocument, { namespace: "canvas", skill: "pixerate-canvas" });
+  // React Flow moves dragged nodes itself; record each finished drag as one undo step.
+  const graphRef = useRef({ nodes, edges });
+  graphRef.current = { nodes, edges };
+  const dragUndo = useMemo(
+    () =>
+      createCanvasGestureRecorder<BoxNode, Edge>({
+        getNodes: () => graphRef.current.nodes,
+        setNodes,
+        getEdges: () => graphRef.current.edges,
+        setEdges,
+        history: history.manager,
+      }),
+    [history.manager],
+  );
 
   useCanvasArrangeShortcuts({ arrange, scenes });
 
@@ -506,6 +526,7 @@ const CanvasDemo: React.FC = () => {
 
   return (
     <div className="space-y-3">
+      <EditorDocumentAutosave doc={canvasDocument} name="Canvas" />
       <div
         className="bg-slate-900/80 border border-slate-800 rounded-xl p-2 flex flex-wrap items-center gap-1 shadow-md"
         role="toolbar"
@@ -758,6 +779,9 @@ const CanvasDemo: React.FC = () => {
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeDragStart={() => dragUndo.begin()}
+          // The drop's final position lands in state after this handler, so record a frame later.
+          onNodeDragStop={() => requestAnimationFrame(() => dragUndo.end("Move"))}
           onNodeMouseEnter={measure.onNodeMouseEnter}
           onNodeMouseLeave={measure.onNodeMouseLeave}
           colorMode="dark"

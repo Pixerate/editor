@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { createPaintEffectsToolProvider, PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type PaintEffectsToolProviderOptions } from '@pixerate/editor/paint-editor';
+import { createPaintEditorDocument, createPaintEffectsToolProvider, PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type PaintEffectsToolProviderOptions } from '@pixerate/editor/paint-editor';
 import type { EffectProvider } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
@@ -13,6 +13,8 @@ export function createReactivePaintEditor(options: PaintEditorOptions | PaintEdi
   const unsubscribe = controller.subscribe(() => {
     snapshot = controller.getState();
   });
+  /** The save / load / undo contract, with every image as an asset reference. */
+  const editorDocument = createPaintEditorDocument(controller);
   return {
     get controller() {
       return controller;
@@ -20,8 +22,10 @@ export function createReactivePaintEditor(options: PaintEditorOptions | PaintEdi
     get state() {
       return snapshot;
     },
+    editorDocument,
     destroy() {
       unsubscribe();
+      editorDocument.destroy();
     },
   };
 }

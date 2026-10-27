@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PresenceStore, type AgentPlayback, type PlaybackSurface } from "@pixerate/editor/tools";
+import { PresenceStore, type AgentPlayback, type PlaybackRef, type PlaybackSurface } from "@pixerate/editor/tools";
 import { useAgentPlayback } from "./AgentPlaybackContext";
 
 /** A surface's behaviour; every function is read fresh on each call, so inline closures are fine. */
@@ -36,7 +36,11 @@ export function usePlaybackSurface(
       beginGesture: (key) => o().beginGesture?.(key),
       endGesture: () => o().endGesture?.(),
       reveal: () => o().reveal?.(),
-      open: (ref) => o().open?.(ref),
+      // Only a surface whose options can open things has `open`, so playback skips `open` steps
+      // (and their wait) everywhere else. Read per step, like the other options.
+      get open() {
+        return o().open ? (ref: PlaybackRef) => o().open?.(ref) : undefined;
+      },
       get defaultKind() {
         return o().defaultKind;
       },

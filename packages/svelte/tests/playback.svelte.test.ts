@@ -125,7 +125,7 @@ describe('ImageEditor playback (Svelte)', () => {
 		flushSync();
 		expect(result.isError).toBeFalsy();
 		expect(steps.map((r) => r.step.type)).toEqual(['open', 'target', 'commit']);
-		expect(target.querySelector('[data-image-tab="adjust"]')!.className).toContain('bg-indigo-600');
+		expect(target.querySelector('[data-image-tab="adjust"]')!.getAttribute('aria-selected')).toBe('true');
 		expect(target.querySelector('[data-control-id="contrast"]')).toBeTruthy();
 		destroy();
 		cleanups = [];

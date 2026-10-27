@@ -1,5 +1,138 @@
 # @pixerate/editor-react
 
+## 0.105.0
+
+### Minor Changes
+
+- 475ff71: Chart editor: radar charts keep Mermaid's `ticks` and `graticule`. New `radarTicks` (an even ring count, or `null` for round-number rings) and `radarGraticule` (`polygon` or `circle`) spec fields are drawn by the radar layout, read and written by `chartFromMermaid` / `chartToMermaid`, settable through `update_chart` / `chart.update`, and shown as Rings and Grid in the React and Svelte inspectors. A `radar-beta` block without `graticule` now imports as `circle` (Mermaid's default), and polygon rings are written as `graticule polygon`.
+
+### Patch Changes
+
+- Updated dependencies [475ff71]
+  - @pixerate/editor@0.157.0
+
+## 0.104.0
+
+### Minor Changes
+
+- 6a2d38e: Bring the save / load / undo contract to the image and paint editors, with pixels kept as assets.
+
+  - `createEditorAssetRegistry()` (`/persistence`): a synchronous, content-addressed store for inline images. With `defineEditorDocument({ assets })`, documents hold `pixerate-asset:` references instead of PNG data URLs and base64, and loads swap them back (refusing references that are not loaded). `withEditorAssets(storage, registry)`, `persistEditorAssets` and `preloadEditorAssets` move the bytes to and from storage; autosave and `createEditorDocumentStore` use them automatically.
+  - `createImageEditorDocument(controller)` (kind `image`; agent loads are one undo step) and `createPaintEditorDocument(controller)` (kind `paint`; opening clears history; read-only mid-stroke or mid wet step). `get_image_document` / `get_paint_document` never return pixel data.
+  - `ImageEditorController`: `documentRevision` and `clearHistory()`. `PaintEditorController`: `documentRevision` and `busyReason()`.
+  - Paint's `save_document` and `open_document` tools are deprecated in favour of the shared `*_paint_document` tools and will be removed in a later minor version.
+  - React: `useImageEditor()` and `usePaintEditor()` return `editorDocument`. Svelte: `createReactiveImageEditor()` and `createReactivePaintEditor()` return `editorDocument`.
+
+### Patch Changes
+
+- Updated dependencies [6a2d38e]
+  - @pixerate/editor@0.155.0
+
+## 0.103.0
+
+### Minor Changes
+
+- 2fc90ff: Bring the save / load / undo contract to the canvas.
+
+  - `createCanvasEditorDocument({ getNodes, setNodes, getEdges, setEdges, history, scenes? })` (kind `canvas`): the nodes and edges held by the host (without selection or measurement) plus saved scenes, loads checked for duplicate ids, dangling edges and missing parents, one undo step in the shared history. Agents get `get_canvas_document`, `load_canvas_document`, `undo_canvas`, `redo_canvas` and the save / open tools.
+  - `createCanvasGestureRecorder(...)`: `begin()` / `end("Move")` around a gesture the flow library applies itself (a node drag), recorded as one undo step.
+  - React: `useCanvasEditorDocument({ nodes, edges, setNodes, setEdges, history, scenes })`. Svelte: `createCanvasDocument({ getNodes, setNodes, getEdges, setEdges, history, scenes })`. Both also count changes the history does not see, but not selection or drag frames.
+
+### Patch Changes
+
+- Updated dependencies [2fc90ff]
+  - @pixerate/editor@0.154.0
+
+## 0.102.0
+
+### Minor Changes
+
+- a7ba1eb: Bring the save / load / undo contract to the rich text, spreadsheet and design-token editors.
+
+  - `createRichTextEditorDocument(editor)` (root entry, kind `rich_text`: ProseMirror JSON checked against the schema; opening starts a fresh undo history), `createSpreadsheetEditorDocument(controller)` (kind `spreadsheet`: the whole workbook) and `createTokensEditorDocument(store)` (kind `tokens`: agent loads also refuse broken and cyclic aliases). Each gets `undo_<kind>` / `redo_<kind>` with the shared document tools.
+  - `SpreadsheetController`: `subscribe(listener)`, `loadWorkbook(workbook, { undoable: true })` (one undo step), and `undo()` / `redo()` now return whether anything happened.
+  - New `pixerate-tokens` agent skill.
+  - React: `useSpreadsheetEditor()` and `useTokens()` return `editorDocument`; new `useRichTextEditorDocument(editor)`.
+  - Svelte: `createReactiveSpreadsheet()` and `createTokens()` return `editorDocument`.
+
+### Patch Changes
+
+- Updated dependencies [a7ba1eb]
+  - @pixerate/editor@0.153.0
+
+## 0.101.0
+
+### Minor Changes
+
+- 4b4fd44: Bring the save / load / undo contract to the chart, animation, video, parameters and vector editors.
+
+  - `createChartEditorDocument`, `createAnimationEditorDocument`, `createVideoEditorDocument`, `createParametersEditorDocument` and `createVectorEditorDocument` (kinds `chart`, `animation`, `video`, `parameters`, `vector`), for `createEditorAutosave`, `createEditorDocumentStore` and `createDocumentToolProvider`. The vector editor's document tools add `undo_vector` / `redo_vector`.
+  - `ChartController.replace(spec)` and `ParametersController.replace(snapshot)`: replace the whole chart or parameter set as one undo step, all-or-nothing.
+  - `defineEditorDocument`: an editor's `load` can return `problems` (parts repaired with defaults); they land in the `LoadReport`.
+  - React: `useChartEditor`, `useAnimationEditor`, `useVideoEditor`, `useParameters` and `useVectorEditor` return `editorDocument`.
+  - Svelte: `createChartEditor`, `createAnimationEditor`, `createVideoEditor`, `createParameters` and `createVectorEditor` return `editorDocument`.
+
+### Patch Changes
+
+- Updated dependencies [4b4fd44]
+  - @pixerate/editor@0.151.0
+
+## 0.100.1
+
+### Patch Changes
+
+- c67147c: Image editor: a newly loaded image (and a document saved without an active layer) opens with its topmost paintable pixel layer active, which is the Background for a new image, so the first brush stroke, fill or `paint_stroke` works without picking a layer. Deleting the active layer moves to the nearest paintable layer below it, and `remove_layer` returns the new `activeLayerId`. Paint refusals now carry a person-facing message (`LayerOperationError.userMessage`, `userErrorMessage()`), which `ImageEditorCanvas`'s `onError` / `onerror` and the brush bar's Fill show (e.g. "Pick a layer to paint on in the Layers panel."). Agent tools keep the message that names tools. `ImageEditorCanvas` (React and Svelte) now stays sharp on high-DPI screens and when a host scales it with a CSS transform. The new `measureCanvasViewport` sizes the backing store from `getBoundingClientRect()` × `devicePixelRatio`. `RenderOptions.pixelRatio` draws through that scale, and layout and pointer mapping stay in CSS pixels. `watchCanvasViewport` measures again on resize and after transitions.
+- Updated dependencies [c67147c]
+  - @pixerate/editor@0.150.1
+
+## 0.100.0
+
+### Minor Changes
+
+- bf2cd2d: `ImageEditorCanvas` draws the crop box (crop mode) and the marquee (select mode) while an agent drags them out, as it does for a user's drag. New in `@pixerate/editor/tools`: `trackPresenceDrag`, which follows a presence store for an agent's drag. New in `@pixerate/editor/image-editor`: `agentDragDraft`, which turns that drag into the canvas's draft crop or selection path.
+
+### Patch Changes
+
+- Updated dependencies [bf2cd2d]
+  - @pixerate/editor@0.150.0
+
+## 0.99.0
+
+### Minor Changes
+
+- 2a49499: An explicit agent playback surface now wins over a provider's own. `createImageEditorToolProvider`, `createImageEffectsToolProvider`, `createVideoEditorToolProvider`, `createVideoEffectsToolProvider`, `createAnimationEditorToolProvider`, `createAnimationEffectsToolProvider`, `createChartToolProvider`, `createPaintEditorToolProvider` and `createPaintEffectsToolProvider` take a `playbackSurface` option, so several editors of one kind on one registry can each play on their own surface (default unchanged: `image`, `video`, `animation`, `chart`, `paint`). `withImagePlayback`, `withVideoPlayback`, `withAnimationPlayback`, `withChartPlayback` and `withPaintPlayback` prefer an explicit `surface` argument over the provider's `playbackSurface`, and fall back to the default only when neither is given. The React hooks that register these providers (`useImageEffectsTools`, `useVideoEditorTools`, `useVideoEffectsTools`, `useAnimationEditorTools`, `useAnimationEffectsTools`, `usePaintEffectsTools`, `useChartToolProvider`) forward `playbackSurface`; the Svelte hooks already pass their options through.
+- 33ce77e: The image editor follows the host's theme. `ImageEditor` and every image-editor panel (adjustment layers, layers, layer effects, colour profile, brush, selection, Refine Edge, Free Transform, shape and type bars, provider effects, curves, sliders) now use shadcn theme tokens (`bg-background`, `bg-muted`, `border-border`, `text-muted-foreground`, `bg-primary`, `text-destructive`, …) instead of the fixed slate / indigo palette, through class constants shared in `image-editor/styles.ts`. Hosts need the theme colours the README lists (with `accent`, `primary-foreground` and `accent-foreground`). `AdjustmentLayersPanel`, `ControlSlider`, `CurvesEditor` and `ImageEffectControls` take `className` (Svelte `class`); the editor's tabs are a `tablist` whose open tab has `aria-selected="true"`. The curve's line and points use `var(--foreground)` / `var(--background)`.
+- b10b6ab: App chrome on canvas and element playback surfaces. `useCanvasPlaybackSurface` / `createCanvasPlaybackSurface` and `useElementPlaybackSurface` / `createElementPlaybackSurface` take `locate(ref)` (a rectangle in surface coordinates), `locateElement(ref)` (an element anywhere on the page, whose client box is mapped into surface coordinates through the surface's `fromViewport`) and `open(ref)`, so a host's HUD, toolbar or panels can answer `{ kind: 'panel' | 'control', id }` refs and open steps. The surface's own locator runs first; the element surface's `selectors` are now optional. `usePlaybackSurface` / `createPlaybackSurface` define `open` on the attached surface only when the options give one, so `AgentPlayback` skips `open` steps on surfaces that can't open anything instead of clicking nothing and waiting 220 ms. Core adds `PlaybackChromeOptions`, `PlaybackClientRect`, `playbackRectFromClient` and `locatePlaybackChrome` to `@pixerate/editor/tools`.
+
+### Patch Changes
+
+- Updated dependencies [2a49499]
+- Updated dependencies [b10b6ab]
+  - @pixerate/editor@0.149.0
+
+## 0.98.0
+
+### Minor Changes
+
+- 65f5873: `ImageEditorCanvas`: the image editor's canvas as its own component, for apps with their own chrome. It has the render loop (sized by its container), every pointer gesture (crop, select, paint with its shortcuts, annotations, shape and type layers with the hidden textarea, Free Transform), the overlays, the agent's cursor and the playback surface. Props: `editor`, `mode` (`crop` / `select` / `paint` / `annotate` / `none`), `fit`, `selectionOptions`, `shapeOptions`, `typeOptions`, `annotationColor`, `annotationWidth`, `cropRatio`, `onError` (Svelte `onerror`), `typeSession` (React with `onTypeSessionChange`, Svelte bindable), `transformTool`, `playback`, `playbackId`, `onPlaybackReveal` (Svelte `onplaybackreveal`), and `chromeRoot`, `locate`, `locateElement` and `open` so a host's chrome answers panel, control and layer refs. `ImageEditor` is now `ImageEditorCanvas` plus its tabs and panels, with no change in behaviour. React's `ImageEditor` gains the `fit` prop Svelte already had. `ImageEffectControls` is exported in both packages. `PresenceLayer` takes `clip` (default true; `false` lets a cursor leave the layer's box).
+
+## 0.97.0
+
+### Minor Changes
+
+- 6a70d44: Add general-purpose effect authoring support across core, React, and Svelte:
+  - Contract types `supportsAuthoring` and `openAuthoring` in `@pixerate/editor/effects`.
+  - `createEffectAuthoringSession`, a generic session over any provider: observable state, control values, keyframe tracks with easing, playback, undo/redo, presets, and saved documents that are validated when reopened. Source editing (`setSource`, compile issues) is part of the session contract for providers that support it; the generic session has none.
+  - `effectSampleInputs` for previews of filters and transitions.
+  - 15 MCP-annotated agent tools and the `pixerate-effect-authoring` skill.
+  - React bindings: `useEffectAuthoring` hook and `<EffectAuthoringEditor />`.
+  - Svelte bindings: `effectAuthoringOf` store and `<EffectAuthoringEditor />`.
+
+### Patch Changes
+
+- Updated dependencies [6a70d44]
+  - @pixerate/editor@0.148.0
+
 ## 0.96.0
 
 ### Minor Changes

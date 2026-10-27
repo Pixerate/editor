@@ -7,7 +7,10 @@ import {
   type AnimationEditorOptions,
   type AnimationEditorState,
   type AnimationEditorToolProviderOptions,
+  createAnimationEditorDocument,
+  type MotionScene,
 } from '@pixerate/editor/animation-editor';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 import type { ToolRegistry } from '@pixerate/editor/tools';
 
 /** An `AnimationEditorController` created once for the component's lifetime (destroyed on unmount). */
@@ -26,6 +29,8 @@ export function useAnimationEditorState(controller: AnimationEditorController): 
 
 export interface UseAnimationEditorResult {
   controller: AnimationEditorController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<MotionScene>;
   state: AnimationEditorState;
   play: () => void;
   pause: () => void;
@@ -63,7 +68,10 @@ export function useAnimationEditor(controllerOrOptions: AnimationEditorControlle
     }),
     [controller],
   );
-  return { controller, state, ...actions };
+  const editorDocument = useMemo(() => createAnimationEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, ...actions };
 }
 
 /**
@@ -75,11 +83,11 @@ export function useAnimationEditorTools(
   controller: AnimationEditorController,
   options: AnimationEditorToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly, rasterize } = options;
+  const { id, namespace, readOnly, rasterize, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createAnimationEditorToolProvider(controller, { id, namespace, readOnly, rasterize }));
-  }, [registry, controller, id, namespace, readOnly, rasterize]);
+    return registry.register(createAnimationEditorToolProvider(controller, { id, namespace, readOnly, rasterize, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, rasterize, playbackSurface]);
 }
 
 /**
@@ -92,9 +100,9 @@ export function useAnimationEffectsTools(
   controller: AnimationEditorController,
   options: AnimationEffectsToolProviderOptions = {},
 ): void {
-  const { id, namespace, readOnly } = options;
+  const { id, namespace, readOnly, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
-    return registry.register(createAnimationEffectsToolProvider(controller, { id, namespace, readOnly }));
-  }, [registry, controller, id, namespace, readOnly]);
+    return registry.register(createAnimationEffectsToolProvider(controller, { id, namespace, readOnly, playbackSurface }));
+  }, [registry, controller, id, namespace, readOnly, playbackSurface]);
 }

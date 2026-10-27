@@ -159,3 +159,42 @@ export class PerformanceQueue {
 		return run;
 	}
 }
+
+/** A box from where an agent's button went down to its cursor, in surface coordinates. */
+export interface PresenceDragBox {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * Follows a presence store for an agent's drag (press, move, release) and reports the box from
+ * the press to the cursor, so a surface can draw its own drag feedback (a crop box or a marquee
+ * being pulled out) under the agent's cursor. `onEnd` runs on release, or when the cursor leaves
+ * the surface mid-drag. Pass the result to `PresenceStore.subscribe`.
+ */
+export function trackPresenceDrag(handlers: {
+	onDrag: (box: PresenceDragBox) => void;
+	onEnd: () => void;
+}): (state: PresenceState) => void {
+	let start: { id: string; x: number; y: number } | null = null;
+	return (state) => {
+		const actor = start ? state.actors.find((a) => a.id === start!.id) : state.actors.find((a) => a.pressed);
+		if (!start) {
+			if (!actor) return;
+			start = { id: actor.id, x: actor.x, y: actor.y };
+		}
+		if (!actor || !actor.pressed) {
+			start = null;
+			handlers.onEnd();
+			return;
+		}
+		handlers.onDrag({
+			x: Math.min(start.x, actor.x),
+			y: Math.min(start.y, actor.y),
+			width: Math.abs(actor.x - start.x),
+			height: Math.abs(actor.y - start.y),
+		});
+	};
+}

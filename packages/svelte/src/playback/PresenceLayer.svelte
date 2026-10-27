@@ -12,10 +12,12 @@
 		 * (`x * zoom + viewport.x`), or a function. Default: one to one.
 		 */
 		viewport?: { x: number; y: number; zoom: number } | ((point: Point) => Point);
+		/** Clip the cursors to the layer's box (default true). `false` lets a cursor visit chrome outside it. */
+		clip?: boolean;
 		class?: string;
 	}
 
-	let { presence, viewport, class: className = '' }: Props = $props();
+	let { presence, viewport, clip = true, class: className = '' }: Props = $props();
 	let view: PresenceState = $state.raw(untrack(() => presence.getState()));
 	$effect(() => {
 		view = presence.getState();
@@ -44,7 +46,7 @@
 	snapshots and exports. Parity with React's `<PresenceLayer>`.
 -->
 {#if view.actors.length}
-	<div class="pixerate-presence {className}" aria-hidden="true" data-testid="presence-layer" style="position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 50;">
+	<div class="pixerate-presence {className}" aria-hidden="true" data-testid="presence-layer" style="position: absolute; inset: 0; pointer-events: none; overflow: {clip ? 'hidden' : 'visible'}; z-index: 50;">
 		{#each view.actors as a (a.id)}
 			{#if a.focus}
 				<div data-actor-focus={a.id} style="position: absolute; {ring(a.focus)} border-radius: 8px; border: 2px solid {a.color}; background: {a.color}14; transition: all 160ms ease-out;"></div>

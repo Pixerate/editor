@@ -67,6 +67,18 @@ with `list_commands` (query "Parameters").
 | `parameters.undo` | Undo the last parameter change (a `parameters.set` call, preset, reset, randomize or keyframe toggle is one step). Disabled when there is nothing to undo. |
 | `parameters.redo` | Re-apply the change just undone. Disabled when there is nothing to redo. |
 
+## Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A parameters document is `{ values, presets }`: every field value (missing ones take their defaults) and the user presets.
+
+| Tool | Use |
+| --- | --- |
+| `get_parameters_document` | Take a copy of the whole parameter set as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the parameter set, use `parameters.list`: it is smaller and says more. Refuses very large documents. |
+| `load_parameters_document` | Put back a copy from `get_parameters_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`parameters.undo` brings the previous values back). Unknown field ids and invalid values are refused. To change a few values use `parameters.set`. |
+| `save_parameters_document` | Save the parameter set under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_parameters_documents` | List saved parameter sets (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_parameters_document` | Replace the parameter set with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Pitfalls
 
 - With agent playback on, `parameters.set` visits each control it changes and types the value. Set related values in one call; results are unchanged.

@@ -48,16 +48,17 @@ export function planAnimationToolPlayback(tool: string, args: Record<string, any
 
 /**
  * Gives an animation tool provider agent playback: each tool plans its steps with
- * `planAnimationToolPlayback` and every call plays on `surface` (default `animation`, where
- * `AnimationEditor` attaches itself).
+ * `planAnimationToolPlayback` and every call plays on `surface`. An explicit `surface` wins over
+ * the provider's own `playbackSurface`; with neither, it is `animation` (where `AnimationEditor`
+ * attaches itself).
  */
-export function withAnimationPlayback(provider: AgentToolProvider, surface = 'animation'): AgentToolProvider {
+export function withAnimationPlayback(provider: AgentToolProvider, surface?: string): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool =>
 		tool.plan || tool.playback !== undefined ? tool : { ...tool, plan: (args) => planAnimationToolPlayback(tool.name, args) };
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? surface,
+		playbackSurface: surface ?? provider.playbackSurface ?? 'animation',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
 }
