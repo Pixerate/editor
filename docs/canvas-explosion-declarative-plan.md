@@ -1,6 +1,6 @@
 # Canvas Node Explosion, Displacement & Declarative State Architecture: Implementation Plan
 
-Status: **draft / not started.** This plan covers the architectural overhaul of canvas node explosion, spatial displacement calculations, and headless state management across `@pixerate/editor-svelte` and `@pixerate/editor-react`.
+Status: **implemented** (see [Implementation status](#implementation-status) for what was built and where it differs from this plan). This plan covers the architectural overhaul of canvas node explosion, spatial displacement calculations, and headless state management across `@pixerate/editor-svelte` and `@pixerate/editor-react`.
 
 ---
 
@@ -162,30 +162,30 @@ Refactor `createCanvasExplosion.svelte.ts` and `useCanvasExplosion.ts` to intern
 
 ## 4. Implementation Steps & Verification
 
-### Step 1: Upstream Geometric Core (`packages/svelte` & `packages/core`)
-- [ ] Update `calculateDirectionalDisplacement` in `packages/svelte/src/canvas/createCanvasDisplacement.ts` to strictly enforce `minY`, `maxY`, and handle `layoutMode: 'row-lane'`.
-- [ ] Export `computeCanvasExplosionLayout` from `packages/svelte/src/canvas/computeCanvasExplosionLayout.ts`.
-- [ ] Add unit tests in `packages/svelte/tests/canvas/createCanvasDisplacement.test.ts` verifying:
+### Step 1: Upstream Geometric Core (`packages/core`)
+- [x] Update `calculateDirectionalDisplacement` to strictly enforce `minY`, `maxY`, and handle `layoutMode: 'row-lane'`. *(Done in core, `packages/core/src/canvas/displacement.ts`; the Svelte copy was deleted and Svelte re-exports core.)*
+- [x] Export `computeCanvasExplosionLayout`. *(Lives in `packages/core/src/canvas/explosionLayout.ts`; re-exported by `@pixerate/editor-svelte/canvas` and `@pixerate/editor-react/canvas`.)*
+- [x] Add unit tests verifying *(in `packages/core/tests/canvas-explosion.test.ts`, plus Svelte coverage in `packages/svelte/tests/canvas/canvas-explosion*.test.ts`)*:
   - Vertical displacement keeps all rows above the origin $\ge \text{minY}$.
   - Distributed row spacing prevents overlapping among multiple nodes above the origin.
   - Horizontal $X$ coordinates remain unchanged during vertical displacement.
 
 ### Step 2: Headless State Machine (`packages/svelte`)
-- [ ] Implement `createCanvasExplosionState.svelte.ts` using Svelte 5 runes (`$state`, `$derived`).
-- [ ] Add unit tests in `packages/svelte/tests/canvas/createCanvasExplosionState.test.ts` verifying:
+- [x] Implement `createCanvasExplosionState.svelte.ts` using Svelte 5 runes. *(A `$state` mirror of core's framework-free `createCanvasExplosionStateController`.)*
+- [x] Add unit tests verifying *(core: `packages/core/tests/canvas-explosion.test.ts`; rune: `packages/svelte/tests/canvas/canvas-explosion-state.svelte.test.ts`)*:
   - `explode()`, `collapse()`, `toggle()` state transitions.
   - Correct timer-based cleanup of `collapsingId`.
   - Rapid toggle debounce/cancellation behavior.
   - `destroy()` cleanup.
 
 ### Step 3: React Parity (`packages/react`)
-- [ ] Implement `useCanvasExplosionState.ts` in `packages/react/src/canvas/`.
-- [ ] Add React test suite verifying identical state transition behavior.
+- [x] Implement `useCanvasExplosionState.ts` in `packages/react/src/canvas/`.
+- [x] Add React test suite verifying identical state transition behavior (`packages/react/tests/canvas-explosion.test.tsx`).
 
 ### Step 4: Package Exports & Documentation
-- [ ] Re-export all new runes, hooks, functions, and types in `packages/svelte/src/canvas/index.ts` and `packages/react/src/canvas/index.ts`.
-- [ ] Update `docs/canvas.md` with usage examples for both declarative (timeline/Gantt) and imperative (whiteboard/diagram) architectures.
-- [ ] Run `npm run check`, `npm run lint`, `npm run test`, and `npm run build` across the monorepo.
+- [x] Re-export all new runes, hooks, functions, and types in `packages/svelte/src/canvas/index.ts` and `packages/react/src/canvas/index.ts`.
+- [x] Update `docs/canvas.md` with usage examples for both declarative (timeline/Gantt) and imperative (whiteboard/diagram) architectures.
+- [x] Run `pnpm build`, `pnpm typecheck`, `pnpm check:packages`, `pnpm test` and `pnpm --filter demo build` across the monorepo (the repo has no `check` / `lint` scripts).
 
 ---
 
@@ -237,3 +237,24 @@ Once published, Uchiage refactors `src/lib/components/gantt/GanttCanvas.svelte`:
 - Eliminates ~50 lines of bespoke row-clamping and timeout code in `GanttCanvas.svelte`.
 - Eliminates the dead call to `calculateDirectionalDisplacement`.
 - Ensures smooth, bug-free collapse transitions synchronized with CSS animation keyframes.
+
+---
+
+## Implementation status
+
+All four steps are done. What was built, by layer:
+
+- **Layer 1, core (`@pixerate/editor/canvas`)**: `calculateDirectionalDisplacement` (enforced `minY` / `maxY` with rows stacked `rowSpacing` apart, axis locking, `layoutMode: 'row-lane'`, `RangeError` on bad options), `calculateReflowDisplacement` (dagre, moved from Svelte), `computeCanvasExplosionLayout` (returns `displacedPositions`, `originalPositions`, `childNodes` copies, `childEdges` including parent edges, `childBounds`, `totalDisplacementDelta`), `nodeSizeOf`.
+- **Layer 2**: core `createCanvasExplosionStateController` (framework-free, `getSnapshot` / `subscribe`), wrapped by the Svelte rune `createCanvasExplosionState` and the React hook `useCanvasExplosionState`.
+- **Layer 3**: `createCanvasExplosion` (Svelte) and `useCanvasExplosion` (React) both compute their layout with `computeCanvasExplosionLayout`; the React hook was brought to parity with the Svelte one.
+- **Agent path** (AGENTS.md section 4): `createCanvasExplosionToolProvider` with `list_explodable_nodes`, `explode_node`, `collapse_node`, and `canvasExplosionToolTarget` to drive the declarative state. Documented in the `pixerate-canvas` skill, mapped in `tests/agent-skills.test.ts`, covered by the conformance test in `tests/command-tools.test.ts`, registered in the demo Canvas tab.
+
+### Deviations from the plan
+
+1. **Geometry and state live in core, not in `packages/svelte`.** AGENTS.md requires shared logic in `@pixerate/editor`, and core already had a second, diverging copy of the displacement math that React used. The two were merged into core; Svelte's `createCanvasDisplacement.ts` was deleted and Svelte / React re-export core.
+2. **The state machine is a core controller plus thin bindings**, so the rune and the hook share one implementation (and the agent tools can drive it). The rune keeps a `$state` snapshot rather than `$derived` fields.
+3. **API additions beyond the sketch**: `explode` / `collapse` / `toggle` return booleans (whether anything changed); `finishCollapse()` ends a collapse early (e.g. from `animationend`); `initialActiveId`; the bindings expose `controller`. Exploding a second node collapses the first and calls `onCollapse` for it.
+4. **`computeCanvasExplosionLayout` takes more inputs** than sketched: `existingEdges`, `strategy` (`directional` / `dagre` / `none`), `reflowOptions`, `connectParentToChildren` (default `false` here; the coordinators default to `'all'`) and `createEdge`. It throws on an origin missing from `existingNodes` and on child ids that clash.
+5. **Coordinators do not compose the single-active state machine.** `createCanvasExplosion` / `useCanvasExplosion` support several exploded nodes at once, which the one-active-node state cannot represent, so they keep their per-node snapshots and use Layer 1 only.
+6. **`minY` semantics**: rows are grouped (by lane in `row-lane` mode, else by original y) and stacked from `minY` (`maxY` from the bottom), and a node never moves past its starting y in the other direction. Rows clamped back to their start are left out of the result.
+7. **Removed** the unused `ExplodeNodeOptions.connectChildrenToDownstream`. Parent edge ids are now deterministic (`explode:<parent>:<child>`) instead of random UUIDs.

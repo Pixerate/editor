@@ -2884,3 +2884,27 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Painting a new image in `ImageEditorCanvas` reported "No layer given and none is active; pass layerId (see list_layers) to paint." through `onerror`.
 - **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
 - **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.
+
+### [canvas] Dagre Explosion Reflow Ignored the Parent-to-Child Edges
+
+- **Issue / Symptom**: Exploding with `displacementStrategy: 'dagre'` barely moved downstream nodes: children landed in the same rank as the node that exploded, and nodes they connect to moved one rank instead of two.
+- **Root Cause**: The coordinators built the parent-to-child edges (`connectParentToChildren`) after computing the reflow, so dagre saw the children as unconnected roots.
+- **Solution / Workaround**: `computeCanvasExplosionLayout` builds the edges first and passes the child edges plus the generated parent edges to `calculateReflowDisplacement`. Both coordinators now go through it, so do not compute displacement before deciding the edges.
+
+### [canvas] Clamping Displaced Rows to `minY` Made Them Overlap or Move Backwards
+
+- **Issue / Symptom**: With a floor such as `minY` below a pinned timeline header, a plain `Math.max(minY, y)` piled every row pushed past it onto the same y, and rows that started above the floor were pulled down into it.
+- **Root Cause**: A per-node clamp knows nothing about the other rows or where the node started.
+- **Solution / Workaround**: `calculateDirectionalDisplacement` groups moved nodes into rows (lanes in `row-lane` mode, else equal original y), stacks clamped rows `rowSpacing` apart from `minY` (`maxY` stacks upward), and never moves a node past its starting y in the other direction. Rows clamped back to their start are dropped from the result.
+
+### [react/canvas] Destroying a Headless Controller in an Effect Cleanup Breaks StrictMode
+
+- **Issue / Symptom**: In `<StrictMode>`, a hook that created a controller once (in a ref) and called `controller.destroy()` from `useEffect`'s cleanup stopped responding: the first explode did nothing.
+- **Root Cause**: StrictMode runs effect cleanup and then the effect again on mount, without re-rendering, so the ref still holds the destroyed controller.
+- **Solution / Workaround**: `useCanvasExplosionState` only ends a running collapse in the cleanup (`finishCollapse()`, which clears the timer) and leaves the controller usable. `useSyncExternalStore` handles subscribe / unsubscribe. Use `destroy()` only where the owner really goes away (the Svelte rune calls it from its `$effect` teardown).
+
+### [react/canvas] React Flow `Edge` Is Not Assignable to Core `CanvasEdge`
+
+- **Issue / Symptom**: `useCanvasExplosion<BoxNode, Edge>(...)` fails to typecheck with `Types of property 'label' are incompatible`.
+- **Root Cause**: React Flow's `Edge.label` is a `ReactNode`; core's structural `CanvasEdge.label` is a string.
+- **Solution / Workaround**: Pass a loose edge type parameter (`useCanvasExplosion<BoxNode, any>`), as the demo does. The coordinator only reads `id`, `source`, `target` and `style` of edges.

@@ -1,0 +1,5 @@
+---
+"@pixerate/editor": minor
+---
+
+Canvas node explosion, declarative-first. `calculateDirectionalDisplacement` now enforces `minY` and the new `maxY` (rows pushed into the band stack `rowSpacing` apart and never move backwards), keeps X locked for vertical moves and Y for horizontal ones, and has `layoutMode: 'row-lane'` (lanes `rowSpacing` apart, vertical deltas rounded up to whole lanes). It throws a `RangeError` for bad options. New: `computeCanvasExplosionLayout` (pure displacement, child copies, parent edges, original positions, total delta), `calculateReflowDisplacement` (dagre reflow for an explosion, ranking children by their parent edges), `nodeSizeOf`, the framework-free `createCanvasExplosionStateController` (active / collapsing node, collapse timer, subscribe), and agent tools `createCanvasExplosionToolProvider` (`list_explodable_nodes`, `explode_node`, `collapse_node`) with `canvasExplosionToolTarget`. Breaking: `ExplodeNodeOptions.connectChildrenToDownstream` (never implemented) is removed, and `left` / `up` displacement no longer moves nodes level with the origin.

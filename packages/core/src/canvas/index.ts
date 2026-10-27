@@ -37,3 +37,6 @@ export * from './effects.js';
 export * from './effect-player.js';
 export * from './effect-tools.js';
 export * from './editorDocument.js';
+export * from './explosionLayout.js';
+export * from './explosionState.js';
+export * from './explosion-tools.js';

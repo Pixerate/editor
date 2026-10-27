@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import type {
 	CanvasEdge,
+	CanvasLayoutOptions,
 	CanvasNode,
 	DirectionalDisplacementOptions,
 	Rect,
@@ -43,9 +44,35 @@ export function computeNodesBoundingBox<TNode extends CanvasNode = CanvasNode>(
 	};
 }
 
+/** A node's size: measured, then explicit, then the defaults. */
+export function nodeSizeOf<TNode extends CanvasNode = CanvasNode>(
+	node: TNode,
+	defaultWidth = 200,
+	defaultHeight = 60
+): { width: number; height: number } {
+	return {
+		width: node.measured?.width ?? node.width ?? defaultWidth,
+		height: node.measured?.height ?? node.height ?? defaultHeight
+	};
+}
+
 /**
  * Pure directional displacement calculation.
- * Shifts downstream or surrounding nodes along an axis to clear space for newly inserted child nodes.
+ *
+ * Shifts surrounding nodes along an axis to clear space for a cluster of child nodes inserted
+ * next to `originNode`, and returns the new positions of the nodes that move (nothing is mutated).
+ *
+ * - `right` / `left` push nodes on that side by the cluster's width plus `gap`; Y is preserved
+ *   (except for `spreadSiblingLanes` with `right`).
+ * - `up` / `down` push nodes on that side by the cluster's height plus `gap`; X is preserved.
+ * - `vertical` opens the origin's row: nodes above move up and nodes below move down by the same
+ *   amount (the larger of the two clearances); X is preserved and the origin's row stays put.
+ * - `layoutMode: 'row-lane'` buckets nodes into lanes `rowSpacing` apart and rounds vertical
+ *   deltas up to whole lanes.
+ * - `minY` / `maxY` keep moved rows inside a band, stacking clamped rows `rowSpacing` apart.
+ *
+ * @throws RangeError when `gap`, `rowSpacing`, `minY` or `maxY` are not finite, `rowSpacing <= 0`,
+ *   or `minY > maxY`.
  */
 export function calculateDirectionalDisplacement<TNode extends CanvasNode = CanvasNode>(params: {
 	existingNodes: TNode[];
@@ -54,132 +81,216 @@ export function calculateDirectionalDisplacement<TNode extends CanvasNode = Canv
 	getNodesBounds?: (nodes: TNode[]) => Rect;
 	options?: DirectionalDisplacementOptions;
 }): Map<string, XYPosition> {
-	const {
-		existingNodes,
-		originNode,
-		childNodes,
-		getNodesBounds,
-		options = {}
-	} = params;
+	const { existingNodes, originNode, childNodes, getNodesBounds, options = {} } = params;
 
 	const {
 		direction = 'right',
 		gap = 40,
 		spreadSiblingLanes = false,
 		siblingTolerance = 50,
-		minY
+		minY,
+		maxY,
+		layoutMode = 'freeform',
+		rowSpacing
 	} = options;
+
+	const finite = (name: string, value: number | undefined) => {
+		if (value !== undefined && !Number.isFinite(value)) {
+			throw new RangeError(`${name} must be a finite number (got ${value}).`);
+		}
+	};
+	finite('gap', gap);
+	finite('minY', minY);
+	finite('maxY', maxY);
+	finite('rowSpacing', rowSpacing);
+	if (rowSpacing !== undefined && rowSpacing <= 0) {
+		throw new RangeError(`rowSpacing must be greater than 0 (got ${rowSpacing}).`);
+	}
+	if (minY !== undefined && maxY !== undefined && minY > maxY) {
+		throw new RangeError(`minY (${minY}) must not be greater than maxY (${maxY}).`);
+	}
 
 	const displacedMap = new Map<string, XYPosition>();
 	if (childNodes.length === 0 || existingNodes.length === 0) {
 		return displacedMap;
 	}
 
-	const childBounds = getNodesBounds
-		? getNodesBounds(childNodes)
-		: computeNodesBoundingBox(childNodes);
+	const childBounds = getNodesBounds ? getNodesBounds(childNodes) : computeNodesBoundingBox(childNodes);
+	const { width: originWidth, height: originHeight } = nodeSizeOf(originNode);
 
-	const originWidth = originNode.measured?.width ?? (originNode as any).width ?? 200;
-	const originHeight = originNode.measured?.height ?? (originNode as any).height ?? 60;
+	const rowLane = layoutMode === 'row-lane';
+	const lane = rowSpacing ?? originHeight;
+	/** Row-lane mode rounds a vertical delta up to whole lanes. */
+	const quantize = (delta: number) => (rowLane && delta > 0 && lane > 0 ? Math.ceil(delta / lane) * lane : delta);
+	/** Lane index relative to the origin's row: negative above, 0 the origin's own row, positive below. */
+	const laneOf = (node: TNode) => (lane > 0 ? Math.round((node.position.y - originNode.position.y) / lane) : 0);
+	const isAbove = (node: TNode) => (rowLane ? laneOf(node) < 0 : node.position.y < originNode.position.y);
+	const isBelow = (node: TNode) =>
+		rowLane ? laneOf(node) > 0 : node.position.y >= originNode.position.y + originHeight * 0.5;
 
-	// The delta space required along primary axis
-	const deltaPrimary =
-		direction === 'right' || direction === 'left'
-			? childBounds.width + gap
-			: childBounds.height + gap;
+	const horizontal = direction === 'right' || direction === 'left';
+	// The delta space required along the primary axis
+	const deltaPrimary = horizontal ? childBounds.width + gap : quantize(childBounds.height + gap);
 
-	// Vertical displacement parameters: upward and downward row clearance
+	// Vertical displacement: upward and downward clearance of the cluster around the origin row
 	const deltaUp = Math.max(0, originNode.position.y - childBounds.y + gap);
-	const deltaDown = Math.max(
-		0,
-		childBounds.y + childBounds.height - (originNode.position.y + originHeight) + gap
-	);
-
+	const deltaDown = Math.max(0, childBounds.y + childBounds.height - (originNode.position.y + originHeight) + gap);
 	// Both above and below displace equally so the row expands symmetrically
-	const equalDelta = Math.max(deltaUp, deltaDown);
+	const equalDelta = quantize(Math.max(deltaUp, deltaDown));
 
 	for (const node of existingNodes) {
 		if (node.id === originNode.id) continue;
 
-		const isSiblingRow =
-			Math.abs(node.position.y - originNode.position.y) < siblingTolerance;
+		let newX = node.position.x;
+		let newY = node.position.y;
 
-		switch (direction) {
-			case 'right': {
-				if (node.position.x > originNode.position.x) {
-					displacedMap.set(node.id, {
-						x: node.position.x + deltaPrimary,
-						y: node.position.y
-					});
+		if (direction === 'right') {
+			// Downstream nodes to the right of the origin's centre
+			if (node.position.x >= originNode.position.x + originWidth * 0.5) {
+				newX += deltaPrimary;
+			} else if (spreadSiblingLanes) {
+				// Nodes in the origin's column that overlap the exploded cluster vertically
+				const { height } = nodeSizeOf(node);
+				const overlapsCluster =
+					node.position.y + height >= childBounds.y - gap &&
+					node.position.y <= childBounds.y + childBounds.height + gap;
+				if (overlapsCluster && Math.abs(node.position.x - originNode.position.x) <= siblingTolerance) {
+					const push = node.position.y >= originNode.position.y ? 1 : -1;
+					newY += push * (childBounds.height * 0.5 + gap);
 				}
-				break;
 			}
-			case 'left': {
-				if (node.position.x < originNode.position.x) {
-					displacedMap.set(node.id, {
-						x: node.position.x - deltaPrimary,
-						y: node.position.y
-					});
-				}
-				break;
-			}
-			case 'down': {
-				if (node.position.y > originNode.position.y) {
-					displacedMap.set(node.id, {
-						x: node.position.x,
-						y: node.position.y + deltaPrimary
-					});
-				}
-				break;
-			}
-			case 'up': {
-				if (node.position.y < originNode.position.y) {
-					displacedMap.set(node.id, {
-						x: node.position.x,
-						y: node.position.y - deltaPrimary
-					});
-				}
-				break;
-			}
-			case 'vertical': {
-				if (isSiblingRow) break;
+		} else if (direction === 'left') {
+			if (node.position.x < originNode.position.x) newX -= deltaPrimary;
+		} else if (direction === 'down') {
+			if (isBelow(node)) newY += deltaPrimary;
+		} else if (direction === 'up') {
+			if (isAbove(node)) newY -= deltaPrimary;
+		} else if (direction === 'vertical') {
+			// X is strictly preserved; the origin's own row stays put
+			if (isAbove(node)) newY -= equalDelta;
+			else if (isBelow(node)) newY += equalDelta;
+		}
 
-				if (node.position.y < originNode.position.y) {
-					displacedMap.set(node.id, {
-						x: node.position.x,
-						y: node.position.y - equalDelta
-					});
-				} else if (node.position.y > originNode.position.y) {
-					displacedMap.set(node.id, {
-						x: node.position.x,
-						y: node.position.y + equalDelta
-					});
-				}
-				break;
-			}
+		if (newX !== node.position.x || newY !== node.position.y) {
+			displacedMap.set(node.id, { x: newX, y: newY });
 		}
 	}
 
-	// Sibling lane spreading to avoid overlap among child nodes
-	if (spreadSiblingLanes && (direction === 'right' || direction === 'left')) {
-		for (const [nodeId, pos] of displacedMap.entries()) {
-			const node = existingNodes.find((n) => n.id === nodeId);
-			if (node && Math.abs(node.position.y - originNode.position.y) < siblingTolerance) {
-				const isAbove = node.position.y < originNode.position.y;
-				displacedMap.set(nodeId, {
-					x: pos.x,
-					y: pos.y + (isAbove ? -deltaUp : deltaDown)
+	if (minY !== undefined || maxY !== undefined) {
+		const byId = new Map(existingNodes.map((n) => [n.id, n]));
+		/** Groups moved nodes into rows (by lane in row-lane mode, else by their original y), top first. */
+		const rowsOf = (moved: TNode[]) => {
+			const rows = new Map<number, TNode[]>();
+			for (const node of moved) {
+				const key = rowLane ? laneOf(node) : node.position.y;
+				rows.set(key, [...(rows.get(key) ?? []), node]);
+			}
+			return [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, nodes]) => nodes);
+		};
+		const spacingFor = (nodes: TNode[]) => rowSpacing ?? Math.max(...nodes.map((n) => nodeSizeOf(n).height));
+		const moved = (sign: 1 | -1) =>
+			[...displacedMap.entries()]
+				.filter(([id, pos]) => Math.sign(pos.y - byId.get(id)!.position.y) === sign)
+				.map(([id]) => byId.get(id)!);
+
+		if (minY !== undefined) {
+			const up = moved(-1);
+			if (up.length > 0) {
+				const spacing = spacingFor(up);
+				rowsOf(up).forEach((row, index) => {
+					const floor = minY + index * spacing;
+					for (const node of row) {
+						const pos = displacedMap.get(node.id)!;
+						// Clamp to the floor, but never move a node below where it started
+						displacedMap.set(node.id, { x: pos.x, y: Math.min(node.position.y, Math.max(floor, pos.y)) });
+					}
 				});
 			}
 		}
+
+		if (maxY !== undefined) {
+			const down = moved(1);
+			if (down.length > 0) {
+				const spacing = spacingFor(down);
+				rowsOf(down)
+					.reverse()
+					.forEach((row, index) => {
+						for (const node of row) {
+							const pos = displacedMap.get(node.id)!;
+							const ceiling = maxY - index * spacing - nodeSizeOf(node).height;
+							// Clamp to the ceiling, but never move a node above where it started
+							displacedMap.set(node.id, { x: pos.x, y: Math.max(node.position.y, Math.min(ceiling, pos.y)) });
+						}
+					});
+			}
+		}
+
+		// Rows clamped back to where they started did not move after all
+		for (const [id, pos] of [...displacedMap.entries()]) {
+			const node = byId.get(id)!;
+			if (pos.x === node.position.x && pos.y === node.position.y) displacedMap.delete(id);
+		}
 	}
 
-	// Floor constraint
-	if (minY !== undefined) {
-		for (const [nodeId, pos] of displacedMap.entries()) {
-			if (pos.y < minY) {
-				displacedMap.set(nodeId, { x: pos.x, y: minY });
-			}
+	return displacedMap;
+}
+
+/**
+ * Hierarchical Dagre reflow displacement for an explosion: lays out the existing graph plus the
+ * child cluster, anchoring the origin node at its current position so the layout does not jump,
+ * and returns the new positions of existing nodes that move.
+ */
+export function calculateReflowDisplacement<
+	TNode extends CanvasNode = CanvasNode,
+	TEdge extends CanvasEdge = CanvasEdge
+>(params: {
+	existingNodes: TNode[];
+	existingEdges: TEdge[];
+	originNode: TNode;
+	childNodes: TNode[];
+	childEdges?: TEdge[];
+	options?: CanvasLayoutOptions;
+}): Map<string, XYPosition> {
+	const { existingNodes, existingEdges, originNode, childNodes, childEdges = [], options = {} } = params;
+	const { direction = 'LR', ranksep = 80, nodesep = 30, defaultNodeWidth = 200, defaultNodeHeight = 60 } = options;
+
+	const displacedMap = new Map<string, XYPosition>();
+	if (existingNodes.length === 0) return displacedMap;
+
+	const allNodes = [...existingNodes, ...childNodes];
+	const allEdges = [...existingEdges, ...childEdges];
+
+	const g = new dagre.graphlib.Graph();
+	g.setDefaultEdgeLabel(() => ({}));
+	g.setGraph({ rankdir: direction, ranksep, nodesep });
+
+	const allNodeIds = new Set(allNodes.map((n) => n.id));
+	for (const node of allNodes) {
+		g.setNode(node.id, nodeSizeOf(node, defaultNodeWidth, defaultNodeHeight));
+	}
+	for (const edge of allEdges) {
+		if (allNodeIds.has(edge.source) && allNodeIds.has(edge.target)) g.setEdge(edge.source, edge.target);
+	}
+
+	dagre.layout(g);
+
+	const dagreOrigin = g.node(originNode.id);
+	if (!dagreOrigin) return displacedMap;
+
+	const origin = nodeSizeOf(originNode, defaultNodeWidth, defaultNodeHeight);
+	// Offset so the origin node stays anchored at its exact initial coordinates
+	const anchorOffsetX = originNode.position.x - (dagreOrigin.x - origin.width / 2);
+	const anchorOffsetY = originNode.position.y - (dagreOrigin.y - origin.height / 2);
+
+	for (const node of existingNodes) {
+		if (node.id === originNode.id) continue;
+		const laidOut = g.node(node.id);
+		if (!laidOut) continue;
+		const { width, height } = nodeSizeOf(node, defaultNodeWidth, defaultNodeHeight);
+		const targetX = laidOut.x - width / 2 + anchorOffsetX;
+		const targetY = laidOut.y - height / 2 + anchorOffsetY;
+		if (Math.abs(targetX - node.position.x) > 0.5 || Math.abs(targetY - node.position.y) > 0.5) {
+			displacedMap.set(node.id, { x: targetX, y: targetY });
 		}
 	}
 
