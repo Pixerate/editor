@@ -18,6 +18,7 @@ export default defineConfig({
     "video-editor/index": "src/video-editor/index.ts",
     "effects/index": "src/effects/index.ts",
     "color/index": "src/color/index.ts",
+    "typography/index": "src/typography/index.ts",
     "gradient/index": "src/gradient/index.ts"
   },
   format: ["esm", "cjs"],
