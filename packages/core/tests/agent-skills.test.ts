@@ -51,6 +51,7 @@ import { VideoEditorController, createVideoEditorDocument, createVideoEditorTool
 import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorCommands, createVectorGenerationToolProvider } from '../src/vector';
 import { ParametersController, createParameterCommands, createParametersEditorDocument } from '../src/parameters';
 import { createColorToolProvider } from '../src/color';
+import { createTypographyToolProvider, createFontPickerToolProvider, FontPickerModel } from '../src/typography';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController, createFindReplaceCommands, createTableCommands } from '../src';
@@ -188,7 +189,8 @@ function expectedBySkill(): Record<string, string[]> {
 			});
 			return toolNames(authoringProvider);
 		})(),
-		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))]
+		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
+		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))]
 	};
 	doc.destroy();
 	return result;
@@ -238,6 +240,8 @@ const FACTORIES: Record<string, string> = {
 	createParameterCommands: 'pixerate-parameters',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
+	createTypographyToolProvider: 'pixerate-typography',
+	createFontPickerToolProvider: 'pixerate-typography',
 	createEffectAuthoringToolProvider: 'pixerate-effect-authoring',
 	// Generic `capture_view`; hosts document it in the skill for the surface they capture.
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',

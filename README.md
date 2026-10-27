@@ -35,6 +35,7 @@ Editors for creative and AI apps: prompts, rich-text documents, spreadsheets, a 
 | **Effects providers** | Optional effects from another package without depending on it: a provider contract (`EffectProvider`: catalog search, strict control schemas, presets, frame-exact renderers at 8, 16 or 32 bits, masks, vector motion, typed errors, capability flags), a conformance check providers run in their own tests, and a deterministic fake provider for tests and demos | `@pixerate/editor/effects` |
 | **Parameters** | Schema-driven control panel for effects, shaders, generators and component props: sliders, toggles, choices, colours, vectors, image pickers and text, with groups, conditional fields, presets, undo, randomize and keyframe diamonds | `@pixerate/editor/parameters` |
 | **Colour & Gradients** | Colour maths, parsing (hex, rgb, hsl, oklab, oklch, color(srgb/p3)), OKLCH gamut mapping, WCAG 2 contrast, Machado colour-vision deficiency simulation, harmonies, dual light/dark colours and CSS export, headless picker and gradient models (`GradientController`), React & Svelte `ColorPicker`, `DualColorPicker`, `GradientEditor`, `FillPicker`, and agent tools | `@pixerate/editor/color`, `/gradient` |
+| **Typography** | Font specs and weights, modular type scales and a caption-to-display hierarchy with CSS custom properties, fluid `clamp()` sizes, readability audits (measure, line spacing, capitals), WCAG contrast that decides large text from size and weight, cross-platform fallback stacks, pluggable font providers (system catalog, opt-in Local Font Access, web fonts through the CSS Font Loading API), text segmentation for animation, a headless font picker, React & Svelte `FontPicker` and `TypographyControl`, font controls in effect parameters, and 12 agent tools | `@pixerate/editor/typography` |
 | **Commands and agents** | One command registry for shortcuts, the command palette and AI agent tools (MCP-style `tools/list` / `tools/call`), and an MCP bridge so Claude Desktop, Claude Code or an IDE can drive editors open in a browser | `@pixerate/editor/commands`, `/agent` |
 | **History and saving** | Undo/redo with gesture merging, dirty-vs-saved tracking, autosave with crash recovery, storage adapters (localStorage, IndexedDB, OPFS), one save / load / undo contract and agent tools per editor | `@pixerate/editor/history`, `/persistence` |
 | **AI generation** | Model capabilities and request planning, settings forms, job progress, generation records with Recreate, asset mentions with roles | `@pixerate/editor/generation` |
@@ -629,6 +630,20 @@ Every feature is available from core and from both framework packages, except wh
 | Generation Job Progress (time-based, ≤95% until done, "~2m left") | `estimateJobProgress` | `<JobProgress>` & `useJobProgress` | `<JobProgress>` & `createJobProgress` |
 | Asset Mentions with Roles (`@fox:style`, `data-role`, per-role limits & media types from capabilities) | `findTextMentions`, `extractMentions({ details })`, `validateAssetMentions`, `PlanOptions.mentions` | `<AssetMentionChips>` (role picker popover) | `<AssetMentionChips>` (role picker popover) |
 | Generation Records & Recreate (template/model/asset hashes, `exact` / `latest`, drift report, variations, record store with filter / prune; agent tools `list_generations`, `get_generation`, `recreate_generation`, `vary_generation`) | `createGenerationRecord`, `recreateRequest`, `variationRequest`, `createGenerationRecordStore`, `createGenerationHistoryToolProvider` | `<GenerationHistory>` & `useGenerationRecords` | `<GenerationHistory>` & `createGenerationRecords` |
+
+</details>
+
+<details>
+<summary><strong>Typography</strong> (6)</summary>
+
+| Feature | Core | React | Svelte |
+| :--- | :---: | :---: | :---: |
+| Type Scales, Hierarchies & Fluid Sizes | `computeTypeScale`, `generateTypeHierarchy`, `typeHierarchyToCss`, `computeFluidSize` (`/typography`) | Via core | Via core |
+| Readability & Type-Aware Contrast | `auditTextReadability`, `checkTypographyAccessibility` | Via core | Via core |
+| Font Stacks, Providers & Loading (system catalog, Local Font Access opt-in, web fonts) | `resolveFontFallback`, `createSystemFontProvider`, `createWebFontProvider`, `ensureFontsLoaded` | Via core | Via core |
+| Text Segmentation for Animation | `segmentText` | Via core | Via core |
+| Font Picker & Typography Control | `FontPickerModel` | `<FontPicker>`, `<TypographyControl>`, `useFontPicker` | `<FontPicker>`, `<TypographyControl>`, `fontPickerOf` |
+| Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …) | `createTypographyToolProvider`, `createFontPickerToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` |
 
 </details>
 

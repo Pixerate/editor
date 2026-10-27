@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.160.0",
+  "version": "0.161.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -242,6 +242,16 @@
       "require": {
         "types": "./dist/color/index.d.cts",
         "default": "./dist/color/index.cjs"
+      }
+    },
+    "./typography": {
+      "import": {
+        "types": "./dist/typography/index.d.ts",
+        "default": "./dist/typography/index.js"
+      },
+      "require": {
+        "types": "./dist/typography/index.d.cts",
+        "default": "./dist/typography/index.cjs"
       }
     },
     "./gradient": {
