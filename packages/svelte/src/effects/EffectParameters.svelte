@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { effectFieldValue, effectParameterFields, type EffectDescription } from '@pixerate/editor/effects';
+  import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
   import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
   import ParameterFieldControl from '../parameters/ParameterFieldControl.svelte';
 
@@ -23,12 +23,14 @@
     onpresetname?: (name: string) => void;
     /** Optional addon rendered next to the control label (e.g. keyframe toggle button). */
     addon?: import('svelte').Snippet<[string]>;
+    /** Families offered by font controls (`format: "font"`); default the system font catalog. */
+    fonts?: EffectFieldOptions['fonts'];
     disabled?: boolean;
     class?: string;
   }
 
-  let { description, values, onchange, onreset, keyframed, onpreset, onpresetname, addon, disabled = false, class: className = '' }: Props = $props();
-  const fields = $derived(effectParameterFields(description));
+  let { description, values, onchange, onreset, keyframed, onpreset, onpresetname, addon, fonts, disabled = false, class: className = '' }: Props = $props();
+  const fields = $derived(effectParameterFields(description, { fonts }));
   const idBase = `fx-${Math.random().toString(36).slice(2, 8)}`;
   let gesture: string | null = null;
   let count = 0;
