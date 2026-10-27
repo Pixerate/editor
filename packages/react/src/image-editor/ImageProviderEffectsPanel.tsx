@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
+import { EFFECT_LAYER_USES, findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
 import { EffectsBrowser } from '../effects';
 import { ImageEffectControls as Controls } from './ImageEffectControls';
 import { imageOutlineButtonClass } from './styles';
@@ -62,7 +62,7 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
         <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id)))} />
       )}
       {browse === 'layer' && (
-        <EffectsBrowser provider={provider} uses={['generator', 'overlay', 'title']} title="Generators and overlays" onPick={(e) => (setBrowse(null), run(() => controller.addEffectLayer(e.id)))} />
+        <EffectsBrowser provider={provider} uses={EFFECT_LAYER_USES} title="Generators and overlays" onPick={(e) => (setBrowse(null), run(() => controller.addEffectLayer(e.id)))} />
       )}
       {generator && layer && (
         <div className="space-y-1" data-effect-part="generator">

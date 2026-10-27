@@ -364,12 +364,22 @@ export interface NewLayerOption {
   group?: string;
   disabled?: boolean;
   reason?: string;
+  /**
+   * The host has the user pick something before adding: `'effect'` is one of the provider's
+   * effects with a use in `EFFECT_LAYER_USES` (an `EffectsBrowser` with those `uses`), passed to
+   * `addLayerOfKind` as `init.effect`.
+   */
+  pick?: 'effect';
 }
 
+/** The effect uses an effect layer draws: generators, overlays and titles (filters apply to a layer instead). */
+export const EFFECT_LAYER_USES = ['generator', 'overlay', 'title'] as const;
+
 /**
- * Catalogue of layer types and adjustment layers that can be added dynamically to the controller.
+ * Catalogue of layer types and adjustment layers that can be added dynamically to the controller,
+ * with an effect layer when it has an effects provider.
  */
-export function newLayerOptions(_controller: ImageEditorController): NewLayerOption[] {
+export function newLayerOptions(controller: ImageEditorController): NewLayerOption[] {
   const options: NewLayerOption[] = [
     { id: 'pixel', label: 'Empty Layer', icon: 'square-dashed', group: 'Basic' },
     { id: 'text', label: 'Text Layer', icon: 'type', group: 'Basic' },
@@ -385,6 +395,10 @@ export function newLayerOptions(_controller: ImageEditorController): NewLayerOpt
       icon: 'sliders',
       group: 'Adjustments',
     });
+  }
+
+  if (controller.effectsProvider) {
+    options.push({ id: 'effect', label: 'Effect Layer…', icon: 'sparkles', group: 'Effects', pick: 'effect' });
   }
 
   return options;
@@ -451,6 +465,11 @@ export async function addLayerOfKind(
       ...(init as object),
     });
   }
+  if (id === 'effect') {
+    const { effect, ...options } = (init ?? {}) as { effect?: unknown } & Parameters<ImageEditorController['addEffectLayer']>[1];
+    if (typeof effect !== 'string' || !effect) throw new Error('An effect layer needs init.effect: the effect to draw.');
+    return controller.addEffectLayer(effect, options);
+  }
   if (id.startsWith('adjustment-')) {
     const kind = id.slice('adjustment-'.length) as AdjustmentKind;
     if (isAdjustmentKind(kind)) {
@@ -469,19 +488,30 @@ export interface LayerPanelDescriptor {
   title: string;
 }
 
+export interface LayerPanelsOptions {
+  /**
+   * The editor has an effects provider (`controller.effectsProvider`): adds the `provider-effects`
+   * panel, to add effect layers and to apply effects to the layer or change an effect layer's own.
+   */
+  effects?: boolean;
+}
+
 /**
  * Returns contextual panels that apply to the currently active layer (or layer-independent panels if null).
  */
-export function layerPanels(layer: ImageLayer | null): LayerPanelDescriptor[] {
+export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOptions = {}): LayerPanelDescriptor[] {
+  const effects: LayerPanelDescriptor[] = options.effects ? [{ id: 'provider-effects', title: 'Effects' }] : [];
   if (!layer) {
     return [
       { id: 'canvas-size', title: 'Composition Size' },
       { id: 'selection', title: 'Selection' },
+      ...effects,
     ];
   }
 
   const panels: LayerPanelDescriptor[] = [
     { id: 'properties', title: 'Layer Properties' },
+    ...effects,
   ];
 
   if (layer.type === 'pixel') {

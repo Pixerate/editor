@@ -1,6 +1,6 @@
 <script lang="ts">
   import { imageOutlineButtonClass } from './styles.js';
-  import { findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
+  import { EFFECT_LAYER_USES, findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
   import ImageEffectControls from './ImageEffectControls.svelte';
@@ -64,7 +64,7 @@
     <EffectsBrowser {provider} uses={['filter']} title="Filters" onpick={(e) => ((browse = null), run(() => controller.applyEffectFilter(id, e.id)))} />
   {/if}
   {#if browse === 'layer'}
-    <EffectsBrowser {provider} uses={['generator', 'overlay', 'title']} title="Generators and overlays" onpick={(e) => ((browse = null), run(() => controller.addEffectLayer(e.id)))} />
+    <EffectsBrowser {provider} uses={EFFECT_LAYER_USES} title="Generators and overlays" onpick={(e) => ((browse = null), run(() => controller.addEffectLayer(e.id)))} />
   {/if}
   {#if generator && layer}
     {@const id = layer.id}

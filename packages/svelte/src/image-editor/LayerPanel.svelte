@@ -15,6 +15,7 @@
   import TypeOptionsBar from './TypeOptionsBar.svelte';
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
+  import ImageProviderEffectsPanel from './ImageProviderEffectsPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -98,6 +99,8 @@
       <div class="font-medium text-sm text-foreground">Smart Filters</div>
       <LayerEffectsPanel {controller} />
     </div>
+  {:else if panelId === 'provider-effects'}
+    <ImageProviderEffectsPanel {controller} />
   {:else if panelId === 'selection'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Selection</div>

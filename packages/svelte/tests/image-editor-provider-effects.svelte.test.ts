@@ -3,7 +3,7 @@ import { flushSync, mount, unmount } from "svelte";
 import { PresenceStore, ToolRegistry, createAgentPlayback, createInstantPresenceClock } from "@pixerate/editor/tools";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
 import { ImageEditorController, type PixelLayer, type SmartObjectLayer } from "@pixerate/editor/image-editor";
-import { ImageProviderEffectsPanel } from "../src/image-editor";
+import { ImageProviderEffectsPanel, LayerPanel } from "../src/image-editor";
 import ImageEffectsProbe from "./fixtures/ImageEffectsProbe.svelte";
 
 let cleanups: (() => void)[] = [];
@@ -53,6 +53,18 @@ function setup(effects: ReturnType<typeof createFakeEffectProvider> | null = cre
 }
 
 describe("ImageProviderEffectsPanel (Svelte)", () => {
+  it("is the LayerPanel for provider-effects, so hosts building panels from layerPanels add effect layers", async () => {
+    const { c } = setup();
+    c.setActiveLayer(null);
+    render(LayerPanel, { controller: c, panelId: "provider-effects" });
+    expect(q("[data-image-provider-effects]")).toBeTruthy();
+    await click(button("Effect layer…"));
+    await click(q('[data-effect-id="fake.gradient"]'));
+    const active = c.getLayer(c.getState().activeLayerId!) as PixelLayer;
+    expect(active.generator?.effect).toBe("fake.gradient");
+  });
+
+
   it("applies a filter effect as a smart filter, edits it and removes it", async () => {
     const { c, id } = setup();
     render(ImageProviderEffectsPanel, { controller: c });
