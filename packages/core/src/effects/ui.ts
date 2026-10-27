@@ -7,6 +7,8 @@
 import type { JsonSchema } from '../tools/schema.js';
 import type { ParameterField, ParameterValue } from '../parameters/types.js';
 import { createEffectPixels } from './helpers.js';
+import { SYSTEM_FONT_CATALOG } from '../typography/catalog.js';
+import type { FontSummary } from '../typography/registry.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectSummary, EffectUse, EffectValue } from './types.js';
 
 /** Names for the uses, for filters and badges. */
@@ -23,12 +25,27 @@ export const EFFECT_USE_LABELS: Readonly<Record<EffectUse, string>> = {
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 const typeOf = (s: JsonSchema) => (Array.isArray(s.type) ? s.type.find((t) => t !== 'null') : s.type);
 
+/** Options for turning effect controls into fields. */
+export interface EffectFieldOptions {
+	/** Families offered by font controls (default: the system font catalog). */
+	fonts?: readonly FontSummary[];
+}
+
+/**
+ * Whether a control picks a font family: a string schema with `format: "font"` or
+ * `"x-pixerate-control": "font"`.
+ */
+export function isEffectFontControl(schema: JsonSchema): boolean {
+	return typeOf(schema) === 'string' && (schema.format === 'font' || schema['x-pixerate-control'] === 'font');
+}
+
 /**
  * One control as a parameter field: numbers and integers (sliders when bounded), switches,
- * choices (`enum`), colours (strings whose default is `#rrggbb`), vectors (2–4 numbers) and text.
+ * choices (`enum`), font families (`format: "font"`, a choice of `options.fonts`), colours
+ * (strings whose default is `#rrggbb`), vectors (2–4 numbers) and text.
  * `null` for a control no field can edit (objects, long lists).
  */
-export function effectControlField(name: string, schema: JsonSchema, fallback: EffectValue | undefined): ParameterField | null {
+export function effectControlField(name: string, schema: JsonSchema, fallback: EffectValue | undefined, options: EffectFieldOptions = {}): ParameterField | null {
 	const base = { id: name, ...(schema.title ? { label: schema.title } : {}), ...(schema.description ? { description: schema.description } : {}) };
 	const def = (schema.default ?? fallback) as EffectValue | undefined;
 	const type = typeOf(schema);
@@ -42,6 +59,13 @@ export function effectControlField(name: string, schema: JsonSchema, fallback: E
 		return { ...base, type: type === 'integer' ? 'int' : 'number', default: typeof def === 'number' ? def : (min ?? 0), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(schema.multipleOf ? { step: schema.multipleOf } : {}) };
 	}
 	if (type === 'boolean') return { ...base, type: 'boolean', default: def === true };
+	if (isEffectFontControl(schema)) {
+		const fonts = options.fonts ?? SYSTEM_FONT_CATALOG;
+		const opts: Array<{ value: string; label: string; description: string }> = fonts.map((f) => ({ value: f.family, label: f.family, description: f.category }));
+		const current = typeof def === 'string' && def ? def : (opts[0]?.value ?? 'sans-serif');
+		if (!opts.some((o) => o.value.toLowerCase() === current.toLowerCase())) opts.unshift({ value: current, label: current, description: 'current' });
+		return { ...base, type: 'choice', options: opts, default: opts.find((o) => o.value.toLowerCase() === current.toLowerCase())!.value, control: 'select' };
+	}
 	if (type === 'string') {
 		if (typeof def === 'string' && HEX.test(def)) return { ...base, type: 'color', alpha: def.length === 9, default: def };
 		return { ...base, type: 'text', default: typeof def === 'string' ? def : '', ...(schema.maxLength ? { maxLength: schema.maxLength } : {}) };
@@ -54,10 +78,24 @@ export function effectControlField(name: string, schema: JsonSchema, fallback: E
 }
 
 /** An effect's controls as parameter fields, in schema order (controls no field can edit are left out). */
-export function effectParameterFields(description: Pick<EffectDescription, 'controls' | 'defaults'>): ParameterField[] {
+export function effectParameterFields(description: Pick<EffectDescription, 'controls' | 'defaults'>, options: EffectFieldOptions = {}): ParameterField[] {
 	return Object.entries(description.controls.properties)
-		.map(([name, schema]) => effectControlField(name, schema, description.defaults[name]))
+		.map(([name, schema]) => effectControlField(name, schema, description.defaults[name], options))
 		.filter((f): f is ParameterField => !!f);
+}
+
+/**
+ * The font families an effect's font controls use with these values (falling back to defaults),
+ * to load with `ensureFontsLoaded` before rendering a title preview.
+ */
+export function effectFontFamilies(description: Pick<EffectDescription, 'controls' | 'defaults'>, values: Readonly<Record<string, unknown>> = {}): string[] {
+	const out: string[] = [];
+	for (const [name, schema] of Object.entries(description.controls.properties)) {
+		if (!isEffectFontControl(schema)) continue;
+		const v = values[name] ?? description.defaults[name] ?? schema.default;
+		if (typeof v === 'string' && v && !out.includes(v)) out.push(v);
+	}
+	return out;
 }
 
 /** A saved value as a field shows it (`ParameterValue`), or the field's default. */
