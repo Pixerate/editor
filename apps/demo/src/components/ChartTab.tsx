@@ -109,6 +109,22 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
       { name: "Support", value: 150 },
     ],
   },
+  Pipeline: {
+    type: "sankey",
+    title: "Sales pipeline",
+    subtitle: "Leads by source, Q3",
+    dataLabels: true,
+    links: [
+      { source: "Website", target: "Discovery", value: 120 },
+      { source: "Events", target: "Discovery", value: 60 },
+      { source: "Referral", target: "Discovery", value: 40 },
+      { source: "Discovery", target: "Proposal", value: 130 },
+      { source: "Discovery", target: "Lost", value: 90 },
+      { source: "Proposal", target: "Won", value: 70 },
+      { source: "Proposal", target: "Lost", value: 60 },
+    ],
+    sankeyNodes: ["Website", "Events", "Referral", "Discovery", "Proposal", "Won", "Lost"],
+  },
   Parliament: {
     type: "parliament",
     title: "Council seats",

@@ -5,6 +5,7 @@ import { sameChartSelection } from './layout.js';
 import { chartPresetPatch } from './presets.js';
 import { chartFamily } from './spec.js';
 import { chartMovingAverage, chartSupportsTrendlines, fitChartTrendline, type ChartTrendFit } from './trend.js';
+import { chartLinksFromTable, normalizeChartLinks } from './links.js';
 import { chartTreeFromRows, chartTreeFromTable, cloneChartTree, findChartTreeNode, normalizeChartTree, type ChartTreeRow } from './tree.js';
 import {
 	chartDataFromTable,
@@ -24,6 +25,7 @@ import type {
 	ChartCurve,
 	ChartErrorBars,
 	ChartLegend,
+	ChartLink,
 	ChartMarker,
 	ChartNumberFormat,
 	ChartReferenceBand,
@@ -403,7 +405,7 @@ export class ChartController {
 	 */
 	setData(data: { categories?: readonly unknown[]; series?: readonly ChartSeriesInput[] }, options: ChartEditOptions = {}): ChartActionResult {
 		// New categories or series replace grouped data.
-		const clear = (data.categories || data.series) && this.spec.tree.length ? { tree: [] } : {};
+		const clear = (data.categories || data.series) && (this.spec.tree.length || this.spec.links.length) ? { tree: [], links: [] } : {};
 		return this.update({ ...(data.categories ? { categories: data.categories as string[] } : {}), ...(data.series ? { series: data.series as ChartSeries[] } : {}), ...clear }, { label: options.label ?? 'Edit chart data' });
 	}
 
@@ -666,7 +668,7 @@ export class ChartController {
 			const old = byName.get(s.name);
 			return { ...s, ...(old?.color ? { color: old.color } : {}), ...(old?.type ? { type: old.type } : {}), ...(old ? { id: old.id } : {}) };
 		});
-		const { spec } = normalizeChartSpec({ ...this.spec, categories: data.categories, series, tree: [] });
+		const { spec } = normalizeChartSpec({ ...this.spec, categories: data.categories, series, tree: [], links: [] });
 		this.commit('Import data', spec);
 		if (data.issues.length) {
 			this.issues = data.issues;
@@ -686,8 +688,12 @@ export class ChartController {
 	// Grouped data (tree)
 	// -------------------------------------------------------------------------
 
-	/** A refusal while the data is a tree (cell edits would be overwritten by its totals), else null. */
+	/** A refusal while the data is a tree or flows (cell edits would be overwritten by their totals), else null. */
 	private treeLocked(): { ok: false; message: string } | null {
+		if (this.spec.links.length)
+			return this.reject(
+				'This chart\'s data is flows (links): its categories are the nodes and its values how much passes through each. Change it with setLinks / the flow edits (set_chart_links, add_chart_link, update_chart_link, remove_chart_link), or replace it with new data.'
+			) as { ok: false; message: string };
 		if (!this.spec.tree.length) return null;
 		return this.reject(
 			'This chart\'s data is grouped (a tree): its categories and values are the top-level groups and their totals. Change it with setTree / the tree node edits (set_chart_tree, add_chart_tree_node, update_chart_tree_node, remove_chart_tree_node), or replace it with new data.'
@@ -699,7 +705,7 @@ export class ChartController {
 		const issues: ChartIssue[] = [];
 		const next = normalizeChartTree(tree, issues);
 		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
-		return this.update({ tree: next }, { label: options.label ?? (next.length ? 'Replace grouped data' : 'Ungroup data') });
+		return this.update({ tree: next, links: [] }, { label: options.label ?? (next.length ? 'Replace grouped data' : 'Ungroup data') });
 	}
 
 	/**
@@ -727,7 +733,7 @@ export class ChartController {
 		const next = chartTreeFromTable(rows, options, issues);
 		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
 		if (!next.length) return this.reject('There is no grouped data to import: expected rows of names followed by a value, e.g. "Europe,France,40".');
-		return this.update({ tree: next }, { label: 'Import grouped data' });
+		return this.update({ tree: next, links: [] }, { label: 'Import grouped data' });
 	}
 
 	private nodeAt(path: readonly string[]): ChartTreeNode | { ok: false; message: string } {
@@ -802,6 +808,64 @@ export class ChartController {
 			parent.value = 0;
 		}
 		return this.update({ tree }, { label: `Delete "${node.name}"` });
+	}
+
+	// -------------------------------------------------------------------------
+	// Flows (links)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Replaces the flows (and, when given, the node order). An empty list goes back to the
+	 * table, keeping how much passed through each node as values. One undo step, all-or-nothing.
+	 */
+	setLinks(links: unknown, options: ChartEditOptions & { nodes?: readonly string[] } = {}): ChartActionResult {
+		const issues: ChartIssue[] = [];
+		const next = normalizeChartLinks(links, issues);
+		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		// Keep the current order for nodes that still have flows; an explicit order is checked as given.
+		const used = new Set(next.flatMap((l) => [l.source, l.target]));
+		const sankeyNodes = options.nodes ? [...options.nodes] : this.spec.sankeyNodes.filter((n) => used.has(n));
+		return this.update({ links: next, tree: [], sankeyNodes }, { label: options.label ?? (next.length ? 'Replace flows' : 'Remove flows') });
+	}
+
+	/** Replaces the data with flows from a table of source, target and value columns. */
+	importLinksTable(rows: ReadonlyArray<ReadonlyArray<unknown>>, options: { header?: boolean | 'auto' } = {}): ChartActionResult {
+		const raw = chartLinksFromTable(rows, options);
+		if (!raw.length) return this.reject('There are no flows to import: expected rows of source, target and value, e.g. "Website,Signup,120".');
+		return this.setLinks(raw, { label: 'Import flows' });
+	}
+
+	private badLink(index: number): { ok: false; message: string } {
+		const n = this.spec.links.length;
+		return fail(`There is no flow ${index}; ${n ? `expected 0 to ${n - 1}` : 'the chart has none yet'}.`) as { ok: false; message: string };
+	}
+
+	/** Adds a flow and returns its index. */
+	addLink(link: ChartLink): { ok: true; index: number } | { ok: false; message: string; issues?: ChartIssue[] } {
+		const result = this.setLinks([...this.spec.links, link], { label: `Add flow ${String(link?.source ?? '')} → ${String(link?.target ?? '')}` });
+		if (!result.ok) return result;
+		return { ok: true, index: this.spec.links.length - 1 };
+	}
+
+	/** Changes a flow's source, target, value or colour (`color: null` goes back to the default). */
+	updateLink(index: number, patch: { source?: string; target?: string; value?: number; color?: string | null }): ChartActionResult {
+		const current = this.spec.links[index];
+		if (!current) return this.badLink(index);
+		const merged: Record<string, unknown> = { ...current, ...patch };
+		if (patch.color === null) delete merged.color;
+		return this.setLinks(
+			this.spec.links.map((l, i) => (i === index ? merged : l)),
+			{ label: 'Change flow' }
+		);
+	}
+
+	removeLink(index: number): ChartActionResult {
+		const current = this.spec.links[index];
+		if (!current) return this.badLink(index);
+		return this.setLinks(
+			this.spec.links.filter((_, i) => i !== index),
+			{ label: `Delete flow ${current.source} → ${current.target}` }
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -1237,6 +1301,9 @@ function updateLabel(patch: ChartSpecPatch): string {
 		parliamentLabel: 'Edit seat caption',
 		sunburstLabel: 'Edit centre caption',
 		tree: 'Replace grouped data',
+		links: 'Replace flows',
+		sankeyNodes: 'Reorder nodes',
+		sankeyLinkColor: 'Change flow colours',
 		radarTicks: 'Change radar rings',
 		radarGraticule: 'Change radar grid',
 		legend: 'Change legend',

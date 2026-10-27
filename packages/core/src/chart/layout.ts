@@ -2,7 +2,7 @@
 // (`legend`, `finalize`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { layoutCartesian, layoutXy, trendlineLegendItems } from './layout-cartesian.js';
 import { applyHighlight, chartAnnotationFamily, drawCallouts, drawNote, noteHeight } from './layout-annotations.js';
-import { layoutBox, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
+import { layoutBox, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSankey, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
 import { estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type FamilyResult, type LayoutCtx } from './layout-shared.js';
 import { chartScaleFromPixel, formatChartNumber } from './scale.js';
 import { chartSpecColorsByCategory, chartFamily, chartVariesColors, chartSeriesColor, chartSeriesType, chartSliceColor, DEFAULT_CHART_THEME } from './spec.js';
@@ -22,7 +22,7 @@ interface LegendItem {
 function legendItems(spec: ChartSpec, ctx: LayoutCtx): LegendItem[] {
 	const family = chartFamily(spec);
 	// Funnel bars and slope lines are labelled along the side already.
-	if (spec.type === 'funnel' || spec.type === 'slope') return [];
+	if (spec.type === 'funnel' || spec.type === 'slope' || spec.type === 'sankey') return [];
 	if (chartSpecColorsByCategory(spec)) {
 		const first = spec.series.find((s) => !s.hidden);
 		const seats = (i: number) => Math.max(0, Math.round(first?.values[i] ?? 0));
@@ -178,6 +178,12 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 			return finish(layoutFunnel(ctx, area, visible[0]));
 		case 'treemap':
 			return finish(spec.tree.length ? layoutTreemapTree(ctx, area, spec.series[0]) : layoutTreemap(ctx, area, visible[0]));
+		case 'sankey':
+			if (!spec.links.length) {
+				ctx.warn('type-fallback', 'A Sankey diagram needs flows (set_chart_links); it is drawn as a bar chart until then.');
+				return finish(layoutCartesian(ctx, area, visible));
+			}
+			return finish(layoutSankey(ctx, area, spec.series[0]));
 		case 'sunburst':
 			return finish(layoutSunburst(ctx, area, spec.tree.length ? spec.series[0] : visible[0]));
 		case 'slope':

@@ -138,7 +138,7 @@ export function drawCallouts(ctx: LayoutCtx, plot: ChartRect) {
 	if (unplaced) ctx.warn('annotations-skipped', `${unplaced} callout${unplaced === 1 ? ' points' : 's point'} at a gap or a hidden value and ${unplaced === 1 ? 'is' : 'are'} not drawn.`);
 }
 
-const MUTED: ReadonlySet<ChartMarkRole> = new Set(['bar', 'line', 'area', 'point', 'slice', 'cell', 'box', 'whisker', 'outlier', 'connector', 'trendline', 'trendline-label', 'error-bar', 'data-label', 'legend-swatch', 'legend-label']);
+const MUTED: ReadonlySet<ChartMarkRole> = new Set(['node', 'bar', 'line', 'area', 'point', 'slice', 'cell', 'box', 'whisker', 'outlier', 'connector', 'trendline', 'trendline-label', 'error-bar', 'data-label', 'legend-swatch', 'legend-label']);
 
 /**
  * Mutes every data mark that `spec.highlight` does not name. A point stays bright when its

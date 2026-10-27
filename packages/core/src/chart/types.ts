@@ -16,6 +16,7 @@
  * - `parliament` draws the first series as seats in a hemicycle, one colour per category.
  * - `sunburst` draws `tree` as rings from the centre out (or, without a tree, the first series
  *   as one ring); a `treemap` with a `tree` nests each group's rectangles inside it.
+ * - `sankey` draws `links` as flows between columns of nodes.
  */
 export type ChartType =
 	| 'bar'
@@ -34,7 +35,8 @@ export type ChartType =
 	| 'slope'
 	| 'likert'
 	| 'parliament'
-	| 'sunburst';
+	| 'sunburst'
+	| 'sankey';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -148,6 +150,19 @@ export interface ChartTreeNode {
 	/** CSS colour (default: the palette colour of its top-level group, lighter further in). */
 	color?: string;
 }
+
+/** One flow of a Sankey diagram, from one named node to another. */
+export interface ChartLink {
+	source: string;
+	target: string;
+	/** Above 0. */
+	value: number;
+	/** CSS colour (default: by `sankeyLinkColor`). */
+	color?: string;
+}
+
+/** What colours each flow of a Sankey diagram: its source node, its target node, or grey. */
+export type ChartSankeyLinkColor = 'source' | 'target' | 'gray';
 
 /** Which axis a reference line or band is measured on: the value axis, the secondary value axis, or the numeric x axis of a scatter or bubble chart. */
 export type ChartReferenceAxis = 'y' | 'y2' | 'x';
@@ -312,6 +327,16 @@ export interface ChartSpec {
 	tree: ChartTreeNode[];
 	/** Sunburst: the caption under the total in the centre ("" for none). */
 	sunburstLabel: string;
+	/**
+	 * Flows between named nodes (Sankey diagrams). When set they are the chart's data: the
+	 * categories are the nodes (in `sankeyNodes` order) and the first series holds how much flows
+	 * through each (the larger of in and out), so other types draw those amounts.
+	 */
+	links: ChartLink[];
+	/** Sankey: the order nodes are listed and stacked in (default: as the links first name them). */
+	sankeyNodes: string[];
+	/** Sankey: what colours each flow. */
+	sankeyLinkColor: ChartSankeyLinkColor;
 }
 
 /** What a click selects. */
@@ -385,6 +410,8 @@ export type ChartMarkRole =
 	| 'reference-band'
 	| 'reference-label'
 	| 'callout'
+	| 'node'
+	| 'link'
 	| 'note'
 	| 'selection'
 	| 'empty';

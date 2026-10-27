@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  addChartLink,
   addChartTreeRow,
   chartColorInputValue,
   chartSeriesColor,
@@ -9,6 +10,7 @@ import {
   chartTreeToRows,
   formatChartNumber,
   removeChartTreeRow,
+  setChartLinkField,
   setChartTreeRowName,
   setChartTreeRowValue,
   type ChartController,
@@ -158,8 +160,67 @@ export function ChartTreeGrid({ controller, readOnly = false, className }: Omit<
   );
 }
 
+/** Flows as a table: source, target and value per row. Edits are checked as a whole (no loops, no repeated pairs). */
+export function ChartLinksGrid({ controller, readOnly = false, className }: Omit<ChartDataGridProps, 'categoryHeader'>) {
+  const { spec } = useChartState(controller);
+  const links = spec.links;
+  const commit = (next: unknown) => controller.setLinks(next).ok;
+  return (
+    <div className={`overflow-auto rounded-md border border-border ${className ?? ''}`} data-chart-grid="" data-chart-links-grid="">
+      <table className="w-full border-collapse text-xs">
+        <thead className="bg-muted/50">
+          <tr>
+            {['Source', 'Target'].map((label) => (
+              <th key={label} className="border-b border-r border-border px-2 py-1 text-left font-medium text-muted-foreground">
+                {label}
+              </th>
+            ))}
+            <th className="border-b border-r border-border px-2 py-1 text-right font-medium text-muted-foreground">Value</th>
+            {!readOnly && <th className="w-8 border-b border-border" />}
+          </tr>
+        </thead>
+        <tbody>
+          {links.map((link, i) => (
+            <tr key={i} data-link-row={i}>
+              {(['source', 'target'] as const).map((field) => (
+                <td key={field} className="border-b border-r border-border p-0">
+                  <ChartCommitInput value={link[field]} aria-label={`${field === 'source' ? 'Source' : 'Target'} of flow ${i + 1}`} data-link-cell={`${i}:${field}`} readOnly={readOnly} onCommit={(text) => commit(setChartLinkField(links, i, field, text))} className={`${chartCellClass} text-left`} />
+                </td>
+              ))}
+              <td className="border-b border-r border-border p-0">
+                <ChartCommitInput value={String(link.value)} inputMode="decimal" aria-label={`Value of ${link.source} → ${link.target}`} data-link-cell={`${i}:value`} readOnly={readOnly} onCommit={(text) => commit(setChartLinkField(links, i, 'value', text))} className={chartCellClass} />
+              </td>
+              {!readOnly && (
+                <td className="border-b border-border px-1">
+                  <button type="button" className={chartIconButtonClass} title="Delete flow" aria-label={`Delete ${link.source} → ${link.target}`} data-action="link-remove" onClick={() => controller.removeLink(i)}>
+                    ×
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!readOnly && (
+        <div className="flex flex-wrap gap-1 p-1">
+          <button type="button" className={`${chartButtonClass} h-6 border-dashed`} data-action="link-add" onClick={() => commit(addChartLink(links))}>
+            + Add flow
+          </button>
+          <span className="flex-1" />
+          {links.length > 0 && (
+            <button type="button" className={`${chartButtonClass} h-6`} data-action="links-clear" title="Keep how much passes through each node as plain data" onClick={() => controller.setLinks([])}>
+              Remove flows
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChartDataGrid({ controller, categoryHeader = 'Category', readOnly = false, className }: ChartDataGridProps) {
   const { spec, selection } = useChartState(controller);
+  if (spec.links.length || spec.type === 'sankey') return <ChartLinksGrid controller={controller} readOnly={readOnly} className={className} />;
   if (spec.tree.length) return <ChartTreeGrid controller={controller} readOnly={readOnly} className={className} />;
   const canGroup = spec.type === 'treemap' || spec.type === 'sunburst';
   const paste = (row: number, column: number) => (e: React.ClipboardEvent<HTMLInputElement>) => {

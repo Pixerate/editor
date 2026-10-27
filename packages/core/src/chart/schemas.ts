@@ -12,6 +12,7 @@ import {
 	CHART_NUMBER_STYLES,
 	CHART_ORIENTATIONS,
 	CHART_RADAR_GRATICULES,
+	CHART_SANKEY_LINK_COLORS,
 	CHART_REFERENCE_AXES,
 	CHART_SERIES_TYPES,
 	CHART_STACKINGS,
@@ -128,6 +129,15 @@ export const TREE_NODE: JsonSchema = {
 export const TREE_DEFS = { chartTreeNode: TREE_NODE };
 export const TREE_PATH: JsonSchema = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Names from the top level down to the node, e.g. ["Europe", "France"] (from get_chart treeTable or spec.tree).' };
 
+/** One Sankey flow's fields; source, target and value are required when adding. */
+export const LINK_PROPS: Record<string, JsonSchema> = {
+	source: { type: 'string', description: 'Name of the node the flow leaves.' },
+	target: { type: 'string', description: 'Name of the node it reaches (a different node; flows only go forwards, no loops).' },
+	value: { type: 'number', exclusiveMinimum: 0, description: 'How much flows, above 0 (its width).' },
+	color: { type: 'string', description: 'CSS colour (default: by sankeyLinkColor).' }
+};
+export const LINK_INDEX: JsonSchema = { type: 'integer', minimum: 0, description: 'Flow index (0 = first), as get_chart lists them in spec.links.' };
+
 export const ERROR_BARS = (what: string): JsonSchema => ({
 	type: ['object', 'null'],
 	description: `${what} null removes them.`,
@@ -168,7 +178,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups.' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats; sunburst draws the grouped data (set_chart_tree) as rings, and a treemap with grouped data nests its groups; sankey draws the flows (set_chart_links).' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -204,5 +214,7 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				parliamentArc: { type: 'number', minimum: 90, maximum: 360, description: 'Parliament: sweep of the hemicycle in degrees (default 180).' },
 				parliamentMajority: { type: ['integer', 'null'], minimum: 1, description: 'Parliament: seats needed for a majority, drawn as a dashed line (null: half of the seats plus one).' },
 				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' },
-				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' }
+				sunburstLabel: { type: 'string', description: 'Sunburst: caption under the total in the centre ("" for none).' },
+				sankeyLinkColor: { type: 'string', enum: [...CHART_SANKEY_LINK_COLORS], description: 'Sankey: colour each flow by its source node (default), its target node, or grey.' },
+				sankeyNodes: { type: 'array', items: { type: 'string' }, description: 'Sankey: node names in the order to stack them within their columns (reorder to untangle crossing flows); nodes left out follow in the order the flows name them.' }
 			};

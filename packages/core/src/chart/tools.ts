@@ -38,6 +38,8 @@ import {
 	CHART_UPDATE_PROPERTIES,
 	FORMAT,
 	HEIGHT,
+	LINK_INDEX,
+	LINK_PROPS,
 	REFERENCE_BAND_PATCH,
 	REFERENCE_BAND_PROPS,
 	REFERENCE_INDEX,
@@ -54,8 +56,9 @@ import {
 } from './schemas.js';
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
+import { chartSankeyNodeValues } from './links.js';
 import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
-import type { ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
+import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
 
@@ -145,6 +148,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		const depth = chartTreeDepth(spec().tree);
 		return [[...Array.from({ length: depth }, (_, k) => (k === 0 ? 'Group' : k === depth - 1 ? 'Item' : `Level ${k + 1}`)), 'Value'], ...rows.map((r) => [...r.path, ...Array(depth - r.path.length).fill(''), r.value])];
 	};
+	const linksSummary = () => ({ links: spec().links, nodes: spec().sankeyNodes.map((name, i) => ({ name, value: chartSankeyNodeValues(spec().links, spec().sankeyNodes)[i] })) });
 	const treeSummary = () => ({ tree: spec().tree, groups: spec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })), depth: chartTreeDepth(spec().tree) });
 	const Parser = (): ParserCtor | undefined => options.DOMParser ?? (globalThis as { DOMParser?: ParserCtor }).DOMParser;
 
@@ -718,6 +722,87 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
+	const setLinks: AgentTool = {
+		name: 'set_chart_links',
+		title: 'Replace the flows',
+		description:
+			'Replaces the chart\'s data with flows between named nodes for a Sankey diagram, as one undo step: each {"source", "target", "value"} with a value above 0. Flows only go forwards (no loops) and a source-target pair appears once. The nodes become the categories and how much passes through each the first series. nodes (optional) sets the stacking order. [] goes back to plain data. Returns the flows and each node\'s throughput.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				links: { type: 'array', items: { type: 'object', properties: LINK_PROPS, required: ['source', 'target', 'value'], additionalProperties: false }, description: 'All the flows; [] removes them.' },
+				nodes: { type: 'array', items: { type: 'string' }, description: 'Node names in stacking order (default: as the flows first name them).' }
+			},
+			required: ['links'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Replace the flows', ...WRITE_IDEMPOTENT },
+		handler: ({ links, nodes }) => {
+			resolve(controller.setLinks(links, { nodes }));
+			return linksSummary();
+		}
+	};
+
+	const importLinksCsv: AgentTool = {
+		name: 'import_chart_links_csv',
+		title: 'Import flows from CSV',
+		description: 'Replaces the data with flows from CSV or TSV rows of source, target and value (as Mermaid sankey-beta and spreadsheets write them). One undo step. Returns the flows and each node\'s throughput.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				csv: { type: 'string', description: 'CSV or TSV text, e.g. "Website,Signup,120\\nSignup,Paid,30".' },
+				header: { type: ['boolean', 'string'], enum: [true, false, 'auto'], description: 'The first row holds column names (default auto: when its third cell is not a number).' }
+			},
+			required: ['csv'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Import flows from CSV', ...WRITE },
+		handler: ({ csv, header }) => {
+			resolve(controller.importLinksTable(parseCsv(csv, { delimiter: csv.includes('\t') ? '\t' : ',' }), { header }));
+			return linksSummary();
+		}
+	};
+
+	const addLink: AgentTool = {
+		name: 'add_chart_link',
+		title: 'Add a flow',
+		description: 'Adds a flow from one node to another (new names add nodes). Refused when the pair exists already or it would close a loop. Returns its index and the throughput of its two nodes.',
+		inputSchema: { type: 'object', properties: LINK_PROPS, required: ['source', 'target', 'value'], additionalProperties: false },
+		annotations: { title: 'Add a flow', ...WRITE },
+		handler: (args) => {
+			const result = resolve(controller.addLink(args as ChartLink)) as { index: number };
+			const s = spec();
+			const through = (n: string) => s.series[0]?.values[s.sankeyNodes.indexOf(n)] ?? 0;
+			const link = s.links[result.index];
+			return { index: result.index, link, nodes: [link.source, link.target].map((name) => ({ name, value: through(name) })) };
+		}
+	};
+
+	const updateLink: AgentTool = {
+		name: 'update_chart_link',
+		title: 'Change a flow',
+		description: 'Changes a flow by index: its source, target, value or colour (null goes back to the default). Checked like a new flow. Returns the flow as stored.',
+		inputSchema: { type: 'object', properties: { index: LINK_INDEX, ...LINK_PROPS, color: { type: ['string', 'null'], description: 'CSS colour, or null for the default.' } }, required: ['index'], additionalProperties: false },
+		annotations: { title: 'Change a flow', ...WRITE_IDEMPOTENT },
+		handler: ({ index, ...patch }) => {
+			if (!Object.keys(patch).length) fail(`Nothing to change: pass source, target, value or color with the index, e.g. {"index": ${index}, "value": 40}.`);
+			resolve(controller.updateLink(index, patch));
+			return { index, link: spec().links[index] };
+		}
+	};
+
+	const removeLink: AgentTool = {
+		name: 'remove_chart_link',
+		title: 'Delete a flow',
+		description: 'Deletes a flow by index; the ones after it move up one, and nodes no flow uses any more go. Returns the flows left.',
+		inputSchema: { type: 'object', properties: { index: LINK_INDEX }, required: ['index'], additionalProperties: false },
+		annotations: { title: 'Delete a flow', ...DESTRUCTIVE },
+		handler: ({ index }) => {
+			resolve(controller.removeLink(index));
+			return { links: spec().links };
+		}
+	};
+
 	const applyPreset: AgentTool = {
 		name: 'apply_chart_preset',
 		title: 'Apply a chart style',
@@ -919,6 +1004,11 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		addTreeNode,
 		updateTreeNode,
 		removeTreeNode,
+		setLinks,
+		importLinksCsv,
+		addLink,
+		updateLink,
+		removeLink,
 		applyPreset,
 		transpose,
 		select,
@@ -932,7 +1022,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
-		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data, flows and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
 		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;

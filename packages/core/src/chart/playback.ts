@@ -63,6 +63,11 @@ export function planChartToolPlayback(tool: string, args: Record<string, any>): 
 		case 'add_chart_tree_node':
 		case 'update_chart_tree_node':
 		case 'remove_chart_tree_node':
+		case 'set_chart_links':
+		case 'import_chart_links_csv':
+		case 'add_chart_link':
+		case 'update_chart_link':
+		case 'remove_chart_link':
 		case 'import_chart_csv':
 		case 'import_chart_mermaid':
 		case 'import_chart_ooxml':

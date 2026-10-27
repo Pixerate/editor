@@ -1,5 +1,6 @@
 import { cyclePaletteColor } from './color.js';
 import { CHART_ERROR_BAR_DIRECTIONS, CHART_ERROR_BAR_TYPES } from './errorbars.js';
+import { chartSankeyNodes, chartSankeyNodeValues, normalizeChartLinks } from './links.js';
 import { chartTreeTotal, cloneChartTree, normalizeChartTree } from './tree.js';
 import type {
 	ChartAxis,
@@ -18,6 +19,7 @@ import type {
 	ChartReferenceAxis,
 	ChartReferenceBand,
 	ChartReferenceLine,
+	ChartSankeyLinkColor,
 	ChartSeries,
 	ChartSeriesType,
 	ChartSpec,
@@ -29,7 +31,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'slope', 'likert', 'parliament'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'slope', 'likert', 'parliament'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -41,6 +43,7 @@ export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
 export const CHART_RADAR_GRATICULES: readonly ChartRadarGraticule[] = ['polygon', 'circle'];
 export const CHART_LIKERT_NEUTRALS: readonly ChartLikertNeutral[] = ['split', 'separate'];
 export const CHART_LIKERT_SORTS: readonly ChartLikertSort[] = ['none', 'positive', 'negative'];
+export const CHART_SANKEY_LINK_COLORS: readonly ChartSankeyLinkColor[] = ['source', 'target', 'gray'];
 export const CHART_REFERENCE_AXES: readonly ChartReferenceAxis[] = ['y', 'y2', 'x'];
 export const CHART_ORIENTATIONS: readonly ChartOrientation[] = ['vertical', 'horizontal'];
 export const CHART_LEGEND_POSITIONS: readonly ChartLegendPosition[] = ['top', 'bottom', 'left', 'right'];
@@ -64,11 +67,12 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	slope: 'Slope',
 	likert: 'Likert',
 	parliament: 'Parliament',
-	sunburst: 'Sunburst'
+	sunburst: 'Sunburst',
+	sankey: 'Sankey'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst' | 'sankey';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -133,6 +137,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'likert':
 		case 'parliament':
 		case 'sunburst':
+		case 'sankey':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -143,7 +148,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 
 /** Chart types whose legend lists categories (one colour per category) rather than series. */
 export function chartColorsByCategory(type: ChartType): boolean {
-	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament' || type === 'sunburst';
+	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament' || type === 'sunburst' || type === 'sankey';
 }
 
 /** Whether this chart colours by category: a pie-like type, or `varyColors` on a one-series chart. */
@@ -608,13 +613,19 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 
 	// A tree is the data: its top-level names are the categories and the first series holds their totals.
 	const tree = normalizeChartTree(value.tree, issues);
-	if (tree.length) categories = tree.map((n) => n.name);
+	// So are flows: the categories are their nodes and the first series how much passes through each.
+	const links = normalizeChartLinks(value.links, issues);
+	const sankeyNodes = chartSankeyNodes(links, Array.isArray(value.sankeyNodes) ? value.sankeyNodes.map(String) : [], issues);
+	if (value.sankeyNodes !== undefined && value.sankeyNodes !== null && !Array.isArray(value.sankeyNodes)) issues.push({ path: 'sankeyNodes', message: 'sankeyNodes must be an array of node names.' });
+	if (tree.length && links.length) issues.push({ path: 'links', message: 'A chart holds either grouped data (tree) or flows (links), not both; the flows were used.' });
+	if (links.length) categories = [...sankeyNodes];
+	else if (tree.length) categories = tree.map((n) => n.name);
 
 	const used = new Set<string>();
 	const series = rawSeries.map((s, i) => normalizeSeries(s, categories.length, used, i, issues)).filter((s): s is ChartSeries => s !== null);
-	if (tree.length) {
+	if (tree.length || links.length) {
 		if (!series.length) series.push({ id: uniqueChartSeriesId(series), name: 'Values', values: [] });
-		series[0] = { ...series[0], values: tree.map(chartTreeTotal) };
+		series[0] = { ...series[0], values: links.length ? chartSankeyNodeValues(links, sankeyNodes) : tree.map(chartTreeTotal) };
 	}
 
 	let palette = [...DEFAULT_CHART_PALETTE];
@@ -708,8 +719,11 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		parliamentArc: fraction('parliamentArc', 180, 90, 360),
 		parliamentMajority,
 		parliamentLabel: text(value.parliamentLabel, '', 'parliamentLabel', issues),
-		tree,
-		sunburstLabel: text(value.sunburstLabel, '', 'sunburstLabel', issues)
+		tree: links.length ? [] : tree,
+		sunburstLabel: text(value.sunburstLabel, '', 'sunburstLabel', issues),
+		links,
+		sankeyNodes: links.length ? sankeyNodes : [],
+		sankeyLinkColor: pick(value.sankeyLinkColor, CHART_SANKEY_LINK_COLORS, 'source', 'sankeyLinkColor', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {
@@ -735,7 +749,9 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		highlight: [...spec.highlight],
 		referenceLines: spec.referenceLines.map((l) => ({ ...l })),
 		referenceBands: spec.referenceBands.map((b) => ({ ...b })),
-		tree: cloneChartTree(spec.tree)
+		tree: cloneChartTree(spec.tree),
+		links: spec.links.map((l) => ({ ...l })),
+		sankeyNodes: [...spec.sankeyNodes]
 	};
 }
 
