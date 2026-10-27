@@ -18,6 +18,8 @@ that uses the tools can load the matching skill.
 | [`pixerate-paint-editor`](pixerate-paint-editor/SKILL.md) | Natural-media painting: paper and grain, dry-media brushes, the brush library, strokes as data, pigment mixing. |
 | [`pixerate-animation-editor`](pixerate-animation-editor/SKILL.md) | Vector animation: shots, commands, timing, Flair and Lottie. |
 | [`pixerate-video-editor`](pixerate-video-editor/SKILL.md) | Non-linear video editing: tracks, clips, transitions, export. |
+| [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. |
+| [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. |
 | [`pixerate-generation`](pixerate-generation/SKILL.md) | Planning, estimating and running paid media generation. |
 | [`pixerate-parameters`](pixerate-parameters/SKILL.md) | Effect parameters, presets and keyframes. |
 | [`pixerate-tokens`](pixerate-tokens/SKILL.md) | Design tokens: collections, modes, variables and aliases, through the whole-set document tools. |

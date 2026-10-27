@@ -2884,3 +2884,51 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Painting a new image in `ImageEditorCanvas` reported "No layer given and none is active; pass layerId (see list_layers) to paint." through `onerror`.
 - **Root Cause**: `LayerOperationError` messages are written for agents (they name tools and arguments), and `PaintGesture` / `BrushOptionsBar` showed `err.message` as it was. A new image also had no active layer, so the first stroke always failed.
 - **Solution / Workaround**: Give a refusal a second, person-facing message (`new LayerOperationError(agentText, personText)`) and show it with `userErrorMessage(err)` in UI code. Tool results keep `message`. New images, and documents saved without an active layer, now open on `defaultActiveLayerId` (the topmost paintable pixel layer). Deleting the active layer moves to `activeLayerAfterRemoval`.
+
+### [core/video-editor] An Adjustment Clip at Part Opacity Must Mix Over the Unadjusted Picture
+
+- **Issue / Symptom**: Drawn naively, an adjustment clip at 50% opacity (or fading in) fades the pictures beneath it towards the background, instead of mixing the adjusted look with the unadjusted picture.
+- **Root Cause**: An adjustment clip is evaluated as a group layer that holds the pictures it changes (like a compound clip), so the renderers can grade and run effects on the composite. Moving the pictures into the group took them out of the frame, so the group's opacity mixed against the background.
+- **Solution / Workaround**: When the adjusted copy does not cover everything fully (opacity below 1, fades, a blend mode, a mask, a wipe or iris), `videoFrameAt` keeps the unadjusted layers in place and draws the group over them. At full opacity it replaces them, so the pictures are drawn once. Scope `underneath` is applied while the tracks are evaluated (it wraps what has been drawn so far). Scopes `all` and `track` are applied after every track, because they reach tracks above the adjustment clip.
+
+### [core/video-editor] An Adjustment Clip's `track` Field Overwrote the Track in Tool Results
+
+- **Issue / Symptom**: Designing the adjustment clip with a `track` field (the track it targets) broke `get_video_project` and every tool result. Clip outputs are built as `{ track: <the track it is on>, ...clip }`, so the clip's own field replaced the track it sits on.
+- **Root Cause**: Clip fields are spread into tool results and inspector rows alongside the location fields.
+- **Solution / Workaround**: The target is `targetTrack`. Avoid clip fields named `track`, `end` or `source`, which tool outputs add.
+
+### [core/video-editor] A Feathered Mask on the Canvas Needs the Blur Scaled to Canvas Pixels
+
+- **Issue / Symptom**: Mask feathers looked right at preview scale 1 but too soft or too hard at other resolutions.
+- **Root Cause**: The mask is cut on a scratch canvas by filling its outline with `globalCompositeOperation = 'destination-in'` (`destination-out` when inverted) and `filter: blur()`. A canvas filter's blur radius is in canvas pixels and ignores the current transform, while the outline is drawn in frame pixels through `setTransform(scale…)`.
+- **Solution / Workaround**: `applyVideoMask` sets `blur(feather × scale / 2 px)`. SVG uses `feGaussianBlur stdDeviation = feather / 2` inside the mask, in user space. Mask outlines are polygons (`videoMaskPolygon`) so the canvas, SVG and agents (`videoMaskContains`) all cut the same shape. The scratch context needs `moveTo`, `lineTo`, `closePath` and `fill`. They are optional in `VideoScratchCanvas`, so hosts with minimal contexts still compile. Without them the mask is skipped.
+
+### [core/video-editor] ffmpeg's `lut3d` Cannot Protect Skin Tones, and Most Adjustment Clips Are Not Filters
+
+- **Issue / Symptom**: Exports did not match the preview for LUTs with `preserveSkinTones`, or for adjustment clips with masks, fades, part opacity or scope `track`.
+- **Root Cause**: Skin protection is a per-pixel mix weighted by the pixel's chroma, which `lut3d` cannot express. An adjustment clip changes the composite of several overlays. ffmpeg's timeline `enable` can switch a grade on the composite for the clip's span, but cannot fade or mask it without splitting the whole graph.
+- **Solution / Workaround**: `toVideoFfmpeg` draws a full-opacity grade or LUT on the composite with `enable='between(t,…)'` for scopes `underneath` and `all`. It refuses masks and other adjustment clips (`videoFfmpegUnsupportedFeatures` names them) unless given `frames` rendered with `renderVideoFrameExact`. Skin protection is applied in the preview and frame renders; the export adds a note. EDLs leave adjustment clips out rather than writing black events.
+
+### [core/video-editor] Loudness Cannot Be Measured From Min / Max Peaks
+
+- **Issue / Symptom**: Loudness worked out from the waveform peaks the editor already keeps does not match LUFS meters: a sine and a square wave at the same peak read the same.
+- **Root Cause**: LUFS (ITU-R BS.1770) is a gated mean of K-weighted energy over 400 ms blocks. Peaks keep only the extremes of each block, which says nothing about energy or frequency weighting.
+- **Solution / Workaround**: `buildVideoAudioPeaks` also stores the K-weighted mean square per 100 ms hop (`peaks.loudness`, from the decoded samples it already has). `videoAudioLoudness` gates any stretch of it into LUFS. Peaks built by older code or by a host without `loudness` make the loudness tools fail with a message saying to rebuild them. Tests check a full-scale 997 Hz sine at -3.0 LUFS.
+
+### [core/video-editor] Plans Must Be Re-Checked, and Their Ids Allocated Only When They Are Made
+
+- **Issue / Symptom**: A plan proposed before other edits could apply ops to clips that had moved or gone. A refused proposal also used up the next plan id, so agents told to apply "plan1" found "plan2".
+- **Root Cause**: A plan is a list of edits worked out against the project as it was. The id counter advanced before the edits were validated.
+- **Solution / Workaround**: The controller remembers the project each plan was made against. `isPlanStale` compares it with the current one, and `applyPlan` re-runs the edits on the current project, refusing (with the plan kept open) when they no longer apply. Ids are reserved only after `planVideoEdits` succeeds. Plans are view state: they are not in the project or the undo history, and applying one is a single undo step labelled with its title.
+
+### [core/video-editor] Spring and Elastic Easings Have No Video Keyframe Equivalent
+
+- **Issue / Symptom**: Writing an effect authored with spring or elastic keyframes back to a clip effect failed, because video keys only take linear, hold, the CSS named eases and cubic-bezier.
+- **Root Cause**: Springs and elastics are physical simulations, not curves through two handles.
+- **Solution / Workaround**: `videoEffectValuesFromDocument` samples those segments into 12 linear steps and says so in `notes`. Non-numeric keyframed controls (colours) keep their first value, also noted. Converting video keys to an authoring document is lossless (`videoEaseToAnimationEasing`).
+
+### [svelte] A Local Variable Named `state` Is Read as a Store
+
+- **Issue / Symptom**: `svelte-check` failed with "Cannot use 'state' as a store" and "Untyped function calls may not accept type arguments" on `let anchor = $state<number | null>(null)` in a component that also declared `const state = $derived(...)`.
+- **Root Cause**: In Svelte 5, a top-level variable named `state` makes `$state` look like an auto-subscription to a store called `state`, not the rune.
+- **Solution / Workaround**: Never name a component-level variable `state` (or `derived`, `effect`, `props`) when the component uses runes. `TranscriptEditor.svelte` uses `ts` for the transcript state.

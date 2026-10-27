@@ -71,7 +71,7 @@ export type VideoEffectJob =
 	/** An effect transition between two whole-frame pictures. */
 	| { kind: 'transition'; effect: string; values: Record<string, EffectValue>; progress: number; time: number; from: EffectPixels; to: EffectPixels };
 
-const PLACEMENT = new Set(['opacity', 'rect', 'rotation', 'blend', 'wipe', 'iris', 'grade', 'track']);
+const PLACEMENT = new Set(['opacity', 'rect', 'rotation', 'blend', 'wipe', 'iris', 'grade', 'track', 'mask']);
 const round = (_k: string, v: unknown) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v);
 
 /**
