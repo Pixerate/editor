@@ -1,5 +1,5 @@
 import React, { useId, useMemo } from 'react';
-import { effectFieldValue, effectParameterFields, type EffectDescription } from '@pixerate/editor/effects';
+import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
 import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
 import { ParameterFieldControl } from '../parameters/fields';
 
@@ -23,6 +23,8 @@ export interface EffectParametersProps {
   onPresetName?: (name: string) => void;
   /** Optional addon rendered next to the control label (e.g. keyframe toggle button). */
   renderControlAddon?: (control: string) => React.ReactNode;
+  /** Families offered by font controls (`format: "font"`); default the system font catalog. */
+  fonts?: EffectFieldOptions['fonts'];
   disabled?: boolean;
   className?: string;
 }
@@ -41,10 +43,11 @@ export function EffectParameters({
   onPreset,
   onPresetName,
   renderControlAddon,
+  fonts,
   disabled = false,
   className = ''
 }: EffectParametersProps) {
-  const fields = useMemo(() => effectParameterFields(description), [description]);
+  const fields = useMemo(() => effectParameterFields(description, { fonts }), [description, fonts]);
   const idBase = useId();
   const gesture = React.useRef<string | null>(null);
   const count = React.useRef(0);
