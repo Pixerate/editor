@@ -21,6 +21,11 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [paint/wet] Wet Paint Mixing Samples Only Suspended Pigment While Settled Pigment Carries Visible Color
+
+- **Issue / Symptom**: Overlapping wet paint strokes (such as Gouache or Watercolor) fail to mix; subsequent strokes paint with their raw color without picking up underlying wet strokes, behaving as opaque dry coats.
+- **Root Cause**: In the wet simulation grid (`world.ts`), pigment deposits from water suspension (`P_P0`) into settled grain (`P_D0`) within seconds, and re-wetted dry paint is directly placed into `settled`. `WetMedium.sample` was only reading `s.pigment`, meaning once pigment settled onto the paper substrate (even while paper remained completely wet), the sampler returned zero pigment density. Additionally, gouache presets lacked evaporation damping, causing moisture to dissipate before a user could pick another color.
+- **Solution / Workaround**: In `WetMedium.sample`, sum both suspended (`s.pigment`) and settled (`s.settled`) absorption channels ($K$), matching visual shader rendering (`shadeTile`). Ensure wet brush definitions specify proper `pickup` and `mixing: 'pigment'` behavior with appropriate evaporation rates to permit natural inter-stroke mixing.
 ### [core/typography] `document.fonts.check()` Says Yes for Fonts That Are Not Installed
 
 - **Issue / Symptom**: A system font provider that answered `hasFont` with `document.fonts.check('16px "Some Font"')` reported every family as available, including made-up names.
