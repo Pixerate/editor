@@ -8,7 +8,7 @@
 import { createChartSpec, normalizeChartSpec } from "@pixerate/editor/chart";
 
 const spec = createChartSpec({
-  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap
+  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap · slope · likert · parliament
   title: "Quarterly revenue",
   categories: ["Q1", "Q2", "Q3", "Q4"],
   series: [
@@ -117,6 +117,9 @@ function Revenue() {
 | `waterfall` | the first series as increases / decreases | categories labelled "total" / "subtotal" are running totals; `showTotal` appends one |
 | `histogram` | every value of the visible series | `bins` (default √n, 1–100); right-inclusive bins |
 | `box` | one box per visible series | Tukey whiskers (1.5 × IQR), outliers, mean ✕ |
+| `slope` | the first series (left) joined to the second (right) for each category, labelled at both ends | the series names are the column captions; needs two series (a line chart until then); draggable |
+| `likert` | each category as one diverging bar of the series, as shares of its total | series from most negative to most positive, coloured orange → grey → purple (`chartLikertColor`); `likertNeutral` `split` / `separate`, `likertSort` `none` / `positive` / `negative` |
+| `parliament` | the first series as seats in rows of dots, each category's seats together from the left | `parliamentArc` (90–360°), `parliamentMajority` (default half plus one, drawn as a dashed line), `parliamentLabel` under the total; seats are rounded, at most 2,000 |
 
 Other spec fields: `xAxis.kind: "date"` (categories read as dates, labelled with calendar steps that fit), `axis.step` (fixed tick distance), `format.code` (spreadsheet codes such as `#,##0.0,,"M"`, using the spreadsheet's own format engine), `gapWidth` / `overlap` (bar spacing), `labelPosition` (`auto` drops labels that do not fit and picks dark or white text by contrast), and per series `marker`, `curve`, `dataLabels`, `format`, `pointColors` and `trendlines`.
 

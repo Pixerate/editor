@@ -10,6 +10,10 @@
  * - `waterfall` draws the first series as running increases and decreases.
  * - `histogram` bins every value of the visible series; `box` draws one box and whiskers per series.
  * - `funnel` and `treemap` draw the first series, one bar or rectangle per category.
+ * - `slope` joins each category's value in the first series (before) to the second (after).
+ * - `likert` draws each category (a question) as one diverging bar of the series (answers,
+ *   most negative first), as shares of the question's total.
+ * - `parliament` draws the first series as seats in a hemicycle, one colour per category.
  */
 export type ChartType =
 	| 'bar'
@@ -24,7 +28,10 @@ export type ChartType =
 	| 'histogram'
 	| 'box'
 	| 'funnel'
-	| 'treemap';
+	| 'treemap'
+	| 'slope'
+	| 'likert'
+	| 'parliament';
 
 /** How a series is drawn in a cartesian chart. */
 export type ChartSeriesType = 'bar' | 'line' | 'area' | 'scatter';
@@ -209,6 +216,8 @@ export type ChartStacking = 'none' | 'stacked' | 'percent';
 export type ChartOrientation = 'vertical' | 'horizontal';
 export type ChartCurve = 'linear' | 'smooth' | 'step';
 export type ChartRadarGraticule = 'polygon' | 'circle';
+export type ChartLikertNeutral = 'split' | 'separate';
+export type ChartLikertSort = 'none' | 'positive' | 'negative';
 /** Where bar labels go: `auto` puts them outside, or centred on stacked segments, and drops ones that do not fit. */
 export type ChartLabelPosition = 'auto' | 'inside' | 'outside' | 'center';
 
@@ -270,6 +279,16 @@ export interface ChartSpec {
 	referenceBands: ChartReferenceBand[];
 	/** A one-series bar, line, area or scatter chart colours each category from the palette (and the legend lists categories). */
 	varyColors: boolean;
+	/** Likert, with an odd number of answers: the middle one straddles the centre line (`split`) or is drawn apart on the right (`separate`). */
+	likertNeutral: ChartLikertNeutral;
+	/** Likert: order the questions by agreement (`positive`), by disagreement (`negative`) or as given (`none`). */
+	likertSort: ChartLikertSort;
+	/** Parliament: the sweep of the hemicycle in degrees, 90–360. */
+	parliamentArc: number;
+	/** Parliament: seats needed for a majority, drawn as a line (`null`: half of the seats plus one). */
+	parliamentMajority: number | null;
+	/** Parliament: the caption under the seat total ("" writes "seats"). */
+	parliamentLabel: string;
 }
 
 /** What a click selects. */

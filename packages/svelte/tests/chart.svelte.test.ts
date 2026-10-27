@@ -264,6 +264,24 @@ describe("ChartInspector", () => {
     expect(q('[data-section="annotations"]')).toBeNull();
   });
 
+  it("sets Likert and parliament options", () => {
+    const controller = new ChartController({ spec: { ...sales, type: "likert" } });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    type(q<HTMLSelectElement>('[data-option="likertNeutral"]'), "separate");
+    type(q<HTMLSelectElement>('[data-option="likertSort"]'), "positive");
+    expect(controller.getSpec()).toMatchObject({ likertNeutral: "separate", likertSort: "positive" });
+    expect(q('[data-option="parliamentArc"]')).toBeNull();
+    controller.setType("parliament");
+    flushSync();
+    expect(q('[data-option="likertSort"]')).toBeNull();
+    type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "20");
+    type(q<HTMLInputElement>('[data-option="parliamentLabel"]'), "MPs");
+    expect(controller.getSpec()).toMatchObject({ parliamentMajority: 20, parliamentLabel: "MPs" });
+    type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "");
+    expect(controller.getSpec().parliamentMajority).toBeNull();
+  });
+
   it("sets radar rings and grid shape", () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     const el = render(ChartInspector, { controller });
