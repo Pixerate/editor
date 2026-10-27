@@ -387,7 +387,7 @@
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.5",
     "assemblyscript": "0.28.20",
-    "fast-check": "^3.23.2",
+    "fast-check": "^4.10.2",
     "mermaid": "12.2.0",
     "tiptap-markdown": "^0.8.10",
     "tsup": "^9.0.0",
