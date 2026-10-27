@@ -6,6 +6,8 @@ import {
 	CHART_CURVES,
 	CHART_LABEL_POSITIONS,
 	CHART_LEGEND_POSITIONS,
+	CHART_LIKERT_NEUTRALS,
+	CHART_LIKERT_SORTS,
 	CHART_MARKERS,
 	CHART_NUMBER_STYLES,
 	CHART_ORIENTATIONS,
@@ -150,7 +152,7 @@ export const SERIES_PROPS: Record<string, JsonSchema> = {
 
 
 export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
-				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type.' },
+				type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type. slope joins each category from the first series (before) to the second (after); likert reads each category as a question and the series as answers from most negative to most positive; parliament draws the first series as seats.' },
 				title: { type: 'string', description: 'Title ("" for none).' },
 				subtitle: { type: 'string', description: 'Subtitle ("" for none).' },
 				xAxis: AXIS('Category axis (or numeric x axis of scatter / bubble charts).'),
@@ -180,5 +182,10 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 				highlight: { type: 'array', items: { type: 'string' }, description: 'Category labels and series names (or ids) to draw normally while the rest are muted; [] shows everything. highlight_chart checks the names.' },
 				referenceLines: { type: 'array', items: { type: 'object', properties: REFERENCE_LINE_PROPS, required: ['value'], additionalProperties: false }, description: 'Replaces every reference line (targets, floors, averages across the plot). add_chart_reference_line adds one.' },
 				referenceBands: { type: 'array', items: { type: 'object', properties: REFERENCE_BAND_PROPS, required: ['from', 'to'], additionalProperties: false }, description: 'Replaces every reference band (target ranges across the plot). add_chart_reference_band adds one.' },
-				varyColors: { type: 'boolean', description: 'A one-series bar, line, area or scatter chart colours each category from the palette, and its legend lists the categories (default false).' }
+				varyColors: { type: 'boolean', description: 'A one-series bar, line, area or scatter chart colours each category from the palette, and its legend lists the categories (default false).' },
+				likertNeutral: { type: 'string', enum: [...CHART_LIKERT_NEUTRALS], description: 'Likert with an odd number of answers: split (default) puts the middle answer across the centre line; separate draws it in its own column on the right.' },
+				likertSort: { type: 'string', enum: [...CHART_LIKERT_SORTS], description: 'Likert: order the questions by agreement (positive), by disagreement (negative) or as given (none, default).' },
+				parliamentArc: { type: 'number', minimum: 90, maximum: 360, description: 'Parliament: sweep of the hemicycle in degrees (default 180).' },
+				parliamentMajority: { type: ['integer', 'null'], minimum: 1, description: 'Parliament: seats needed for a majority, drawn as a dashed line (null: half of the seats plus one).' },
+				parliamentLabel: { type: 'string', description: 'Parliament: caption under the seat total ("" writes "seats").' }
 			};

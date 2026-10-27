@@ -513,6 +513,16 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	} else if (family === 'treemap') {
 		issues.push('Treemaps are written as pie charts: DrawingML has no treemap type.');
 		type = 'pie';
+	} else if (family === 'parliament') {
+		issues.push('Parliament charts are written as doughnut charts of the seats: DrawingML has no parliament type.');
+		type = 'donut';
+	} else if (family === 'slope') {
+		issues.push('Slope charts are written as line charts with the two series as lines over the categories: DrawingML has no slope type.');
+		type = 'line';
+	} else if (family === 'likert') {
+		issues.push('Likert charts are written as 100% stacked horizontal bars: DrawingML has no diverging bar.');
+		spec = { ...spec, type: 'bar', stacking: 'percent', orientation: 'horizontal' };
+		type = 'bar';
 	}
 	const visible = spec.series.filter((s) => !s.hidden);
 	const annotations = [

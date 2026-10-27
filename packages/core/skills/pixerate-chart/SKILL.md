@@ -1,6 +1,6 @@
 ---
 name: pixerate-chart
-description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel and treemap charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
+description: How to build, edit and check charts in the Pixerate chart editor through its agent tools and chart.* commands - bar, column, line, area, scatter, bubble, pie, donut, radar, waterfall, histogram, box plot, funnel, treemap, slope, Likert (survey) and parliament charts; series, categories, stacking, secondary axis, log axis, number formats, data labels, legend, trendline, error bars, reference lines and target bands, callouts, highlighting, footnotes, colour palettes and colour-blind checks, CSV and Mermaid import, Office chart XML export, and reading charts out of open .xlsx, .pptx and .docx files. Use when a chart editor's tools (get_chart, update_chart, set_chart_values, list_file_charts...) are available or the user asks to make, restyle, fix or explain a chart.
 ---
 
 # Charts
@@ -12,9 +12,11 @@ a list of `categories` (strings, in order) and a list of `series`. Each series h
 per-series settings (type for combos, secondary axis, marker, colour, format, trendlines,
 error bars, callouts). Annotations sit on the spec: `note` (footnote), `highlight` (names of
 categories and series to keep bright), `referenceLines`, `referenceBands` and `varyColors`. Tools take a series by id or exact name and a category by 0-based index or
-exact label; `get_chart` returns both. Pie, donut, funnel and treemap draw only the first
-visible series, one slice per category; histogram and box read every value of the visible
-series.
+exact label; `get_chart` returns both. Pie, donut, funnel, treemap and parliament draw only
+the first visible series, one slice (or group of seats) per category; histogram and box read
+every value of the visible series. A slope chart joins the first series (before) to the
+second (after) for each category; a Likert chart reads each category as a question and the
+series as its answers, ordered from most negative to most positive.
 
 Read `pixerate-agent-tools` first for tool naming, errors and `run_commands` batching.
 Charts inside a rich-text document are not edited with these tools: use `insert_chart`,
@@ -55,7 +57,12 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
   stacked bar or `stacking: "percent"` for shares across groups; pie or donut only for one
   whole with few parts. Distribution: histogram (`bins`, default the square root of n) or
   box. Relationship: scatter with `series.x`, bubble with `sizes` for a third measure.
-  Running totals and bridges: waterfall (`showTotal`). Staged drop-off: funnel.
+  Running totals and bridges: waterfall (`showTotal`). Staged drop-off: funnel. What rose
+  and what fell between two points in time: slope (two series, the names are the column
+  captions). Agree-to-disagree survey answers: likert (`likertSort: "positive"` ranks the
+  questions; `likertNeutral: "separate"` keeps the middle answer out of the comparison).
+  Seats or votes per group with a majority: parliament (`parliamentMajority`,
+  `parliamentArc`, `parliamentLabel`).
 - **Bars start at zero.** Bar length encodes the value, so never set a non-zero `min` on the
   value axis of a bar, column or area chart. Line and scatter charts may zoom to the data
   range when the change, not the magnitude, is the point.
@@ -128,7 +135,7 @@ it changed.
 
 | Tool | Use it to |
 | --- | --- |
-| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart). Invalid values change nothing and come back as sentences. Returns the spec. |
+| `update_chart` | Change presentation in one all-or-nothing call: `type`, `title`, `subtitle`, `xAxis` / `yAxis` / `yAxis2` (show, title, min, max, step, gridlines, format, kind `"date"`, scale `"log"`, logBase, reverse), `legend` (show, position top / bottom / left / right), `stacking` (none / stacked / percent), `orientation`, `curve`, `points`, `dataLabels`, `labelPosition`, `palette`, `innerRadius` (donut hole, 0-0.9), `gapWidth`, `overlap`, `bins`, `showTotal`, `radarTicks` (radar ring count 1-50, null for round numbers), `radarGraticule` (radar rings as `polygon` or `circle`), `note` (footnote, "" for none), `highlight` (whole list of names), `referenceLines` / `referenceBands` (whole lists; prefer the add tools), `varyColors` (one colour per category on a one-series chart), `likertNeutral` (`split` / `separate`), `likertSort` (`none` / `positive` / `negative`), `parliamentArc` (90-360 degrees), `parliamentMajority` (seats, null for half plus one), `parliamentLabel` (caption under the total). Invalid values change nothing and come back as sentences. Returns the spec. |
 | `set_chart_data` | Replace `categories` and / or all `series` (each with `name`, `values` and optional settings). Values are padded with gaps to the categories. Use for whole tables and for re-sorting. Returns the table and series ids. |
 | `set_chart_values` | Set individual `cells` (`series`, `category`, `value`) all-or-nothing. Values may be numbers, numeric text (`"1,200"`, `"12%"`, `"$40"`, `"(3)"`) or `null` for a gap. Returns the stored values. Acted out with a cursor when the host has a director. |
 | `add_chart_series` | Add a series (`name` required; `values`, `color`, `type` for a combo, `axis: "secondary"`, `x` / `sizes` for scatter and bubble, marker, format, error bars, `id`, `at`). Selects it and returns its id. |
@@ -225,6 +232,12 @@ several charts may register them with another prefix.
 - Percent-stacked charts, pies and gaps cannot be dragged; use `set_chart_values`.
 - Radar needs at least three categories (it draws as a line chart until then); trendlines
   are refused on stacked charts, pies and the other single-series families.
+- Likert answers must be entered in order, most negative first: the chart puts the first
+  half left of the centre line and colours them orange, the last half right in purple.
+  Values are counts or shares; each question is scaled to its own total.
+- A slope chart needs exactly two visible series; with one it draws a line chart (a
+  `type-fallback` warning), and a third is not drawn. Hide the extra series or move them.
+- Parliament seats are rounded to whole numbers; more than 2,000 seats are not drawn.
 - Reference lines, bands and callouts are drawn on bar, line, area, scatter and bubble
   charts only. Switching to another type keeps them in the spec but leaves them out of the
   drawing (an `annotations-skipped` warning says so); they come back when you switch back.

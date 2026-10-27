@@ -18,6 +18,8 @@
     CHART_LABEL_POSITIONS,
     CHART_LAYOUT_PRESETS,
     CHART_LEGEND_POSITIONS,
+    CHART_LIKERT_NEUTRALS,
+    CHART_LIKERT_SORTS,
     CHART_MARKERS,
     CHART_NUMBER_STYLES,
     CHART_SERIES_TYPES,
@@ -418,6 +420,54 @@
           <label for="{idPrefix}-bins" class="{chartLabelClass} w-20 shrink-0">Bins</label>
           <div class="min-w-0 flex-1">
             <ChartCommitInput id="{idPrefix}-bins" value={spec.bins === null ? '' : String(spec.bins)} placeholder="Auto" inputmode="numeric" data-option="bins" oncommit={(text) => controller.update({ bins: text.trim() === '' ? null : Number(text) }).ok} />
+          </div>
+        </div>
+      {/if}
+      {#if spec.type === 'likert'}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-likert-neutral" class="{chartLabelClass} w-20 shrink-0">Neutral</label>
+          <select id="{idPrefix}-likert-neutral" class={chartInputClass} value={spec.likertNeutral} data-option="likertNeutral" onchange={(e) => controller.update({ likertNeutral: e.currentTarget.value as (typeof CHART_LIKERT_NEUTRALS)[number] })}>
+            {#each CHART_LIKERT_NEUTRALS as n (n)}
+              <option value={n}>{n === 'split' ? 'Across the centre' : 'In its own column'}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-likert-sort" class="{chartLabelClass} w-20 shrink-0">Order</label>
+          <select id="{idPrefix}-likert-sort" class={chartInputClass} value={spec.likertSort} data-option="likertSort" onchange={(e) => controller.update({ likertSort: e.currentTarget.value as (typeof CHART_LIKERT_SORTS)[number] })}>
+            {#each CHART_LIKERT_SORTS as o (o)}
+              <option value={o}>{o === 'none' ? 'As entered' : o === 'positive' ? 'Most agreement first' : 'Most disagreement first'}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      {#if spec.type === 'parliament'}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-parliament-arc" class="{chartLabelClass} w-20 shrink-0">Sweep</label>
+          <input
+            id="{idPrefix}-parliament-arc"
+            type="range"
+            min="90"
+            max="360"
+            step="10"
+            value={spec.parliamentArc}
+            data-option="parliamentArc"
+            class="w-full accent-primary"
+            onpointerdown={() => controller.beginGesture('parliamentArc')}
+            onpointerup={() => controller.endGesture()}
+            oninput={(e) => controller.update({ parliamentArc: Number(e.currentTarget.value) })}
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-parliament-majority" class="{chartLabelClass} w-20 shrink-0">Majority</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-parliament-majority" value={spec.parliamentMajority === null ? '' : String(spec.parliamentMajority)} placeholder="Half plus one" inputmode="numeric" data-option="parliamentMajority" oncommit={(text) => controller.update({ parliamentMajority: text.trim() === '' ? null : Number(text) }).ok} />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-parliament-label" class="{chartLabelClass} w-20 shrink-0">Caption</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-parliament-label" value={spec.parliamentLabel} placeholder="seats" data-option="parliamentLabel" oncommit={(parliamentLabel) => controller.update({ parliamentLabel }).ok} />
           </div>
         </div>
       {/if}

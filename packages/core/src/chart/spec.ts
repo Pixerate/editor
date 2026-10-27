@@ -8,6 +8,8 @@ import type {
 	ChartLabelPosition,
 	ChartLegend,
 	ChartLegendPosition,
+	ChartLikertNeutral,
+	ChartLikertSort,
 	ChartMarker,
 	ChartNumberFormat,
 	ChartOrientation,
@@ -26,7 +28,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'slope', 'likert', 'parliament'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -36,6 +38,8 @@ export const CHART_SERIES_TYPES: readonly ChartSeriesType[] = ['bar', 'line', 'a
 export const CHART_STACKINGS: readonly ChartStacking[] = ['none', 'stacked', 'percent'];
 export const CHART_CURVES: readonly ChartCurve[] = ['linear', 'smooth', 'step'];
 export const CHART_RADAR_GRATICULES: readonly ChartRadarGraticule[] = ['polygon', 'circle'];
+export const CHART_LIKERT_NEUTRALS: readonly ChartLikertNeutral[] = ['split', 'separate'];
+export const CHART_LIKERT_SORTS: readonly ChartLikertSort[] = ['none', 'positive', 'negative'];
 export const CHART_REFERENCE_AXES: readonly ChartReferenceAxis[] = ['y', 'y2', 'x'];
 export const CHART_ORIENTATIONS: readonly ChartOrientation[] = ['vertical', 'horizontal'];
 export const CHART_LEGEND_POSITIONS: readonly ChartLegendPosition[] = ['top', 'bottom', 'left', 'right'];
@@ -55,11 +59,14 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	histogram: 'Histogram',
 	box: 'Box plot',
 	funnel: 'Funnel',
-	treemap: 'Treemap'
+	treemap: 'Treemap',
+	slope: 'Slope',
+	likert: 'Likert',
+	parliament: 'Parliament'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -120,6 +127,9 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'box':
 		case 'funnel':
 		case 'treemap':
+		case 'slope':
+		case 'likert':
+		case 'parliament':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -130,7 +140,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 
 /** Chart types whose legend lists categories (one colour per category) rather than series. */
 export function chartColorsByCategory(type: ChartType): boolean {
-	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap';
+	return type === 'pie' || type === 'donut' || type === 'funnel' || type === 'treemap' || type === 'slope' || type === 'parliament';
 }
 
 /** Whether this chart colours by category: a pie-like type, or `varyColors` on a one-series chart. */
@@ -148,10 +158,31 @@ export function createChartSpec(partial: Partial<ChartSpec> = {}): ChartSpec {
 }
 
 /** The colour a series is drawn with. */
-export function chartSeriesColor(spec: Pick<ChartSpec, 'palette' | 'series'>, seriesIndex: number): string {
+export function chartSeriesColor(spec: Pick<ChartSpec, 'palette' | 'series'> & { type?: ChartType }, seriesIndex: number): string {
 	const series = spec.series[seriesIndex];
 	if (series?.color) return series.color;
+	if (spec.type === 'likert') return chartLikertColor(spec.series.length, seriesIndex);
 	return cyclePaletteColor(spec.palette.length ? spec.palette : DEFAULT_CHART_PALETTE, seriesIndex);
+}
+
+// ColorBrewer PuOr (colour-blind safe): disagreement in oranges, agreement in purples.
+const LIKERT_NEGATIVE = [['#e66101'], ['#e66101', '#fdb863'], ['#b35806', '#f1a340', '#fee0b6'], ['#b35806', '#e08214', '#fdb863', '#fee0b6']];
+const LIKERT_POSITIVE = [['#5e3c99'], ['#b2abd2', '#5e3c99'], ['#d8daeb', '#998ec3', '#542788'], ['#d8daeb', '#b2abd2', '#8073ac', '#542788']];
+const LIKERT_NEUTRAL = '#d4d4d8';
+
+/**
+ * The colour of answer `index` of `count` on a Likert chart: oranges for the negative half
+ * (darkest first), grey for a middle answer, purples for the positive half (darkest last).
+ */
+export function chartLikertColor(count: number, index: number): string {
+	const side = Math.floor(count / 2);
+	if (count % 2 === 1 && index === side) return LIKERT_NEUTRAL;
+	if (!side) return LIKERT_POSITIVE[0][0];
+	const ramp = (sets: string[][]) => sets[Math.min(side, sets.length) - 1];
+	// More answers than the ramps hold share the nearest shade.
+	const pick = (list: string[], k: number) => list[Math.min(list.length - 1, Math.floor((k * list.length) / side))];
+	if (index < side) return pick(ramp(LIKERT_NEGATIVE), index);
+	return pick(ramp(LIKERT_POSITIVE), index - (count - side));
 }
 
 /** The colour a pie slice is drawn with (by category). */
@@ -176,6 +207,7 @@ export function chartPointColor(spec: Pick<ChartSpec, 'palette' | 'series'> & { 
 export function chartSeriesType(spec: Pick<ChartSpec, 'type'>, series: ChartSeries): ChartSeriesType {
 	if (series.type) return series.type;
 	if (spec.type === 'bubble') return 'scatter';
+	if (spec.type === 'slope') return 'line';
 	return isCartesianChart(spec.type) ? (spec.type as ChartSeriesType) : 'bar';
 }
 
@@ -617,6 +649,12 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 	};
 	const referenceLines = listOf('referenceLines', normalizeChartReferenceLine);
 	const referenceBands = listOf('referenceBands', normalizeChartReferenceBand);
+	let parliamentMajority: number | null = null;
+	if (value.parliamentMajority !== undefined && value.parliamentMajority !== null) {
+		const m = Number(value.parliamentMajority);
+		if (Number.isInteger(m) && m >= 1) parliamentMajority = m;
+		else issues.push({ path: 'parliamentMajority', message: 'parliamentMajority must be a whole number of seats, 1 or more, or null for half plus one.' });
+	}
 	let radarTicks: number | null = null;
 	if (value.radarTicks !== undefined && value.radarTicks !== null) {
 		const t = Number(value.radarTicks);
@@ -653,7 +691,12 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		highlight,
 		referenceLines,
 		referenceBands,
-		varyColors: flag(value.varyColors, false, 'varyColors', issues)
+		varyColors: flag(value.varyColors, false, 'varyColors', issues),
+		likertNeutral: pick(value.likertNeutral, CHART_LIKERT_NEUTRALS, 'split', 'likertNeutral', issues),
+		likertSort: pick(value.likertSort, CHART_LIKERT_SORTS, 'none', 'likertSort', issues),
+		parliamentArc: fraction('parliamentArc', 180, 90, 360),
+		parliamentMajority,
+		parliamentLabel: text(value.parliamentLabel, '', 'parliamentLabel', issues)
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {

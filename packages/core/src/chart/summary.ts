@@ -79,6 +79,37 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 		parts.push(`The largest is ${s.maxAt} at ${fmt(s.max)}${share(s.max)}; the smallest is ${s.minAt} at ${fmt(s.min)}${share(s.min)}.`);
 		return parts.join(' ');
 	}
+	if (family === 'parliament') {
+		const s = spec.series.find((x) => !x.hidden)!;
+		const seats = spec.categories.map((c, i) => ({ c, n: Math.max(0, Math.round(s.values[i] ?? 0)) }));
+		const total = seats.reduce((t, x) => t + x.n, 0);
+		const majority = spec.parliamentMajority ?? Math.floor(total / 2) + 1;
+		const largest = [...seats].sort((a, b) => b.n - a.n)[0];
+		const verdict = largest && largest.n >= majority ? `${largest.c} holds a majority with ${largest.n}` : `no group reaches the majority of ${majority}; the largest is ${largest?.c} with ${largest?.n}`;
+		return `${head} of ${total} seats across ${seats.length} groups: ${verdict}.`;
+	}
+	if (family === 'slope') {
+		const [a, b] = spec.series.filter((x) => !x.hidden);
+		if (!b) return `${head} that needs a second series to compare against.`;
+		const moves = spec.categories.map((c, i) => ({ c, d: a.values[i] !== null && b.values[i] !== null ? (b.values[i] as number) - (a.values[i] as number) : null })).filter((m): m is { c: string; d: number } => m.d !== null);
+		const up = moves.filter((m) => m.d > 0).length;
+		const down = moves.filter((m) => m.d < 0).length;
+		const top = [...moves].sort((x, y) => y.d - x.d);
+		const extremes = top.length ? ` The biggest rise is ${top[0].c} (${fmt(top[0].d)}); the biggest fall is ${top[top.length - 1].c} (${fmt(top[top.length - 1].d)}).` : '';
+		return `${head} from ${a.name} to ${b.name}: ${up} of ${moves.length} rose and ${down} fell.${extremes}`;
+	}
+	if (family === 'likert') {
+		const answers = spec.series.filter((x) => !x.hidden);
+		const side = Math.floor(answers.length / 2);
+		const agree = spec.categories.map((c, i) => {
+			const vals = answers.map((x) => Math.max(0, x.values[i] ?? 0));
+			const total = vals.reduce((t, v) => t + v, 0);
+			return { c, share: total ? vals.slice(answers.length - side).reduce((t, v) => t + v, 0) / total : 0 };
+		});
+		const best = [...agree].sort((x, y) => y.share - x.share);
+		const pct = (v: number) => `${Math.round(v * 100)}%`;
+		return `${head} of ${spec.categories.length} questions with ${answers.length} answers from ${answers[0]?.name} to ${answers[answers.length - 1]?.name}. Most positive: ${best[0]?.c} (${pct(best[0]?.share ?? 0)}); least: ${best[best.length - 1]?.c} (${pct(best[best.length - 1]?.share ?? 0)}).`;
+	}
 	if (family === 'waterfall') {
 		const s = spec.series.find((x) => !x.hidden)!;
 		const steps = s.values.filter((v, i) => v !== null && Number.isFinite(v) && !/\b(sub)?total\b/i.test(spec.categories[i] ?? '')) as number[];

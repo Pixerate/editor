@@ -15,6 +15,8 @@ import {
   CHART_CURVES,
   CHART_RADAR_GRATICULES,
   CHART_LEGEND_POSITIONS,
+  CHART_LIKERT_NEUTRALS,
+  CHART_LIKERT_SORTS,
   CHART_NUMBER_STYLES,
   CHART_SERIES_TYPES,
   CHART_STACKINGS,
@@ -400,6 +402,43 @@ export function ChartInspector({ controller, sections, className }: ChartInspect
                 onPointerUp={() => controller.endGesture()}
                 onChange={(e) => controller.update({ gapWidth: Number(e.currentTarget.value) })}
               />
+            </Field>
+          )}
+          {spec.type === 'likert' && (
+            <Field label="Neutral" htmlFor={`${idBase}-likert-neutral`}>
+              <Select id={`${idBase}-likert-neutral`} name="likertNeutral" value={spec.likertNeutral} options={CHART_LIKERT_NEUTRALS} labels={{ split: 'Across the centre', separate: 'In its own column' }} onChange={(likertNeutral) => controller.update({ likertNeutral })} />
+            </Field>
+          )}
+          {spec.type === 'likert' && (
+            <Field label="Order" htmlFor={`${idBase}-likert-sort`}>
+              <Select id={`${idBase}-likert-sort`} name="likertSort" value={spec.likertSort} options={CHART_LIKERT_SORTS} labels={{ none: 'As entered', positive: 'Most agreement first', negative: 'Most disagreement first' }} onChange={(likertSort) => controller.update({ likertSort })} />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Sweep" htmlFor={`${idBase}-parliament-arc`}>
+              <input
+                id={`${idBase}-parliament-arc`}
+                type="range"
+                min={90}
+                max={360}
+                step={10}
+                value={spec.parliamentArc}
+                data-option="parliamentArc"
+                className="w-full accent-primary"
+                onPointerDown={() => controller.beginGesture('parliamentArc')}
+                onPointerUp={() => controller.endGesture()}
+                onChange={(e) => controller.update({ parliamentArc: Number(e.currentTarget.value) })}
+              />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Majority" htmlFor={`${idBase}-parliament-majority`}>
+              <ChartCommitInput id={`${idBase}-parliament-majority`} value={spec.parliamentMajority === null ? '' : String(spec.parliamentMajority)} placeholder="Half plus one" inputMode="numeric" data-option="parliamentMajority" className={chartInputClass} onCommit={(text) => controller.update({ parliamentMajority: text.trim() === '' ? null : Number(text) }).ok} />
+            </Field>
+          )}
+          {spec.type === 'parliament' && (
+            <Field label="Caption" htmlFor={`${idBase}-parliament-label`}>
+              <ChartCommitInput id={`${idBase}-parliament-label`} value={spec.parliamentLabel} placeholder="seats" data-option="parliamentLabel" className={chartInputClass} onCommit={(parliamentLabel) => controller.update({ parliamentLabel }).ok} />
             </Field>
           )}
           {spec.type === 'radar' && (

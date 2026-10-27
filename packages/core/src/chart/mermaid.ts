@@ -45,7 +45,7 @@ function splitOutside(text: string, sep: string): string[] {
 /** The Mermaid family a chart is written as. */
 export function chartMermaidFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartMermaidFamily {
 	const family = chartFamily(spec);
-	if (family === 'pie' || family === 'funnel' || family === 'treemap') return 'pie';
+	if (family === 'pie' || family === 'funnel' || family === 'treemap' || family === 'parliament') return 'pie';
 	if (family === 'radar') return 'radar';
 	return 'xychart';
 }
@@ -87,7 +87,8 @@ function metaFor(spec: ChartSpec, text: string): Record<string, unknown> | null 
 
 /**
  * Writes a chart as Mermaid: `xychart-beta` for bar, line, area and scatter charts (areas and
- * scatters drawn as lines), `pie` for pies, donuts, funnels and treemaps, `radar-beta` for
+ * scatters drawn as lines; slopes and Likert charts as lines and bars), `pie` for pies, donuts,
+ * funnels, treemaps and parliaments, `radar-beta` for
  * radars. Anything Mermaid cannot hold (stacking, colours, formats, gaps, trendlines, other
  * chart types) goes into one `%% @pixerate {…}` comment so `chartFromMermaid` gets the chart
  * back exactly, while any Mermaid renderer still draws the basic chart.

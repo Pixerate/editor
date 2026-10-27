@@ -276,6 +276,24 @@ describe("ChartInspector", () => {
     expect(q('[data-section="annotations"]')).toBeNull();
   });
 
+  it("sets Likert and parliament options", async () => {
+    const controller = new ChartController({ spec: { ...sales, type: "likert" } });
+    await render(<ChartInspector controller={controller} />);
+    await type(q<HTMLSelectElement>('[data-option="likertNeutral"]'), "separate");
+    await type(q<HTMLSelectElement>('[data-option="likertSort"]'), "positive");
+    expect(controller.getSpec()).toMatchObject({ likertNeutral: "separate", likertSort: "positive" });
+    expect(q('[data-option="parliamentArc"]')).toBeNull();
+    await act(async () => controller.setType("parliament"));
+    expect(q('[data-option="likertSort"]')).toBeNull();
+    await type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "20");
+    await type(q<HTMLInputElement>('[data-option="parliamentLabel"]'), "MPs");
+    expect(controller.getSpec()).toMatchObject({ parliamentMajority: 20, parliamentLabel: "MPs" });
+    await type(q<HTMLInputElement>('[data-option="parliamentMajority"]'), "");
+    expect(controller.getSpec().parliamentMajority).toBeNull();
+    await type(q<HTMLInputElement>('[data-option="parliamentArc"]'), "270", "change");
+    expect(controller.getSpec().parliamentArc).toBe(270);
+  });
+
   it("sets radar rings and grid shape", async () => {
     const controller = new ChartController({ spec: { ...sales, type: "radar" } });
     await render(<ChartInspector controller={controller} />);

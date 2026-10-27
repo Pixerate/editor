@@ -59,6 +59,38 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
     referenceBands: [{ from: 110, to: 130, label: "Usual range" }],
     highlight: ["W4", "W6"],
   },
+  Slope: {
+    type: "slope",
+    title: "Revenue by product line",
+    subtitle: "Cloud overtook Add-ons",
+    dataLabels: true,
+    categories: ["Core", "Add-ons", "Services", "Cloud", "Support"],
+    series: [
+      { id: "y24", name: "2024", values: [40, 30, 22, 12, 21] },
+      { id: "y25", name: "2025", values: [52, 24, 23, 35, 20] },
+    ],
+    highlight: ["Cloud", "Add-ons"],
+  },
+  Survey: {
+    type: "likert",
+    title: "Customer survey",
+    dataLabels: true,
+    likertSort: "positive",
+    categories: ["Easy to use", "Good value", "Would recommend", "Fast support"],
+    series: [
+      { id: "sd", name: "Strongly disagree", values: [5, 10, 8, 14] },
+      { id: "d", name: "Disagree", values: [10, 15, 12, 20] },
+      { id: "n", name: "Neutral", values: [25, 30, 20, 26] },
+      { id: "a", name: "Agree", values: [40, 30, 35, 28] },
+      { id: "sa", name: "Strongly agree", values: [20, 15, 25, 12] },
+    ],
+  },
+  Parliament: {
+    type: "parliament",
+    title: "Council seats",
+    categories: ["Alliance", "Union", "Greens", "Independents"],
+    series: [{ id: "seats", name: "Seats", values: [148, 117, 40, 45] }],
+  },
   "Web traffic": {
     type: "area",
     title: "Weekly visitors",
