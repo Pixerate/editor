@@ -18,12 +18,14 @@
     histogram?: ImageHistogram | null;
     channel?: 'master' | 'red' | 'green' | 'blue';
     size?: number;
+    /** Extra classes on the root element. */
+    class?: string;
   }
 
-  let { points, onchange, histogram = null, channel = 'master', size = 200 }: Props = $props();
+  let { points, onchange, histogram = null, channel = 'master', size = 200, class: className = '' }: Props = $props();
 
   const BOX = 256;
-  const STROKE = { master: '#e2e8f0', red: '#ef4444', green: '#22c55e', blue: '#3b82f6' };
+  const STROKE = { master: 'var(--foreground, #e2e8f0)', red: '#ef4444', green: '#22c55e', blue: '#3b82f6' };
 
   let svgEl: SVGSVGElement | undefined = $state();
   let drag: number | null = $state(null);
@@ -72,7 +74,7 @@
   role="application"
   aria-label="{channel} curve"
   data-testid="curves-editor"
-  class="rounded bg-slate-950/70 touch-none select-none cursor-crosshair"
+  class="rounded bg-muted/40 touch-none select-none cursor-crosshair {className}"
   {onpointerdown}
   {onpointermove}
   onpointerup={() => (drag = null)}
@@ -96,7 +98,7 @@
       cx={b.x}
       cy={b.y}
       r="5"
-      fill={drag === i ? STROKE[channel] : '#0f172a'}
+      fill={drag === i ? STROKE[channel] : 'var(--background, #0f172a)'}
       stroke={STROKE[channel]}
       stroke-width="2"
       aria-label="Point {p.input} to {p.output}"

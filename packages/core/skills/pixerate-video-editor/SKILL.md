@@ -254,6 +254,18 @@ and every write tool is refused with the reason.
 | `set_video_effect_transition` | Use a transition effect from the effects provider into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. For a cross dissolve, dip, wipe, push, slide or iris use the built-in `set_video_transition` instead. |
 | `set_video_effect_keyframes` | Animate one number `control` of a clip effect (or an effect clip's `generator`) with `keys` in clip ms, or `null` to stop animating it. |
 
+### Save and open
+
+The host may add the shared document tools (see `pixerate-agent-tools`). A video document is the `VideoProject` (assets point at their media; the media itself is not copied); the playhead is not part of it.
+
+| Tool | Use |
+| --- | --- |
+| `get_video_document` | Take a copy of the whole video project as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the video project, use `get_video_project`: it is smaller and says more. Refuses very large documents. |
+| `load_video_document` | Put back a copy from `get_video_document` (its `document`, or the whole result). Checked first: when anything is wrong nothing changes and the error says what. One undo step (`undo_video` brings the previous project back). Refused while the editor is read-only. To change part of a project use `edit_video` or the per-operation tools. |
+| `save_video_document` | Save the video project under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |
+| `list_saved_video_documents` | List saved video projects (`key`, `name`, `savedAt`), newest first. |
+| `open_saved_video_document` | Replace the video project with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
+
 ## Pitfalls
 
 - With agent playback on, the cursor drags a moved or trimmed clip to its new time, clicks a track where a clip goes in, and clicks the ruler where a split, seek or marker lands. Give real `start` / `at` times in ms; results are unchanged.

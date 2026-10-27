@@ -127,6 +127,12 @@
 </div>
 
 <style>
+  /* Typography gives bold, italic and code their own colour, which would override a colour mark
+     (or gradient text) on the text around them. Let them inherit it. */
+  :global(.pixerate-editor-content :is(strong, b, em, i, u, s, a, code)) {
+    color: inherit;
+  }
+
   :global(.pixerate-editor-content .is-empty::before) {
     content: attr(data-placeholder);
     float: left;

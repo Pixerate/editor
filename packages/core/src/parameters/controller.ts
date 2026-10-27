@@ -709,6 +709,36 @@ export class ParametersController {
 		this.notify(changed);
 	}
 
+	/**
+	 * Replaces every value (missing ones take their defaults) and, when given, the user presets,
+	 * as one undo step. All-or-nothing: if any id is unknown or any value invalid, nothing
+	 * changes and every error is returned.
+	 */
+	replace(snapshot: ParametersSnapshot, options: SetParameterOptions = {}): ParameterSetValuesResult {
+		const errors: ParameterError[] = [];
+		const coerced: Partial<ParameterValues> = {};
+		for (const [id, raw] of Object.entries(snapshot.values ?? {})) {
+			if (raw === undefined) continue;
+			const field = this.fieldMap.get(id);
+			if (!field) {
+				errors.push({ id, path: `/${id}`, message: unknownMessage(id, this.fields) });
+				continue;
+			}
+			const result = coerceParameterValue(field, raw);
+			if (result.ok) coerced[id] = result.value;
+			else errors.push(result.error);
+		}
+		if (errors.length) {
+			this.reject(errors.filter((e) => this.fieldMap.has(e.id)));
+			return { ok: false, errors, message: errors.map((e) => e.message).join(' ') };
+		}
+		const after = this.diff({ ...this.defaults, ...coerced });
+		const presets = snapshot.presets ? { before: this.userPresets, after: snapshot.presets.map((p) => ({ ...p, values: { ...p.values }, builtIn: false })) } : undefined;
+		const changed = Object.keys(after);
+		if (changed.length || presets) this.record(options.label ?? 'Replace parameters', after, presets ? { presets } : {});
+		return { ok: true, values: { ...this.values }, changed };
+	}
+
 	undo(): boolean {
 		this.endGesture();
 		return this.history.undo();

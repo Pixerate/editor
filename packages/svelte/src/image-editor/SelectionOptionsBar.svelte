@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imageRangeClass } from './styles.js';
   import type {
     ImageEditorController,
     SelectionMask,
@@ -56,7 +57,7 @@
 
   const btn = (on: boolean) =>
     `px-2 py-1 rounded-md border text-[11px] transition-colors ${
-      on ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+      on ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground'
     }`;
 </script>
 
@@ -78,7 +79,7 @@
   {#if options.tool === 'wand'}
     <div class="flex flex-col gap-2">
       <label class="flex flex-col gap-1">
-        <span class="flex justify-between text-slate-400">
+        <span class="flex justify-between text-muted-foreground">
           <span>Tolerance</span>
           <span class="font-mono">{options.tolerance}</span>
         </span>
@@ -90,24 +91,24 @@
           aria-label="Tolerance"
           value={options.tolerance}
           oninput={(e) => set({ tolerance: Number((e.currentTarget as HTMLInputElement).value) })}
-          class="w-full accent-indigo-500"
+          class={imageRangeClass}
         />
       </label>
-      <label class="flex items-center gap-2 text-slate-300">
+      <label class="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={options.contiguous} onchange={(e) => set({ contiguous: (e.currentTarget as HTMLInputElement).checked })} />
         Contiguous
       </label>
-      <label class="flex items-center gap-2 text-slate-300">
+      <label class="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={options.sampleMerged} onchange={(e) => set({ sampleMerged: (e.currentTarget as HTMLInputElement).checked })} />
         Sample adjusted image
       </label>
-      <label class="flex items-center gap-2 text-slate-300">
+      <label class="flex items-center gap-2 text-foreground">
         Sample
         <select
           aria-label="Sample from"
           value={options.sample ?? 'composite'}
           onchange={(e) => set({ sample: (e.currentTarget as HTMLSelectElement).value as 'composite' | 'active-layer' })}
-          class="bg-slate-800 border border-slate-700 rounded px-1 py-0.5"
+          class="bg-muted border border-border rounded px-1 py-0.5"
         >
           <option value="composite">All layers</option>
           <option value="active-layer">Active layer</option>
@@ -115,7 +116,7 @@
       </label>
     </div>
   {/if}
-  <label class="flex items-center gap-2 text-slate-300">
+  <label class="flex items-center gap-2 text-foreground">
     <input type="checkbox" checked={options.antiAlias} onchange={(e) => set({ antiAlias: (e.currentTarget as HTMLInputElement).checked })} />
     Anti-alias
   </label>
@@ -126,7 +127,7 @@
     <button type="button" aria-pressed={qm} class={btn(qm)} onclick={() => controller.setQuickMask(!qm)}>Quick Mask</button>
   </div>
   <div class="flex flex-wrap items-center gap-1">
-    <label class="flex items-center gap-1 text-slate-400">
+    <label class="flex items-center gap-1 text-muted-foreground">
       Radius
       <input
         type="number"
@@ -136,12 +137,12 @@
         aria-label="Modify radius"
         value={radius}
         oninput={(e) => (radius = Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0))}
-        class="w-14 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-slate-200"
+        class="w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground"
       />
     </label>
     {#each MODIFY_OPS as m (m.op)}
       <button type="button" class={btn(false)} disabled={!sel} onclick={() => controller.modifySelection(m.op, radius)}>{m.label}</button>
     {/each}
   </div>
-  <p data-testid="selection-status" class="text-slate-400">{describeSelection(sel)}</p>
+  <p data-testid="selection-status" class="text-muted-foreground">{describeSelection(sel)}</p>
 </div>

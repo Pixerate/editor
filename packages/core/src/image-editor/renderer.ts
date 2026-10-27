@@ -53,8 +53,15 @@ import {
 } from './geometry';
 
 export interface RenderOptions {
+  /** The viewport's size in CSS pixels: layout, the projection and overlays use these units. */
   viewportWidth?: number;
   viewportHeight?: number;
+  /**
+   * Backing-store pixels per CSS pixel (default 1): the canvas is sized `viewport × pixelRatio` and
+   * drawn through that scale, so it stays sharp on high-DPI screens and under CSS transforms. See
+   * `measureCanvasViewport`.
+   */
+  pixelRatio?: number;
   showCropOverlay?: boolean;
   showSelectionOverlay?: boolean;
   interactive?: boolean;
@@ -265,8 +272,11 @@ export class ImageEditorRenderer {
     const vpWidth = options.viewportWidth || targetCanvas.width;
     const vpHeight = options.viewportHeight || targetCanvas.height;
 
-    targetCanvas.width = vpWidth;
-    targetCanvas.height = vpHeight;
+    const ratio = options.pixelRatio && Number.isFinite(options.pixelRatio) && options.pixelRatio > 0 ? options.pixelRatio : 1;
+    targetCanvas.width = Math.max(1, Math.round(vpWidth * ratio));
+    targetCanvas.height = Math.max(1, Math.round(vpHeight * ratio));
+    // Everything below draws in CSS pixels; the base scale maps them onto the backing store.
+    if (ratio !== 1 && typeof ctx.setTransform === 'function') ctx.setTransform(targetCanvas.width / vpWidth, 0, 0, targetCanvas.height / vpHeight, 0, 0);
 
     ctx.clearRect(0, 0, vpWidth, vpHeight);
 

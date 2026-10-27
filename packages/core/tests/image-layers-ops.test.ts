@@ -122,6 +122,7 @@ describe('layer operations', () => {
   it('layer via copy and via cut use the selection coverage', () => {
     const { c } = setup();
     c.selectRect({ x: 2, y: 2, width: 4, height: 3 });
+    c.setActiveLayer(null);
     expect(() => c.layerViaCopy()).toThrow(/none is active/);
     const copy = c.layerViaCopy({ layerId: 'background' });
     expect(c.getLayerBounds(copy)).toEqual({ x: 2, y: 2, width: 4, height: 3 });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
 import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
+import { imageChipClass, imageColorInputClass } from './styles';
 
 export interface TypeOptionsBarProps {
   controller: ImageEditorController;
@@ -11,7 +12,7 @@ export interface TypeOptionsBarProps {
   className?: string;
 }
 
-const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+
 const ALIGN_LABELS: Record<TextAlign, string> = { left: 'Left', center: 'Centre', right: 'Right', justify: 'Justify' };
 
 /**
@@ -58,7 +59,7 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
   };
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="type-options">
+    <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="type-options">
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1">
           Font
@@ -67,7 +68,7 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
             aria-label="Font family"
             value={shown.fontFamily}
             onChange={(e) => e.target.value.trim() && style({ fontFamily: e.target.value })}
-            className="w-32 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+            className="w-32 rounded border border-border bg-background px-1 py-0.5"
           />
           <datalist id="pixerate-type-fonts">
             {fonts.map((f) => (
@@ -84,32 +85,32 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
             max={2000}
             value={Math.round(shown.fontSize * 10) / 10}
             onChange={(e) => Number(e.target.value) > 0 && style({ fontSize: Number(e.target.value) })}
-            className="w-16 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+            className="w-16 rounded border border-border bg-background px-1 py-0.5"
           />
         </label>
-        <button type="button" aria-pressed={shown.fontWeight >= 600} className={`${chip(shown.fontWeight >= 600)} font-bold`} onClick={() => style({ fontWeight: shown.fontWeight >= 600 ? 400 : 700 })}>
+        <button type="button" aria-pressed={shown.fontWeight >= 600} className={`${imageChipClass(shown.fontWeight >= 600)} font-bold`} onClick={() => style({ fontWeight: shown.fontWeight >= 600 ? 400 : 700 })}>
           B
         </button>
-        <button type="button" aria-pressed={shown.italic} className={`${chip(shown.italic)} italic`} onClick={() => style({ italic: !shown.italic })}>
+        <button type="button" aria-pressed={shown.italic} className={`${imageChipClass(shown.italic)} italic`} onClick={() => style({ italic: !shown.italic })}>
           I
         </button>
-        <input type="color" aria-label="Text colour" value={shown.color} onChange={(e) => style({ color: e.target.value })} className="h-6 w-8 rounded border border-slate-700 bg-transparent" />
+        <input type="color" aria-label="Text colour" value={shown.color} onChange={(e) => style({ color: e.target.value })} className={imageColorInputClass} />
       </div>
       <div className="flex gap-1" role="toolbar" aria-label="Alignment">
         {TEXT_ALIGNS.map((a) => (
-          <button key={a} type="button" aria-pressed={options.align === a} className={chip(options.align === a)} onClick={() => style({ align: a })}>
+          <button key={a} type="button" aria-pressed={options.align === a} className={imageChipClass(options.align === a)} onClick={() => style({ align: a })}>
             {ALIGN_LABELS[a]}
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-slate-500">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
+      <p className="text-[10px] text-muted-foreground">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
       {missing.length > 0 && (
-        <p role="status" className="text-amber-400" data-testid="type-missing-fonts">
+        <p role="status" className="text-amber-600" data-testid="type-missing-fonts">
           Missing {missing.length === 1 ? 'font' : 'fonts'}: {missing.join(', ')}
         </p>
       )}
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}

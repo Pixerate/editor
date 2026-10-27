@@ -1,6 +1,7 @@
 import type { ToolRegistry } from '@pixerate/editor/tools';
 import {
   ImageEditorController,
+  createImageEditorDocument,
   createImageEffectsToolProvider,
   type ImageEffectsToolProviderOptions,
   type ImageEditorFit,
@@ -37,11 +38,14 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
   const unsubscribeHistogram = controller.subscribeHistogram((h) => {
     histogram = h;
   });
+  /** The save / load / undo contract, with layer pixels as asset references. */
+  const editorDocument = createImageEditorDocument(controller);
 
   return {
     get controller() {
       return controller;
     },
+    editorDocument,
     get state() {
       return state;
     },
@@ -195,6 +199,7 @@ export function createReactiveImageEditor(options: ImageEditorOptions = {}) {
     destroy() {
       unsubscribe();
       unsubscribeHistogram();
+      editorDocument.destroy();
     },
   };
 }

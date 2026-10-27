@@ -1,10 +1,13 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
-import { PaintDirector, PaintEditorController, PaintPresence, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState } from '@pixerate/editor/paint-editor';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { PaintDirector, PaintEditorController, PaintPresence, createPaintEditorDocument, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type SerializedPaintDocument } from '@pixerate/editor/paint-editor';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 
 export interface UsePaintEditorReturn {
   controller: PaintEditorController;
   /** The controller's snapshot (a new object after every change). */
   state: PaintEditorState;
+  /** The save / load / undo contract, with every image as an asset reference (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<SerializedPaintDocument>;
 }
 
 /**
@@ -14,7 +17,10 @@ export interface UsePaintEditorReturn {
 export function usePaintEditor(options: PaintEditorOptions | PaintEditorController = {}): UsePaintEditorReturn {
   const [controller] = useState(() => (options instanceof PaintEditorController ? options : new PaintEditorController(options)));
   const state = usePaintEditorState(controller);
-  return useMemo(() => ({ controller, state }), [controller, state]);
+  const editorDocument = useMemo(() => createPaintEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return useMemo(() => ({ controller, state, editorDocument }), [controller, state, editorDocument]);
 }
 
 /** Subscribes to a controller's state. */

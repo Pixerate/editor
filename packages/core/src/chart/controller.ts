@@ -864,6 +864,17 @@ export class ChartController {
 		return issues;
 	}
 
+	/**
+	 * Replaces the whole chart as one undo step. All-or-nothing: if `input` has any problem,
+	 * nothing changes and every problem is returned (and shown in `state.issues`).
+	 */
+	replace(input: unknown, options: ChartEditOptions = {}): ChartActionResult {
+		const { spec, issues } = normalizeChartSpec(input);
+		if (issues.length) return this.reject(issues.map((i) => i.message).join(' '), issues);
+		this.commit(options.label ?? 'Replace chart', spec, this.validSelection(this.selection, spec));
+		return { ok: true };
+	}
+
 	undo(): boolean {
 		this.endGesture();
 		return this.history.undo();
@@ -903,6 +914,8 @@ function updateLabel(patch: ChartSpecPatch): string {
 		overlap: 'Change bar overlap',
 		bins: 'Change histogram bins',
 		showTotal: 'Toggle waterfall total',
+		radarTicks: 'Change radar rings',
+		radarGraticule: 'Change radar grid',
 		legend: 'Change legend',
 		stacking: 'Change stacking',
 		orientation: 'Change orientation',

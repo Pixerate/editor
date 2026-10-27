@@ -6,6 +6,7 @@ import {
   SELECTION_TOOLS,
   describeSelection,
 } from '@pixerate/editor/image-editor';
+import { imageRangeClass } from './styles';
 
 export interface SelectionOptionsBarProps {
   controller: ImageEditorController;
@@ -28,7 +29,7 @@ const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
 
 const btn = (on: boolean) =>
   `px-2 py-1 rounded-md border text-[11px] transition-colors ${
-    on ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+    on ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground'
   }`;
 
 /**
@@ -67,7 +68,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       {options.tool === 'wand' && (
         <div className="flex flex-col gap-2">
           <label className="flex flex-col gap-1">
-            <span className="flex justify-between text-slate-400">
+            <span className="flex justify-between text-muted-foreground">
               <span>Tolerance</span>
               <span className="font-mono">{options.tolerance}</span>
             </span>
@@ -79,24 +80,24 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
               aria-label="Tolerance"
               value={options.tolerance}
               onChange={(e) => set({ tolerance: Number(e.target.value) })}
-              className="w-full accent-indigo-500"
+              className={imageRangeClass}
             />
           </label>
-          <label className="flex items-center gap-2 text-slate-300">
+          <label className="flex items-center gap-2 text-foreground">
             <input type="checkbox" checked={options.contiguous} onChange={(e) => set({ contiguous: e.target.checked })} />
             Contiguous
           </label>
-          <label className="flex items-center gap-2 text-slate-300">
+          <label className="flex items-center gap-2 text-foreground">
             <input type="checkbox" checked={options.sampleMerged} onChange={(e) => set({ sampleMerged: e.target.checked })} />
             Sample adjusted image
           </label>
-          <label className="flex items-center gap-2 text-slate-300">
+          <label className="flex items-center gap-2 text-foreground">
             Sample
             <select
               aria-label="Sample from"
               value={options.sample ?? 'composite'}
               onChange={(e) => set({ sample: e.target.value as 'composite' | 'active-layer' })}
-              className="bg-slate-800 border border-slate-700 rounded px-1 py-0.5"
+              className="bg-muted border border-border rounded px-1 py-0.5"
             >
               <option value="composite">All layers</option>
               <option value="active-layer">Active layer</option>
@@ -104,7 +105,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </label>
         </div>
       )}
-      <label className="flex items-center gap-2 text-slate-300">
+      <label className="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={options.antiAlias} onChange={(e) => set({ antiAlias: e.target.checked })} />
         Anti-alias
       </label>
@@ -123,7 +124,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-1">
-        <label className="flex items-center gap-1 text-slate-400">
+        <label className="flex items-center gap-1 text-muted-foreground">
           Radius
           <input
             type="number"
@@ -133,7 +134,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             aria-label="Modify radius"
             value={radius}
             onChange={(e) => setRadius(Math.max(0, Number(e.target.value) || 0))}
-            className="w-14 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-slate-200"
+            className="w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground"
           />
         </label>
         {MODIFY_OPS.map(({ op, label }) => (
@@ -142,7 +143,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </button>
         ))}
       </div>
-      <p data-testid="selection-status" className="text-slate-400">
+      <p data-testid="selection-status" className="text-muted-foreground">
         {describeSelection(sel)}
       </p>
     </div>

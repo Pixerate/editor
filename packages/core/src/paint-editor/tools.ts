@@ -49,6 +49,11 @@ export interface PaintEditorToolProviderOptions {
   director?: PaintDirector;
   /** The agent's cursor (default `{ id: 'agent', name: 'Agent' }`). */
   actor?: PresenceActorInfo;
+  /**
+   * The agent playback surface its calls are acted out on (default `paint`, where `PaintEditor` attaches).
+   * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+   */
+  playbackSurface?: string;
 }
 
 const TIP = {
@@ -342,7 +347,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'get_canvas_info',
     title: 'Get the canvas',
     description:
-      'Reads the canvas: size in pixels and dpi, the paper (preset, colour, grain depth), the active layer, the active brush id, the paint colour, the view (zoom, rotation, mirror), the hand, how many strokes are recorded, the undo / redo labels, and the blend modes. Call it first.',
+      'Reads the canvas: size in pixels and dpi, its origin (where (0, 0) is relative to the canvas it was extended from), the paper (preset, colour, grain depth), the active layer, the active brush id, the paint colour, the view (zoom, rotation, mirror), the hand, how many strokes are recorded, the undo / redo labels, and the blend modes. Call it first.',
     inputSchema: EMPTY,
     annotations: { title: 'Get the canvas', ...READ },
     handler: () => {
@@ -352,6 +357,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         width: d.canvas.width,
         height: d.canvas.height,
         dpi: d.canvas.dpi,
+        origin: { ...(d.origin ?? { x: 0, y: 0 }) },
         paper: { preset: d.paper.preset, name: d.paper.name, color: d.paper.color, depth: d.paper.depth },
         activeLayerId: d.activeLayerId,
         layerCount: c.listLayers().length,
@@ -408,6 +414,21 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     },
     annotations: { title: 'Resize the canvas', ...SET },
     handler: (a) => c.setCanvas({ width: a.width, height: a.height, dpi: a.dpi }),
+  });
+
+  const EXTEND_SIDE = (side: string) => ({ type: 'integer', minimum: 0, maximum: MAX_CANVAS_SIDE - 1, description: `Pixels to add on the ${side} (default 0).` }) as const;
+  add({
+    name: 'extend_canvas',
+    title: 'Extend the canvas',
+    description:
+      'Grows the canvas by adding pixels on any side, keeping everything painted. Adding on the left or top moves the whole picture (layers, paper grain, guides, stencils, recorded strokes) right or down by that much in document pixels, so coordinates you read before change by (+left, +top). Wet paint dries first. One undo step. Returns the canvas, rect (the new canvas in the previous coordinates: x -left, y -top) and origin.',
+    inputSchema: {
+      type: 'object',
+      properties: { left: EXTEND_SIDE('left'), top: EXTEND_SIDE('top'), right: EXTEND_SIDE('right'), bottom: EXTEND_SIDE('bottom') },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Extend the canvas', ...WRITE },
+    handler: (a) => c.extendCanvas({ left: a.left, top: a.top, right: a.right, bottom: a.bottom }),
   });
 
   // --- Paper -------------------------------------------------------------------
@@ -1078,7 +1099,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'save_document',
     title: 'Save the document',
-    description: 'Returns the document as JSON (format pixerate-paint, version 1): canvas, paper, layers with PNG data URLs, and the recorded strokes unless strokes is false. Changes nothing.',
+    description: 'Deprecated (kept for one minor version): use get_paint_document, which returns the painting with images as asset references, or save_paint_document to store it. Returns the document as JSON (format pixerate-paint, version 1): canvas, paper, layers with PNG data URLs, and the recorded strokes unless strokes is false. Changes nothing.',
     inputSchema: { type: 'object', properties: { strokes: { type: 'boolean', description: 'Include the recorded strokes (default true).' } }, additionalProperties: false },
     annotations: { title: 'Save the document', ...READ },
     handler: ({ strokes }) => c.toJSON({ strokes }),
@@ -1087,7 +1108,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   add({
     name: 'open_document',
     title: 'Open a document',
-    description: 'Opens a saved paint document (as save_document returns), replacing the painting and clearing the undo history. Returns the canvas, the layers and anything that could not be read.',
+    description: 'Deprecated (kept for one minor version): use load_paint_document or open_saved_paint_document. Opens a saved paint document (as save_document returns), replacing the painting and clearing the undo history. Returns the canvas, the layers and anything that could not be read.',
     inputSchema: { type: 'object', properties: { document: { type: 'object', description: 'The saved document JSON.' } }, required: ['document'], additionalProperties: false },
     annotations: { title: 'Open a document', ...DESTRUCTIVE },
     handler: ({ document }) => {
@@ -1111,5 +1132,5 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.',
     skill: 'pixerate-paint-editor',
     tools
-  }, { director: !!options.director });
+  }, { director: !!options.director, surface: options.playbackSurface });
 }

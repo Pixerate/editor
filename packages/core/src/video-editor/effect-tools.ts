@@ -21,6 +21,11 @@ export interface VideoEffectsToolProviderOptions {
 	namespace?: string;
 	/** The project cannot be edited: write tools are hidden. A string is the reason. */
 	readOnly?: boolean | string | (() => boolean | string);
+	/**
+	 * The agent playback surface its calls are acted out on (default `video`, where `VideoTimeline` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 /** A clip's effects as the tools report them: its effect clip picture, its effect transition, then its stack. */
@@ -205,5 +210,5 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 				}
 			}
 		]
-	}));
+	}), options.playbackSurface);
 }

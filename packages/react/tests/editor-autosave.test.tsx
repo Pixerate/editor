@@ -5,7 +5,19 @@ import { createRoot } from "react-dom/client";
 import { DiagramController, createDiagramEditorDocument } from "@pixerate/editor/diagram";
 import { createMemoryStorage, toEditorDocumentFile, type EditorDocument, type MemoryStorage } from "@pixerate/editor/persistence";
 import { useEditorAutosave, type UseEditorAutosaveResult } from "../src/persistence";
-import { useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
+import { useCanvasEditorDocument, useMermaidDiagram, type UseMermaidDiagramResult } from "../src/canvas";
+import { HistoryManager } from "@pixerate/editor/history";
+import type { CanvasNode } from "@pixerate/editor/canvas";
+import { useChartEditor } from "../src/chart";
+import { useAnimationEditor } from "../src/animation-editor";
+import { useVideoEditor } from "../src/video-editor";
+import { useParameters } from "../src/parameters";
+import { useVectorEditor } from "../src/vector";
+import { useSpreadsheetEditor } from "../src/spreadsheet";
+import { useTokens, useTokenStore } from "../src/tokens";
+import { useEditor, useRichTextEditorDocument } from "../src";
+import { useImageEditor } from "../src/image-editor";
+import { usePaintEditor } from "../src/paint-editor";
 
 let container: HTMLDivElement;
 let root: any;
@@ -85,5 +97,112 @@ describe("useMermaidDiagram().editorDocument", () => {
     expect(seen.length).toBe(1);
     expect(doc.getDocument()).toEqual({ source: controller.getSource() });
     off();
+  });
+});
+
+describe("editor hooks expose editorDocument", () => {
+  it("chart, animation, video, parameters and vector", async () => {
+    const docs: Record<string, EditorDocument> = {};
+    const Probe = () => {
+      docs.chart = useChartEditor().editorDocument;
+      docs.animation = useAnimationEditor().editorDocument;
+      docs.video = useVideoEditor().editorDocument;
+      docs.parameters = useParameters({ schema: { fields: [{ id: "speed", type: "number", min: 0, max: 4, default: 1 }] } }).editorDocument;
+      docs.vector = useVectorEditor().editorDocument;
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    for (const [kind, doc] of Object.entries(docs)) {
+      expect(doc.kind).toBe(kind);
+      const seen: number[] = [];
+      const off = doc.subscribe(() => seen.push(doc.revision()));
+      const start = doc.getDocument();
+      await act(async () => void doc.loadDocument(start, { history: "record" }));
+      expect(doc.getDocument()).toEqual(start);
+      off();
+    }
+    // A recorded load of a changed document is one undo step.
+    const before = docs.parameters.getDocument();
+    await act(async () => void docs.parameters.loadDocument({ values: { speed: 3 } }, { history: "record" }));
+    expect((docs.parameters.getDocument() as any).values.speed).toBe(3);
+    await act(async () => void docs.parameters.history.undo());
+    expect(docs.parameters.getDocument()).toEqual(before);
+  });
+});
+
+describe("phase 3 hooks expose editorDocument", () => {
+  it("spreadsheet, tokens and rich text", async () => {
+    const docs: Record<string, EditorDocument | null> = {};
+    const Probe = () => {
+      docs.spreadsheet = useSpreadsheetEditor().editorDocument;
+      docs.tokens = useTokens(useTokenStore()).editorDocument;
+      docs.rich_text = useRichTextEditorDocument(useEditor({ content: "<p>Hi</p>", immediatelyRender: false }));
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    for (const [kind, doc] of Object.entries(docs)) {
+      expect(doc?.kind).toBe(kind);
+    }
+    const doc = docs.rich_text!;
+    const seen: number[] = [];
+    const off = doc.subscribe(() => seen.push(doc.revision()));
+    await act(async () => void doc.loadDocument({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Bye" }] }] }, { history: "record" }));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(JSON.stringify(doc.getDocument())).toContain("Bye");
+    off();
+  });
+});
+
+describe("useCanvasEditorDocument", () => {
+  it("counts finished moves, not selection or drag frames", async () => {
+    const history = new HistoryManager();
+    let setNodes!: (nodes: CanvasNode[]) => void;
+    let doc!: EditorDocument;
+    const Probe = () => {
+      const [nodes, set] = React.useState<CanvasNode[]>([{ id: "a", position: { x: 0, y: 0 }, data: {} }]);
+      setNodes = set;
+      doc = useCanvasEditorDocument({ nodes, edges: [], setNodes: set, setEdges: () => {}, history });
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    let changes = 0;
+    const off = doc.subscribe(() => changes++);
+    await act(async () => setNodes([{ id: "a", position: { x: 0, y: 0 }, data: {}, selected: true }]));
+    await act(async () => setNodes([{ id: "a", position: { x: 5, y: 0 }, data: {}, dragging: true } as CanvasNode]));
+    expect(changes).toBe(0);
+    await act(async () => setNodes([{ id: "a", position: { x: 9, y: 0 }, data: {} }]));
+    expect(changes).toBe(1);
+    expect((doc.getDocument() as any).nodes[0].position).toEqual({ x: 9, y: 0 });
+    // A recorded load goes through the shared history and lands in React state.
+    await act(async () => void doc.loadDocument({ nodes: [{ id: "b", position: { x: 1, y: 1 }, data: {} }], edges: [] }, { history: "record" }));
+    expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["b"]);
+    await act(async () => void history.undo());
+    expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["a"]);
+    off();
+  });
+});
+
+describe("image and paint hooks", () => {
+  it("expose editorDocument, and autosave writes their assets with the snapshot", async () => {
+    const storage = createMemoryStorage();
+    let image!: EditorDocument;
+    let painter!: ReturnType<typeof usePaintEditor>;
+    const Probe = () => {
+      painter = usePaintEditor({ width: 120, height: 60, paper: "smooth" });
+      image = useImageEditor().editorDocument;
+      useEditorAutosave(painter.editorDocument, { storage, debounceMs: 5, interval: 20 });
+      return null;
+    };
+    await act(async () => root.render(<React.StrictMode><Probe /></React.StrictMode>));
+    await act(async () => void (await wait(5)));
+    expect(image.kind).toBe("image");
+    expect(painter.editorDocument.kind).toBe("paint");
+    const points = Array.from({ length: 20 }, (_, i) => ({ x: 5 + i * 5, y: 30 + (i % 3) * 4, pressure: 0.7 }));
+    await act(async () => void painter.controller.paintStroke({ points, brushId: "ink-pen", color: "#000000" }));
+    await act(async () => void (await wait(60)));
+    const snapshot = storage.entries.get("paint");
+    expect(snapshot).toBeDefined();
+    expect(snapshot).toContain("pixerate-asset:");
+    expect([...storage.entries.keys()].some((k) => k.startsWith("pixerate.assets:"))).toBe(true);
   });
 });

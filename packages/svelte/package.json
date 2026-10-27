@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-svelte",
-  "version": "0.107.0",
+  "version": "0.115.0",
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -184,14 +184,14 @@
   },
   "devDependencies": {
     "@dagrejs/dagre": "^1.1.4",
-    "@sveltejs/package": "^3.0.0",
+    "@sveltejs/package": "^3.0.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
     "@types/dagre": "^0.7.52",
     "@xyflow/svelte": "^1.7.0",
     "svelte": "^5.57.2",
-    "svelte-check": "^4.7.6",
+    "svelte-check": "^4.7.7",
     "typescript": "^5.7.3",
     "vitest": "^5.0.5"
   }

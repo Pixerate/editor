@@ -19,7 +19,10 @@ import {
   type ChartSpecPatch,
   type ChartState,
   type ChartType,
+  createChartEditorDocument,
+  type ChartSpec,
 } from '@pixerate/editor/chart';
+import type { EditorDocument } from '@pixerate/editor/persistence';
 
 /** A `ChartController` created once for the component's lifetime. */
 export function useChartController(options: ChartControllerOptions = {}): ChartController {
@@ -35,6 +38,8 @@ export function useChartState(controller: ChartController): ChartState {
 
 export interface UseChartEditorResult {
   controller: ChartController;
+  /** The save / load / undo contract (for `useEditorAutosave` or `createDocumentToolProvider`). */
+  editorDocument: EditorDocument<ChartSpec>;
   state: ChartState;
   spec: ChartState['spec'];
   selection: ChartSelection | null;
@@ -70,7 +75,10 @@ export function useChartEditor(controllerOrOptions: ChartController | ChartContr
     }),
     [controller],
   );
-  return { controller, state, spec: state.spec, selection: state.selection, ...actions };
+  const editorDocument = useMemo(() => createChartEditorDocument(controller), [controller]);
+  // Subscribing again reconnects it, so a StrictMode remount keeps working.
+  useEffect(() => () => editorDocument.destroy(), [editorDocument]);
+  return { controller, editorDocument, state, spec: state.spec, selection: state.selection, ...actions };
 }
 
 /** Anything with `register(specs) → unregister` (a `CommandRegistry`). */
@@ -101,12 +109,12 @@ export type ChartToolProviderHookOptions = Omit<ChartToolProviderOptions, 'raste
 export function useChartToolProvider(registry: ToolRegistry | null | undefined, controller: ChartController, options: ChartToolProviderHookOptions = {}): void {
   const latest = useRef(options);
   latest.current = options;
-  const { id, namespace } = options;
+  const { id, namespace, playbackSurface } = options;
   useEffect(() => {
     if (!registry) return;
     const { rasterize, ...rest } = latest.current;
-    return registry.register(createChartToolProvider(controller, { ...rest, id, namespace, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
-  }, [registry, controller, id, namespace]);
+    return registry.register(createChartToolProvider(controller, { ...rest, id, namespace, playbackSurface, rasterize: rasterize === false ? undefined : (rasterize ?? createChartRasterizer()) }));
+  }, [registry, controller, id, namespace, playbackSurface]);
 }
 
 /**

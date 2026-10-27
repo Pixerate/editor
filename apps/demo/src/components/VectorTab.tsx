@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
+import { createVectorEditorDocument, createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { VectorEditor, VectorGeneratePanel, useVectorCommands, useVectorEditorController, useVectorEditorState, useVectorEffectsTools, useVectorGenerationTools } from "@pixerate/editor-react/vector";
 import { DEMO_VECTOR_MODELS, demoVectorGenerate } from "../vectorGeneration";
 import { useDemoEffects } from "../demoEffects";
@@ -321,6 +322,7 @@ export function VectorTab() {
   useVectorEffectsTools(demoToolRegistry, controller, { id: "vector-effects", namespace: "vectorfx" });
   // Generative prompts through a pretend offline backend (a host sends them to its models).
   useVectorGenerationTools(demoToolRegistry, controller, { id: "vector-generation", namespace: "vectorgen", models: DEMO_VECTOR_MODELS, generate: demoVectorGenerate });
+  const editorDocument = useDemoEditorDocument(controller, createVectorEditorDocument, { namespace: "vector", skill: "pixerate-vector", history: true });
   const [svg, setSvg] = useState<string | null>(null);
   // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).
   const [fonts, setFonts] = useState<OpenTypeFont[]>([]);
@@ -353,6 +355,7 @@ export function VectorTab() {
           </p>
         </div>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Vector artwork" />
       <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         {/* The vector canvas acts out every vector.* call (agent playback): no targets in the scripts. */}

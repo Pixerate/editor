@@ -6,3 +6,4 @@ export * from './commands.js';
 export * from './shader.js';
 export * from './rangeMapper.js';
 export * from './playback.js';
+export * from './editorDocument.js';

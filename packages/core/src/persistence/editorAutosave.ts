@@ -5,6 +5,7 @@ import {
   type AutosaveRecovery,
 } from "./autosave";
 import { parseEditorDocument, toEditorDocumentFile, type EditorDocument, type EditorDocumentFile } from "./editorDocument";
+import { withEditorAssets } from "./assets";
 import type { LoadReport } from "./migrate";
 import { createRevisionTracker, type DirtyFlagSource, type RevisionTracker } from "./revisions";
 
@@ -44,6 +45,8 @@ export function createEditorAutosave(doc: EditorDocument, options: EditorAutosav
   const revisions = createRevisionTracker({ history: doc, dirty });
   const controller = createAutosaveController<EditorDocumentFile>({
     ...rest,
+    // Image and paint documents hold asset references: their bytes are saved and read with them.
+    storage: doc.assets ? withEditorAssets(rest.storage, doc.assets) : rest.storage,
     key: key ?? doc.kind,
     getSnapshot: () => toEditorDocumentFile(doc),
     deserialize: (text) => parseEditorDocument(text, { kind: doc.kind }),

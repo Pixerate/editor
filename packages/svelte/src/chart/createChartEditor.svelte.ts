@@ -19,10 +19,15 @@ import {
   type ChartSpecPatch,
   type ChartState,
   type ChartType,
+  createChartEditorDocument,
+  type ChartSpec,
 } from "@pixerate/editor/chart";
+import type { EditorDocument } from "@pixerate/editor/persistence";
 
 export interface SvelteChartEditor {
   readonly controller: ChartController;
+  /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+  readonly editorDocument: EditorDocument<ChartSpec>;
   /** The controller's state (reactive). */
   readonly state: ChartState;
   /** Shorthand for `state.spec` (reactive). */
@@ -49,8 +54,10 @@ export function createChartEditor(controllerOrOptions: ChartController | ChartCo
   const unsubscribe = controller.subscribe((next) => {
     state = next;
   });
+  const editorDocument = createChartEditorDocument(controller);
   return {
     controller,
+    editorDocument,
     get state() {
       return state;
     },
@@ -66,7 +73,10 @@ export function createChartEditor(controllerOrOptions: ChartController | ChartCo
     select: (selection) => controller.select(selection),
     undo: () => void controller.undo(),
     redo: () => void controller.redo(),
-    destroy: unsubscribe,
+    destroy: () => {
+      unsubscribe();
+      editorDocument.destroy();
+    },
   };
 }
 

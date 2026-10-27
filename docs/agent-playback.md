@@ -79,6 +79,22 @@ function Board() {
 
 `<AgentPlaybackProvider playback={playback}>` makes a playback the default for every surface below it. Surfaces then take `undefined` for the playback argument and use the context.
 
+**App chrome over the canvas.** The canvas finds nodes and edges from the flow's geometry. A tool whose plan names something else, such as `{ kind: 'panel' | 'control', id }` for your own HUD, toolbar or side panels, is located through options you add:
+
+```tsx
+const presence = useCanvasPlaybackSurface(playback, 'canvas', {
+  getNodes: flow.getNodes, getEdges: flow.getEdges, viewport, container,
+  // An element anywhere on the page; its client box is mapped into flow coordinates.
+  locateElement: (ref) => document.querySelector(`[data-hud="${CSS.escape(ref.id)}"]`),
+  // Or a rectangle already in flow coordinates (tried first).
+  locate: (ref) => null,
+  // Show a panel for an `open` step. Without it, open steps are skipped.
+  open: (ref) => setPanel(ref.id),
+});
+```
+
+The canvas locator runs first; `locate`, then `locateElement`, answer what it does not find. The same three options (`PlaybackChromeOptions` in `@pixerate/editor/tools`) work on `useElementPlaybackSurface` / `createElementPlaybackSurface`, whose `selectors` are now optional, and on the Svelte `createCanvasPlaybackSurface`. `playbackRectFromClient(rect, fromViewport)` and `locatePlaybackChrome(ref, chrome, fromViewport)` do the mapping for a surface of your own.
+
 Arrange commands registered with `createArrangeCommands` (`canvas.alignLeft`, …) play on the same surface. A command plays on the surface named by its `scope`, or by its id prefix (`canvas.`).
 
 Another provider that acts on the same canvas plays there if it names the surface. Spread the provider and add `playbackSurface: 'canvas'`, as with `createCanvasComponentToolProvider`. Providers whose namespace is the surface id (`canvas`) find it on their own.
@@ -106,6 +122,16 @@ Before each write the cursor opens the panel the tool belongs to, by clicking it
 - other calls visit the layers they name.
 
 Surface coordinates are document pixels. The editor's own tabs, sliders and layer rows are located too, through `{ kind: 'panel' | 'control' | 'layer', id }` refs.
+
+**Several editors of one kind on one registry** (an image editor per canvas node, say) each attach under their own surface id. Give each editor's tool providers the same id as `playbackSurface`, and the component that id as `playbackId`:
+
+```tsx
+registry.register(createImageEditorToolProvider(controllerA, { id: 'imageA', playbackSurface: 'imageA:surface' }));
+useImageEffectsTools(registry, controllerA, { id: 'imageA-effects', playbackSurface: 'imageA:surface' });
+<ImageEditor editor={editorA} playback={playback} playbackId="imageA:surface" />
+```
+
+Every tool-provider factory that plays on its editor takes `playbackSurface`: `createImageEditorToolProvider`, `createImageEffectsToolProvider`, `createVideoEditorToolProvider`, `createVideoEffectsToolProvider`, `createAnimationEditorToolProvider`, `createAnimationEffectsToolProvider`, `createChartToolProvider`, `createPaintEditorToolProvider`, `createPaintEffectsToolProvider` and `createSpreadsheetToolProvider`, and so do the React and Svelte hooks that register them (`useImageEffectsTools`, `useVideoEditorTools`, …). Without it they play on their default surface (`image`, `video`, `animation`, `chart`, `paint`, `spreadsheet`). The `with*Playback(provider, surface)` wrappers follow the same rule when you wrap a provider of your own: an explicit `surface` wins over the provider's `playbackSurface`, which wins over the default.
 
 **Spreadsheet, video, animation and parameters** work the same way. Each component takes `playback`, `playbackId` and a reveal callback:
 - `<SpreadsheetEditor>` attaches as `spreadsheet` and finds cells by `td[data-row][data-col]`.
@@ -142,7 +168,7 @@ The provider marks the director's tools `playback: 'self'`, so value drags (char
 | `defaultKind` | The kind of a bare `id` / `ids` argument |
 | `reveal()` | Bring the surface on screen before playing |
 | `beginGesture` / `endGesture` | Group a call's changes into one undo step |
-| `open(ref)` | Show a panel or tab for an `open` step (e.g. click its tab) |
+| `open(ref)` | Show a panel or tab for an `open` step (e.g. click its tab). The attached surface has `open` only when you give one, so without it `open` steps are skipped instead of waiting |
 
 ## Show the cursor: Svelte
 
@@ -172,6 +198,7 @@ The provider marks the director's tools `playback: 'self'`, so value drags (char
 
 - `setAgentPlayback(playback)` (and `getAgentPlayback()`) is the context equivalent.
 - `<VectorCanvas playback={playback} onplaybackreveal={…} />` plays the vector commands, and `<ImageEditor playback={playback} />` the image tools, as in React.
+- `<ImageEditorCanvas>` (React and Svelte) is the image editor's canvas without its tabs and panels, with the same playback props plus `chromeRoot`, `locate`, `locateElement` and `open`, so the image tools play on a canvas inside your own chrome. See [Image editor canvas](./image-editor-canvas.md).
 - `createPlaybackSurface(playback, id, options)` builds a custom surface and takes the same options as React.
 - React and Svelte draw the same cursor.
 - The layer has the `.pixerate-presence` class, so snapshots, `view_editor` and `capture_view` leave it out.
@@ -341,7 +368,7 @@ Rules for planners:
 - **Live state for the post-roll.** The post-roll locates new ids right after the handler returns. Make `locate` read a copy you update synchronously, not state that renders later.
 - **Never block a call.** If a planner throws or returns nothing, the call falls back to the derived tier.
 - **Durations are optional.** Leave `ms` out and the cursor moves at the shared natural pace, scaled by `speed`.
-- **Live previews need a director.** If the change should update step by step as the cursor moves (a value following a drag, paint landing along a stroke), write a director and mark the tool `playback: 'self'`. Use `PresenceStore`, `PerformanceQueue` and `tweenPresenceCursor` from `@pixerate/editor/tools`.
+- **Live previews need a director.** If the change should update step by step as the cursor moves (a value following a drag, paint landing along a stroke), write a director and mark the tool `playback: 'self'`. Use `PresenceStore`, `PerformanceQueue` and `tweenPresenceCursor` from `@pixerate/editor/tools`. For drag feedback alone (a box pulled out under the cursor while the call itself applies at `commit`), subscribe `trackPresenceDrag` to the surface's presence store instead: it reports the box from the press to the cursor and when the drag ends.
 
 ### Test it
 

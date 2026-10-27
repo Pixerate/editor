@@ -9,7 +9,9 @@ import {
   type ParameterValue,
   type ParameterValues,
   type ShaderControlLike,
+  createParametersEditorDocument,
 } from "@pixerate/editor/parameters";
+import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { ParametersPanel, useParameterCommands, useParameters, useParametersController } from "@pixerate/editor-react/parameters";
 import { Pause, Play, SlidersHorizontal } from "lucide-react";
 import { demoCommandRegistry, demoPlayback } from "../agentTools";
@@ -169,6 +171,7 @@ export function ParametersTab() {
   const controller = useParametersController({ schema: SCHEMA, keyframes });
   const { state } = useParameters(controller);
   useParameterCommands(demoCommandRegistry, controller, { group: "Parameters" });
+  const editorDocument = useDemoEditorDocument(controller, createParametersEditorDocument, { namespace: "parameters", skill: "pixerate-parameters", history: false });
 
   const [playing, setPlaying] = useState(false);
   const seek = (time: number) => {
@@ -211,6 +214,7 @@ export function ParametersTab() {
           actions as <code>parameters.*</code> commands in the panel below.
         </p>
       </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Parameters" />
 
       <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">

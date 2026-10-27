@@ -13,19 +13,22 @@ import {
 } from '../src/agent';
 import { CommandRegistry, createCommandToolProvider, createHistoryCommands } from '../src/commands';
 import { HistoryManager } from '../src/history';
-import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
+import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
-import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
+import { ParametersController, createParametersEditorDocument } from '../src/parameters';
+import { TokenStore, createTokensEditorDocument } from '../src/tokens';
+import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
+import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
-import { AnimationEditorController, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
-import { VideoEditorController, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
+import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
+import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider } from '../src/video-editor';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
-import { VectorEditorController, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
-import { createRichTextPreset, SpreadsheetController } from '../src';
+import { VectorEditorController, createVectorEditorDocument, createVectorEffectsToolProvider, createVectorGenerationToolProvider } from '../src/vector';
+import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
-import { createCanvasCaptureToolProvider, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider } from '../src/canvas';
+import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
@@ -219,6 +222,21 @@ describe('built-in tool providers have complete MCP annotations', () => {
 				store: createEditorDocumentStore({ storage: createMemoryStorage() })
 			})
 		);
+		for (const [doc, skill] of [
+			[createChartEditorDocument(new ChartController()), 'pixerate-chart'],
+			[createAnimationEditorDocument(new AnimationEditorController()), 'pixerate-animation-editor'],
+			[createVideoEditorDocument(new VideoEditorController()), 'pixerate-video-editor'],
+			[createParametersEditorDocument(new ParametersController({ schema: { fields: [] } })), 'pixerate-parameters'],
+			[createVectorEditorDocument(new VectorEditorController()), 'pixerate-vector'],
+			[createSpreadsheetEditorDocument(sheet), 'pixerate-spreadsheet'],
+			[createRichTextEditorDocument(editor), 'pixerate-rich-text'],
+			[createTokensEditorDocument(new TokenStore()), 'pixerate-tokens'],
+			[createCanvasEditorDocument({ getNodes: () => [], setNodes: () => {}, getEdges: () => [], setEdges: () => {}, history: new HistoryManager() }), 'pixerate-canvas'],
+			[createImageEditorDocument(new ImageEditorController()), 'pixerate-image-editor'],
+			[createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), 'pixerate-paint-editor']
+		] as const) {
+			registry.register(createDocumentToolProvider(doc, { namespace: `${doc.kind}doc`, skill, store: createEditorDocumentStore({ storage: createMemoryStorage() }) }));
+		}
 		registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation', namespace: 'animation' }));
 		registry.register(createVectorEffectsToolProvider(new VectorEditorController(), { id: 'vector-effects', namespace: 'vecfx' }));
 		registry.register(createVectorGenerationToolProvider(new VectorEditorController(), { id: 'vector-generation', namespace: 'vecgen', models: [{ id: 'm', media: 'image' }], generate: () => ({ svg: '' }) }));

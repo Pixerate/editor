@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, LiveShapeKind, ShapeToolOptions } from '@pixerate/editor/image-editor';
 import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
+import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles';
 
 export interface ShapeOptionsBarProps {
   controller: ImageEditorController;
@@ -9,7 +10,7 @@ export interface ShapeOptionsBarProps {
   className?: string;
 }
 
-const chip = (on: boolean) => `px-2 py-1 rounded text-[11px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+
 
 /**
  * The shape tool's options: the kind to draw, fill and stroke (colour or none), stroke width and
@@ -35,10 +36,10 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
   const num = (v: string, min: number, max: number) => Math.max(min, Math.min(max, Number(v) || min));
 
   return (
-    <div className={`flex flex-col gap-2 text-xs text-slate-200 ${className ?? ''}`} data-testid="shape-options">
+    <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="shape-options">
       <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
         {LIVE_SHAPE_KINDS.map((k: LiveShapeKind) => (
-          <button key={k} type="button" aria-pressed={options.kind === k} className={chip(options.kind === k)} onClick={() => onChange({ ...options, kind: k })}>
+          <button key={k} type="button" aria-pressed={options.kind === k} className={imageChipClass(options.kind === k)} onClick={() => onChange({ ...options, kind: k })}>
             {SHAPE_KIND_LABELS[k]}
           </button>
         ))}
@@ -53,7 +54,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
             disabled={options.fill === null}
             value={options.fill ?? '#4f46e5'}
             onChange={(e) => set({ fill: e.target.value })}
-            className="h-6 w-8 rounded border border-slate-700 bg-transparent"
+            className={imageColorInputClass}
           />
         </label>
         <label className="flex items-center gap-1">
@@ -65,7 +66,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
             disabled={options.stroke === null}
             value={options.stroke ?? '#000000'}
             onChange={(e) => set({ stroke: e.target.value })}
-            className="h-6 w-8 rounded border border-slate-700 bg-transparent"
+            className={imageColorInputClass}
           />
         </label>
         <label className="flex items-center gap-1">
@@ -77,7 +78,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
             max={200}
             value={options.strokeWidth}
             onChange={(e) => set({ strokeWidth: num(e.target.value, 0, 200) })}
-            className="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+            className={`w-14 ${imageFieldClass}`}
           />
         </label>
       </div>
@@ -85,20 +86,20 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
         {options.kind === 'rect' && (
           <label className="flex items-center gap-1">
             Radius
-            <input type="number" aria-label="Corner radius" min={0} max={1000} value={options.radius} onChange={(e) => set({ radius: num(e.target.value, 0, 1000) })} className="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+            <input type="number" aria-label="Corner radius" min={0} max={1000} value={options.radius} onChange={(e) => set({ radius: num(e.target.value, 0, 1000) })} className={`w-14 ${imageFieldClass}`} />
           </label>
         )}
         {options.kind === 'polygon' && (
           <label className="flex items-center gap-1">
             Sides
-            <input type="number" aria-label="Sides" min={3} max={100} value={options.sides} onChange={(e) => set({ sides: num(e.target.value, 3, 100) })} className="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+            <input type="number" aria-label="Sides" min={3} max={100} value={options.sides} onChange={(e) => set({ sides: num(e.target.value, 3, 100) })} className={`w-14 ${imageFieldClass}`} />
           </label>
         )}
         {options.kind === 'star' && (
           <>
             <label className="flex items-center gap-1">
               Points
-              <input type="number" aria-label="Points" min={3} max={100} value={options.points} onChange={(e) => set({ points: num(e.target.value, 3, 100) })} className="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+              <input type="number" aria-label="Points" min={3} max={100} value={options.points} onChange={(e) => set({ points: num(e.target.value, 3, 100) })} className={`w-14 ${imageFieldClass}`} />
             </label>
             <label className="flex items-center gap-1">
               Inner
@@ -110,7 +111,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
                 step={0.05}
                 value={options.innerRatio}
                 onChange={(e) => set({ innerRatio: Number(e.target.value) })}
-                className="accent-indigo-500"
+                className="accent-primary"
               />
             </label>
           </>
@@ -119,7 +120,7 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
           <>
             <label className="flex items-center gap-1">
               Weight
-              <input type="number" aria-label="Line weight" min={1} max={200} value={options.weight} onChange={(e) => set({ weight: num(e.target.value, 1, 200) })} className="w-14 rounded border border-slate-700 bg-slate-950 px-1 py-0.5" />
+              <input type="number" aria-label="Line weight" min={1} max={200} value={options.weight} onChange={(e) => set({ weight: num(e.target.value, 1, 200) })} className={`w-14 ${imageFieldClass}`} />
             </label>
             <label className="flex items-center gap-1">
               <input type="checkbox" aria-label="Arrowhead" checked={options.arrow} onChange={(e) => set({ arrow: e.target.checked })} />
@@ -128,9 +129,9 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
           </>
         )}
       </div>
-      <p className="text-[10px] text-slate-500">Drag on the image to draw. Shift: square, circle or 45° line. Alt: from the centre.</p>
+      <p className="text-[10px] text-muted-foreground">Drag on the image to draw. Shift: square, circle or 45° line. Alt: from the centre.</p>
       {error && (
-        <p role="alert" className="text-rose-400">
+        <p role="alert" className="text-destructive">
           {error}
         </p>
       )}

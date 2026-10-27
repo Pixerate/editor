@@ -1,6 +1,7 @@
 import {
   SpreadsheetController,
   bindSpreadsheetTableActions,
+  createSpreadsheetEditorDocument,
   type SpreadsheetControllerOptions,
   type SpreadsheetDocument,
   type CellCoordinate,
@@ -138,6 +139,8 @@ export function createReactiveSpreadsheet(options: SpreadsheetControllerOptions 
       controller.draftValue = val;
     },
     controller,
+    /** The save / load / undo contract (for `createEditorAutosave` or `createDocumentToolProvider`). */
+    editorDocument: createSpreadsheetEditorDocument(controller),
 
     getCell(rowId: string, colId: string): CellData {
       return controller.getCell(rowId, colId);

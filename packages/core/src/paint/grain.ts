@@ -45,6 +45,8 @@ export interface PaperGrainSettings {
   tiling: PaperTiling;
   dry: GrainTuning;
   wet: GrainTuning;
+  /** Where the grain's (0, 0) sits in document pixels (missing = the canvas's top-left). */
+  offset?: { x: number; y: number };
 }
 
 /** Side of the generated grain tile in pixels (at scale 1). */
@@ -180,6 +182,8 @@ export class PaperGrain {
   private readonly heights: Float32Array;
   private readonly scale: number;
   private readonly mirror: boolean;
+  private readonly ox: number;
+  private readonly oy: number;
   readonly flat: boolean;
 
   constructor(paper: PaperGrainSettings, media: 'dry' | 'wet' = 'dry') {
@@ -197,6 +201,8 @@ export class PaperGrain {
     }
     this.scale = paper.scale;
     this.mirror = paper.tiling === 'mirror';
+    this.ox = paper.offset?.x ?? 0;
+    this.oy = paper.offset?.y ?? 0;
   }
 
   /** Tile cell index for a coordinate in grain pixels (mirrored on odd tiles when mirroring). */
@@ -209,8 +215,8 @@ export class PaperGrain {
 
   /** Height 0..1 at document position (x, y). */
   at(x: number, y: number): number {
-    const u = x / this.scale - 0.5;
-    const v = y / this.scale - 0.5;
+    const u = (x - this.ox) / this.scale - 0.5;
+    const v = (y - this.oy) / this.scale - 0.5;
     const x0 = Math.floor(u);
     const y0 = Math.floor(v);
     const fx = u - x0;

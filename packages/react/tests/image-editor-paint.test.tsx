@@ -73,8 +73,14 @@ describe('React paint tools', () => {
     c.setPaintOptions({ foreground: '#112233' });
     await act(async () => button('Swap').click());
     expect(c.getState().paint.background).toBe('#112233');
+    // A new image starts on its Background, so Fill works at once.
     await act(async () => button('Fill').click());
-    expect(container.querySelector('[role="alert"]')!.textContent).toMatch(/none is active/);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(c.getLayer('background')).not.toHaveProperty('source');
+    // With no pixel layer left there is nothing to fill, and the message is for a person.
+    await act(async () => c.removeLayer('background'));
+    await act(async () => button('Fill').click());
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe('Pick a layer to fill on in the Layers panel.');
     c.addPixelLayer();
     await act(async () => button('Fill').click());
     expect(c.getLayerBounds(c.getState().activeLayerId!)).toEqual({ x: 0, y: 0, width: 300, height: 150 });

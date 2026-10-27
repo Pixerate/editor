@@ -10,20 +10,24 @@
     values: Readonly<Record<string, unknown>>;
     onchange: (control: string, value: unknown, gesture: string | null) => void;
     onpreset: (values: Readonly<Record<string, unknown>>) => void;
+    /** Extra classes on the root element. */
+    class?: string;
   }
 
-  let { provider, effect, name, values, onchange, onpreset }: Props = $props();
+  let { provider, effect, name, values, onchange, onpreset, class: className = '' }: Props = $props();
   const loaded = effectDescriptionOf(() => provider, () => effect);
 </script>
 
 <!-- One effect's controls, loaded from the provider; a note when it does not have the effect. -->
-{#if !provider}
-  <p class="text-[11px] text-slate-400">No effects provider: "{name ?? effect}" is kept but not drawn.</p>
-{:else if loaded.error}
-  <p class="text-[11px] text-amber-400">{loaded.error}</p>
-{:else if !loaded.description}
-  <p class="text-[11px] text-slate-400">Loading…</p>
-{:else}
-  {@const description = loaded.description}
-  <EffectParameters {description} {values} {onchange} onreset={(k) => onchange(k, description.defaults[k], null)} {onpreset} />
-{/if}
+<div class={className || undefined} data-testid="image-effect-controls">
+  {#if !provider}
+    <p class="text-[11px] text-muted-foreground">No effects provider: "{name ?? effect}" is kept but not drawn.</p>
+  {:else if loaded.error}
+    <p class="text-[11px] text-amber-600">{loaded.error}</p>
+  {:else if !loaded.description}
+    <p class="text-[11px] text-muted-foreground">Loading…</p>
+  {:else}
+    {@const description = loaded.description}
+    <EffectParameters {description} {values} {onchange} onreset={(k) => onchange(k, description.defaults[k], null)} {onpreset} />
+  {/if}
+</div>

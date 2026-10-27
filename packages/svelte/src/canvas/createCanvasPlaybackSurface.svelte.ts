@@ -1,10 +1,16 @@
 import { createCanvasPlaybackLocator, type CanvasEdge, type CanvasNode, type NodeRectOptions } from '@pixerate/editor/canvas';
-import type { AgentPlayback, PlaybackPoint, PresenceStore } from '@pixerate/editor/tools';
+import { locatePlaybackChrome, type AgentPlayback, type PlaybackChromeOptions, type PlaybackPoint, type PlaybackRef, type PresenceStore } from '@pixerate/editor/tools';
 import { createPlaybackSurface } from '../playback/playback.svelte.js';
 
 type MaybeGetter<T> = T | (() => T);
 
-export interface CreateCanvasPlaybackSurfaceOptions<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdge = CanvasEdge> {
+/**
+ * `locate`, `locateElement` and `open` (see `PlaybackChromeOptions`) let the host's own chrome over
+ * the canvas (a HUD, toolbar or panels) answer refs the canvas does not find, such as
+ * `{ kind: 'panel' | 'control', id }`: `locate` in flow coordinates, `locateElement` as an element
+ * whose client box is mapped into flow coordinates through the viewport.
+ */
+export interface CreateCanvasPlaybackSurfaceOptions<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdge = CanvasEdge> extends PlaybackChromeOptions {
 	/** The flow's nodes and edges now (e.g. the `bind:nodes` state). */
 	getNodes: () => readonly TNode[];
 	getEdges?: () => readonly TEdge[];
@@ -31,15 +37,20 @@ export function createCanvasPlaybackSurface<TNode extends CanvasNode = CanvasNod
 	id: MaybeGetter<string | null | undefined>,
 	options: CreateCanvasPlaybackSurfaceOptions<TNode, TEdge>
 ): PresenceStore {
-	const locate = createCanvasPlaybackLocator<TNode, TEdge>({
+	const locateFlow = createCanvasPlaybackLocator<TNode, TEdge>({
 		getNodes: options.getNodes,
 		getEdges: () => options.getEdges?.() ?? [],
 		rectOptions: options.rectOptions
 	});
 	const box = () => options.container()?.getBoundingClientRect() ?? null;
+	const fromViewport = (p: PlaybackPoint) => {
+		const r = box();
+		const { x, y, zoom } = options.getViewport();
+		return { x: (p.x - (r?.left ?? 0) - x) / zoom, y: (p.y - (r?.top ?? 0) - y) / zoom };
+	};
 	return createPlaybackSurface(playback, id, {
 		defaultKind: 'node',
-		locate,
+		locate: (ref) => locateFlow(ref) ?? locatePlaybackChrome(ref, options, fromViewport),
 		bounds: () => {
 			const r = box();
 			const { x, y, zoom } = options.getViewport();
@@ -56,11 +67,10 @@ export function createCanvasPlaybackSurface<TNode extends CanvasNode = CanvasNod
 			const { x, y, zoom } = options.getViewport();
 			return { x: (r?.left ?? 0) + p.x * zoom + x, y: (r?.top ?? 0) + p.y * zoom + y };
 		},
-		fromViewport: (p: PlaybackPoint) => {
-			const r = box();
-			const { x, y, zoom } = options.getViewport();
-			return { x: (p.x - (r?.left ?? 0) - x) / zoom, y: (p.y - (r?.top ?? 0) - y) / zoom };
-		},
-		reveal: () => options.reveal?.()
+		fromViewport,
+		reveal: () => options.reveal?.(),
+		get open() {
+			return options.open ? (ref: PlaybackRef) => options.open?.(ref) : undefined;
+		}
 	});
 }

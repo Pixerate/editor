@@ -26,6 +26,11 @@ export interface AnimationEditorToolProviderOptions {
 	readOnly?: boolean | string | (() => boolean | string);
 	/** Turns SVG into PNG (e.g. `rasterizeSvg`), so `render_animation_frame` can return an image. */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
+	 * The agent playback surface its calls are acted out on (default `animation`, where `AnimationEditor` attaches).
+	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
+	 */
+	playbackSurface?: string;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -1238,5 +1243,5 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				}
 			});
 		}
-	});
+	}, options.playbackSurface);
 }

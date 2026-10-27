@@ -89,7 +89,13 @@ export function layoutRadar(ctx: LayoutCtx, area: ChartRect, visible: ChartSerie
 	let hi = -Infinity;
 	for (const s of visible) for (const v of s.values) if (v !== null && Number.isFinite(v)) (lo = Math.min(lo, v)), (hi = Math.max(hi, v));
 	if (!Number.isFinite(hi)) hi = 1;
-	const scale = axisScale(lo, hi, radius, spec.yAxis, ctx.options.valueDomain);
+	let scale = axisScale(lo, hi, radius, spec.yAxis, ctx.options.valueDomain);
+	// A fixed ring count (Mermaid's `ticks`) spaces rings evenly over the scale instead of at round numbers.
+	if (spec.radarTicks !== null && spec.yAxis.scale !== 'log') {
+		const n = spec.radarTicks;
+		const step = (scale.max - scale.min) / n;
+		scale = { ...scale, step, ticks: Array.from({ length: n + 1 }, (_, k) => Number((scale.min + step * k).toPrecision(12))) };
+	}
 	const rOf = (v: number) => linearMap(Math.min(scale.max, Math.max(scale.min, v)), [scale.min, scale.max], [0, radius]);
 	const angle = (i: number) => (i / n) * Math.PI * 2;
 	const at = (i: number, r: number): [number, number] => [cx + r * Math.sin(angle(i)), cy - r * Math.cos(angle(i))];
@@ -99,6 +105,10 @@ export function layoutRadar(ctx: LayoutCtx, area: ChartRect, visible: ChartSerie
 		scale.ticks.forEach((t, k) => {
 			const r = rOf(t);
 			if (r <= 0) return;
+			if (spec.radarGraticule === 'circle') {
+				marks.push({ kind: 'circle', key: `grid-ring-${k}`, role: 'grid', cx, cy, r, fill: 'none', stroke: theme.grid, strokeWidth: 1 });
+				return;
+			}
 			const d = Array.from({ length: n }, (_, i) => at(i, r)).map(([x, y], i) => `${i ? 'L' : 'M'}${r2(x)},${r2(y)}`).join('') + 'Z';
 			marks.push({ kind: 'path', key: `grid-ring-${k}`, role: 'grid', d, fill: 'none', stroke: theme.grid, strokeWidth: 1 });
 		});

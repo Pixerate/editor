@@ -7,6 +7,7 @@ import {
   DEFAULT_SELECTION_TOOL_OPTIONS,
   ImageEditorController,
   type SelectionToolOptions,
+  DEFAULT_CANVAS_VIEWPORT,
 } from '@pixerate/editor/image-editor';
 
 let container: HTMLDivElement;
@@ -149,14 +150,14 @@ describe('React ImageEditor Select & Mask tab', () => {
     expect(container.querySelector('[data-testid="refine-edge-panel"]')).not.toBeNull();
 
     const canvas = container.querySelector('canvas')!;
-    // jsdom: no layout, so client coordinates are canvas pixels; the 20×10 image is drawn 1:1 at
-    // the canvas centre, so 5 px left of the centre is in the red half.
+    // jsdom: no layout, so the canvas projects through the fallback viewport and client coordinates
+    // map 1:1; the 20×10 image is drawn 1:1 at its centre, so 5 px left of the centre is in the red half.
     const down = (x: number, y: number, extra: Record<string, unknown> = {}) =>
       canvas.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y, ...extra }));
     const move = (x: number, y: number) => canvas.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }));
     const up = (x: number, y: number) => canvas.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y }));
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const cx = DEFAULT_CANVAS_VIEWPORT.width / 2;
+    const cy = DEFAULT_CANVAS_VIEWPORT.height / 2;
     await act(async () => {
       down(cx - 5, cy);
       await new Promise((r) => setTimeout(r, 0));

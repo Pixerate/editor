@@ -4,6 +4,7 @@
 // layers a call names. Pure: plans read the arguments and the state before the call.
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { PlaybackPoint, PlaybackRect, PlaybackRef, PlaybackStep } from '../tools/playback.js';
+import type { PresenceDragBox } from '../tools/presence.js';
 import type { ImageEditorController } from './controller';
 
 /** The playback kind of an image layer (`{ kind: 'layer', id }`, as in `data-layer-id`). */
@@ -106,16 +107,49 @@ export function planImageToolPlayback(tool: string, args: Record<string, any>): 
 
 /**
  * Gives an image tool provider agent playback: each write tool plans its steps with
- * `planImageToolPlayback` and every call plays on the `surface` (default `image`, where
- * `ImageEditor` attaches itself).
+ * `planImageToolPlayback` and every call plays on `surface`. An explicit `surface` wins over the
+ * provider's own `playbackSurface`; with neither, it is `image` (where `ImageEditor` attaches itself).
  */
-export function withImagePlayback(provider: AgentToolProvider, surface = 'image'): AgentToolProvider {
+export function withImagePlayback(provider: AgentToolProvider, surface?: string): AgentToolProvider {
 	const plan = (tool: AgentTool): AgentTool =>
 		tool.plan || tool.playback !== undefined ? tool : { ...tool, plan: (args) => planImageToolPlayback(tool.name, args) };
 	const tools = provider.tools;
 	return {
 		...provider,
-		playbackSurface: provider.playbackSurface ?? surface,
+		playbackSurface: surface ?? provider.playbackSurface ?? 'image',
 		tools: typeof tools === 'function' ? () => tools().map(plan) : tools.map(plan)
 	};
+}
+
+/**
+ * What a canvas draws while an agent drags on it (see `trackPresenceDrag`): in crop mode, the crop
+ * box being pulled out (clamped to the image); in select mode, the marquee as a selection path.
+ * The tool call that follows sets the real crop or selection.
+ */
+export function agentDragDraft(
+  mode: string,
+  box: PresenceDragBox,
+  image: { width: number; height: number },
+): { crop: { x: number; y: number; width: number; height: number } } | { selectionPath: PlaybackPoint[] } | null {
+  if (mode === 'select') {
+    return {
+      selectionPath: [
+        { x: box.x, y: box.y },
+        { x: box.x + box.width, y: box.y },
+        { x: box.x + box.width, y: box.y + box.height },
+        { x: box.x, y: box.y + box.height },
+      ],
+    };
+  }
+  if (mode !== 'crop' || !image.width || !image.height) return null;
+  const x = Math.max(0, Math.min(image.width, box.x));
+  const y = Math.max(0, Math.min(image.height, box.y));
+  return {
+    crop: {
+      x,
+      y,
+      width: Math.max(1, Math.min(image.width - x, box.width)),
+      height: Math.max(1, Math.min(image.height - y, box.height)),
+    },
+  };
 }
