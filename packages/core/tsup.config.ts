@@ -31,6 +31,7 @@ export default defineConfig({
     "parameters/index": "src/parameters/index.ts",
     "vector/index": "src/vector/index.ts",
     "chart/index": "src/chart/index.ts",
+    "chart-maps/index": "src/chart-maps/index.ts",
     "diagram/index": "src/diagram/index.ts",
     "effects/index": "src/effects/index.ts",
     "bridge/index": "src/bridge/index.ts",

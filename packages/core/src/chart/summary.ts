@@ -9,6 +9,7 @@ import { formatChartNumber } from './scale.js';
 import { chartSpecColorsByCategory, chartFamily, chartSeriesColor, chartSliceColor, CHART_TYPE_LABELS } from './spec.js';
 import { summarizeChartSeries, type ChartSeriesSummary } from './stats.js';
 import type { ChartAxis, ChartScene, ChartSpec, ChartWarning } from './types.js';
+import { getChartMap, matchChartMapRegions } from './maps.js';
 import { chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeToRows } from './tree.js';
 
@@ -85,6 +86,15 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 			parts.push(`The data is grouped ${depth} level${depth === 1 ? '' : 's'} deep with ${items} item${items === 1 ? '' : 's'}.`);
 		}
 		return parts.join(' ');
+	}
+	if (family === 'choropleth') {
+		const s = spec.series.find((x) => !x.hidden)!;
+		const map = getChartMap(spec.map);
+		const matches = map ? matchChartMapRegions(map, spec.categories) : spec.categories.map(() => null);
+		const rows = spec.categories.flatMap((c, i) => (matches[i] && s.values[i] !== null ? [{ name: matches[i]!.name, v: s.values[i] as number }] : [])).sort((a, b) => b.v - a.v);
+		const missing = spec.categories.filter((_, i) => !matches[i]).length;
+		if (!rows.length) return `${head} of ${map?.name ?? spec.map} with no regions matched.`;
+		return `${head} of ${map?.name ?? spec.map} shading ${rows.length} region${rows.length === 1 ? '' : 's'} by ${s.name}: highest ${rows[0].name} (${fmt(rows[0].v)}), lowest ${rows[rows.length - 1].name} (${fmt(rows[rows.length - 1].v)}).${missing ? ` ${missing} categor${missing === 1 ? 'y names' : 'ies name'} no region.` : ''}`;
 	}
 	if (family === 'barrace') {
 		const n = spec.categories.length;

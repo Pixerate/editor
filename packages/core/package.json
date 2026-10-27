@@ -304,6 +304,16 @@
         "default": "./dist/chart/index.cjs"
       }
     },
+    "./chart-maps": {
+      "import": {
+        "types": "./dist/chart-maps/index.d.ts",
+        "default": "./dist/chart-maps/index.js"
+      },
+      "require": {
+        "types": "./dist/chart-maps/index.d.cts",
+        "default": "./dist/chart-maps/index.cjs"
+      }
+    },
     "./effects": {
       "import": {
         "types": "./dist/effects/index.d.ts",

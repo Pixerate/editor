@@ -29,6 +29,7 @@ import {
 import { chartSpecColorsByCategory, chartDataToTable, chartSeriesColor, chartSliceColor } from './spec.js';
 import { summarizeChart } from './summary.js';
 import { chartToSvg } from './svg.js';
+import { getChartMap, matchChartMapRegions } from './maps.js';
 import { chartRaceRanking } from './race.js';
 import { chartTreeTotal } from './tree.js';
 import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartTrendline } from './types.js';
@@ -494,6 +495,22 @@ export function createChartCommands(controller: ChartController, options: ChartC
 			run: (_ctx: unknown, params: { index: number }) => {
 				check(controller.removeLink(params.index));
 				return { links: controller.getSpec().links };
+			}
+		},
+		{
+			...base,
+			id: `${prefix}mapRegions`,
+			label: 'Map Regions',
+			readOnly: true,
+			keywords: ['chart', 'map', 'choropleth', 'regions', 'countries', 'codes'],
+			description: 'Lists the regions of the chart\'s map (or another registered map) and which categories match none.',
+			params: object({ map: { type: 'string', description: 'Map id (default: the chart\'s map).' } }),
+			run: (_ctx: unknown, params: { map?: string } = {}) => {
+				const id = params?.map ?? controller.getSpec().map;
+				const geometry = getChartMap(id);
+				if (!geometry) fail(`There is no map "${id}"; register it with registerChartMap.`);
+				const matches = matchChartMapRegions(geometry!, controller.getSpec().categories);
+				return { regions: geometry!.regions.map((r) => ({ id: r.id, name: r.name })), unmatched: controller.getSpec().categories.filter((_, i) => !matches[i]) };
 			}
 		},
 		{

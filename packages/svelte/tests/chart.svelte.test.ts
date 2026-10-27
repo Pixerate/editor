@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { ChartController, type ChartSpec } from "@pixerate/editor/chart";
+import { ChartController, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
+import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 import { ChartCanvas, ChartDataGrid, ChartEditor, ChartInspector, createChartEditor, useChartCommands } from "../src/chart";
 
 let cleanups: (() => void)[] = [];
@@ -347,6 +348,23 @@ describe("ChartInspector", () => {
     expect(q("[data-race-time]").textContent).toBe("Q1");
     const canvas = render(ChartCanvas, { controller });
     expect(canvas.querySelector("svg")!.textContent).toContain("Q1");
+  });
+
+  it("picks the map, its colour classes and breaks for a choropleth", () => {
+    registerChartMap(EUROPE_CHART_MAP);
+    const controller = new ChartController({ spec: { type: "choropleth", map: "atlas", categories: ["FRA"], series: [{ name: "N", values: [1] }] } });
+    const el = render(ChartInspector, { controller });
+    const q = <T extends Element = HTMLElement>(sel: string) => el.querySelector(sel) as T;
+    const options = Array.from(q<HTMLSelectElement>('[data-option="map"]').options).map((o) => o.textContent);
+    expect(options).toEqual(expect.arrayContaining(["atlas (not loaded)", "Europe"]));
+    type(q<HTMLSelectElement>('[data-option="map"]'), "europe");
+    type(q<HTMLInputElement>('[data-option="mapSteps"]'), "4");
+    expect(controller.getSpec()).toMatchObject({ map: "europe", mapSteps: 4 });
+    type(q<HTMLInputElement>('[data-option="mapThresholds"]'), "10, 50");
+    expect(controller.getSpec().mapThresholds).toEqual([10, 50]);
+    expect(q<HTMLInputElement>('[data-option="mapSteps"]').disabled).toBe(true);
+    type(q<HTMLInputElement>('[data-option="mapThresholds"]'), "");
+    expect(controller.getSpec().mapThresholds).toEqual([]);
   });
 
   it("sets radar rings and grid shape", () => {

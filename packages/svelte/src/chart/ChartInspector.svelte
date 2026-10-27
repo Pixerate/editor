@@ -39,6 +39,7 @@
     defaultChartErrorBarValue,
     formatChartAmountList,
     isCartesianChart,
+    listChartMaps,
     suggestChartReferences,
     parseChartAmountList,
     type ChartAxis,
@@ -424,6 +425,29 @@
           <label for="{idPrefix}-bins" class="{chartLabelClass} w-20 shrink-0">Bins</label>
           <div class="min-w-0 flex-1">
             <ChartCommitInput id="{idPrefix}-bins" value={spec.bins === null ? '' : String(spec.bins)} placeholder="Auto" inputmode="numeric" data-option="bins" oncommit={(text) => controller.update({ bins: text.trim() === '' ? null : Number(text) }).ok} />
+          </div>
+        </div>
+      {/if}
+      {#if spec.type === 'choropleth'}
+        {@const maps = listChartMaps()}
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-map" class="{chartLabelClass} w-20 shrink-0">Map</label>
+          <select id="{idPrefix}-map" class={chartInputClass} value={spec.map} data-option="map" onchange={(e) => controller.update({ map: e.currentTarget.value })}>
+            {#each [...new Set([spec.map, ...maps.map((m) => m.id)])] as id (id)}
+              <option value={id}>{maps.find((m) => m.id === id)?.name ?? `${id} (not loaded)`}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-map-steps" class="{chartLabelClass} w-20 shrink-0">Classes</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-map-steps" value={String(spec.mapSteps)} inputmode="numeric" data-option="mapSteps" disabled={spec.mapThresholds.length > 0} oncommit={(text) => controller.update({ mapSteps: Number(text) }).ok} />
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="{idPrefix}-map-breaks" class="{chartLabelClass} w-20 shrink-0">Breaks</label>
+          <div class="min-w-0 flex-1">
+            <ChartCommitInput id="{idPrefix}-map-breaks" value={spec.mapThresholds.join(', ')} placeholder="Equal classes" data-option="mapThresholds" oncommit={(text) => controller.update({ mapThresholds: text.trim() ? text.split(',').map((t) => Number(t.trim())) : [] }).ok} />
           </div>
         </div>
       {/if}

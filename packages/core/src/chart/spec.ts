@@ -31,7 +31,7 @@ import type {
 	ChartValue
 } from './types.js';
 
-export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'slope', 'likert', 'parliament', 'barrace'];
+export const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap', 'sunburst', 'sankey', 'slope', 'likert', 'parliament', 'barrace', 'choropleth'];
 export const CHART_MARKERS: readonly ChartMarker[] = ['circle', 'square', 'diamond', 'triangle', 'cross', 'none'];
 export const CHART_TRENDLINE_TYPES: readonly ChartTrendlineType[] = ['linear', 'exponential', 'logarithmic', 'power', 'polynomial', 'moving-average'];
 export const CHART_LABEL_POSITIONS: readonly ChartLabelPosition[] = ['auto', 'inside', 'outside', 'center'];
@@ -69,11 +69,12 @@ export const CHART_TYPE_LABELS: Readonly<Record<ChartType, string>> = {
 	parliament: 'Parliament',
 	sunburst: 'Sunburst',
 	sankey: 'Sankey',
-	barrace: 'Bar race'
+	barrace: 'Bar race',
+	choropleth: 'Map'
 };
 
 /** How a chart type is laid out. */
-export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst' | 'sankey' | 'barrace';
+export type ChartFamily = 'cartesian' | 'xy' | 'pie' | 'radar' | 'waterfall' | 'histogram' | 'box' | 'funnel' | 'treemap' | 'slope' | 'likert' | 'parliament' | 'sunburst' | 'sankey' | 'barrace' | 'choropleth';
 
 /** A colour-blind-friendly categorical palette (Okabe–Ito order, tuned for light and dark backgrounds). */
 export const DEFAULT_CHART_PALETTE: readonly string[] = ['#4269d0', '#efb118', '#ff725c', '#6cc5b0', '#3ca951', '#ff8ab7', '#a463f2', '#97bbf5', '#9c6b4e', '#9498a0'];
@@ -140,6 +141,7 @@ export function chartFamily(spec: Pick<ChartSpec, 'type' | 'series'>): ChartFami
 		case 'sunburst':
 		case 'sankey':
 		case 'barrace':
+		case 'choropleth':
 			return spec.type;
 		case 'bubble':
 			return 'xy';
@@ -679,6 +681,19 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		if (Number.isInteger(m) && m >= 1) parliamentMajority = m;
 		else issues.push({ path: 'parliamentMajority', message: 'parliamentMajority must be a whole number of seats, 1 or more, or null for half plus one.' });
 	}
+	let mapSteps = 5;
+	if (value.mapSteps !== undefined) {
+		const n = Number(value.mapSteps);
+		if (value.mapSteps !== null && Number.isInteger(n) && n >= 2 && n <= 9) mapSteps = n;
+		else issues.push({ path: 'mapSteps', message: 'mapSteps must be a whole number of colour classes from 2 to 9.' });
+	}
+	let mapThresholds: number[] = [];
+	if (value.mapThresholds !== undefined && value.mapThresholds !== null) {
+		const list = Array.isArray(value.mapThresholds) ? value.mapThresholds.map((t) => (typeof t === 'number' ? t : Number(t))) : null;
+		if (!list || list.some((t) => !Number.isFinite(t)) || list.length > 8 || list.some((t, i) => i > 0 && t <= list[i - 1]))
+			issues.push({ path: 'mapThresholds', message: 'mapThresholds must be up to 8 numbers in ascending order (the class breaks), or [] for equal classes.' });
+		else mapThresholds = list;
+	}
 	let raceTopN = 10;
 	if (value.raceTopN !== undefined) {
 		const n = Number(value.raceTopN);
@@ -732,7 +747,10 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 		links,
 		sankeyNodes: links.length ? sankeyNodes : [],
 		sankeyLinkColor: pick(value.sankeyLinkColor, CHART_SANKEY_LINK_COLORS, 'source', 'sankeyLinkColor', issues),
-		raceTopN
+		raceTopN,
+		map: text(value.map, 'europe', 'map', issues).trim() || 'europe',
+		mapSteps,
+		mapThresholds
 	};
 	if (spec.stacking === 'percent')
 		for (const name of ['yAxis', 'yAxis2'] as const) {
@@ -760,7 +778,8 @@ export function cloneChartSpec(spec: ChartSpec): ChartSpec {
 		referenceBands: spec.referenceBands.map((b) => ({ ...b })),
 		tree: cloneChartTree(spec.tree),
 		links: spec.links.map((l) => ({ ...l })),
-		sankeyNodes: [...spec.sankeyNodes]
+		sankeyNodes: [...spec.sankeyNodes],
+		mapThresholds: [...spec.mapThresholds]
 	};
 }
 
