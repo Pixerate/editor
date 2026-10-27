@@ -36,6 +36,8 @@ import {
   ShapeNodeZoomProvider,
   useCanvasBrushes,
   useCanvasPlaybackSurface,
+  useCanvasExplosion,
+  createCanvasExplosionToolProvider,
   PresenceLayer,
   type CanvasBrushPaint,
   DEFAULT_ARRANGE_SHORTCUTS,
@@ -79,6 +81,7 @@ import {
   Circle,
   Star,
   Brush,
+  Network,
   Plus,
 } from "lucide-react";
 import {
@@ -513,6 +516,40 @@ const CanvasDemo: React.FC = () => {
     getNodes: flow.getNodes,
   });
   useAgentToolProvider(demoToolRegistry, capture);
+
+  // Explode a card into its steps: neighbours slide aside, collapse puts them back. Agents get
+  // canvas__list_explodable_nodes / canvas__explode_node / canvas__collapse_node.
+  // React Flow edge labels are ReactNodes; core CanvasEdge labels are strings, so edges stay loose.
+  const explosion = useCanvasExplosion<BoxNode, any>({ nodes, edges, setNodes, setEdges });
+  const explosionRef = useRef(explosion);
+  explosionRef.current = explosion;
+  const isExplosionStep = (id: string) => id.includes(":step");
+  const explodeCard = useCallback((id: string) => {
+    const parent = live.current.nodes.find((n) => n.id === id);
+    if (!parent) return false;
+    const width = parent.measured?.width ?? parent.width ?? 140;
+    const childNodes = ["Plan", "Do", "Check"].map((step, i) =>
+      box(`${id}:step${i + 1}`, `${parent.data.label}: ${step}`, parent.position.x + width + 40, parent.position.y - 50 + i * 50, 130, 40, parent.data.color)
+    );
+    return explosionRef.current.explodeNode(id, { childNodes, duration: 450, directionalOptions: { direction: "right", gap: 40 } });
+  }, []);
+  const explosionTools = useMemo(
+    () =>
+      createCanvasExplosionToolProvider<BoxNode>(
+        {
+          getNodes: () => live.current.nodes,
+          canExplode: (n) => (isExplosionStep(n.id) ? "A step has no steps of its own." : n.type === "box" ? true : "Only cards explode."),
+          exploded: () => explosionRef.current.explodedNodeIds,
+          explode: explodeCard,
+          collapse: (id) => explosionRef.current.collapseNode(id, { duration: 350 }),
+          multiple: true,
+        },
+        { id: "canvas-explosion", namespace: "canvas" }
+      ),
+    [explodeCard]
+  );
+  useAgentToolProvider(demoToolRegistry, explosionTools);
+  const selectedCard = nodes.length && selectedCount === 1 ? nodes.find((n) => n.selected && n.type === "box" && !isExplosionStep(n.id)) : undefined;
   // The agent's cursor on the canvas: every canvas__* and canvas.* call is acted out here.
   const agentPresence = useCanvasPlaybackSurface(demoPlayback, "canvas", {
     getNodes: () => live.current.nodes,
@@ -761,6 +798,22 @@ const CanvasDemo: React.FC = () => {
             <Brush className="w-4 h-4 text-pink-400" />
           </button>
         </div>
+        <div className="w-px h-5 bg-slate-800 mx-1" />
+        <button
+          type="button"
+          className={btn}
+          disabled={!selectedCard}
+          onClick={() => {
+            if (!selectedCard) return;
+            if (explosion.getSnapshot(selectedCard.id)) explosion.collapseNode(selectedCard.id, { duration: 350 });
+            else explodeCard(selectedCard.id);
+          }}
+          title="Explode the selected card into steps, or collapse it"
+          aria-label="Explode or collapse card"
+          aria-pressed={!!selectedCard && explosion.isExploded(selectedCard.id)}
+        >
+          <Network className="w-4 h-4" />
+        </button>
         <div className="w-px h-5 bg-slate-800 mx-1" />
         <button type="button" className={btn} disabled={!history.canUndo} onClick={() => history.undo()} title="Undo (Mod+Z)" aria-label="Undo">
           <Undo2 className="w-4 h-4" />
