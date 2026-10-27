@@ -40,10 +40,33 @@ export {
 	type UseCanvasDockingOptions
 } from './useCanvasDocking.js';
 
+// Imperative explosion coordinator, declarative explosion state, and the explosion agent tools
 export {
 	useCanvasExplosion,
-	type CanvasGraphTarget
+	type CanvasGraphTarget,
+	type UseCanvasExplosionOptions
 } from './useCanvasExplosion.js';
+
+export {
+	useCanvasExplosionState,
+	type CanvasExplosionState,
+	type CanvasExplosionStateHandle,
+	type CanvasExplosionStateOptions
+} from './useCanvasExplosionState.js';
+
+export {
+	computeCanvasExplosionLayout,
+	explosionEdgeId,
+	createCanvasExplosionStateController,
+	createCanvasExplosionToolProvider,
+	canvasExplosionToolTarget,
+	type ComputeCanvasExplosionLayoutParams,
+	type CanvasExplosionLayoutResult,
+	type CanvasExplosionStateController,
+	type CanvasExplosionStateSnapshot,
+	type CanvasExplosionToolTarget,
+	type CanvasExplosionToolProviderOptions
+} from '@pixerate/editor/canvas';
 
 // Arrangement (align / distribute / size / lock / z-order), smart guides and scenes
 export {
@@ -311,7 +334,9 @@ export {
 	runMultiNodeTransition,
 	defaultEasing,
 	computeNodesBoundingBox,
+	nodeSizeOf,
 	calculateDirectionalDisplacement,
+	calculateReflowDisplacement,
 	calculateDagreReflowDisplacement,
 	isEventFromTextInput,
 	isValidCanvasNode,
@@ -343,6 +368,7 @@ export {
 	type DisplacementDirection,
 	type DirectionalDisplacementOptions,
 	type ReflowDisplacementOptions,
+	type ExplosionDisplacementStrategy,
 	type ExplosionSnapshot,
 	type ExplodeNodeOptions,
 	type CollapseNodeOptions,
