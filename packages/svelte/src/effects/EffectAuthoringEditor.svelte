@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { effectSampleInputs, type EffectAuthoringSession, type EffectRenderer } from '@pixerate/editor/effects';
   import { effectAuthoringOf } from './effects.svelte.js';
   import EffectParameters from './EffectParameters.svelte';
@@ -32,6 +32,12 @@
   let renderer: EffectRenderer | null = $state.raw(null);
   let rendering = false;
   let pending = false;
+  /** Why the preview shows nothing: the preview could not be made, or its last frame failed. */
+  let previewError: string | null = $state(null);
+
+  function clearCanvas() {
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+  }
 
   // Preset saving state
   let savingPreset = $state(false);
@@ -48,6 +54,12 @@
     const s = session;
     const w = previewSize.width;
     const h = previewSize.height;
+
+    // A new session must not show the last session's frame, whatever happens next.
+    untrack(() => {
+      clearCanvas();
+      previewError = null;
+    });
 
     if (!s) {
       if (renderer) {
@@ -67,6 +79,9 @@
       }
       createdRenderer = r;
       renderer = r;
+    }).catch((e: unknown) => {
+      // The session's own reason (state.previewError) when it has one, else the error's.
+      if (live) previewError = s.getState().previewError || (e instanceof Error ? e.message : String(e));
     });
 
     return () => {
@@ -103,8 +118,14 @@
           if (ctx && typeof ImageData !== 'undefined') {
             ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
           }
-        } catch {
-          // A failed frame (for example a disposed renderer) is skipped; the next change draws again.
+          if (renderer === r) previewError = null;
+        } catch (e) {
+          // A frame from a renderer that has since been replaced (or disposed) is skipped; a failure
+          // of the current one clears the canvas and says why. The next change draws again.
+          if (renderer === r) {
+            clearCanvas();
+            previewError = e instanceof Error ? e.message : String(e);
+          }
         }
       } while (pending);
     } finally {
@@ -261,6 +282,11 @@
             class="h-full w-full object-contain"
             aria-label="Effect preview canvas"
           ></canvas>
+          {#if previewError}
+            <div class="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-white/80" role="status" data-effect-preview-error>
+              {previewError}
+            </div>
+          {/if}
         </div>
         {#if current.issues.length > 0}
           <div class="space-y-1 rounded border border-destructive/20 bg-destructive/10 p-2 text-xs" data-effect-issues>

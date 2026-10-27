@@ -33,6 +33,7 @@ function render(component: any, props: Record<string, any>) {
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = (() => ({
     putImageData: vi.fn(),
+    clearRect: vi.fn(),
   })) as any;
 });
 
@@ -73,7 +74,7 @@ describe("EffectAuthoringEditor (Svelte)", () => {
     expect(toggleBtn).not.toBeNull();
     expect(toggleBtn?.textContent?.trim()).toBe("◇");
 
-    // Click to add keyframe at playhead (t=0)
+    // Click to add keyframe at the playhead (half the 1000 ms length)
     toggleBtn?.click();
     await flush();
 
@@ -236,11 +237,11 @@ describe("EffectAuthoringEditor (Svelte)", () => {
     const drawnAt: number[] = [];
     let lastRendered = -1;
     const pending: Array<() => void> = [];
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((() => ({ putImageData: () => drawnAt.push(lastRendered) })) as any);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((() => ({ putImageData: () => drawnAt.push(lastRendered), clearRect: () => {} })) as any);
     if (typeof (globalThis as any).ImageData === "undefined") {
       vi.stubGlobal("ImageData", class { constructor(public data: unknown, public width: number, public height: number) {} });
     }
-    const session = await createEffectAuthoringSession({ effectId: "fake.gradient" }, { provider: createFakeEffectProvider(), schedule: () => () => {} });
+    const session = await createEffectAuthoringSession({ effectId: "fake.gradient" }, { provider: createFakeEffectProvider(), schedule: () => () => {}, startTime: 0 });
     const real = await session.createPreview({ width: 4, height: 4 });
     vi.spyOn(session, "createPreview").mockResolvedValue({
       ...real,
@@ -318,5 +319,41 @@ describe("EffectAuthoringEditor (Svelte)", () => {
     await flush();
     const request = renderSpy.mock.calls.at(-1)?.[0];
     expect(request?.inputs?.source).toMatchObject({ width: 480, height: 270 });
+  });
+
+  it("clears the canvas and says why when a vector effect has no pixel preview", async () => {
+    const ctx = { putImageData: vi.fn(), clearRect: vi.fn() };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as any);
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const provider = createFakeEffectProvider();
+      const invert = await provider.openAuthoring!({ effectId: "fake.invert" });
+      const badge = await provider.openAuthoring!({ effectId: "fake.badge" });
+      const props = $state({ session: invert as EffectAuthoringSession });
+      render(EffectAuthoringEditor, props);
+      await flush();
+      expect(ctx.putImageData).toHaveBeenCalled();
+      expect(target.querySelector("[data-effect-preview-error]")).toBeNull();
+
+      ctx.clearRect.mockClear();
+      ctx.putImageData.mockClear();
+      props.session = badge;
+      await flush();
+      expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 480, 270);
+      expect(ctx.putImageData).not.toHaveBeenCalled();
+      expect(target.querySelector("[data-effect-preview-error]")?.textContent).toMatch(/No pixel preview for this vector effect/);
+      // Parameters stay usable.
+      expect(target.querySelector('[data-effect-control="color"]')).not.toBeNull();
+      expect(unhandled).not.toHaveBeenCalled();
+
+      // Back to a shader effect: the message goes and frames draw again.
+      props.session = invert;
+      await flush();
+      expect(target.querySelector("[data-effect-preview-error]")).toBeNull();
+      expect(ctx.putImageData).toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 });

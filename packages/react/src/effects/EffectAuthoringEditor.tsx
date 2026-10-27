@@ -39,6 +39,8 @@ export function EffectAuthoringEditor({
   const timeRef = useRef(0);
   /** Sample pictures for the effect's image inputs, so filters and transitions show something. */
   const inputsRef = useRef<Record<string, EffectPixels>>({});
+  /** Why the preview shows nothing: the preview could not be made, or its last frame failed. */
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Preset saving state
   const [savingPreset, setSavingPreset] = useState(false);
@@ -51,6 +53,10 @@ export function EffectAuthoringEditor({
   const sourceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // A new session must not show the last session's frame, whatever happens next.
+    const canvas = canvasRef.current;
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    setPreviewError(null);
     if (!session) {
       if (rendererRef.current) {
         rendererRef.current.dispose();
@@ -70,6 +76,9 @@ export function EffectAuthoringEditor({
       createdRenderer = renderer;
       rendererRef.current = renderer;
       setRendererReady((c) => c + 1);
+    }).catch((e: unknown) => {
+      // The session's own reason (state.previewError) when it has one, else the error's.
+      if (live) setPreviewError(session.getState().previewError || (e instanceof Error ? e.message : String(e)));
     });
 
     return () => {
@@ -102,8 +111,15 @@ export function EffectAuthoringEditor({
           if (ctx && typeof ImageData !== 'undefined') {
             ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
           }
-        } catch {
-          // A failed frame (for example a disposed renderer) is skipped; the next change draws again.
+          if (rendererRef.current === renderer) setPreviewError(null);
+        } catch (e) {
+          // A frame from a renderer that has since been replaced (or disposed) is skipped; a failure
+          // of the current one clears the canvas and says why. The next change draws again.
+          if (rendererRef.current === renderer) {
+            const canvas = canvasRef.current;
+            canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+            setPreviewError(e instanceof Error ? e.message : String(e));
+          }
         }
       } while (pendingRef.current);
     } finally {
@@ -271,6 +287,11 @@ export function EffectAuthoringEditor({
               className="h-full w-full object-contain"
               aria-label="Effect preview canvas"
             />
+            {previewError && (
+              <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-white/80" role="status" data-effect-preview-error>
+                {previewError}
+              </div>
+            )}
           </div>
           {state.issues.length > 0 && (
             <div className="space-y-1 rounded border border-destructive/20 bg-destructive/10 p-2 text-xs" data-effect-issues>

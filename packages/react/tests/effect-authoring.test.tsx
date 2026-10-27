@@ -18,6 +18,7 @@ beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   HTMLCanvasElement.prototype.getContext = (() => ({
     putImageData: vi.fn(),
+    clearRect: vi.fn(),
   })) as any;
 });
 
@@ -162,14 +163,14 @@ describe('EffectAuthoringEditor (React)', () => {
     expect(diamondBtn?.textContent).toBe('◇');
     expect(session.getState().tracks.amount).toBeUndefined();
 
-    // Click to add keyframe at playhead (0ms)
+    // Click to add keyframe at the playhead (half the 1000 ms length)
     act(() => {
       diamondBtn?.click();
     });
     await flush();
 
     expect(session.getState().tracks.amount).toHaveLength(1);
-    expect(session.getState().tracks.amount[0].time).toBe(0);
+    expect(session.getState().tracks.amount[0].time).toBe(500);
     expect(diamondBtn?.textContent).toBe('◆');
 
     // Click again to remove keyframe at playhead
@@ -233,11 +234,11 @@ describe('EffectAuthoringEditor (React)', () => {
     const drawnAt: number[] = [];
     let lastRendered = -1;
     const pending: Array<() => void> = [];
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ putImageData: () => drawnAt.push(lastRendered) })) as any);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ putImageData: () => drawnAt.push(lastRendered), clearRect: () => {} })) as any);
     if (typeof (globalThis as any).ImageData === 'undefined') {
       vi.stubGlobal('ImageData', class { constructor(public data: unknown, public width: number, public height: number) {} });
     }
-    const session = await createEffectAuthoringSession({ effectId: 'fake.gradient' }, { provider: createFakeEffectProvider(), schedule: () => () => {} });
+    const session = await createEffectAuthoringSession({ effectId: 'fake.gradient' }, { provider: createFakeEffectProvider(), schedule: () => () => {}, startTime: 0 });
     const real = await session.createPreview({ width: 4, height: 4 });
     vi.spyOn(session, 'createPreview').mockResolvedValue({
       ...real,
@@ -330,5 +331,46 @@ describe('EffectAuthoringEditor (React)', () => {
     await flush();
     const request = render.mock.calls.at(-1)?.[0];
     expect(request?.inputs?.source).toMatchObject({ width: 480, height: 270 });
+  });
+
+  it('clears the canvas and says why when a vector effect has no pixel preview', async () => {
+    const ctx = { putImageData: vi.fn(), clearRect: vi.fn() };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as any);
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const provider = createFakeEffectProvider();
+      const invert = await provider.openAuthoring!({ effectId: 'fake.invert' });
+      act(() => {
+        root.render(<EffectAuthoringEditor session={invert} />);
+      });
+      await flush();
+      expect(ctx.putImageData).toHaveBeenCalled();
+      expect(container.querySelector('[data-effect-preview-error]')).toBeNull();
+
+      const badge = await provider.openAuthoring!({ effectId: 'fake.badge' });
+      ctx.clearRect.mockClear();
+      ctx.putImageData.mockClear();
+      act(() => {
+        root.render(<EffectAuthoringEditor session={badge} />);
+      });
+      await flush();
+      expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 480, 270);
+      expect(ctx.putImageData).not.toHaveBeenCalled();
+      expect(container.querySelector('[data-effect-preview-error]')?.textContent).toMatch(/No pixel preview for this vector effect/);
+      // Parameters stay usable.
+      expect(container.querySelector('[data-effect-control="color"]')).not.toBeNull();
+      expect(unhandled).not.toHaveBeenCalled();
+
+      // Back to a shader effect: the message goes and frames draw again.
+      act(() => {
+        root.render(<EffectAuthoringEditor session={invert} />);
+      });
+      await flush();
+      expect(container.querySelector('[data-effect-preview-error]')).toBeNull();
+      expect(ctx.putImageData).toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 });

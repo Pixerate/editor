@@ -101,7 +101,7 @@ export function createEffectAuthoringToolProvider(
 		name: 'effect_authoring_describe',
 		title: 'Describe open effect',
 		description:
-			'Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, duration, loop, and compile issues.',
+			'Describes the effect currently open for authoring: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead time, duration, loop, compile issues, and previewError: why there is no pixel preview (e.g. a vector effect the provider only draws as SVG), or null.',
 		inputSchema: object({}),
 		annotations: { title: 'Describe open effect', ...ANNOTATIONS.read },
 		handler: () => {
@@ -118,9 +118,11 @@ export function createEffectAuthoringToolProvider(
 					control,
 					keyframes: track.length
 				})),
+				time: state.time,
 				duration: state.duration,
 				loop: state.loop,
-				issues: state.issues
+				issues: state.issues,
+				previewError: state.previewError ?? null
 			};
 		}
 	};
@@ -401,7 +403,7 @@ export function createEffectAuthoringToolProvider(
 		name: 'effect_authoring_view',
 		title: 'View effect preview image',
 		description:
-			'Captures an image of the effect preview at the current playhead time or at a specified time in milliseconds.',
+			'Captures an image of the effect preview at the current playhead time or at a specified time in milliseconds. Refused, with the reason, when the effect has no pixel preview (see previewError in effect_authoring_describe).',
 		inputSchema: object({
 			time: { type: 'number', minimum: 0, description: 'Optional time in milliseconds to view the preview at. Moves playhead to this time before capturing.' }
 		}),
@@ -409,6 +411,10 @@ export function createEffectAuthoringToolProvider(
 		handler: async (args) => {
 			const session = requireSession();
 			if (!host.capture) throw new Error('Capturing a preview image is not supported by this host.');
+			const previewError = session.getState().previewError;
+			if (previewError) {
+				throw new Error(`${previewError} The other effect authoring tools still work; check values with effect_authoring_describe.`);
+			}
 			if (args.time !== undefined) {
 				if (typeof args.time !== 'number' || !Number.isFinite(args.time) || args.time < 0) {
 					throw new Error('time must be a finite non-negative number.');
