@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|react|svelte/effects] A Vector Effect's Authoring Preview Showed the Previous Effect's Frame
+
+- **Issue / Symptom**: Opening a `vector` effect (the fake provider's Badge) in `EffectAuthoringEditor` left the previous effect's last frame on the canvas and threw an uncaught `"fake.badge" is a vector effect; use applyVectorEffect.`; entrance effects and transitions opened on an empty or unchanged frame.
+- **Root Cause**: Providers may refuse `createRenderer` for vector effects, and both editors called `createPreview(...).then(...)` with no `.catch` and never cleared the canvas on a session change. The playhead also opened at 0 ms, where slide-ins and transitions (progress 0) draw nothing useful.
+- **Solution / Workaround**: The generic session records the refusal in `EffectAuthoringState.previewError` (and `effect_authoring_describe` returns it; `effect_authoring_view` refuses with it). The editors clear the canvas on every session change, catch preview and frame failures, and show the reason. Sessions start at half the length like thumbnails (`startTime` overrides). Canvas mocks in editor tests need `clearRect` as well as `putImageData`.
+
 ### [paint/wet] Wet Paint Mixing Samples Only Suspended Pigment While Settled Pigment Carries Visible Color
 
 - **Issue / Symptom**: Overlapping wet paint strokes (such as Gouache or Watercolor) fail to mix; subsequent strokes paint with their raw color without picking up underlying wet strokes, behaving as opaque dry coats.

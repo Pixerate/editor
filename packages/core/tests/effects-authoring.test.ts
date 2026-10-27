@@ -17,8 +17,10 @@ describe('createEffectAuthoringSession', () => {
     expect(state.name).toBe('Invert');
     expect(state.values).toHaveProperty('amount');
     expect(state.tracks).toEqual({});
-    expect(state.time).toBe(0);
+    // Half the length, as thumbnails do, so the first frame shows the effect.
+    expect(state.time).toBe(500);
     expect(state.duration).toBe(1000);
+    expect(state.previewError).toBeNull();
     expect(state.playing).toBe(false);
     expect(state.loop).toBe(false);
     expect(state.canUndo).toBe(false);
@@ -346,5 +348,29 @@ describe('createEffectAuthoringSession', () => {
     const reopened = await createEffectAuthoringSession({ document: doc }, { provider });
     expect(reopened.getState().name).toBe('My tint');
     expect(reopened.exportDocument().name).toBe('My tint');
+  });
+  it('starts the playhead at startTime when given, clamped to the length', async () => {
+    const at0 = await createEffectAuthoringSession({ effectId: 'fake.invert' }, { provider, startTime: 0 });
+    expect(at0.getState().time).toBe(0);
+    const past = await createEffectAuthoringSession({ effectId: 'fake.invert' }, { provider, startTime: 5000 });
+    expect(past.getState().time).toBe(1000);
+  });
+
+  it('records why a vector effect has no pixel preview, and clears it once a preview works', async () => {
+    const session = await createEffectAuthoringSession({ effectId: 'fake.badge' }, { provider });
+    expect(session.getState().kind).toBe('vector');
+    expect(session.getState().previewError).toBeNull();
+    const seen: (string | null | undefined)[] = [];
+    session.subscribe((s) => seen.push(s.previewError));
+    await expect(session.createPreview({ width: 16, height: 9 })).rejects.toThrow(/vector effect/);
+    expect(session.getState().previewError).toMatch(/^No pixel preview for this vector effect: "fake.badge" is a vector effect/);
+    expect(seen).toHaveLength(1);
+    // The rest of the session still works.
+    expect(session.setValue('color', '#ff0000').ok).toBe(true);
+
+    const shader = await createEffectAuthoringSession({ effectId: 'fake.invert' }, { provider });
+    const preview = await shader.createPreview({ width: 4, height: 4 });
+    expect(shader.getState().previewError).toBeNull();
+    preview.dispose();
   });
 });

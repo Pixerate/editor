@@ -78,6 +78,12 @@ export interface EffectAuthoringState {
 	issues: readonly EffectAuthoringIssue[];
 	/** Whether the source compiled: true, false, or null when that is not known yet (no preview has compiled it). */
 	compiled: boolean | null;
+	/**
+	 * Why `createPreview` could not make a pixel preview (for example a vector effect whose provider
+	 * only draws it as SVG), or null when it could or has not been asked yet. Optional for sessions
+	 * that never fail to preview.
+	 */
+	previewError?: string | null;
 	/** Current playhead position (ms). */
 	time: number;
 	/** Length of one play (ms). */

@@ -302,6 +302,23 @@ describe('effect authoring agent tools', () => {
 		expect((descAfterRedo.structuredContent as any).values.amount).toBe(0.1);
 	});
 
+	it('says when the open effect has no pixel preview, and refuses to view it', async () => {
+		const fakeProvider = createFakeEffectProvider();
+		const session = await fakeProvider.openAuthoring!({ effectId: 'fake.badge' });
+		const { call, capture } = await setup({ withCapture: true, session });
+		const before = await call('effect_authoring_describe');
+		expect(before.structuredContent).toMatchObject({ kind: 'vector', time: 250, previewError: null });
+
+		await expect(Promise.resolve(session.createPreview({ width: 16, height: 9 }))).rejects.toThrow();
+		const after = await call('effect_authoring_describe');
+		expect((after.structuredContent as any).previewError).toMatch(/No pixel preview for this vector effect/);
+
+		const view = await call('effect_authoring_view');
+		expect(view.isError).toBe(true);
+		expect(JSON.stringify(view.content)).toMatch(/No pixel preview for this vector effect.*effect_authoring_describe/);
+		expect(capture).not.toHaveBeenCalled();
+	});
+
 	it('captures preview image via effect_authoring_view', async () => {
 		const { call, capture } = await setup({ withCapture: true });
 		const viewRes = await call('effect_authoring_view', { time: 250 });

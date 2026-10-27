@@ -21,7 +21,9 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 
 1. **Inspect first.** Run `effect_authoring_describe` to inspect the effect name, kind, source
    language (`glsl`, `svg`, or null when the effect has no source to edit), control parameter schemas, current
-   values, existing tracks, and compile issues.
+   values, existing tracks, playhead `time`, compile issues and `previewError`.
+   A session opens with its playhead at half the effect's length (where entrance-style effects and
+   transitions show), so values set on an animated control key that time unless you seek first.
 2. **Read or update source code.** If `sourceLanguage` is non-null, use `effect_authoring_get_source`
    to read the shader or script code. Use `effect_authoring_set_source` to recompile with new code
    and immediately inspect any reported syntax or compilation issues with line numbers.
@@ -38,7 +40,10 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 6. **Save presets.** When an interesting look is achieved, save it with `effect_authoring_save_preset`
    or restore known presets with `effect_authoring_apply_preset`.
 7. **Verify visually.** When `effect_authoring_view` is available, capture rendered preview frames
-   at specific times to visually confirm effect appearance.
+   at specific times to visually confirm effect appearance. When `effect_authoring_describe` reports a
+   `previewError` (typically a `vector` effect whose provider only draws it as SVG), there is no pixel
+   preview: `effect_authoring_view` is refused with that reason, but values, presets, keyframes and
+   timing still work. Judge the result from the values instead of retrying the view.
 
 ## Best practices
 
@@ -56,7 +61,7 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 
 | Tool | Description and usage |
 | --- | --- |
-| `effect_authoring_describe` | Reads the currently open effect session: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, duration, loop, and compile issues. |
+| `effect_authoring_describe` | Reads the currently open effect session: name, kind, source language, controls schema and current values, presets, animated tracks with keyframe counts, playhead `time`, duration, loop, compile issues, and `previewError` (why there is no pixel preview, or null). Call it first. |
 | `effect_authoring_get_source` | Retrieves shader or script source code and language for code-backed effects. Refused if `sourceLanguage` is null. |
 | `effect_authoring_set_source` | Recompiles the effect with new shader or script source code. Returns compiler issues with line numbers and messages. Available only when supported by the session. |
 | `effect_authoring_set_values` | Sets one or more control values at the current playhead time as a single undo step. Rejects all changes if any control name or value is invalid. |
@@ -70,11 +75,13 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 | `effect_authoring_seek` | Moves the preview playhead to a specific timeline position in milliseconds (clamped to 0..duration) and returns values at that time. |
 | `effect_authoring_undo` | Undoes the most recent edit in the authoring session. |
 | `effect_authoring_redo` | Redoes the most recently undone edit in the authoring session. |
-| `effect_authoring_view` | Captures a preview image of the effect at the current playhead or a specified timestamp. Available when preview capture is supported. |
+| `effect_authoring_view` | Captures a preview image of the effect at the current playhead or a specified timestamp. Available when preview capture is supported. Refused, with the reason, when `effect_authoring_describe` shows a `previewError`. |
 
 ## Pitfalls
 
 - Calling authoring tools when no authoring session is open returns an error explaining that a session must be opened first.
 - Animated controls calculate their values dynamically from keyframes; clearing a track reverts the parameter to static behavior.
 - Compiling invalid shader code produces issues in `effect_authoring_set_source`; inspect the line numbers and messages to correct syntax.
+- A `vector` effect may have no pixel preview (the provider refuses a pixel renderer); check `previewError` rather than reading a blank capture as a broken effect.
+- The playhead does not start at 0. Pass explicit `time`s to `effect_authoring_set_keyframe`, or `effect_authoring_seek` before setting values on an animated control.
 - Control values must match their schema types and bounds; colours must be `#rrggbb` (or `#rrggbbaa`), and numbers must fall within `[min, max]`.

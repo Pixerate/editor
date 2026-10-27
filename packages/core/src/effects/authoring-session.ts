@@ -41,6 +41,11 @@ export interface GenericAuthoringOptions {
 	schedule?: (frame: (now: number) => void) => () => void;
 	/** Ms within which `setValue` calls on one control with no gesture merge (default 400). */
 	mergeWindowMs?: number;
+	/**
+	 * Where the playhead starts (ms, clamped to 0..duration). Default: half the duration, as
+	 * catalog thumbnails do, so entrance-style effects and transitions open on a frame that shows them.
+	 */
+	startTime?: number;
 }
 
 const HEX_RE = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -260,9 +265,11 @@ export async function createEffectAuthoringSession(
 	let playing = false;
 	let cancelSchedule: (() => void) | null = null;
 	let lastScheduleTime: number | null = null;
-	let playheadTime = 0;
 	let duration = initialDoc?.duration ?? description.duration ?? 1000;
 	if (!(duration > 0)) duration = 1000;
+	const start = options.startTime;
+	let playheadTime = typeof start === 'number' && Number.isFinite(start) ? Math.max(0, Math.min(duration, start)) : duration / 2;
+	let previewError: string | null = null;
 	let loop = initialDoc?.loop ?? description.loop ?? false;
 	let compiled: boolean | null = null;
 
@@ -340,6 +347,7 @@ export async function createEffectAuthoringSession(
 			tracks: { ...tracks },
 			issues: [],
 			compiled,
+			previewError,
 			time: playheadTime,
 			duration,
 			loop,
@@ -864,8 +872,24 @@ export async function createEffectAuthoringSession(
 				throw new EffectDisposedError(effectId);
 			}
 
-			const renderer = await provider.createRenderer(effectId, opts);
+			let renderer: EffectRenderer;
+			try {
+				renderer = await provider.createRenderer(effectId, opts);
+			} catch (e) {
+				// Kept in the state so editors and agents can say why there is no picture.
+				const message = e instanceof Error ? e.message : String(e);
+				const reason = description.kind === 'vector' ? `No pixel preview for this vector effect: ${message}` : `No pixel preview: ${message}`;
+				if (previewError !== reason) {
+					previewError = reason;
+					invalidateState();
+				}
+				throw e;
+			}
 			livePreviews.add(renderer);
+			if (previewError !== null) {
+				previewError = null;
+				invalidateState();
+			}
 
 			const preview: EffectRenderer = {
 				effectId: renderer.effectId,
