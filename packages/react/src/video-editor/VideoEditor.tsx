@@ -6,6 +6,8 @@ import { VideoEffectsPanel } from './VideoEffectsPanel';
 import { ClipInspector } from './ClipInspector';
 import { MediaBin } from './MediaBin';
 import { TranscriptPanel } from './TranscriptPanel';
+import { TranscriptEditor } from './TranscriptEditor';
+import { EditPlanPreview } from './EditPlanPreview';
 import { useVideoEditor } from './useVideoEditor';
 import { VideoPreview } from './VideoPreview';
 import { VideoScopes } from './VideoScopes';
@@ -33,6 +35,12 @@ export interface VideoEditorProps {
   showIssues?: boolean;
   /** Show the transcript panel for editing by text (default true). */
   showTranscript?: boolean;
+  /**
+   * How the transcript is shown: `panel` (default) is `<TranscriptPanel>`, which also loads
+   * transcript files; `editor` marks fillers, pauses and stutters and plans cleanups for review
+   * (`<TranscriptEditor>`).
+   */
+  transcriptMode?: 'editor' | 'panel';
   /** Show colour scopes (histogram, luma waveform, vectorscope) of the preview under it (default false). */
   showScopes?: boolean;
   /**
@@ -55,10 +63,10 @@ export interface VideoEditorProps {
  * transport, the timeline and the clip inspector, with the project's issues listed under the
  * timeline. Every edit is one undo step; the controller's agent tools edit the same project.
  */
-export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, showScopes = false, effects, showEffects, className = '', playback, onPlaybackReveal }: VideoEditorProps) {
+export function VideoEditor({ controller: given, options, editable = true, pxPerSecond, onPxPerSecondChange, resolution, showIssues = true, showTranscript = true, transcriptMode = 'panel', showScopes = false, effects, showEffects, className = '', playback, onPlaybackReveal }: VideoEditorProps) {
   const { controller, state } = useVideoEditor(given ?? options ?? {});
   useEffects(controller, effects);
-  const effectsShown = showEffects ?? !!(state.effectsProvider || state.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.effects?.length || c.transition?.type === 'effect')));
+  const effectsShown = showEffects ?? !!(state.effectsProvider || state.project.tracks.some((t) => t.clips.some((c) => c.type === 'effect' || c.type === 'adjustment' || c.effects?.length || c.transition?.type === 'effect')));
   useEffect(() => {
     if (editable) return;
     const was = controller.getState().readOnly;
@@ -92,7 +100,8 @@ export function VideoEditor({ controller: given, options, editable = true, pxPer
         )}
       </div>
       <VideoTimeline controller={controller} editable={editable} pxPerSecond={pxPerSecond} onPxPerSecondChange={onPxPerSecondChange} playback={playback} onPlaybackReveal={onPlaybackReveal} />
-      {showTranscript && <TranscriptPanel controller={controller} editable={editable} />}
+      <EditPlanPreview controller={controller} editable={editable} />
+      {showTranscript && (transcriptMode === 'editor' ? <TranscriptEditor controller={controller} editable={editable} /> : <TranscriptPanel controller={controller} editable={editable} />)}
       {issueList}
     </div>
   );

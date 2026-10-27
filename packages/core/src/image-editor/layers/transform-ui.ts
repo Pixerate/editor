@@ -46,7 +46,7 @@ import {
 import type { WarpMesh, WarpStyle } from '../../geom/types';
 import type { Vec2 } from '../../geom/types';
 import type { Interpolation } from '../../raster/transform';
-import type { ImagePoint } from '../types';
+import type { CropBox, ImagePoint } from '../types';
 import { flattenLayers } from './model';
 import type { ShortcutEvent } from './paint-ui';
 
@@ -201,6 +201,58 @@ export interface FreeTransformToolOptions {
 }
 
 /**
+ * A Free Transform frame with no transform open (a host's selected-layer frame) from where its
+ * corners lie (top-left, top-right, bottom-right, bottom-left, as `getLayerFrame` gives them): the
+ * outline, the eight handles (none with `handles = false`, e.g. for a layer locked in place) and the
+ * centre as the reference point. Same shape and handle order as `FreeTransformTool.overlay`.
+ */
+export function quadFrameOverlay(corners: readonly ImagePoint[], handles = true): TransformOverlay {
+  const [nw, ne, se, sw] = corners;
+  const mid = (a: ImagePoint, b: ImagePoint) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const at = { nw, ne, se, sw, n: mid(nw, ne), e: mid(ne, se), s: mid(se, sw), w: mid(sw, nw) };
+  return {
+    outline: CORNERS.map((id) => ({ ...at[id] })),
+    handles: handles ? [...CORNERS, ...SIDES].map((id) => ({ id, x: at[id].x, y: at[id].y })) : [],
+    reference: mid(nw, se),
+  };
+}
+
+/** `quadFrameOverlay` for an axis-aligned box. */
+export function boxFrameOverlay(box: CropBox, handles = true): TransformOverlay {
+  const { x, y, width: w, height: h } = box;
+  return quadFrameOverlay([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], handles);
+}
+
+/**
+ * What a document point is over on a frame from `quadFrameOverlay`: a handle (within `tolerance`),
+ * `inside`, `outside` within `band` of the outline (where a drag rotates), or `null` beyond that.
+ */
+export function boxFrameHit(overlay: TransformOverlay, p: ImagePoint, tolerance: number, band: number): TransformHandle | null {
+  let best: TransformHandle | null = null;
+  let bestD = tolerance;
+  for (const h of overlay.handles) {
+    const d = Math.hypot(h.x - p.x, h.y - p.y);
+    if (d <= bestD) {
+      best = h.id;
+      bestD = d;
+    }
+  }
+  if (best) return best;
+  if (insideQuad(overlay.outline, p)) return 'inside';
+  const o = overlay.outline;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i];
+    const b = o[(i + 1) % o.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    if (Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) <= band) return 'outside';
+  }
+  return null;
+}
+
+/**
  * The interactive Free Transform (see the module comment). `begin` opens a session on the
  * controller; pointer and key methods drive it; `commit` / `cancel` close it.
  */
@@ -243,6 +295,15 @@ export class FreeTransformTool {
 
   get interpolation(): Interpolation {
     return this.sessionRef?.interpolation ?? 'bicubic';
+  }
+
+  /** Whether the open transform has changed anything yet (a commit would add an undo step). */
+  get modified(): boolean {
+    const s = this.session;
+    if (!s || !this.corners) return false;
+    if (this.mesh && this.mesh !== (s.startGeometry.warp ?? null)) return true;
+    const start = s.startGeometry.corners;
+    return this.corners.some((p, i) => p.x !== start[i].x || p.y !== start[i].y);
   }
 
   private readonly listeners = new Set<() => void>();
@@ -444,10 +505,14 @@ export class FreeTransformTool {
     return CURSOR[handle];
   }
 
-  /** Starts a drag on what `p` is over. */
-  down(p: ImagePoint, tolerance: number): TransformHandle | null {
+  /**
+   * Starts a drag on what `p` is over. With `reference: false` the reference point is not a handle
+   * (a press on it moves the frame), for hosts that drag layers by their frame.
+   */
+  down(p: ImagePoint, tolerance: number, options: { reference?: boolean } = {}): TransformHandle | null {
     if (!this.session || !this.corners) return null;
-    const handle = this.hit(p, tolerance);
+    let handle = this.hit(p, tolerance);
+    if (handle === 'reference' && options.reference === false) handle = 'inside';
     if (!handle) return null;
     let st: { s: number; t: number } | null = null;
     if (this.modeValue === 'warp' && this.mesh && handle === 'inside') {
