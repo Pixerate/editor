@@ -8,7 +8,7 @@
 import { createChartSpec, normalizeChartSpec } from "@pixerate/editor/chart";
 
 const spec = createChartSpec({
-  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap · sunburst · sankey · slope · likert · parliament
+  type: "bar", // bar · line · area · scatter · bubble · pie · donut · radar · waterfall · histogram · box · funnel · treemap · sunburst · sankey · barrace · slope · likert · parliament
   title: "Quarterly revenue",
   categories: ["Q1", "Q2", "Q3", "Q4"],
   series: [
@@ -122,6 +122,7 @@ function Revenue() {
 | `parliament` | the first series as seats in rows of dots, each category's seats together from the left | `parliamentArc` (90–360°), `parliamentMajority` (default half plus one, drawn as a dashed line), `parliamentLabel` under the total; seats are rounded, at most 2,000 |
 | `sunburst` | `tree` as rings from the centre out, each node inside its parent's arc (without a tree, the first series as one ring) | colours per top-level group, lighter further out; `sunburstLabel` captions the total in the centre |
 | `sankey` | `links` as flows between columns of nodes | a node's column follows the longest chain into it, sinks on the right; `sankeyNodes` sets the stacking order, `sankeyLinkColor` `source` / `target` / `gray`; without flows it draws the table as bars |
+| `barrace` | each category a time point, each series a name; the top `raceTopN` at one moment as ranked bars | the moment is view state (`setRaceFrame`, `playRace`); values ease and places slide between time points; gaps carry the last value |
 
 Other spec fields: `xAxis.kind: "date"` (categories read as dates, labelled with calendar steps that fit), `axis.step` (fixed tick distance), `format.code` (spreadsheet codes such as `#,##0.0,,"M"`, using the spreadsheet's own format engine), `gapWidth` / `overlap` (bar spacing), `labelPosition` (`auto` drops labels that do not fit and picks dark or white text by contrast), and per series `marker`, `curve`, `dataLabels`, `format`, `pointColors` and `trendlines`.
 
@@ -176,6 +177,19 @@ chart.setLinks([]); // back to plain data, keeping each node's throughput
 ```
 
 `spec.links` holds flows between named nodes, each with a value above 0. `normalizeChartLinks` refuses a flow to itself, a repeated source–target pair and a flow that would close a loop (a Sankey diagram cannot draw one), each with a sentence. Like a tree, flows are the chart's data when set: the categories are the nodes (`sankeyNodes` order, then as the flows first name them) and the first series how much passes through each (`chartSankeyNodeValues`, the larger of in and out). A chart holds a tree or flows, not both. The layout puts each node one column after the furthest node flowing into it, lines sinks up on the right, scales nodes and flows together so the tightest column fills the height, and stacks flows at each node in the order of the nodes at their other end; reorder `sankeyNodes` to untangle crossings. Highlighting a node keeps its flows bright. The data grids show flows as Source / Target / Value rows (`ChartLinksGrid`). Office export writes the node amounts as a bar chart and says so; Mermaid keeps the flows in the `%% @pixerate` comment.
+
+## Bar chart races
+
+```ts
+chart.update({ type: "barrace", raceTopN: 8 }); // categories are time points, series are names
+chart.setRaceFrame(2.5); // halfway between the third and fourth time points (view state, not undone)
+chart.playRace({ msPerStep: 800 }); // plays to the end from the moment shown
+chart.pauseRace();
+chartRaceRanking(spec, 3); // [{ seriesId, name, value, position, rank }, …] best first
+layoutChart(spec, { width, height, raceFrame: 1.25 }); // draw any moment
+```
+
+A bar race reads the ordinary table as a ranking over time. `chartRaceRanking` gives every visible name at a moment: its value eased between the two time points (a gap carries the last value, 0 before the first) and its place, which slides from one ranking to the next so bars pass each other. `layoutBarRace` draws the top `raceTopN` as horizontal bars on a plain linear scale (so bars do not jump when the leader crosses a round number), names on the left, values at the bar ends and the time point large in the corner; bar keys follow the series, so `blendChartScenes` moves each bar to its new place between frames. The moment shown is controller view state, like the selection: `ChartState.raceFrame` (null for the last time point) and `racePlaying`. `playRace` advances it on animation frames (`raceTicker` in the controller options swaps the clock, e.g. for tests or recording), and `setRaceFrame` stops playback. The React and Svelte canvases draw the moment shown, and the inspectors have Play / Pause, a scrubber and Bars (`raceTopN`). Office and Mermaid get every name at every time point as clustered bars.
 
 ## Annotations
 

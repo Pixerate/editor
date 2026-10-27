@@ -548,6 +548,9 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	} else if (family === 'sunburst') {
 		issues.push(`Sunburst charts are written as doughnut charts of the ${spec.tree.length ? 'top-level group totals' : 'values'}: DrawingML has no sunburst type (Office 2016 stores it as chartex).`);
 		type = 'donut';
+	} else if (family === 'barrace') {
+		issues.push('Bar chart races are written as clustered bar charts of every name at every time point: DrawingML has no animation.');
+		type = 'bar';
 	} else if (family === 'sankey') {
 		issues.push('Sankey diagrams are written as bar charts of how much passes through each node: DrawingML has no flows.');
 		type = 'bar';

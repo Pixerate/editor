@@ -24,6 +24,11 @@ export interface ChartLayoutOptions {
 	xDomain?: { min: number; max: number } | null;
 	/** Shows the value of this point next to it (a `drag-readout` text mark, kept inside the plot). */
 	readout?: { seriesId: string; index: number } | null;
+	/**
+	 * Bar race: the moment to draw, as a category index that may be fractional (2.5 is halfway
+	 * between the third and fourth time points). Default: the last time point.
+	 */
+	raceFrame?: number | null;
 }
 
 /** A DOM-free text width estimate (average glyph ≈ 0.56 em, bold ≈ 0.6 em). */

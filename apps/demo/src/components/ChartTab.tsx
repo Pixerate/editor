@@ -109,6 +109,22 @@ const SAMPLES: Record<string, Partial<ChartSpec>> = {
       { name: "Support", value: 150 },
     ],
   },
+  Race: {
+    type: "barrace",
+    title: "Most visited cities",
+    subtitle: "International arrivals, millions",
+    raceTopN: 6,
+    categories: ["2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023"],
+    series: [
+      { id: "bkk", name: "Bangkok", values: [21.5, 22.4, 24.2, 22.8, 4.4, 0.4, 11.2, 22.2] },
+      { id: "par", name: "Paris", values: [18.0, 17.4, 19.1, 19.1, 7.3, 8.6, 17.2, 17.4] },
+      { id: "lon", name: "London", values: [19.9, 19.8, 19.2, 19.6, 4.6, 3.8, 16.9, 18.8] },
+      { id: "dxb", name: "Dubai", values: [14.9, 15.8, 15.9, 16.7, 5.5, 7.3, 14.4, 17.2] },
+      { id: "sin", name: "Singapore", values: [13.1, 13.9, 14.7, 14.7, 2.7, 0.3, 6.3, 13.6] },
+      { id: "ist", name: "Istanbul", values: [9.2, 10.7, 13.4, 14.7, 5.9, 8.1, 16.4, 20.2] },
+      { id: "nyc", name: "New York", values: [12.7, 13.1, 13.6, 13.6, 2.4, 2.8, 10.0, 12.6] },
+    ],
+  },
   Pipeline: {
     type: "sankey",
     title: "Sales pipeline",

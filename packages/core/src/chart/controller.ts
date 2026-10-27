@@ -69,7 +69,27 @@ export interface ChartControllerOptions {
 	history?: HistoryManager;
 	/** Called after the spec changes (edit, undo, redo, load). */
 	onChange?: (spec: Readonly<ChartSpec>) => void;
+	/** Time and frames for playing a bar race (default: `performance.now` / `requestAnimationFrame`, else timers). */
+	raceTicker?: ChartRaceTicker;
 }
+
+/** Drives bar race playback: the current time in ms, and a way to run `step` on the next frame (returns a cancel). */
+export interface ChartRaceTicker {
+	now(): number;
+	next(step: () => void): () => void;
+}
+
+const defaultRaceTicker: ChartRaceTicker = {
+	now: () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+	next: (step) => {
+		if (typeof requestAnimationFrame === 'function') {
+			const id = requestAnimationFrame(() => step());
+			return () => cancelAnimationFrame(id);
+		}
+		const id = setTimeout(step, 16);
+		return () => clearTimeout(id);
+	}
+};
 
 /** A snapshot of the controller. The same object is returned until something changes. */
 export interface ChartState {
@@ -87,6 +107,10 @@ export interface ChartState {
 	canRedo: boolean;
 	undoLabel: string;
 	redoLabel: string;
+	/** Bar race: the moment shown, a fractional category index (null: the last time point). View state, not undone. */
+	raceFrame: number | null;
+	/** Bar race: playback is running. */
+	racePlaying: boolean;
 	/** Bumped on every change. */
 	revision: number;
 }
@@ -171,6 +195,9 @@ export class ChartController {
 	private revision = 0;
 	private applying = false;
 	private readonly onChange?: ChartControllerOptions['onChange'];
+	private readonly raceTicker: ChartRaceTicker;
+	private raceFrame: number | null = null;
+	private raceStop: (() => void) | null = null;
 	private readonly listeners = new Set<(state: ChartState) => void>();
 	private unsubscribeHistory?: () => void;
 	private state!: ChartState;
@@ -178,6 +205,7 @@ export class ChartController {
 	constructor(options: ChartControllerOptions = {}) {
 		this.history = options.history ?? new HistoryManager();
 		this.onChange = options.onChange;
+		this.raceTicker = options.raceTicker ?? defaultRaceTicker;
 		const { spec, issues } = normalizeChartSpec(options.spec ?? {});
 		this.spec = spec;
 		this.issues = issues;
@@ -236,6 +264,8 @@ export class ChartController {
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
 			redoLabel: h.redoName,
+			raceFrame: this.raceFrame === null ? null : Math.min(this.raceFrame, Math.max(0, this.spec.categories.length - 1)),
+			racePlaying: this.raceStop !== null,
 			revision: this.revision
 		};
 	}
@@ -1127,6 +1157,59 @@ export class ChartController {
 	// Selection and gestures
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Shows a bar race at a moment: a category index, fractional between time points (`null`:
+	 * the last one). View state like the selection, so not an undo step. Stops playback.
+	 */
+	setRaceFrame(frame: number | null): ChartActionResult {
+		const n = this.spec.categories.length;
+		if (frame !== null && !(Number.isFinite(frame) && frame >= 0 && frame <= Math.max(0, n - 1)))
+			return fail(n ? `The race has time points 0 to ${n - 1}${n > 1 ? ` ("${this.spec.categories[0]}" to "${this.spec.categories[n - 1]}")` : ''}; got ${frame}.` : 'The chart has no time points (categories) yet.');
+		this.stopRace();
+		if (frame === this.raceFrame) return { ok: true };
+		this.raceFrame = frame;
+		this.notify(false);
+		return { ok: true };
+	}
+
+	/**
+	 * Plays the bar race from the moment shown (from the start when it is at the end), moving
+	 * one time point every `msPerStep` (default 1000) until the last. Not an undo step.
+	 */
+	playRace(options: { msPerStep?: number } = {}): ChartActionResult {
+		const last = this.spec.categories.length - 1;
+		if (last < 1) return fail('A race needs at least two time points (categories) to play.');
+		this.stopRace();
+		const per = Math.max(50, options.msPerStep ?? 1000);
+		const from = this.raceFrame === null || this.raceFrame >= last ? 0 : this.raceFrame;
+		const start = this.raceTicker.now();
+		const step = () => {
+			const at = Math.min(last, from + (this.raceTicker.now() - start) / per);
+			this.raceFrame = at;
+			if (at >= last) {
+				this.raceStop = null;
+				this.raceFrame = null;
+			} else this.raceStop = this.raceTicker.next(step);
+			this.notify(false);
+		};
+		this.raceFrame = from;
+		this.raceStop = this.raceTicker.next(step);
+		this.notify(false);
+		return { ok: true };
+	}
+
+	/** Pauses bar race playback where it is. */
+	pauseRace(): void {
+		if (!this.raceStop) return;
+		this.stopRace();
+		this.notify(false);
+	}
+
+	private stopRace() {
+		this.raceStop?.();
+		this.raceStop = null;
+	}
+
 	/** Selects a chart element (view state; not an undo step). */
 	select(selection: ChartSelection | null): void {
 		const next = this.validSelection(selection, this.spec);
@@ -1262,6 +1345,7 @@ export class ChartController {
 
 	/** Stops listening to the history (reconnected by the next `subscribe`). */
 	destroy(): void {
+		this.stopRace();
 		this.unsubscribeHistory?.();
 		this.unsubscribeHistory = undefined;
 		this.listeners.clear();
@@ -1299,6 +1383,7 @@ function updateLabel(patch: ChartSpecPatch): string {
 		parliamentArc: 'Change hemicycle sweep',
 		parliamentMajority: 'Change majority',
 		parliamentLabel: 'Edit seat caption',
+		raceTopN: 'Change bars shown',
 		sunburstLabel: 'Edit centre caption',
 		tree: 'Replace grouped data',
 		links: 'Replace flows',

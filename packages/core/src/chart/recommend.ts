@@ -109,6 +109,7 @@ export function recommendForShape(shape: Omit<ChartTableShape, 'headerRow' | 'by
 		add('area', 'Area', 'Shows change over time with volume.');
 		add('bar', 'Column', 'Compares each period.');
 		if (shape.series > 1) add('area', 'Stacked area', 'Shows how the parts add up over time.', 'stacked');
+		if (shape.series >= 5 && shape.points >= 3) add('barrace', 'Bar race', 'Many series over time: an animated ranking shows who leads when.');
 		return out;
 	}
 	if (shape.series === 1) {
@@ -143,6 +144,7 @@ export function recommendForShape(shape: Omit<ChartTableShape, 'headerRow' | 'by
 		add('bar', 'Stacked column', 'Shows how the series add up.', 'stacked');
 		add('line', 'Line', 'Shows the series in order.');
 		if (shape.points >= 3 && shape.series <= 6) add('radar', 'Radar', 'Compares several measures across the series.');
+		if (shape.nonNegative && shape.series >= 5 && shape.points >= 3) add('barrace', 'Bar race', 'Many series across ordered categories (such as years): an animated ranking shows who leads when.');
 		if (shape.nonNegative && shape.series >= 3 && shape.series <= 7) add('likert', 'Likert', 'Survey answers per question (columns from most negative to most positive): shows agreement against disagreement.');
 	}
 	return out;

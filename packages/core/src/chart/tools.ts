@@ -40,6 +40,7 @@ import {
 	HEIGHT,
 	LINK_INDEX,
 	LINK_PROPS,
+	RACE_TIME,
 	REFERENCE_BAND_PATCH,
 	REFERENCE_BAND_PROPS,
 	REFERENCE_INDEX,
@@ -57,6 +58,7 @@ import {
 import { describeChart, summarizeChart } from './summary.js';
 import { chartSceneToSvg } from './svg.js';
 import { chartSankeyNodeValues } from './links.js';
+import { chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
 import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
 
@@ -148,6 +150,25 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		const depth = chartTreeDepth(spec().tree);
 		return [[...Array.from({ length: depth }, (_, k) => (k === 0 ? 'Group' : k === depth - 1 ? 'Item' : `Level ${k + 1}`)), 'Value'], ...rows.map((r) => [...r.path, ...Array(depth - r.path.length).fill(''), r.value])];
 	};
+	/** A race moment from a label or index, or a sentence saying what is valid. */
+	const raceFrameOf = (time: string | number): number => {
+		const cats = spec().categories;
+		const frame = typeof time === 'number' ? time : cats.indexOf(time);
+		if (!(Number.isFinite(frame) && frame >= 0 && frame <= cats.length - 1))
+			fail(`There is no time point ${JSON.stringify(time)}; expected an index from 0 to ${Math.max(0, cats.length - 1)} or one of ${cats.slice(0, 20).map((c) => JSON.stringify(c)).join(', ')}.`);
+		return frame;
+	};
+	const raceAt = (frame: number | null) => {
+		const s = spec();
+		const at = frame ?? s.categories.length - 1;
+		return {
+			frame: at,
+			time: s.categories[Math.round(at)] ?? null,
+			ranking: chartRaceRanking(s, at)
+				.slice(0, s.raceTopN)
+				.map((e) => ({ rank: e.rank + 1, series: e.seriesId, name: e.name, value: e.value }))
+		};
+	};
 	const linksSummary = () => ({ links: spec().links, nodes: spec().sankeyNodes.map((name, i) => ({ name, value: chartSankeyNodeValues(spec().links, spec().sankeyNodes)[i] })) });
 	const treeSummary = () => ({ tree: spec().tree, groups: spec().tree.map((n) => ({ name: n.name, total: chartTreeTotal(n) })), depth: chartTreeDepth(spec().tree) });
 	const Parser = (): ParserCtor | undefined => options.DOMParser ?? (globalThis as { DOMParser?: ParserCtor }).DOMParser;
@@ -182,14 +203,16 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			properties: {
 				width: WIDTH,
 				height: HEIGHT,
-				format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default): the SVG document as text. png: an image to look at (only when the host can rasterize; costs image tokens).' }
+				format: { type: 'string', enum: ['svg', 'png'], description: 'svg (default): the SVG document as text. png: an image to look at (only when the host can rasterize; costs image tokens).' },
+				time: { ...RACE_TIME, description: `Bar race only: the moment to draw (default: the one shown). ${RACE_TIME.description}` }
 			},
 			additionalProperties: false
 		},
 		annotations: { title: 'Render the chart', ...READ },
-		handler: async ({ width = size.width, height = size.height, format = 'svg' }) => {
+		handler: async ({ width = size.width, height = size.height, format = 'svg', time }) => {
 			const json = controller.toJSON();
-			const scene = layoutChart(json, { width, height, selection: null });
+			const raceFrame = time !== undefined ? raceFrameOf(time) : controller.getState().raceFrame;
+			const scene = layoutChart(json, { width, height, selection: null, raceFrame });
 			const svg = chartSceneToSvg(scene, { ariaLabel: json.title || undefined, description: describeChart(json) });
 			const warnings = scene.warnings;
 			if (format === 'png') {
@@ -266,6 +289,16 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			if (!fit) fail(`The ${line!.type} trendline on "${s.name}" cannot be fitted: it needs more points (and positive values for log, exponential and power fits).`);
 			return { trendline: line, coefficients: fit!.coefficients, r2: fit!.r2, equation: fit!.equation, points: fit!.points };
 		}
+	};
+
+	const raceRanking: AgentTool = {
+		name: 'get_chart_race_ranking',
+		title: 'Read a bar race ranking',
+		description:
+			'Returns who leads a bar race at a moment without changing what is shown: the top raceTopN names with their rank, series id and value (eased between time points). Defaults to the moment shown. Works for any chart, reading categories as time points and series as names.',
+		inputSchema: { type: 'object', properties: { time: RACE_TIME }, additionalProperties: false },
+		annotations: { title: 'Read a bar race ranking', ...READ },
+		handler: ({ time }) => raceAt(time !== undefined ? raceFrameOf(time) : controller.getState().raceFrame)
 	};
 
 	const listPresets: AgentTool = {
@@ -803,6 +836,33 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
+	const setRaceFrame: AgentTool = {
+		name: 'set_chart_race_frame',
+		title: 'Show a bar race moment',
+		description:
+			'Shows the bar race at a time point (or between two), and stops playback. This is view state like the selection: it is not an undo step and is not saved in the chart. Returns the moment and the ranking shown.',
+		inputSchema: { type: 'object', properties: { time: { ...RACE_TIME, type: ['string', 'number', 'null'], description: `${RACE_TIME.description} null shows the last time point.` } }, required: ['time'], additionalProperties: false },
+		annotations: { title: 'Show a bar race moment', ...WRITE_IDEMPOTENT },
+		handler: ({ time }) => {
+			const frame = time === null ? null : raceFrameOf(time);
+			resolve(controller.setRaceFrame(frame));
+			return raceAt(frame);
+		}
+	};
+
+	const playRace: AgentTool = {
+		name: 'play_chart_race',
+		title: 'Play the bar race',
+		description: 'Starts playing the bar race for the user from the moment shown (from the start when it is at the end), one time point every msPerStep ms, and returns at once. set_chart_race_frame stops it. Nothing in the chart changes.',
+		inputSchema: { type: 'object', properties: { msPerStep: { type: 'number', minimum: 50, maximum: 10000, description: 'Milliseconds per time point (default 1000).' } }, additionalProperties: false },
+		annotations: { title: 'Play the bar race', ...WRITE },
+		handler: ({ msPerStep }) => {
+			resolve(controller.playRace({ msPerStep }));
+			const n = spec().categories.length;
+			return { playing: true, from: controller.getState().raceFrame ?? 0, durationMs: Math.round((n - 1 - (controller.getState().raceFrame ?? 0)) * (msPerStep ?? 1000)) };
+		}
+	};
+
 	const applyPreset: AgentTool = {
 		name: 'apply_chart_preset',
 		title: 'Apply a chart style',
@@ -977,7 +1037,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
-	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, listPresets, exportMermaid, exportOoxml];
+	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, raceRanking, listPresets, exportMermaid, exportOoxml];
 	const writes = [
 		updateChart,
 		setData,
@@ -1009,6 +1069,8 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		addLink,
 		updateLink,
 		removeLink,
+		setRaceFrame,
+		playRace,
 		applyPreset,
 		transpose,
 		select,
@@ -1022,7 +1084,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		id: options.id ?? 'chart',
 		namespace: options.namespace,
 		title: 'Chart editor',
-		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data, flows and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
+		description: 'One chart: its spec, data and values, series and categories, trendlines, reference lines and bands, callouts, highlight, grouped data, flows, bar race playback and presets, CSV, Mermaid and OOXML import, rendering and colour checks.',
 		skill: 'pixerate-chart',
 		tools: () => {
 			if (readOnlyReason()) return reads;

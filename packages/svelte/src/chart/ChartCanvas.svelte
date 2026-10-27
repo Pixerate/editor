@@ -87,7 +87,8 @@
       valueDomain: frozen?.valueDomain,
       valueDomain2: frozen?.valueDomain2,
       xDomain: frozen?.xDomain,
-      readout: frozen?.readout
+      readout: frozen?.readout,
+      raceFrame: view.current.raceFrame
     })
   );
   $effect(() => {

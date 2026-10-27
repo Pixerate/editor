@@ -94,6 +94,10 @@ export function planChartToolPlayback(tool: string, args: Record<string, any>): 
 			return click(control('series.callout'));
 		case 'highlight_chart':
 			return click(control('highlight'));
+		case 'set_chart_race_frame':
+			return click(control('raceFrame'));
+		case 'play_chart_race':
+			return click({ kind: 'action', id: 'race-play' });
 		case 'render_chart':
 			return [{ type: 'target', ref: { kind: 'action', id: 'download-png' } }];
 		case 'undo_chart':
