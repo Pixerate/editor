@@ -186,7 +186,7 @@
       role="tooltip"
       data-chart-tooltip=""
       class="pointer-events-none absolute z-10 min-w-32 rounded-md border px-2.5 py-1.5 text-xs shadow-md"
-      style="left: {tipAt.left}px; top: {tipAt.top}px; transform: translate({tipAt.flip ? 'calc(-100% - 12px)' : '12px'}, calc(-100% - 8px)); background: var(--popover, #ffffff); color: var(--popover-foreground, #0f172a); border-color: var(--border, #e2e8f0); font-family: {scene.theme.fontFamily};"
+      style="left: {tipAt.left}px; top: {tipAt.top}px; transform: translate({tipAt.flip ? 'calc(-100% - 12px)' : '12px'}, calc(-100% - 8px)); background: var(--popover, var(--background, #ffffff)); color: var(--popover-foreground, var(--foreground, #0f172a)); border-color: var(--border, #e2e8f0); font-family: {scene.theme.fontFamily};"
     >
       {#if tooltipContent}
         {@render tooltipContent(tip)}

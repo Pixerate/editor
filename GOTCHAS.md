@@ -464,6 +464,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The demo (and the other components' inline styles) define `--foreground`, `--border`, `--primary`, … as full colours (`rgb(...)`) plus `--x-rgb` channels for Tailwind. Only shadcn's own CSS stores bare HSL channels, so `hsl(var(--x))` is invalid everywhere else. SVG presentation attributes also don't reliably resolve `var()`.
 - **Solution / Workaround**: `CSS_VARIABLE_CHART_THEME` uses `var(--foreground, #0f172a)`-style values (as `SpreadsheetEditor` does), and the canvases put colours in `style`, not `fill=` / `stroke=` attributes. The demo defines `--muted-foreground` for it.
 
+### [react|svelte/chart] Tooltip Colours Need Chained Fallbacks, Not a Fixed One
+
+- **Issue / Symptom**: In the dark demo, the chart tooltip drew its title and values in near-black on a near-black background. The swatches and series names were visible.
+- **Root Cause**: The tooltip used `var(--popover, #ffffff)` and `var(--popover-foreground, #0f172a)`. The demo defines `--popover` (dark) but not `--popover-foreground`, so the text fell back to the light-theme colour. A fixed fallback is only right when the host defines neither token.
+- **Solution / Workaround**: Chain to the base tokens: `var(--popover, var(--background, #ffffff))` and `var(--popover-foreground, var(--foreground, #0f172a))`. Pair any token whose partner may be missing with a fallback through the base token of the same theme.
+
 ### [svelte] `bind:clientWidth` Throws in jsdom Tests
 
 - **Issue / Symptom**: Every Svelte test mounting `ChartCanvas` failed with `ReferenceError: ResizeObserver is not defined`.
