@@ -1,0 +1,41 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "indent-nested-bullet",
+      "description": "Indenting a list item nests it under the preceding item",
+      "command": "edit.indent",
+      "input": "- one\n- two‸",
+      "expected": "- one\n  - two‸"
+    },
+    {
+      "id": "outdent-nested-bullet",
+      "description": "Outdenting a nested list item lifts it up one level",
+      "command": "edit.outdent",
+      "input": "- one\n  - two‸",
+      "expected": "- one\n- two‸"
+    },
+    {
+      "id": "indent-first-item-noop",
+      "description": "Attempting to indent the first item in a list is a no-op",
+      "command": "edit.indent",
+      "input": "- one‸",
+      "expected": "- one‸",
+      "expectedNoop": true
+    },
+    {
+      "id": "indent-nested-numbered",
+      "description": "Indenting a numbered item nests it as a sub-list",
+      "command": "edit.indent",
+      "input": "1. one\n2. two‸",
+      "expected": "1. one\n   1. two‸"
+    },
+    {
+      "id": "outdent-nested-numbered",
+      "description": "Outdenting a nested numbered item brings it back to the outer level",
+      "command": "edit.outdent",
+      "input": "1. one\n   1. two‸",
+      "expected": "1. one\n2. two‸"
+    }
+  ]
+}

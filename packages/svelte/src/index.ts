@@ -15,6 +15,7 @@ export * from "./createNavigationGuard.svelte.js";
 export * from "./history/index.js";
 export * from "./fileImport.svelte.js";
 export * from "./docxExport.svelte.js";
+export { formatCommandsFor, type FormatManifest, type FormatManifestCommand, type CodeLanguageOption, type FormatCommandOptions } from "@pixerate/editor";
 export * from "./agentTools.svelte.js";
 export * from "./playback/index.js";
 export * from "./toolBridge.svelte.js";

@@ -1,0 +1,50 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "code-block-from-paragraph",
+      "description": "Wraps paragraph into a fenced code block without language",
+      "command": "format.codeBlock",
+      "input": "const ‸x = 1;",
+      "expected": "```\nconst ‸x = 1;\n```"
+    },
+    {
+      "id": "code-block-with-language",
+      "description": "Creates fenced code block with specific language identifier",
+      "command": "format.codeBlock",
+      "params": { "language": "javascript" },
+      "input": "const ‸x = 1;",
+      "expected": "```javascript\nconst ‸x = 1;\n```"
+    },
+    {
+      "id": "code-block-change-language",
+      "description": "Changes language of an existing fenced code block",
+      "command": "format.codeBlock",
+      "params": { "language": "python" },
+      "input": "```javascript\nconst ‸x = 1;\n```",
+      "expected": "```python\nconst ‸x = 1;\n```"
+    },
+    {
+      "id": "code-block-clear-language",
+      "description": "Clears language identifier from an existing fenced code block",
+      "command": "format.codeBlock",
+      "params": { "language": null },
+      "input": "```javascript\nconst ‸x = 1;\n```",
+      "expected": "```\nconst ‸x = 1;\n```"
+    },
+    {
+      "id": "code-block-toggle-off",
+      "description": "Unwraps fenced code block back to normal paragraphs",
+      "command": "format.codeBlock",
+      "input": "```\nconst ‸x = 1;\n```",
+      "expected": "const ‸x = 1;"
+    },
+    {
+      "id": "code-block-wrap-selection",
+      "description": "Wraps multi-line selection into a code block",
+      "command": "format.codeBlock",
+      "input": "⟦const x = 1;\nconst y = 2;⟧",
+      "expected": "```\n⟦const x = 1;\nconst y = 2;⟧\n```"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pixerate.dev/schemas/manifest.schema.json",
+  "title": "Format Command Manifest",
+  "description": "Describes formatting commands and supported code languages shared across editor implementations.",
+  "type": "object",
+  "required": ["commands", "codeLanguages"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "group", "surfaces"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^format\\.[a-zA-Z0-9]+$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "shortcut": {
+            "type": "string"
+          },
+          "shortcuts": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "surfaces": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["bubble", "menu", "palette", "keyboardBar"]
+            },
+            "minItems": 1
+          },
+          "enabledWhen": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["notInCode", "inTable", "hasSelection"]
+            }
+          },
+          "params": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "codeLanguages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "shortLabel": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

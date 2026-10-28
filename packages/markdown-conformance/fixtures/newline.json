@@ -1,0 +1,80 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "enter-continues-bullet",
+      "description": "Pressing Enter at the end of a bullet item continues the list",
+      "command": "edit.newline",
+      "input": "- one‸",
+      "expected": "- one\n- ‸"
+    },
+    {
+      "id": "enter-continues-numbered",
+      "description": "Pressing Enter at the end of a numbered item continues with next number",
+      "command": "edit.newline",
+      "input": "1. one‸",
+      "expected": "1. one\n2. ‸"
+    },
+    {
+      "id": "enter-continues-task",
+      "description": "Pressing Enter at the end of a task item creates a new task item",
+      "command": "edit.newline",
+      "input": "- [ ] one‸",
+      "expected": "- [ ] one\n- [ ] ‸",
+      "variants": {
+        "editor": "- [ ] one\n\n- [ ] ‸"
+      }
+    },
+    {
+      "id": "enter-empty-bullet-exits",
+      "description": "Pressing Enter on an empty bullet item exits the list",
+      "command": "edit.newline",
+      "input": "- one\n- ‸",
+      "expected": "- one\n\n‸"
+    },
+    {
+      "id": "enter-empty-numbered-exits",
+      "description": "Pressing Enter on an empty numbered item exits the list",
+      "command": "edit.newline",
+      "input": "1. one\n2. ‸",
+      "expected": "1. one\n\n‸"
+    },
+    {
+      "id": "enter-empty-task-exits",
+      "description": "Pressing Enter on an empty task item exits the list",
+      "command": "edit.newline",
+      "input": "- [ ] one\n- [ ] ‸",
+      "expected": "- [ ] one\n\n‸",
+      "variants": {
+        "editor": "- [ ] one\n\n‸"
+      }
+    },
+    {
+      "id": "enter-splits-paragraph",
+      "description": "Pressing Enter in the middle of a paragraph splits it into two",
+      "command": "edit.newline",
+      "input": "Hello ‸world",
+      "expected": "Hello\n\n‸world",
+      "variants": {
+        "editor": "Hello \n\n‸world"
+      }
+    },
+    {
+      "id": "enter-inside-quote",
+      "description": "Pressing Enter inside a blockquote continues the blockquote",
+      "command": "edit.newline",
+      "input": "> one‸",
+      "expected": "> one\n> ‸",
+      "variants": {
+        "editor": "> one\n>\n> ‸"
+      }
+    },
+    {
+      "id": "enter-at-end-of-heading",
+      "description": "Pressing Enter at the end of a heading starts a new paragraph",
+      "command": "edit.newline",
+      "input": "## Title‸",
+      "expected": "## Title\n\n‸"
+    }
+  ]
+}

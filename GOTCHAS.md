@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [markdown-conformance] CommonMark Delimiter Rules Shift Delimiters Across Unicode Selection Markers
+
+- **Issue / Symptom**: In markdown serialization with selection markers (e.g. `⟦`, `⟧`), `tiptap-markdown`'s `trimInline` serializer shifted delimiters across selection markers (e.g. `**⟦wor**⟧ld` instead of `⟦**wor**⟧ld`).
+- **Root Cause**: `\u27e7` (`⟧`) is classified as Unicode punctuation. CommonMark's `scanDelims.can_close` returns `false` if a closing delimiter (`**`) is preceded by punctuation (`⟧`) and followed by an alphanumeric character (`l`). `tiptap-markdown` consequently treats it as non-closing and pulls delimiters before the closing bracket.
+- **Solution / Workaround**: When serializing selection markers through ProseMirror / TipTap transactions, insert temporary alphanumeric tokens (`ZCONFOPENZ`, `ZCONFCLOSEZ`, `ZCONFCARETZ`) with appropriate mark sets, run the serializer, and replace the alphanumeric tokens with `⟦`, `⟧`, and `‸`.
+
+### [monorepo/build] Bundling Data-Only Packages with JSON Exports in ESM
+
+- **Issue / Symptom**: Importing a data-only package's `.json` export (e.g. `@pixerate/markdown-conformance/manifest.json`) in a bundled library (`@pixerate/editor`) threw `ERR_IMPORT_ATTRIBUTE_MISSING: Module ... needs an import attribute of "type: json"` when consumed via Node ESM.
+- **Root Cause**: `tsup` treats workspace packages in `dependencies` as external by default and strips the TS import attribute `with { type: 'json' }` from output chunks, leaving bare `import manifestData from ".../manifest.json"`, which Node ESM rejects.
+- **Solution / Workaround**: Add the data-only package to `noExternal` in `tsup.config.ts` (e.g. `noExternal: ["tiptap-markdown", "@pixerate/markdown-conformance"]`). `esbuild` then inlines the JSON directly into the built JavaScript chunks, avoiding runtime JSON module import attribute restrictions for consumers.
+
 ### [core|react|svelte/effects] A Vector Effect's Authoring Preview Showed the Previous Effect's Frame
 
 - **Issue / Symptom**: Opening a `vector` effect (the fake provider's Badge) in `EffectAuthoringEditor` left the previous effect's last frame on the canvas and threw an uncaught `"fake.badge" is a vector effect; use applyVectorEffect.`; entrance effects and transitions opened on an empty or unchanged frame.

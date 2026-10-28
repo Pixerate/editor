@@ -1,0 +1,54 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "backspace-at-start-of-heading",
+      "description": "Backspace at the start of a heading turns it into a paragraph",
+      "command": "edit.backspace",
+      "input": "# ‸title",
+      "expected": "‸title"
+    },
+    {
+      "id": "backspace-at-start-of-quote",
+      "description": "Backspace at the start of a blockquote lifts it into a paragraph",
+      "command": "edit.backspace",
+      "input": "> ‸quote",
+      "expected": "‸quote"
+    },
+    {
+      "id": "backspace-empty-bullet-item",
+      "description": "Backspace on an empty bullet list item removes the list item",
+      "command": "edit.backspace",
+      "input": "- ‸",
+      "expected": "‸"
+    },
+    {
+      "id": "backspace-empty-numbered-item",
+      "description": "Backspace on an empty numbered list item removes the list item",
+      "command": "edit.backspace",
+      "input": "1. ‸",
+      "expected": "‸"
+    },
+    {
+      "id": "backspace-empty-task-item",
+      "description": "Backspace on an empty task list item removes the list item",
+      "command": "edit.backspace",
+      "input": "- [ ] ‸",
+      "expected": "‸"
+    },
+    {
+      "id": "backspace-joins-paragraphs",
+      "description": "Backspace at start of second paragraph joins it with preceding paragraph",
+      "command": "edit.backspace",
+      "input": "Hello\n\n‸world",
+      "expected": "Hello‸world"
+    },
+    {
+      "id": "backspace-deletes-selection",
+      "description": "Backspace with range selection deletes selected content",
+      "command": "edit.backspace",
+      "input": "Hello ⟦wor⟧ld",
+      "expected": "Hello ‸ld"
+    }
+  ]
+}

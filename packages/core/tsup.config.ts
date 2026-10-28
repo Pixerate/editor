@@ -50,5 +50,5 @@ export default defineConfig({
   esbuildOptions(options, { format }) {
     if (format === "cjs") options.define = { ...options.define, "import.meta.url": "undefined" };
   },
-  noExternal: ["tiptap-markdown"],
+  noExternal: ["tiptap-markdown", "@pixerate/markdown-conformance"],
 });

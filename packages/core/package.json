@@ -363,6 +363,7 @@
     "eval:tools": "vitest run --config vitest.eval.config.ts --disableConsoleIntercept"
   },
   "dependencies": {
+    "@pixerate/markdown-conformance": "workspace:*",
     "@tiptap/extension-character-count": "^2.27.3",
     "@tiptap/extension-color": "^2.27.3",
     "@tiptap/extension-highlight": "^2.27.3",

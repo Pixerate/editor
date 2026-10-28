@@ -1,5 +1,6 @@
 export * from "./hooks/usePromptEditor";
 export * from "./hooks/useEditor";
+export { formatCommandsFor, type FormatManifest, type FormatManifestCommand, type CodeLanguageOption, type FormatCommandOptions } from "@pixerate/editor";
 export * from "./hooks/useNavigationGuard";
 export * from "./hooks/useDismissGuard";
 export * from "./hooks/useHistory";
