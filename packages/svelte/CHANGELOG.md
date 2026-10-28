@@ -1,5 +1,14 @@
 # @pixerate/editor-svelte
 
+## 0.128.2
+
+### Patch Changes
+
+- 767f494: Add shared `@pixerate/markdown-conformance` package containing Markdown editing fixtures and format-command manifest.
+  Expose `createFormatCommands` and `formatCommandsFor` across `@pixerate/editor`, `@pixerate/editor-react`, and `@pixerate/editor-svelte` with full cross-framework parity and schema validation.
+- Updated dependencies [767f494]
+  - @pixerate/editor@0.174.0
+
 ## 0.128.1
 
 ### Patch Changes
