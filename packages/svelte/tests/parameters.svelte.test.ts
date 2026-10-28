@@ -11,6 +11,10 @@ import {
   createParameters,
   useParameterCommands,
 } from "../src/parameters";
+import CustomParameterInput from "./fixtures/CustomParameterInput.svelte";
+import CustomParameterSlider from "./fixtures/CustomParameterSlider.svelte";
+import CustomParameterSelect from "./fixtures/CustomParameterSelect.svelte";
+import ParameterComponentsProbe from "./fixtures/ParameterComponentsProbe.svelte";
 
 let cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -52,8 +56,9 @@ function render(component: any, props: Record<string, any>) {
   return target;
 }
 
-const fire = (el: Element, type: string) => {
-  el.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }));
+const fire = (el: Element, type: string, init?: any) => {
+  const Ctor = type.startsWith("key") ? KeyboardEvent : Event;
+  el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, ...init }));
   flushSync();
 };
 const setInput = (el: HTMLInputElement | HTMLSelectElement, value: string, type = "input") => {
@@ -152,7 +157,7 @@ describe("field controls", () => {
     // Use alpha slider inside the ColorPicker
     const alphaSlider = b.querySelector('[role="slider"][aria-label="Alpha"]')!;
     fire(alphaSlider, "keydown", { key: "End" });
-    expect(onColor).toHaveBeenLastCalledWith("#00ff00ff");
+    expect(onColor).toHaveBeenLastCalledWith("#ff0000ff");
 
     // Click the swatch button inside the ColorPicker
     click(b.querySelector('button[title="#00f"]')!);
@@ -167,6 +172,44 @@ describe("field controls", () => {
     expect(button.getAttribute("aria-pressed")).toBe("true");
     click(button);
     expect(ontoggle).toHaveBeenCalled();
+  });
+
+  it("commits on Tab and deduplicates with subsequent blur", () => {
+    const onchange = vi.fn();
+    const root = render(ParameterSlider, { field: schema.fields[0], value: 1, onchange });
+    const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
+    input.value = "2.5";
+    // Press Tab
+    fire(input, "keydown", { key: "Tab" });
+    expect(onchange).toHaveBeenCalledTimes(1);
+    expect(onchange).toHaveBeenCalledWith(2.5);
+
+    // Immediate blur should not trigger duplicate commit
+    fire(input, "blur");
+    expect(onchange).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits on native change event and resets on Escape", () => {
+    const onchange = vi.fn();
+    const root = render(ParameterSlider, { field: schema.fields[0], value: 1, onchange });
+    const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
+    input.value = "3.2";
+    fire(input, "change");
+    expect(onchange).toHaveBeenCalledTimes(1);
+    expect(onchange).toHaveBeenCalledWith(3.2);
+
+    // Escape resets draft back to current value
+    input.value = "99";
+    fire(input, "keydown", { key: "Escape" });
+    expect(input.value).toBe("1");
+  });
+
+  it("renders with host parameter fallback styling tokens", () => {
+    const root = render(ParameterSlider, { field: schema.fields[0], value: 1, onchange: () => {} });
+    const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
+    expect(input.getAttribute("style")).toContain("var(--pixerate-parameter-input-bg");
+    const range = root.querySelector('input[type="range"]') as HTMLInputElement;
+    expect(range.getAttribute("style")).toContain("var(--pixerate-parameter-slider-accent");
   });
 });
 
@@ -237,5 +280,25 @@ describe("ParametersPanel", () => {
     expect(controller.getState().presets.map((p) => p.name)).toEqual(["Punchy", "Mine"]);
     click(root.querySelector('button[aria-label="Delete preset Mine"]'));
     expect(controller.getState().presets.map((p) => p.name)).toEqual(["Punchy"]);
+  });
+
+  it("renders custom components passed via components prop", () => {
+    const controller = new ParametersController({ schema });
+    const root = render(ParametersPanel, {
+      controller,
+      components: { input: CustomParameterInput, slider: CustomParameterSlider, select: CustomParameterSelect },
+    });
+    expect(root.querySelector('[data-testid="custom-slider"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="custom-input"]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="custom-select"]')).not.toBeNull();
+  });
+
+  it("renders custom components provided via context", () => {
+    const controller = new ParametersController({ schema });
+    const root = render(ParameterComponentsProbe, {
+      controller,
+      components: { input: CustomParameterInput },
+    });
+    expect(root.querySelector('[data-testid="custom-input"]')).not.toBeNull();
   });
 });

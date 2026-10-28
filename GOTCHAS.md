@@ -21,6 +21,13 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [react|svelte/parameters] Parameter Inputs Tab Commit Lifecycle and Theme Token Fallbacks
+
+- **Issue / Symptom**: In effect and filter parameter panels, tabbing out of an active number or text input moved focus away without committing the draft value until a full blur cycle occurred, causing race conditions when users pressed Tab to move quickly between parameter fields. In addition, parameter inputs, selects, and range sliders rendered with unstyled browser defaults instead of inheriting the host application's dark/light design system tokens.
+- **Root Cause**: Inputs only listened for `blur` and `Enter`. When a user pressed `Tab`, focus shifted to the next element before the commit event could update the controller, and an immediate subsequent `blur` event would fire, risking double-commit or stale value re-reads. Additionally, parameter form controls did not apply CSS fallback variables that chained to common UI theme tokens (`--background`, `--foreground`, `--primary`, `--input`, `--border`).
+- **Solution / Workaround**: `ParameterCommitInput` now commits explicitly on `keydown` for `Tab` (and on native `change`) and caches `lastCommitted` to deduplicate against the immediate subsequent `blur`. All parameter inputs, selects, buttons, and range sliders apply default inline styles with `--pixerate-parameter-*` CSS variables that fall back to standard theme tokens (`--input`, `--border`, `--background`, `--foreground`, `--primary`, `currentColor`), and support custom host controls through `ParameterComponents` prop and context (`ParameterComponentsProvider` / `setParameterComponents`).
+
+
 ### [markdown-conformance] CommonMark Delimiter Rules Shift Delimiters Across Unicode Selection Markers
 
 - **Issue / Symptom**: In markdown serialization with selection markers (e.g. `⟦`, `⟧`), `tiptap-markdown`'s `trimInline` serializer shifted delimiters across selection markers (e.g. `**⟦wor**⟧ld` instead of `⟦**wor**⟧ld`).

@@ -20,7 +20,14 @@
   } from '@pixerate/editor/parameters';
   import KeyframeDiamond from './KeyframeDiamond.svelte';
   import ParameterFieldControl from './ParameterFieldControl.svelte';
-  import { parameterButtonClass, parameterInputClass } from './styles.js';
+  import {
+    parameterButtonClass,
+    parameterButtonStyle,
+    parameterInputClass,
+    parameterInputStyle,
+    parameterSelectStyle
+  } from './styles.js';
+  import { resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     controller: ParametersController;
@@ -36,6 +43,8 @@
     showFieldReset?: boolean;
     /** Turns a picked file into a URL for image fields. */
     resolveFile?: (file: File) => string | Promise<string>;
+    /** Custom host components for inputs, sliders, and selects. */
+    components?: ParameterComponents;
     /** Shown when the schema has no fields. */
     emptyMessage?: string;
     /** Prefix for the panel's element ids. */
@@ -68,8 +77,12 @@
     children,
     playback,
     playbackId = 'parameters',
-    onplaybackreveal
+    onplaybackreveal,
+    components
   }: Props = $props();
+
+  const resolvedComponents = $derived(resolveParameterComponents(components));
+  const CustomPresetSelect = $derived(resolvedComponents.select);
 
   // Agent playback: the cursor visits the controls a call changes.
   let root: HTMLDivElement | undefined = $state();
@@ -126,6 +139,7 @@
         <button
           type="button"
           class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground"
+          style={parameterButtonStyle}
           title="Reset to {String(view.defaults[field.id])}"
           aria-label="Reset {label}"
           onclick={() => controller.reset([field.id])}>↺</button
@@ -140,6 +154,7 @@
       value={view.values[field.id]}
       id={inputId}
       {resolveFile}
+      {components}
       onchange={(v) => controller.setValue(field.id, v)}
       ongesturestart={() => controller.beginGesture(field.id)}
       ongestureend={() => controller.endGesture()}
@@ -200,6 +215,7 @@
           <button
             type="button"
             class={parameterButtonClass}
+            style={parameterButtonStyle}
             disabled={!view.canUndo}
             title={view.canUndo ? `Undo ${view.undoLabel}` : 'Nothing to undo'}
             onclick={() => controller.undo()}>Undo</button
@@ -207,12 +223,13 @@
           <button
             type="button"
             class={parameterButtonClass}
+            style={parameterButtonStyle}
             disabled={!view.canRedo}
             title={view.canRedo ? `Redo ${view.redoLabel}` : 'Nothing to redo'}
             onclick={() => controller.redo()}>Redo</button
           >
-          <button type="button" class={parameterButtonClass} disabled={!view.modified} onclick={() => controller.reset()}>Reset</button>
-          <button type="button" class={parameterButtonClass} onclick={() => controller.randomize()}>Randomize</button>
+          <button type="button" class={parameterButtonClass} style={parameterButtonStyle} disabled={!view.modified} onclick={() => controller.reset()}>Reset</button>
+          <button type="button" class={parameterButtonClass} style={parameterButtonStyle} onclick={() => controller.randomize()}>Randomize</button>
         </div>
       {/if}
     </div>
@@ -221,22 +238,42 @@
   {#if showPresets}
     <div class="space-y-1.5" data-parameter-presets="">
       <div class="flex items-center gap-1.5">
-        <select
-          aria-label="Preset"
-          class={parameterInputClass}
-          value={view.activePreset ?? ''}
-          onchange={(e) => e.currentTarget.value && controller.applyPreset(e.currentTarget.value)}
-        >
-          <option value="">{view.presets.length ? 'Presets…' : 'No presets'}</option>
-          {#each view.presets as p (p.name)}
-            <option value={p.name} title={p.description}>{p.name}</option>
-          {/each}
-        </select>
-        <button type="button" class={parameterButtonClass} aria-expanded={saving} onclick={() => (saving = !saving)}>Save…</button>
+        {#if CustomPresetSelect}
+          <CustomPresetSelect
+            aria-label="Preset"
+            label="Preset"
+            value={view.activePreset ?? ''}
+            options={[
+              { value: '', label: view.presets.length ? 'Presets…' : 'No presets' },
+              ...view.presets.map((p) => ({ value: p.name, label: p.name, description: p.description }))
+            ]}
+            class={parameterInputClass}
+            style={parameterSelectStyle}
+            onchange={(val) => {
+              const str = String(val);
+              if (str) controller.applyPreset(str);
+            }}
+          />
+        {:else}
+          <select
+            aria-label="Preset"
+            class={parameterInputClass}
+            style={parameterSelectStyle}
+            value={view.activePreset ?? ''}
+            onchange={(e) => e.currentTarget.value && controller.applyPreset(e.currentTarget.value)}
+          >
+            <option value="" style={parameterSelectStyle}>{view.presets.length ? 'Presets…' : 'No presets'}</option>
+            {#each view.presets as p (p.name)}
+              <option value={p.name} title={p.description} style={parameterSelectStyle}>{p.name}</option>
+            {/each}
+          </select>
+        {/if}
+        <button type="button" class={parameterButtonClass} style={parameterButtonStyle} aria-expanded={saving} onclick={() => (saving = !saving)}>Save…</button>
         {#if activePreset && !activePreset.builtIn}
           <button
             type="button"
             class={parameterButtonClass}
+            style={parameterButtonStyle}
             aria-label="Delete preset {activePreset.name}"
             onclick={() => controller.deletePreset(activePreset.name)}>Delete</button
           >
@@ -245,8 +282,8 @@
       {#if saving}
         <form class="flex items-center gap-1.5" onsubmit={savePreset}>
           <!-- svelte-ignore a11y_autofocus -->
-          <input autofocus aria-label="Preset name" placeholder="Preset name" class={parameterInputClass} bind:value={presetName} />
-          <button type="submit" class={parameterButtonClass}>Save</button>
+          <input autofocus aria-label="Preset name" placeholder="Preset name" class={parameterInputClass} style={parameterInputStyle} bind:value={presetName} />
+          <button type="submit" class={parameterButtonClass} style={parameterButtonStyle}>Save</button>
         </form>
       {/if}
       {#if presetMessage}

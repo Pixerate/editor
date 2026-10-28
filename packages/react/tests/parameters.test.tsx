@@ -13,7 +13,12 @@ import {
   useParameterCommands,
   useParameters,
   useParametersController,
+  ParameterCommitInput,
+  ParameterComponentsProvider,
+  parameterInputStyle,
+  parameterButtonStyle,
   type UseParametersResult,
+  type ParameterComponents,
 } from "../src/parameters";
 
 let container: HTMLDivElement;
@@ -208,6 +213,50 @@ describe("field controls", () => {
     await click(button);
     expect(onToggle).toHaveBeenCalled();
   });
+
+  it("commits on Tab and deduplicates with subsequent blur", async () => {
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={onChange} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    input.value = "2.5";
+    // Press Tab
+    await fire(input, "keydown", { key: "Tab", bubbles: true });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(2.5);
+
+    // Immediate blur should not trigger duplicate commit
+    await fire(input, "focusout", { bubbles: true });
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits on native change event and resets on Escape", async () => {
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={onChange} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    input.value = "3.2";
+    await fire(input, "change");
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(3.2);
+
+    // Escape resets draft back to current value
+    input.value = "99";
+    await fire(input, "keydown", { key: "Escape", bubbles: true });
+    expect(input.value).toBe("1");
+  });
+
+  it("renders with host parameter fallback styling tokens", async () => {
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={() => {}} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    expect(input.style.backgroundColor).toContain("var(--pixerate-parameter-input-bg");
+    const range = q<HTMLInputElement>('input[type="range"]');
+    expect(range.style.accentColor).toContain("var(--pixerate-parameter-accent");
+  });
 });
 
 describe("ParametersPanel", () => {
@@ -279,5 +328,50 @@ describe("ParametersPanel", () => {
     // "Mine" equals the current values, so it is active and can be deleted.
     await click(q('button[aria-label="Delete preset Mine"]'));
     expect(controller.getState().presets.map((p) => p.name)).toEqual(["Punchy"]);
+  });
+
+  it("renders custom components passed via components prop", async () => {
+    const controller = new ParametersController({ schema });
+    const CustomInput = ({ value, onCommit }: any) => (
+      <input data-testid="custom-input" value={value} onChange={(e) => onCommit(e.target.value)} />
+    );
+    const CustomSlider = ({ value, onChange }: any) => (
+      <input type="range" data-testid="custom-slider" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    );
+    const CustomSelect = ({ value, options, onChange }: any) => (
+      <select data-testid="custom-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o: any) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    );
+
+    await act(async () =>
+      root.render(
+        <ParametersPanel
+          controller={controller}
+          components={{ input: CustomInput, slider: CustomSlider, select: CustomSelect }}
+        />,
+      ),
+    );
+    expect(q('[data-testid="custom-slider"]')).not.toBeNull();
+    expect(q('[data-testid="custom-input"]')).not.toBeNull();
+    expect(q('[data-testid="custom-select"]')).not.toBeNull();
+  });
+
+  it("renders custom components provided via context", async () => {
+    const controller = new ParametersController({ schema });
+    const CustomInput = ({ value, onCommit }: any) => (
+      <input data-testid="context-input" value={value} onChange={(e) => onCommit(e.target.value)} />
+    );
+
+    await act(async () =>
+      root.render(
+        <ParameterComponentsProvider components={{ input: CustomInput }}>
+          <ParametersPanel controller={controller} />
+        </ParameterComponentsProvider>,
+      ),
+    );
+    expect(q('[data-testid="context-input"]')).not.toBeNull();
   });
 });

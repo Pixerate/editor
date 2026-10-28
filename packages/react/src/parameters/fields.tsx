@@ -23,6 +23,37 @@ import {
   type VectorParameterField,
 } from '@pixerate/editor/parameters';
 import { ColorPicker } from '../color/index.js';
+import {
+  useParameterComponents,
+  resolveParameterComponents,
+  type ParameterComponents,
+} from './controls.js';
+
+/** Theme fallback style for parameter text / number inputs. */
+export const parameterInputStyle: React.CSSProperties = {
+  backgroundColor: 'var(--pixerate-parameter-input-bg, var(--input-bg, var(--background, transparent)))',
+  color: 'var(--pixerate-parameter-input-fg, var(--input-fg, var(--foreground, currentColor)))',
+  borderColor: 'var(--pixerate-parameter-border, var(--border, var(--input, currentColor)))',
+};
+
+/** Theme fallback style for parameter buttons (reset, preset actions, toolbar). */
+export const parameterButtonStyle: React.CSSProperties = {
+  backgroundColor: 'var(--pixerate-parameter-btn-bg, var(--button-bg, var(--background, transparent)))',
+  color: 'var(--pixerate-parameter-btn-fg, var(--button-fg, var(--foreground, currentColor)))',
+  borderColor: 'var(--pixerate-parameter-border, var(--border, var(--input, currentColor)))',
+};
+
+/** Theme fallback style for parameter select dropdowns. */
+export const parameterSelectStyle: React.CSSProperties = {
+  backgroundColor: 'var(--pixerate-parameter-select-bg, var(--input-bg, var(--background, transparent)))',
+  color: 'var(--pixerate-parameter-select-fg, var(--input-fg, var(--foreground, currentColor)))',
+  borderColor: 'var(--pixerate-parameter-border, var(--border, var(--input, currentColor)))',
+};
+
+/** Theme fallback style for range sliders. */
+export const parameterRangeStyle: React.CSSProperties = {
+  accentColor: 'var(--pixerate-parameter-accent, var(--primary, currentColor))',
+};
 
 /** Props every field control takes. Controls are controller-free: wire them to anything. */
 export interface ParameterControlProps<F extends ParameterField, V extends ParameterValue> {
@@ -35,6 +66,8 @@ export interface ParameterControlProps<F extends ParameterField, V extends Param
   disabled?: boolean;
   /** DOM id of the main input (for a `<label htmlFor>`). */
   id?: string;
+  /** Custom host controls (input, slider, select). */
+  components?: ParameterComponents;
 }
 
 export const parameterInputClass =
@@ -50,67 +83,137 @@ type CommitInputProps = {
   multiline?: boolean;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement> & React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'>;
 
-/** A text box that commits on blur or Enter (Mod+Enter when multiline) and resets on Escape. */
-export function ParameterCommitInput({ value, onCommit, multiline, className, onKeyDown, ...rest }: CommitInputProps) {
+/** A text box that commits on blur, Tab, or Enter (Mod+Enter when multiline) and resets on Escape. Deduplicates against blur. */
+export function ParameterCommitInput({ value, onCommit, multiline, className, onKeyDown, style, ...rest }: CommitInputProps) {
+  const lastCommittedRef = useRef<string>(value);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    lastCommittedRef.current = value;
+  }, [value]);
+
   const commit = (el: HTMLInputElement | HTMLTextAreaElement) => {
-    if (el.value !== value) onCommit(el.value, el);
+    if (el.value !== lastCommittedRef.current) {
+      lastCommittedRef.current = el.value;
+      onCommit(el.value, el);
+    }
   };
+
   const keyDown = (e: React.KeyboardEvent<HTMLInputElement & HTMLTextAreaElement>) => {
     onKeyDown?.(e);
     if (e.defaultPrevented) return;
+    if (e.key === 'Tab') {
+      commit(e.currentTarget);
+      return;
+    }
     if (e.key === 'Enter' && (!multiline || e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       commit(e.currentTarget);
     }
-    if (e.key === 'Escape') e.currentTarget.value = value;
+    if (e.key === 'Escape') {
+      e.currentTarget.value = value;
+      lastCommittedRef.current = value;
+    }
   };
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handleChange = () => commit(el);
+    el.addEventListener('change', handleChange);
+    return () => el.removeEventListener('change', handleChange);
+  }, [onCommit]);
+
+  const mergedStyle: React.CSSProperties = {
+    ...parameterInputStyle,
+    ...style,
+  };
+
   const props = {
     defaultValue: value,
     className: className ?? parameterInputClass,
+    style: mergedStyle,
     onBlur: (e: React.FocusEvent<HTMLInputElement & HTMLTextAreaElement>) => commit(e.currentTarget),
     onKeyDown: keyDown,
     ...rest,
   };
+
+  const setRef = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = el;
+    const incomingRef = (rest as any).ref;
+    if (typeof incomingRef === 'function') incomingRef(el);
+    else if (incomingRef && typeof incomingRef === 'object') incomingRef.current = el;
+  };
+
   // `key` remounts the box when the value changes from outside.
   return multiline ? (
-    <textarea key={value} {...props} className={`${props.className} h-auto min-h-[3.5rem] py-1`} />
+    <textarea key={value} ref={setRef} {...props} className={`${props.className} h-auto min-h-[3.5rem] py-1`} />
   ) : (
-    <input key={value} type="text" {...props} />
+    <input key={value} ref={setRef} type="text" {...props} />
   );
 }
 
 const plainNumber = (field: NumberParameterField, value: number) => formatParameterNumber({ ...field, unit: undefined }, value);
 
 /** A number box: type a value (units allowed), or step with the arrow keys (Shift ×10). */
-export function ParameterNumberInput({
-  field,
-  value,
-  onChange,
-  disabled,
-  id,
-  'aria-label': ariaLabel,
-}: ParameterControlProps<NumberParameterField, number> & { 'aria-label'?: string }) {
+export function ParameterNumberInput(props: ParameterControlProps<NumberParameterField, number> & { 'aria-label'?: string }) {
+  const { field, value, onChange, disabled, id, components, 'aria-label': ariaLabel } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomInput = resolved.input;
+
+  const plain = plainNumber(field, value);
+  const handleCommit = (text: string, input?: HTMLInputElement | HTMLTextAreaElement) => {
+    const n = parseParameterNumberInput(field, text);
+    // Show the stored value again when the text was not a number or clamps to it.
+    if (n === null || n === value) {
+      if (input) input.value = plain;
+    } else {
+      onChange(n);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const step = parameterStep(field) * (e.shiftKey ? 10 : 1);
+    onChange(clampParameterNumber(field, value + (e.key === 'ArrowUp' ? step : -step)));
+  };
+
+  if (CustomInput) {
+    return (
+      <div className="relative min-w-0 flex-1">
+        <CustomInput
+          id={id}
+          inputMode="decimal"
+          label={parameterLabel(field)}
+          aria-label={ariaLabel ?? parameterLabel(field)}
+          value={plain}
+          disabled={disabled || field.readOnly}
+          className={`${parameterInputClass} ${field.unit ? 'pr-6' : ''}`}
+          style={parameterInputStyle}
+          onCommit={handleCommit}
+          onKeyDown={handleKeyDown}
+        />
+        {field.unit && (
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{field.unit}</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-w-0 flex-1">
       <ParameterCommitInput
         id={id}
         inputMode="decimal"
         aria-label={ariaLabel ?? parameterLabel(field)}
-        value={plainNumber(field, value)}
+        value={plain}
         disabled={disabled || field.readOnly}
         className={`${parameterInputClass} ${field.unit ? 'pr-6' : ''}`}
-        onCommit={(text, input) => {
-          const n = parseParameterNumberInput(field, text);
-          // Show the stored value again when the text was not a number or clamps to it.
-          if (n === null || n === value) input.value = plainNumber(field, value);
-          else onChange(n);
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-          e.preventDefault();
-          const step = parameterStep(field) * (e.shiftKey ? 10 : 1);
-          onChange(clampParameterNumber(field, value + (e.key === 'ArrowUp' ? step : -step)));
-        }}
+        style={parameterInputStyle}
+        onCommit={handleCommit}
+        onKeyDown={handleKeyDown}
       />
       {field.unit && (
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{field.unit}</span>
@@ -121,7 +224,10 @@ export function ParameterNumberInput({
 
 /** A slider plus number box for `number` / `int` fields (number box only for `control: 'input'` or unbounded fields). */
 export function ParameterSlider(props: ParameterControlProps<NumberParameterField, number>) {
-  const { field, value, onChange, onGestureStart, onGestureEnd, disabled } = props;
+  const { field, value, onChange, onGestureStart, onGestureEnd, disabled, components } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomSlider = resolved.slider;
   const dragging = useRef(false);
   const end = () => {
     if (!dragging.current) return;
@@ -132,26 +238,48 @@ export function ParameterSlider(props: ParameterControlProps<NumberParameterFiel
   const step = parameterStep(field);
   return (
     <div className="flex items-center gap-2">
-      <input
-        type="range"
-        aria-label={parameterLabel(field)}
-        aria-valuetext={formatParameterNumber(field, value)}
-        min={field.min}
-        max={field.max}
-        step={step}
-        value={value}
-        disabled={disabled || field.readOnly}
-        className={rangeClass}
-        onPointerDown={() => {
-          if (dragging.current) return;
-          dragging.current = true;
-          onGestureStart?.();
-        }}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onBlur={end}
-        onChange={(e) => onChange(clampParameterNumber(field, Number(e.target.value)))}
-      />
+      {CustomSlider ? (
+        <CustomSlider
+          id={props.id ? `${props.id}-slider` : undefined}
+          label={parameterLabel(field)}
+          aria-label={parameterLabel(field)}
+          aria-valuetext={formatParameterNumber(field, value)}
+          min={field.min}
+          max={field.max}
+          step={step}
+          value={value}
+          disabled={disabled || field.readOnly}
+          className={rangeClass}
+          style={parameterRangeStyle}
+          onChange={(v: number) => onChange(clampParameterNumber(field, v))}
+          onGestureStart={onGestureStart}
+          onGestureEnd={onGestureEnd}
+          onStart={onGestureStart}
+          onEnd={onGestureEnd}
+        />
+      ) : (
+        <input
+          type="range"
+          aria-label={parameterLabel(field)}
+          aria-valuetext={formatParameterNumber(field, value)}
+          min={field.min}
+          max={field.max}
+          step={step}
+          value={value}
+          disabled={disabled || field.readOnly}
+          className={rangeClass}
+          style={parameterRangeStyle}
+          onPointerDown={() => {
+            if (dragging.current) return;
+            dragging.current = true;
+            onGestureStart?.();
+          }}
+          onPointerUp={end}
+          onPointerCancel={end}
+          onBlur={end}
+          onChange={(e) => onChange(clampParameterNumber(field, Number(e.target.value)))}
+        />
+      )}
       <div className="w-20 shrink-0">
         <ParameterNumberInput {...props} id={props.id} aria-label={`${parameterLabel(field)} value`} />
       </div>
@@ -182,12 +310,16 @@ export function ParameterToggle({ field, value, onChange, disabled, id }: Parame
 }
 
 /** A dropdown (or segmented buttons with `control: 'segmented'`) for `choice` fields. */
-export function ParameterSelect({ field, value, onChange, disabled, id }: ParameterControlProps<ChoiceParameterField, string | number>) {
+export function ParameterSelect(props: ParameterControlProps<ChoiceParameterField, string | number>) {
+  const { field, value, onChange, disabled, id, components } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomSelect = resolved.select;
   const options = getChoiceOptions(field);
   const off = disabled || field.readOnly;
   if (field.control === 'segmented') {
     return (
-      <div role="radiogroup" aria-label={parameterLabel(field)} className="inline-flex flex-wrap rounded-md border border-input bg-muted p-0.5">
+      <div role="radiogroup" aria-label={parameterLabel(field)} className="inline-flex flex-wrap rounded-md border border-input bg-muted p-0.5" style={parameterSelectStyle}>
         {options.map((o) => (
           <button
             key={String(o.value)}
@@ -197,6 +329,7 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
             title={o.description}
             disabled={off}
             onClick={() => onChange(o.value)}
+            style={o.value === value ? parameterButtonStyle : undefined}
             className={`rounded px-2 py-0.5 text-xs disabled:opacity-50 ${
               o.value === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -205,6 +338,26 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
           </button>
         ))}
       </div>
+    );
+  }
+  if (CustomSelect) {
+    const customOptions = options.map((o) => ({
+      value: o.value,
+      label: choiceOptionLabel(o),
+      description: o.description,
+    }));
+    return (
+      <CustomSelect
+        id={id}
+        label={parameterLabel(field)}
+        aria-label={parameterLabel(field)}
+        value={value}
+        options={customOptions}
+        disabled={off}
+        className={parameterInputClass}
+        style={parameterSelectStyle}
+        onChange={(v: string | number) => onChange(v)}
+      />
     );
   }
   const index = options.findIndex((o) => o.value === value);
@@ -219,9 +372,10 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
         if (option) onChange(option.value);
       }}
       className={parameterInputClass}
+      style={parameterSelectStyle}
     >
       {options.map((o, i) => (
-        <option key={String(o.value)} value={String(i)} title={o.description}>
+        <option key={String(o.value)} value={String(i)} title={o.description} style={parameterSelectStyle}>
           {choiceOptionLabel(o)}
         </option>
       ))}
@@ -230,7 +384,7 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
 }
 
 /** A colour picker with a hex box and a popup ColorPicker. */
-export function ParameterColor({ field, value, onChange, onGestureStart, onGestureEnd, disabled, id }: ParameterControlProps<ColorParameterField, string>) {
+export function ParameterColor({ field, value, onChange, onGestureStart, onGestureEnd, disabled, id, components }: ParameterControlProps<ColorParameterField, string>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -327,7 +481,7 @@ export function ParameterColor({ field, value, onChange, onGestureStart, onGestu
 }
 
 /** One number box per component for `vector` fields. */
-export function ParameterVector({ field, value, onChange, disabled, id }: ParameterControlProps<VectorParameterField, number[]>) {
+export function ParameterVector({ field, value, onChange, disabled, id, components }: ParameterControlProps<VectorParameterField, number[]>) {
   const size = vectorSize(field);
   return (
     <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}>
@@ -342,6 +496,7 @@ export function ParameterVector({ field, value, onChange, disabled, id }: Parame
               id={i === 0 ? id : undefined}
               aria-label={`${parameterLabel(field)} ${component.label}`}
               disabled={disabled || field.readOnly}
+              components={components}
               onChange={(n) => onChange(Array.from({ length: size }, (_, j) => (j === i ? n : (value[j] ?? 0))))}
             />
           </label>
@@ -357,7 +512,7 @@ export interface ParameterImageProps extends ParameterControlProps<ImageParamete
 }
 
 /** An image picker: suggested thumbnails, a URL box, an optional file button and a clear button. */
-export function ParameterImage({ field, value, onChange, disabled, id, resolveFile }: ParameterImageProps) {
+export function ParameterImage({ field, value, onChange, disabled, id, resolveFile, components }: ParameterImageProps) {
   const off = disabled || field.readOnly;
   const name = parameterLabel(field);
   return (
@@ -381,7 +536,10 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
           />
           <div className="flex gap-1">
             {resolveFile && (
-              <label className={`${parameterButtonClass} cursor-pointer ${off ? 'pointer-events-none opacity-50' : ''}`}>
+              <label
+                style={parameterButtonStyle}
+                className={`${parameterButtonClass} cursor-pointer ${off ? 'pointer-events-none opacity-50' : ''}`}
+              >
                 Choose file…
                 <input
                   type="file"
@@ -398,7 +556,14 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
               </label>
             )}
             {value && (
-              <button type="button" className={parameterButtonClass} disabled={off} onClick={() => onChange('')} aria-label={`Clear ${name}`}>
+              <button
+                type="button"
+                style={parameterButtonStyle}
+                className={parameterButtonClass}
+                disabled={off}
+                onClick={() => onChange('')}
+                aria-label={`Clear ${name}`}
+              >
                 Clear
               </button>
             )}
@@ -427,8 +592,8 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
   );
 }
 
-/** A text box (or textarea with `multiline`) that commits on blur or Enter. */
-export function ParameterText({ field, value, onChange, disabled, id }: ParameterControlProps<TextParameterField, string>) {
+/** A text box (or textarea with `multiline`) that commits on blur, Tab, or Enter. */
+export function ParameterText({ field, value, onChange, disabled, id, components }: ParameterControlProps<TextParameterField, string>) {
   return (
     <ParameterCommitInput
       id={id}
@@ -486,24 +651,25 @@ export interface ParameterFieldControlProps extends ParameterControlProps<Parame
 }
 
 /** The control for any field type. */
-export function ParameterFieldControl({ field, value, onChange, resolveFile, ...rest }: ParameterFieldControlProps) {
+export function ParameterFieldControl({ field, value, onChange, resolveFile, components, ...rest }: ParameterFieldControlProps) {
   const set = onChange as (value: any) => void;
   switch (field.type) {
     case 'number':
     case 'int':
-      return <ParameterSlider field={field} value={value as number} onChange={set} {...rest} />;
+      return <ParameterSlider field={field} value={value as number} onChange={set} components={components} {...rest} />;
     case 'boolean':
-      return <ParameterToggle field={field} value={value as boolean} onChange={set} {...rest} />;
+      return <ParameterToggle field={field} value={value as boolean} onChange={set} components={components} {...rest} />;
     case 'choice':
-      return <ParameterSelect field={field} value={value as string | number} onChange={set} {...rest} />;
+      return <ParameterSelect field={field} value={value as string | number} onChange={set} components={components} {...rest} />;
     case 'color':
-      return <ParameterColor field={field} value={value as string} onChange={set} {...rest} />;
+      return <ParameterColor field={field} value={value as string} onChange={set} components={components} {...rest} />;
     case 'vector':
-      return <ParameterVector field={field} value={value as number[]} onChange={set} {...rest} />;
+      return <ParameterVector field={field} value={value as number[]} onChange={set} components={components} {...rest} />;
     case 'image':
-      return <ParameterImage field={field} value={value as string} onChange={set} resolveFile={resolveFile} {...rest} />;
+      return <ParameterImage field={field} value={value as string} onChange={set} resolveFile={resolveFile} components={components} {...rest} />;
     case 'text':
-      return <ParameterText field={field} value={value as string} onChange={set} {...rest} />;
+      return <ParameterText field={field} value={value as string} onChange={set} components={components} {...rest} />;
   }
 }
+
 

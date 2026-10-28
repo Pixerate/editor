@@ -3,10 +3,13 @@ import { EFFECT_LAYER_USES, findLayer, type ImageEditorController, type ImageLay
 import { EffectsBrowser } from '../effects';
 import { ImageEffectControls as Controls } from './ImageEffectControls';
 import { imageOutlineButtonClass } from './styles';
+import { useImageEditorControls, ImageCheckbox, ImageRange } from './controls/controls.js';
+import type { ParameterComponents } from '../parameters/index.js';
 
 export interface ImageProviderEffectsPanelProps {
   controller: ImageEditorController;
   className?: string;
+  components?: ParameterComponents;
 }
 
 /**
@@ -15,12 +18,15 @@ export interface ImageProviderEffectsPanelProps {
  * controls; plus adding effect layers. Applying a filter effect to a pixel layer converts it to a
  * smart object in the same undo step. Without a provider it says why nothing can be added.
  */
-export function ImageProviderEffectsPanel({ controller, className = '' }: ImageProviderEffectsPanelProps) {
+export function ImageProviderEffectsPanel({ controller, className = '', components }: ImageProviderEffectsPanelProps) {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [browse, setBrowse] = useState<null | 'filter' | 'layer'>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const hostControls = useImageEditorControls();
+  const ImageCheckbox = hostControls.Checkbox;
+  const ImageRange = hostControls.Range;
   const provider = controller.effectsProvider;
   const state = controller.getState();
   const layer: ImageLayer | null = state.activeLayerId ? (findLayer(state.layers, state.activeLayerId)?.layer ?? null) : null;
@@ -77,6 +83,7 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
             effect={generator.effect}
             name={generator.name}
             values={generator.values}
+            components={components}
             onChange={(k, v, gesture) => run(() => controller.updateEffectLayer(layer.id, { values: { [k]: v as never } }, commit(gesture)))}
             onPreset={(values) => run(() => controller.updateEffectLayer(layer.id, { values: values as never }))}
           />
@@ -92,10 +99,25 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
             return (
               <li key={f.id} className="rounded border border-border p-1" data-smart-effect={f.id}>
                 <div className="flex items-center gap-1">
-                  <input type="checkbox" checked={f.enabled} aria-label={`${label} on`} onChange={(e) => {
-                      const enabled = e.currentTarget.checked;
-                      run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
-                    }} />
+                  {ImageCheckbox ? (
+                    <ImageCheckbox
+                      checked={f.enabled}
+                      label={`${label} on`}
+                      onChange={(enabled: boolean) => {
+                        run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={f.enabled}
+                      aria-label={`${label} on`}
+                      onChange={(e) => {
+                        const enabled = e.currentTarget.checked;
+                        run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
+                      }}
+                    />
+                  )}
                   <button type="button" className="min-w-0 flex-1 truncate text-left text-foreground" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}>
                     {label}
                   </button>
@@ -113,25 +135,40 @@ export function ImageProviderEffectsPanel({ controller, className = '' }: ImageP
                   <div className="mt-1 space-y-2">
                     <label className="flex items-center gap-1">
                       <span className="w-14 text-[11px] text-foreground">Opacity</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        className="flex-1"
-                        value={f.opacity}
-                        aria-label={`${label} opacity`}
-                        onChange={(e) => {
-                          const opacity = Number(e.currentTarget.value);
-                          run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }));
-                        }}
-                      />
+                      {ImageRange ? (
+                        <ImageRange
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          className="flex-1"
+                          value={f.opacity}
+                          label={`${label} opacity`}
+                          onChange={(opacity: number) => {
+                            run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }));
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          className="flex-1"
+                          value={f.opacity}
+                          aria-label={`${label} opacity`}
+                          onChange={(e) => {
+                            const opacity = Number(e.currentTarget.value);
+                            run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }));
+                          }}
+                        />
+                      )}
                     </label>
                     <Controls
                       provider={provider}
                       effect={f.effect}
                       name={f.name}
                       values={f.values}
+                      components={components}
                       onChange={(k, v, gesture) => run(() => controller.updateEffectFilter(layer.id, f.id, { values: { [k]: v as never } }, commit(gesture)))}
                       onPreset={(values) => run(() => controller.updateEffectFilter(layer.id, f.id, { values: values as never }))}
                     />

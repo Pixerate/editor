@@ -13,7 +13,21 @@ import {
   type ParametersController,
   type ParametersState,
 } from '@pixerate/editor/parameters';
-import { KeyframeDiamond, ParameterFieldControl, parameterButtonClass, parameterInputClass, type ParameterImageProps } from './fields';
+import {
+  KeyframeDiamond,
+  ParameterFieldControl,
+  parameterButtonClass,
+  parameterInputClass,
+  parameterButtonStyle,
+  parameterInputStyle,
+  parameterSelectStyle,
+  type ParameterImageProps,
+} from './fields';
+import {
+  useParameterComponents,
+  resolveParameterComponents,
+  type ParameterComponents,
+} from './controls.js';
 import { useParametersState } from './useParameters';
 
 export interface ParametersPanelProps {
@@ -33,6 +47,8 @@ export interface ParametersPanelProps {
   /** Shown when the schema has no fields. */
   emptyMessage?: React.ReactNode;
   className?: string;
+  /** Custom host controls (input, slider, select). */
+  components?: ParameterComponents;
   /**
    * Agent playback: act out `parameters.*` commands here with the agent's cursor (default: the
    * nearest `AgentPlaybackProvider`; `null` turns it off).
@@ -52,6 +68,7 @@ function FieldRow({
   showKeyframes,
   showFieldReset,
   resolveFile,
+  components,
 }: {
   controller: ParametersController;
   state: ParametersState;
@@ -60,6 +77,7 @@ function FieldRow({
   showKeyframes: boolean;
   showFieldReset: boolean;
   resolveFile?: ParameterImageProps['resolveFile'];
+  components?: ParameterComponents;
 }) {
   const label = parameterLabel(field);
   const inputId = `${idBase}-${field.id}`;
@@ -79,6 +97,7 @@ function FieldRow({
           <button
             type="button"
             className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground"
+            style={parameterButtonStyle}
             title={`Reset to ${String(state.defaults[field.id])}`}
             aria-label={`Reset ${label}`}
             onClick={() => controller.reset([field.id])}
@@ -93,6 +112,7 @@ function FieldRow({
         value={value}
         id={inputId}
         resolveFile={resolveFile}
+        components={components}
         onChange={(v) => controller.setValue(field.id, v)}
         onGestureStart={() => controller.beginGesture(field.id)}
         onGestureEnd={() => controller.endGesture()}
@@ -106,11 +126,15 @@ function FieldRow({
   );
 }
 
-function PresetBar({ controller, state }: { controller: ParametersController; state: ParametersState }) {
+function PresetBar({ controller, state, components }: { controller: ParametersController; state: ParametersState; components?: ParameterComponents }) {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const active = state.presets.find((p) => p.name === state.activePreset);
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomPresetSelect = resolved.select;
+
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     const result = controller.savePreset(name);
@@ -123,24 +147,39 @@ function PresetBar({ controller, state }: { controller: ParametersController; st
   return (
     <div className="space-y-1.5" data-parameter-presets="">
       <div className="flex items-center gap-1.5">
-        <select
-          aria-label="Preset"
-          className={parameterInputClass}
-          value={state.activePreset ?? ''}
-          onChange={(e) => e.target.value && controller.applyPreset(e.target.value)}
-        >
-          <option value="">{state.presets.length ? 'Presets…' : 'No presets'}</option>
-          {state.presets.map((p) => (
-            <option key={p.name} value={p.name} title={p.description}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" className={parameterButtonClass} onClick={() => setSaving((s) => !s)} aria-expanded={saving}>
+        {CustomPresetSelect ? (
+          <CustomPresetSelect
+            aria-label="Preset"
+            className={parameterInputClass}
+            style={parameterSelectStyle}
+            value={state.activePreset ?? ''}
+            options={[
+              { value: '', label: state.presets.length ? 'Presets…' : 'No presets' },
+              ...state.presets.map((p) => ({ value: p.name, label: p.name, description: p.description })),
+            ]}
+            onChange={(val: string | number) => val && controller.applyPreset(String(val))}
+          />
+        ) : (
+          <select
+            aria-label="Preset"
+            className={parameterInputClass}
+            style={parameterSelectStyle}
+            value={state.activePreset ?? ''}
+            onChange={(e) => e.target.value && controller.applyPreset(e.target.value)}
+          >
+            <option value="" style={parameterSelectStyle}>{state.presets.length ? 'Presets…' : 'No presets'}</option>
+            {state.presets.map((p) => (
+              <option key={p.name} value={p.name} title={p.description} style={parameterSelectStyle}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button type="button" className={parameterButtonClass} style={parameterButtonStyle} onClick={() => setSaving((s) => !s)} aria-expanded={saving}>
           Save…
         </button>
         {active && !active.builtIn && (
-          <button type="button" className={parameterButtonClass} aria-label={`Delete preset ${active.name}`} onClick={() => controller.deletePreset(active.name)}>
+          <button type="button" className={parameterButtonClass} style={parameterButtonStyle} aria-label={`Delete preset ${active.name}`} onClick={() => controller.deletePreset(active.name)}>
             Delete
           </button>
         )}
@@ -152,10 +191,11 @@ function PresetBar({ controller, state }: { controller: ParametersController; st
             aria-label="Preset name"
             placeholder="Preset name"
             className={parameterInputClass}
+            style={parameterInputStyle}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <button type="submit" className={parameterButtonClass}>
+          <button type="submit" className={parameterButtonClass} style={parameterButtonStyle}>
             Save
           </button>
         </form>
@@ -184,6 +224,7 @@ export function ParametersPanel({
   resolveFile,
   emptyMessage = 'No parameters.',
   className = '',
+  components,
   playback,
   playbackId = 'parameters',
   onPlaybackReveal,
@@ -216,6 +257,7 @@ export function ParametersPanel({
           showKeyframes={keys}
           showFieldReset={showFieldReset}
           resolveFile={resolveFile}
+          components={components}
         />
       );
     });
@@ -257,6 +299,7 @@ export function ParametersPanel({
               <button
                 type="button"
                 className={parameterButtonClass}
+                style={parameterButtonStyle}
                 disabled={!state.canUndo}
                 title={state.canUndo ? `Undo ${state.undoLabel}` : 'Nothing to undo'}
                 onClick={() => controller.undo()}
@@ -266,23 +309,35 @@ export function ParametersPanel({
               <button
                 type="button"
                 className={parameterButtonClass}
+                style={parameterButtonStyle}
                 disabled={!state.canRedo}
                 title={state.canRedo ? `Redo ${state.redoLabel}` : 'Nothing to redo'}
                 onClick={() => controller.redo()}
               >
                 Redo
               </button>
-              <button type="button" className={parameterButtonClass} disabled={!state.modified} onClick={() => controller.reset()}>
+              <button
+                type="button"
+                className={parameterButtonClass}
+                style={parameterButtonStyle}
+                disabled={!state.modified}
+                onClick={() => controller.reset()}
+              >
                 Reset
               </button>
-              <button type="button" className={parameterButtonClass} onClick={() => controller.randomize()}>
+              <button
+                type="button"
+                className={parameterButtonClass}
+                style={parameterButtonStyle}
+                onClick={() => controller.randomize()}
+              >
                 Randomize
               </button>
             </div>
           )}
         </div>
       )}
-      {showPresets && <PresetBar controller={controller} state={state} />}
+      {showPresets && <PresetBar controller={controller} state={state} components={components} />}
       {state.fields.length === 0 ? <p className="text-xs text-muted-foreground">{emptyMessage}</p> : renderItems(state.schema.fields)}
       {/* Last, so it doesn't shift the stacked spacing. */}
       {playing && <PresenceLayer presence={agentPresence} />}

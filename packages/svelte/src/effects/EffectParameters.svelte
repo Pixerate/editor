@@ -2,6 +2,14 @@
   import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
   import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
   import ParameterFieldControl from '../parameters/ParameterFieldControl.svelte';
+  import {
+    parameterButtonStyle,
+    parameterSelectStyle
+  } from '../parameters/styles.js';
+  import {
+    resolveParameterComponents,
+    type ParameterComponents
+  } from '../parameters/controls.js';
 
   interface Props {
     /** The effect's description (`describe`). */
@@ -25,12 +33,29 @@
     addon?: import('svelte').Snippet<[string]>;
     /** Families offered by font controls (`format: "font"`); default the system font catalog. */
     fonts?: EffectFieldOptions['fonts'];
+    /** Custom host components for inputs, sliders, and selects. */
+    components?: ParameterComponents;
     disabled?: boolean;
     class?: string;
   }
 
-  let { description, values, onchange, onreset, keyframed, onpreset, onpresetname, addon, fonts, disabled = false, class: className = '' }: Props = $props();
+  let {
+    description,
+    values,
+    onchange,
+    onreset,
+    keyframed,
+    onpreset,
+    onpresetname,
+    addon,
+    fonts,
+    components,
+    disabled = false,
+    class: className = ''
+  }: Props = $props();
   const fields = $derived(effectParameterFields(description, { fonts }));
+  const resolvedComponents = $derived(resolveParameterComponents(components));
+  const CustomPresetSelect = $derived(resolvedComponents.select);
   const idBase = `fx-${Math.random().toString(36).slice(2, 8)}`;
   let gesture: string | null = null;
   let count = 0;
@@ -52,10 +77,32 @@
 -->
 <div class="space-y-2 {className}" data-effect-parameters={description.id}>
   {#if (onpreset || onpresetname) && description.presets.length > 0}
-    <select class="w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs" aria-label="{description.name} presets" value="" {disabled} onchange={(e) => preset(e.currentTarget.value)}>
-      <option value="">Presets…</option>
-      {#each description.presets as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
-    </select>
+    {#if CustomPresetSelect}
+      <CustomPresetSelect
+        aria-label="{description.name} presets"
+        label="{description.name} presets"
+        value=""
+        options={[
+          { value: '', label: 'Presets…' },
+          ...description.presets.map((p) => ({ value: p.name, label: p.name }))
+        ]}
+        style={parameterSelectStyle}
+        {disabled}
+        onchange={(val) => preset(String(val))}
+      />
+    {:else}
+      <select
+        class="w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs"
+        style={parameterSelectStyle}
+        aria-label="{description.name} presets"
+        value=""
+        {disabled}
+        onchange={(e) => preset(e.currentTarget.value)}
+      >
+        <option value="" style={parameterSelectStyle}>Presets…</option>
+        {#each description.presets as p (p.name)}<option value={p.name} style={parameterSelectStyle}>{p.name}</option>{/each}
+      </select>
+    {/if}
   {/if}
   {#each fields as field (field.id)}
     {@const label = parameterLabel(field)}
@@ -67,7 +114,7 @@
         {#if keyed}<span class="text-[10px] text-muted-foreground">keyframed</span>{/if}
         {#if addon}{@render addon(field.id)}{/if}
         {#if onreset && !keyed && !disabled && !parameterValuesEqual(value, field.default)}
-          <button type="button" class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Reset {label}" onclick={() => onreset(field.id)}>↺</button>
+          <button type="button" class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" style={parameterButtonStyle} aria-label="Reset {label}" onclick={() => onreset(field.id)}>↺</button>
         {/if}
       </div>
       <ParameterFieldControl
@@ -75,6 +122,7 @@
         {value}
         id="{idBase}-{field.id}"
         disabled={disabled || keyed}
+        {components}
         onchange={(v) => onchange(field.id, v, gesture)}
         ongesturestart={() => (gesture = `${idBase}:${field.id}:${++count}`)}
         ongestureend={() => (gesture = null)}
