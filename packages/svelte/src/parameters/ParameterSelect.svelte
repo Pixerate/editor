@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { choiceOptionLabel, getChoiceOptions, parameterLabel, type ChoiceParameterField } from '@pixerate/editor/parameters';
+  import { choiceOptionLabel, getChoiceOptions, matchParameterOptionValue, parameterLabel, type ChoiceParameterField } from '@pixerate/editor/parameters';
   import { parameterInputClass, parameterSelectStyle } from './styles.js';
-  import { resolveParameterComponents, type ParameterComponents } from './controls.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     field: ChoiceParameterField;
@@ -16,16 +16,10 @@
 
   const options = $derived(getChoiceOptions(field));
   const off = $derived(disabled || !!field.readOnly);
-  const resolved = $derived(resolveParameterComponents(components));
-  const CustomSelect = $derived(resolved.select);
+  const context = getParameterComponents();
+  const CustomSelect = $derived(resolveParameterComponents(components, context).select);
   const label = $derived(parameterLabel(field));
-  const mappedOptions = $derived(
-    options.map((o) => ({
-      value: o.value,
-      label: choiceOptionLabel(o),
-      description: o.description
-    }))
-  );
+  const customOptions = $derived(options.map((o) => ({ value: o.value, label: choiceOptionLabel(o), description: o.description })));
 </script>
 
 <!-- A dropdown (or segmented buttons with `control: 'segmented'`) for `choice` fields. -->
@@ -53,15 +47,11 @@
     aria-label={label}
     {label}
     {value}
-    options={mappedOptions}
+    options={customOptions}
     disabled={off}
     class={parameterInputClass}
     style={parameterSelectStyle}
-    onchange={(v: any) => {
-      const found = options.find((o) => String(o.value) === String(v));
-      if (found) onchange(found.value);
-      else onchange(v);
-    }}
+    onchange={(v) => onchange(matchParameterOptionValue(options, v))}
   />
 {:else}
   <select

@@ -1,5 +1,7 @@
 <script lang="ts">
-  let { value, onCommit, ariaLabel }: { value: string; onCommit: (val: string) => void; ariaLabel?: string } = $props();
+  import type { ParameterInputProps } from '../../src/parameters';
+
+  let { value, label, oncommit }: ParameterInputProps = $props();
 </script>
 
-<input data-testid="custom-input" aria-label={ariaLabel} {value} onchange={(e) => onCommit((e.target as HTMLInputElement).value)} />
+<input data-testid="custom-input" aria-label={label} {value} onchange={(e) => oncommit(e.currentTarget.value, e.currentTarget)} />

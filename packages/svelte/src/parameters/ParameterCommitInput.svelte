@@ -13,37 +13,30 @@
 
   let { value, oncommit, multiline = false, class: className = parameterInputClass, onkeydown, onchange, style, ...rest }: Props = $props();
 
-  let lastCommitted = $state('');
-
-  $effect(() => {
-    lastCommitted = value;
+  /** The text last handed to `oncommit` (null once `value` changes), so the blur after Tab or `change` is a no-op. */
+  let lastCommitted: string | null = null;
+  $effect.pre(() => {
+    void value;
+    lastCommitted = null;
   });
 
   function commit(el: HTMLInputElement | HTMLTextAreaElement) {
-    if (el.value === lastCommitted) return;
-    const attempted = el.value;
-    lastCommitted = attempted;
-    if (attempted !== value) {
-      oncommit(attempted, el);
-      lastCommitted = el.value;
-    }
+    const text = el.value;
+    if (text === value || text === lastCommitted) return;
+    oncommit(text, el);
+    // A refused edit puts the stored text back: then the same text is tried (and refused) again.
+    lastCommitted = el.value === text ? text : null;
   }
 
   function keydown(e: KeyboardEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) {
     (onkeydown as ((e: KeyboardEvent) => void) | undefined)?.(e);
     if (e.defaultPrevented) return;
-    if (e.key === 'Tab') {
-      commit(e.currentTarget);
-      return;
-    }
+    if (e.key === 'Tab') commit(e.currentTarget);
     if (e.key === 'Enter' && (!multiline || e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       commit(e.currentTarget);
     }
-    if (e.key === 'Escape') {
-      e.currentTarget.value = value;
-      lastCommitted = value;
-    }
+    if (e.key === 'Escape') e.currentTarget.value = value;
   }
 </script>
 

@@ -9,7 +9,7 @@
   } from '@pixerate/editor/parameters';
   import ParameterNumberInput from './ParameterNumberInput.svelte';
   import { parameterRangeClass, parameterRangeStyle } from './styles.js';
-  import { resolveParameterComponents, type ParameterComponents } from './controls.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     field: NumberParameterField;
@@ -37,8 +37,8 @@
     ongestureend?.();
   }
 
-  const resolved = $derived(resolveParameterComponents(components));
-  const CustomSlider = $derived(resolved.slider);
+  const context = getParameterComponents();
+  const CustomSlider = $derived(resolveParameterComponents(components, context).slider);
   const step = $derived(parameterStep(field));
   const label = $derived(parameterLabel(field));
   const valuetext = $derived(formatParameterNumber(field, value));
@@ -49,7 +49,7 @@
   <div class="flex items-center gap-2">
     {#if CustomSlider}
       <CustomSlider
-        {id}
+        id={id ? `${id}-slider` : undefined}
         aria-label={label}
         {label}
         aria-valuetext={valuetext}
@@ -60,23 +60,17 @@
         disabled={disabled || field.readOnly}
         class={parameterRangeClass}
         style={parameterRangeStyle}
-        onpointerdown={start}
-        onpointerup={end}
-        onpointercancel={end}
-        onstart={start}
-        onend={end}
         ongesturestart={start}
         ongestureend={end}
-        oninput={(val: number) => onchange(clampParameterNumber(field, Number(val)))}
-        onchange={(val: number) => onchange(clampParameterNumber(field, Number(val)))}
+        oninput={(v) => onchange(clampParameterNumber(field, v))}
       />
     {:else}
       <input
         type="range"
         aria-label={label}
         aria-valuetext={valuetext}
-        min={field.min}
-        max={field.max}
+        min={field.min ?? 0}
+        max={field.max ?? 100}
         {step}
         {value}
         disabled={disabled || field.readOnly}

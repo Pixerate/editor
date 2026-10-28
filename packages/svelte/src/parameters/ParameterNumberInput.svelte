@@ -9,7 +9,7 @@
   } from '@pixerate/editor/parameters';
   import ParameterCommitInput from './ParameterCommitInput.svelte';
   import { parameterInputClass, parameterInputStyle } from './styles.js';
-  import { resolveParameterComponents, type ParameterComponents } from './controls.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     field: NumberParameterField;
@@ -24,8 +24,8 @@
   let { field, value, onchange, disabled = false, id, 'aria-label': ariaLabel, components }: Props = $props();
 
   const text = $derived(formatParameterNumber({ ...field, unit: undefined }, value));
-  const resolved = $derived(resolveParameterComponents(components));
-  const CustomInput = $derived(resolved.input);
+  const context = getParameterComponents();
+  const CustomInput = $derived(resolveParameterComponents(components, context).input);
 
   function keydown(e: KeyboardEvent) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -52,14 +52,13 @@
       {id}
       inputmode="decimal"
       aria-label={ariaLabel ?? parameterLabel(field)}
-      label={ariaLabel ?? parameterLabel(field)}
+      label={parameterLabel(field)}
       value={text}
       disabled={disabled || field.readOnly}
       class="{parameterInputClass} {field.unit ? 'pr-6' : ''}"
       style={parameterInputStyle}
       onkeydown={keydown}
       oncommit={commitValue}
-      onchange={commitValue}
     />
   {:else}
     <ParameterCommitInput

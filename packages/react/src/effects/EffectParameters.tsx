@@ -1,16 +1,8 @@
 import React, { useId, useMemo } from 'react';
 import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
 import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
-import {
-  ParameterFieldControl,
-  parameterButtonStyle,
-  parameterSelectStyle,
-} from '../parameters/fields';
-import {
-  useParameterComponents,
-  resolveParameterComponents,
-  type ParameterComponents,
-} from '../parameters/controls.js';
+import { ParameterFieldControl, parameterSelectStyle } from '../parameters/fields';
+import { useParameterComponents, resolveParameterComponents, type ParameterComponents } from '../parameters/controls.js';
 
 export interface EffectParametersProps {
   /** The effect's description (`describe`). */
@@ -64,9 +56,7 @@ export function EffectParameters({
   const gesture = React.useRef<string | null>(null);
   const count = React.useRef(0);
 
-  const ctx = useParameterComponents();
-  const resolved = resolveParameterComponents(components, ctx);
-  const CustomPresetSelect = resolved.select;
+  const CustomPresetSelect = resolveParameterComponents(components, useParameterComponents()).select;
 
   const handlePresetSelect = (name: string) => {
     if (!name) return;
@@ -84,6 +74,7 @@ export function EffectParameters({
         CustomPresetSelect ? (
           <CustomPresetSelect
             aria-label={`${description.name} presets`}
+            label={`${description.name} presets`}
             value=""
             disabled={disabled}
             className="w-full rounded border border-border px-1 py-0.5 text-xs"
@@ -92,7 +83,7 @@ export function EffectParameters({
               { value: '', label: 'Presets…' },
               ...description.presets.map((p) => ({ value: p.name, label: p.name })),
             ]}
-            onChange={(name: string | number) => handlePresetSelect(String(name))}
+            onChange={(name) => handlePresetSelect(String(name))}
           />
         ) : (
           <select
@@ -127,13 +118,7 @@ export function EffectParameters({
               {keyed && <span className="text-[10px] text-muted-foreground">keyframed</span>}
               {renderControlAddon?.(field.id)}
               {onReset && changed && !disabled && (
-                <button
-                  type="button"
-                  className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  style={parameterButtonStyle}
-                  aria-label={`Reset ${label}`}
-                  onClick={() => onReset(field.id)}
-                >
+                <button type="button" className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label={`Reset ${label}`} onClick={() => onReset(field.id)}>
                   ↺
                 </button>
               )}

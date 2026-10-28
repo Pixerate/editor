@@ -97,7 +97,6 @@ function FieldRow({
           <button
             type="button"
             className="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground"
-            style={parameterButtonStyle}
             title={`Reset to ${String(state.defaults[field.id])}`}
             aria-label={`Reset ${label}`}
             onClick={() => controller.reset([field.id])}
@@ -131,9 +130,7 @@ function PresetBar({ controller, state, components }: { controller: ParametersCo
   const [name, setName] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const active = state.presets.find((p) => p.name === state.activePreset);
-  const ctx = useParameterComponents();
-  const resolved = resolveParameterComponents(components, ctx);
-  const CustomPresetSelect = resolved.select;
+  const CustomPresetSelect = resolveParameterComponents(components, useParameterComponents()).select;
 
   const save = (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +147,7 @@ function PresetBar({ controller, state, components }: { controller: ParametersCo
         {CustomPresetSelect ? (
           <CustomPresetSelect
             aria-label="Preset"
+            label="Preset"
             className={parameterInputClass}
             style={parameterSelectStyle}
             value={state.activePreset ?? ''}
@@ -157,7 +155,7 @@ function PresetBar({ controller, state, components }: { controller: ParametersCo
               { value: '', label: state.presets.length ? 'Presets…' : 'No presets' },
               ...state.presets.map((p) => ({ value: p.name, label: p.name, description: p.description })),
             ]}
-            onChange={(val: string | number) => val && controller.applyPreset(String(val))}
+            onChange={(val) => val && controller.applyPreset(String(val))}
           />
         ) : (
           <select

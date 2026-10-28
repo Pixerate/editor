@@ -10,6 +10,7 @@
 
   interface Props {
     controller: ImageEditorController;
+    /** Host controls for the effects' parameters. */
     components?: ParameterComponents;
     class?: string;
   }

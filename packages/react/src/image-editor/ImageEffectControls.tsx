@@ -2,7 +2,8 @@ import React from 'react';
 import type { EffectProvider } from '@pixerate/editor/effects';
 import { EffectParameters, useEffectDescription } from '../effects';
 import { useImageEditorControls } from './controls/controls.js';
-import type { ParameterComponents } from '../parameters/index.js';
+import { imageEditorParameterComponents } from './controls/parameterControls.js';
+import { resolveParameterComponents, useParameterComponents, type ParameterComponents } from '../parameters/controls.js';
 
 export interface ImageEffectControlsProps {
   provider: EffectProvider | null;
@@ -13,19 +14,15 @@ export interface ImageEffectControlsProps {
   onPreset: (values: Readonly<Record<string, unknown>>) => void;
   /** Extra classes on the root element. */
   className?: string;
-  /** Custom host controls or override components. */
+  /** Host parameter controls; else those of a `ParameterComponentsProvider`, else the image editor's host `Range` / `Select`. */
   components?: ParameterComponents;
 }
 
 /** One effect's controls, loaded from the provider; a note when it does not have the effect. Parity with Svelte's `<ImageEffectControls>`. */
 export function ImageEffectControls({ provider, effect, name, values, onChange, onPreset, className, components }: ImageEffectControlsProps) {
   const { description, error } = useEffectDescription(provider, effect);
-  const hostControls = useImageEditorControls();
-  const effectiveComponents: ParameterComponents = {
-    ...(hostControls.Range ? { Range: hostControls.Range } : {}),
-    ...(hostControls.Select ? { Select: hostControls.Select } : {}),
-    ...components,
-  };
+  const fallback = resolveParameterComponents(useParameterComponents(), imageEditorParameterComponents(useImageEditorControls()));
+  const effectiveComponents = resolveParameterComponents(components, fallback);
 
   let body: React.ReactNode;
   if (!provider) body = <p className="text-[11px] text-muted-foreground">No effects provider: "{name ?? effect}" is kept but not drawn.</p>;

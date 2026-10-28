@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { ParametersController, createParameterKeyframeStore, type ParameterSchema } from "@pixerate/editor/parameters";
+import { ParametersController, createParameterKeyframeStore, parameterThemeStyleText, type ParameterSchema } from "@pixerate/editor/parameters";
 import {
   KeyframeDiamond,
   ParameterColor,
@@ -10,7 +10,11 @@ import {
   ParametersPanel,
   createParameters,
   useParameterCommands,
+  parameterButtonStyle,
+  parameterInputStyle,
 } from "../src/parameters";
+import { imageEditorParameterComponents } from "../src/image-editor/controls/parameterControls";
+import ImageParameterControlsProbe from "./fixtures/ImageParameterControlsProbe.svelte";
 import CustomParameterInput from "./fixtures/CustomParameterInput.svelte";
 import CustomParameterSlider from "./fixtures/CustomParameterSlider.svelte";
 import CustomParameterSelect from "./fixtures/CustomParameterSelect.svelte";
@@ -209,7 +213,7 @@ describe("field controls", () => {
     const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
     expect(input.getAttribute("style")).toContain("var(--pixerate-parameter-input-bg");
     const range = root.querySelector('input[type="range"]') as HTMLInputElement;
-    expect(range.getAttribute("style")).toContain("var(--pixerate-parameter-slider-accent");
+    expect(range.getAttribute("style")).toContain("var(--pixerate-parameter-accent");
   });
 });
 
@@ -300,5 +304,93 @@ describe("ParametersPanel", () => {
       components: { input: CustomParameterInput },
     });
     expect(root.querySelector('[data-testid="custom-input"]')).not.toBeNull();
+  });
+});
+
+describe("parameter control fixes", () => {
+  it("reverts refused text every time it is committed, not only the first", () => {
+    const onchange = vi.fn();
+    const root = render(ParameterSlider, { field: schema.fields[0], value: 4, onchange });
+    const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
+    for (const attempt of [1, 2]) {
+      input.value = "99"; // clamps to the stored 4
+      fire(input, "keydown", { key: "Enter" });
+      expect(input.value, `attempt ${attempt}`).toBe("4");
+    }
+    commit(input, "abc");
+    commit(input, "abc");
+    expect(input.value).toBe("4");
+    expect(onchange).not.toHaveBeenCalled();
+  });
+
+  it("commits once on Tab in a panel and keeps the element", () => {
+    const controller = new ParametersController({ schema });
+    const root = render(ParametersPanel, { controller });
+    const input = root.querySelector('input[aria-label="Speed value"]') as HTMLInputElement;
+    input.value = "2.5";
+    fire(input, "keydown", { key: "Tab" });
+    fire(input, "blur");
+    expect(controller.getState().values.speed).toBe(2.5);
+    expect(root.querySelector('input[aria-label="Speed value"]')).toBe(input);
+    controller.undo();
+    expect(controller.getState().canUndo).toBe(false);
+  });
+
+  it("maps a string-only custom select back to the option's numeric value", () => {
+    const onchange = vi.fn();
+    const field = { id: "radius", type: "choice", options: [1, 2, 4], default: 1 };
+    const root = render(ParameterSelect, { field, value: 1, onchange, components: { select: CustomParameterSelect } });
+    setInput(root.querySelector('[data-testid="custom-select"]') as HTMLSelectElement, "4", "change");
+    expect(onchange).toHaveBeenCalledWith(4);
+  });
+
+  it("commits through a custom input's oncommit", () => {
+    const onchange = vi.fn();
+    const root = render(ParameterSlider, { field: schema.fields[0], value: 1, onchange, components: { input: CustomParameterInput } });
+    setInput(root.querySelector('[data-testid="custom-input"]') as HTMLInputElement, "3", "change");
+    expect(onchange).toHaveBeenCalledWith(3);
+  });
+
+  it("starts one gesture per drag from a custom slider", () => {
+    const ongesturestart = vi.fn();
+    const ongestureend = vi.fn();
+    const onchange = vi.fn();
+    const root = render(ParameterSlider, {
+      field: schema.fields[0],
+      value: 1,
+      onchange,
+      ongesturestart,
+      ongestureend,
+      components: { slider: CustomParameterSlider },
+    });
+    const slider = root.querySelector('[data-testid="custom-slider"]') as HTMLInputElement;
+    fire(slider, "pointerdown");
+    fire(slider, "pointerdown");
+    setInput(slider, "2");
+    fire(slider, "pointerup");
+    expect(ongesturestart).toHaveBeenCalledTimes(1);
+    expect(ongestureend).toHaveBeenCalledTimes(1);
+    expect(onchange).toHaveBeenCalledWith(2);
+  });
+
+  it("uses the image editor's host Select through the adapter, with typed values", () => {
+    const onchange = vi.fn();
+    const field = { id: "radius", type: "choice", options: [1, 2, 4], default: 1 };
+    const root = render(ImageParameterControlsProbe, { field, value: 1, onchange });
+    setInput(root.querySelector('[data-testid="host-select"]') as HTMLSelectElement, "2", "change");
+    expect(onchange).toHaveBeenCalledWith(2);
+    expect(imageEditorParameterComponents({})).toEqual({ slider: undefined, select: undefined });
+  });
+
+  it("themes buttons without an inline background, with the same tokens as React", () => {
+    expect(parameterButtonStyle).not.toContain("background-color");
+    expect(parameterInputStyle).toBe(parameterThemeStyleText("input"));
+    const controller = new ParametersController({ schema });
+    controller.setValue("speed", 3);
+    const root = render(ParametersPanel, { controller });
+    expect(root.querySelector('button[aria-label="Reset Speed"]')!.getAttribute("style")).toBeNull();
+    const undo = Array.from(root.querySelectorAll("button")).find((b) => b.textContent === "Undo")!;
+    expect(undo.getAttribute("style")).toContain("--pixerate-parameter-button-fg");
+    expect(undo.getAttribute("style")).not.toContain("background-color");
   });
 });

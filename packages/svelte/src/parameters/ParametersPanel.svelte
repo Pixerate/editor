@@ -27,7 +27,7 @@
     parameterInputStyle,
     parameterSelectStyle
   } from './styles.js';
-  import { resolveParameterComponents, type ParameterComponents } from './controls.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     controller: ParametersController;
@@ -81,8 +81,8 @@
     components
   }: Props = $props();
 
-  const resolvedComponents = $derived(resolveParameterComponents(components));
-  const CustomPresetSelect = $derived(resolvedComponents.select);
+  const parameterContext = getParameterComponents();
+  const CustomPresetSelect = $derived(resolveParameterComponents(components, parameterContext).select);
 
   // Agent playback: the cursor visits the controls a call changes.
   let root: HTMLDivElement | undefined = $state();
@@ -139,7 +139,6 @@
         <button
           type="button"
           class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground"
-          style={parameterButtonStyle}
           title="Reset to {String(view.defaults[field.id])}"
           aria-label="Reset {label}"
           onclick={() => controller.reset([field.id])}>↺</button

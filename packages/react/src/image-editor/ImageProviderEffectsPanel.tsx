@@ -3,12 +3,13 @@ import { EFFECT_LAYER_USES, findLayer, type ImageEditorController, type ImageLay
 import { EffectsBrowser } from '../effects';
 import { ImageEffectControls as Controls } from './ImageEffectControls';
 import { imageOutlineButtonClass } from './styles';
-import { useImageEditorControls, ImageCheckbox, ImageRange } from './controls/controls.js';
+import { ImageCheckbox, ImageRange } from './controls/controls.js';
 import type { ParameterComponents } from '../parameters/index.js';
 
 export interface ImageProviderEffectsPanelProps {
   controller: ImageEditorController;
   className?: string;
+  /** Host controls for the effects' parameters. */
   components?: ParameterComponents;
 }
 
@@ -24,9 +25,6 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
   const [browse, setBrowse] = useState<null | 'filter' | 'layer'>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const hostControls = useImageEditorControls();
-  const ImageCheckbox = hostControls.Checkbox;
-  const ImageRange = hostControls.Range;
   const provider = controller.effectsProvider;
   const state = controller.getState();
   const layer: ImageLayer | null = state.activeLayerId ? (findLayer(state.layers, state.activeLayerId)?.layer ?? null) : null;
@@ -99,25 +97,11 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
             return (
               <li key={f.id} className="rounded border border-border p-1" data-smart-effect={f.id}>
                 <div className="flex items-center gap-1">
-                  {ImageCheckbox ? (
-                    <ImageCheckbox
-                      checked={f.enabled}
-                      label={`${label} on`}
-                      onChange={(enabled: boolean) => {
-                        run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
-                      }}
-                    />
-                  ) : (
-                    <input
-                      type="checkbox"
-                      checked={f.enabled}
-                      aria-label={`${label} on`}
-                      onChange={(e) => {
-                        const enabled = e.currentTarget.checked;
-                        run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }));
-                      }}
-                    />
-                  )}
+                  <ImageCheckbox
+                    checked={f.enabled}
+                    label={`${label} on`}
+                    onChange={(enabled) => run(() => controller.updateEffectFilter(layer.id, f.id, { enabled }))}
+                  />
                   <button type="button" className="min-w-0 flex-1 truncate text-left text-foreground" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}>
                     {label}
                   </button>
@@ -135,33 +119,15 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
                   <div className="mt-1 space-y-2">
                     <label className="flex items-center gap-1">
                       <span className="w-14 text-[11px] text-foreground">Opacity</span>
-                      {ImageRange ? (
-                        <ImageRange
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          className="flex-1"
-                          value={f.opacity}
-                          label={`${label} opacity`}
-                          onChange={(opacity: number) => {
-                            run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }));
-                          }}
-                        />
-                      ) : (
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          className="flex-1"
-                          value={f.opacity}
-                          aria-label={`${label} opacity`}
-                          onChange={(e) => {
-                            const opacity = Number(e.currentTarget.value);
-                            run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }));
-                          }}
-                        />
-                      )}
+                      <ImageRange
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        className="flex-1"
+                        value={f.opacity}
+                        label={`${label} opacity`}
+                        onChange={(opacity) => run(() => controller.updateEffectFilter(layer.id, f.id, { opacity }))}
+                      />
                     </label>
                     <Controls
                       provider={provider}

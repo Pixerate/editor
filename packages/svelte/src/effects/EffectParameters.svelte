@@ -2,14 +2,8 @@
   import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
   import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
   import ParameterFieldControl from '../parameters/ParameterFieldControl.svelte';
-  import {
-    parameterButtonStyle,
-    parameterSelectStyle
-  } from '../parameters/styles.js';
-  import {
-    resolveParameterComponents,
-    type ParameterComponents
-  } from '../parameters/controls.js';
+  import { parameterSelectStyle } from '../parameters/styles.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from '../parameters/controls.js';
 
   interface Props {
     /** The effect's description (`describe`). */
@@ -54,8 +48,8 @@
     class: className = ''
   }: Props = $props();
   const fields = $derived(effectParameterFields(description, { fonts }));
-  const resolvedComponents = $derived(resolveParameterComponents(components));
-  const CustomPresetSelect = $derived(resolvedComponents.select);
+  const parameterContext = getParameterComponents();
+  const CustomPresetSelect = $derived(resolveParameterComponents(components, parameterContext).select);
   const idBase = `fx-${Math.random().toString(36).slice(2, 8)}`;
   let gesture: string | null = null;
   let count = 0;
@@ -86,6 +80,7 @@
           { value: '', label: 'Presets…' },
           ...description.presets.map((p) => ({ value: p.name, label: p.name }))
         ]}
+        class="w-full rounded border border-border px-1 py-0.5 text-xs"
         style={parameterSelectStyle}
         {disabled}
         onchange={(val) => preset(String(val))}
@@ -114,7 +109,7 @@
         {#if keyed}<span class="text-[10px] text-muted-foreground">keyframed</span>{/if}
         {#if addon}{@render addon(field.id)}{/if}
         {#if onreset && !keyed && !disabled && !parameterValuesEqual(value, field.default)}
-          <button type="button" class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" style={parameterButtonStyle} aria-label="Reset {label}" onclick={() => onreset(field.id)}>↺</button>
+          <button type="button" class="rounded px-1 text-[11px] text-muted-foreground hover:text-foreground" aria-label="Reset {label}" onclick={() => onreset(field.id)}>↺</button>
         {/if}
       </div>
       <ParameterFieldControl

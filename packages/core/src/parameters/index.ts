@@ -7,3 +7,5 @@ export * from './shader.js';
 export * from './rangeMapper.js';
 export * from './playback.js';
 export * from './editorDocument.js';
+export * from './theme.js';
+export * from './options.js';

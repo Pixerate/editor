@@ -1,17 +1,12 @@
 <script lang="ts">
-  let {
-    value,
-    options,
-    onChange,
-  }: {
-    value: string;
-    options: { value: string; label: string }[];
-    onChange: (val: string) => void;
-  } = $props();
+  import type { ParameterSelectProps } from '../../src/parameters';
+
+  let { value, options, label, onchange }: ParameterSelectProps = $props();
 </script>
 
-<select data-testid="custom-select" {value} onchange={(e) => onChange((e.target as HTMLSelectElement).value)}>
-  {#each options as opt}
-    <option value={opt.value}>{opt.label}</option>
+<!-- A string-only select, like most host dropdowns. -->
+<select data-testid="custom-select" aria-label={label} value={String(value)} onchange={(e) => onchange(e.currentTarget.value)}>
+  {#each options as opt (opt.value)}
+    <option value={String(opt.value)}>{opt.label}</option>
   {/each}
 </select>
