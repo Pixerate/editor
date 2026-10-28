@@ -11,7 +11,9 @@ import {
   layerPanels,
   CANVAS_SIZE_PRESETS,
   type GroupLayer,
+  type PixelLayer,
 } from '../src/image-editor';
+import { createFakeEffectProvider } from '../src/effects';
 
 function setup() {
   const fake = { width: 20, height: 10, naturalWidth: 20, naturalHeight: 10 } as unknown as HTMLImageElement;
@@ -99,5 +101,23 @@ describe('layers panel view model', () => {
     expect(adjPanels.map((p) => p.id)).toContain('adjustment');
 
     expect(CANVAS_SIZE_PRESETS.length).toBeGreaterThan(0);
+  });
+
+  it('offers effect layers and the effects panel only with an effects provider', async () => {
+    const c = setup();
+    expect(newLayerOptions(c).some((o) => o.id === 'effect')).toBe(false);
+    expect(layerPanels(null).map((p) => p.id)).not.toContain('provider-effects');
+
+    c.setEffectsProvider(createFakeEffectProvider());
+    expect(newLayerOptions(c).find((o) => o.id === 'effect')).toMatchObject({ pick: 'effect', group: 'Effects' });
+    await expect(addLayerOfKind(c, 'effect')).rejects.toThrow(/init\.effect/);
+    const id = await addLayerOfKind(c, 'effect', { effect: 'fake.gradient', name: 'Sky' });
+    expect(c.getLayer(id)).toMatchObject({ type: 'pixel', name: 'Sky', generator: { effect: 'fake.gradient' } });
+    expect(c.getState().activeLayerId).toBe(id);
+
+    // With nothing active the panel adds effect layers; with a layer it follows Layer Properties.
+    expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection', 'provider-effects']);
+    const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
+    expect(ids.slice(0, 2)).toEqual(['properties', 'provider-effects']);
   });
 });
