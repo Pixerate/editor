@@ -1,5 +1,11 @@
 # @pixerate/editor-react
 
+## 0.114.2
+
+### Patch Changes
+
+- 4d75a85: Chart tooltips fall back to `--background` / `--foreground` when the host defines only one of `--popover` and `--popover-foreground`, so the text stays readable in dark themes that leave `--popover-foreground` out.
+
 ## 0.114.1
 
 ### Patch Changes
