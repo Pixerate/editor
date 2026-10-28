@@ -977,6 +977,29 @@ describe('Image editor geometry - canonical natural-image space', () => {
     expect(border.args[1]).toBeCloseTo(600, 6);
   });
 
+  it('renderer draws overlay chrome a fixed size on screen under a host scale', async () => {
+    const renderer = new ImageEditorRenderer();
+    const handleSizes = async (hostScale?: number) => {
+      const controller = new ImageEditorController();
+      controller.setCrop({ x: 0, y: 0, width: 400, height: 300 });
+      const { ctx, calls } = makeRecordingCtx();
+      const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+      await renderer.renderToCanvas(target, fakeImage('', 800, 600), controller.getState(), {
+        viewportWidth: VP,
+        viewportHeight: VP,
+        showCropOverlay: true,
+        ...(hostScale ? { hostScale } : {}),
+      });
+      // The crop handles are the small filled squares.
+      return calls.filter((c) => c.name === 'fillRect' && c.args[2] === c.args[3] && c.args[2] < 20).map((c) => c.args[2]);
+    };
+    const plain = await handleSizes();
+    const zoomed = await handleSizes(4);
+    expect(plain.length).toBe(8);
+    expect(zoomed.length).toBe(8);
+    expect(zoomed[0]).toBeCloseTo(plain[0] / 4, 6);
+  });
+
   it('renderer sizes the backing store by pixelRatio and draws in CSS pixels through a base scale', async () => {
     const renderer = new ImageEditorRenderer();
     const controller = new ImageEditorController({ initialState: { transform: { rotate: 90, flipH: false, flipV: false } } });

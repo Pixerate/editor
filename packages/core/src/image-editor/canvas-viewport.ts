@@ -20,6 +20,11 @@ export interface CanvasViewport {
   height: number;
   /** Backing-store pixels per CSS pixel (pass as `RenderOptions.pixelRatio`). */
   pixelRatio: number;
+  /**
+   * Screen pixels per CSS pixel from CSS transforms on the element or its ancestors (1 without
+   * one; pass as `RenderOptions.hostScale` so overlay chrome keeps its size on screen).
+   */
+  hostScale: number;
 }
 
 /** The size `measureCanvasViewport` gives an element without layout (e.g. before it is shown, or in jsdom). */
@@ -54,7 +59,13 @@ export function measureCanvasViewport(
   // The larger axis keeps a non-uniform scale sharp in both directions.
   let pixelRatio = dpr * Math.max(sx, sy);
   pixelRatio = Math.min(pixelRatio, MAX_CANVAS_BACKING_SIDE / Math.max(width, height));
-  return { width, height, pixelRatio: Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1 };
+  const hostScale = Math.max(sx, sy);
+  return {
+    width,
+    height,
+    pixelRatio: Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1,
+    hostScale: Number.isFinite(hostScale) && hostScale > 0 ? hostScale : 1,
+  };
 }
 
 /** Whether two measurements need different backing stores. */

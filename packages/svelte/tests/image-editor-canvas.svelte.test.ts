@@ -56,6 +56,21 @@ describe('ImageEditorCanvas (Svelte)', () => {
     expect(c.getLayerBounds(id)).toBeNull();
   });
 
+  it('pans with a primary drag in pan mode, instead of painting', () => {
+    const { c } = setup({ mode: 'paint', panMode: true });
+    const id = c.addPixelLayer();
+    c.setTool('brush');
+    flushSync();
+    canvas().dispatchEvent(pointer('pointerdown', 120, 70));
+    canvas().dispatchEvent(pointer('mousedown', 120, 70));
+    canvas().dispatchEvent(pointer('pointermove', 160, 90));
+    canvas().dispatchEvent(pointer('mousemove', 160, 90));
+    canvas().dispatchEvent(pointer('pointerup', 160, 90));
+    canvas().dispatchEvent(pointer('mouseup', 160, 90));
+    expect(c.getState().pan).toEqual({ x: 40, y: 20 });
+    expect(c.getLayerBounds(id)).toBeNull();
+  });
+
   it('paints in paint mode', () => {
     const { c } = setup({ mode: 'paint' });
     const id = c.addPixelLayer();

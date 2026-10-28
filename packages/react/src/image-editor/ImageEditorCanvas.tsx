@@ -299,6 +299,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
         viewportWidth: viewport.width,
         viewportHeight: viewport.height,
         pixelRatio: viewport.pixelRatio,
+        hostScale: viewport.hostScale,
         fit,
         showCropOverlay: mode === 'crop',
         showSelectionOverlay: true,

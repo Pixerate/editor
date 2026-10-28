@@ -27,6 +27,7 @@ describe('measureCanvasViewport', () => {
     expect(v.width).toBe(220);
     expect(v.height).toBe(160);
     expect(v.pixelRatio).toBeCloseTo((500 / 220) * 2, 6);
+    expect(v.hostScale).toBeCloseTo(500 / 220, 6);
   });
 
   it('uses the device pixel ratio alone without a transform, and 1 for a bad ratio', () => {
@@ -47,12 +48,12 @@ describe('measureCanvasViewport', () => {
 
   it('falls back for an element without layout', () => {
     const v = measureCanvasViewport({ clientWidth: 0, clientHeight: 0, getBoundingClientRect: () => ({ width: 0, height: 0 }) }, 2);
-    expect(v).toEqual({ ...DEFAULT_CANVAS_VIEWPORT, pixelRatio: 2 });
+    expect(v).toEqual({ ...DEFAULT_CANVAS_VIEWPORT, pixelRatio: 2, hostScale: 1 });
   });
 
   it('compares measurements', () => {
-    expect(sameCanvasViewport({ width: 1, height: 2, pixelRatio: 2 }, { width: 1, height: 2, pixelRatio: 2.0001 })).toBe(true);
-    expect(sameCanvasViewport({ width: 1, height: 2, pixelRatio: 2 }, { width: 1, height: 2, pixelRatio: 2.5 })).toBe(false);
+    expect(sameCanvasViewport({ width: 1, height: 2, pixelRatio: 2, hostScale: 1 }, { width: 1, height: 2, pixelRatio: 2.0001, hostScale: 1 })).toBe(true);
+    expect(sameCanvasViewport({ width: 1, height: 2, pixelRatio: 2, hostScale: 1 }, { width: 1, height: 2, pixelRatio: 2.5, hostScale: 1 })).toBe(false);
   });
 
   it('maps a pointer under a CSS transform to the same document point (CSS-pixel projection)', () => {
