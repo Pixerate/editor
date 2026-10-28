@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.174.1
+
+### Patch Changes
+
+- 01baa4c: `@pixerate/markdown-conformance` is no longer installed with the editor. Its format manifest is already built into the editor, so it is now only a development dependency.
+
 ## 0.174.0
 
 ### Minor Changes
