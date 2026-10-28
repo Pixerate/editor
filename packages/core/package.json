@@ -362,12 +362,10 @@
     "build:wasm": "node scripts/build-wet-wasm.mjs",
     "eval:tools": "vitest run --config vitest.eval.config.ts --disableConsoleIntercept"
   },
-  "dependencies": {
-    "@pixerate/markdown-conformance": "workspace:*"
-  },
   "devDependencies": {
     "@anthropic-ai/sdk": "1.1.0",
     "@dagrejs/dagre": "^1.1.8",
+    "@pixerate/markdown-conformance": "workspace:*",
     "@tiptap/core": "^2.27.3",
     "@tiptap/extension-character-count": "^2.27.3",
     "@tiptap/extension-color": "^2.27.3",

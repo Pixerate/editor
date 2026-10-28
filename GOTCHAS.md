@@ -31,7 +31,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Importing a data-only package's `.json` export (e.g. `@pixerate/markdown-conformance/manifest.json`) in a bundled library (`@pixerate/editor`) threw `ERR_IMPORT_ATTRIBUTE_MISSING: Module ... needs an import attribute of "type: json"` when consumed via Node ESM.
 - **Root Cause**: `tsup` treats workspace packages in `dependencies` as external by default and strips the TS import attribute `with { type: 'json' }` from output chunks, leaving bare `import manifestData from ".../manifest.json"`, which Node ESM rejects.
-- **Solution / Workaround**: Add the data-only package to `noExternal` in `tsup.config.ts` (e.g. `noExternal: ["tiptap-markdown", "@pixerate/markdown-conformance"]`). `esbuild` then inlines the JSON directly into the built JavaScript chunks, avoiding runtime JSON module import attribute restrictions for consumers.
+- **Solution / Workaround**: Add the data-only package to `noExternal` in `tsup.config.ts` (e.g. `noExternal: ["tiptap-markdown", "@pixerate/markdown-conformance"]`). `esbuild` then inlines the JSON directly into the built JavaScript chunks, avoiding runtime JSON module import attribute restrictions for consumers. Because it is inlined, the data package is a `devDependency` of core, not a dependency: apps installing the editor don't get it, and `scripts/check-packages.mjs` leaves it out of its test project so it fails if a package starts needing it at runtime.
 
 ### [core|react|svelte/effects] A Vector Effect's Authoring Preview Showed the Previous Effect's Frame
 
