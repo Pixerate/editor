@@ -74,6 +74,24 @@ describe('video effect tools', () => {
 		expect((await call('search_effects', { use: 'sideways' })).isError).toBe(true);
 	});
 
+	it('searches by tag, returns tags, and names the nearest tags for an unknown one', async () => {
+		const { call } = setup();
+		const colour = ok(await call('search_effects', { tags: ['Colour'] }));
+		expect(colour.effects.map((e: { id: string }) => e.id)).toEqual(['fake.invert', 'fake.tint']);
+		expect(colour.effects[0].tags).toEqual(['negative', 'colour']);
+		expect(colour.tags).toEqual([
+			{ tag: 'colour', count: 2 },
+			{ tag: 'negative', count: 1 },
+			{ tag: 'wash', count: 1 }
+		]);
+		expect(ok(await call('search_effects', { tags: ['Lower Third'] })).effects.map((e: { id: string }) => e.id)).toEqual(['fake.bar']);
+		const all = ok(await call('search_effects', {}));
+		expect(all.tags).toContainEqual({ tag: 'lower-third', count: 1 });
+		const none = ok(await call('search_effects', { tags: ['color'] }));
+		expect(none).toMatchObject({ total: 0, unknownTags: [{ tag: 'color', nearest: ['colour'] }] });
+		expect(ok(await call('search_effects', { tags: ['colour', 'title'] })).unknownTags).toBeUndefined();
+	});
+
 	it('applies, updates, keyframes and removes clip effects, one undo step each, returning what changed', async () => {
 		const { call, controller } = setup();
 		const applied = ok(await call('apply_effect', { target: 'a', effect: 'fake.tint', values: { amount: 0.2 } }));
