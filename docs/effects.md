@@ -72,7 +72,7 @@ const release = editor.useEffects(effects);
 
 ## Agent tools
 
-`createEffectToolProvider(host)` (`effects/tools.ts`) gives every editor the same six tools: `search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect` and `remove_effect`. Without a provider the read tools say so and the write tools refuse. Each editor adds its own:
+`createEffectToolProvider(host)` (`effects/tools.ts`) gives every editor the same six tools: `search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect` and `remove_effect`. `search_effects` filters by words, kind, category, use and `tags`, returns each effect's tags, and lists the tags of everything it matched with their counts, so an agent can browse tags and then narrow by them; a tag the catalog lacks comes back with the nearest ones. Without a provider the read tools say so and the write tools refuse. Each editor adds its own:
 
 | Provider factory | Extra tools |
 |---|---|
@@ -137,7 +137,7 @@ The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a so
 
 ## Writing a provider
 
-1. Implement `EffectProvider`. Return summaries from `list` / `search`, and a full `EffectDescription` (controls with ranges and units, defaults, presets) from `describe`.
+1. Implement `EffectProvider`. Return summaries (with `tags`) from `list` / `search` (`searchEffectSummaries` applies every `EffectSearchOptions` filter, `tags` included), and a full `EffectDescription` (controls with ranges and units, defaults, presets) from `describe`.
 2. Throw the typed errors: an unknown id, invalid values, or something the provider can't do (a vector effect in a Worker, float output without float support).
 3. Make `render` deterministic for the same request, and free GPU or Worker resources in `dispose`.
 4. Run `checkEffectProvider` in your tests.

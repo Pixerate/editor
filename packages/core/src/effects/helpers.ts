@@ -40,12 +40,31 @@ export function resolveEffectValues(description: Pick<EffectDescription, 'id' | 
 // Search
 // ---------------------------------------------------------------------------
 
+/** A tag as tags are compared: trimmed, lower case, spaces and underscores as single hyphens (`"Game Boy"` → `game-boy`). */
+export function normaliseEffectTag(tag: string): string {
+	return tag.trim().toLowerCase().replace(/[\s_-]+/g, '-');
+}
+
+/** True when the effect carries every one of `tags` (compared with `normaliseEffectTag`). */
+export function hasEffectTags(e: Pick<EffectSummary, 'tags'>, tags: readonly string[] | undefined): boolean {
+	if (!tags?.length) return true;
+	const own = new Set((e.tags ?? []).map(normaliseEffectTag));
+	return tags.every((t) => own.has(normaliseEffectTag(t)));
+}
+
+/** The tags of `effects` with how many carry each, the most used first (ties alphabetical). */
+export function countEffectTags(effects: readonly Pick<EffectSummary, 'tags'>[]): { tag: string; count: number }[] {
+	const counts = new Map<string, number>();
+	for (const e of effects) for (const tag of new Set((e.tags ?? []).map(normaliseEffectTag))) if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+	return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
 const matchesFilters = (e: EffectSummary, o: EffectSearchOptions) =>
-	(!o.kind || e.kind === o.kind) && (!o.category || e.category === o.category) && (!o.use || e.uses.includes(o.use));
+	(!o.kind || e.kind === o.kind) && (!o.category || e.category === o.category) && (!o.use || e.uses.includes(o.use)) && hasEffectTags(e, o.tags);
 
 /**
- * Filters a catalog and ranks it against `query` (every word must appear in the id, name,
- * category, tags or description; name matches rank first). An empty query keeps catalog order.
+ * Filters a catalog (kind, category, use and every tag) and ranks it against `query` (every word
+ * must appear in the id, name, category, tags or description; name matches rank first). An empty query keeps catalog order.
  * Providers can implement `list` and `search` with it.
  */
 export function searchEffectSummaries<T extends EffectSummary>(catalog: readonly T[], query = '', options: EffectSearchOptions = {}): T[] {

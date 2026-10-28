@@ -12,6 +12,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { isEffectError } from './errors.js';
+import { countEffectTags, hasEffectTags, normaliseEffectTag } from './helpers.js';
 import { EFFECT_KINDS, EFFECT_USES, type EffectDescription, type EffectProvider, type EffectSummary, type EffectUse } from './types.js';
 
 /** One effect applied to a target, as the tools report it. */
@@ -115,6 +116,15 @@ interface Catalog {
 
 /** Most effect ids listed in an `effect` argument's enum; larger catalogs are searched instead. */
 const ENUM_LIMIT = 60;
+/** Most tags `search_effects` lists from its matches. */
+const TAG_LIMIT = 40;
+
+/** Catalog tags close to an unknown one (one contains the other, or they share a stem), the most used first. */
+function nearestTags(tag: string, known: readonly { tag: string; count: number }[]): string[] {
+	const t = normaliseEffectTag(tag);
+	const stem = t.slice(0, 4);
+	return known.filter((k) => k.tag.includes(t) || t.includes(k.tag) || (stem.length === 4 && k.tag.startsWith(stem))).slice(0, 5).map((k) => k.tag);
+}
 
 const summaryOut = (e: EffectSummary) => ({
 	id: e.id,
@@ -123,6 +133,7 @@ const summaryOut = (e: EffectSummary) => ({
 	category: e.category,
 	uses: e.uses,
 	...(e.description ? { description: e.description } : {}),
+	...(e.tags?.length ? { tags: e.tags } : {}),
 	transparent: e.transparent,
 	loop: e.loop,
 	...(e.duration !== undefined ? { duration: e.duration } : {})
@@ -196,21 +207,31 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'search_effects',
 			title: 'Search effects',
-			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion), category or use (${EFFECT_USES.join(', ')}). For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, transparent, loop, duration (ms) }], total }. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
+			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one). For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms) }], total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
 			inputSchema: object({
 				query: { type: 'string', description: 'Words to match (default: every effect).' },
 				kind: { type: 'string', enum: [...EFFECT_KINDS], description: 'shader (pixels), vector (animated SVG) or motion (animates vector art).' },
 				category: { type: 'string', minLength: 1, description: 'The provider\'s category, e.g. "gradient", "light", "transition".' },
 				use: { type: 'string', enum: [...EFFECT_USES], description: 'What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input.' },
+				tags: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens).' },
 				limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Most effects to return (default 20).' }
 			}),
 			annotations: { title: 'Search effects', ...ANNOTATIONS.read },
 			handler: async (args) => {
 				const p = host.provider();
 				if (!p) return { available: false, reason: NO_PROVIDER, effects: [], total: 0 };
-				const found = await explain(async () => p.search((args.query as string | undefined) ?? '', { kind: args.kind, category: args.category, use: args.use }));
+				const tags = args.tags as string[] | undefined;
+				// Filtered here too: a provider with its own search may not know tags.
+				const found = (await explain(async () => p.search((args.query as string | undefined) ?? '', { kind: args.kind, category: args.category, use: args.use, tags }))).filter((e) => hasEffectTags(e, tags));
 				const limit = (args.limit as number | undefined) ?? 20;
-				return { available: true, provider: { id: p.id, name: p.name, capabilities: p.capabilities }, effects: found.slice(0, limit).map(summaryOut), total: found.length };
+				const out: Record<string, unknown> = { available: true, provider: { id: p.id, name: p.name, capabilities: p.capabilities }, effects: found.slice(0, limit).map(summaryOut), total: found.length, tags: countEffectTags(found).slice(0, TAG_LIMIT) };
+				if (tags?.length && !found.length) {
+					const known = countEffectTags(await explain(async () => p.list()));
+					const have = new Set(known.map((k) => k.tag));
+					const unknown = tags.filter((t) => !have.has(normaliseEffectTag(t)));
+					if (unknown.length) out.unknownTags = unknown.map((tag) => ({ tag, nearest: nearestTags(tag, known) }));
+				}
+				return out;
 			}
 		},
 		{
