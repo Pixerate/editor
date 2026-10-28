@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [react|svelte/parameters] Parameter Inputs: Tab Commit, Refused Edits and Theme Tokens
+
+- **Issue / Symptom**: (1) A typed number sometimes did not apply when the user pressed Tab. (2) After a refused edit (not a number, or clamped to the stored value), typing the same text again stayed on screen. (3) Parameter inputs, selects and sliders ignored the host's theme.
+- **Root Cause**: (1) Commits ran on blur only. The React box was also keyed on `value` (`key={value}`), so a commit made during the Tab keydown remounted the focused element before the browser moved focus on. (2) The commit dedup remembered the refused text, so the next identical attempt was treated as already committed. (3) No theme hook. Inline `background-color` / `color` on buttons also beat their `hover:` / `text-muted-foreground` classes, because inline styles override class utilities.
+- **Solution / Workaround**: `ParameterCommitInput` commits on Tab, native `change`, blur and Enter, and skips text equal to `value` or to the last commit. After a commit it remembers what the box *shows*, so a refused edit (the stored text put back) is tried again. React keeps the same element and syncs a changed `value` in a layout effect, so do not reintroduce `key={value}`. Theme tokens live once in core (`parameterThemeStyles` / `parameterThemeStyleText` in `@pixerate/editor/parameters`): `--pixerate-parameter-input-bg/-fg`, `-select-bg/-fg`, `-button-fg`, `-border` and `-accent`, falling back to `--background`, `--foreground`, `--input`, `--border` and `--primary`. Buttons get text and border colour only. Do not add inline styles to the `↺` reset or segmented buttons. Host controls are `components={{ input, slider, select }}` (prop or `ParameterComponentsProvider` / `setParameterComponents`). Custom selects may report string values; map them back with `matchParameterOptionValue`. The image editor's host `Range` / `Select` reach effect parameters through `imageEditorParameterComponents` adapters, not by passing those components directly, because their props differ.
+
 ### [markdown-conformance] CommonMark Delimiter Rules Shift Delimiters Across Unicode Selection Markers
 
 - **Issue / Symptom**: In markdown serialization with selection markers (e.g. `⟦`, `⟧`), `tiptap-markdown`'s `trimInline` serializer shifted delimiters across selection markers (e.g. `**⟦wor**⟧ld` instead of `⟦**wor**⟧ld`).

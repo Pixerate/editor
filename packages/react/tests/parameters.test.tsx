@@ -2,6 +2,9 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { parameterThemeStyles } from "@pixerate/editor/parameters";
+import { ImageEditorControlsProvider, type ImageSelectProps } from "../src/image-editor/controls/controls";
+import { imageEditorParameterComponents } from "../src/image-editor/controls/parameterControls";
 import { CommandRegistry } from "@pixerate/editor/commands";
 import { ParametersController, createParameterKeyframeStore, type ParameterSchema } from "@pixerate/editor/parameters";
 import {
@@ -13,7 +16,12 @@ import {
   useParameterCommands,
   useParameters,
   useParametersController,
+  ParameterCommitInput,
+  ParameterComponentsProvider,
+  parameterInputStyle,
+  parameterButtonStyle,
   type UseParametersResult,
+  type ParameterComponents,
 } from "../src/parameters";
 
 let container: HTMLDivElement;
@@ -191,8 +199,9 @@ describe("field controls", () => {
 
     // Use alpha slider inside the ColorPicker
     const alphaSlider = q('[role="slider"][aria-label="Alpha"]');
-    await fire(alphaSlider, "keydown", { key: "End" });
-    expect(onColor).toHaveBeenLastCalledWith("#00ff00ff");
+    await fire(alphaSlider, "keydown", { key: "End", bubbles: true });
+    // `value` is still the red it was rendered with: End takes its alpha to full.
+    expect(onColor).toHaveBeenLastCalledWith("#ff0000ff");
 
     // Click the swatch button inside the ColorPicker
     await click(q('button[title="#00f"]'));
@@ -207,6 +216,50 @@ describe("field controls", () => {
     expect(button.getAttribute("aria-pressed")).toBe("true");
     await click(button);
     expect(onToggle).toHaveBeenCalled();
+  });
+
+  it("commits on Tab and deduplicates with subsequent blur", async () => {
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={onChange} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    input.value = "2.5";
+    // Press Tab
+    await fire(input, "keydown", { key: "Tab", bubbles: true });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(2.5);
+
+    // Immediate blur should not trigger duplicate commit
+    await fire(input, "focusout", { bubbles: true });
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits on native change event and resets on Escape", async () => {
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={onChange} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    input.value = "3.2";
+    await fire(input, "change");
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(3.2);
+
+    // Escape resets draft back to current value
+    input.value = "99";
+    await fire(input, "keydown", { key: "Escape", bubbles: true });
+    expect(input.value).toBe("1");
+  });
+
+  it("renders with host parameter fallback styling tokens", async () => {
+    await act(async () =>
+      root.render(<ParameterSlider field={schema.fields[0] as any} value={1} onChange={() => {}} />),
+    );
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    expect(input.style.backgroundColor).toContain("var(--pixerate-parameter-input-bg");
+    const range = q<HTMLInputElement>('input[type="range"]');
+    expect(range.style.accentColor).toContain("var(--pixerate-parameter-accent");
   });
 });
 
@@ -279,5 +332,182 @@ describe("ParametersPanel", () => {
     // "Mine" equals the current values, so it is active and can be deleted.
     await click(q('button[aria-label="Delete preset Mine"]'));
     expect(controller.getState().presets.map((p) => p.name)).toEqual(["Punchy"]);
+  });
+
+  it("renders custom components passed via components prop", async () => {
+    const controller = new ParametersController({ schema });
+    const CustomInput = ({ value, onCommit }: any) => (
+      <input data-testid="custom-input" value={value} onChange={(e) => onCommit(e.target.value)} />
+    );
+    const CustomSlider = ({ value, onChange }: any) => (
+      <input type="range" data-testid="custom-slider" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    );
+    const CustomSelect = ({ value, options, onChange }: any) => (
+      <select data-testid="custom-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o: any) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    );
+
+    await act(async () =>
+      root.render(
+        <ParametersPanel
+          controller={controller}
+          components={{ input: CustomInput, slider: CustomSlider, select: CustomSelect }}
+        />,
+      ),
+    );
+    expect(q('[data-testid="custom-slider"]')).not.toBeNull();
+    expect(q('[data-testid="custom-input"]')).not.toBeNull();
+    expect(q('[data-testid="custom-select"]')).not.toBeNull();
+  });
+
+  it("renders custom components provided via context", async () => {
+    const controller = new ParametersController({ schema });
+    const CustomInput = ({ value, onCommit }: any) => (
+      <input data-testid="context-input" value={value} onChange={(e) => onCommit(e.target.value)} />
+    );
+
+    await act(async () =>
+      root.render(
+        <ParameterComponentsProvider components={{ input: CustomInput }}>
+          <ParametersPanel controller={controller} />
+        </ParameterComponentsProvider>,
+      ),
+    );
+    expect(q('[data-testid="context-input"]')).not.toBeNull();
+  });
+});
+
+describe("parameter control fixes", () => {
+  it("reverts refused text every time it is committed, not only the first", async () => {
+    const onChange = vi.fn();
+    await act(async () => root.render(<ParameterSlider field={schema.fields[0] as any} value={4} onChange={onChange} />));
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    for (const attempt of [1, 2]) {
+      input.value = "99"; // clamps to the stored 4
+      await fire(input, "keydown", { key: "Enter", bubbles: true, cancelable: true });
+      expect(input.value, `attempt ${attempt}`).toBe("4");
+    }
+    input.value = "abc";
+    await fire(input, "focusout", { bubbles: true });
+    input.value = "abc";
+    await fire(input, "focusout", { bubbles: true });
+    expect(input.value).toBe("4");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the focused element when Tab commits, and shows the new value in it", async () => {
+    const controller = new ParametersController({ schema });
+    await act(async () => root.render(<ParametersPanel controller={controller} />));
+    const input = q<HTMLInputElement>('input[aria-label="Speed value"]');
+    input.focus();
+    input.value = "2.5";
+    await fire(input, "keydown", { key: "Tab", bubbles: true, cancelable: true });
+    expect(controller.getState().values.speed).toBe(2.5);
+    expect(q('input[aria-label="Speed value"]')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    await fire(input, "focusout", { bubbles: true });
+    expect(controller.getState().canUndo).toBe(true);
+    await act(async () => controller.undo());
+    expect(controller.getState().canUndo).toBe(false);
+  });
+
+  it("commits on a native change after the value changed from outside", async () => {
+    const onCommit = vi.fn();
+    const stable = (text: string) => onCommit(text);
+    await act(async () => root.render(<ParameterCommitInput aria-label="Box" value="a" onCommit={stable} />));
+    await act(async () => root.render(<ParameterCommitInput aria-label="Box" value="b" onCommit={stable} />));
+    const input = q<HTMLInputElement>('input[aria-label="Box"]');
+    expect(input.value).toBe("b");
+    input.value = "c";
+    await fire(input, "change");
+    expect(onCommit).toHaveBeenCalledWith("c");
+  });
+
+  it("forwards a caller's ref to the input", async () => {
+    const ref = React.createRef<HTMLInputElement>();
+    await act(async () => root.render(<ParameterCommitInput aria-label="Box" value="a" onCommit={() => {}} {...({ ref } as any)} />));
+    expect(ref.current).toBe(q('input[aria-label="Box"]'));
+  });
+
+  it("maps a string-only custom select back to the option's numeric value", async () => {
+    const onChange = vi.fn();
+    const StringSelect = ({ value, options, label, onChange: change }: any) => (
+      <select aria-label={label} value={String(value)} onChange={(e) => change(e.target.value)}>
+        {options.map((o: any) => (
+          <option key={o.value} value={String(o.value)}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+    const field = { id: "radius", type: "choice", options: [1, 2, 4], default: 1 } as any;
+    await act(async () => root.render(<ParameterSelect field={field} value={1} onChange={onChange} components={{ select: StringSelect }} />));
+    await setInput(q<HTMLSelectElement>("select"), "4", "change");
+    expect(onChange).toHaveBeenCalledWith(4);
+  });
+
+  it("uses the image editor's host Select through the adapter, with typed values", async () => {
+    const onChange = vi.fn();
+    const HostSelect = ({ value, options, label, onChange: change }: ImageSelectProps) => (
+      <select data-testid="host-select" aria-label={label} value={value} onChange={(e) => change(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+    const field = { id: "radius", type: "choice", options: [1, 2, 4], default: 1 } as any;
+    await act(async () =>
+      root.render(
+        <ImageEditorControlsProvider controls={{ Select: HostSelect }}>
+          <ParameterSelect field={field} value={1} onChange={onChange} components={imageEditorParameterComponents({ Select: HostSelect })} />
+        </ImageEditorControlsProvider>,
+      ),
+    );
+    await setInput(q<HTMLSelectElement>('[data-testid="host-select"]'), "2", "change");
+    expect(onChange).toHaveBeenCalledWith(2);
+    expect(imageEditorParameterComponents({})).toEqual({ slider: undefined, select: undefined });
+  });
+
+  it("starts one gesture per drag even when a custom slider reports it twice", async () => {
+    const onGestureStart = vi.fn();
+    const onGestureEnd = vi.fn();
+    const Chatty = ({ label, onGestureStart: start, onGestureEnd: end }: any) => (
+      <button type="button" aria-label={label} onPointerDown={() => (start(), start())} onPointerUp={() => (end(), end())} />
+    );
+    await act(async () =>
+      root.render(
+        <ParameterSlider
+          field={schema.fields[0] as any}
+          value={1}
+          onChange={() => {}}
+          onGestureStart={onGestureStart}
+          onGestureEnd={onGestureEnd}
+          components={{ slider: Chatty }}
+        />,
+      ),
+    );
+    const handle = q('button[aria-label="Speed"]');
+    await fire(handle, "pointerdown");
+    await fire(handle, "pointerup");
+    expect(onGestureStart).toHaveBeenCalledTimes(1);
+    expect(onGestureEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("themes buttons without an inline background, so hover classes apply", async () => {
+    expect(parameterButtonStyle).not.toHaveProperty("backgroundColor");
+    expect(parameterInputStyle).toEqual(parameterThemeStyles.input);
+    const controller = new ParametersController({ schema });
+    controller.setValue("speed", 3);
+    await act(async () => root.render(<ParametersPanel controller={controller} />));
+    const reset = q<HTMLButtonElement>('button[aria-label="Reset Speed"]');
+    expect(reset.getAttribute("style")).toBeNull();
+    const undo = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Undo")!;
+    expect(undo.style.backgroundColor).toBe("");
+    expect(undo.style.color).toContain("--pixerate-parameter-button-fg");
   });
 });

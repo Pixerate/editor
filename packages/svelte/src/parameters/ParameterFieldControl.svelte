@@ -7,6 +7,7 @@
   import ParameterText from './ParameterText.svelte';
   import ParameterToggle from './ParameterToggle.svelte';
   import ParameterVector from './ParameterVector.svelte';
+  import type { ParameterComponents } from './controls.js';
 
   interface Props {
     field: ParameterField;
@@ -17,23 +18,24 @@
     resolveFile?: (file: File) => string | Promise<string>;
     disabled?: boolean;
     id?: string;
+    components?: ParameterComponents;
   }
 
-  let { field, value, onchange, ongesturestart, ongestureend, resolveFile, disabled = false, id }: Props = $props();
+  let { field, value, onchange, ongesturestart, ongestureend, resolveFile, disabled = false, id, components }: Props = $props();
   const set = $derived(onchange as (value: any) => void);
 </script>
 
 <!-- The control for any field type. -->
 {#if field.type === 'number' || field.type === 'int'}
-  <ParameterSlider {field} value={value as number} onchange={set} {ongesturestart} {ongestureend} {disabled} {id} />
+  <ParameterSlider {field} value={value as number} onchange={set} {ongesturestart} {ongestureend} {disabled} {id} {components} />
 {:else if field.type === 'boolean'}
   <ParameterToggle {field} value={value as boolean} onchange={set} {disabled} {id} />
 {:else if field.type === 'choice'}
-  <ParameterSelect {field} value={value as string | number} onchange={set} {disabled} {id} />
+  <ParameterSelect {field} value={value as string | number} onchange={set} {disabled} {id} {components} />
 {:else if field.type === 'color'}
   <ParameterColor {field} value={value as string} onchange={set} {ongesturestart} {ongestureend} {disabled} {id} />
 {:else if field.type === 'vector'}
-  <ParameterVector {field} value={value as number[]} onchange={set} {disabled} {id} />
+  <ParameterVector {field} value={value as number[]} onchange={set} {disabled} {id} {components} />
 {:else if field.type === 'image'}
   <ParameterImage {field} value={value as string} onchange={set} {resolveFile} {disabled} {id} />
 {:else if field.type === 'text'}

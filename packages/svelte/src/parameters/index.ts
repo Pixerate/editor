@@ -14,6 +14,7 @@ export { default as ParameterText } from "./ParameterText.svelte";
 export { default as ParameterCommitInput } from "./ParameterCommitInput.svelte";
 export { default as KeyframeDiamond } from "./KeyframeDiamond.svelte";
 export * from "./createParameters.svelte.js";
+export * from "./controls.js";
 export * from "./styles.js";
 
 export type ParametersPanelProps = ComponentProps<typeof ParametersPanelComponent>;

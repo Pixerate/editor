@@ -4,13 +4,18 @@
   import { untrack } from 'svelte';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
   import ImageEffectControls from './ImageEffectControls.svelte';
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
+  import ImageRange from './controls/ImageRange.svelte';
+  import type { ParameterComponents } from '../parameters/index.js';
 
   interface Props {
     controller: ImageEditorController;
+    /** Host controls for the effects' parameters. */
+    components?: ParameterComponents;
     class?: string;
   }
 
-  let { controller, class: className = '' }: Props = $props();
+  let { controller, components, class: className = '' }: Props = $props();
   let tick = $state(0);
   $effect(() => {
     const c = controller;
@@ -78,6 +83,7 @@
         effect={generator.effect}
         name={generator.name}
         values={generator.values}
+        {components}
         onchange={(k, v, g) => run(() => controller.updateEffectLayer(id, { values: { [k]: v as never } }, commit(g)))}
         onpreset={(values) => run(() => controller.updateEffectLayer(id, { values: values as never }))}
       />
@@ -91,8 +97,7 @@
           {@const label = f.name ?? f.effect}
           <li class="rounded border border-border p-1" data-smart-effect={f.id}>
             <div class="flex items-center gap-1">
-              <input type="checkbox" checked={f.enabled} aria-label="{label} on" onchange={(e) => {
-                const enabled = e.currentTarget.checked;
+              <ImageCheckbox checked={f.enabled} label="{label} on" onchange={(enabled) => {
                 run(() => controller.updateEffectFilter(id, f.id, { enabled }));
               }} />
               <button type="button" class="min-w-0 flex-1 truncate text-left text-foreground" aria-expanded={open === f.id} onclick={() => (open = open === f.id ? null : f.id)}>{label}</button>
@@ -104,8 +109,7 @@
               <div class="mt-1 space-y-2">
                 <label class="flex items-center gap-1">
                   <span class="w-14 text-[11px] text-foreground">Opacity</span>
-                  <input type="range" min="0" max="1" step="0.01" class="flex-1" value={f.opacity} aria-label="{label} opacity" oninput={(e) => {
-                    const opacity = Number(e.currentTarget.value);
+                  <ImageRange min={0} max={1} step={0.01} class="flex-1" value={f.opacity} label="{label} opacity" oninput={(opacity) => {
                     run(() => controller.updateEffectFilter(id, f.id, { opacity }));
                   }} />
                 </label>
@@ -114,6 +118,7 @@
                   effect={f.effect}
                   name={f.name}
                   values={f.values}
+                  {components}
                   onchange={(k, v, g) => run(() => controller.updateEffectFilter(id, f.id, { values: { [k]: v as never } }, commit(g)))}
                   onpreset={(values) => run(() => controller.updateEffectFilter(id, f.id, { values: values as never }))}
                 />

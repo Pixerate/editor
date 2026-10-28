@@ -1,7 +1,8 @@
 import React, { useId, useMemo } from 'react';
 import { effectFieldValue, effectParameterFields, type EffectDescription, type EffectFieldOptions } from '@pixerate/editor/effects';
 import { parameterLabel, parameterValuesEqual, type ParameterValue } from '@pixerate/editor/parameters';
-import { ParameterFieldControl } from '../parameters/fields';
+import { ParameterFieldControl, parameterSelectStyle } from '../parameters/fields';
+import { useParameterComponents, resolveParameterComponents, type ParameterComponents } from '../parameters/controls.js';
 
 export interface EffectParametersProps {
   /** The effect's description (`describe`). */
@@ -27,6 +28,8 @@ export interface EffectParametersProps {
   fonts?: EffectFieldOptions['fonts'];
   disabled?: boolean;
   className?: string;
+  /** Custom host controls (input, slider, select). */
+  components?: ParameterComponents;
 }
 
 /**
@@ -45,38 +48,60 @@ export function EffectParameters({
   renderControlAddon,
   fonts,
   disabled = false,
-  className = ''
+  className = '',
+  components,
 }: EffectParametersProps) {
   const fields = useMemo(() => effectParameterFields(description, { fonts }), [description, fonts]);
   const idBase = useId();
   const gesture = React.useRef<string | null>(null);
   const count = React.useRef(0);
+
+  const CustomPresetSelect = resolveParameterComponents(components, useParameterComponents()).select;
+
+  const handlePresetSelect = (name: string) => {
+    if (!name) return;
+    if (onPresetName) {
+      onPresetName(name);
+    } else if (onPreset) {
+      const preset = description.presets.find((p) => p.name === name);
+      if (preset) onPreset({ ...description.defaults, ...preset.values });
+    }
+  };
+
   return (
     <div className={`space-y-2 ${className}`} data-effect-parameters={description.id}>
       {(onPreset || onPresetName) && description.presets.length > 0 && (
-        <select
-          className="w-full rounded border border-border bg-transparent px-1 py-0.5 text-xs"
-          aria-label={`${description.name} presets`}
-          value=""
-          disabled={disabled}
-          onChange={(e) => {
-            const name = e.currentTarget.value;
-            if (!name) return;
-            if (onPresetName) {
-              onPresetName(name);
-            } else if (onPreset) {
-              const preset = description.presets.find((p) => p.name === name);
-              if (preset) onPreset({ ...description.defaults, ...preset.values });
-            }
-          }}
-        >
-          <option value="">Presets…</option>
-          {description.presets.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        CustomPresetSelect ? (
+          <CustomPresetSelect
+            aria-label={`${description.name} presets`}
+            label={`${description.name} presets`}
+            value=""
+            disabled={disabled}
+            className="w-full rounded border border-border px-1 py-0.5 text-xs"
+            style={parameterSelectStyle}
+            options={[
+              { value: '', label: 'Presets…' },
+              ...description.presets.map((p) => ({ value: p.name, label: p.name })),
+            ]}
+            onChange={(name) => handlePresetSelect(String(name))}
+          />
+        ) : (
+          <select
+            className="w-full rounded border border-border px-1 py-0.5 text-xs"
+            style={parameterSelectStyle}
+            aria-label={`${description.name} presets`}
+            value=""
+            disabled={disabled}
+            onChange={(e) => handlePresetSelect(e.currentTarget.value)}
+          >
+            <option value="" style={parameterSelectStyle}>Presets…</option>
+            {description.presets.map((p) => (
+              <option key={p.name} value={p.name} style={parameterSelectStyle}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )
       )}
       {fields.map((field) => {
         const label = parameterLabel(field);
@@ -103,6 +128,7 @@ export function EffectParameters({
               value={value}
               id={inputId}
               disabled={disabled || keyed}
+              components={components}
               onChange={(v) => onChange(field.id, v, gesture.current)}
               onGestureStart={() => (gesture.current = `${idBase}:${field.id}:${++count.current}`)}
               onGestureEnd={() => (gesture.current = null)}

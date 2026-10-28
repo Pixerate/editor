@@ -1,12 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   choiceOptionLabel,
   formatParameterNumber,
   getChoiceOptions,
   isSliderField,
+  matchParameterOptionValue,
   normalizeHexColor,
   parameterLabel,
   parameterStep,
+  parameterThemeStyles,
   parseParameterNumberInput,
   clampParameterNumber,
   vectorComponentField,
@@ -23,6 +25,18 @@ import {
   type VectorParameterField,
 } from '@pixerate/editor/parameters';
 import { ColorPicker } from '../color/index.js';
+import {
+  useParameterComponents,
+  resolveParameterComponents,
+  type ParameterComponents,
+} from './controls.js';
+
+/** Inline theme styles (`--pixerate-parameter-*` tokens with host fallbacks), shared with Svelte through core. */
+export const parameterInputStyle: React.CSSProperties = parameterThemeStyles.input;
+export const parameterSelectStyle: React.CSSProperties = parameterThemeStyles.select;
+/** Text and border only, so the button classes' `hover:` background still applies. */
+export const parameterButtonStyle: React.CSSProperties = parameterThemeStyles.button;
+export const parameterRangeStyle: React.CSSProperties = parameterThemeStyles.range;
 
 /** Props every field control takes. Controls are controller-free: wire them to anything. */
 export interface ParameterControlProps<F extends ParameterField, V extends ParameterValue> {
@@ -35,6 +49,8 @@ export interface ParameterControlProps<F extends ParameterField, V extends Param
   disabled?: boolean;
   /** DOM id of the main input (for a `<label htmlFor>`). */
   id?: string;
+  /** Custom host controls (input, slider, select). */
+  components?: ParameterComponents;
 }
 
 export const parameterInputClass =
@@ -50,68 +66,117 @@ type CommitInputProps = {
   multiline?: boolean;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement> & React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'>;
 
-/** A text box that commits on blur or Enter (Mod+Enter when multiline) and resets on Escape. */
-export function ParameterCommitInput({ value, onCommit, multiline, className, onKeyDown, ...rest }: CommitInputProps) {
+/**
+ * A text box that commits on blur, Tab, a native `change` or Enter (Mod+Enter when multiline) and
+ * resets on Escape. Text that was already committed (or refused) is not committed again, so the
+ * blur that follows Tab or `change` is a no-op.
+ */
+export function ParameterCommitInput({ value, onCommit, multiline, className, onKeyDown, style, ...rest }: CommitInputProps) {
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  /** The text last handed to `onCommit` (null once `value` changes). */
+  const lastCommitted = useRef<string | null>(null);
+
+  // Show a value changed from outside. The element is kept (no `key` remount) so focus survives
+  // a commit made from a Tab keydown, before the browser moves focus on.
+  useLayoutEffect(() => {
+    lastCommitted.current = null;
+    const el = inputRef.current;
+    if (el && el.value !== value) el.value = value;
+  }, [value]);
+
   const commit = (el: HTMLInputElement | HTMLTextAreaElement) => {
-    if (el.value !== value) onCommit(el.value, el);
+    const text = el.value;
+    if (text === value || text === lastCommitted.current) return;
+    onCommit(text, el);
+    // A refused edit puts the stored text back: then the same text is tried (and refused) again.
+    lastCommitted.current = el.value === text ? text : null;
   };
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const change = () => commitRef.current(el);
+    el.addEventListener('change', change);
+    return () => el.removeEventListener('change', change);
+  }, [multiline]);
+
   const keyDown = (e: React.KeyboardEvent<HTMLInputElement & HTMLTextAreaElement>) => {
     onKeyDown?.(e);
     if (e.defaultPrevented) return;
+    if (e.key === 'Tab') commit(e.currentTarget);
     if (e.key === 'Enter' && (!multiline || e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       commit(e.currentTarget);
     }
     if (e.key === 'Escape') e.currentTarget.value = value;
   };
+
   const props = {
     defaultValue: value,
     className: className ?? parameterInputClass,
+    style: { ...parameterInputStyle, ...style },
     onBlur: (e: React.FocusEvent<HTMLInputElement & HTMLTextAreaElement>) => commit(e.currentTarget),
     onKeyDown: keyDown,
     ...rest,
   };
-  // `key` remounts the box when the value changes from outside.
+  // React 19 passes a caller's `ref` in `rest`: forward it alongside ours.
+  const forwarded = (rest as { ref?: React.Ref<HTMLInputElement | HTMLTextAreaElement> }).ref;
+  const setRef = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = el;
+    if (typeof forwarded === 'function') forwarded(el);
+    else if (forwarded) (forwarded as React.MutableRefObject<typeof el>).current = el;
+  };
+
   return multiline ? (
-    <textarea key={value} {...props} className={`${props.className} h-auto min-h-[3.5rem] py-1`} />
+    <textarea {...props} ref={setRef} className={`${props.className} h-auto min-h-[3.5rem] py-1`} />
   ) : (
-    <input key={value} type="text" {...props} />
+    <input type="text" {...props} ref={setRef} />
   );
 }
 
 const plainNumber = (field: NumberParameterField, value: number) => formatParameterNumber({ ...field, unit: undefined }, value);
 
 /** A number box: type a value (units allowed), or step with the arrow keys (Shift ×10). */
-export function ParameterNumberInput({
-  field,
-  value,
-  onChange,
-  disabled,
-  id,
-  'aria-label': ariaLabel,
-}: ParameterControlProps<NumberParameterField, number> & { 'aria-label'?: string }) {
+export function ParameterNumberInput(props: ParameterControlProps<NumberParameterField, number> & { 'aria-label'?: string }) {
+  const { field, value, onChange, disabled, id, components, 'aria-label': ariaLabel } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomInput = resolved.input;
+
+  const plain = plainNumber(field, value);
+  const handleCommit = (text: string, input?: HTMLInputElement | HTMLTextAreaElement) => {
+    const n = parseParameterNumberInput(field, text);
+    // Show the stored value again when the text was not a number or clamps to it.
+    if (n === null || n === value) {
+      if (input) input.value = plain;
+    } else {
+      onChange(n);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const step = parameterStep(field) * (e.shiftKey ? 10 : 1);
+    onChange(clampParameterNumber(field, value + (e.key === 'ArrowUp' ? step : -step)));
+  };
+
+  const inputProps = {
+    id,
+    inputMode: 'decimal' as const,
+    'aria-label': ariaLabel ?? parameterLabel(field),
+    value: plain,
+    disabled: disabled || field.readOnly,
+    className: `${parameterInputClass} ${field.unit ? 'pr-6' : ''}`,
+    style: parameterInputStyle,
+    onCommit: handleCommit,
+    onKeyDown: handleKeyDown,
+  };
   return (
     <div className="relative min-w-0 flex-1">
-      <ParameterCommitInput
-        id={id}
-        inputMode="decimal"
-        aria-label={ariaLabel ?? parameterLabel(field)}
-        value={plainNumber(field, value)}
-        disabled={disabled || field.readOnly}
-        className={`${parameterInputClass} ${field.unit ? 'pr-6' : ''}`}
-        onCommit={(text, input) => {
-          const n = parseParameterNumberInput(field, text);
-          // Show the stored value again when the text was not a number or clamps to it.
-          if (n === null || n === value) input.value = plainNumber(field, value);
-          else onChange(n);
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-          e.preventDefault();
-          const step = parameterStep(field) * (e.shiftKey ? 10 : 1);
-          onChange(clampParameterNumber(field, value + (e.key === 'ArrowUp' ? step : -step)));
-        }}
-      />
+      {CustomInput ? <CustomInput {...inputProps} label={parameterLabel(field)} /> : <ParameterCommitInput {...inputProps} />}
       {field.unit && (
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{field.unit}</span>
       )}
@@ -121,8 +186,17 @@ export function ParameterNumberInput({
 
 /** A slider plus number box for `number` / `int` fields (number box only for `control: 'input'` or unbounded fields). */
 export function ParameterSlider(props: ParameterControlProps<NumberParameterField, number>) {
-  const { field, value, onChange, onGestureStart, onGestureEnd, disabled } = props;
+  const { field, value, onChange, onGestureStart, onGestureEnd, disabled, components } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomSlider = resolved.slider;
   const dragging = useRef(false);
+  // One gesture per drag, whichever events (pointer, blur, a custom slider's) report it.
+  const start = () => {
+    if (dragging.current) return;
+    dragging.current = true;
+    onGestureStart?.();
+  };
   const end = () => {
     if (!dragging.current) return;
     dragging.current = false;
@@ -130,28 +204,40 @@ export function ParameterSlider(props: ParameterControlProps<NumberParameterFiel
   };
   if (!isSliderField(field)) return <ParameterNumberInput {...props} />;
   const step = parameterStep(field);
+  const sliderProps = {
+    'aria-label': parameterLabel(field),
+    'aria-valuetext': formatParameterNumber(field, value),
+    // A `control: 'slider'` field may leave out a bound: the range input's own defaults.
+    min: field.min ?? 0,
+    max: field.max ?? 100,
+    step,
+    value,
+    disabled: disabled || field.readOnly,
+    className: rangeClass,
+    style: parameterRangeStyle,
+  };
   return (
     <div className="flex items-center gap-2">
-      <input
-        type="range"
-        aria-label={parameterLabel(field)}
-        aria-valuetext={formatParameterNumber(field, value)}
-        min={field.min}
-        max={field.max}
-        step={step}
-        value={value}
-        disabled={disabled || field.readOnly}
-        className={rangeClass}
-        onPointerDown={() => {
-          if (dragging.current) return;
-          dragging.current = true;
-          onGestureStart?.();
-        }}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onBlur={end}
-        onChange={(e) => onChange(clampParameterNumber(field, Number(e.target.value)))}
-      />
+      {CustomSlider ? (
+        <CustomSlider
+          {...sliderProps}
+          id={props.id ? `${props.id}-slider` : undefined}
+          label={parameterLabel(field)}
+          onChange={(v) => onChange(clampParameterNumber(field, v))}
+          onGestureStart={start}
+          onGestureEnd={end}
+        />
+      ) : (
+        <input
+          type="range"
+          {...sliderProps}
+          onPointerDown={start}
+          onPointerUp={end}
+          onPointerCancel={end}
+          onBlur={end}
+          onChange={(e) => onChange(clampParameterNumber(field, Number(e.target.value)))}
+        />
+      )}
       <div className="w-20 shrink-0">
         <ParameterNumberInput {...props} id={props.id} aria-label={`${parameterLabel(field)} value`} />
       </div>
@@ -182,7 +268,11 @@ export function ParameterToggle({ field, value, onChange, disabled, id }: Parame
 }
 
 /** A dropdown (or segmented buttons with `control: 'segmented'`) for `choice` fields. */
-export function ParameterSelect({ field, value, onChange, disabled, id }: ParameterControlProps<ChoiceParameterField, string | number>) {
+export function ParameterSelect(props: ParameterControlProps<ChoiceParameterField, string | number>) {
+  const { field, value, onChange, disabled, id, components } = props;
+  const ctx = useParameterComponents();
+  const resolved = resolveParameterComponents(components, ctx);
+  const CustomSelect = resolved.select;
   const options = getChoiceOptions(field);
   const off = disabled || field.readOnly;
   if (field.control === 'segmented') {
@@ -207,6 +297,22 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
       </div>
     );
   }
+  if (CustomSelect) {
+    const customOptions = options.map((o) => ({ value: o.value, label: choiceOptionLabel(o), description: o.description }));
+    return (
+      <CustomSelect
+        id={id}
+        label={parameterLabel(field)}
+        aria-label={parameterLabel(field)}
+        value={value}
+        options={customOptions}
+        disabled={off}
+        className={parameterInputClass}
+        style={parameterSelectStyle}
+        onChange={(v) => onChange(matchParameterOptionValue(options, v))}
+      />
+    );
+  }
   const index = options.findIndex((o) => o.value === value);
   return (
     <select
@@ -219,9 +325,10 @@ export function ParameterSelect({ field, value, onChange, disabled, id }: Parame
         if (option) onChange(option.value);
       }}
       className={parameterInputClass}
+      style={parameterSelectStyle}
     >
       {options.map((o, i) => (
-        <option key={String(o.value)} value={String(i)} title={o.description}>
+        <option key={String(o.value)} value={String(i)} title={o.description} style={parameterSelectStyle}>
           {choiceOptionLabel(o)}
         </option>
       ))}
@@ -327,7 +434,7 @@ export function ParameterColor({ field, value, onChange, onGestureStart, onGestu
 }
 
 /** One number box per component for `vector` fields. */
-export function ParameterVector({ field, value, onChange, disabled, id }: ParameterControlProps<VectorParameterField, number[]>) {
+export function ParameterVector({ field, value, onChange, disabled, id, components }: ParameterControlProps<VectorParameterField, number[]>) {
   const size = vectorSize(field);
   return (
     <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}>
@@ -342,6 +449,7 @@ export function ParameterVector({ field, value, onChange, disabled, id }: Parame
               id={i === 0 ? id : undefined}
               aria-label={`${parameterLabel(field)} ${component.label}`}
               disabled={disabled || field.readOnly}
+              components={components}
               onChange={(n) => onChange(Array.from({ length: size }, (_, j) => (j === i ? n : (value[j] ?? 0))))}
             />
           </label>
@@ -381,7 +489,10 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
           />
           <div className="flex gap-1">
             {resolveFile && (
-              <label className={`${parameterButtonClass} cursor-pointer ${off ? 'pointer-events-none opacity-50' : ''}`}>
+              <label
+                style={parameterButtonStyle}
+                className={`${parameterButtonClass} cursor-pointer ${off ? 'pointer-events-none opacity-50' : ''}`}
+              >
                 Choose file…
                 <input
                   type="file"
@@ -398,7 +509,14 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
               </label>
             )}
             {value && (
-              <button type="button" className={parameterButtonClass} disabled={off} onClick={() => onChange('')} aria-label={`Clear ${name}`}>
+              <button
+                type="button"
+                style={parameterButtonStyle}
+                className={parameterButtonClass}
+                disabled={off}
+                onClick={() => onChange('')}
+                aria-label={`Clear ${name}`}
+              >
                 Clear
               </button>
             )}
@@ -427,7 +545,7 @@ export function ParameterImage({ field, value, onChange, disabled, id, resolveFi
   );
 }
 
-/** A text box (or textarea with `multiline`) that commits on blur or Enter. */
+/** A text box (or textarea with `multiline`) that commits on blur, Tab, or Enter. */
 export function ParameterText({ field, value, onChange, disabled, id }: ParameterControlProps<TextParameterField, string>) {
   return (
     <ParameterCommitInput
@@ -506,4 +624,3 @@ export function ParameterFieldControl({ field, value, onChange, resolveFile, ...
       return <ParameterText field={field} value={value as string} onChange={set} {...rest} />;
   }
 }
-
