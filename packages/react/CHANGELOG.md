@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.113.1
+
+### Patch Changes
+
+- eee1ff2: Image editor overlay chrome keeps its size on screen under a host's CSS zoom. `measureCanvasViewport()` returns `hostScale` (screen pixels per CSS pixel from transforms on the element), and the new `RenderOptions.hostScale` draws the crop and Free Transform frames and handles, the brush cursor, the clone source marker and the text caret that much smaller. `ImageEditorCanvas` (React and Svelte) passes it, so the handles of a canvas inside a zoomed canvas node no longer grow with the zoom. The crop and transform handles are also a little smaller (8px instead of 10px) and the transform frame thinner.
+
+  Svelte `ImageEditorCanvas` takes `panMode`: a host's hand tool, where a primary drag pans the view in every mode (as holding Space does) and the canvas's own gestures pause, with a grab cursor.
+
+- Updated dependencies [eee1ff2]
+  - @pixerate/editor@0.170.0
+
 ## 0.113.0
 
 ### Minor Changes
