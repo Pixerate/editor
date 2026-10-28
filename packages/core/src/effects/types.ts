@@ -53,6 +53,8 @@ export interface EffectSearchOptions {
 	kind?: EffectKind;
 	category?: string;
 	use?: EffectUse;
+	/** Only effects carrying every one of these tags (in any case, spaces as hyphens: see `normaliseEffectTag`). */
+	tags?: readonly string[];
 	/** Most results to return. */
 	limit?: number;
 }

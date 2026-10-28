@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.171.0",
+  "version": "0.172.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -363,7 +363,12 @@
     "eval:tools": "vitest run --config vitest.eval.config.ts --disableConsoleIntercept"
   },
   "dependencies": {
-    "@pixerate/markdown-conformance": "workspace:*",
+    "@pixerate/markdown-conformance": "workspace:*"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "1.1.0",
+    "@dagrejs/dagre": "^1.1.8",
+    "@tiptap/core": "^2.27.3",
     "@tiptap/extension-character-count": "^2.27.3",
     "@tiptap/extension-color": "^2.27.3",
     "@tiptap/extension-highlight": "^2.27.3",
@@ -383,23 +388,18 @@
     "@tiptap/extension-text-style": "^2.27.3",
     "@tiptap/extension-typography": "^2.27.3",
     "@tiptap/extension-underline": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
     "@tiptap/starter-kit": "^2.27.3",
     "@tiptap/suggestion": "^2.27.3",
-    "markdown-it": "^15.0.3",
-    "markdown-it-task-lists": "^2.1.1",
-    "prosemirror-markdown": "^1.13.9"
-  },
-  "devDependencies": {
-    "@anthropic-ai/sdk": "1.1.0",
-    "@dagrejs/dagre": "^1.1.8",
-    "@tiptap/core": "^2.27.3",
-    "@tiptap/pm": "^2.27.3",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.5",
     "assemblyscript": "0.28.20",
     "fast-check": "^4.10.2",
+    "markdown-it": "^15.0.3",
+    "markdown-it-task-lists": "^2.1.1",
     "mermaid": "12.2.0",
+    "prosemirror-markdown": "^1.13.9",
     "tiptap-markdown": "^0.8.10",
     "tsup": "^9.0.0",
     "typescript": "^5.7.3",
@@ -408,10 +408,112 @@
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
     "@tiptap/core": "^2.27.3",
-    "@tiptap/pm": "^2.27.3"
+    "@tiptap/extension-character-count": "^2.27.3",
+    "@tiptap/extension-color": "^2.27.3",
+    "@tiptap/extension-highlight": "^2.27.3",
+    "@tiptap/extension-image": "^2.27.3",
+    "@tiptap/extension-link": "^2.27.3",
+    "@tiptap/extension-mention": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
+    "@tiptap/extension-subscript": "^2.27.3",
+    "@tiptap/extension-superscript": "^2.27.3",
+    "@tiptap/extension-table": "^2.27.3",
+    "@tiptap/extension-table-cell": "^2.27.3",
+    "@tiptap/extension-table-header": "^2.27.3",
+    "@tiptap/extension-table-row": "^2.27.3",
+    "@tiptap/extension-task-item": "^2.27.3",
+    "@tiptap/extension-task-list": "^2.27.3",
+    "@tiptap/extension-text-align": "^2.27.3",
+    "@tiptap/extension-text-style": "^2.27.3",
+    "@tiptap/extension-typography": "^2.27.3",
+    "@tiptap/extension-underline": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
+    "@tiptap/suggestion": "^2.27.3",
+    "markdown-it": "^15.0.3",
+    "markdown-it-task-lists": "^2.1.1",
+    "prosemirror-markdown": "^1.13.9"
   },
   "peerDependenciesMeta": {
     "@dagrejs/dagre": {
+      "optional": true
+    },
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-character-count": {
+      "optional": true
+    },
+    "@tiptap/extension-color": {
+      "optional": true
+    },
+    "@tiptap/extension-highlight": {
+      "optional": true
+    },
+    "@tiptap/extension-image": {
+      "optional": true
+    },
+    "@tiptap/extension-link": {
+      "optional": true
+    },
+    "@tiptap/extension-mention": {
+      "optional": true
+    },
+    "@tiptap/extension-placeholder": {
+      "optional": true
+    },
+    "@tiptap/extension-subscript": {
+      "optional": true
+    },
+    "@tiptap/extension-superscript": {
+      "optional": true
+    },
+    "@tiptap/extension-table": {
+      "optional": true
+    },
+    "@tiptap/extension-table-cell": {
+      "optional": true
+    },
+    "@tiptap/extension-table-header": {
+      "optional": true
+    },
+    "@tiptap/extension-table-row": {
+      "optional": true
+    },
+    "@tiptap/extension-task-item": {
+      "optional": true
+    },
+    "@tiptap/extension-task-list": {
+      "optional": true
+    },
+    "@tiptap/extension-text-align": {
+      "optional": true
+    },
+    "@tiptap/extension-text-style": {
+      "optional": true
+    },
+    "@tiptap/extension-typography": {
+      "optional": true
+    },
+    "@tiptap/extension-underline": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@tiptap/starter-kit": {
+      "optional": true
+    },
+    "@tiptap/suggestion": {
+      "optional": true
+    },
+    "markdown-it": {
+      "optional": true
+    },
+    "markdown-it-task-lists": {
+      "optional": true
+    },
+    "prosemirror-markdown": {
       "optional": true
     }
   }

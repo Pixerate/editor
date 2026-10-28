@@ -1,5 +1,24 @@
 # @pixerate/editor-svelte
 
+## 0.128.0
+
+### Minor Changes
+
+- fb070dd: Chart tooltips. `<ChartCanvas tooltip>` shows the bar, point or slice under the pointer, and `tooltip="category"` shows every series anywhere in a bar, line or area chart's category band. Values are written with the series or axis format, with shares on 100% stacked and pie charts. Pass `renderTooltip` (React) or a `tooltipContent` snippet (Svelte) for custom content. The tooltip hides while a point is dragged. Core adds `chartTooltipAt`, `chartTooltipFor`, `sameChartTooltip`, `chartCategoryAtPoint` and `ChartScene.categoryScale`, and the chart tool provider adds a read-only `get_chart_tooltip` tool.
+- fb070dd: **Breaking for rich-text users:** TipTap, ProseMirror and markdown-it are now optional peer dependencies instead of dependencies, so apps that only use charts, spreadsheets, canvases, images or the other subpath entries no longer install them. Apps that use rich text or prompts (the root entries, and core's `/extensions`, `/serializers`, `/agent` and `/compare`) must install them; each package README has the install line. `@tiptap/core`, `@tiptap/pm` and `@tiptap/react` are optional peers too.
+
+### Patch Changes
+
+- Updated dependencies [fb070dd]
+- Updated dependencies [fb070dd]
+  - @pixerate/editor@0.172.0
+
+## 0.127.1
+
+### Patch Changes
+
+- 23e0bd8: `ImageEditorCanvas` pans by the distance the pointer moves on screen when its host is scaled (e.g. an expanded studio inside a zoomed-out canvas), instead of overshooting by the host's scale.
+
 ## 0.127.0
 
 ### Minor Changes

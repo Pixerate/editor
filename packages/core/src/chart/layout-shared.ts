@@ -1,5 +1,5 @@
 import { niceLogScale, niceScale, type NiceScale } from './scale.js';
-import type { ChartAxis, ChartMark, ChartMarker, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartValueScale, ChartWarning } from './types.js';
+import type { ChartAxis, ChartCategoryScale, ChartMark, ChartMarker, ChartRect, ChartScene, ChartSelection, ChartSpec, ChartTheme, ChartValueScale, ChartWarning } from './types.js';
 
 export type ChartTextMeasure = (text: string, size: number, weight?: number) => number;
 
@@ -97,6 +97,7 @@ export interface FamilyResult {
 	valueScale?: ChartValueScale;
 	valueScale2?: ChartValueScale;
 	xScale?: ChartValueScale;
+	categoryScale?: ChartCategoryScale;
 	percent?: boolean;
 }
 

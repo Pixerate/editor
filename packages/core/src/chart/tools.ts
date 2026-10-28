@@ -9,6 +9,7 @@ import { checkChartColors } from './color.js';
 import type { ChartController, ChartSeriesPatch, ChartSpecPatch } from './controller.js';
 import { chartHitTest, handleChartKey, startChartPointDrag } from './interaction.js';
 import { layoutChart } from './layout.js';
+import { chartTooltipFor } from './tooltip.js';
 import { chartFromMermaid, chartToMermaid } from './mermaid.js';
 import { chartFromOoxml, chartToOoxml } from './ooxml.js';
 import type { ChartDirector, ChartDirectorActor } from './presence.js';
@@ -289,6 +290,26 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			const fit = controller.trendlineFit(s.id, index);
 			if (!fit) fail(`The ${line!.type} trendline on "${s.name}" cannot be fitted: it needs more points (and positive values for log, exponential and power fits).`);
 			return { trendline: line, coefficients: fit!.coefficients, r2: fit!.r2, equation: fit!.equation, points: fit!.points };
+		}
+	};
+
+	const getTooltip: AgentTool = {
+		name: 'get_chart_tooltip',
+		title: 'Read a chart tooltip',
+		description:
+			'Returns what a viewer sees when hovering a category (or one series in it): the category label and, for each visible series with a value there, its name, colour, value, share (percent-stacked and pie charts, 0–1) and the value as the chart writes it. Returns null for charts without one value per category (histogram, box, treemap, sunburst, sankey, …) or when no visible series has a value there.',
+		inputSchema: {
+			type: 'object',
+			properties: { category: CATEGORY_REF, series: { ...SERIES_REF, description: `${SERIES_REF.description} Omit to include every visible series in the category.` } },
+			required: ['category'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Read a chart tooltip', ...READ },
+		handler: ({ category, series }) => {
+			const index = categoryIndex(category);
+			const seriesId = series === undefined ? undefined : seriesById(series).id;
+			const tooltip = chartTooltipFor(controller.toJSON(), index, seriesId);
+			return tooltip && { title: tooltip.title, index: tooltip.index, items: tooltip.items };
 		}
 	};
 
@@ -1061,7 +1082,7 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 		}
 	};
 
-	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, raceRanking, mapRegions, listPresets, exportMermaid, exportOoxml];
+	const reads = [getChart, renderChart, checkColors, recommend, getTrendline, getTooltip, raceRanking, mapRegions, listPresets, exportMermaid, exportOoxml];
 	const writes = [
 		updateChart,
 		setData,

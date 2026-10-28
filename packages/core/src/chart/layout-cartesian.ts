@@ -688,6 +688,7 @@ export function layoutCartesian(ctx: LayoutCtx, area: ChartRect, visible: ChartS
 		plot,
 		valueScale: toValueScale(frame.value, horizontal ? 'x' : 'y'),
 		...(frame.value2 ? { valueScale2: toValueScale(frame.value2, horizontal ? 'x' : 'y') } : {}),
+		categoryScale: { axis: horizontal ? 'y' : 'x', start: catStart, length: frame.catLen, count: frame.n, reverse: !!spec.xAxis.reverse },
 		percent
 	};
 }

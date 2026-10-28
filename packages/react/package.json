@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-react",
-  "version": "0.113.2",
+  "version": "0.114.0",
   "description": "React bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -256,23 +256,40 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@tiptap/extension-bubble-menu": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@pixerate/editor": ">=0.171.0 <1.0.0-0",
+    "@pixerate/editor": ">=0.172.0 <1.0.0-0",
     "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-bubble-menu": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
     "@tiptap/react": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "@xyflow/react": "^12.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
   "peerDependenciesMeta": {
     "@dagrejs/dagre": {
+      "optional": true
+    },
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-bubble-menu": {
+      "optional": true
+    },
+    "@tiptap/extension-placeholder": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@tiptap/react": {
+      "optional": true
+    },
+    "@tiptap/starter-kit": {
       "optional": true
     },
     "@xyflow/react": {
@@ -282,8 +299,11 @@
   "devDependencies": {
     "@pixerate/editor": "workspace:*",
     "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-bubble-menu": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
     "@tiptap/react": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.1",

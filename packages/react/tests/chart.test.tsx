@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { ChartController, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
+import { CSS_VARIABLE_CHART_THEME, ChartController, layoutChart, normalizeChartSpec, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
 import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 import {
   ChartCanvas,
@@ -463,5 +463,55 @@ describe("ChartEditor", () => {
     expect(q("[data-chart-issues]").textContent).toMatch(/not a number/);
     await act(async () => controller.select({ kind: "axis", axis: "y" }));
     expect(q("[data-chart-selection]").textContent).toBe("Value axis");
+  });
+});
+
+describe("ChartCanvas tooltips", () => {
+  const scene = () => layoutChart(normalizeChartSpec(sales).spec, { width: 640, height: 400, theme: CSS_VARIABLE_CHART_THEME });
+  const bar = (seriesId: string, index: number) => {
+    const mark = scene().marks.find((m) => m.kind === "rect" && m.target?.kind === "point" && m.target.seriesId === seriesId && m.target.index === index);
+    if (mark?.kind !== "rect") throw new Error("no bar");
+    return { key: mark.key, clientX: mark.x + mark.width / 2, clientY: mark.y + mark.height / 2 };
+  };
+
+  it("is off by default", async () => {
+    await render(<ChartCanvas controller={new ChartController({ spec: sales })} responsive={false} editable={false} />);
+    const { clientX, clientY } = bar("north", 1);
+    await fire(q("svg"), "pointermove", { clientX, clientY });
+    expect(q("[data-chart-tooltip]")).toBeNull();
+  });
+
+  it("shows the bar under the pointer and hides on leave", async () => {
+    await render(<ChartCanvas controller={new ChartController({ spec: sales })} responsive={false} editable={false} tooltip />);
+    const { clientX, clientY } = bar("north", 1);
+    await fire(q("svg"), "pointermove", { clientX, clientY });
+    const text = q('[role="tooltip"]').textContent!;
+    expect(text).toContain("Q2");
+    expect(text).toContain("North");
+    expect(text).toContain("18");
+    expect(text).not.toContain("South");
+    await fire(q("svg"), "pointerout", { relatedTarget: document.body });
+    expect(q("[data-chart-tooltip]")).toBeNull();
+  });
+
+  it("lists every series in the category, or custom content", async () => {
+    await render(<ChartCanvas controller={new ChartController({ spec: sales })} responsive={false} editable={false} tooltip="category" />);
+    await fire(q("svg"), "pointermove", { clientX: bar("north", 2).clientX, clientY: scene().plot.y + 2 });
+    expect(qa("[data-chart-tooltip] .flex").map((r) => r.textContent)).toEqual(["North9", "South14"]);
+    await render(<ChartCanvas controller={new ChartController({ spec: sales })} responsive={false} editable={false} tooltip="category" renderTooltip={(t) => <b>{t.items.length} series</b>} />);
+    await fire(q("svg"), "pointermove", { clientX: bar("north", 2).clientX, clientY: scene().plot.y + 2 });
+    expect(q("[data-chart-tooltip]").textContent).toBe("2 series");
+  });
+
+  it("hides while a point is dragged", async () => {
+    await render(<ChartCanvas controller={new ChartController({ spec: sales })} responsive={false} tooltip />);
+    const { key, clientX, clientY } = bar("north", 1);
+    await fire(q("svg"), "pointermove", { clientX, clientY });
+    expect(q("[data-chart-tooltip]")).not.toBeNull();
+    await fire(q(`[data-chart-key="${key}"]`), "pointerdown", { clientX, clientY, button: 0 });
+    expect(q("[data-chart-tooltip]")).toBeNull();
+    await fire(q("svg"), "pointermove", { clientX, clientY: clientY - 20 });
+    expect(q("[data-chart-tooltip]")).toBeNull();
+    await fire(q("svg"), "pointerup", { clientX, clientY });
   });
 });

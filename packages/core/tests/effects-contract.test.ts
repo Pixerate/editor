@@ -12,6 +12,8 @@ import {
 	isEffectError,
 	resolveEffectValues,
 	searchEffectSummaries,
+	normaliseEffectTag,
+	countEffectTags,
 	type EffectPixels,
 	type EffectProvider
 } from '../src/effects';
@@ -166,6 +168,24 @@ describe('effects contract: helpers', () => {
 		];
 		expect(searchEffectSummaries(catalog, 'glow').map((e) => e.id)).toEqual(['b', 'a']);
 		expect(searchEffectSummaries(catalog, '', { category: 'glow' }).map((e) => e.id)).toEqual(['a']);
+	});
+
+	it('searchEffectSummaries filters by tag in any case, and countEffectTags counts them', () => {
+		const base = { kind: 'shader' as const, uses: ['filter' as const], transparent: false, loop: false, category: 'retro' };
+		const catalog = [
+			{ ...base, id: 'a', name: 'Pocket', tags: ['game boy', 'pixel'] },
+			{ ...base, id: 'b', name: 'Arcade', tags: ['Pixel', 'crt'] },
+			{ ...base, id: 'c', name: 'Plain' }
+		];
+		expect(normaliseEffectTag('  Game_Boy ')).toBe('game-boy');
+		expect(searchEffectSummaries(catalog, '', { tags: ['Game Boy'] }).map((e) => e.id)).toEqual(['a']);
+		expect(searchEffectSummaries(catalog, '', { tags: ['pixel'] }).map((e) => e.id)).toEqual(['a', 'b']);
+		expect(searchEffectSummaries(catalog, '', { tags: ['pixel', 'crt'] }).map((e) => e.id)).toEqual(['b']);
+		expect(countEffectTags(catalog)).toEqual([
+			{ tag: 'pixel', count: 2 },
+			{ tag: 'crt', count: 1 },
+			{ tag: 'game-boy', count: 1 }
+		]);
 	});
 
 	it('applyEffectMask blends filters with their source and fades generators', () => {

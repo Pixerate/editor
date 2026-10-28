@@ -22,6 +22,7 @@ export * from './recommend.js';
 export * from './controller.js';
 export * from './commands.js';
 export * from './interaction.js';
+export * from './tooltip.js';
 export * from './mermaid.js';
 export * from './ooxml.js';
 export * from './tools.js';

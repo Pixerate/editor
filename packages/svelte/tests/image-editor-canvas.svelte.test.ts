@@ -71,6 +71,17 @@ describe('ImageEditorCanvas (Svelte)', () => {
     expect(c.getLayerBounds(id)).toBeNull();
   });
 
+  it('pans by the distance on screen when its host is scaled', () => {
+    const { c } = setup({ mode: 'paint', panMode: true });
+    flushSync();
+    // Shown at 4× its layout size (800×500 in jsdom), as in an expanded studio on a zoomed-out canvas.
+    canvas().getBoundingClientRect = () => ({ left: 0, top: 0, width: 3200, height: 2000, right: 3200, bottom: 2000, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    canvas().dispatchEvent(pointer('mousedown', 400, 200));
+    canvas().dispatchEvent(pointer('mousemove', 560, 280));
+    canvas().dispatchEvent(pointer('mouseup', 560, 280));
+    expect(c.getState().pan).toEqual({ x: 40, y: 20 });
+  });
+
   it('paints in paint mode', () => {
     const { c } = setup({ mode: 'paint' });
     const id = c.addPixelLayer();

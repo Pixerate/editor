@@ -797,6 +797,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: ProseMirror relies on module identity (plugin keys, `Node`/`Schema` classes). Listing `@tiptap/core` and `@tiptap/pm` under `dependencies` lets the package manager install a private copy per package when ranges differ; `@pixerate/editor-react` also advertised `^2 || ^3` while core only supported v2.
 - **Solution / Workaround**: Declare `@tiptap/core`, `@tiptap/pm` (and `@tiptap/react` for React) as `peerDependencies` with one shared range, mirrored in `devDependencies` for local builds. Extension packages (`@tiptap/extension-*`, `@tiptap/starter-kit`, `@tiptap/suggestion`) can stay regular dependencies because they themselves peer-depend on `@tiptap/core`/`@tiptap/pm`. Only widen the range to a new TipTap major once it is installed and tested in CI. The demo app lists the peers explicitly.
 
+### [monorepo/deps] TipTap Extensions Must Be Optional Peers Too, or Chart-Only Apps Still Install TipTap
+
+- **Issue / Symptom**: Marking only `@tiptap/core` and `@tiptap/pm` optional left a chart-only app (`@pixerate/editor-svelte/chart`) installing all of TipTap anyway.
+- **Root Cause**: The `@tiptap/extension-*`, `@tiptap/starter-kit` and `@tiptap/suggestion` packages were regular dependencies, and each of them has a *required* peer on `@tiptap/core` / `@tiptap/pm`. npm 7+ installs required peers of installed packages automatically, so the optional flag on our own peer did nothing.
+- **Solution / Workaround**: Every TipTap, ProseMirror and markdown-it package is an optional peer (listed in `peerDependencies` and `peerDependenciesMeta`, mirrored in `devDependencies` for local builds) in core, React and Svelte. This supersedes the earlier advice above that extensions could stay regular dependencies. `packages/core/tests/optional-peers.test.ts` fails if one comes back as a dependency or loses its optional flag. Apps using rich text install them from the README install line. Keep chart, spreadsheet, canvas and other non-rich-text entries free of them (`tests/entry-isolation.test.ts`).
+
 ### [react/tiptap] `useEditor` Dependency Arrays Destroy the Editor (and Loop on Inline Objects)
 
 - **Issue / Symptom**: `usePromptEditor({ templateColorMap: new Map(...) })` threw "Maximum update depth exceeded"; toggling `isEditing` or changing `placeholder` lost undo history, focus and the caret.
