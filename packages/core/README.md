@@ -6,9 +6,13 @@ Framework bindings: [`@pixerate/editor-react`](https://www.npmjs.com/package/@pi
 
 ```bash
 npm install @pixerate/editor
+# only if you use rich text or prompts (the root entry, /extensions, /serializers, /agent, /compare):
+npm install @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/suggestion @tiptap/extension-character-count @tiptap/extension-color @tiptap/extension-highlight @tiptap/extension-image @tiptap/extension-link @tiptap/extension-mention @tiptap/extension-placeholder @tiptap/extension-subscript @tiptap/extension-superscript @tiptap/extension-table @tiptap/extension-table-cell @tiptap/extension-table-header @tiptap/extension-table-row @tiptap/extension-task-item @tiptap/extension-task-list @tiptap/extension-text-align @tiptap/extension-text-style @tiptap/extension-typography @tiptap/extension-underline markdown-it markdown-it-task-lists prosemirror-markdown
 # only if you use @pixerate/editor/canvas (or the agent canvas planner):
 npm install @dagrejs/dagre
 ```
+
+TipTap, ProseMirror and markdown-it are optional peer dependencies, so `@pixerate/editor/chart`, `/spreadsheet`, `/canvas` and the other subpaths install without them.
 
 ## Prompt grammar
 

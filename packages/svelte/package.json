@@ -170,20 +170,35 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pixerate/editor": "workspace:*",
-    "@tiptap/extension-bubble-menu": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3"
+    "@pixerate/editor": "workspace:*"
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.4",
     "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-bubble-menu": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "@xyflow/svelte": "^1.6.0",
     "svelte": "^5.57.2"
   },
   "peerDependenciesMeta": {
     "@dagrejs/dagre": {
+      "optional": true
+    },
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-bubble-menu": {
+      "optional": true
+    },
+    "@tiptap/extension-placeholder": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@tiptap/starter-kit": {
       "optional": true
     },
     "@xyflow/svelte": {
@@ -195,7 +210,10 @@
     "@sveltejs/package": "^3.0.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-bubble-menu": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
     "@tiptap/pm": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "@types/dagre": "^0.7.52",
     "@xyflow/svelte": "^1.7.0",
     "svelte": "^5.57.2",

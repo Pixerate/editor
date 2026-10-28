@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, type Snippet } from 'svelte';
   import {
     CSS_VARIABLE_CHART_THEME,
     chartClientToScene,
+    chartTooltipAt,
+    sameChartTooltip,
     describeChartSelection,
     handleChartKey,
     layoutChart,
@@ -12,7 +14,9 @@
     type ChartPresence,
     type ChartScene,
     type ChartTextMeasure,
-    type ChartTheme
+    type ChartTheme,
+    type ChartTooltip,
+    type ChartTooltipMode
   } from '@pixerate/editor/chart';
   import { chartStateOf } from './createChartEditor.svelte.js';
   import ChartMarks from './ChartMarks.svelte';
@@ -38,6 +42,10 @@
     presence?: ChartPresence;
     /** Receives the scene as drawn (e.g. for `ChartDirector`'s `scene`). */
     sceneRef?: { current: ChartScene | null };
+    /** Show a tooltip on hover: `point` (or `true`) for the bar, point or slice under the pointer, `category` for every series in the category under it (default off). */
+    tooltip?: boolean | ChartTooltipMode;
+    /** Draws the tooltip's content instead of the category label and one row per series. */
+    tooltipContent?: Snippet<[ChartTooltip]>;
   }
 
   let {
@@ -51,7 +59,9 @@
     emptyMessage,
     class: className = '',
     presence,
-    sceneRef
+    sceneRef,
+    tooltip = false,
+    tooltipContent
   }: Props = $props();
 
   const view = chartStateOf(() => controller);
@@ -94,6 +104,10 @@
   $effect(() => {
     if (sceneRef) sceneRef.current = scene;
   });
+  const tooltipMode = $derived<ChartTooltipMode | null>(tooltip === true ? 'point' : tooltip || null);
+  let tip = $state.raw<ChartTooltip | null>(null);
+  // In wrapper pixels; `flip` puts the tooltip left of the pointer near the right edge.
+  let tipAt = $state({ left: 0, top: 0, flip: false });
   const byKey = $derived(new Map(scene.marks.map((m) => [m.key, m])));
   const label = $derived(view.current.spec.title || 'Chart');
 
@@ -108,12 +122,26 @@
     controller.select(target ?? null);
     drag = startChartPointDrag(controller, scene, target, scenePoint(e));
     if (drag) {
+      tip = null;
       frozen = { valueDomain: drag.valueDomain, valueDomain2: drag.valueDomain2 ?? null, xDomain: drag.xDomain ?? null, readout: drag.target };
       svg?.setPointerCapture?.(e.pointerId);
     }
   }
   function pointermove(e: PointerEvent) {
     drag?.move(scenePoint(e), { fine: e.altKey, lockAxis: e.shiftKey, noSnap: e.ctrlKey || e.metaKey });
+    hover(e);
+  }
+  function hover(e: PointerEvent) {
+    if (!tooltipMode || drag || !wrapper) {
+      tip = null;
+      return;
+    }
+    const next = chartTooltipAt(view.current.spec, scene, scenePoint(e), { mode: tooltipMode, measureText });
+    if (!sameChartTooltip(tip, next)) tip = next;
+    if (!next) return;
+    const box = wrapper.getBoundingClientRect();
+    const left = e.clientX - box.left;
+    tipAt = { left, top: e.clientY - box.top, flip: left > box.width * 0.6 };
   }
   function endDrag() {
     drag?.end();
@@ -132,7 +160,7 @@
   }
 </script>
 
-<div bind:this={wrapper} class="w-full {className}" data-chart-canvas="">
+<div bind:this={wrapper} class="relative w-full {className}" data-chart-canvas="">
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg
     bind:this={svg}
@@ -147,9 +175,31 @@
     onpointermove={pointermove}
     onpointerup={endDrag}
     onpointercancel={endDrag}
+    onpointerleave={() => (tip = null)}
     onkeydown={keydown}
   >
     <ChartMarks marks={scene.marks} fontFamily={scene.theme.fontFamily} interactive={editable} />
     {#if presence}<ChartPresenceLayer {presence} />{/if}
   </svg>
+  {#if tip}
+    <div
+      role="tooltip"
+      data-chart-tooltip=""
+      class="pointer-events-none absolute z-10 min-w-32 rounded-md border px-2.5 py-1.5 text-xs shadow-md"
+      style="left: {tipAt.left}px; top: {tipAt.top}px; transform: translate({tipAt.flip ? 'calc(-100% - 12px)' : '12px'}, calc(-100% - 8px)); background: var(--popover, #ffffff); color: var(--popover-foreground, #0f172a); border-color: var(--border, #e2e8f0); font-family: {scene.theme.fontFamily};"
+    >
+      {#if tooltipContent}
+        {@render tooltipContent(tip)}
+      {:else}
+        {#if tip.title}<div class="mb-1 font-medium">{tip.title}</div>{/if}
+        {#each tip.items as item (item.seriesId)}
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 shrink-0 rounded-full" style="background: {item.color}"></span>
+            <span style="color: var(--muted-foreground, #64748b)">{item.name}</span>
+            <span class="ml-auto pl-3 font-medium tabular-nums">{item.text}</span>
+          </div>
+        {/each}
+      {/if}
+    </div>
+  {/if}
 </div>
