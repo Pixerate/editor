@@ -514,6 +514,19 @@ export interface ChartValueScale {
 	logBase?: number;
 }
 
+/**
+ * The category bands of a bar, line or area chart: `count` equal bands of the category axis,
+ * from `start` for `length` pixels (the last category first when `reverse` is set).
+ */
+export interface ChartCategoryScale {
+	/** `x` for vertical charts, `y` for horizontal bars. */
+	axis: 'x' | 'y';
+	start: number;
+	length: number;
+	count: number;
+	reverse: boolean;
+}
+
 /** Something the layout had to leave out or shorten, as a sentence (for agents and screen readers). */
 export interface ChartWarning {
 	code: 'labels-hidden' | 'labels-truncated' | 'legend-truncated' | 'points-decimated' | 'values-skipped' | 'data-labels-hidden' | 'type-fallback' | 'annotations-skipped' | 'highlight-unmatched';
@@ -534,6 +547,8 @@ export interface ChartScene {
 	valueScale2?: ChartValueScale;
 	/** The numeric x scale of a scatter or bubble chart with x values. */
 	xScale?: ChartValueScale;
+	/** The category bands of a bar, line or area chart. */
+	categoryScale?: ChartCategoryScale;
 	/** Percent-stacked: values are shown as shares, so dragging is disabled. */
 	percent: boolean;
 	theme: ChartTheme;

@@ -4,6 +4,9 @@ React bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixerate/
 
 ```bash
 npm install @pixerate/editor-react @pixerate/editor react react-dom
+# only if you use the rich-text or prompt editors (the root entry): TipTap, and the rich-text peers
+# listed in the @pixerate/editor README
+npm install @tiptap/react @tiptap/extension-bubble-menu @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/extension-placeholder
 # only if you use @pixerate/editor-react/canvas:
 npm install @xyflow/react @dagrejs/dagre
 ```

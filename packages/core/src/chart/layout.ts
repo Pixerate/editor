@@ -149,7 +149,8 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 			warnings,
 			...(result.valueScale ? { valueScale: result.valueScale } : {}),
 			...(result.valueScale2 ? { valueScale2: result.valueScale2 } : {}),
-			...(result.xScale ? { xScale: result.xScale } : {})
+			...(result.xScale ? { xScale: result.xScale } : {}),
+			...(result.categoryScale ? { categoryScale: result.categoryScale } : {})
 		};
 	};
 	const empty = (message: string) => {
@@ -368,6 +369,16 @@ export function chartValueAtPoint(scene: ChartScene, point: { x: number; y: numb
 	if (!scale || scene.percent) return undefined;
 	const px = scale.axis === 'y' ? point.y : point.x;
 	return chartScaleFromPixel(px, scale);
+}
+
+/** The category index under a scene point inside the plot of a bar, line or area chart, or `undefined`. */
+export function chartCategoryAtPoint(scene: ChartScene, point: { x: number; y: number }): number | undefined {
+	const scale = scene.categoryScale;
+	const { plot } = scene;
+	if (!scale || point.x < plot.x || point.x > plot.x + plot.width || point.y < plot.y || point.y > plot.y + plot.height) return undefined;
+	const offset = (scale.axis === 'x' ? point.x : point.y) - scale.start;
+	const k = Math.min(scale.count - 1, Math.max(0, Math.floor((offset / scale.length) * scale.count)));
+	return scale.reverse ? scale.count - 1 - k : k;
 }
 
 /** The x value at a scene point on a scatter or bubble chart, or `undefined` without a numeric x axis. */

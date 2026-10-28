@@ -383,7 +383,7 @@ export function ChartTab() {
 
       <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3">
         {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
-        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef }} playback={demoPlayback} />
+        <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef, tooltip: 'category' }} playback={demoPlayback} />
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200" data-testid="chart-house-style">
           <StyleFindings report={houseStyle.report} title="House style (org: Acme, locked · user: big labels)" onSelect={(f) => controller.select(f.target as ChartSelection)} />
           {houseStyle.error && <p className="text-xs text-rose-400">{houseStyle.error}</p>}

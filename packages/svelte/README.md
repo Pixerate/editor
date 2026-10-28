@@ -4,6 +4,9 @@ Svelte 5 bindings for [`@pixerate/editor`](https://www.npmjs.com/package/@pixera
 
 ```bash
 npm install @pixerate/editor-svelte @pixerate/editor svelte
+# only if you use the rich-text or prompt editors (the root entry): TipTap, and the rich-text peers
+# listed in the @pixerate/editor README
+npm install @tiptap/extension-bubble-menu @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/extension-placeholder
 # only if you use @pixerate/editor-svelte/canvas:
 npm install @xyflow/svelte @dagrejs/dagre
 ```

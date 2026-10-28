@@ -65,6 +65,7 @@ const PRODUCTIVITY_FEATURES: ParityRow[] = [
   row("Canvas Animation Export & Commands", "exportCssAnimation & createCanvasAnimationCommands", "Via core", "Via core", "CSS @keyframes, Web Animations, agent tools"),
   row("Chart Editor (bar, line, area, scatter, pie, donut, combos, stacking, horizontal bars)", "ChartController & layoutChart (/chart)", "useChartEditor & <ChartEditor>", "createChartEditor & <ChartEditor>", "DOM-free layout to drawing primitives; one spec drives the canvas, grid and agent tools"),
   row("Chart Selection, Drag-to-Edit & Keyboard Editing", "startChartPointDrag & handleChartKey", "<ChartCanvas>", "<ChartCanvas>", "A drag is one undo step; values snap to a tenth of the tick step"),
+  row("Chart Tooltips", "chartTooltipAt, chartTooltipFor & get_chart_tooltip", "<ChartCanvas tooltip renderTooltip>", "<ChartCanvas tooltip tooltipContent>", "point or category mode; values written with the series or axis format; hidden while dragging"),
   row("Chart Data Grid, Paste & CSV Import", "pasteCells, importCsv & chartDataFromTable", "<ChartDataGrid>", "<ChartDataGrid>", "Numbers as typed (1,200 · 12% · blank gap); pasting grows the grid"),
   row("Chart Inspector (type, titles, axes, legend, formats, series)", "update, setAxis, setLegend & updateSeries", "<ChartInspector>", "<ChartInspector>", "All-or-nothing edits with sentence errors"),
   row("Chart SVG Export & Agent Commands", "chartToSvg & createChartCommands", "useChartCommands", "useChartCommands", "Series and categories addressed by name"),

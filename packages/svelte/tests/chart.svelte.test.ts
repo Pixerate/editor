@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { CommandRegistry } from "@pixerate/editor/commands";
-import { ChartController, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
+import { CSS_VARIABLE_CHART_THEME, ChartController, layoutChart, normalizeChartSpec, registerChartMap, type ChartSpec } from "@pixerate/editor/chart";
 import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
 import { ChartCanvas, ChartDataGrid, ChartEditor, ChartInspector, createChartEditor, useChartCommands } from "../src/chart";
 
@@ -452,5 +452,56 @@ describe("ChartEditor", () => {
     controller.select({ kind: "axis", axis: "y" });
     flushSync();
     expect(q("[data-chart-selection]").textContent).toBe("Value axis");
+  });
+});
+
+describe("ChartCanvas tooltips", () => {
+  const scene = () => layoutChart(normalizeChartSpec(sales).spec, { width: 640, height: 400, theme: CSS_VARIABLE_CHART_THEME });
+  const barCentre = (seriesId: string, index: number) => {
+    const bar = scene().marks.find((m) => m.kind === "rect" && m.target?.kind === "point" && m.target.seriesId === seriesId && m.target.index === index);
+    if (bar?.kind !== "rect") throw new Error("no bar");
+    return { clientX: bar.x + bar.width / 2, clientY: bar.y + bar.height / 2 };
+  };
+
+  it("is off by default", () => {
+    const el = render(ChartCanvas, { controller: new ChartController({ spec: sales }), editable: false });
+    fire(el.querySelector("svg")!, "pointermove", barCentre("north", 1));
+    expect(el.querySelector("[data-chart-tooltip]")).toBeNull();
+  });
+
+  it("shows the bar under the pointer and hides on leave", () => {
+    const el = render(ChartCanvas, { controller: new ChartController({ spec: sales }), editable: false, tooltip: true });
+    const svg = el.querySelector("svg")!;
+    fire(svg, "pointermove", barCentre("north", 1));
+    const tip = el.querySelector('[role="tooltip"]')!;
+    expect(tip.textContent).toContain("Q2");
+    expect(tip.textContent).toContain("North");
+    expect(tip.textContent).toContain("18");
+    expect(tip.textContent).not.toContain("South");
+    fire(svg, "pointerleave");
+    expect(el.querySelector("[data-chart-tooltip]")).toBeNull();
+  });
+
+  it("lists every series in the category in category mode", () => {
+    const el = render(ChartCanvas, { controller: new ChartController({ spec: sales }), editable: false, tooltip: "category" });
+    const { clientX } = barCentre("north", 2);
+    fire(el.querySelector("svg")!, "pointermove", { clientX, clientY: scene().plot.y + 2 });
+    const rows = [...el.querySelectorAll("[data-chart-tooltip] .flex")].map((r) => r.textContent?.replace(/\s+/g, " ").trim());
+    expect(rows).toEqual(["North 9", "South 14"]);
+  });
+
+  it("hides while a point is dragged", () => {
+    const controller = new ChartController({ spec: sales });
+    const el = render(ChartCanvas, { controller, tooltip: true });
+    const svg = el.querySelector("svg")!;
+    const at = barCentre("north", 1);
+    fire(svg, "pointermove", at);
+    expect(el.querySelector("[data-chart-tooltip]")).not.toBeNull();
+    const key = scene().marks.find((m) => m.target?.kind === "point" && m.target.seriesId === "north" && m.target.index === 1)!.key;
+    fire(svg.querySelector(`[data-chart-key="${key}"]`)!, "pointerdown", { ...at, button: 0 });
+    expect(el.querySelector("[data-chart-tooltip]")).toBeNull();
+    fire(svg, "pointermove", { ...at, clientY: at.clientY - 20 });
+    expect(el.querySelector("[data-chart-tooltip]")).toBeNull();
+    fire(svg, "pointerup", at);
   });
 });
