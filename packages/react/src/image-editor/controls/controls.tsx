@@ -1,5 +1,5 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
-import { imageSelectClass } from '../styles.js';
+import { imageColorInputClass, imageSelectClass } from '../styles.js';
 
 /** A checkbox in the image editor's panels. */
 export interface ImageCheckboxProps {
@@ -48,6 +48,23 @@ export interface ImageSelectProps {
   className?: string;
 }
 
+/** A colour well in the image editor's panels. */
+export interface ImageColorProps {
+  /** `#rrggbb`, or `#rrggbbaa` with `alpha`. */
+  value: string;
+  /** The accessible name. */
+  label: string;
+  /** Whether the colour has an alpha channel. */
+  alpha?: boolean;
+  disabled?: boolean;
+  /** Every change while the colour is picked. */
+  onChange: (value: string) => void;
+  /** A pick (e.g. a drag in the picker) starts: changes until `onEnd` merge into one undo step. */
+  onStart?: () => void;
+  onEnd?: () => void;
+  className?: string;
+}
+
 /**
  * The host's own form controls for the image editor's panels. Any left out fall back to the
  * editor's plain inputs.
@@ -56,6 +73,7 @@ export interface ImageEditorControls {
   Checkbox?: ComponentType<ImageCheckboxProps>;
   Range?: ComponentType<ImageRangeProps>;
   Select?: ComponentType<ImageSelectProps>;
+  Color?: ComponentType<ImageColorProps>;
 }
 
 const ControlsContext = createContext<ImageEditorControls>({});
@@ -125,5 +143,22 @@ export function ImageSelect(props: ImageSelectProps) {
         </option>
       ))}
     </select>
+  );
+}
+
+/** A colour well: the host's, or a plain colour input (which keeps the stored alpha). */
+export function ImageColor(props: ImageColorProps) {
+  const Host = useImageEditorControls().Color;
+  if (Host) return <Host {...props} />;
+  const { value, label, alpha, disabled, onChange, className = '' } = props;
+  return (
+    <input
+      type="color"
+      aria-label={label}
+      value={value.slice(0, 7)}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value + (alpha ? value.slice(7, 9) : ''))}
+      className={`${imageColorInputClass} ${className}`}
+    />
   );
 }

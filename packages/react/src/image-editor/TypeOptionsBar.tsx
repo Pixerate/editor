@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
 import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
-import { imageChipClass, imageColorInputClass } from './styles';
+import { imageChipClass } from './styles';
+import { ImageColor } from './controls/controls.js';
 
 export interface TypeOptionsBarProps {
   controller: ImageEditorController;
@@ -94,7 +95,7 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
         <button type="button" aria-pressed={shown.italic} className={`${imageChipClass(shown.italic)} italic`} onClick={() => style({ italic: !shown.italic })}>
           I
         </button>
-        <input type="color" aria-label="Text colour" value={shown.color} onChange={(e) => style({ color: e.target.value })} className={imageColorInputClass} />
+        <ImageColor label="Text colour" value={shown.color} onChange={(color) => style({ color })} />
       </div>
       <div className="flex gap-1" role="toolbar" aria-label="Alignment">
         {TEXT_ALIGNS.map((a) => (

@@ -33,7 +33,7 @@
 {:else if field.type === 'choice'}
   <ParameterSelect {field} value={value as string | number} onchange={set} {disabled} {id} {components} />
 {:else if field.type === 'color'}
-  <ParameterColor {field} value={value as string} onchange={set} {ongesturestart} {ongestureend} {disabled} {id} />
+  <ParameterColor {field} value={value as string} onchange={set} {ongesturestart} {ongestureend} {disabled} {id} {components} />
 {:else if field.type === 'vector'}
   <ParameterVector {field} value={value as number[]} onchange={set} {disabled} {id} {components} />
 {:else if field.type === 'image'}

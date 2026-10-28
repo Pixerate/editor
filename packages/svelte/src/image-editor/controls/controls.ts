@@ -47,6 +47,23 @@ export interface ImageSelectProps {
   class?: string;
 }
 
+/** A colour well in the image editor's panels. */
+export interface ImageColorProps {
+  /** `#rrggbb`, or `#rrggbbaa` with `alpha`. */
+  value: string;
+  /** The accessible name. */
+  label: string;
+  /** Whether the colour has an alpha channel. */
+  alpha?: boolean;
+  disabled?: boolean;
+  /** Every change while the colour is picked. */
+  oninput: (value: string) => void;
+  /** A pick (e.g. a drag in the picker) starts: changes until `onend` merge into one undo step. */
+  onstart?: () => void;
+  onend?: () => void;
+  class?: string;
+}
+
 /**
  * The host's own form controls for the image editor's panels. Any left out fall back to the
  * editor's plain inputs.
@@ -55,6 +72,7 @@ export interface ImageEditorControls {
   Checkbox?: Component<ImageCheckboxProps>;
   Range?: Component<ImageRangeProps>;
   Select?: Component<ImageSelectProps>;
+  Color?: Component<ImageColorProps>;
 }
 
 const KEY = Symbol('pixerate.image-editor.controls');

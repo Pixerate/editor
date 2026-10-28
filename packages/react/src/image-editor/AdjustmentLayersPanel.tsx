@@ -22,7 +22,7 @@ import {
 import { ControlSlider } from './ControlSlider';
 import { CurvesEditor } from './CurvesEditor';
 import { imageSectionTitleClass, imageSelectClass } from './styles';
-import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface AdjustmentLayersPanelProps {
   controller: ImageEditorController;
@@ -181,13 +181,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
               <ImageCheckbox label="Tint" checked={layer.params.tint !== null} onChange={(on) => setParam(layer, 'tint', on ? '#e1d3b3' : null)} />
               Tint
               {layer.params.tint && (
-                <input
-                  type="color"
-                  aria-label="Tint colour"
-                  value={layer.params.tint}
-                  onChange={(e) => setParam(layer, 'tint', e.target.value)}
-                  className="h-5 w-8 bg-transparent"
-                />
+                <ImageColor label="Tint colour" value={layer.params.tint} onChange={(v) => setParam(layer, 'tint', v)} />
               )}
             </label>
           </div>
@@ -197,13 +191,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 text-foreground">
               Filter colour
-              <input
-                type="color"
-                aria-label="Filter colour"
-                value={layer.params.color}
-                onChange={(e) => setParam(layer, 'color', e.target.value)}
-                className="h-5 w-8 bg-transparent"
-              />
+              <ImageColor label="Filter colour" value={layer.params.color} onChange={(v) => setParam(layer, 'color', v)} />
             </label>
             {controlsOf(layer).map((s) => slider(layer, s))}
             {checkbox(layer, 'preserveLuminosity', 'Preserve luminosity')}

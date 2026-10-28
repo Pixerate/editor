@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageColor from './controls/ImageColor.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
   import { imageSectionTitleClass } from './styles.js';
@@ -242,13 +243,7 @@
       {:else if layer.kind === 'photoFilter'}
         <label class="flex items-center gap-2 text-foreground">
           Filter colour
-          <input
-            type="color"
-            aria-label="Filter colour"
-            value={layer.params.color}
-            oninput={(e) => setParam(layer, 'color', (e.target as HTMLInputElement).value)}
-            class="h-5 w-8 bg-transparent"
-          />
+          <ImageColor label="Filter colour" value={layer.params.color} oninput={(v) => setParam(layer, 'color', v)} />
         </label>
       {:else if layer.kind === 'invert'}
         <p class="text-muted-foreground text-[11px]">Invert has no settings.</p>
@@ -275,13 +270,7 @@
           <ImageCheckbox label="Tint" checked={layer.params.tint !== null} onchange={(on) => setParam(layer, 'tint', on ? '#e1d3b3' : null)} />
           Tint
           {#if layer.params.tint}
-            <input
-              type="color"
-              aria-label="Tint colour"
-              value={layer.params.tint}
-              oninput={(e) => setParam(layer, 'tint', (e.target as HTMLInputElement).value)}
-              class="h-5 w-8 bg-transparent"
-            />
+            <ImageColor label="Tint colour" value={layer.params.tint} oninput={(v) => setParam(layer, 'tint', v)} />
           {/if}
         </label>
       {/if}

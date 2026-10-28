@@ -19,8 +19,8 @@ import {
 import { DEFAULT_PAINT_GRADIENT, userErrorMessage } from '@pixerate/editor/image-editor';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
-import { imageChipClass, imageColorInputClass } from './styles';
-import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { imageChipClass } from './styles';
+import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface BrushOptionsBarProps {
   controller: ImageEditorController;
@@ -75,23 +75,11 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
 
       <div className="flex items-center gap-2" role="group" aria-label="Colours">
         <label className="flex items-center gap-1">
-          <input
-            type="color"
-            aria-label="Foreground colour"
-            value={foreground}
-            onChange={(e) => controller.setPaintOptions({ foreground: e.target.value })}
-            className={imageColorInputClass}
-          />
+          <ImageColor label="Foreground colour" value={foreground} onChange={(fg) => controller.setPaintOptions({ foreground: fg })} />
           <span className="text-muted-foreground">FG</span>
         </label>
         <label className="flex items-center gap-1">
-          <input
-            type="color"
-            aria-label="Background colour"
-            value={background}
-            onChange={(e) => controller.setPaintOptions({ background: e.target.value })}
-            className={imageColorInputClass}
-          />
+          <ImageColor label="Background colour" value={background} onChange={(bg) => controller.setPaintOptions({ background: bg })} />
           <span className="text-muted-foreground">BG</span>
         </label>
         <button type="button" title="Swap colours (X)" className={imageChipClass(false)} onClick={() => controller.swapPaintColors()}>

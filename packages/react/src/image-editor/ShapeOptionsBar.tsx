@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { ImageEditorController, LiveShapeKind, ShapeToolOptions } from '@pixerate/editor/image-editor';
 import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
-import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles';
-import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { imageChipClass, imageFieldClass } from './styles';
+import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface ShapeOptionsBarProps {
   controller: ImageEditorController;
@@ -49,26 +49,12 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
         <label className="flex items-center gap-1">
           <ImageCheckbox label="Fill" checked={options.fill !== null} onChange={(on) => set({ fill: on ? '#4f46e5' : null })} />
           Fill
-          <input
-            type="color"
-            aria-label="Fill colour"
-            disabled={options.fill === null}
-            value={options.fill ?? '#4f46e5'}
-            onChange={(e) => set({ fill: e.target.value })}
-            className={imageColorInputClass}
-          />
+          <ImageColor label="Fill colour" disabled={options.fill === null} value={options.fill ?? '#4f46e5'} onChange={(fill) => set({ fill })} />
         </label>
         <label className="flex items-center gap-1">
           <ImageCheckbox label="Stroke" checked={options.stroke !== null} onChange={(on) => set({ stroke: on ? '#000000' : null })} />
           Stroke
-          <input
-            type="color"
-            aria-label="Stroke colour"
-            disabled={options.stroke === null}
-            value={options.stroke ?? '#000000'}
-            onChange={(e) => set({ stroke: e.target.value })}
-            className={imageColorInputClass}
-          />
+          <ImageColor label="Stroke colour" disabled={options.stroke === null} value={options.stroke ?? '#000000'} onChange={(stroke) => set({ stroke })} />
         </label>
         <label className="flex items-center gap-1">
           Width

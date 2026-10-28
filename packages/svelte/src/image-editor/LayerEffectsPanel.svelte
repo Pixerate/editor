@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageColor from './controls/ImageColor.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageRange from './controls/ImageRange.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
@@ -155,7 +156,7 @@
                   </label>
                 {:else if c.type === 'color'}
                   <label class="flex items-center gap-1.5 text-foreground">
-                    <input type="color" aria-label={c.label} value={c.value} disabled={view.model.readOnly} oninput={(e) => change(row.id, c, (e.currentTarget as HTMLInputElement).value)} />
+                    <ImageColor label={c.label} value={c.value} disabled={view.model.readOnly} oninput={(v) => change(row.id, c, v)} />
                     {c.label}
                   </label>
                 {:else if c.type === 'checkbox'}

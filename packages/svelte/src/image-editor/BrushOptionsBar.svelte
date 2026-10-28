@@ -1,6 +1,7 @@
 <script lang="ts">
+  import ImageColor from './controls/ImageColor.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
-  import { imageChipClass, imageColorInputClass } from './styles.js';
+  import { imageChipClass } from './styles.js';
   import type { ImageEditorController } from '@pixerate/editor/image-editor';
   import {
     userErrorMessage,
@@ -70,23 +71,11 @@
 
   <div class="flex items-center gap-2" role="group" aria-label="Colours">
     <label class="flex items-center gap-1">
-      <input
-        type="color"
-        aria-label="Foreground colour"
-        value={view.foreground}
-        oninput={(e) => controller.setPaintOptions({ foreground: (e.target as HTMLInputElement).value })}
-        class={imageColorInputClass}
-      />
+      <ImageColor label="Foreground colour" value={view.foreground} oninput={(foreground) => controller.setPaintOptions({ foreground })} />
       <span class="text-muted-foreground">FG</span>
     </label>
     <label class="flex items-center gap-1">
-      <input
-        type="color"
-        aria-label="Background colour"
-        value={view.background}
-        oninput={(e) => controller.setPaintOptions({ background: (e.target as HTMLInputElement).value })}
-        class={imageColorInputClass}
-      />
+      <ImageColor label="Background colour" value={view.background} oninput={(background) => controller.setPaintOptions({ background })} />
       <span class="text-muted-foreground">BG</span>
     </label>
     <button type="button" title="Swap colours (X)" class={imageChipClass(false)} onclick={() => controller.swapPaintColors()}>Swap</button>

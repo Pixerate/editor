@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageColor from './controls/ImageColor.svelte';
   import { imageDividerClass, imageEditorFrameClass, imageEditorHeaderClass, imageErrorBannerClass, imageHeaderButtonClass, imagePrimaryButtonClass, imageRangeClass, imageSectionClass, imageSectionTitleClass, imageSelectClass, imageSidebarClass, imageSmallButtonClass, imageSpinnerClass, imageTabClass, imageTabListClass } from './styles.js';
   import type {
     ExportOptions,
@@ -747,11 +748,7 @@
           <!-- Color & Size -->
           <div class="flex items-center gap-2 mt-2">
             <span class="text-muted-foreground">Color:</span>
-            <input
-              type="color"
-              bind:value={activeColor}
-              class="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
-            />
+            <ImageColor label="Annotation colour" value={activeColor} oninput={(c) => (activeColor = c)} />
             <div class="flex-1 ml-2">
               <div class="flex justify-between text-muted-foreground mb-0.5">
                 <span>Width:</span>

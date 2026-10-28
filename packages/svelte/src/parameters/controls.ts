@@ -60,11 +60,32 @@ export interface ParameterSelectProps {
   onchange: (value: string | number) => void;
 }
 
+/** Props for a custom colour control in parameter panels. */
+export interface ParameterColorProps {
+  id?: string;
+  /** `#rrggbb`, or `#rrggbbaa` with `alpha`. */
+  value: string;
+  /** Whether the field has an alpha channel. */
+  alpha?: boolean;
+  /** Suggested colours for the field, if it has any. */
+  swatches?: readonly string[];
+  disabled?: boolean;
+  /** The field's label. */
+  label: string;
+  class?: string;
+  style?: string;
+  onchange: (value: string) => void;
+  /** A pick starts: changes until `ongestureend` merge into one undo step. */
+  ongesturestart?: () => void;
+  ongestureend?: () => void;
+}
+
 /** Host form controls for parameter panels. Any left out fall back to the default controls. */
 export interface ParameterComponents {
   input?: Component<ParameterInputProps>;
   slider?: Component<ParameterSliderProps>;
   select?: Component<ParameterSelectProps>;
+  color?: Component<ParameterColorProps>;
 }
 
 const KEY = Symbol('pixerate.parameters.components');
@@ -85,5 +106,6 @@ export function resolveParameterComponents(explicit?: ParameterComponents, fallb
     input: explicit?.input ?? fallback.input,
     slider: explicit?.slider ?? fallback.slider,
     select: explicit?.select ?? fallback.select,
+    color: explicit?.color ?? fallback.color,
   };
 }

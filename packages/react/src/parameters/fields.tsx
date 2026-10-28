@@ -337,7 +337,8 @@ export function ParameterSelect(props: ParameterControlProps<ChoiceParameterFiel
 }
 
 /** A colour picker with a hex box and a popup ColorPicker. */
-export function ParameterColor({ field, value, onChange, onGestureStart, onGestureEnd, disabled, id }: ParameterControlProps<ColorParameterField, string>) {
+export function ParameterColor({ field, value, onChange, onGestureStart, onGestureEnd, disabled, id, components }: ParameterControlProps<ColorParameterField, string>) {
+  const CustomColor = resolveParameterComponents(components, useParameterComponents()).color;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -375,6 +376,22 @@ export function ParameterColor({ field, value, onChange, onGestureStart, onGestu
       window.removeEventListener('keydown', onKeyDown, true);
     };
   }, [open]);
+
+  if (CustomColor) {
+    return (
+      <CustomColor
+        id={id}
+        value={shown}
+        alpha={alpha}
+        swatches={field.swatches}
+        disabled={off}
+        label={name}
+        onChange={onChange}
+        onGestureStart={onGestureStart}
+        onGestureEnd={onGestureEnd}
+      />
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative space-y-1.5">

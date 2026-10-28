@@ -61,10 +61,31 @@ export interface ParameterSelectProps {
 }
 
 /** Host form controls for parameter panels. Any left out fall back to the default controls. */
+/** Props for a custom colour control in parameter panels. */
+export interface ParameterColorProps {
+  id?: string;
+  /** `#rrggbb`, or `#rrggbbaa` with `alpha`. */
+  value: string;
+  /** Whether the field has an alpha channel. */
+  alpha?: boolean;
+  /** Suggested colours for the field, if it has any. */
+  swatches?: readonly string[];
+  disabled?: boolean;
+  /** The field's label. */
+  label: string;
+  className?: string;
+  style?: React.CSSProperties;
+  onChange: (value: string) => void;
+  /** A pick starts: changes until `onGestureEnd` merge into one undo step. */
+  onGestureStart?: () => void;
+  onGestureEnd?: () => void;
+}
+
 export interface ParameterComponents {
   input?: ComponentType<ParameterInputProps>;
   slider?: ComponentType<ParameterSliderProps>;
   select?: ComponentType<ParameterSelectProps>;
+  color?: ComponentType<ParameterColorProps>;
 }
 
 const ParameterComponentsContext = createContext<ParameterComponents>({});
@@ -85,6 +106,7 @@ export function resolveParameterComponents(explicit?: ParameterComponents, conte
     input: explicit?.input ?? context?.input,
     slider: explicit?.slider ?? context?.slider,
     select: explicit?.select ?? context?.select,
+    color: explicit?.color ?? context?.color,
   };
 }
 

@@ -6,6 +6,9 @@ import ControlsProbe from './fixtures/ControlsProbe.svelte';
 import HostCheckbox from './fixtures/HostCheckbox.svelte';
 import HostRange from './fixtures/HostRange.svelte';
 import HostSelect from './fixtures/HostSelect.svelte';
+import HostColor from './fixtures/HostColor.svelte';
+import BrushControlsProbe from './fixtures/BrushControlsProbe.svelte';
+import { BrushOptionsBar } from '../src/image-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -58,6 +61,34 @@ describe('image editor panel controls', () => {
       [magicWand.tolerance, !magicWand.antiAlias, magicWand.sample],
       [magicWand.tolerance, magicWand.antiAlias, 'active-layer'],
     ]);
+  });
+});
+
+describe('image editor colour controls', () => {
+  it('uses native colour wells when the host sets no Color', () => {
+    const controller = new ImageEditorController();
+    component = mount(BrushOptionsBar, { target, props: { controller } });
+    flushSync();
+    const fg = target.querySelector('input[type="color"][aria-label="Foreground colour"]') as HTMLInputElement;
+    expect(fg).not.toBeNull();
+    fg.value = '#00ff00';
+    fg.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(controller.getState().paint.foreground).toBe('#00ff00');
+  });
+
+  it("renders the host's Color and passes its picks back", () => {
+    const controller = new ImageEditorController();
+    component = mount(BrushControlsProbe, { target, props: { controller, controls: { Color: HostColor } } });
+    flushSync();
+    expect(target.querySelector('input[type="color"]')).toBeNull();
+    const fg = target.querySelector('[data-host="color"][aria-label="Foreground colour"]') as HTMLButtonElement;
+    const bg = target.querySelector('[data-host="color"][aria-label="Background colour"]') as HTMLButtonElement;
+    expect(fg).not.toBeNull();
+    expect(bg).not.toBeNull();
+    fg.click();
+    flushSync();
+    expect(controller.getState().paint.foreground).toBe('#123456');
+    expect(fg.dataset.value).toBe('#123456');
   });
 });
 
