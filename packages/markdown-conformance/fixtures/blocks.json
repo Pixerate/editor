@@ -1,0 +1,146 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "heading-1-from-paragraph",
+      "description": "Transforms paragraph into heading level 1",
+      "command": "format.heading",
+      "params": { "level": 1 },
+      "input": "Some ‸title",
+      "expected": "# Some ‸title"
+    },
+    {
+      "id": "heading-2-from-paragraph",
+      "description": "Transforms paragraph into heading level 2",
+      "command": "format.heading",
+      "params": { "level": 2 },
+      "input": "Some ‸title",
+      "expected": "## Some ‸title"
+    },
+    {
+      "id": "heading-3-from-paragraph",
+      "description": "Transforms paragraph into heading level 3",
+      "command": "format.heading",
+      "params": { "level": 3 },
+      "input": "Some ‸title",
+      "expected": "### Some ‸title"
+    },
+    {
+      "id": "heading-4-from-paragraph",
+      "description": "Transforms paragraph into heading level 4",
+      "command": "format.heading",
+      "params": { "level": 4 },
+      "input": "Some ‸title",
+      "expected": "#### Some ‸title"
+    },
+    {
+      "id": "heading-5-from-paragraph",
+      "description": "Transforms paragraph into heading level 5",
+      "command": "format.heading",
+      "params": { "level": 5 },
+      "input": "Some ‸title",
+      "expected": "##### Some ‸title"
+    },
+    {
+      "id": "heading-6-from-paragraph",
+      "description": "Transforms paragraph into heading level 6",
+      "command": "format.heading",
+      "params": { "level": 6 },
+      "input": "Some ‸title",
+      "expected": "###### Some ‸title"
+    },
+    {
+      "id": "heading-change-level",
+      "description": "Switches heading from level 2 to level 3",
+      "command": "format.heading",
+      "params": { "level": 3 },
+      "input": "## Some ‸title",
+      "expected": "### Some ‸title"
+    },
+    {
+      "id": "heading-to-paragraph",
+      "description": "Converts heading back to standard paragraph",
+      "command": "format.paragraph",
+      "input": "## Some ‸title",
+      "expected": "Some ‸title"
+    },
+    {
+      "id": "heading-toggle-same-level",
+      "description": "Toggling the same heading level reverts to paragraph",
+      "command": "format.heading",
+      "params": { "level": 2 },
+      "input": "## Some ‸title",
+      "expected": "Some ‸title"
+    },
+    {
+      "id": "quote-from-paragraph",
+      "description": "Wraps paragraph into a blockquote",
+      "command": "format.quote",
+      "input": "Some ‸quote",
+      "expected": "> Some ‸quote"
+    },
+    {
+      "id": "quote-toggle-off",
+      "description": "Unwraps blockquote back to paragraph",
+      "command": "format.quote",
+      "input": "> Some ‸quote",
+      "expected": "Some ‸quote"
+    },
+    {
+      "id": "bullet-list-from-paragraph",
+      "description": "Converts paragraph into a bullet list item",
+      "command": "format.bulletList",
+      "input": "Item ‸one",
+      "expected": "- Item ‸one"
+    },
+    {
+      "id": "bullet-list-toggle-off",
+      "description": "Toggles bullet list item back to paragraph",
+      "command": "format.bulletList",
+      "input": "- Item ‸one",
+      "expected": "Item ‸one"
+    },
+    {
+      "id": "numbered-list-from-paragraph",
+      "description": "Converts paragraph into an ordered list item",
+      "command": "format.numberedList",
+      "input": "Item ‸one",
+      "expected": "1. Item ‸one"
+    },
+    {
+      "id": "numbered-list-toggle-off",
+      "description": "Toggles ordered list item back to paragraph",
+      "command": "format.numberedList",
+      "input": "1. Item ‸one",
+      "expected": "Item ‸one"
+    },
+    {
+      "id": "task-list-from-paragraph",
+      "description": "Converts paragraph into a task list item",
+      "command": "format.taskList",
+      "input": "Task ‸one",
+      "expected": "- [ ] Task ‸one"
+    },
+    {
+      "id": "task-list-toggle-off",
+      "description": "Toggles task list item back to paragraph",
+      "command": "format.taskList",
+      "input": "- [ ] Task ‸one",
+      "expected": "Task ‸one"
+    },
+    {
+      "id": "bullet-to-numbered",
+      "description": "Switches list from bullet to numbered",
+      "command": "format.numberedList",
+      "input": "- Item ‸one",
+      "expected": "1. Item ‸one"
+    },
+    {
+      "id": "numbered-to-bullet",
+      "description": "Switches list from numbered to bullet",
+      "command": "format.bulletList",
+      "input": "1. Item ‸one",
+      "expected": "- Item ‸one"
+    }
+  ]
+}

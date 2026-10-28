@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ts = createRequire(path.join(root, "package.json"))("typescript");
 const PACKAGES = ["core", "react", "svelte"];
+const DATA_PACKAGES = ["markdown-conformance"];
 const keep = process.argv.includes("--keep");
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "pixerate-check-packages-"));
@@ -32,8 +33,7 @@ fs.mkdirSync(modules);
 const failures = [];
 const fail = (message) => failures.push(message);
 
-// 1. Pack and unpack.
-const packages = PACKAGES.map((dir) => {
+function packTo(dir) {
   const source = path.join(root, "packages", dir);
   const pkg = JSON.parse(
     fs.readFileSync(path.join(source, "package.json"), "utf8"),
@@ -58,7 +58,11 @@ const packages = PACKAGES.map((dir) => {
     target,
     pkg: JSON.parse(fs.readFileSync(path.join(target, "package.json"), "utf8")),
   };
-});
+}
+
+// 1. Pack and unpack.
+for (const dir of DATA_PACKAGES) packTo(dir);
+const packages = PACKAGES.map(packTo);
 
 // Link everything the workspace installed for these packages (dependencies, peers and type
 // packages), plus the root's @types/node. The first package to provide a name wins.

@@ -1,0 +1,17 @@
+{
+  "name": "@pixerate/markdown-conformance",
+  "version": "0.1.0",
+  "description": "Shared Markdown editing fixtures and format-command manifest",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "fixtures",
+    "manifest.json",
+    "schema"
+  ],
+  "exports": {
+    "./manifest.json": "./manifest.json",
+    "./schema/*": "./schema/*",
+    "./fixtures/*": "./fixtures/*"
+  }
+}

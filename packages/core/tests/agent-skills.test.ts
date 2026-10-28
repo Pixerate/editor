@@ -212,6 +212,7 @@ const FACTORIES: Record<string, string> = {
 	createEditorMcpToolProvider: 'pixerate-rich-text, pixerate-canvas',
 	createFindReplaceCommands: 'pixerate-rich-text',
 	createTableCommands: 'pixerate-rich-text',
+	createFormatCommands: 'pixerate-rich-text',
 	createSpreadsheetToolProvider: 'pixerate-spreadsheet',
 	createSpreadsheetCommands: 'pixerate-spreadsheet',
 	createCanvasComponentToolProvider: 'pixerate-canvas',

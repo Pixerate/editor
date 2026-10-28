@@ -1,0 +1,104 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "bold-partial-word",
+      "description": "Bolding part of a word wraps just the selection",
+      "command": "format.bold",
+      "input": "Hello ⟦wor⟧ld",
+      "expected": "Hello **⟦wor⟧**ld"
+    },
+    {
+      "id": "bold-toggle-off",
+      "description": "Bolding an existing bold range removes bold delimiters",
+      "command": "format.bold",
+      "input": "Hello **⟦world⟧**",
+      "expected": "Hello ⟦world⟧"
+    },
+    {
+      "id": "bold-entire-word",
+      "description": "Bolding a full word wraps the word in bold delimiters",
+      "command": "format.bold",
+      "input": "Hello ⟦world⟧",
+      "expected": "Hello **⟦world⟧**"
+    },
+    {
+      "id": "bold-across-words",
+      "description": "Bolding multiple words wraps all selected words",
+      "command": "format.bold",
+      "input": "⟦Hello world⟧",
+      "expected": "**⟦Hello world⟧**"
+    },
+    {
+      "id": "italic-wrap",
+      "description": "Italicising wraps the selection in single asterisks",
+      "command": "format.italic",
+      "input": "Hello ⟦world⟧",
+      "expected": "Hello *⟦world⟧*"
+    },
+    {
+      "id": "italic-toggle-off",
+      "description": "Italicising an existing italic range removes italic delimiters",
+      "command": "format.italic",
+      "input": "Hello *⟦world⟧*",
+      "expected": "Hello ⟦world⟧"
+    },
+    {
+      "id": "italic-partial-word",
+      "description": "Italicising part of a word wraps just the selection",
+      "command": "format.italic",
+      "input": "Hello ⟦wor⟧ld",
+      "expected": "Hello *⟦wor⟧*ld"
+    },
+    {
+      "id": "strikethrough-wrap",
+      "description": "Strikethrough wraps selection in tildes",
+      "command": "format.strikethrough",
+      "input": "Hello ⟦world⟧",
+      "expected": "Hello ~~⟦world⟧~~"
+    },
+    {
+      "id": "strikethrough-toggle-off",
+      "description": "Strikethrough on existing strikethrough removes delimiters",
+      "command": "format.strikethrough",
+      "input": "Hello ~~⟦world⟧~~",
+      "expected": "Hello ⟦world⟧"
+    },
+    {
+      "id": "strikethrough-partial-word",
+      "description": "Strikethrough on partial word wraps just the selection",
+      "command": "format.strikethrough",
+      "input": "Hello ⟦wor⟧ld",
+      "expected": "Hello ~~⟦wor⟧~~ld"
+    },
+    {
+      "id": "code-wrap",
+      "description": "Inline code wraps selection in backticks",
+      "command": "format.code",
+      "input": "Hello ⟦world⟧",
+      "expected": "Hello `⟦world⟧`"
+    },
+    {
+      "id": "code-toggle-off",
+      "description": "Inline code on existing code removes backticks",
+      "command": "format.code",
+      "input": "Hello `⟦world⟧`",
+      "expected": "Hello ⟦world⟧"
+    },
+    {
+      "id": "nested-bold-italic",
+      "description": "Applying italic to already bold text nests italic inside bold",
+      "command": "format.italic",
+      "input": "Hello **⟦world⟧**",
+      "expected": "Hello ***⟦world⟧***"
+    },
+    {
+      "id": "bold-inside-code-noop",
+      "description": "Bolding inside inline code is disabled or noop",
+      "command": "format.bold",
+      "input": "Hello `⟦world⟧`",
+      "expected": "Hello `⟦world⟧`",
+      "expectedNoop": true
+    }
+  ]
+}

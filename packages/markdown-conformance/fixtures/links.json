@@ -1,0 +1,45 @@
+{
+  "$schema": "../schema/fixture.schema.json",
+  "cases": [
+    {
+      "id": "link-wrap-selection",
+      "description": "Wrapping selection in a link creates markdown link markup",
+      "command": "format.link",
+      "params": { "url": "https://example.com" },
+      "input": "Hello ⟦world⟧",
+      "expected": "Hello [⟦world⟧](https://example.com)"
+    },
+    {
+      "id": "link-update-url",
+      "description": "Applying new url to an existing link updates the destination",
+      "command": "format.link",
+      "params": { "url": "https://new.com" },
+      "input": "Hello [⟦world⟧](https://old.com)",
+      "expected": "Hello [⟦world⟧](https://new.com)"
+    },
+    {
+      "id": "link-remove",
+      "description": "Setting link url to null unwraps the link",
+      "command": "format.link",
+      "params": { "url": null },
+      "input": "Hello [⟦world⟧](https://example.com)",
+      "expected": "Hello ⟦world⟧"
+    },
+    {
+      "id": "link-remove-from-caret",
+      "description": "Unsetting link with caret inside link text unwraps the link",
+      "command": "format.link",
+      "params": { "url": null },
+      "input": "Hello [wor‸ld](https://example.com)",
+      "expected": "Hello wor‸ld"
+    },
+    {
+      "id": "link-empty-url-removes",
+      "description": "Setting empty string url removes the link",
+      "command": "format.link",
+      "params": { "url": "" },
+      "input": "Hello [⟦world⟧](https://example.com)",
+      "expected": "Hello ⟦world⟧"
+    }
+  ]
+}

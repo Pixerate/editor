@@ -1,0 +1,131 @@
+{
+  "$schema": "./schema/manifest.schema.json",
+  "commands": [
+    {
+      "id": "format.bold",
+      "label": "Bold",
+      "group": "Format",
+      "shortcut": "Mod+B",
+      "surfaces": ["bubble", "menu"],
+      "enabledWhen": ["notInCode"]
+    },
+    {
+      "id": "format.italic",
+      "label": "Italic",
+      "group": "Format",
+      "shortcut": "Mod+I",
+      "surfaces": ["bubble", "menu"],
+      "enabledWhen": ["notInCode"]
+    },
+    {
+      "id": "format.strikethrough",
+      "label": "Strikethrough",
+      "group": "Format",
+      "shortcut": "Mod+Shift+X",
+      "surfaces": ["bubble", "menu"],
+      "enabledWhen": ["notInCode"]
+    },
+    {
+      "id": "format.code",
+      "label": "Inline Code",
+      "group": "Format",
+      "shortcut": "Mod+E",
+      "surfaces": ["bubble", "menu"]
+    },
+    {
+      "id": "format.link",
+      "label": "Link…",
+      "group": "Format",
+      "shortcut": "Mod+K",
+      "surfaces": ["bubble", "menu"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": { "type": ["string", "null"] }
+        }
+      }
+    },
+    {
+      "id": "format.heading",
+      "label": "Heading",
+      "group": "Block",
+      "surfaces": ["bubble", "menu"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "level": { "type": "integer", "minimum": 1, "maximum": 6 }
+        },
+        "required": ["level"]
+      },
+      "shortcuts": {
+        "level=1": "Mod+Alt+1",
+        "level=2": "Mod+Alt+2",
+        "level=3": "Mod+Alt+3"
+      }
+    },
+    {
+      "id": "format.paragraph",
+      "label": "Paragraph",
+      "group": "Block",
+      "shortcut": "Mod+Alt+0",
+      "surfaces": ["menu"]
+    },
+    {
+      "id": "format.bulletList",
+      "label": "Bullet List",
+      "group": "Block",
+      "shortcut": "Mod+Shift+8",
+      "surfaces": ["bubble", "menu"]
+    },
+    {
+      "id": "format.numberedList",
+      "label": "Numbered List",
+      "group": "Block",
+      "shortcut": "Mod+Shift+7",
+      "surfaces": ["bubble", "menu"]
+    },
+    {
+      "id": "format.taskList",
+      "label": "To-do List",
+      "group": "Block",
+      "shortcut": "Mod+Shift+9",
+      "surfaces": ["menu"]
+    },
+    {
+      "id": "format.quote",
+      "label": "Quote",
+      "group": "Block",
+      "shortcut": "Mod+Shift+.",
+      "surfaces": ["bubble", "menu"]
+    },
+    {
+      "id": "format.codeBlock",
+      "label": "Code Block",
+      "group": "Block",
+      "shortcut": "Mod+Alt+C",
+      "surfaces": ["bubble", "menu"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "language": { "type": ["string", "null"] }
+        }
+      }
+    },
+    {
+      "id": "format.table",
+      "label": "Table",
+      "group": "Insert",
+      "surfaces": ["bubble"],
+      "enabledWhen": ["inTable"]
+    }
+  ],
+  "codeLanguages": [
+    { "id": "javascript", "label": "JavaScript", "shortLabel": "JS" },
+    { "id": "swift", "label": "Swift" },
+    { "id": "python", "label": "Python" },
+    { "id": "html", "label": "HTML" },
+    { "id": "css", "label": "CSS" },
+    { "id": "json", "label": "JSON" },
+    { "id": "bash", "label": "Bash" }
+  ]
+}

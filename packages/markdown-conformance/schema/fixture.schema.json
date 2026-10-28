@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pixerate.dev/schemas/fixture.schema.json",
+  "title": "Markdown Editing Fixtures",
+  "description": "Corpus of Markdown editing cases specifying input, command, and expected output.",
+  "type": "object",
+  "required": ["cases"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "command", "input", "expected"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "command": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          },
+          "input": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "expectedNoop": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "skip": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "editor": { "type": "string" },
+              "swash": { "type": "string" }
+            }
+          },
+          "variants": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "editor": { "type": "string" },
+              "swash": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
