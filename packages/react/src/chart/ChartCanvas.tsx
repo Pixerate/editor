@@ -279,8 +279,8 @@ export function ChartCanvas({ controller, width = 640, height = 400, responsive 
             left: tipAt.left,
             top: tipAt.top,
             transform: `translate(${tipAt.flip ? 'calc(-100% - 12px)' : '12px'}, calc(-100% - 8px))`,
-            background: 'var(--popover, #ffffff)',
-            color: 'var(--popover-foreground, #0f172a)',
+            background: 'var(--popover, var(--background, #ffffff))',
+            color: 'var(--popover-foreground, var(--foreground, #0f172a))',
             borderColor: 'var(--border, #e2e8f0)',
             fontFamily: scene.theme.fontFamily,
           }}
