@@ -24,7 +24,6 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ts = createRequire(path.join(root, "package.json"))("typescript");
 const PACKAGES = ["core", "react", "svelte"];
-const DATA_PACKAGES = ["markdown-conformance"];
 const keep = process.argv.includes("--keep");
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "pixerate-check-packages-"));
@@ -60,8 +59,8 @@ function packTo(dir) {
   };
 }
 
-// 1. Pack and unpack.
-for (const dir of DATA_PACKAGES) packTo(dir);
+// 1. Pack and unpack. Data packages (markdown-conformance) are bundled into core, so they stay
+// out: the checks below then fail if a package still needs one installed.
 const packages = PACKAGES.map(packTo);
 
 // Link everything the workspace installed for these packages (dependencies, peers and type
