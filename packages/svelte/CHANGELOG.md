@@ -1,5 +1,11 @@
 # @pixerate/editor-svelte
 
+## 0.127.1
+
+### Patch Changes
+
+- 23e0bd8: `ImageEditorCanvas` pans by the distance the pointer moves on screen when its host is scaled (e.g. an expanded studio inside a zoomed-out canvas), instead of overshooting by the host's scale.
+
 ## 0.127.0
 
 ### Minor Changes
