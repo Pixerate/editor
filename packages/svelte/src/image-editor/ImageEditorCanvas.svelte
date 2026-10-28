@@ -208,7 +208,9 @@
   let isPanning = $state(false);
   // A primary drag pans: Space held, or the host's pan mode.
   const panning = $derived(viewportGestures && (isSpacePressed || panMode));
-  let panStartPoint: { clientX: number; clientY: number } | null = null;
+  // Where a pan drag started, in view pixels: a scaled host (an expanded studio in a zoomed-out
+  // canvas) makes screen pixels larger or smaller than the pan's.
+  let panStartPoint: ImagePoint | null = null;
   let panStartOffset: { x: number; y: number } = { x: 0, y: 0 };
 
   function handleWheel(e: WheelEvent) {
@@ -629,7 +631,7 @@
     if (viewportGestures && (e.button === 1 || (e.button === 0 && panning))) {
       e.preventDefault();
       isPanning = true;
-      panStartPoint = { clientX: e.clientX, clientY: e.clientY };
+      panStartPoint = getCanvasEventPoint(e);
       const curPan = editor.controller.getState().pan || { x: 0, y: 0 };
       panStartOffset = { ...curPan };
       return;
@@ -732,8 +734,9 @@
     if (!canvasEl) return;
 
     if (isPanning && panStartPoint) {
-      const dx = e.clientX - panStartPoint.clientX;
-      const dy = e.clientY - panStartPoint.clientY;
+      const pt = getCanvasEventPoint(e);
+      const dx = pt.x - panStartPoint.x;
+      const dy = pt.y - panStartPoint.y;
       editor.controller.setPan({
         x: Math.round(panStartOffset.x + dx),
         y: Math.round(panStartOffset.y + dy),
