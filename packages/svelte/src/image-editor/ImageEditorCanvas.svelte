@@ -18,6 +18,7 @@
     FreeTransformTool,
     boxFrameHit,
     quadFrameOverlay,
+    TRANSFORM_ROTATE_HANDLE_OFFSET,
     getViewportProjection,
     measureCanvasViewport,
     watchCanvasViewport,
@@ -371,7 +372,8 @@
     if (!layer || layer.visible === false) return null;
     const corners = c.getLayerFrame(layer.id);
     if (!corners) return null;
-    return quadFrameOverlay(corners, !(layer.locks?.all || layer.locks?.position));
+    const { scale } = getViewportProjection(c.getState(), view.width, view.height, false);
+    return quadFrameOverlay(corners, !(layer.locks?.all || layer.locks?.position), TRANSFORM_ROTATE_HANDLE_OFFSET / (scale || 1));
   }
 
   /**
@@ -503,6 +505,8 @@
     if (!canvasEl || !containerEl) return;
     const viewport = measureCanvasViewport(containerEl);
     view = { width: viewport.width, height: viewport.height };
+    // The transform overlay's rotate handle sits a fixed distance out on screen.
+    transformTool.setView(getViewportProjection(editor.controller.getState(), view.width, view.height, mode === 'crop').scale);
 
     await editor.controller.render(canvasEl, {
       viewportWidth: viewport.width,

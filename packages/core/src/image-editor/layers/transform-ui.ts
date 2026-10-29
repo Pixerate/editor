@@ -10,8 +10,9 @@
  *   proportional; side: scale one axis;
  * - Mod (Ctrl / Cmd) + corner: distort that corner; Mod + side: skew along the side (Alt: about
  *   the centre); Mod + Alt + Shift + corner: perspective;
- * - outside the box: rotate about the reference point (Shift: 15° steps); inside: move (Shift:
- *   along one axis); the reference point: move it;
+ * - the rotate handle on its stem above the top edge, or outside the box: rotate about the
+ *   reference point (Shift: 15° steps); inside: move (Shift: along one axis); the reference
+ *   point: move it;
  * - the mode switch (rotate, skew, distort, perspective) makes every handle do that;
  * - Warp: drag a mesh anchor or handle (the grid stays smooth across its lines), or anywhere
  *   inside to pull the surface; presets and the grid size come from the options bar. The warp is
@@ -51,7 +52,10 @@ import { flattenLayers } from './model';
 import type { ShortcutEvent } from './paint-ui';
 
 /** What a pointer is over (`mesh:<index>`: a warp mesh control point). */
-export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'reference' | 'inside' | 'outside' | `mesh:${number}`;
+export type TransformHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate' | 'reference' | 'inside' | 'outside' | `mesh:${number}`;
+
+/** Screen pixels from the top edge's midpoint to the rotate handle (as the vector editor's). */
+export const TRANSFORM_ROTATE_HANDLE_OFFSET = 24;
 
 const CORNERS = ['nw', 'ne', 'se', 'sw'] as const;
 const SIDES = ['n', 'e', 's', 'w'] as const;
@@ -138,6 +142,8 @@ export interface TransformOverlay {
   /** The eight handles (none in Warp mode). */
   handles: Array<{ id: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'; x: number; y: number }>;
   reference: ImagePoint;
+  /** The rotate handle, on a stem out from the top edge's midpoint (none without handles or in Warp mode). */
+  rotate?: ImagePoint;
   /** In Warp mode: the mesh's grid lines as cubics, its anchors, and its handles with the anchor each belongs to. */
   warp?: { curves: ImagePoint[][]; anchors: ImagePoint[]; handles: Array<{ point: ImagePoint; anchor: ImagePoint }> };
 }
@@ -152,9 +158,23 @@ const CURSOR: Record<TransformHandle, string> = {
   e: 'ew-resize',
   w: 'ew-resize',
   reference: 'move',
+  rotate: 'grab',
   inside: 'move',
   outside: 'alias',
 };
+
+/**
+ * The rotate handle `offset` document pixels out from the top edge's midpoint, square to the edge
+ * and away from `centre` (so it stays outside a flipped or rotated frame).
+ */
+function rotateHandleAt(nw: Vec2, ne: Vec2, centre: Vec2, offset: number): Vec2 | undefined {
+  const len = Math.hypot(ne.x - nw.x, ne.y - nw.y);
+  if (!(offset > 0) || !len) return undefined;
+  const n = { x: (nw.x + ne.x) / 2, y: (nw.y + ne.y) / 2 };
+  let dir = { x: (ne.y - nw.y) / len, y: -(ne.x - nw.x) / len };
+  if (dir.x * (centre.x - n.x) + dir.y * (centre.y - n.y) > 0) dir = { x: -dir.x, y: -dir.y };
+  return { x: n.x + dir.x * offset, y: n.y + dir.y * offset };
+}
 const meshIndex = (h: TransformHandle | null) => (h && h.startsWith('mesh:') ? Number(h.slice(5)) : -1);
 
 const mod = (m: TransformModifiers) => Boolean(m.ctrlKey || m.metaKey);
@@ -204,17 +224,37 @@ export interface FreeTransformToolOptions {
  * A Free Transform frame with no transform open (a host's selected-layer frame) from where its
  * corners lie (top-left, top-right, bottom-right, bottom-left, as `getLayerFrame` gives them): the
  * outline, the eight handles (none with `handles = false`, e.g. for a layer locked in place) and the
- * centre as the reference point. Same shape and handle order as `FreeTransformTool.overlay`.
+ * centre as the reference point. With handles and a `rotateOffset` (document pixels, usually
+ * `TRANSFORM_ROTATE_HANDLE_OFFSET / scale`) it also has the rotate handle. Same shape and handle
+ * order as `FreeTransformTool.overlay`.
  */
-export function quadFrameOverlay(corners: readonly ImagePoint[], handles = true): TransformOverlay {
+export function quadFrameOverlay(corners: readonly ImagePoint[], handles = true, rotateOffset = 0): TransformOverlay {
   const [nw, ne, se, sw] = corners;
   const mid = (a: ImagePoint, b: ImagePoint) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   const at = { nw, ne, se, sw, n: mid(nw, ne), e: mid(ne, se), s: mid(se, sw), w: mid(sw, nw) };
+  const reference = mid(nw, se);
+  const rotate = handles ? rotateHandleAt(nw, ne, reference, rotateOffset) : undefined;
   return {
     outline: CORNERS.map((id) => ({ ...at[id] })),
     handles: handles ? [...CORNERS, ...SIDES].map((id) => ({ id, x: at[id].x, y: at[id].y })) : [],
-    reference: mid(nw, se),
+    reference,
+    ...(rotate ? { rotate } : {}),
   };
+}
+
+/** The nearest of the handles and the rotate handle within `tolerance`, or null. */
+function nearestHandle(overlay: TransformOverlay, p: ImagePoint, tolerance: number): { handle: TransformHandle | null; distance: number } {
+  let handle: TransformHandle | null = null;
+  let distance = tolerance;
+  const points: Array<{ id: TransformHandle; x: number; y: number }> = overlay.rotate ? [...overlay.handles, { id: 'rotate', ...overlay.rotate }] : overlay.handles;
+  for (const h of points) {
+    const d = Math.hypot(h.x - p.x, h.y - p.y);
+    if (d <= distance) {
+      handle = h.id;
+      distance = d;
+    }
+  }
+  return { handle, distance };
 }
 
 /** `quadFrameOverlay` for an axis-aligned box. */
@@ -224,19 +264,12 @@ export function boxFrameOverlay(box: CropBox, handles = true): TransformOverlay 
 }
 
 /**
- * What a document point is over on a frame from `quadFrameOverlay`: a handle (within `tolerance`),
- * `inside`, `outside` within `band` of the outline (where a drag rotates), or `null` beyond that.
+ * What a document point is over on a frame from `quadFrameOverlay`: a handle or the rotate handle
+ * (within `tolerance`), `inside`, `outside` within `band` of the outline (where a drag rotates), or
+ * `null` beyond that.
  */
 export function boxFrameHit(overlay: TransformOverlay, p: ImagePoint, tolerance: number, band: number): TransformHandle | null {
-  let best: TransformHandle | null = null;
-  let bestD = tolerance;
-  for (const h of overlay.handles) {
-    const d = Math.hypot(h.x - p.x, h.y - p.y);
-    if (d <= bestD) {
-      best = h.id;
-      bestD = d;
-    }
-  }
+  const best = nearestHandle(overlay, p, tolerance).handle;
   if (best) return best;
   if (insideQuad(overlay.outline, p)) return 'inside';
   const o = overlay.outline;
@@ -430,6 +463,8 @@ export class FreeTransformTool {
       return { id, x: p.x, y: p.y };
     });
     const out: TransformOverlay = { outline: this.corners.map((p) => ({ x: p.x, y: p.y })), handles, reference: this.referencePoint() ?? { x: 0, y: 0 } };
+    const rotate = rotateHandleAt(handles[0], handles[1], applyHomography(h, { x: s.box.x + s.box.width / 2, y: s.box.y + s.box.height / 2 }) ?? out.reference, TRANSFORM_ROTATE_HANDLE_OFFSET / this.viewScale);
+    if (rotate) out.rotate = rotate;
     if (this.modeValue === 'warp' && this.mesh) {
       // Control points through the corner map: exact for affine corners, close for perspective.
       const m = this.mesh;
@@ -437,6 +472,7 @@ export class FreeTransformTool {
       const pts = m.points.map(at);
       const edit = warpMeshEditPoints(m);
       out.handles = [];
+      delete out.rotate;
       out.outline = warpMeshGridCurves({ ...m, points: pts }).length ? this.meshOutline(pts, m) : out.outline;
       out.warp = {
         curves: warpMeshGridCurves({ ...m, points: pts }),
@@ -480,17 +516,9 @@ export class FreeTransformTool {
       if (best >= 0) return `mesh:${best}`;
       return insidePolygon(o.outline, p) ? 'inside' : 'outside';
     }
-    // The nearest of the handles and the reference point within the tolerance (a small frame on
-    // screen puts several within reach); handles win ties.
-    let best: TransformHandle | null = null;
-    let bestD = tolerance;
-    for (const h of o.handles) {
-      const d = Math.hypot(h.x - p.x, h.y - p.y);
-      if (d <= bestD) {
-        best = h.id;
-        bestD = d;
-      }
-    }
+    // The nearest of the handles, the rotate handle and the reference point within the tolerance
+    // (a small frame on screen puts several within reach); handles win ties.
+    let { handle: best, distance: bestD } = nearestHandle(o, p, tolerance);
     if (Math.hypot(o.reference.x - p.x, o.reference.y - p.y) < bestD) best = 'reference';
     if (best) return best;
     return insideQuad(o.outline, p) ? 'inside' : 'outside';
@@ -579,7 +607,7 @@ export class FreeTransformTool {
     const handle = d.handle;
     const isCorner = handle in CORNER_INDEX;
     const isSide = handle in SIDE_CORNERS;
-    const rotating = handle === 'outside' || (this.modeValue === 'rotate' && (isCorner || isSide));
+    const rotating = handle === 'outside' || handle === 'rotate' || (this.modeValue === 'rotate' && (isCorner || isSide));
     if (handle === 'inside') {
       if (m.shiftKey) delta = Math.abs(delta.x) >= Math.abs(delta.y) ? { x: delta.x, y: 0 } : { x: 0, y: delta.y };
       return map((q) => add(q, delta));

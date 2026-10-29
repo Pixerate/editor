@@ -103,6 +103,8 @@ export interface RenderOptions {
     outline: ImagePoint[];
     handles: ImagePoint[];
     reference: ImagePoint;
+    /** The rotate handle, on a stem from the top edge's midpoint (`outline[0]` to `outline[1]`). */
+    rotate?: ImagePoint;
     /** Warp mode: the mesh's grid lines as cubics, its anchors, and handles with their anchors. */
     warp?: { curves: ImagePoint[][]; anchors: ImagePoint[]; handles: Array<{ point: ImagePoint; anchor: ImagePoint }> };
   } | null;
@@ -524,6 +526,13 @@ export class ImageEditorRenderer {
           outline.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
           ctx.closePath();
         }
+        // The rotate handle's stem, from the top edge's midpoint.
+        const rotate = t.rotate && t.outline.length >= 2 ? scr(t.rotate) : null;
+        if (rotate) {
+          const n = scr({ x: (t.outline[0].x + t.outline[1].x) / 2, y: (t.outline[0].y + t.outline[1].y) / 2 });
+          ctx.moveTo(n.x, n.y);
+          ctx.lineTo(rotate.x, rotate.y);
+        }
         ctx.lineWidth = 3 * u;
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.stroke();
@@ -531,6 +540,15 @@ export class ImageEditorRenderer {
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
         drawOverlayHandles(ctx, [...t.handles, ...(t.warp?.anchors ?? [])].map(scr), u);
+        if (rotate) {
+          ctx.beginPath();
+          ctx.arc(rotate.x, rotate.y, 5 * u, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.lineWidth = 1.5 * u;
+          ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
+          ctx.stroke();
+        }
         for (const h of (t.warp?.handles ?? []).map((w) => scr(w.point))) {
           ctx.beginPath();
           ctx.arc(h.x, h.y, 3.5 * u, 0, Math.PI * 2);
