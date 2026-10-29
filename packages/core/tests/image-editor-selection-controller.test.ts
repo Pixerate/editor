@@ -1,6 +1,6 @@
 // The selection-mixing cases are re-expressed from photocraft/crates/algo/src/tests_selection_mix.rs
 // (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   ImageEditorController,
   ImageEditorRenderer,
@@ -18,6 +18,8 @@ import {
   serializeSelection,
   createImageEditorToolProvider,
   SelectionGesture,
+  startMarchingAnts,
+  MARCHING_ANTS_STEP_MS,
   DEFAULT_SELECTION_TOOL_OPTIONS,
   type SelectionToolOptions,
   type PixelBuffer,
@@ -282,6 +284,64 @@ describe('selection overlay rendering', () => {
     await renderer.renderToCanvas(target, source, c.getState(), { viewportWidth: 200, viewportHeight: 100, selectionDisplay: 'none' });
     expect(calls.some((k) => k.name === 'moveTo')).toBe(false);
   });
+
+  it('keeps the ants one screen pixel wide under a host scale and dashes them from antsOffset', async () => {
+    const widths: number[] = [];
+    const offsets: number[] = [];
+    const ctx: any = {};
+    let lineWidth = 1;
+    Object.defineProperty(ctx, 'lineWidth', { get: () => lineWidth, set: (v) => (lineWidth = v) });
+    Object.defineProperty(ctx, 'lineDashOffset', { get: () => 0, set: (v) => offsets.push(v) });
+    for (const m of ['clearRect', 'save', 'restore', 'translate', 'scale', 'rotate', 'drawImage', 'beginPath', 'moveTo', 'lineTo', 'rect', 'clip', 'closePath', 'setLineDash', 'fillRect', 'strokeRect', 'setTransform']) {
+      ctx[m] = () => {};
+    }
+    ctx.stroke = () => widths.push(lineWidth);
+    const target = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement;
+    const source = { width: 20, height: 10, naturalWidth: 20, naturalHeight: 10, src: '' } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: source });
+    c.selectRect({ x: 2, y: 3, width: 4, height: 2 }, { antiAlias: false });
+    const renderer = new ImageEditorRenderer();
+    await renderer.renderToCanvas(target, source, c.getState(), { viewportWidth: 200, viewportHeight: 100 });
+    const plain = widths.slice(-2);
+    widths.length = 0;
+    await renderer.renderToCanvas(target, source, c.getState(), { viewportWidth: 200, viewportHeight: 100, hostScale: 3, antsOffset: 2 });
+    const scaled = widths.slice(-2);
+    // A host zoomed 3× draws the line a third as wide in CSS pixels: still one pixel on screen.
+    expect(scaled[0]).toBeCloseTo(plain[0] / 3);
+    expect(offsets.at(-1)).toBeCloseTo(-2 * scaled[0]);
+  });
+});
+
+describe('marching ants', () => {
+  it('steps the dash offset until stopped', () => {
+    vi.useFakeTimers();
+    try {
+      const ticks: number[] = [];
+      const stop = startMarchingAnts((o) => ticks.push(o));
+      vi.advanceTimersByTime(MARCHING_ANTS_STEP_MS * 9);
+      expect(ticks).toEqual([1, 2, 3, 4, 5, 6, 7, 0, 1]);
+      stop();
+      vi.advanceTimersByTime(MARCHING_ANTS_STEP_MS * 4);
+      expect(ticks.length).toBe(9);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stands still when reduced motion is requested', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce') }));
+    try {
+      const tick = vi.fn();
+      const stop = startMarchingAnts(tick);
+      vi.advanceTimersByTime(MARCHING_ANTS_STEP_MS * 5);
+      expect(tick).not.toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('selection gestures', () => {
@@ -365,6 +425,15 @@ describe('selection agent tools', () => {
     expect(masked.mask).toMatchObject({ width: 20, height: 10, density: 0.5 });
     expect(c.getAdjustmentLayer(masked.layerId)!.mask).toBeDefined();
     await expect(Promise.resolve().then(() => tool('select_region').handler({ shape: 'rect' }, {} as never))).rejects.toThrow(/numeric/);
+    // The lasso: a triangle traced around the left square.
+    const lasso: any = await tool('select_region').handler(
+      { shape: 'polygon', points: [{ x: 2, y: 0 }, { x: 6, y: 0 }, { x: 2, y: 10 }] },
+      {} as never
+    );
+    expect(lasso.bounds).toMatchObject({ x: 2, y: 0 });
+    expect(lasso.area).toBeGreaterThan(15);
+    expect(lasso.area).toBeLessThan(25);
+    await expect(Promise.resolve().then(() => tool('select_region').handler({ shape: 'polygon', points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }, {} as never))).rejects.toThrow(/at least 3/);
     await tool('select_region').handler({ shape: 'none' }, {} as never);
     await expect(Promise.resolve().then(() => tool('modify_selection').handler({ op: 'grow', radius: 1 }, {} as never))).rejects.toThrow(/Nothing/);
   });

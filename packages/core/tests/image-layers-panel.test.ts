@@ -101,6 +101,9 @@ describe('layers panel view model', () => {
     const adjId = c.addAdjustmentLayer('curves');
     const adjPanels = layerPanels(c.getLayer(adjId));
     expect(adjPanels.map((p) => p.id)).toContain('adjustment');
+    // The selection is the document's: its panel stays with any layer active.
+    expect(pxPanels.at(-1)?.id).toBe('selection');
+    expect(adjPanels.at(-1)?.id).toBe('selection');
 
     expect(CANVAS_SIZE_PRESETS.length).toBeGreaterThan(0);
   });
@@ -121,11 +124,11 @@ describe('layers panel view model', () => {
     // controls and filters) follows Layer Properties, which holds the layer's Layer Style.
     expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection']);
     const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
-    expect(ids).toEqual(['properties', 'provider-effects', 'paint']);
-    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint']);
+    expect(ids).toEqual(['properties', 'provider-effects', 'paint', 'selection']);
+    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', 'selection']);
     const smart = c.convertToSmartObject([id]);
-    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects']);
-    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties']);
+    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects', 'selection']);
+    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', 'selection']);
     for (const type of ['pixel', 'type', 'shape', 'smart', 'group'] as const) {
       const panels = layerPanels({ id: 'x', type } as ImageLayer, { effects: true }).map((p) => p.id);
       expect(panels, type).not.toContain('effects');

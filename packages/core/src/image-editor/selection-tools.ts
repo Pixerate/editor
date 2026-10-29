@@ -58,15 +58,26 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_region',
     title: 'Select a region',
     description:
-      'Selects a rectangle or ellipse (x, y, width, height in natural image pixels), everything ("all"), nothing ("none") or the inverse of the current selection ("invert"). One undoable step.',
+      'Selects a rectangle or ellipse (x, y, width, height in natural image pixels), a polygon (the lasso: points along an outline, closed automatically), everything ("all"), nothing ("none") or the inverse of the current selection ("invert"). To cut out a subject, trace its contour with polygon (then refine_selection for soft edges such as fur or foliage) rather than selecting its bounding box. One undoable step.',
     inputSchema: {
       type: 'object',
       properties: {
-        shape: { type: 'string', enum: ['rect', 'ellipse', 'all', 'none', 'invert'], description: 'What to select.' },
+        shape: { type: 'string', enum: ['rect', 'ellipse', 'polygon', 'all', 'none', 'invert'], description: 'What to select.' },
         x: { type: 'number', description: 'rect / ellipse: left edge in natural image pixels.' },
         y: { type: 'number', description: 'rect / ellipse: top edge in natural image pixels.' },
         width: { type: 'number', description: 'rect / ellipse: width in natural image pixels.' },
         height: { type: 'number', description: 'rect / ellipse: height in natural image pixels.' },
+        points: {
+          type: 'array',
+          minItems: 3,
+          items: {
+            type: 'object',
+            properties: { x: { type: 'number' }, y: { type: 'number' } },
+            required: ['x', 'y'],
+            additionalProperties: false,
+          },
+          description: 'polygon: at least 3 vertices along the outline, in order, in natural image pixels. Follow the edge closely; more points give a tighter contour.',
+        },
         mode: modeSchema,
         feather: { type: 'number', minimum: 0, description: 'Feather radius in pixels (default 0).' },
       },
@@ -74,7 +85,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: writeAnnotations('Select a region', true),
-    handler: ({ shape, x, y, width, height, mode, feather }) => {
+    handler: ({ shape, x, y, width, height, points, mode, feather }) => {
       const opts = { mode: parseSelectionMode(mode), feather: num(feather, 0) };
       switch (shape) {
         case 'all':
@@ -96,8 +107,16 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
           else controller.selectEllipse(rect, opts);
           break;
         }
+        case 'polygon': {
+          const list = Array.isArray(points) ? points.map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) : [];
+          if (list.length < 3 || !list.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+            throw new Error('polygon needs points: at least 3 { x, y } vertices.');
+          }
+          controller.selectPolygon(list, opts);
+          break;
+        }
         default:
-          throw new Error(`Unknown shape "${String(shape)}". Use rect, ellipse, all, none or invert.`);
+          throw new Error(`Unknown shape "${String(shape)}". Use rect, ellipse, polygon, all, none or invert.`);
       }
       return summary(controller);
     },
