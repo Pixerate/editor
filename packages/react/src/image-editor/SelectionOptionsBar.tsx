@@ -36,7 +36,8 @@ const btn = (on: boolean) =>
 /**
  * Options bar of the selection tools: tool, mode (new / add / subtract / intersect), magic wand
  * tolerance and contiguous, anti-alias, sample merged, Select › All / Deselect / Inverse,
- * Modify (grow, shrink, feather, border, smooth) and the Quick Mask toggle.
+ * Modify (grow, shrink, feather, border, smooth) and the Quick Mask toggle. With a segmentation
+ * provider on the controller it adds Select › Subject (a description and a button).
  */
 export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   controller,
@@ -50,6 +51,23 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   const set = (patch: Partial<SelectionToolOptions>) => onOptionsChange({ ...options, ...patch });
   const sel = selection === undefined ? controller.getSelection() : selection;
   const qm = quickMask ?? Boolean(controller.getState().quickMask);
+  const [subject, setSubject] = useState('');
+  const [segmenting, setSegmenting] = useState(false);
+  const [subjectStatus, setSubjectStatus] = useState<string | null>(null);
+  const selectSubject = async () => {
+    const target = subject.trim();
+    if (!target || segmenting) return;
+    setSegmenting(true);
+    setSubjectStatus(null);
+    try {
+      const { segments } = await controller.selectSubject(target, { mode: options.mode });
+      setSubjectStatus(segments.length ? null : `Nothing matching “${target}” was found.`);
+    } catch (err) {
+      setSubjectStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSegmenting(false);
+    }
+  };
   return (
     <div data-testid="selection-options-bar" className={`flex flex-col gap-3 text-xs ${className}`}>
       <div role="group" aria-label="Selection tool" className="flex flex-wrap gap-1">
@@ -96,6 +114,36 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             />
           </label>
         </div>
+      )}
+      {controller.segmentationProvider && (
+        <form
+          data-testid="select-subject"
+          className="flex flex-col gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void selectSubject();
+          }}
+        >
+          <div className="flex gap-1">
+            <input
+              type="text"
+              aria-label="Subject to select"
+              placeholder="Subject, e.g. the dog"
+              value={subject}
+              disabled={segmenting}
+              onChange={(e) => setSubject(e.currentTarget.value)}
+              className="min-w-0 flex-1 bg-background border border-border rounded px-2 py-1 text-foreground"
+            />
+            <button type="submit" className={btn(false)} disabled={segmenting || !subject.trim()} aria-busy={segmenting}>
+              {segmenting ? 'Selecting…' : 'Select Subject'}
+            </button>
+          </div>
+          {subjectStatus && (
+            <p role="status" className="text-muted-foreground">
+              {subjectStatus}
+            </p>
+          )}
+        </form>
       )}
       <label className="flex items-center gap-2 text-foreground">
         <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onChange={(on) => set({ antiAlias: on })} />

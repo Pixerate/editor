@@ -1,4 +1,4 @@
-import type { AgentTool } from '../tools/registry.js';
+import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import type { ImageEditorController } from './controller';
 import type { AdjustmentKind } from './types';
@@ -7,6 +7,7 @@ import { describeSelection } from './selection/tool-options';
 import { SELECTION_MODES, parseSelectionMode, selectionArea } from './selection/mask';
 import { SELECTION_MODIFY_OPS, type SelectionModifyOp } from './selection/modify';
 import { layerMaskFromSelection } from './selection/layer-mask';
+import { withImagePlayback } from './playback';
 
 const modeSchema: JsonSchema = {
   type: 'string',
@@ -263,4 +264,73 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
   };
 
   return [getSelection, selectRegion, selectByColor, modify, refine, applyMask];
+}
+
+/** Options for `createImageSegmentationToolProvider`. */
+export interface ImageSegmentationToolProviderOptions {
+  /** Provider id (default `image-segmentation`). */
+  id?: string;
+  /** Tool-name prefix (`<namespace>__<name>`). */
+  namespace?: string;
+  /** Agent playback surface (default the image editor's). */
+  playbackSurface?: string;
+}
+
+/** The `select_subject` tool: Select › Subject through the controller's segmentation provider. */
+export function createImageSubjectSelectionTool(controller: ImageEditorController): AgentTool {
+  return {
+    name: 'select_subject',
+    title: 'Select a subject',
+    description:
+      'Select › Subject: an AI segmentation model finds the objects matching target (a description such as "the dog", "the house", "the sky") in the flattened image and selects their outlines, combined with the selection by mode. Use it to cut a subject out by its contour (then layer_via_copy for a layer of just that subject); describe one object precisely to get only that one. One undoable step. Returns the selection and the objects found (label, bounds); none found leaves the selection unchanged.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', minLength: 1, description: 'What to select, in words.' },
+        maxSegments: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 32,
+          description: 'Select at most this many matching objects (default the model’s; 1 for a single subject).',
+        },
+        mode: modeSchema,
+        feather: { type: 'number', minimum: 0, description: 'Feather radius in pixels (default 0).' },
+      },
+      required: ['target'],
+      additionalProperties: false,
+    },
+    annotations: { ...writeAnnotations('Select a subject'), openWorldHint: true },
+    handler: async ({ target, maxSegments, mode, feather }) => {
+      if (typeof target !== 'string' || !target.trim()) throw new Error('target must describe what to select.');
+      const { segments } = await controller.selectSubject(target, {
+        mode: parseSelectionMode(mode),
+        feather: num(feather, 0),
+        maxSegments: typeof maxSegments === 'number' ? Math.max(1, Math.round(maxSegments)) : undefined,
+      });
+      return { ...summary(controller), found: segments };
+    },
+  };
+}
+
+/**
+ * Agent tools that need the controller's segmentation provider (`select_subject`). The list is
+ * empty while no provider is set, so a host can register this once and the tool appears when a
+ * model is available.
+ */
+export function createImageSegmentationToolProvider(
+  controller: ImageEditorController,
+  options: ImageSegmentationToolProviderOptions = {}
+): AgentToolProvider {
+  const tool = createImageSubjectSelectionTool(controller);
+  return withImagePlayback(
+    {
+      id: options.id ?? 'image-segmentation',
+      namespace: options.namespace,
+      title: 'Image segmentation',
+      description: 'Select › Subject: select objects in the image by description through an AI segmentation model.',
+      skill: 'pixerate-image-editor',
+      tools: () => (controller.segmentationProvider ? [tool] : []),
+    },
+    options.playbackSurface
+  );
 }

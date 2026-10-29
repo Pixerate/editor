@@ -89,6 +89,36 @@ describe('Svelte SelectionOptionsBar', () => {
   });
 });
 
+describe('Svelte SelectionOptionsBar: Select Subject', () => {
+  it('shows only with a segmentation provider and selects the described subject', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    expect(target.querySelector('[data-testid="select-subject"]')).toBeNull();
+
+    const calls: unknown[][] = [];
+    controller.selectSubject = (async (...args: unknown[]) => {
+      calls.push(args);
+      return { segments: [] };
+    }) as any;
+    controller.setSegmentationProvider({ segment: async () => [] });
+    flushSync();
+    expect(button('Select Subject').disabled).toBe(true);
+    setValue(target.querySelector('input[aria-label="Subject to select"]')!, 'the dog');
+    click(button('Select Subject'));
+    await settle();
+    expect(calls).toEqual([['the dog', { mode: 'replace' }]]);
+    expect(target.querySelector('[data-testid="select-subject"] [role="status"]')!.textContent).toContain('Nothing matching');
+  });
+});
+
 describe('Svelte RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

@@ -482,6 +482,7 @@ export interface ExportOptions {
 }
 
 import type { EffectProvider } from '../effects/types';
+import type { SegmentationProvider } from './selection/segmentation';
 
 export interface ImageEditorOptions {
   /**
@@ -509,6 +510,12 @@ export interface ImageEditorOptions {
    * with `setEffectsProvider`.
    */
   effects?: EffectProvider | null;
+  /**
+   * A segmentation provider (an AI model that finds objects by description) for Select ›
+   * Subject (`selectSubject`, the `select_subject` tool). Optional; change it later with
+   * `setSegmentationProvider`.
+   */
+  segmentation?: SegmentationProvider | null;
 }
 
 export interface InpaintOptions {
