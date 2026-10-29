@@ -1,7 +1,8 @@
 <script lang="ts">
+  import ImageColor from './controls/ImageColor.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageRange from './controls/ImageRange.svelte';
-  import { imageChipClass, imageColorInputClass, imageFieldClass } from './styles.js';
+  import { imageChipClass, imageFieldClass } from './styles.js';
   import type { ImageEditorController, ShapeToolOptions } from '@pixerate/editor/image-editor';
   import { LIVE_SHAPE_KINDS, SHAPE_KIND_LABELS, applyShapeOptions } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -58,26 +59,12 @@
     <label class="flex items-center gap-1">
       <ImageCheckbox label="Fill" checked={options.fill !== null} onchange={(on) => set({ fill: on ? '#4f46e5' : null })} />
       Fill
-      <input
-        type="color"
-        aria-label="Fill colour"
-        disabled={options.fill === null}
-        value={options.fill ?? '#4f46e5'}
-        oninput={(e) => set({ fill: value(e) })}
-        class={imageColorInputClass}
-      />
+      <ImageColor label="Fill colour" disabled={options.fill === null} value={options.fill ?? '#4f46e5'} oninput={(fill) => set({ fill })} />
     </label>
     <label class="flex items-center gap-1">
       <ImageCheckbox label="Stroke" checked={options.stroke !== null} onchange={(on) => set({ stroke: on ? '#000000' : null })} />
       Stroke
-      <input
-        type="color"
-        aria-label="Stroke colour"
-        disabled={options.stroke === null}
-        value={options.stroke ?? '#000000'}
-        oninput={(e) => set({ stroke: value(e) })}
-        class={imageColorInputClass}
-      />
+      <ImageColor label="Stroke colour" disabled={options.stroke === null} value={options.stroke ?? '#000000'} oninput={(stroke) => set({ stroke })} />
     </label>
     <label class="flex items-center gap-1">
       Width

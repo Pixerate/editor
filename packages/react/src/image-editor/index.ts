@@ -23,9 +23,11 @@ export {
   ImageCheckbox,
   ImageRange,
   ImageSelect,
+  ImageColor,
   type ImageEditorControls,
   type ImageCheckboxProps,
   type ImageRangeProps,
   type ImageSelectProps,
   type ImageSelectOption,
+  type ImageColorProps,
 } from './controls/controls.js';

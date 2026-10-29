@@ -1,6 +1,6 @@
 import { matchParameterOptionValue } from '@pixerate/editor/parameters';
-import type { ParameterComponents, ParameterSelectProps, ParameterSliderProps } from '../../parameters/controls.js';
-import { ImageRange, ImageSelect, type ImageEditorControls } from './controls.js';
+import type { ParameterColorProps, ParameterComponents, ParameterSelectProps, ParameterSliderProps } from '../../parameters/controls.js';
+import { ImageColor, ImageRange, ImageSelect, type ImageEditorControls } from './controls.js';
 
 /** A parameter slider drawn with the host's image-editor `Range`. */
 function ImageParameterSlider({ value, min, max, step, label, disabled, className, onChange, onGestureStart, onGestureEnd }: ParameterSliderProps) {
@@ -34,10 +34,27 @@ function ImageParameterSelect({ value, options, label, disabled, className, onCh
   );
 }
 
-/** The host's image-editor `Range` and `Select` as parameter controls (only the ones it set). */
+/** A parameter colour drawn with the host's image-editor `Color`. */
+function ImageParameterColor({ value, alpha, label, disabled, className, onChange, onGestureStart, onGestureEnd }: ParameterColorProps) {
+  return (
+    <ImageColor
+      value={value}
+      alpha={alpha}
+      label={label}
+      disabled={disabled}
+      className={className}
+      onChange={onChange}
+      onStart={onGestureStart}
+      onEnd={onGestureEnd}
+    />
+  );
+}
+
+/** The host's image-editor `Range`, `Select` and `Color` as parameter controls (only the ones it set). */
 export function imageEditorParameterComponents(controls: ImageEditorControls): ParameterComponents {
   return {
     slider: controls.Range ? ImageParameterSlider : undefined,
     select: controls.Select ? ImageParameterSelect : undefined,
+    color: controls.Color ? ImageParameterColor : undefined,
   };
 }

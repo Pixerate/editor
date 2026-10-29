@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vite
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { parameterThemeStyles } from "@pixerate/editor/parameters";
-import { ImageEditorControlsProvider, type ImageSelectProps } from "../src/image-editor/controls/controls";
+import { ImageEditorControlsProvider, type ImageColorProps, type ImageSelectProps } from "../src/image-editor/controls/controls";
 import { imageEditorParameterComponents } from "../src/image-editor/controls/parameterControls";
 import { CommandRegistry } from "@pixerate/editor/commands";
 import { ParametersController, createParameterKeyframeStore, type ParameterSchema } from "@pixerate/editor/parameters";
@@ -22,6 +22,7 @@ import {
   parameterButtonStyle,
   type UseParametersResult,
   type ParameterComponents,
+  type ParameterColorProps,
 } from "../src/parameters";
 
 let container: HTMLDivElement;
@@ -471,6 +472,36 @@ describe("parameter control fixes", () => {
     await setInput(q<HTMLSelectElement>('[data-testid="host-select"]'), "2", "change");
     expect(onChange).toHaveBeenCalledWith(2);
     expect(imageEditorParameterComponents({})).toEqual({ slider: undefined, select: undefined });
+  });
+
+  it("renders a custom color component, and the image editor's host Color through the adapter", async () => {
+    const onChange = vi.fn();
+    const CustomColor = ({ value, alpha, swatches, label, onChange: change }: ParameterColorProps) => (
+      <button type="button" data-testid="custom-color" aria-label={label} data-value={value} data-alpha={String(!!alpha)} data-swatches={swatches?.join(",")} onClick={() => change("#abcdef")} />
+    );
+    const field = { id: "tint", type: "color", label: "Tint", alpha: true, swatches: ["#ff0000"], default: "#77c16a" } as any;
+    await act(async () => root.render(<ParameterColor field={field} value="#77c16a" onChange={onChange} components={{ color: CustomColor }} />));
+    const custom = q<HTMLButtonElement>('[data-testid="custom-color"]');
+    expect(custom.getAttribute("aria-label")).toBe("Tint");
+    expect(custom.dataset.value).toBe("#77c16aff");
+    expect(custom.dataset.alpha).toBe("true");
+    expect(custom.dataset.swatches).toBe("#ff0000");
+    await act(async () => custom.click());
+    expect(onChange).toHaveBeenCalledWith("#abcdef");
+
+    const HostColor = ({ value, label, onChange: change }: ImageColorProps) => (
+      <button type="button" data-testid="host-color" aria-label={label} data-value={value} onClick={() => change("#123456")} />
+    );
+    const plain = { id: "tint", type: "color", label: "Tint", default: "#77c16a" } as any;
+    await act(async () =>
+      root.render(
+        <ImageEditorControlsProvider controls={{ Color: HostColor }}>
+          <ParameterColor field={plain} value="#77c16a" onChange={onChange} components={imageEditorParameterComponents({ Color: HostColor })} />
+        </ImageEditorControlsProvider>,
+      ),
+    );
+    await act(async () => q<HTMLButtonElement>('[data-testid="host-color"]').click());
+    expect(onChange).toHaveBeenLastCalledWith("#123456");
   });
 
   it("starts one gesture per drag even when a custom slider reports it twice", async () => {

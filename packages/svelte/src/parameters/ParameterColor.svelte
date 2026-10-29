@@ -3,6 +3,7 @@
   import ColorPicker from '../color/ColorPicker.svelte';
   import ParameterCommitInput from './ParameterCommitInput.svelte';
   import { parameterInputClass } from './styles.js';
+  import { getParameterComponents, resolveParameterComponents, type ParameterComponents } from './controls.js';
 
   interface Props {
     field: ColorParameterField;
@@ -13,9 +14,10 @@
     ongestureend?: () => void;
     disabled?: boolean;
     id?: string;
+    components?: ParameterComponents;
   }
 
-  let { field, value, onchange, ongesturestart, ongestureend, disabled = false, id }: Props = $props();
+  let { field, value, onchange, ongesturestart, ongestureend, disabled = false, id, components }: Props = $props();
 
   const alpha = $derived(!!field.alpha);
   const hex = $derived(normalizeHexColor(value, true) ?? '#000000ff');
@@ -23,6 +25,8 @@
   const shown = $derived(alpha ? hex : rgb);
   const off = $derived(disabled || !!field.readOnly);
   const name = $derived(parameterLabel(field));
+  const context = getParameterComponents();
+  const CustomColor = $derived(resolveParameterComponents(components, context).color);
 
   let open = $state(false);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -52,57 +56,61 @@
   });
 </script>
 
-<!-- A colour picker with a hex box and a popup ColorPicker. -->
-<div bind:this={containerEl} class="relative space-y-1.5">
-  <div class="flex items-center gap-2">
-    <button
-      bind:this={buttonEl}
-      type="button"
-      aria-label={name}
-      aria-expanded={open}
-      aria-haspopup="dialog"
-      disabled={off}
-      onclick={() => (open = !open)}
-      class="relative h-7 w-9 shrink-0 overflow-hidden rounded-md border border-input bg-[repeating-conic-gradient(#d4d4d8_0_25%,#fff_0_50%)] bg-[length:8px_8px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <span class="absolute inset-0" style:background={shown}></span>
-    </button>
-    <ParameterCommitInput
-      {id}
-      aria-label="{name} hex"
-      value={shown}
-      disabled={off}
-      spellcheck={false}
-      class="{parameterInputClass} font-mono"
-      oncommit={(text) => {
-        const next = normalizeHexColor(text, alpha);
-        if (next) onchange(next);
-      }}
-    />
-  </div>
-  {#if open}
-    <div
-      bind:this={popoverEl}
-      role="dialog"
-      aria-label={name}
-      tabindex="-1"
-      onfocusout={(e) => {
-        if (popoverEl && !popoverEl.contains(e.relatedTarget as Node)) {
-          open = false;
-        }
-      }}
-      class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-xl"
-      style="background: var(--popover, var(--background, #fff));"
-    >
-      <ColorPicker
-        value={shown}
-        {alpha}
-        swatches={field.swatches}
+<!-- A colour picker with a hex box and a popup ColorPicker, or the host's own colour control. -->
+{#if CustomColor}
+  <CustomColor {id} value={shown} {alpha} swatches={field.swatches} disabled={off} label={name} {onchange} {ongesturestart} {ongestureend} />
+{:else}
+  <div bind:this={containerEl} class="relative space-y-1.5">
+    <div class="flex items-center gap-2">
+      <button
+        bind:this={buttonEl}
+        type="button"
+        aria-label={name}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         disabled={off}
-        {onchange}
-        {ongesturestart}
-        {ongestureend}
+        onclick={() => (open = !open)}
+        class="relative h-7 w-9 shrink-0 overflow-hidden rounded-md border border-input bg-[repeating-conic-gradient(#d4d4d8_0_25%,#fff_0_50%)] bg-[length:8px_8px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span class="absolute inset-0" style:background={shown}></span>
+      </button>
+      <ParameterCommitInput
+        {id}
+        aria-label="{name} hex"
+        value={shown}
+        disabled={off}
+        spellcheck={false}
+        class="{parameterInputClass} font-mono"
+        oncommit={(text) => {
+          const next = normalizeHexColor(text, alpha);
+          if (next) onchange(next);
+        }}
       />
     </div>
-  {/if}
-</div>
+    {#if open}
+      <div
+        bind:this={popoverEl}
+        role="dialog"
+        aria-label={name}
+        tabindex="-1"
+        onfocusout={(e) => {
+          if (popoverEl && !popoverEl.contains(e.relatedTarget as Node)) {
+            open = false;
+          }
+        }}
+        class="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-xl"
+        style="background: var(--popover, var(--background, #fff));"
+      >
+        <ColorPicker
+          value={shown}
+          {alpha}
+          swatches={field.swatches}
+          disabled={off}
+          {onchange}
+          {ongesturestart}
+          {ongestureend}
+        />
+      </div>
+    {/if}
+  </div>
+{/if}

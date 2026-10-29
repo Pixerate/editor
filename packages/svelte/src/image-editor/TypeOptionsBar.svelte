@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { imageChipClass, imageColorInputClass } from './styles.js';
+  import ImageColor from './controls/ImageColor.svelte';
+  import { imageChipClass } from './styles.js';
   import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
   import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
@@ -100,7 +101,7 @@
     </label>
     <button type="button" aria-pressed={view.shown.fontWeight >= 600} class="{imageChipClass(view.shown.fontWeight >= 600)} font-bold" onclick={() => style({ fontWeight: view.shown.fontWeight >= 600 ? 400 : 700 })}>B</button>
     <button type="button" aria-pressed={view.shown.italic} class="{imageChipClass(view.shown.italic)} italic" onclick={() => style({ italic: !view.shown.italic })}>I</button>
-    <input type="color" aria-label="Text colour" value={view.shown.color} oninput={(e) => style({ color: value(e) })} class={imageColorInputClass} />
+    <ImageColor label="Text colour" value={view.shown.color} oninput={(color) => style({ color })} />
   </div>
   <div class="flex gap-1" role="toolbar" aria-label="Alignment">
     {#each TEXT_ALIGNS as a (a)}

@@ -25,6 +25,7 @@ import {
 import { ImageEditorCanvas, type ImageEditorCanvasErrorSource, type ImageEditorCanvasMode } from './ImageEditorCanvas';
 import { useImageEditor, type UseImageEditorReturn } from './useImageEditor';
 import { ControlSlider } from './ControlSlider';
+import { ImageColor } from './controls/controls.js';
 import { Histogram } from './Histogram';
 import { AdjustmentLayersPanel } from './AdjustmentLayersPanel';
 import { LayersPanel } from './LayersPanel';
@@ -765,12 +766,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               {/* Color & Size */}
               <div className="flex items-center gap-2 mt-2">
                 <label className="text-muted-foreground">Color:</label>
-                <input
-                  type="color"
-                  value={activeColor}
-                  onChange={(e) => setActiveColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
-                />
+                <ImageColor label="Annotation colour" value={activeColor} onChange={setActiveColor} />
                 <div className="flex-1 ml-2">
                   <div className="flex justify-between text-muted-foreground mb-0.5">
                     <span>Width:</span>

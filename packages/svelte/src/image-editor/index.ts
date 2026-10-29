@@ -45,6 +45,7 @@ export * from './imageEditorState.svelte.js';
 export { default as ImageCheckbox } from './controls/ImageCheckbox.svelte';
 export { default as ImageRange } from './controls/ImageRange.svelte';
 export { default as ImageSelect } from './controls/ImageSelect.svelte';
+export { default as ImageColor } from './controls/ImageColor.svelte';
 export {
   setImageEditorControls,
   getImageEditorControls,
@@ -53,6 +54,7 @@ export {
   type ImageRangeProps,
   type ImageSelectProps,
   type ImageSelectOption,
+  type ImageColorProps,
 } from './controls/controls.js';
 
 export type ImageEditorProps = ComponentProps<typeof ImageEditorComponent>;

@@ -15,9 +15,11 @@ import {
 } from "../src/parameters";
 import { imageEditorParameterComponents } from "../src/image-editor/controls/parameterControls";
 import ImageParameterControlsProbe from "./fixtures/ImageParameterControlsProbe.svelte";
+import ImageParameterColorProbe from "./fixtures/ImageParameterColorProbe.svelte";
 import CustomParameterInput from "./fixtures/CustomParameterInput.svelte";
 import CustomParameterSlider from "./fixtures/CustomParameterSlider.svelte";
 import CustomParameterSelect from "./fixtures/CustomParameterSelect.svelte";
+import CustomParameterColor from "./fixtures/CustomParameterColor.svelte";
 import ParameterComponentsProbe from "./fixtures/ParameterComponentsProbe.svelte";
 
 let cleanups: (() => void)[] = [];
@@ -371,6 +373,31 @@ describe("parameter control fixes", () => {
     expect(ongesturestart).toHaveBeenCalledTimes(1);
     expect(ongestureend).toHaveBeenCalledTimes(1);
     expect(onchange).toHaveBeenCalledWith(2);
+  });
+
+  it("renders a custom color component with the field's value, alpha and swatches", () => {
+    const onchange = vi.fn();
+    const field = { id: "tint", type: "color", label: "Tint", alpha: true, swatches: ["#ff0000", "#00ff00"], default: "#77c16a" } as const;
+    const root = render(ParameterColor, { field, value: "#77c16a", onchange, components: { color: CustomParameterColor } });
+    const custom = root.querySelector('[data-testid="custom-color"]') as HTMLButtonElement;
+    expect(custom).not.toBeNull();
+    expect(custom.getAttribute("aria-label")).toBe("Tint");
+    expect(custom.dataset.value).toBe("#77c16aff");
+    expect(custom.dataset.alpha).toBe("true");
+    expect(custom.dataset.swatches).toBe("#ff0000,#00ff00");
+    click(custom);
+    expect(onchange).toHaveBeenCalledWith("#abcdef");
+  });
+
+  it("uses the image editor's host Color through the adapter", () => {
+    const onchange = vi.fn();
+    const field = { id: "tint", type: "color", label: "Tint", default: "#77c16a" } as const;
+    const root = render(ImageParameterColorProbe, { field, value: "#77c16a", onchange });
+    const host = root.querySelector('[data-host="color"][aria-label="Tint"]') as HTMLButtonElement;
+    expect(host).not.toBeNull();
+    expect(host.dataset.value).toBe("#77c16a");
+    click(host);
+    expect(onchange).toHaveBeenCalledWith("#123456");
   });
 
   it("uses the image editor's host Select through the adapter, with typed values", () => {

@@ -5,7 +5,9 @@ import { createRoot } from 'react-dom/client';
 import {
   ImageEditorControlsProvider,
   SelectionOptionsBar,
+  BrushOptionsBar,
   type ImageCheckboxProps,
+  type ImageColorProps,
   type ImageRangeProps,
   type ImageSelectProps,
 } from '../src/image-editor';
@@ -37,6 +39,10 @@ const HostSelect = ({ options, label, onChange }: ImageSelectProps) => (
   <button type="button" data-host="select" aria-label={label} onClick={() => onChange(options[options.length - 1]!.value)} />
 );
 
+const HostColor = ({ value, label, onChange }: ImageColorProps) => (
+  <button type="button" data-host="color" aria-label={label} data-value={value} onClick={() => onChange('#123456')} />
+);
+
 describe('image editor panel controls (React)', () => {
   it('uses plain inputs without a provider', () => {
     const controller = new ImageEditorController();
@@ -66,5 +72,30 @@ describe('image editor panel controls (React)', () => {
       [wand.tolerance, !wand.antiAlias, wand.sample],
       [wand.tolerance, wand.antiAlias, 'active-layer'],
     ]);
+  });
+});
+
+describe('image editor colour controls (React)', () => {
+  it('uses native colour wells without a provider', () => {
+    const controller = new ImageEditorController();
+    act(() => root.render(<BrushOptionsBar controller={controller} />));
+    expect(container.querySelector('input[type="color"][aria-label="Foreground colour"]')).not.toBeNull();
+    expect(container.querySelector('input[type="color"][aria-label="Background colour"]')).not.toBeNull();
+  });
+
+  it("renders the host's Color and passes its picks back", () => {
+    const controller = new ImageEditorController();
+    act(() =>
+      root.render(
+        <ImageEditorControlsProvider controls={{ Color: HostColor }}>
+          <BrushOptionsBar controller={controller} />
+        </ImageEditorControlsProvider>
+      )
+    );
+    expect(container.querySelector('input[type="color"]')).toBeNull();
+    const fg = container.querySelector('[data-host="color"][aria-label="Foreground colour"]') as HTMLButtonElement;
+    expect(container.querySelector('[data-host="color"][aria-label="Background colour"]')).not.toBeNull();
+    act(() => fg.click());
+    expect(controller.getState().paint.foreground).toBe('#123456');
   });
 });

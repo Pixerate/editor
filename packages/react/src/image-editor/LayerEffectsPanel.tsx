@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
 import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
 import { imageIconButtonClass, imageSelectClass } from './styles';
-import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface LayerEffectsPanelProps {
   controller: ImageEditorController;
@@ -80,7 +80,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
       case 'color':
         return (
           <label key={c.key} className="flex items-center gap-1.5 text-foreground">
-            <input type="color" aria-label={label} value={c.value} disabled={model.readOnly} onChange={(e) => change(effectId, c, e.target.value)} />
+            <ImageColor label={label} value={c.value} disabled={model.readOnly} onChange={(v) => change(effectId, c, v)} />
             {label}
           </label>
         );
