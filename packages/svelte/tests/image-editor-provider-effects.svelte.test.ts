@@ -52,23 +52,27 @@ function setup(effects: ReturnType<typeof createFakeEffectProvider> | null = cre
   return { c, id };
 }
 
+const select = (label: string) => q<HTMLSelectElement>(`select[aria-label="${label}"]`);
+const choose = async (label: string, value: string) => {
+  const el = select(label);
+  el.value = value;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  flushSync();
+  await settle();
+};
+
 describe("ImageProviderEffectsPanel (Svelte)", () => {
-  it("is the LayerPanel for provider-effects, so hosts building panels from layerPanels add effect layers", async () => {
+  it("is the LayerPanel for provider-effects", async () => {
     const { c } = setup();
-    c.setActiveLayer(null);
     render(LayerPanel, { controller: c, panelId: "provider-effects" });
     expect(q("[data-image-provider-effects]")).toBeTruthy();
-    await click(button("Effect layer…"));
-    await click(q('[data-effect-id="fake.gradient"]'));
-    const active = c.getLayer(c.getState().activeLayerId!) as PixelLayer;
-    expect(active.generator?.effect).toBe("fake.gradient");
+    expect(target.textContent).toMatch(/No effects yet/);
   });
 
-
-  it("applies a filter effect as a smart filter, edits it and removes it", async () => {
+  it("applies a filter effect from the Add menu as a smart filter, edits it and removes it", async () => {
     const { c, id } = setup();
     render(ImageProviderEffectsPanel, { controller: c });
-    await click(button("Apply effect…"));
+    await choose("Add effect", "filter");
     await click(q('[data-effect-id="fake.invert"]'));
     const layer = c.getLayer(id) as SmartObjectLayer;
     expect(layer.type).toBe("smart");
@@ -80,25 +84,76 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     expect((c.getLayer(id) as SmartObjectLayer).smartFilters?.filters ?? []).toEqual([]);
   });
 
-  it("adds an effect layer and shows its controls", async () => {
-    const { c } = setup();
+  it("adds layer styles from the same menu and lists them with the filters", async () => {
+    const { c, id } = setup();
     render(ImageProviderEffectsPanel, { controller: c });
-    await click(button("Effect layer…"));
+    await choose("Add effect", "style:drop-shadow");
+    expect(c.getLayerEffects(id).items.map((e) => e.kind)).toEqual(["drop-shadow"]);
+    expect(q('[data-testid="layer-effects"]').textContent).toMatch(/Styles/);
+    // One Add menu: the styles list has none of its own.
+    expect(target.querySelectorAll('select[aria-label="Add effect"]').length).toBe(1);
+  });
+
+  it("shows an effect layer's controls, changes its effect and rasterizes it", async () => {
+    const { c } = setup();
+    const id = await c.addEffectLayer("fake.bar");
+    render(ImageProviderEffectsPanel, { controller: c });
+    await settle();
+    expect(q('[data-effect-part="generator"]').textContent).toMatch(/Lower-third bar/);
+    await click(button("Change…"));
     await click(q('[data-effect-id="fake.gradient"]'));
-    const id = c.getState().activeLayerId!;
-    expect((c.getLayer(id) as PixelLayer).generator).toMatchObject({ effect: "fake.gradient" });
+    expect((c.getLayer(id) as PixelLayer).generator).toMatchObject({ effect: "fake.gradient", values: { opacity: 0 } });
+    await settle();
     expect(q('[data-effect-part="generator"]').textContent).toMatch(/Gradient/);
-    expect(target.querySelectorAll("[data-effect-control]").length).toBe(4);
+    expect(target.querySelectorAll("[data-effect-control]").length).toBe(5);
     await click(button("Rasterize"));
     expect((c.getLayer(id) as PixelLayer).generator).toBeUndefined();
   });
 
-  it("without a provider, says so and adds nothing", () => {
+  it("picks a still frame or an animation with its length", async () => {
+    const { c } = setup();
+    const id = await c.addEffectLayer("fake.gradient");
+    render(ImageProviderEffectsPanel, { controller: c });
+    await settle();
+    const timing = q('[data-effect-part="timing"]');
+    expect(timing.querySelector('[aria-checked="true"]')!.textContent).toBe("Still frame");
+    const frame = q<HTMLInputElement>('input[aria-label="Frame"]');
+    expect(frame.max).toBe("4000");
+    frame.value = "1000";
+    frame.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+    expect((c.getLayer(id) as PixelLayer).generator!.time).toBe(1000);
+    await click(button("Animate"));
+    expect((c.getLayer(id) as PixelLayer).generator!.animate).toEqual({ duration: 4000 });
+    expect(c.getAnimation()).toMatchObject({ duration: 4000 });
+    const length = q<HTMLInputElement>('input[aria-label="Animation length in seconds"]');
+    length.value = "2.5";
+    length.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+    expect((c.getLayer(id) as PixelLayer).generator!.animate).toEqual({ duration: 2500 });
+    expect(target.textContent).toMatch(/loops every 4\.00 s/);
+    await click(button("Still frame"));
+    expect(c.getAnimation()).toBeNull();
+  });
+
+  it("hides frames for an effect that does not move", async () => {
+    const provider = createFakeEffectProvider();
+    const { c } = setup(provider);
+    const describe = provider.describe.bind(provider);
+    provider.describe = async (id: string) => ({ ...(await describe(id)), duration: undefined });
+    await c.addEffectLayer("fake.gradient");
+    render(ImageProviderEffectsPanel, { controller: c });
+    await settle();
+    expect(target.querySelector('[data-effect-part="timing"]')).toBeNull();
+  });
+
+  it("without a provider, says so and adds no filters", () => {
     const { c } = setup(null);
     render(ImageProviderEffectsPanel, { controller: c });
     expect(target.textContent).toMatch(/No effects provider/);
-    expect(button("Apply effect…").disabled).toBe(true);
-    expect(button("Effect layer…").disabled).toBe(true);
+    const options = [...select("Add effect").options].map((o) => o.value);
+    expect(options).not.toContain("filter");
+    expect(options).toContain("style:drop-shadow");
   });
 
   it("useImageEffectsTools registers the tools", async () => {

@@ -390,7 +390,8 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `apply_effect` | Run a provider filter effect on a layer as a smart filter (`target`, `effect`, `values`, `index`, `enabled`, `opacity`); a pixel, shape or type layer becomes a smart object in the same undo step (`converted`). Returns the filter id. |
 | `update_effect` | Change an effect smart filter (`values` merged, `null` resets; `enabled`, `opacity`, `index`) or redraw an effect layer (`effect: "generator"`, values only). |
 | `remove_effect` | Remove an effect smart filter, or (`generator`) keep an effect layer's pixels as a plain layer. |
-| `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `name`, `aboveId` / `belowId`, `opacity`, `blend`). Returns the layer id. |
+| `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `animate`, `name`, `aboveId` / `belowId`, `opacity`, `blend`). An effect with its own background (`backgroundOpacity` in `describe_effect`) starts with it transparent when there are layers below. Returns the layer id. |
+| `set_effect_layer` | Change an effect layer: swap its `effect` (its defaults plus `values`), pick the still frame (`time`, ms), or make it play in an animation (`animate: { duration }`; `null` for a still frame). The longest animating layer sets the animation's length. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 
 ### Save and open

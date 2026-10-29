@@ -8,6 +8,11 @@ export interface LayerEffectsPanelProps {
   controller: ImageEditorController;
   /** The layer whose effects to show (default: the active layer). */
   layerId?: string | null;
+  /**
+   * Show the "fx Effects" title and the "Add effect" menu (default true). Without them (inside a
+   * panel that adds styles from its own menu) the master switch and Scale stay.
+   */
+  heading?: boolean;
   className?: string;
 }
 
@@ -16,7 +21,7 @@ export interface LayerEffectsPanelProps {
  * menu, and each effect with its enabled toggle, remove button and, when expanded, its settings.
  * Every change is one undo step (a slider drag is one step too).
  */
-export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller, layerId, className }) => {
+export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller, layerId, heading = true, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [open, setOpen] = useState<string | null>(null);
@@ -110,7 +115,7 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
   return (
     <div className={`flex flex-col gap-1.5 text-xs text-foreground ${className ?? ''}`} data-testid="layer-effects" aria-label="Layer effects" role="group">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-foreground">fx Effects</span>
+        <span className="font-semibold text-foreground">{heading ? 'fx Effects' : 'Styles'}</span>
         <label className="flex items-center gap-1 text-foreground">
           <ImageCheckbox label="Effects on" checked={model.enabled} disabled={model.readOnly} onChange={(on) => attempt(() => controller.setLayerEffectsEnabled(id, on))} />
           On
@@ -133,18 +138,20 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
           />
           %
         </label>
-        <ImageSelect
-          label="Add effect"
-          value=""
-          placeholder="Add effect…"
-          disabled={model.readOnly}
-          options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
-          onChange={(v) => {
-            const kind = v as LayerEffectKind;
-            if (!kind) return;
-            attempt(() => setOpen(controller.addLayerEffect(id, kind).effect.id));
-          }}
-        />
+        {heading && (
+          <ImageSelect
+            label="Add effect"
+            value=""
+            placeholder="Add effect…"
+            disabled={model.readOnly}
+            options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
+            onChange={(v) => {
+              const kind = v as LayerEffectKind;
+              if (!kind) return;
+              attempt(() => setOpen(controller.addLayerEffect(id, kind).effect.id));
+            }}
+          />
+        )}
       </div>
       {model.readOnly && model.reason && <p className="text-muted-foreground">{model.reason}</p>}
       <ul className="flex flex-col gap-1" aria-label="Effects">

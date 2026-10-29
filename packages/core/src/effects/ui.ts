@@ -45,10 +45,20 @@ export function isEffectFontControl(schema: JsonSchema): boolean {
  * (strings whose default is `#rrggbb`), vectors (2–4 numbers) and text.
  * `null` for a control no field can edit (objects, long lists).
  */
+/** The JSON Schema type a value has (`undefined` for none). */
+function jsonTypeOf(value: unknown): string | undefined {
+	if (Array.isArray(value)) return 'array';
+	if (typeof value === 'string' || typeof value === 'boolean') return typeof value;
+	if (typeof value === 'number') return 'number';
+	return undefined;
+}
+
 export function effectControlField(name: string, schema: JsonSchema, fallback: EffectValue | undefined, options: EffectFieldOptions = {}): ParameterField | null {
 	const base = { id: name, ...(schema.title ? { label: schema.title } : {}), ...(schema.description ? { description: schema.description } : {}) };
 	const def = (schema.default ?? fallback) as EffectValue | undefined;
-	const type = typeOf(schema);
+	// A control that takes several shapes (`anyOf`: a colour as channels or a CSS string) is edited
+	// as the shape its default has.
+	const type = typeOf(schema) ?? typeOf(schema.anyOf?.find((s) => typeOf(s) === jsonTypeOf(def)) ?? {});
 	if (Array.isArray(schema.enum) && schema.enum.length) {
 		const options = schema.enum.filter((v): v is string | number => typeof v === 'string' || typeof v === 'number');
 		return { ...base, type: 'choice', options, default: (typeof def === 'string' || typeof def === 'number' ? def : options[0]) as string | number, control: options.length <= 4 ? 'segmented' : 'select' };
@@ -71,7 +81,7 @@ export function effectControlField(name: string, schema: JsonSchema, fallback: E
 		return { ...base, type: 'text', default: typeof def === 'string' ? def : '', ...(schema.maxLength ? { maxLength: schema.maxLength } : {}) };
 	}
 	if (type === 'array' && Array.isArray(def) && def.length >= 2 && def.length <= 4 && def.every((n) => typeof n === 'number')) {
-		const items = schema.items ?? {};
+		const items = (schema.items ?? schema.anyOf?.find((s) => typeOf(s) === 'array')?.items ?? {}) as JsonSchema;
 		return { ...base, type: 'vector', size: def.length as 2 | 3 | 4, default: [...def], ...(items.minimum !== undefined ? { min: items.minimum } : {}), ...(items.maximum !== undefined ? { max: items.maximum } : {}) };
 	}
 	return null;

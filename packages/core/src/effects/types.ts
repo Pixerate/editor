@@ -47,6 +47,12 @@ export interface EffectSummary {
 	loop: boolean;
 	/** Length of one play (ms). Absent for effects that do not change over time. */
 	duration?: number;
+	/**
+	 * The control (a number from 0 to 1) setting how opaque the effect's own background is: at 0
+	 * only what it draws is left, so it can sit over other content. Absent when the effect has no
+	 * background of its own to fade (an overlay is already transparent).
+	 */
+	backgroundOpacity?: string;
 }
 
 export interface EffectSearchOptions {

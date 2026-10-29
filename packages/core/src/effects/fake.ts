@@ -4,7 +4,7 @@
  *
  * Effects (ids prefixed `fake.`):
  * - `invert` (filter), `tint` (filter)
- * - `gradient` (generator, loops)
+ * - `gradient` (generator, loops; its background opacity is `opacity`)
  * - `bar` (title / overlay: a lower-third bar that slides in, transparent)
  * - `crossfade` (transition)
  * - `fade-in` (motion, vector only)
@@ -89,6 +89,7 @@ const DESCRIPTIONS: readonly EffectDescription[] = [
 		transparent: false,
 		loop: true,
 		duration: 4000,
+		backgroundOpacity: 'opacity',
 		controls: {
 			type: 'object',
 			additionalProperties: false,
@@ -96,10 +97,11 @@ const DESCRIPTIONS: readonly EffectDescription[] = [
 				from: colour('Start colour as #rrggbb. Default #1e3a8a.'),
 				to: colour('End colour as #rrggbb. Default #f472b6.'),
 				angle: { type: 'number', minimum: 0, maximum: 360, description: 'Direction in degrees, 0 = left to right, 90 = top to bottom. Default 90.' },
-				spin: { type: 'number', minimum: -360, maximum: 360, description: 'Turn per loop (4 s) in degrees. Default 0.' }
+				spin: { type: 'number', minimum: -360, maximum: 360, description: 'Turn per loop (4 s) in degrees. Default 0.' },
+				opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Background opacity 0–1: 0 is fully transparent. Default 1.' }
 			}
 		},
-		defaults: { from: '#1e3a8a', to: '#f472b6', angle: 90, spin: 0 },
+		defaults: { from: '#1e3a8a', to: '#f472b6', angle: 90, spin: 0, opacity: 1 },
 		presets: [{ name: 'Sunset', values: { from: '#f97316', to: '#7c3aed' } }],
 		inputs: []
 	},
@@ -250,7 +252,7 @@ function renderPixels(d: EffectDescription, v: Record<string, EffectValues[strin
 				for (let x = 0; x < width; x++, i += 4) {
 					const t = clamp01(((x + 0.5 - width / 2) * dx + (y + 0.5 - height / 2) * dy) / (2 * half) + 0.5);
 					for (let c = 0; c < 3; c++) o[i + c] = a[c] + (b[c] - a[c]) * t;
-					o[i + 3] = 255;
+					o[i + 3] = 255 * clamp01(v.opacity as number);
 				}
 			}
 			break;

@@ -90,8 +90,24 @@ export interface ImageEffectGenerator {
   name?: string;
   /** Control values (over the effect's defaults). */
   values: Record<string, EffectValue>;
-  /** The moment of the effect drawn (ms, default 0). */
+  /**
+   * The moment of the effect drawn (ms, default 0): the still frame, and where an animation
+   * starts.
+   */
   time?: number;
+  /**
+   * The layer plays when the document is output as an animation (`renderAnimationFrame`),
+   * for `duration` ms from `time`. Absent: the layer is the still frame at `time`.
+   */
+  animate?: ImageEffectAnimation;
+}
+
+/** The longest an effect layer animates (ms): a minute. */
+export const MAX_EFFECT_ANIMATION_MS = 60_000;
+
+/** How an animated effect layer plays: for `duration` ms (more than 0, at most `MAX_EFFECT_ANIMATION_MS`). */
+export interface ImageEffectAnimation {
+  duration: number;
 }
 
 export interface PixelLayer extends LayerBase, Omit<RasterPixelLayer, keyof RasterLayerBase> {
