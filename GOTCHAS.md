@@ -3060,3 +3060,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Building the Europe map dropped the outlines of Iceland, Malta, the Faroes and Åland (they came out empty and were drawn as markers), though they are far larger than the simplification tolerance.
 - **Root Cause**: In TopoJSON an island is often a single arc that starts and ends at the same point. Douglas–Peucker measures each point's distance to the line between the arc's ends; with both ends at one point that line has length 0, the cross-product distance is 0 for every point, and the whole ring collapses to its endpoints.
 - **Solution / Workaround**: When an arc's ends coincide, measure from that point instead (`scripts/build-europe-chart-map.mjs`). Simplify per arc (not per ring) so neighbouring countries keep identical borders, and check the script's "no outline left" warnings: only Vatican City should be a marker.
+
+### [svelte/effects] An `$effect` Re-runs When the Object a Getter Reads Through Changes, Not Only Its Result
+
+- **Issue / Symptom**: Dragging an effect layer's Frame slider stopped after a few pixels; the drag couldn't continue.
+- **Root Cause**: The panel passes `() => generator?.effect`. Inside `$effect` that getter subscribes to the `generator` derived, and every edit of the layer replaces the generator object, so the effect re-ran on each scrub step even though the id string was unchanged. It cleared `description`, `effectLayerTiming` returned null, and `{#if timing}` unmounted the slider under the pointer.
+- **Solution / Workaround**: Read getter arguments through `$derived` before the `$effect` (`const id = $derived(effect())`), so it only re-runs when the value changes. Don't clear async-loaded state that live controls depend on when the input is the same.
