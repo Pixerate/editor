@@ -17,6 +17,7 @@
  * - `sunburst` draws `tree` as rings from the centre out (or, without a tree, the first series
  *   as one ring); a `treemap` with a `tree` nests each group's rectangles inside it.
  * - `sankey` draws `links` as flows between columns of nodes.
+ * - `streamgraph` stacks areas symmetrically around a center baseline (silhouette offset).
  * - `barrace` reads each category as a time point and each series as a name, and draws the
  *   top `raceTopN` names at one moment as ranked horizontal bars (an animated ranking).
  * - `choropleth` shades the regions of a registered map (`map`) by the first series, each
@@ -41,6 +42,7 @@ export type ChartType =
 	| 'parliament'
 	| 'sunburst'
 	| 'sankey'
+	| 'streamgraph'
 	| 'barrace'
 	| 'choropleth';
 

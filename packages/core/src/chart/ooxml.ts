@@ -554,6 +554,10 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	} else if (family === 'barrace') {
 		issues.push('Bar chart races are written as clustered bar charts of every name at every time point: DrawingML has no animation.');
 		type = 'bar';
+	} else if (family === 'streamgraph') {
+		issues.push('Streamgraphs are written as stacked area charts: DrawingML has no streamgraph type.');
+		spec = { ...spec, type: 'area', stacking: 'stacked' };
+		type = 'area';
 	} else if (family === 'sankey') {
 		issues.push('Sankey diagrams are written as bar charts of how much passes through each node: DrawingML has no flows.');
 		type = 'bar';
