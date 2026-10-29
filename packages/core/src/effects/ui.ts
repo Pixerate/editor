@@ -25,6 +25,19 @@ export const EFFECT_USE_LABELS: Readonly<Record<EffectUse, string>> = {
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 const typeOf = (s: JsonSchema) => (Array.isArray(s.type) ? s.type.find((t) => t !== 'null') : s.type);
 
+/** A colour as `#rrggbb` (or `#rrggbbaa`): hex strings as they are, `[r, g, b(, a)]` channels from 0 to 1 converted. */
+function hexColour(value: unknown): string | undefined {
+	if (typeof value === 'string') return HEX.test(value) ? value : undefined;
+	if (!Array.isArray(value) || (value.length !== 3 && value.length !== 4) || !value.every((n) => typeof n === 'number' && Number.isFinite(n))) return undefined;
+	return `#${value.map((n: number) => Math.round(Math.min(1, Math.max(0, n)) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Whether a control is a colour written as `anyOf` with no `type` of its own, the way Flair writes
+ * them: `[r, g, b]` channels from 0 to 1, a CSS colour string, or `"currentColor"`.
+ */
+const isAnyOfColour = (schema: JsonSchema) => !typeOf(schema) && !!schema.anyOf?.some((branch) => typeOf(branch) === 'string');
+
 /** Options for turning effect controls into fields. */
 export interface EffectFieldOptions {
 	/** Families offered by font controls (default: the system font catalog). */
@@ -42,7 +55,8 @@ export function isEffectFontControl(schema: JsonSchema): boolean {
 /**
  * One control as a parameter field: numbers and integers (sliders when bounded), switches,
  * choices (`enum`), font families (`format: "font"`, a choice of `options.fonts`), colours
- * (strings whose default is `#rrggbb`), vectors (2–4 numbers) and text.
+ * (strings whose default is `#rrggbb`, or an `anyOf` of channels and a colour string whose default
+ * is either), vectors (2–4 numbers) and text.
  * `null` for a control no field can edit (objects, long lists).
  */
 export function effectControlField(name: string, schema: JsonSchema, fallback: EffectValue | undefined, options: EffectFieldOptions = {}): ParameterField | null {
@@ -59,6 +73,10 @@ export function effectControlField(name: string, schema: JsonSchema, fallback: E
 		return { ...base, type: type === 'integer' ? 'int' : 'number', default: typeof def === 'number' ? def : (min ?? 0), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(schema.multipleOf ? { step: schema.multipleOf } : {}) };
 	}
 	if (type === 'boolean') return { ...base, type: 'boolean', default: def === true };
+	if (isAnyOfColour(schema)) {
+		const hex = hexColour(def);
+		return hex ? { ...base, type: 'color', alpha: hex.length === 9, default: hex } : null;
+	}
 	if (isEffectFontControl(schema)) {
 		const fonts = options.fonts ?? SYSTEM_FONT_CATALOG;
 		const opts: Array<{ value: string; label: string; description: string }> = fonts.map((f) => ({ value: f.family, label: f.family, description: f.category }));
@@ -98,9 +116,14 @@ export function effectFontFamilies(description: Pick<EffectDescription, 'control
 	return out;
 }
 
-/** A saved value as a field shows it (`ParameterValue`), or the field's default. */
-export const effectFieldValue = (field: ParameterField, value: unknown): ParameterValue =>
-	value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value)) ? field.default : (value as ParameterValue);
+/**
+ * A saved value as a field shows it (`ParameterValue`), or the field's default. Colour fields show
+ * channel arrays as hex, and the default for values they can't show (`"currentColor"`, `rgb(…)`).
+ */
+export const effectFieldValue = (field: ParameterField, value: unknown): ParameterValue => {
+	if (field.type === 'color') return hexColour(value) ?? field.default;
+	return value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value)) ? field.default : (value as ParameterValue);
+};
 
 /**
  * A colourful, deterministic picture for previews of filters and transitions (`variant` 0 and 1

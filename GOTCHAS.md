@@ -188,6 +188,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Provider effects are arbitrary shaders or CPU code that run in the host. ffmpeg has no equivalent.
 - **Solution / Workaround**: `toVideoFfmpeg` throws, naming the clips with enabled effects, unless `frames` is passed. With `frames`, the host renders every frame with `renderVideoFrameExact` (the preview's own drawing) to PNGs or to raw RGBA on a pipe. ffmpeg then takes those as the picture and still builds the sound graph. Turning the effects off (`enabled: false`) makes a quick draft export possible again.
 
+### [core/effects] Provider Colour Controls May Be `anyOf` With No Top-Level `type`
+
+- **Issue / Symptom**: The effect parameter panels, the Effect Authoring workspace and `effect_authoring_describe` left out every colour control of Flair's effects. Mesh gradient showed Speed, Warp and Grain but none of its four colours, although Flair's `describe` and authoring session listed them all.
+- **Root Cause**: `effectControlField` picks a field from `schema.type`, and recognised a colour only as `type: "string"` with a `#rrggbb` default. Flair writes a colour as `anyOf: [[r, g, b] channels 0–1, CSS colour string, optionally { const: "currentColor" }]` with no `type`, so the control matched nothing and returned `null`. That means "no field can edit this", and the control was dropped without a word.
+- **Solution / Workaround**: An `anyOf` with a string branch and a colour default (hex, or 3 or 4 channels converted to hex) becomes a colour field. `effectFieldValue` shows channel values as hex, and the default for values a colour well can't show (`currentColor`, `rgb(…)`). When a provider's controls go missing in a panel, check `effectParameterFields` against the provider's real schema before blaming the provider: fields it can't map are left out without a warning.
+
 ### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
 
 - **Issue / Symptom**: An editor's `catch (e) { if (e instanceof UnknownEffectError) ... }` missed errors thrown by an effects provider, so a bad effect id surfaced as a generic failure instead of a useful tool error.

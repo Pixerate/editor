@@ -346,6 +346,35 @@ describe('effect authoring agent tools', () => {
 		expect(bad.isError).toBe(true);
 	});
 
+	it('describes colour controls written as anyOf (as Flair writes them) as colours', async () => {
+		const fake = createFakeEffectProvider();
+		const provider = {
+			...fake,
+			async describe(id: string) {
+				const d = await fake.describe(id);
+				if (id !== 'fake.tint') return d;
+				const color = {
+					title: 'Colour',
+					anyOf: [{ type: 'array', items: { type: 'number', minimum: 0, maximum: 1 }, minItems: 3, maxItems: 3 }, { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, { const: 'currentColor' }],
+					default: '#ff8800'
+				};
+				return { ...d, controls: { ...d.controls, properties: { ...d.controls.properties, color } } };
+			}
+		};
+		const session = await createEffectAuthoringSession({ effectId: 'fake.tint' }, { provider: provider as never });
+		const { call } = await setup({ session });
+		const described = (await call('effect_authoring_describe')).structuredContent as any;
+		expect(described.controls.map((c: any) => [c.id, c.type])).toEqual([
+			['color', 'color'],
+			['amount', 'number']
+		]);
+		expect(described.controls[0]).toMatchObject({ label: 'Colour', default: '#ff8800', alpha: false });
+		const set = await call('effect_authoring_set_values', { values: { color: '#2060ff' } });
+		expect(set.isError).toBeFalsy();
+		expect(session.getState().values.color).toBe('#2060ff');
+		session.dispose();
+	});
+
 	it('marks seek as a write: it moves the playhead', async () => {
 		const { registry } = await setup();
 		const seek = registry.listTools().tools.find((t) => baseToolName(t.name) === 'effect_authoring_seek');
