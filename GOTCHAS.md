@@ -3071,3 +3071,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging an effect layer's Frame slider stopped after a few pixels; the drag couldn't continue.
 - **Root Cause**: The panel passes `() => generator?.effect`. Inside `$effect` that getter subscribes to the `generator` derived, and every edit of the layer replaces the generator object, so the effect re-ran on each scrub step even though the id string was unchanged. It cleared `description`, `effectLayerTiming` returned null, and `{#if timing}` unmounted the slider under the pointer.
 - **Solution / Workaround**: Read getter arguments through `$derived` before the `$effect` (`const id = $derived(effect())`), so it only re-runs when the value changes. Don't clear async-loaded state that live controls depend on when the input is the same.
+
+### [image-editor] Marching Ants Drawn Thick and Still in a Zoomed Host
+
+- **Issue / Symptom**: In Pixerate's image studio (the canvas inside a CSS-scaled node), the selection outline was a thick black-and-white dashed band, and it never moved.
+- **Root Cause**: `drawAnts` (and `drawDraftPath`) sized the line as `1 / projection.scale`, one CSS pixel. The other overlay chrome divides by `hostScale` (`u`) as well, but the ants didn't, so a host zoomed 3× drew them 3 screen pixels wide. `RenderOptions.antsOffset` existed, but neither `ImageEditorCanvas` ever changed it, so the dashes stood still.
+- **Solution / Workaround**: Pass `projection.scale / u` to both, so the ants stay one screen pixel wide. The canvases run `startMarchingAnts` while a selection shows as ants and pass the offset on each render. Any new overlay that should stay a fixed size on screen must also divide by `u`, not only by the projection scale.

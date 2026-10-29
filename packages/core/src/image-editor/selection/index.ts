@@ -7,3 +7,4 @@ export * from './layer-mask';
 export * from './overlay';
 export * from './tool-options';
 export * from './gesture';
+export * from './segmentation';

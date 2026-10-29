@@ -504,7 +504,8 @@ export interface LayerPanelsOptions {
  *
  * `properties` ("Layer Properties") is first for every layer and includes the layer's Layer Style
  * (drop shadow, stroke, glow…: `layerEffectsPanel`) for layers that can take one, with or without a
- * provider. There is no separate `effects` (Layer Effects) or `smart-filters` panel.
+ * provider. There is no separate `effects` (Layer Effects) or `smart-filters` panel. `selection`
+ * is last for every layer, and with no active layer follows `canvas-size`.
  */
 export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOptions = {}): LayerPanelDescriptor[] {
   if (!layer) {
@@ -537,6 +538,10 @@ export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOption
   if (layer.mask) {
     panels.push({ id: 'mask', title: 'Mask Options' });
   }
+
+  // The selection belongs to the document, not the layer: it stays available with a layer active
+  // (Layer via Copy, masks and painting all work through it).
+  panels.push({ id: 'selection', title: 'Selection' });
 
   return panels;
 }

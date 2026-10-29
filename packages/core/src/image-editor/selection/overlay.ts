@@ -61,3 +61,31 @@ export function quickMaskPixels(mask: SelectionMask, style: QuickMaskStyle = {})
   }
   return out;
 }
+
+/** How often marching ants step (ms); each step moves the dashes one screen pixel. */
+export const MARCHING_ANTS_STEP_MS = 100;
+
+/** Whether the viewer asked for reduced motion (`prefers-reduced-motion: reduce`). */
+function prefersReducedMotion(): boolean {
+  try {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Marches the ants: calls `tick` with the next `RenderOptions.antsOffset` every `stepMs` until the
+ * returned stop function is called. Hosts run it while a selection is shown and render on each
+ * tick. With reduced motion requested the ants stand still and `tick` is never called.
+ */
+export function startMarchingAnts(tick: (offset: number) => void, stepMs = MARCHING_ANTS_STEP_MS): () => void {
+  if (prefersReducedMotion()) return () => {};
+  let offset = 0;
+  const id = setInterval(() => {
+    // The dash pattern repeats every 8 screen pixels (4 on, 4 off).
+    offset = (offset + 1) % 8;
+    tick(offset);
+  }, stepMs);
+  return () => clearInterval(id);
+}

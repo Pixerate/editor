@@ -36,7 +36,7 @@ import {
 	createCanvasAnimationCommands,
 	type CommandSpec
 } from '../src/commands';
-import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
+import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider, createImageSegmentationToolProvider } from '../src/image-editor';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
@@ -153,6 +153,8 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-image-editor': [
 			...toolNames(createImageEditorToolProvider(new ImageEditorController(), { id: 'img' })),
 			...toolNames(createImageEffectsToolProvider(new ImageEditorController(), { id: 'img-effects' })),
+			// Its tools are listed only while a segmentation provider is set.
+			...toolNames(createImageSegmentationToolProvider(new ImageEditorController({ segmentation: { segment: async () => [] } }), { id: 'img-segmentation' })),
 			...toolNames(createDocumentToolProvider(createImageEditorDocument(new ImageEditorController()), { history: false, store: documentStore() }))
 		],
 		'pixerate-paint-editor': [
@@ -236,6 +238,7 @@ const FACTORIES: Record<string, string> = {
 		'pixerate-diagram, pixerate-chart, pixerate-animation-editor, pixerate-video-editor, pixerate-parameters, pixerate-vector, pixerate-spreadsheet, pixerate-rich-text, pixerate-tokens, pixerate-canvas, pixerate-image-editor, pixerate-paint-editor',
 	createImageEditorToolProvider: 'pixerate-image-editor',
 	createImageEffectsToolProvider: 'pixerate-image-editor',
+	createImageSegmentationToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',

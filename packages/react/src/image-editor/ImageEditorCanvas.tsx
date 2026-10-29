@@ -19,6 +19,7 @@ import {
   getViewportProjection,
   measureCanvasViewport,
   watchCanvasViewport,
+  startMarchingAnts,
   ShapeDrawGesture,
   TypeToolGesture,
   DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -285,6 +286,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   const currentPathRef = useRef<ImagePoint[]>([]);
   const dragStartPointRef = useRef<ImagePoint | null>(null);
 
+  const antsOffsetRef = useRef(0);
+
   // Canvas viewport sizing and re-render
   const renderCanvas = useCallback(
     async (draftAnnotation?: Annotation | null, draftCrop?: CropBox | null) => {
@@ -305,6 +308,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
         fit,
         showCropOverlay: mode === 'crop',
         showSelectionOverlay: true,
+        antsOffset: antsOffsetRef.current,
         interactive: true,
         draftAnnotation: draftAnnotation !== undefined ? draftAnnotation : draftAnnotationRef.current,
         draftCrop: draftCrop !== undefined ? draftCrop : draftCropRef.current,
@@ -319,6 +323,16 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     },
     [controller, mode, fit, transformTool]
   );
+
+  // Marching ants: while a selection shows as ants, step the dash offset and redraw.
+  const marching = !!state.selection?.bounds && !state.quickMask;
+  useEffect(() => {
+    if (!marching) return;
+    return startMarchingAnts((offset) => {
+      antsOffsetRef.current = offset;
+      void renderCanvas();
+    });
+  }, [marching, renderCanvas]);
 
   // The text being edited: re-render on every change, and end it when the tool or mode changes or
   // the host clears its session.

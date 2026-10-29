@@ -22,6 +22,7 @@
     getViewportProjection,
     measureCanvasViewport,
     watchCanvasViewport,
+    startMarchingAnts,
     ShapeDrawGesture,
     TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -501,6 +502,17 @@
     );
   });
 
+  // Marching ants: while a selection shows as ants, step the dash offset and redraw.
+  let antsOffset = 0;
+  const marching = $derived(!!editor.state.selection?.bounds && !editor.state.quickMask);
+  $effect(() => {
+    if (!marching) return;
+    return startMarchingAnts((offset) => {
+      antsOffset = offset;
+      void renderCanvas();
+    });
+  });
+
   async function renderCanvas(overrideAnnotation?: Annotation | null, overrideCrop?: CropBox | null) {
     if (!canvasEl || !containerEl) return;
     const viewport = measureCanvasViewport(containerEl);
@@ -516,6 +528,7 @@
       fit,
       showCropOverlay: mode === 'crop',
       showSelectionOverlay: true,
+      antsOffset,
       interactive: true,
       draftAnnotation: overrideAnnotation !== undefined ? overrideAnnotation : draftAnnotation,
       draftCrop: overrideCrop !== undefined ? overrideCrop : draftCrop,

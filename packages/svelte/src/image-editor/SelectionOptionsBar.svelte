@@ -45,6 +45,29 @@
 
   let radius = $state(2);
 
+  // Select › Subject (only with a segmentation provider).
+  const canSegment = $derived.by(() => {
+    void tick;
+    return Boolean(controller.segmentationProvider);
+  });
+  let subject = $state('');
+  let segmenting = $state(false);
+  let subjectStatus = $state<string | null>(null);
+  async function selectSubject() {
+    const target = subject.trim();
+    if (!target || segmenting) return;
+    segmenting = true;
+    subjectStatus = null;
+    try {
+      const { segments } = await controller.selectSubject(target, { mode: options.mode });
+      subjectStatus = segments.length ? null : `Nothing matching “${target}” was found.`;
+    } catch (err) {
+      subjectStatus = err instanceof Error ? err.message : String(err);
+    } finally {
+      segmenting = false;
+    }
+  }
+
   const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
     { op: 'grow', label: 'Grow' },
     { op: 'shrink', label: 'Shrink' },
@@ -108,6 +131,33 @@
         />
       </label>
     </div>
+  {/if}
+  {#if canSegment}
+    <form
+      data-testid="select-subject"
+      class="flex flex-col gap-1"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void selectSubject();
+      }}
+    >
+      <div class="flex gap-1">
+        <input
+          type="text"
+          aria-label="Subject to select"
+          placeholder="Subject, e.g. the dog"
+          bind:value={subject}
+          disabled={segmenting}
+          class="min-w-0 flex-1 bg-background border border-border rounded px-2 py-1 text-foreground"
+        />
+        <button type="submit" class={btn(false)} disabled={segmenting || !subject.trim()} aria-busy={segmenting}>
+          {segmenting ? 'Selecting…' : 'Select Subject'}
+        </button>
+      </div>
+      {#if subjectStatus}
+        <p role="status" class="text-muted-foreground">{subjectStatus}</p>
+      {/if}
+    </form>
   {/if}
   <label class="flex items-center gap-2 text-foreground">
     <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onchange={(on) => set({ antiAlias: on })} />

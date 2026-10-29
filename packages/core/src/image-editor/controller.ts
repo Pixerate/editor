@@ -44,6 +44,7 @@ import {
 import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
 import { colorRange, magicWand, type ColorRangeOptions, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
+import { segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
 import type { LayerMaskProps } from './selection/layer-mask';
 import type { AdjustmentLayerMask } from './types';
@@ -1292,6 +1293,8 @@ export class ImageEditorController {
   private viewKey: unknown[] = [];
   /** For `compositePixels` and mask evaluation (the renderer keeps its own for the viewport). */
   private compositor = new LayerCompositor();
+  /** The segmentation provider behind `selectSubject` (see `setSegmentationProvider`). */
+  private segmentation: SegmentationProvider | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
   public readonly effects = new EffectsSlot();
   /** Renders provider effects: effect smart filter results and effect layers. */
@@ -1304,6 +1307,7 @@ export class ImageEditorController {
     this.effects.subscribe(() => this.queueEffectRefresh('all'));
     this.effectsEngine.subscribe(() => this.queueEffectRefresh('incomplete'));
     if (options.effects) this.effects.set(options.effects);
+    if (options.segmentation) this.segmentation = options.segmentation;
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
     if (options.textShaper !== undefined) this.textShaperValue = options.textShaper;
     this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
@@ -1509,6 +1513,18 @@ export class ImageEditorController {
     const next = walk(this.state.layers);
     if (!changed) return;
     this.state.layers = next as ImageLayer[];
+    this.notify();
+  }
+
+  /** The registered segmentation provider, or `null` (then `selectSubject` is unavailable). */
+  public get segmentationProvider(): SegmentationProvider | null {
+    return this.segmentation;
+  }
+
+  /** Registers (or with `null` removes) the segmentation provider. Not an edit: no undo step. */
+  public setSegmentationProvider(provider: SegmentationProvider | null): void {
+    if (this.segmentation === provider) return;
+    this.segmentation = provider;
     this.notify();
   }
 
@@ -4587,22 +4603,54 @@ export class ImageEditorController {
     source: string | PixelBuffer,
     options: { channel?: SelectionChannel; invert?: boolean; threshold?: number; mode?: SelectionMode } = {}
   ): Promise<SelectionMask | null> {
-    let pixels: PixelBuffer;
-    if (typeof source === 'string') {
-      const img = await this.renderer.imageCache.get(source);
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      const canvas = this.renderer.createCanvas(w, h);
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(img, 0, 0, w, h);
-      const data = ctx?.getImageData?.(0, 0, w, h);
-      if (!data) throw new Error('The mask image pixels are not available (no canvas access); pass pixels.');
-      pixels = { width: w, height: h, data: data.data };
-    } else {
-      pixels = source;
-    }
+    const pixels = await this.decodeMaskImage(source);
     this.setSelection(selectionFromPixels(pixels, options), options.mode ?? 'replace');
     return this.getSelection();
+  }
+
+  /** A mask image (data URL / URL, or pixels as they are) as RGBA pixels. */
+  private async decodeMaskImage(source: string | PixelBuffer): Promise<PixelBuffer> {
+    if (typeof source !== 'string') return source;
+    const img = await this.renderer.imageCache.get(source);
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const canvas = this.renderer.createCanvas(w, h);
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx?.getImageData?.(0, 0, w, h);
+    if (!data) throw new Error('The mask image pixels are not available (no canvas access); pass pixels.');
+    return { width: w, height: h, data: data.data };
+  }
+
+  /**
+   * Select › Subject: asks the segmentation provider for the objects matching `target` ("the
+   * dog", "the sky") in the flattened image and selects their shapes, combined with the
+   * selection by `mode`, as one undo step. Returns what was found (labels and bounds in natural
+   * pixels); an empty list leaves the selection as it was. Throws without a provider.
+   */
+  public async selectSubject(
+    target: string,
+    options: SelectionCommandOptions & { maxSegments?: number; signal?: AbortSignal } = {}
+  ): Promise<{ segments: { label: string; bounds: CropBox | null; score?: number }[] }> {
+    const provider = this.segmentation;
+    if (!provider) throw new Error('Select Subject needs a segmentation provider (setSegmentationProvider).');
+    const description = target.trim();
+    if (!description) throw new Error('Describe the subject to select.');
+    const { width, height } = this.naturalSize;
+    const image = await this.toDataURL({ format: 'image/png' });
+    const results = await provider.segment({ image, width, height, target: description, maxSegments: options.maxSegments, signal: options.signal });
+    options.signal?.throwIfAborted();
+    const decoded: DecodedSegmentationResult[] = [];
+    for (const r of results ?? []) {
+      decoded.push({ ...r, mask: r.mask !== undefined ? await this.decodeMaskImage(r.mask) : undefined });
+    }
+    const segments = decoded.map((r) => {
+      const one = segmentsToSelection(width, height, [r]);
+      return { label: r.label || description, bounds: one?.bounds ?? null, ...(r.score !== undefined ? { score: r.score } : {}) };
+    });
+    const mask = segmentsToSelection(width, height, decoded);
+    if (mask) this.shapeCommand(mask, options);
+    return { segments: segments.filter((s) => s.bounds) };
   }
 
   /** Quick Mask view (tints the unselected area). View state: no undo step. */

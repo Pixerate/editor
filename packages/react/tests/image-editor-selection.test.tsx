@@ -90,6 +90,31 @@ describe('React SelectionOptionsBar', () => {
   });
 });
 
+describe('React SelectionOptionsBar: Select Subject', () => {
+  it('shows only with a segmentation provider and selects the described subject', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    await act(async () => root.render(<Bar controller={controller} />));
+    expect(container.querySelector('[data-testid="select-subject"]')).toBeNull();
+
+    controller.setSegmentationProvider({ segment: async () => [] });
+    const calls: unknown[][] = [];
+    controller.selectSubject = (async (...args: unknown[]) => {
+      calls.push(args);
+      return { segments: [] };
+    }) as any;
+    await act(async () => root.render(<Bar controller={controller} />));
+    const input = container.querySelector('input[aria-label="Subject to select"]') as HTMLInputElement;
+    expect(button('Select Subject').disabled).toBe(true);
+    await act(async () => setValue(input, 'the dog'));
+    await act(async () => {
+      button('Select Subject').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(calls).toEqual([['the dog', { mode: 'replace' }]]);
+    expect(container.querySelector('[data-testid="select-subject"] [role="status"]')!.textContent).toContain('Nothing matching');
+  });
+});
+
 describe('React RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

@@ -47,7 +47,7 @@ batching.
 3. **Write in few steps.** Put every base change of one correction into one `set_adjustments`
    call (one undo step) with a `label`. Create layers with their `params` in the same
    `add_adjustment_layer` call rather than adding a neutral layer and then setting it.
-4. **Local edits:** select (`select_region`, `select_by_color`), refine (`modify_selection`,
+4. **Local edits:** select (`select_region`, `select_by_color`, `select_subject`), refine (`modify_selection`,
    `refine_selection`), check with `get_selection` (area, percent, bounds), then
    `apply_selection_as_mask` with a `kind` to create the masked layer in one step.
 5. **Verify.** `render_preview` after each group of corrections, not after each slider, then
@@ -62,7 +62,8 @@ batching.
    `set_adjustments` base controls edit the active pixel layer's `develop` filter.
 2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
    `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
-   risky change. Name layers by intent.
+   risky change. Name layers by intent. Split out a subject by its outline, not its box
+   (`select_subject`, or a `select_region` polygon, then `refine_selection`), then `layer_via_copy`.
 3. **Shape layers non-destructively**: masks (`add_layer_mask` from the selection, or
    reveal-all / hide-all, softened with `density` / `feather`) instead of deleting pixels;
    `clipped: true` (via `set_layer_properties`) to limit a layer or adjustment to the layer below;
@@ -265,6 +266,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
+| `select_subject` | Select › Subject (only when the host has a segmentation model): `target` describes what to select ("the dog", "the sky"); an AI model finds the matching objects and selects their outlines, combined by `mode`. `maxSegments` 1 for a single subject. Returns the selection and `found` (label, bounds per object); nothing found leaves the selection unchanged. |
 | `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `shape`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`; shapes a `shape` summary of component ops and kinds and paint types, and `annotation` when migrated from one), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, `bitDepth` (8, 16 or 32), the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
@@ -289,7 +291,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
 | `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
-| `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
+| `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `polygon` (the lasso: `points`, at least 3 `{x, y}` along the outline, closed automatically), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
 | `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source; `sample: "active-layer"` samples only the active pixel layer (pick it with `set_active_layer`) instead of the whole image. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
 | `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
 | `refine_selection` | Refine Edge: snap the selection edge to image edges within `radius` px (0..64, default 8), with `smartRadius`, `smooth` 0..100, `feather` px, `contrast` 0..100 and `shiftEdge` -100..100 %. Use on hair, fur, foliage or after loading a coarse AI mask. |

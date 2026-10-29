@@ -406,8 +406,8 @@ export class ImageEditorRenderer {
         ctx.rect(region.x, region.y, region.width, region.height);
         ctx.clip();
         if (state.selection?.bounds && display === 'quickMask') this.drawQuickMask(ctx, state.selection);
-        else if (state.selection?.bounds && display === 'ants') this.drawAnts(ctx, state.selection, projection.scale, options.antsOffset ?? 0);
-        if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale);
+        else if (state.selection?.bounds && display === 'ants') this.drawAnts(ctx, state.selection, projection.scale / u, options.antsOffset ?? 0);
+        if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale / u);
       } catch {
         // Overlays are best effort (headless / mocked contexts).
       }
@@ -886,7 +886,10 @@ export class ImageEditorRenderer {
     ctx.drawImage(canvas, 0, 0, selection.width, selection.height);
   }
 
-  /** Marching ants: a white line under a black dashed one, one screen pixel wide. */
+  /**
+   * Marching ants: a white line under a black dashed one, one screen pixel wide. `scale` is
+   * screen pixels per natural pixel (the projection scale times the host's CSS scale).
+   */
   private drawAnts(ctx: CanvasRenderingContext2D, selection: SelectionMask, scale: number, offset: number): void {
     let segs = this.outlineCache.get(selection);
     if (!segs) {

@@ -514,7 +514,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'layer_via_copy',
     title: 'New layer from the selection',
     description:
-      'Layer via Copy: copies the selected pixels of a pixel layer (layerId, default the active layer) to a new layer directly above it and makes it active. cut: true also removes them from the source (Layer via Cut). Needs a selection. One undo step. Returns the new layer.',
+      'Layer via Copy: copies the selected pixels of a pixel layer (layerId, default the active layer) to a new layer directly above it and makes it active. cut: true also removes them from the source (Layer via Cut). Needs a selection; the new layer takes the selection’s shape, so select the subject’s outline (select_region polygon, select_by_color) to isolate it, not its bounding box. One undo step. Returns the new layer.',
     inputSchema: {
       type: 'object',
       properties: {
