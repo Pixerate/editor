@@ -294,6 +294,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
       const viewport = measureCanvasViewport(container);
       viewRef.current = { width: viewport.width, height: viewport.height };
+      // The transform overlay's rotate handle sits a fixed distance out on screen.
+      transformTool.setView(getViewportProjection(controller.getState(), viewport.width, viewport.height, mode === 'crop').scale);
 
       await controller.render(canvas, {
         viewportWidth: viewport.width,

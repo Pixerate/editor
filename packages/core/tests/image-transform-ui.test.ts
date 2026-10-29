@@ -250,6 +250,37 @@ describe('FreeTransformTool', () => {
     expect(boxFrameHit(o, { x: 0, y: 10 }, 1, 4)).toBe('inside');
   });
 
+  it('puts a rotate handle on a stem above the top edge, a fixed screen distance out', () => {
+    const { tool } = setup();
+    tool.begin();
+    tool.setView(2);
+    const o = tool.overlay()!;
+    // 24 screen px at 2× is 12 document px above the top edge's midpoint.
+    expect(o.rotate).toEqual({ x: 70, y: 38 });
+    expect(tool.hit({ x: 71, y: 38 }, 3)).toBe('rotate');
+    expect(tool.cursor('rotate')).toBe('grab');
+    // A drag on it rotates about the reference point.
+    drag(tool, { x: 70, y: 38 }, { x: 92, y: 60 });
+    expect(tool.bar()!.rotate).toBeCloseTo(90, 6);
+    // The handle follows the turned top edge, now facing right.
+    close(tool.overlay()!.rotate!, { x: 92, y: 60 });
+    tool.setMode('warp');
+    expect(tool.overlay()!.rotate).toBeUndefined();
+    tool.cancel();
+  });
+
+  it('gives a layer frame a rotate handle that stays outside a flipped frame', () => {
+    const o = quadFrameOverlay([{ x: 50, y: 50 }, { x: 90, y: 50 }, { x: 90, y: 70 }, { x: 50, y: 70 }], true, 24);
+    expect(o.rotate).toEqual({ x: 70, y: 26 });
+    expect(boxFrameHit(o, { x: 70, y: 28 }, 3, 12)).toBe('rotate');
+    // Flipped vertically: the top edge is lowest, so the handle hangs below it.
+    const flipped = quadFrameOverlay([{ x: 50, y: 70 }, { x: 90, y: 70 }, { x: 90, y: 50 }, { x: 50, y: 50 }], true, 24);
+    expect(flipped.rotate).toEqual({ x: 70, y: 94 });
+    // None for a frame locked in place or without an offset.
+    expect(quadFrameOverlay([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }], false, 24).rotate).toBeUndefined();
+    expect(boxFrameOverlay({ x: 0, y: 0, width: 10, height: 10 }).rotate).toBeUndefined();
+  });
+
   it('moves from the reference point when the host turns it off as a handle', () => {
     const { c, id, tool } = setup();
     tool.begin();
