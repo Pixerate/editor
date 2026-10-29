@@ -49,6 +49,11 @@ For general error reporting and undo conventions, see `pixerate-agent-tools`.
 
 - **Batch parameter changes.** Set all related control values in a single `effect_authoring_set_values`
   call so they apply cleanly in a single undo step.
+- **Write colours as hex.** A control with `type: "color"` in `effect_authoring_describe` takes
+  `#rrggbb` (or `#rrggbbaa` when `alpha` is true), even when the provider's schema also accepts 0–1
+  channel arrays or CSS colour strings (Flair's colours do). Hex keyframes blend smoothly. A control
+  that is in `values` but has no entry in `controls` has a shape no field can edit. Set it only with a
+  value that matches the provider's schema.
 - **Check compile issues.** When editing source code via `effect_authoring_set_source`, always verify
   the returned `issues` array. Fix errors before attempting to preview or set controls.
 - **Keyframe animation tracks.** Controls with active keyframes calculate their values dynamically

@@ -25,6 +25,13 @@ export const EFFECT_USE_LABELS: Readonly<Record<EffectUse, string>> = {
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 const typeOf = (s: JsonSchema) => (Array.isArray(s.type) ? s.type.find((t) => t !== 'null') : s.type);
 
+/** A colour as `#rrggbb` (or `#rrggbbaa`): hex strings as they are, `[r, g, b(, a)]` channels from 0 to 1 converted. */
+function hexColour(value: unknown): string | undefined {
+	if (typeof value === 'string') return HEX.test(value) ? value : undefined;
+	if (!Array.isArray(value) || (value.length !== 3 && value.length !== 4) || !value.every((n) => typeof n === 'number' && Number.isFinite(n))) return undefined;
+	return `#${value.map((n: number) => Math.round(Math.min(1, Math.max(0, n)) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Options for turning effect controls into fields. */
 export interface EffectFieldOptions {
 	/** Families offered by font controls (default: the system font catalog). */
@@ -108,9 +115,14 @@ export function effectFontFamilies(description: Pick<EffectDescription, 'control
 	return out;
 }
 
-/** A saved value as a field shows it (`ParameterValue`), or the field's default. */
-export const effectFieldValue = (field: ParameterField, value: unknown): ParameterValue =>
-	value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value)) ? field.default : (value as ParameterValue);
+/**
+ * A saved value as a field shows it (`ParameterValue`), or the field's default. Colour fields show
+ * channel arrays as hex, and the default for values they can't show (`"currentColor"`, `rgb(…)`).
+ */
+export const effectFieldValue = (field: ParameterField, value: unknown): ParameterValue => {
+	if (field.type === 'color') return hexColour(value) ?? field.default;
+	return value === undefined || value === null || (typeof value === 'object' && !Array.isArray(value)) ? field.default : (value as ParameterValue);
+};
 
 /**
  * A colourful, deterministic picture for previews of filters and transitions (`variant` 0 and 1
