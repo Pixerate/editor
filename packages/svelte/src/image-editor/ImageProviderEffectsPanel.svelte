@@ -1,14 +1,12 @@
 <script lang="ts">
   import { imageOutlineButtonClass } from './styles.js';
-  import { EFFECT_LAYER_USES, LAYER_EFFECT_MENU, effectLayerTiming, findLayer, layerEffectsPanel, type ImageEditorController, type ImageLayer, type LayerEffectKind, type SmartObjectLayer } from '@pixerate/editor/image-editor';
+  import { EFFECT_LAYER_USES, effectLayerTiming, findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
   import { effectDescriptionOf } from '../effects/effects.svelte.js';
   import ImageEffectControls from './ImageEffectControls.svelte';
-  import LayerEffectsPanel from './LayerEffectsPanel.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageRange from './controls/ImageRange.svelte';
-  import ImageSelect from './controls/ImageSelect.svelte';
   import type { ParameterComponents } from '../parameters/index.js';
 
   interface Props {
@@ -38,14 +36,9 @@
   const layer = $derived(snapshot.layer);
   const all = $derived(layer?.type === 'smart' ? ((layer as SmartObjectLayer).smartFilters?.filters ?? []) : []);
   const generator = $derived(layer?.type === 'pixel' ? layer.generator : undefined);
-  const canFilter = $derived(!!layer && layer.type !== 'adjustment' && layer.type !== 'annotation');
-  const styles = $derived(layerEffectsPanel(layer));
+  const canFilter = $derived(!!provider && !!layer && layer.type !== 'adjustment' && layer.type !== 'annotation');
   const described = effectDescriptionOf(() => provider, () => generator?.effect);
   const timing = $derived(generator ? effectLayerTiming(generator, described.description) : null);
-  const addOptions = $derived([
-    ...(provider && canFilter ? [{ value: 'filter', label: 'Filter…' }] : []),
-    ...(styles.available && !styles.readOnly ? LAYER_EFFECT_MENU.map((m) => ({ value: `style:${m.kind}`, label: m.label })) : []),
-  ]);
   const drags = new Set<string>();
   /** Changes during a drag skip the undo stack after the first, so the drag is one step. */
   function commit(gesture: string | null) {
@@ -59,12 +52,6 @@
     Promise.resolve()
       .then(work)
       .catch((e: unknown) => (message = e instanceof Error ? e.message : String(e)));
-  }
-  function add(value: string) {
-    const id = layer?.id;
-    if (!value || !id) return;
-    if (value === 'filter') browse = browse === 'filter' ? null : 'filter';
-    else run(() => controller.addLayerEffect(id, value.slice('style:'.length) as LayerEffectKind));
   }
 
   // Scrubbing the frame draws the effect again: one render at a time, the latest frame wins.
@@ -94,11 +81,12 @@
 </script>
 
 <!--
-  Effects for the active layer, in one place. An effect layer first: its effect (change it or
+  Provider effects for the active layer. An effect layer first: its effect (change it or
   rasterize it), a still frame or an animation for an effect that moves, and its controls. Then
-  what is applied to any layer: provider filters (smart filters; applying one converts a pixel
-  layer to a smart object in the same undo step) and layer styles, added from one menu. New
-  effect layers come from the layers panel. Without a provider it says why nothing can be added.
+  the provider filters applied to the layer (smart filters; applying one converts a pixel layer to
+  a smart object in the same undo step). Layer styles (drop shadow, stroke…) are not here: they
+  are part of the layer's properties (LayerEffectsPanel). New effect layers come from the layers
+  panel. Without a provider it says why nothing can be added.
 -->
 <section class="flex flex-col gap-2 text-xs {className}" aria-label="Effects" data-image-provider-effects="">
   {#if !provider}<p class="text-[11px] text-muted-foreground">No effects provider is registered. Effects in the document are kept.</p>{/if}
@@ -169,10 +157,8 @@
   {/if}
   {#if layer && canFilter}
     <div class="flex items-center gap-1" data-effect-part="applied">
-      <span class="flex-1 text-[11px] font-semibold uppercase tracking-wider text-foreground">{generator ? 'On this layer' : 'Effects'}</span>
-      {#if addOptions.length}
-        <ImageSelect label="Add effect" value="" placeholder="Add…" options={addOptions} onchange={add} />
-      {/if}
+      <span class="flex-1 text-[11px] font-semibold uppercase tracking-wider text-foreground">Filters</span>
+      <button type="button" class={imageOutlineButtonClass} aria-pressed={browse === 'filter'} onclick={() => (browse = browse === 'filter' ? null : 'filter')}>Add filter…</button>
     </div>
     {#if browse === 'filter'}
       {@const id = layer.id}
@@ -219,11 +205,8 @@
       {/each}
     </ol>
   {/if}
-  {#if layer && styles.available && styles.rows.length}
-    <LayerEffectsPanel {controller} layerId={layer.id} heading={false} />
-  {/if}
-  {#if layer && canFilter && !generator && !all.some((f) => f.kind === 'effect') && !styles.rows.length}
-    <p class="text-[11px] text-muted-foreground">No effects yet. Add a filter, or a style such as a drop shadow. New effect layers are added from the layers panel.</p>
+  {#if layer && canFilter && !generator && !all.some((f) => f.kind === 'effect')}
+    <p class="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties; new effect layers are added from the layers panel.</p>
   {/if}
   {#if !layer}<p class="text-[11px] text-muted-foreground">Select a layer to apply effects to it.</p>{/if}
   {#if message}<p role="alert" class="text-[11px] text-destructive">{message}</p>{/if}

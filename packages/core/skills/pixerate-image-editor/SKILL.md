@@ -117,7 +117,10 @@ drawing or editing either.
    annotation and group layers (not adjustment layers) and follow the layer's pixels as they
    change. Add them with `add_layer_effect` (`kind` plus only the `settings` that differ from
    Photoshop's defaults), tune them with `update_layer_effect` and read them back with
-   `list_layer_effects`. Each call is one undo step and returns the layer's effects.
+   `list_layer_effects`. Each call is one undo step and returns the layer's effects. In the UI
+   they are the **Layer Style** section of **Layer Properties**; the separate **Effects** panel is
+   for provider effects (effect layers and filters), so say "layer style" when you tell the user
+   where a drop shadow or stroke lives.
 2. **Keep the ids**: `add_layer_effect` returns `effectId`; `update_layer_effect` and
    `remove_layer_effect` need it. `list_layers` shows which layers have effects (ids and kinds
    only).

@@ -68,6 +68,10 @@
             onchange={(val) => controller.setLayerProperties(activeLayer.id, { opacity: val })}
           />
         </div>
+        <!-- Layer Style (drop shadow, stroke, glow…) is part of the layer's properties; adjustment layers have none. -->
+        {#if activeLayer.type !== 'adjustment'}
+          <LayerEffectsPanel {controller} layerId={activeLayer.id} class="border-t border-border pt-2" />
+        {/if}
       {:else}
         <div class="text-muted-foreground">No active layer selected.</div>
       {/if}
@@ -78,10 +82,8 @@
       <BrushOptionsBar {controller} />
     </div>
   {:else if panelId === 'effects'}
-    <div class="flex flex-col gap-3">
-      <div class="font-medium text-sm text-foreground">Layer Effects</div>
-      <LayerEffectsPanel {controller} />
-    </div>
+    <!-- Kept for hosts that still ask for it by id: layerPanels() folds it into 'properties'. -->
+    <LayerEffectsPanel {controller} />
   {:else if panelId === 'adjustment'}
     <AdjustmentLayersPanel {controller} />
   {:else if panelId === 'type'}
@@ -95,10 +97,8 @@
       <ShapeOptionsBar {controller} options={shapeOptions} onchange={(o) => (shapeOptions = o)} />
     </div>
   {:else if panelId === 'smart-filters'}
-    <div class="flex flex-col gap-3">
-      <div class="font-medium text-sm text-foreground">Smart Filters</div>
-      <LayerEffectsPanel {controller} />
-    </div>
+    <!-- Kept for hosts that still ask for it by id: smart filters are under 'provider-effects'. -->
+    <ImageProviderEffectsPanel {controller} />
   {:else if panelId === 'provider-effects'}
     <ImageProviderEffectsPanel {controller} />
   {:else if panelId === 'selection'}

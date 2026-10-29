@@ -42,7 +42,7 @@ describe('LayerEffectsPanel (Svelte)', () => {
     const { c, id } = setup();
     component = mount(LayerEffectsPanel, { target, props: { controller: c } });
     flushSync();
-    setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), 'drop-shadow');
+    setValue(q<HTMLSelectElement>('select[aria-label="Add style"]'), 'drop-shadow');
     expect(c.getLayerEffects(id).items.map((e) => e.kind)).toEqual(['drop-shadow']);
     expect(q('[data-testid="effect-settings"]')).toBeTruthy();
     const distance = q<HTMLInputElement>('input[aria-label="Distance"]');
@@ -81,7 +81,7 @@ describe('LayerEffectsPanel (Svelte)', () => {
     const adj = c.addAdjustmentLayer({ kind: 'curves' });
     component = mount(LayerEffectsPanel, { target, props: { controller: c, layerId: adj } });
     flushSync();
-    expect(target.textContent).toMatch(/Adjustment layers cannot have effects/);
+    expect(target.textContent).toMatch(/Adjustment layers cannot have a layer style/);
   });
 
   it('shows an fx badge in the layers panel that switches the effects on and off', () => {

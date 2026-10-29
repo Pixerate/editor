@@ -2,7 +2,10 @@
 
 The host may register an effects provider (for example Flair). The tools then reach its catalog:
 filter effects become **smart filters**, and generator, overlay and title effects become
-**effect layers**. These are not the layer styles of `set_layer_effect` (drop shadow, stroke, glow).
+**effect layers**. These are not the layer styles of `add_layer_effect` (drop shadow, stroke, glow).
+In the UI, the **Effects** panel holds an effect layer's controls and the layer's filters; layer
+styles are the **Layer Style** section of **Layer Properties**. Use those names when you tell the
+user where to find what you changed.
 
 ## Working method
 

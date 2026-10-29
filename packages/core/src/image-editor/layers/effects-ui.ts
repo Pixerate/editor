@@ -39,14 +39,14 @@ export interface LayerEffectsPanelModel {
 /** The effects section for `layer`. */
 export function layerEffectsPanel(layer: ImageLayer | null | undefined): LayerEffectsPanelModel {
   const empty = { readOnly: true, enabled: true, scale: 1, rows: [] };
-  if (!layer) return { ...empty, available: false, reason: 'Select a layer to add effects.' };
-  if (layer.type === 'adjustment') return { ...empty, available: false, reason: 'Adjustment layers cannot have effects.' };
+  if (!layer) return { ...empty, available: false, reason: 'Select a layer to add a layer style.' };
+  if (layer.type === 'adjustment') return { ...empty, available: false, reason: 'Adjustment layers cannot have a layer style.' };
   const fx = layer.effects;
   const readOnly = Boolean(layer.locks?.all);
   return {
     available: true,
     readOnly,
-    reason: readOnly ? 'The layer is locked; unlock it to change its effects.' : undefined,
+    reason: readOnly ? 'The layer is locked; unlock it to change its layer style.' : undefined,
     enabled: fx?.enabled ?? true,
     scale: fx?.scale ?? 1,
     rows: (fx?.items ?? []).map((e) => ({ id: e.id, kind: e.kind, label: layerEffectLabel(e.kind), enabled: e.enabled })),

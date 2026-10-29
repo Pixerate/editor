@@ -53,13 +53,13 @@ const enter = async (el: HTMLInputElement | HTMLSelectElement, value: string, ev
   await settle();
   await settle();
 };
-const addMenu = () => q<HTMLSelectElement>('select[aria-label="Add effect"]');
 
 describe('ImageProviderEffectsPanel (React)', () => {
-  it('applies a filter effect from the Add menu as a smart filter, edits it and removes it', async () => {
+  it('applies a filter effect from Add filter as a smart filter, edits it and removes it', async () => {
     const { c, id } = setup();
     await act(async () => root.render(<ImageProviderEffectsPanel controller={c} />));
-    await enter(addMenu(), 'filter', 'change');
+    expect(container.textContent).toMatch(/No filters yet/);
+    await click(button('Add filter…'));
     await click(q('[data-effect-id="fake.invert"]'));
     const layer = c.getLayer(id) as SmartObjectLayer;
     expect(layer.type).toBe('smart');
@@ -71,13 +71,13 @@ describe('ImageProviderEffectsPanel (React)', () => {
     expect((c.getLayer(id) as SmartObjectLayer).smartFilters?.filters ?? []).toEqual([]);
   });
 
-  it('adds layer styles from the same menu and lists them with the filters', async () => {
+  it('leaves layer styles to the layer\'s properties', async () => {
     const { c, id } = setup();
+    c.addLayerEffect(id, 'drop-shadow');
     await act(async () => root.render(<ImageProviderEffectsPanel controller={c} />));
-    await enter(addMenu(), 'style:drop-shadow', 'change');
-    expect(c.getLayerEffects(id).items.map((e) => e.kind)).toEqual(['drop-shadow']);
-    expect(q('[data-testid="layer-effects"]').textContent).toMatch(/Styles/);
-    expect(container.querySelectorAll('select[aria-label="Add effect"]').length).toBe(1);
+    expect(container.querySelector('[data-testid="layer-effects"]')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
+    expect(container.textContent).toMatch(/Layer styles such as a drop shadow are in the layer's properties/);
   });
 
   it('shows an effect layer\'s controls, changes its effect and rasterizes it', async () => {
@@ -117,9 +117,7 @@ describe('ImageProviderEffectsPanel (React)', () => {
     const { c } = setup(null);
     await act(async () => root.render(<ImageProviderEffectsPanel controller={c} />));
     expect(container.textContent).toMatch(/No effects provider/);
-    const options = [...addMenu().options].map((o) => o.value);
-    expect(options).not.toContain('filter');
-    expect(options).toContain('style:drop-shadow');
+    expect(button('Add filter…')).toBeUndefined();
   });
 
   it('useImageEffectsTools registers the tools', async () => {
