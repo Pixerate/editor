@@ -61,7 +61,7 @@ export function createTypographyToolProvider(options: TypographyToolProviderOpti
 		name: 'list_fonts',
 		title: 'List fonts',
 		description:
-			'Lists the fonts the host offers, optionally filtered by category, source, weight, style or a name query (families starting with the query first). Returns { fonts: [{ family, category, weights, styles, isVariable?, source }], total, truncated }. Use a family from here with resolve_font_stack, load_font or set_font_selection.',
+			'Lists the fonts the host offers, optionally filtered by category, source, weight, style, tags or a name query (families starting with the query first), in the provider\'s order (web services list their most popular first). Returns { fonts: [{ family, category, weights, styles, isVariable?, source, tags? }], total, truncated, tags: [{ tag, count }] } where tags counts the classes of every font matched (display, slab-serif, variable-wdth…), so you can narrow by them. Use a family from here with resolve_font_stack, load_font or set_font_selection.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -70,6 +70,7 @@ export function createTypographyToolProvider(options: TypographyToolProviderOpti
 				weight: WEIGHT_SCHEMA,
 				style: STYLE_SCHEMA,
 				query: { type: 'string', description: 'Case-insensitive part of the family name.' },
+				tags: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 8, description: 'Only fonts carrying every one of these tags (from a previous result\'s tags).' },
 				limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Most fonts to return (default 50, max 500).' }
 			},
 			additionalProperties: false
@@ -77,9 +78,12 @@ export function createTypographyToolProvider(options: TypographyToolProviderOpti
 		annotations: { title: 'List fonts', ...READ },
 		handler: async (args: Record<string, any>) => {
 			const all = await fonts.listFonts();
-			const kept = filterFonts(all, { category: args.category, source: args.source, weight: args.weight, style: args.style, query: args.query });
+			const kept = filterFonts(all, { category: args.category, source: args.source, weight: args.weight, style: args.style, query: args.query, tags: args.tags });
 			const limit = args.limit ?? 50;
-			return { fonts: kept.slice(0, limit), total: kept.length, truncated: kept.length > limit };
+			const counts = new Map<string, number>();
+			for (const f of kept) for (const t of f.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+			const tags = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag, count]) => ({ tag, count }));
+			return { fonts: kept.slice(0, limit), total: kept.length, truncated: kept.length > limit, tags };
 		}
 	};
 

@@ -11,6 +11,7 @@ export * from './segment.js';
 export * from './metrics.js';
 export * from './registry.js';
 export * from './catalog.js';
+export * from './stylesheet.js';
 export * from './stack.js';
 export * from './accessibility.js';
 export * from './picker.js';

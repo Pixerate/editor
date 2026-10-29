@@ -23,8 +23,12 @@ what this machine has.
 
 ## Working method
 
-1. **Find fonts.** `list_fonts` with `category`, `weight`, `style` or `query`. Only use families it
-   returns (or that the user names), and always ship them inside a stack from `resolve_font_stack`.
+1. **Find fonts.** `list_fonts` with `category`, `weight`, `style`, `tags` or `query`. Only use
+   families it returns (or that the user names), and always ship them inside a stack from
+   `resolve_font_stack`. When the host offers a web font service (`source: 'web'`, e.g. Google
+   Fonts), its catalog is far larger than the installed fonts and listed most popular first:
+   narrow it by `category` and by the `tags` the result counts (`display`, `slab-serif`,
+   `variable-wdth`…) to find faces with the character you want, rather than taking the top few.
 2. **Load before rendering.** `load_font` before drawing or capturing text in a web font, so the
    first frame does not use the fallback. `loaded: false` means the fallback will show.
 3. **Set up the scale.** `generate_type_hierarchy` for named tokens and ready CSS custom
@@ -62,7 +66,7 @@ what this machine has.
 
 | Tool | When to use | Returns |
 | --- | --- | --- |
-| `list_fonts` | Discover families the host offers; filter by `category`, `source`, `weight`, `style`, `query`; `limit` default 50 | `{ fonts: [{ family, category, weights, styles, isVariable?, source }], total, truncated }` |
+| `list_fonts` | Discover families the host offers; filter by `category`, `source`, `weight`, `style`, `tags`, `query`; `limit` default 50 | `{ fonts: [{ family, category, weights, styles, isVariable?, source, tags? }], total, truncated, tags: [{ tag, count }] }` |
 | `resolve_font_stack` | Turn a family (or stack) into a resilient `font-family` value for its category; also says if the provider lists it | `{ stack, families, category, available }` |
 | `suggest_type_scale` | Sizes for arbitrary integer `steps` (-12…12) from `baseSize` (px, default 16) and `ratio` (name or number, default major-third) | `{ ratio, baseSize, steps: [{ name, step, size, lineHeight, letterSpacing }] }` |
 | `generate_type_hierarchy` | Named tokens caption…display on one scale, with CSS custom properties (`prefix`, `selector`) | `{ ratio, ratioName?, baseSize, steps: { body, h1, … }, css }` |
