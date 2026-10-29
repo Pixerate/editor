@@ -386,14 +386,14 @@ const FEATURES: ParityRow[] = [
     core: true,
     react: true,
     svelte: true,
-    note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; fx badges and an effects section in <LayersPanel>; six agent tools",
+    note: "Shadows, glows, bevel & emboss, satin, colour / gradient / pattern overlays and strokes, live in the tiled compositor; master switch, Scale Effects, global light; fx badges and a Layer Style section in <LayersPanel> and in Layer Properties; six agent tools",
   },
   {
     feature: "Image Provider Effects (smart filters & effect layers)",
     core: true,
     react: true,
     svelte: true,
-    note: "Filter effects from an effects provider as smart filters (pixel layers convert in the same undo step; blend, opacity, filter mask), generator and overlay effects as effect layers at the document's bit depth; rendered in the background; kept without a provider; <ImageProviderEffectsPanel>; seven agent tools",
+    note: "Filter effects from an effects provider as smart filters (pixel layers convert in the same undo step; blend, opacity, filter mask), generator and overlay effects as effect layers at the document's bit depth; rendered in the background; kept without a provider; <ImageProviderEffectsPanel> (effect layer controls and filters); seven agent tools",
   },
   {
     feature: "Image High Bit Depth (16-bit and 32-bit float layers)",

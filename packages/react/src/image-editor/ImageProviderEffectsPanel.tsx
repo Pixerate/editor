@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EFFECT_LAYER_USES, LAYER_EFFECT_MENU, effectLayerTiming, findLayer, layerEffectsPanel, type ImageEditorController, type ImageLayer, type LayerEffectKind, type SmartObjectLayer } from '@pixerate/editor/image-editor';
+import { EFFECT_LAYER_USES, effectLayerTiming, findLayer, type ImageEditorController, type ImageLayer, type SmartObjectLayer } from '@pixerate/editor/image-editor';
 import { EffectsBrowser, useEffectDescription } from '../effects';
 import { ImageEffectControls as Controls } from './ImageEffectControls';
-import { LayerEffectsPanel } from './LayerEffectsPanel';
 import { imageOutlineButtonClass } from './styles';
-import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { ImageCheckbox, ImageRange } from './controls/controls.js';
 import type { ParameterComponents } from '../parameters/index.js';
 
 export interface ImageProviderEffectsPanelProps {
@@ -17,11 +16,12 @@ export interface ImageProviderEffectsPanelProps {
 const fmt = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
 
 /**
- * Effects for the active layer, in one place. An effect layer first: its effect (change it or
+ * Provider effects for the active layer. An effect layer first: its effect (change it or
  * rasterize it), a still frame or an animation for an effect that moves, and its controls. Then
- * what is applied to any layer: provider filters (smart filters; applying one converts a pixel
- * layer to a smart object in the same undo step) and layer styles, added from one menu. New
- * effect layers come from the layers panel. Without a provider it says why nothing can be added.
+ * the provider filters applied to the layer (smart filters; applying one converts a pixel layer to
+ * a smart object in the same undo step). Layer styles (drop shadow, stroke…) are not here: they
+ * are part of the layer's properties (`LayerEffectsPanel`). New effect layers come from the layers
+ * panel. Without a provider it says why nothing can be added.
  */
 export function ImageProviderEffectsPanel({ controller, className = '', components }: ImageProviderEffectsPanelProps) {
   const [, setTick] = useState(0);
@@ -54,19 +54,9 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
   };
   const filters = layer?.type === 'smart' ? ((layer as SmartObjectLayer).smartFilters?.filters ?? []).filter((f) => f.kind === 'effect') : [];
   const generator = layer?.type === 'pixel' ? layer.generator : undefined;
-  const canFilter = !!layer && layer.type !== 'adjustment' && layer.type !== 'annotation';
-  const styles = layerEffectsPanel(layer);
+  const canFilter = !!provider && !!layer && layer.type !== 'adjustment' && layer.type !== 'annotation';
   const { description } = useEffectDescription(provider, generator?.effect);
   const timing = generator ? effectLayerTiming(generator, description) : null;
-  const addOptions = [
-    ...(provider && canFilter ? [{ value: 'filter', label: 'Filter…' }] : []),
-    ...(styles.available && !styles.readOnly ? LAYER_EFFECT_MENU.map((m) => ({ value: `style:${m.kind}`, label: m.label })) : []),
-  ];
-  const add = (value: string) => {
-    if (!value || !layer) return;
-    if (value === 'filter') setBrowse(browse === 'filter' ? null : 'filter');
-    else run(() => controller.addLayerEffect(layer.id, value.slice('style:'.length) as LayerEffectKind));
-  };
 
   // Scrubbing the frame draws the effect again: one render at a time, the latest frame wins.
   const scrub = useRef<{ next: { layerId: string; time: number; commit: boolean } | null; busy: boolean; gesture: string | null }>({ next: null, busy: false, gesture: null });
@@ -182,8 +172,10 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
       )}
       {layer && canFilter && (
         <div className="flex items-center gap-1" data-effect-part="applied">
-          <span className="flex-1 font-semibold uppercase tracking-wider text-[11px] text-foreground">{generator ? 'On this layer' : 'Effects'}</span>
-          {addOptions.length > 0 && <ImageSelect label="Add effect" value="" placeholder="Add…" options={addOptions} onChange={add} />}
+          <span className="flex-1 font-semibold uppercase tracking-wider text-[11px] text-foreground">Filters</span>
+          <button type="button" className={imageOutlineButtonClass} aria-pressed={browse === 'filter'} onClick={() => setBrowse(browse === 'filter' ? null : 'filter')}>
+            Add filter…
+          </button>
         </div>
       )}
       {browse === 'filter' && layer && (
@@ -247,9 +239,8 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
           })}
         </ol>
       )}
-      {layer && styles.available && styles.rows.length > 0 && <LayerEffectsPanel controller={controller} layerId={layer.id} heading={false} />}
-      {layer && canFilter && !generator && filters.length === 0 && styles.rows.length === 0 && (
-        <p className="text-[11px] text-muted-foreground">No effects yet. Add a filter, or a style such as a drop shadow. New effect layers are added from the layers panel.</p>
+      {layer && canFilter && !generator && filters.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties; new effect layers are added from the layers panel.</p>
       )}
       {!layer && <p className="text-[11px] text-muted-foreground">Select a layer to apply effects to it.</p>}
       {message && (

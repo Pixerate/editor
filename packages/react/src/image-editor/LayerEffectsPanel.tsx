@@ -9,7 +9,7 @@ export interface LayerEffectsPanelProps {
   /** The layer whose effects to show (default: the active layer). */
   layerId?: string | null;
   /**
-   * Show the "fx Effects" title and the "Add effect" menu (default true). Without them (inside a
+   * Show the "Layer Style" title and the "Add style" menu (default true). Without them (inside a
    * panel that adds styles from its own menu) the master switch and Scale stay.
    */
   heading?: boolean;
@@ -17,7 +17,7 @@ export interface LayerEffectsPanelProps {
 }
 
 /**
- * A layer's effects (Photoshop's layer styles): the master switch, Scale Effects, an "Add effect"
+ * A layer's effects (Photoshop's layer styles): the master switch, Scale Effects, an "Add style"
  * menu, and each effect with its enabled toggle, remove button and, when expanded, its settings.
  * Every change is one undo step (a slider drag is one step too).
  */
@@ -113,9 +113,9 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
   };
 
   return (
-    <div className={`flex flex-col gap-1.5 text-xs text-foreground ${className ?? ''}`} data-testid="layer-effects" aria-label="Layer effects" role="group">
+    <div className={`flex flex-col gap-1.5 text-xs text-foreground ${className ?? ''}`} data-testid="layer-effects" aria-label="Layer style" role="group">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-foreground">{heading ? 'fx Effects' : 'Styles'}</span>
+        <span className="font-semibold text-foreground">{heading ? 'Layer Style' : 'Styles'}</span>
         <label className="flex items-center gap-1 text-foreground">
           <ImageCheckbox label="Effects on" checked={model.enabled} disabled={model.readOnly} onChange={(on) => attempt(() => controller.setLayerEffectsEnabled(id, on))} />
           On
@@ -140,9 +140,9 @@ export const LayerEffectsPanel: React.FC<LayerEffectsPanelProps> = ({ controller
         </label>
         {heading && (
           <ImageSelect
-            label="Add effect"
+            label="Add style"
             value=""
-            placeholder="Add effect…"
+            placeholder="Add style…"
             disabled={model.readOnly}
             options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
             onChange={(v) => {

@@ -4,7 +4,8 @@
  * `remove_effect`) on layers, where filter effects become smart filters, plus `add_effect_layer`
  * for generator, overlay and title effects and `set_effect_layer` to change one (its effect, still
  * frame or animation). (Drop shadows, strokes and the other layer styles are
- * `set_layer_effect`, a different thing.)
+ * `add_layer_effect`, a different thing: the Layer Style section of Layer Properties, not the
+ * Effects panel.)
  */
 
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult, type EffectTargetEffects } from '../effects/tools.js';

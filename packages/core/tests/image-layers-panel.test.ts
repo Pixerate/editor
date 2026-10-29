@@ -11,6 +11,7 @@ import {
   layerPanels,
   CANVAS_SIZE_PRESETS,
   type GroupLayer,
+  type ImageLayer,
   type PixelLayer,
 } from '../src/image-editor';
 import { createFakeEffectProvider } from '../src/effects';
@@ -94,7 +95,8 @@ describe('layers panel view model', () => {
     const pxPanels = layerPanels(c.getLayer(pxId));
     expect(pxPanels.map((p) => p.id)).toContain('properties');
     expect(pxPanels.map((p) => p.id)).toContain('paint');
-    expect(pxPanels.map((p) => p.id)).toContain('effects');
+    // Layer Style is part of Layer Properties: no separate Layer Effects panel.
+    expect(pxPanels.map((p) => p.id)).not.toContain('effects');
 
     const adjId = c.addAdjustmentLayer('curves');
     const adjPanels = layerPanels(c.getLayer(adjId));
@@ -115,14 +117,19 @@ describe('layers panel view model', () => {
     expect(c.getLayer(id)).toMatchObject({ type: 'pixel', name: 'Sky', generator: { effect: 'fake.gradient' } });
     expect(c.getState().activeLayerId).toBe(id);
 
-    // Effect layers are added from the layers panel; with a layer, one Effects panel follows Layer
-    // Properties and takes the place of Layer Effects and Smart Filters.
+    // Effect layers are added from the layers panel; with a layer, one Effects panel (effect layer
+    // controls and filters) follows Layer Properties, which holds the layer's Layer Style.
     expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection']);
     const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
     expect(ids).toEqual(['properties', 'provider-effects', 'paint']);
-    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', 'effects']);
+    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint']);
     const smart = c.convertToSmartObject([id]);
     expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects']);
-    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', 'smart-filters', 'effects']);
+    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties']);
+    for (const type of ['pixel', 'type', 'shape', 'smart', 'group'] as const) {
+      const panels = layerPanels({ id: 'x', type } as ImageLayer, { effects: true }).map((p) => p.id);
+      expect(panels, type).not.toContain('effects');
+      expect(panels, type).not.toContain('smart-filters');
+    }
   });
 });

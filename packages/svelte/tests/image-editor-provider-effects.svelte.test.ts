@@ -66,13 +66,13 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     const { c } = setup();
     render(LayerPanel, { controller: c, panelId: "provider-effects" });
     expect(q("[data-image-provider-effects]")).toBeTruthy();
-    expect(target.textContent).toMatch(/No effects yet/);
+    expect(target.textContent).toMatch(/No filters yet/);
   });
 
-  it("applies a filter effect from the Add menu as a smart filter, edits it and removes it", async () => {
+  it("applies a filter effect from Add filter as a smart filter, edits it and removes it", async () => {
     const { c, id } = setup();
     render(ImageProviderEffectsPanel, { controller: c });
-    await choose("Add effect", "filter");
+    await click(button("Add filter…"));
     await click(q('[data-effect-id="fake.invert"]'));
     const layer = c.getLayer(id) as SmartObjectLayer;
     expect(layer.type).toBe("smart");
@@ -84,14 +84,28 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     expect((c.getLayer(id) as SmartObjectLayer).smartFilters?.filters ?? []).toEqual([]);
   });
 
-  it("adds layer styles from the same menu and lists them with the filters", async () => {
+  it("leaves layer styles to the layer's properties", async () => {
     const { c, id } = setup();
+    c.addLayerEffect(id, "drop-shadow");
     render(ImageProviderEffectsPanel, { controller: c });
-    await choose("Add effect", "style:drop-shadow");
+    expect(target.querySelector('[data-testid="layer-effects"]')).toBeNull();
+    expect(target.querySelector("select")).toBeNull();
+    expect(target.textContent).toMatch(/Layer styles such as a drop shadow are in the layer's properties/);
+  });
+
+  it("shows Layer Style in LayerPanel's properties, with its Add style menu", async () => {
+    const { c, id } = setup();
+    render(LayerPanel, { controller: c, panelId: "properties" });
+    expect(q('[data-testid="layer-effects"]').textContent).toMatch(/Layer Style/);
+    await choose("Add style", "drop-shadow");
     expect(c.getLayerEffects(id).items.map((e) => e.kind)).toEqual(["drop-shadow"]);
-    expect(q('[data-testid="layer-effects"]').textContent).toMatch(/Styles/);
-    // One Add menu: the styles list has none of its own.
-    expect(target.querySelectorAll('select[aria-label="Add effect"]').length).toBe(1);
+  });
+
+  it("has no Layer Style in properties for an adjustment layer", () => {
+    const { c } = setup();
+    c.setActiveLayer(c.addAdjustmentLayer("curves"));
+    render(LayerPanel, { controller: c, panelId: "properties" });
+    expect(target.querySelector('[data-testid="layer-effects"]')).toBeNull();
   });
 
   it("shows an effect layer's controls, changes its effect and rasterizes it", async () => {
@@ -151,9 +165,7 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     const { c } = setup(null);
     render(ImageProviderEffectsPanel, { controller: c });
     expect(target.textContent).toMatch(/No effects provider/);
-    const options = [...select("Add effect").options].map((o) => o.value);
-    expect(options).not.toContain("filter");
-    expect(options).toContain("style:drop-shadow");
+    expect(button("Add filter…")).toBeUndefined();
   });
 
   it("useImageEffectsTools registers the tools", async () => {

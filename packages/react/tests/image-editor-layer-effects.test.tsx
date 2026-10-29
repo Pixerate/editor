@@ -40,7 +40,7 @@ describe('LayerEffectsPanel (React)', () => {
   it('adds an effect, edits a setting with one undo step per drag, toggles and removes it', async () => {
     const { c, id } = setup();
     await act(async () => root.render(<LayerEffectsPanel controller={c} />));
-    await act(async () => setValue(q<HTMLSelectElement>('select[aria-label="Add effect"]'), 'drop-shadow'));
+    await act(async () => setValue(q<HTMLSelectElement>('select[aria-label="Add style"]'), 'drop-shadow'));
     const fx = c.getLayerEffects(id);
     expect(fx.items.map((e) => e.kind)).toEqual(['drop-shadow']);
     // The new effect opens with its settings.
@@ -81,7 +81,7 @@ describe('LayerEffectsPanel (React)', () => {
     const { c } = setup();
     const adj = c.addAdjustmentLayer({ kind: 'curves' });
     await act(async () => root.render(<LayerEffectsPanel controller={c} layerId={adj} />));
-    expect(container.textContent).toMatch(/Adjustment layers cannot have effects/);
+    expect(container.textContent).toMatch(/Adjustment layers cannot have a layer style/);
   });
 
   it('shows an fx badge in the layers panel that switches the effects on and off', async () => {
