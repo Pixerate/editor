@@ -115,9 +115,14 @@ describe('layers panel view model', () => {
     expect(c.getLayer(id)).toMatchObject({ type: 'pixel', name: 'Sky', generator: { effect: 'fake.gradient' } });
     expect(c.getState().activeLayerId).toBe(id);
 
-    // With nothing active the panel adds effect layers; with a layer it follows Layer Properties.
-    expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection', 'provider-effects']);
+    // Effect layers are added from the layers panel; with a layer, one Effects panel follows Layer
+    // Properties and takes the place of Layer Effects and Smart Filters.
+    expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection']);
     const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
-    expect(ids.slice(0, 2)).toEqual(['properties', 'provider-effects']);
+    expect(ids).toEqual(['properties', 'provider-effects', 'paint']);
+    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', 'effects']);
+    const smart = c.convertToSmartObject([id]);
+    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects']);
+    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', 'smart-filters', 'effects']);
   });
 });

@@ -91,6 +91,7 @@ export {
 } from '../geom';
 export * from './layers/transform-ui';
 export * from './effects';
+export { checkEffectAnimation, checkEffectTime, effectLayerTiming, hasLayersBelow, withBackgroundOpacity, type EffectLayerTiming } from './effect-layers';
 export * from './provider-effect-tools';
 export * from './playback';
 export * from './editorDocument';

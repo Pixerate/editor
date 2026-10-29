@@ -490,8 +490,12 @@ export interface LayerPanelDescriptor {
 
 export interface LayerPanelsOptions {
   /**
-   * The editor has an effects provider (`controller.effectsProvider`): adds the `provider-effects`
-   * panel, to add effect layers and to apply effects to the layer or change an effect layer's own.
+   * The editor has an effects provider (`controller.effectsProvider`): one `provider-effects`
+   * panel ("Effects") holds everything that changes how a layer looks beyond its own settings:
+   * an effect layer's effect (change it, its frame or animation, its controls), and the layer's
+   * styles (drop shadow, stroke…) and filters. It takes the place of the `effects` (Layer
+   * Effects) and `smart-filters` panels. New effect layers are added from the layers panel
+   * (`newLayerOptions`).
    */
   effects?: boolean;
 }
@@ -500,34 +504,42 @@ export interface LayerPanelsOptions {
  * Returns contextual panels that apply to the currently active layer (or layer-independent panels if null).
  */
 export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOptions = {}): LayerPanelDescriptor[] {
-  const effects: LayerPanelDescriptor[] = options.effects ? [{ id: 'provider-effects', title: 'Effects' }] : [];
   if (!layer) {
     return [
       { id: 'canvas-size', title: 'Composition Size' },
       { id: 'selection', title: 'Selection' },
-      ...effects,
     ];
   }
 
-  const panels: LayerPanelDescriptor[] = [
-    { id: 'properties', title: 'Layer Properties' },
-    ...effects,
-  ];
+  const panels: LayerPanelDescriptor[] = [{ id: 'properties', title: 'Layer Properties' }];
+  // Without a provider, layer styles keep their own panel (and a smart object's, Smart Filters).
+  const styles = (id: 'effects' | 'smart-filters', title: string) => {
+    if (!options.effects) panels.push({ id, title });
+  };
+  const effects = () => {
+    if (options.effects) panels.push({ id: 'provider-effects', title: 'Effects' });
+  };
 
   if (layer.type === 'pixel') {
+    effects();
     panels.push({ id: 'paint', title: 'Brush Options' });
-    panels.push({ id: 'effects', title: 'Layer Effects' });
+    styles('effects', 'Layer Effects');
   } else if (layer.type === 'adjustment') {
     panels.push({ id: 'adjustment', title: adjustmentKindLabel(layer.kind) });
   } else if (layer.type === 'type') {
     panels.push({ id: 'type', title: 'Typography' });
-    panels.push({ id: 'effects', title: 'Layer Effects' });
+    effects();
+    styles('effects', 'Layer Effects');
   } else if (layer.type === 'shape') {
     panels.push({ id: 'shape', title: 'Shape Options' });
-    panels.push({ id: 'effects', title: 'Layer Effects' });
+    effects();
+    styles('effects', 'Layer Effects');
   } else if (layer.type === 'smart') {
-    panels.push({ id: 'smart-filters', title: 'Smart Filters' });
-    panels.push({ id: 'effects', title: 'Layer Effects' });
+    effects();
+    styles('smart-filters', 'Smart Filters');
+    styles('effects', 'Layer Effects');
+  } else if (layer.type === 'group') {
+    effects();
   }
 
   if (layer.mask) {

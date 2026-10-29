@@ -80,8 +80,11 @@ import {
   type ParagraphStyle,
   type TextStyle,
   type TypeLayer,
+  type ImageEffectAnimation,
+  type ImageEffectGenerator,
   hasSurface,
 } from './layers/model';
+import { checkEffectAnimation, checkEffectTime, hasLayersBelow, withBackgroundOpacity } from './effect-layers';
 import {
   annotationOfShape,
   createShapeLayer,
@@ -1612,31 +1615,38 @@ export class ImageEditorController {
   /**
    * Adds an effect layer: a pixel layer drawn by a provider generator, overlay or title effect at
    * the document's size and bit depth (at `time` ms, default 0), placed like `addPixelLayer`. One
-   * undo step. Masks, blend and opacity apply as to any layer. Returns its id.
+   * undo step. Masks, blend and opacity apply as to any layer. An effect with a background of its
+   * own (`backgroundOpacity`) starts with it transparent when there are layers below it, unless
+   * `values` set it. `animate` makes it play when the document is output as an animation. Returns
+   * its id.
    */
   public async addEffectLayer(
     effect: string,
-    options: LayerPlacement & { values?: Record<string, EffectValue>; name?: string; time?: number; opacity?: number; blend?: string; id?: string } = {}
+    options: LayerPlacement & { values?: Record<string, EffectValue>; name?: string; time?: number; animate?: ImageEffectAnimation; opacity?: number; blend?: string; id?: string } = {}
   ): Promise<string> {
     const d = await this.describeEffect(effect, 'layer');
-    const values = resolveEffectValues(d, options.values);
-    const { width, height } = this.naturalSize;
-    const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time: options.time });
     const blend = parseBlend(options.blend) as BlendMode | undefined;
     if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
+    const time = checkEffectTime(options.time);
+    const animate = options.animate === undefined ? undefined : checkEffectAnimation(options.animate);
     const ids = new Set(flattenLayers(this.state.layers).map((l) => l.id));
+    const id = options.id && !ids.has(options.id) ? options.id : newLayerId();
+    const placed = placeLayer(this.state.layers, { type: 'pixel', id, name: '', visible: true, opacity: 1, blend: 'normal', surface: emptySurface(4), offset: { x: 0, y: 0 } }, this.newLayerPlacement(options));
+    const values = resolveEffectValues(d, withBackgroundOpacity(d, options.values, hasLayersBelow(placed, id)));
+    const { width, height } = this.naturalSize;
+    const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time });
     const layer: PixelLayer = {
       type: 'pixel',
-      id: options.id && !ids.has(options.id) ? options.id : newLayerId(),
+      id,
       name: options.name?.trim() || d.name,
       visible: true,
       opacity: options.opacity ?? 1,
       blend: blend ?? 'normal',
       surface: effectPixelsToSurface(pixels, this.bitDepth),
       offset: { x: 0, y: 0 },
-      generator: { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(options.time ? { time: options.time } : {}) },
+      generator: { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(time ? { time } : {}), ...(animate ? { animate } : {}) },
     };
-    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(options));
+    const next = mapLayer(placed, id, () => layer);
     this.commitLayers(next, () => {
       this.state.activeLayerId = layer.id;
       this.state.activeTarget = 'pixels';
@@ -1645,18 +1655,26 @@ export class ImageEditorController {
   }
 
   /**
-   * Draws an effect layer again with new `values` (merged over its own; `null` resets a control)
-   * or `time`, at the document's size and depth, replacing its pixels (painting on it is lost).
-   * One undo step (none with `commitToHistory` false). Returns its effect settings.
+   * Draws an effect layer again, replacing its pixels (painting on it is lost): with new `values`
+   * (merged over its own; `null` resets a control), at another `time`, or as another `effect`
+   * (a generator, overlay or title: its defaults plus `values`, with its background transparent
+   * when there are layers below; the layer keeps a name of its own, else takes the new effect's).
+   * `animate` sets how it plays in an animation (null: a still frame). One undo step (none with
+   * `commitToHistory` false). Returns its effect settings.
    */
-  public async updateEffectLayer(layerId: string, changes: { values?: Record<string, EffectValue | null>; time?: number }, commitToHistory = true): Promise<NonNullable<PixelLayer['generator']>> {
+  public async updateEffectLayer(
+    layerId: string,
+    changes: { effect?: string; values?: Record<string, EffectValue | null>; time?: number; animate?: ImageEffectAnimation | null },
+    commitToHistory = true
+  ): Promise<NonNullable<PixelLayer['generator']>> {
     const found = findLayer(this.state.layers, layerId);
     const layer = found?.layer;
     if (!layer || layer.type !== 'pixel' || !layer.generator) throw new LayerOperationError(`"${layerId}" is not an effect layer; add one with add_effect_layer.`);
     requireUnlocked(layer, 'pixels', 'draw its effect again');
     const g = layer.generator;
-    const d = await this.describeEffect(g.effect);
-    const base = { ...g.values };
+    const swap = changes.effect !== undefined && changes.effect !== g.effect;
+    const d = swap ? await this.describeEffect(changes.effect!, 'layer') : await this.describeEffect(g.effect);
+    const base: Record<string, EffectValue> = swap ? { ...d.defaults, ...withBackgroundOpacity(d, {}, hasLayersBelow(this.state.layers, layerId)) } : { ...g.values };
     const given: Record<string, EffectValue> = {};
     for (const [k, v] of Object.entries(changes.values ?? {})) {
       if (v !== null) given[k] = v;
@@ -1664,14 +1682,48 @@ export class ImageEditorController {
       else throw new LayerOperationError(`"${k}" is not a control of "${d.id}"; its controls are ${Object.keys(d.controls.properties).join(', ')}.`);
     }
     const values = { ...base, ...resolveEffectValues({ ...d, defaults: base }, given) };
-    const time = changes.time ?? g.time ?? 0;
+    const time = changes.time === undefined ? (g.time ?? 0) : checkEffectTime(changes.time);
+    const animate = changes.animate === undefined ? g.animate : changes.animate === null ? undefined : checkEffectAnimation(changes.animate);
     const { width, height } = this.naturalSize;
     const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time });
-    const generator = { ...g, values, provider: this.effects.require().id, ...(time ? { time } : {}) };
-    if (!time) delete generator.time;
-    const next = mapLayer(this.state.layers, layerId, (l) => ({ ...(l as PixelLayer), surface: effectPixelsToSurface(pixels, this.bitDepth), offset: { x: 0, y: 0 }, generator }));
+    const generator: ImageEffectGenerator = { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(time ? { time } : {}), ...(animate ? { animate } : {}) };
+    const renamed = swap && (!layer.name || layer.name === (g.name ?? g.effect));
+    const next = mapLayer(this.state.layers, layerId, (l) => ({ ...(l as PixelLayer), ...(renamed ? { name: d.name } : {}), surface: effectPixelsToSurface(pixels, this.bitDepth), offset: { x: 0, y: 0 }, generator }));
     this.commitLayers(next, undefined, commitToHistory);
     return generator;
+  }
+
+  /**
+   * The document as an animation: its visible effect layers that animate (`generator.animate`)
+   * and how long it runs, the longest of theirs (ms). Null when none animates.
+   */
+  public getAnimation(): { duration: number; layerIds: string[] } | null {
+    const layers = flattenLayers(this.state.layers).filter((l): l is PixelLayer => l.type === 'pixel' && l.visible && !!l.generator?.animate);
+    if (!layers.length) return null;
+    return { duration: Math.max(...layers.map((l) => l.generator!.animate!.duration)), layerIds: layers.map((l) => l.id) };
+  }
+
+  /**
+   * Renders the document `time` ms into its animation (see `getAnimation`), like `renderExport`:
+   * each animating effect layer drawn at its own `time` plus `time` (an effect that loops keeps
+   * looping past its duration), every other layer as it is. Nothing in the document changes.
+   */
+  public async renderAnimationFrame(time: number, options?: ExportOptions): Promise<HTMLCanvasElement> {
+    if (!(Number.isFinite(time) && time >= 0)) throw new LayerOperationError('time must be a number of ms from 0.');
+    const source = this.drawSource();
+    if (!source) return this.renderer.createCanvas(1, 1);
+    this.syncViews();
+    const { width, height } = this.naturalSize;
+    const surfaces = new Map<string, PixelSurface>();
+    for (const l of flattenLayers(this.state.layers)) {
+      if (l.type !== 'pixel' || !l.visible || !l.generator?.animate) continue;
+      const g = l.generator;
+      const pixels = await this.effectsEngine.renderLayer(g.effect, g.values, { width, height, depth: this.bitDepth, time: (g.time ?? 0) + time });
+      surfaces.set(l.id, effectPixelsToSurface(pixels, this.bitDepth));
+    }
+    let layers = this.state.layers;
+    for (const [id, surface] of surfaces) layers = mapLayer(layers, id, (l) => ({ ...(l as PixelLayer), surface, offset: { x: 0, y: 0 } }));
+    return this.renderer.renderExport(source, { ...this.state, layers }, options);
   }
 
   /** Turns an effect layer into a plain pixel layer keeping its pixels (one undo step). */

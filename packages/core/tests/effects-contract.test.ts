@@ -150,7 +150,7 @@ describe('effects contract: fake provider', () => {
 describe('effects contract: helpers', () => {
 	it('resolveEffectValues merges defaults and names every bad control', async () => {
 		const d = await createFakeEffectProvider().describe('fake.gradient');
-		expect(resolveEffectValues(d, { angle: 0 })).toEqual({ from: '#1e3a8a', to: '#f472b6', angle: 0, spin: 0 });
+		expect(resolveEffectValues(d, { angle: 0 })).toEqual({ from: '#1e3a8a', to: '#f472b6', angle: 0, spin: 0, opacity: 1 });
 		try {
 			resolveEffectValues(d, { angle: 400, nope: 1 });
 			throw new Error('should fail');
