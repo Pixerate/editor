@@ -136,6 +136,26 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     expect(c.getAnimation()).toBeNull();
   });
 
+  it("keeps the frame slider mounted while it is dragged", async () => {
+    const { c } = setup();
+    const id = await c.addEffectLayer("fake.gradient");
+    render(ImageProviderEffectsPanel, { controller: c });
+    await settle();
+    const frame = q<HTMLInputElement>('input[aria-label="Frame"]');
+    // Each step of a drag edits the layer; the slider under the pointer must survive it, or
+    // the browser ends the drag.
+    for (const value of ["500", "1000", "1500"]) {
+      frame.value = value;
+      frame.dispatchEvent(new Event("input", { bubbles: true }));
+      flushSync();
+      expect(frame.isConnected).toBe(true);
+      expect(q('input[aria-label="Frame"]')).toBe(frame);
+      await settle();
+      expect(q('input[aria-label="Frame"]')).toBe(frame);
+    }
+    expect((c.getLayer(id) as PixelLayer).generator!.time).toBe(1500);
+  });
+
   it("hides frames for an effect that does not move", async () => {
     const provider = createFakeEffectProvider();
     const { c } = setup(provider);

@@ -24,9 +24,14 @@ export function useEffects(host: EffectsHost | null | undefined | (() => Effects
 export function effectDescriptionOf(provider: () => EffectProvider | null | undefined, effect: () => string | null | undefined): { readonly description: EffectDescription | null; readonly error: string | null } {
   let description = $state.raw<EffectDescription | null>(null);
   let error = $state<string | null>(null);
+  // Through deriveds, so the description reloads only when the provider or the id changes, not
+  // whenever an object the getters read from does (each edit of an effect layer replaces it, and
+  // clearing the description mid-drag takes the controls that need it off the page).
+  const currentProvider = $derived(provider());
+  const currentId = $derived(effect());
   $effect(() => {
-    const p = provider();
-    const id = effect();
+    const p = currentProvider;
+    const id = currentId;
     description = null;
     error = null;
     if (!p || !id) return;
