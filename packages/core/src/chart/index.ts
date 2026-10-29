@@ -12,6 +12,7 @@ export * from './stats.js';
 export * from './trend.js';
 export * from './errorbars.js';
 export * from './layout.js';
+export * from './layout-streamgraph.js';
 export { MAX_CHART_DATA_LABELS, MAX_CHART_LINE_POINTS, MAX_CHART_MARKERS } from './layout-cartesian.js';
 export * from './svg.js';
 export * from './raster.js';

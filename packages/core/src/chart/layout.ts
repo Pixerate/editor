@@ -1,6 +1,7 @@
 // The legend height cap and the final non-finite pass follow gridcraft-main/crates/chart/src/render.rs
 // (`legend`, `finalize`) (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 import { layoutCartesian, layoutXy, trendlineLegendItems } from './layout-cartesian.js';
+import { layoutStreamgraph } from './layout-streamgraph.js';
 import { applyHighlight, chartAnnotationFamily, drawCallouts, drawNote, noteHeight } from './layout-annotations.js';
 import { layoutBarRace, layoutBox, layoutChoropleth, layoutFunnel, layoutHistogram, layoutLikert, layoutParliament, layoutPie, layoutRadar, layoutSankey, layoutSlope, layoutSunburst, layoutTreemap, layoutTreemapTree, layoutWaterfall } from './layout-families.js';
 import { estimateChartTextWidth, sameChartSelection, type ChartLayoutOptions, type FamilyResult, type LayoutCtx } from './layout-shared.js';
@@ -194,6 +195,8 @@ export function layoutChart(spec: ChartSpec, options: ChartLayoutOptions): Chart
 		}
 		case 'barrace':
 			return finish(layoutBarRace(ctx, area, options.raceFrame));
+		case 'streamgraph':
+			return finish(layoutStreamgraph(ctx, area, visible));
 		case 'sankey':
 			if (!spec.links.length) {
 				ctx.warn('type-fallback', 'A Sankey diagram needs flows (set_chart_links); it is drawn as a bar chart until then.');

@@ -108,7 +108,10 @@ export function recommendForShape(shape: Omit<ChartTableShape, 'headerRow' | 'by
 		add('line', 'Line', 'The categories are dates: a line shows change over time.');
 		add('area', 'Area', 'Shows change over time with volume.');
 		add('bar', 'Column', 'Compares each period.');
-		if (shape.series > 1) add('area', 'Stacked area', 'Shows how the parts add up over time.', 'stacked');
+		if (shape.series > 1) {
+			add('area', 'Stacked area', 'Shows how the parts add up over time.', 'stacked');
+			add('streamgraph', 'Streamgraph', 'Shows changing proportions and overall volume as an organic stream.');
+		}
 		if (shape.series >= 5 && shape.points >= 3) add('barrace', 'Bar race', 'Many series over time: an animated ranking shows who leads when.');
 		return out;
 	}

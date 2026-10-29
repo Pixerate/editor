@@ -142,6 +142,12 @@ export function describeChart(spec: ChartSpec, series = spec.series.filter((s) =
 		const pct = (v: number) => `${Math.round(v * 100)}%`;
 		return `${head} of ${spec.categories.length} questions with ${answers.length} answers from ${answers[0]?.name} to ${answers[answers.length - 1]?.name}. Most positive: ${best[0]?.c} (${pct(best[0]?.share ?? 0)}); least: ${best[best.length - 1]?.c} (${pct(best[best.length - 1]?.share ?? 0)}).`;
 	}
+	if (family === 'streamgraph') {
+		const n = spec.categories.length;
+		const totals = spec.categories.map((_, i) => spec.series.filter((x) => !x.hidden).reduce((sum, s) => sum + Math.max(0, s.values[i] ?? 0), 0));
+		const maxTotal = Math.max(0, ...totals);
+		return `${head} of ${series.length} series over ${n} categories${n ? ` (${spec.categories[0]} to ${spec.categories[n - 1]})` : ''}, stacked symmetrically around a center baseline with a peak volume of ${fmt(maxTotal)}.`;
+	}
 	if (family === 'waterfall') {
 		const s = spec.series.find((x) => !x.hidden)!;
 		const steps = s.values.filter((v, i) => v !== null && Number.isFinite(v) && !/\b(sub)?total\b/i.test(spec.categories[i] ?? '')) as number[];

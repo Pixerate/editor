@@ -39,7 +39,7 @@ export interface ChartTooltipOptions {
 }
 
 // Families whose point targets index straight into `series.values`.
-const VALUE_FAMILIES = new Set<ChartFamily>(['cartesian', 'xy', 'pie', 'radar', 'waterfall', 'funnel', 'parliament', 'slope']);
+const VALUE_FAMILIES = new Set<ChartFamily>(['cartesian', 'xy', 'pie', 'radar', 'waterfall', 'funnel', 'parliament', 'slope', 'streamgraph']);
 // Families that colour (and name) each category rather than each series.
 const SLICE_FAMILIES = new Set<ChartFamily>(['pie', 'funnel', 'parliament']);
 
