@@ -56,6 +56,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `FontFaceSet.check()` answers whether loading the matching faces *in the set* would be needed. When no `@font-face` in the set matches the family, nothing needs loading, so it returns `true`. It says nothing about installed system fonts.
 - **Solution / Workaround**: `createSystemFontProvider` never uses `check()`. It answers from the metadata catalog (what is commonly installed), or from `queryLocalFonts()` when the host opts in (it prompts for permission, so it is only called when passed in). Web fonts report their own load state through `createWebFontProvider(...).loaded()`. Always ship a family inside a `resolveFontFallback` stack.
 
+### [core/typography] Google Fonts Rejects Faces a Family Does Not Have, and Its Catalog Has No CORS
+
+- **Issue / Symptom**: Loading `Anton` at weight 700 through `fonts.googleapis.com/css2?family=Anton:ital,wght@0,700` returns HTTP 400, so the whole stylesheet fails and no face loads. In a browser, `fetch('https://fonts.google.com/metadata/fonts')` fails with a CORS error.
+- **Root Cause**: The css2 API answers only for faces the family ships (Anton has just 400), and the metadata endpoint sends no `Access-Control-Allow-Origin`. The stylesheets themselves (`fonts.googleapis.com`) and font files (`fonts.gstatic.com`) are fine cross-origin.
+- **Solution / Workaround**: `createStylesheetFontProvider` asks for the nearest weight the family lists (any weight for a variable font) and falls back to `normal` when the family has no italic; the browser synthesises the rest. `createGoogleFontsProvider({ catalog })` takes the metadata from the host, so a browser host fetches it through its own server and may pass the catalog already built with `googleFontsCatalog`.
+
 ### [core/color] Accessible Colour Suggestions Must Be Judged After Rounding to Hex
 
 - **Issue / Symptom**: `check_color_contrast` (and the new typography check) sometimes suggested a foreground that failed AA when checked again, e.g. 4.48:1 for a 4.5:1 target.
