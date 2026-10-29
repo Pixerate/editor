@@ -47,6 +47,7 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 	if (typeof e.transparent !== 'boolean') at('transparent is not a boolean');
 	if (typeof e.loop !== 'boolean') at('loop is not a boolean');
 	if (e.duration !== undefined && !(e.duration > 0)) at('duration must be a positive number of ms when present');
+	if (e.backgroundOpacity !== undefined && (typeof e.backgroundOpacity !== 'string' || !e.backgroundOpacity)) at('backgroundOpacity must name a control when present');
 }
 
 function checkDescription(id: string, d: EffectDescription, issues: EffectConformanceIssue[]) {
@@ -60,6 +61,11 @@ function checkDescription(id: string, d: EffectDescription, issues: EffectConfor
 		if (!(name in (d.defaults ?? {}))) at(`control "${name}" has no default`);
 	}
 	for (const name of Object.keys(d.defaults ?? {})) if (!(name in (c?.properties ?? {}))) at(`default "${name}" is not a control`);
+	if (d.backgroundOpacity !== undefined) {
+		const control = c?.properties?.[d.backgroundOpacity];
+		if (!control) at(`backgroundOpacity "${d.backgroundOpacity}" is not a control`);
+		else if (control.type !== 'number' || control.minimum !== 0 || control.maximum !== 1) at(`backgroundOpacity "${d.backgroundOpacity}" must be a number control from 0 to 1`);
+	}
 	for (const e of effectValueErrors(d, d.defaults)) at(`default ${e.path}: ${e.message}`);
 	for (const p of d.presets ?? []) for (const e of effectValueErrors(d, p.values)) at(`preset "${p.name}" ${e.path}: ${e.message}`);
 	for (const input of d.inputs ?? []) {

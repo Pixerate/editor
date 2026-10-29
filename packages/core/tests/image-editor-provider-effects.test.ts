@@ -119,7 +119,7 @@ describe('image provider effects: smart filters', () => {
     d.loadJSON(json);
     expect(d.lastLoadProblems).toEqual([]);
     expect((d.getLayer(id) as SmartObjectLayer).smartFilters?.filters[0]).toMatchObject({ kind: 'effect', effect: 'fake.tint', values: { color: '#102030', amount: 0.5 } });
-    expect((d.getLayer(layer) as PixelLayer).generator).toEqual({ effect: 'fake.gradient', provider: 'fake', name: 'Gradient', values: { from: '#1e3a8a', to: '#f472b6', angle: 0, spin: 0 } });
+    expect((d.getLayer(layer) as PixelLayer).generator).toEqual({ effect: 'fake.gradient', provider: 'fake', name: 'Gradient', values: { from: '#1e3a8a', to: '#f472b6', angle: 0, spin: 0, opacity: 0 } });
     // The effect layer keeps its pixels without a provider.
     expect(pixel(d, layer)).toEqual(pixel(c, layer));
     expect(JSON.parse(JSON.stringify(d.toJSON())).layers).toEqual(json.layers);
@@ -145,7 +145,7 @@ describe('image provider effects: without a provider', () => {
 describe('image provider effects: effect layers', () => {
   it('adds a generator layer at document size, redraws it with new values and rasterizes it', async () => {
     const c = setup();
-    const id = await c.addEffectLayer('fake.gradient', { values: { from: '#000000', to: '#ffffff', angle: 0 } });
+    const id = await c.addEffectLayer('fake.gradient', { values: { from: '#000000', to: '#ffffff', angle: 0, opacity: 1 } });
     const layer = c.getLayer(id) as PixelLayer;
     expect(layer).toMatchObject({ type: 'pixel', name: 'Gradient', generator: { effect: 'fake.gradient' } });
     expect(c.getState().activeLayerId).toBe(id);
@@ -156,6 +156,70 @@ describe('image provider effects: effect layers', () => {
     c.rasterizeEffectLayer(id);
     expect((c.getLayer(id) as PixelLayer).generator).toBeUndefined();
     expect(pixel(c, id, 3)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('starts an effect with its own background transparent over other layers, opaque at the bottom', async () => {
+    const c = setup();
+    const base = c.getLayers()[0].id;
+    const over = await c.addEffectLayer('fake.gradient');
+    expect((c.getLayer(over) as PixelLayer).generator!.values.opacity).toBe(0);
+    expect(pixel(c, over)[3]).toBe(0);
+    // Values given win; at the bottom of the stack the effect keeps its default.
+    const kept = await c.addEffectLayer('fake.gradient', { values: { opacity: 0.5 } });
+    expect((c.getLayer(kept) as PixelLayer).generator!.values.opacity).toBe(0.5);
+    const bottom = await c.addEffectLayer('fake.gradient', { belowId: base });
+    expect((c.getLayer(bottom) as PixelLayer).generator!.values.opacity).toBe(1);
+    // An overlay has no background of its own to fade.
+    const bar = await c.addEffectLayer('fake.bar');
+    expect(Object.keys((c.getLayer(bar) as PixelLayer).generator!.values)).not.toContain('opacity');
+  });
+
+  it('changes the effect of an effect layer in one undo step, keeping a name of its own', async () => {
+    const c = setup();
+    const id = await c.addEffectLayer('fake.bar');
+    const before = steps(c);
+    const g = await c.updateEffectLayer(id, { effect: 'fake.gradient', values: { from: '#ff0000', to: '#ff0000' } });
+    expect(g).toMatchObject({ effect: 'fake.gradient', name: 'Gradient', values: { from: '#ff0000', opacity: 0, angle: 90 } });
+    expect(c.getLayer(id)?.name).toBe('Gradient');
+    expect(steps(c)).toBe(before + 1);
+    c.setLayerProperties(id, { name: 'Sky' });
+    await c.updateEffectLayer(id, { effect: 'fake.bar' });
+    expect(c.getLayer(id)?.name).toBe('Sky');
+    await expect(c.updateEffectLayer(id, { effect: 'fake.invert' })).rejects.toThrow(/apply_effect/);
+    c.undo();
+    c.undo();
+    expect((c.getLayer(id) as PixelLayer).generator!.effect).toBe('fake.gradient');
+  });
+
+  it('keeps a still frame or an animation, and renders the document at a time into it', async () => {
+    const c = setup();
+    const id = await c.addEffectLayer('fake.gradient', { values: { from: '#000000', to: '#ffffff', angle: 0, spin: 180, opacity: 1 }, time: 1000 });
+    expect(c.getAnimation()).toBeNull();
+    await c.updateEffectLayer(id, { animate: { duration: 2500 } });
+    expect((c.getLayer(id) as PixelLayer).generator).toMatchObject({ time: 1000, animate: { duration: 2500 } });
+    const other = await c.addEffectLayer('fake.bar', { animate: { duration: 4000 } });
+    expect(c.getAnimation()).toEqual({ duration: 4000, layerIds: [id, other] });
+    c.setLayerProperties(other, { visible: false });
+    expect(c.getAnimation()).toEqual({ duration: 2500, layerIds: [id] });
+    await expect(c.updateEffectLayer(id, { animate: { duration: 0 } })).rejects.toThrow(/animate.duration/);
+    await expect(c.updateEffectLayer(id, { time: -1 })).rejects.toThrow(/time must be/);
+    const render = vi.spyOn((c as any).effectsEngine, 'renderLayer');
+    const surface = (c.getLayer(id) as PixelLayer).surface;
+    await c.renderAnimationFrame(500);
+    expect(render).toHaveBeenCalledWith('fake.gradient', expect.any(Object), expect.objectContaining({ time: 1500 }));
+    // Rendering a frame changes nothing in the document.
+    expect((c.getLayer(id) as PixelLayer).surface).toBe(surface);
+    await c.updateEffectLayer(id, { animate: null });
+    expect((c.getLayer(id) as PixelLayer).generator!.animate).toBeUndefined();
+    expect(c.getAnimation()).toBeNull();
+  });
+
+  it('round-trips a still frame and an animation through JSON', async () => {
+    const c = setup();
+    const id = await c.addEffectLayer('fake.gradient', { time: 750, animate: { duration: 3000 } });
+    const d = setup();
+    d.loadJSON(JSON.parse(JSON.stringify(c.toJSON())));
+    expect((d.getLayer(id) as PixelLayer).generator).toMatchObject({ time: 750, animate: { duration: 3000 } });
   });
 
   it('renders at the document bit depth', async () => {
@@ -186,7 +250,7 @@ describe('image provider effect tools', () => {
   const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
   it('lists the tools, read-only hides the writes', () => {
-    expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'add_effect_layer']);
+    expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'add_effect_layer', 'set_effect_layer']);
     const registry = new ToolRegistry();
     registry.register(createImageEffectsToolProvider(setup(), { readOnly: 'Locked for review.' }));
     expect(registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
@@ -211,6 +275,19 @@ describe('image provider effect tools', () => {
     const removed = await registry.callTool('remove_effect', { target: lid, effect: 'generator' });
     expect((removed.structuredContent as any).effects).toEqual([]);
     expect(text(await registry.callTool('remove_effect', { target: id, effect: 'nope' }))).toMatch(/no provider effect "nope"/);
+  });
+
+  it('changes an effect layer\'s effect, frame and animation through set_effect_layer', async () => {
+    const { c, registry } = tools();
+    const lid = (await registry.callTool('add_effect_layer', { effect: 'fake.bar', animate: { duration: 1200 } })).structuredContent as any;
+    expect(c.getAnimation()).toMatchObject({ duration: 1200 });
+    const r = await registry.callTool('set_effect_layer', { layerId: lid.layerId, effect: 'fake.gradient', time: 400, animate: null });
+    expect(r.isError).toBeFalsy();
+    expect((r.structuredContent as any).effects[0]).toMatchObject({ effect: 'fake.gradient', time: 400 });
+    expect(c.getAnimation()).toBeNull();
+    expect(text(await registry.callTool('set_effect_layer', { layerId: lid.layerId, animate: { duration: 0 } }))).toMatch(/duration/);
+    const plain = solid(c, [0, 0, 0, 255]);
+    expect(text(await registry.callTool('set_effect_layer', { layerId: plain, time: 1 }))).toMatch(/not an effect layer/);
   });
 
   it('without a provider: read tools say so, write tools refuse', async () => {

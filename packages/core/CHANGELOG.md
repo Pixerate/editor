@@ -1,5 +1,26 @@
 # @pixerate/editor
 
+## 0.177.0
+
+### Minor Changes
+
+- 17663ce: Web font services for typography. `createStylesheetFontProvider` loads fonts from any service that serves CSS: `loadFont` adds the face's stylesheet once (asking for the nearest weight and a style the family has, since services reject the others) and resolves when `document.fonts` has the face. `createGoogleFontsProvider({ catalog })` does this for Google Fonts or a css2-compatible mirror; the host supplies the metadata (fonts.google.com allows no cross-origin reads), and `googleFontsCatalog` and `googleFontsStylesheetUrl` are exported for hosts that fetch or build it themselves. The catalog lists the most popular families first and files a family classified as display, handwriting or monospace under that category (Anton is a sans serif classified as display).
+
+  `FontSummary.tags` carries a provider's classes (`display`, `slab-serif`, `variable-wdth`…), `filterFonts` takes `tags`, and `list_fonts` takes `tags` and returns the tags of every font it matched with their counts, so an agent can narrow a large web catalog to faces with the character it wants.
+
+## 0.176.0
+
+### Minor Changes
+
+- 9de2389: Effect layers: transparent backgrounds, still frames or animation, changing the effect, and one Effects panel.
+
+  - Effects contract: `EffectSummary.backgroundOpacity` names a 0–1 control that fades the effect's own background (checked by `checkEffectProvider`). `addEffectLayer` sets it to 0 when the layer has others below it, unless `values` set it; the fake gradient has one (`opacity`).
+  - `updateEffectLayer(id, { effect })` changes an effect layer's effect in one undo step (its defaults plus `values`; a name the user gave is kept).
+  - Effect layers are a still frame (`time`) or play in an animation (`animate: { duration }`, saved with the document). `getAnimation()` reports the animating layers and the animation's length; `renderAnimationFrame(time)` renders the document at a time into it without changing it. `effectLayerTiming` gives the panels' view.
+  - Agent tools: `add_effect_layer` takes `animate`; new `set_effect_layer` changes an effect layer's effect, frame or animation.
+  - One Effects panel (`ImageProviderEffectsPanel`): an effect layer's effect (Change…, Rasterize), Still frame / Animate with a frame scrubber and length, and its controls; then the layer's filters and layer styles, added from one Add menu. `layerPanels(layer, { effects: true })` no longer lists Layer Effects or Smart Filters separately, and no longer shows Effects with no layer selected: new effect layers come from the layers panel. `LayerEffectsPanel` takes `heading={false}` to drop its own title and Add menu.
+  - Fix: effect controls whose schema is an `anyOf` (Flair's colours: sRGB channels or a CSS string) were left out of `effectParameterFields`, so effect panels showed no colour controls; they are now edited as the shape of their default.
+
 ## 0.175.0
 
 ### Minor Changes

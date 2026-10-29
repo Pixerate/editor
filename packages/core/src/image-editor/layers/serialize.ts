@@ -16,6 +16,7 @@ import type { SerializedSelection } from '../selection/mask';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
 import type { SerializedColorMode, SerializedColorProfile } from '../color-management';
 import {
+  MAX_EFFECT_ANIMATION_MS,
   newLayerId,
   type PsdSmartFilter,
   type EffectSmartFilter,
@@ -899,7 +900,14 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
       const filters = readFilters(r.filters);
       if (filters) layer.filters = filters;
       const generator = readEffectRef(r.generator);
-      if (generator) layer.generator = { ...generator, ...(typeof r.generator.time === 'number' && r.generator.time > 0 ? { time: r.generator.time } : {}) };
+      if (generator) {
+        const duration = r.generator.animate?.duration;
+        layer.generator = {
+          ...generator,
+          ...(typeof r.generator.time === 'number' && r.generator.time > 0 ? { time: r.generator.time } : {}),
+          ...(typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? { animate: { duration: Math.min(duration, MAX_EFFECT_ANIMATION_MS) } } : {}),
+        };
+      }
       return layer;
     }
     case 'adjustment': {

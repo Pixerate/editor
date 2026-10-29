@@ -18,6 +18,8 @@ export interface FontSummary {
 	source: FontSource;
 	/** Platforms that ship it, for system fonts. */
 	platforms?: FontPlatform[];
+	/** Lowercase, hyphenated classes from the provider, e.g. `display`, `slab-serif`, `variable-wdth`. */
+	tags?: string[];
 }
 
 export interface FontProvider {
@@ -39,6 +41,8 @@ export interface FontFilter {
 	/** Case-insensitive substring of the family name. */
 	query?: string;
 	isVariable?: boolean;
+	/** Keep fonts carrying every one of these tags (any case, spaces as hyphens). */
+	tags?: readonly string[];
 }
 
 /** Whether a font offers a weight (variable fonts offer every weight in their range). */
@@ -55,6 +59,7 @@ export function fontHasWeight(font: FontSummary, weight: FontWeight): boolean {
  */
 export function filterFonts(fonts: readonly FontSummary[], filter: FontFilter = {}): FontSummary[] {
 	const q = filter.query?.trim().toLowerCase() ?? '';
+	const wantedTags = (filter.tags ?? []).map((t) => t.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean);
 	const kept = fonts.filter(
 		(f) =>
 			(!filter.category || f.category === filter.category) &&
@@ -62,6 +67,7 @@ export function filterFonts(fonts: readonly FontSummary[], filter: FontFilter = 
 			(filter.weight === undefined || fontHasWeight(f, filter.weight)) &&
 			(!filter.style || f.styles.includes(filter.style)) &&
 			(filter.isVariable === undefined || !!f.isVariable === filter.isVariable) &&
+			(!wantedTags.length || wantedTags.every((t) => f.tags?.includes(t))) &&
 			(!q || f.family.toLowerCase().includes(q))
 	);
 	if (!q) return kept;

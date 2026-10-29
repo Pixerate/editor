@@ -17,10 +17,15 @@
     controller: ImageEditorController;
     /** The layer whose effects to show (default: the active layer). */
     layerId?: string | null;
+    /**
+     * Show the "fx Effects" title and the "Add effect" menu (default true). Without them (inside a
+     * panel that adds styles from its own menu) the master switch and Scale stay.
+     */
+    heading?: boolean;
     class?: string;
   }
 
-  let { controller, layerId = null, class: className = '' }: Props = $props();
+  let { controller, layerId = null, heading = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -84,7 +89,7 @@
   {@const id = view.id}
   <div class="flex flex-col gap-1.5 text-xs text-foreground {className}" data-testid="layer-effects" aria-label="Layer effects" role="group">
     <div class="flex flex-wrap items-center gap-2">
-      <span class="font-semibold text-foreground">fx Effects</span>
+      {#if heading}<span class="font-semibold text-foreground">fx Effects</span>{:else}<span class="font-semibold text-foreground">Styles</span>{/if}
       <label class="flex items-center gap-1 text-foreground">
         <ImageCheckbox
           label="Effects on"
@@ -109,14 +114,16 @@
         />
         %
       </label>
-      <ImageSelect
-        label="Add effect"
-        value=""
-        placeholder="Add effect…"
-        disabled={view.model.readOnly}
-        options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
-        onchange={add}
-      />
+      {#if heading}
+        <ImageSelect
+          label="Add effect"
+          value=""
+          placeholder="Add effect…"
+          disabled={view.model.readOnly}
+          options={LAYER_EFFECT_MENU.map((m) => ({ value: m.kind, label: m.label }))}
+          onchange={add}
+        />
+      {/if}
     </div>
     {#if view.model.readOnly && view.model.reason}<p class="text-muted-foreground">{view.model.reason}</p>{/if}
     <ul class="flex flex-col gap-1" aria-label="Effects">
