@@ -4,7 +4,7 @@
 // layers a call names. Pure: plans read the arguments and the state before the call.
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { PlaybackPoint, PlaybackRect, PlaybackRef, PlaybackStep } from '../tools/playback.js';
-import type { PresenceDragBox } from '../tools/presence.js';
+import type { PresenceDrag, PresenceDragBox } from '../tools/presence.js';
 import type { ImageEditorController } from './controller';
 
 /** The playback kind of an image layer (`{ kind: 'layer', id }`, as in `data-layer-id`). */
@@ -42,19 +42,31 @@ export function createImagePlaybackLocator(controller: Pick<ImageEditorControlle
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isPoint = (p: unknown): p is PlaybackPoint => !!p && typeof p === 'object' && num((p as PlaybackPoint).x) && num((p as PlaybackPoint).y);
 
-function trace(points: readonly PlaybackPoint[], max = 32): PlaybackStep[] {
+function trace(points: readonly PlaybackPoint[], max = 32, ms = 900): PlaybackStep[] {
 	const list = points.length <= max ? points : Array.from({ length: max }, (_, i) => points[Math.round((i * (points.length - 1)) / (max - 1))]!);
 	if (!list.length) return [];
 	if (list.length === 1) return [{ type: 'move', to: list[0]! }, { type: 'press' }, { type: 'release' }];
 	let total = 0;
 	for (let i = 1; i < list.length; i++) total += Math.hypot(list[i]!.x - list[i - 1]!.x, list[i]!.y - list[i - 1]!.y);
-	const ms = (i: number) => (total > 0 ? Math.max(16, (900 * Math.hypot(list[i]!.x - list[i - 1]!.x, list[i]!.y - list[i - 1]!.y)) / total) : 16);
+	const stepMs = (i: number) => (total > 0 ? Math.max(16, (ms * Math.hypot(list[i]!.x - list[i - 1]!.x, list[i]!.y - list[i - 1]!.y)) / total) : 16);
 	return [
 		{ type: 'move', to: list[0]! },
-		{ type: 'press' },
-		...list.slice(1).map((to, i): PlaybackStep => ({ type: 'drag', to, ms: ms(i + 1) })),
+		{ type: 'press', gesture: 'path' },
+		...list.slice(1).map((to, i): PlaybackStep => ({ type: 'drag', to, ms: stepMs(i + 1) })),
 		{ type: 'release' }
 	];
+}
+
+/**
+ * Cursor steps that trace closed outlines (document pixels) as lasso drags, one after another: how
+ * playback shows a selection whose shape a tool learns mid-call (`select_subject`, through
+ * `context.perform`). Long outlines are thinned to `maxPoints`; at most `maxOutlines` are traced.
+ */
+export function planOutlineTrace(outlines: readonly (readonly PlaybackPoint[])[], options: { maxOutlines?: number; maxPoints?: number } = {}): PlaybackStep[] {
+	const rings = outlines.map((ring) => ring.filter(isPoint)).filter((ring) => ring.length >= 3);
+	return rings
+		.slice(0, options.maxOutlines ?? 4)
+		.flatMap((ring) => trace([...ring, ring[0]!], options.maxPoints ?? 32, rings.length > 1 ? 700 : 1100));
 }
 
 /** A box `{ x, y, width, height }` or a line `{ x1, y1, x2, y2 }` in the arguments (or their `shape`, `box`, `rect`). */
@@ -123,15 +135,17 @@ export function withImagePlayback(provider: AgentToolProvider, surface?: string)
 
 /**
  * What a canvas draws while an agent drags on it (see `trackPresenceDrag`): in crop mode, the crop
- * box being pulled out (clamped to the image); in select mode, the marquee as a selection path.
- * The tool call that follows sets the real crop or selection.
+ * box being pulled out (clamped to the image); in select mode, the lasso traced so far (a drag
+ * with the `path` gesture) or else the marquee, as a selection path. The tool call that follows
+ * sets the real crop or selection.
  */
 export function agentDragDraft(
   mode: string,
-  box: PresenceDragBox,
+  box: PresenceDragBox | PresenceDrag,
   image: { width: number; height: number },
 ): { crop: { x: number; y: number; width: number; height: number } } | { selectionPath: PlaybackPoint[] } | null {
   if (mode === 'select') {
+    if ('gesture' in box && box.gesture === 'path' && box.path.length >= 2) return { selectionPath: box.path.map((p) => ({ x: p.x, y: p.y })) };
     return {
       selectionPath: [
         { x: box.x, y: box.y },

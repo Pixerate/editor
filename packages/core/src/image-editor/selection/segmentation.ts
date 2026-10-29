@@ -48,7 +48,8 @@ const isPoint = (p: unknown): p is ImagePoint =>
   !!p && typeof p === 'object' && Number.isFinite((p as ImagePoint).x) && Number.isFinite((p as ImagePoint).y);
 
 /** A result's polygons as lists of at least three points. */
-function polygonsOf(result: DecodedSegmentationResult): ImagePoint[][] {
+/** A result's polygon outlines (rings of at least 3 points), in image pixels. */
+export function segmentationOutlines(result: Pick<SegmentationResult, 'polygon'>): ImagePoint[][] {
   const p = result.polygon;
   if (!Array.isArray(p) || !p.length) return [];
   const rings = Array.isArray(p[0]) ? (p as ImagePoint[][]) : [p as ImagePoint[]];
@@ -61,7 +62,7 @@ function polygonsOf(result: DecodedSegmentationResult): ImagePoint[][] {
  */
 export function segmentToSelection(width: number, height: number, result: DecodedSegmentationResult): SelectionMask | null {
   let out: SelectionMask | null = null;
-  for (const ring of polygonsOf(result)) {
+  for (const ring of segmentationOutlines(result)) {
     out = combineSelections(out, polygonSelection(width, height, ring), 'add');
   }
   if (result.mask && result.mask.width > 0 && result.mask.height > 0) {

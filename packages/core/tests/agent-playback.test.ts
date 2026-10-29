@@ -192,6 +192,49 @@ describe('AgentPlayback', () => {
 		expect(log).toEqual(['move 10', 'add first', 'move 20', 'add second', 'add third']);
 	});
 
+	it('acts out steps the handler learns mid-call before its change lands', async () => {
+		const log: string[] = [];
+		const trace = tool('trace', {
+			plan: () => [{ type: 'move', to: { x: 5, y: 5 } }],
+			handler: async (_args, context) => {
+				log.push('found outline');
+				await context.perform?.([
+					{ type: 'move', to: { x: 10, y: 10 } },
+					{ type: 'press', gesture: 'path' },
+					{ type: 'drag', to: { x: 30, y: 10 } },
+					{ type: 'commit' },
+					{ type: 'release' }
+				]);
+				log.push('selected');
+				return 'ok';
+			}
+		});
+		const { registry, playback } = setup([trace]);
+		const surface = fakeSurface();
+		playback.attach('canvas', surface);
+		const steps = playback.record();
+		const seen: string[] = [];
+		surface.presence.subscribe((state) => {
+			const a = state.actors[0];
+			if (a?.pressed) seen.push(`${a.gesture ?? 'box'} ${a.x}`);
+		});
+		const result = await registry.callTool('canvas__trace', {});
+		expect(result.isError).toBeFalsy();
+		expect(log).toEqual(['found outline', 'selected']);
+		// The plan's move, its commit (the handler), then the handler's own steps (commit skipped).
+		expect(steps.map((r) => r.step.type)).toEqual(['move', 'commit', 'move', 'press', 'drag', 'release']);
+		expect(seen.at(-1)).toBe('path 30');
+		expect(surface.presence.getState().actors[0]?.gesture).toBeUndefined();
+	});
+
+	it('gives handlers no perform without playback', async () => {
+		const seen: boolean[] = [];
+		const registry = new ToolRegistry();
+		registry.register({ id: 'canvas', tools: [tool('trace', { handler: (_a, context) => (seen.push(typeof context.perform === 'function'), 'ok') })] });
+		await registry.callTool('canvas__trace', {});
+		expect(seen).toEqual([false]);
+	});
+
 	it('runs a staged handler straight through without playback', async () => {
 		const seen: boolean[] = [];
 		const registry = new ToolRegistry();

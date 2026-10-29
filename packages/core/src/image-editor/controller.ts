@@ -44,7 +44,7 @@ import {
 import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
 import { colorRange, magicWand, type ColorRangeOptions, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
-import { segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
+import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
 import type { LayerMaskProps } from './selection/layer-mask';
 import type { AdjustmentLayerMask } from './types';
@@ -4630,7 +4630,12 @@ export class ImageEditorController {
    */
   public async selectSubject(
     target: string,
-    options: SelectionCommandOptions & { maxSegments?: number; signal?: AbortSignal } = {}
+    options: SelectionCommandOptions & {
+      maxSegments?: number;
+      signal?: AbortSignal;
+      /** Called with the outlines found (image pixels; a mask-only result's bounds) before the selection changes, e.g. to trace them with an agent's cursor. */
+      beforeApply?: (outlines: ImagePoint[][]) => void | Promise<void>;
+    } = {}
   ): Promise<{ segments: { label: string; bounds: CropBox | null; score?: number }[] }> {
     const provider = this.segmentation;
     if (!provider) throw new Error('Select Subject needs a segmentation provider (setSegmentationProvider).');
@@ -4649,6 +4654,15 @@ export class ImageEditorController {
       return { label: r.label || description, bounds: one?.bounds ?? null, ...(r.score !== undefined ? { score: r.score } : {}) };
     });
     const mask = segmentsToSelection(width, height, decoded);
+    if (mask && options.beforeApply) {
+      const outlines = decoded.flatMap((r, i) => {
+        const rings = segmentationOutlines(r);
+        const b = segments[i]?.bounds;
+        return rings.length ? rings : b ? [[{ x: b.x, y: b.y }, { x: b.x + b.width, y: b.y }, { x: b.x + b.width, y: b.y + b.height }, { x: b.x, y: b.y + b.height }]] : [];
+      });
+      await options.beforeApply(outlines);
+      options.signal?.throwIfAborted();
+    }
     if (mask) this.shapeCommand(mask, options);
     return { segments: segments.filter((s) => s.bounds) };
   }
