@@ -197,8 +197,11 @@ All contributors and AI assistants should check this file before starting work a
 ### [core/effects] Provider Colour Controls May Be `anyOf` With No Top-Level `type`
 
 - **Issue / Symptom**: The effect parameter panels, the Effect Authoring workspace and `effect_authoring_describe` left out every colour control of Flair's effects. Mesh gradient showed Speed, Warp and Grain but none of its four colours, although Flair's `describe` and authoring session listed them all.
-- **Root Cause**: `effectControlField` picks a field from `schema.type`, and recognised a colour only as `type: "string"` with a `#rrggbb` default. Flair writes a colour as `anyOf: [[r, g, b] channels 0–1, CSS colour string, optionally { const: "currentColor" }]` with no `type`, so the control matched nothing and returned `null`. That means "no field can edit this", and the control was dropped without a word.
-- **Solution / Workaround**: An `anyOf` with a string branch and a colour default (hex, or 3 or 4 channels converted to hex) becomes a colour field. `effectFieldValue` shows channel values as hex, and the default for values a colour well can't show (`currentColor`, `rgb(…)`). When a provider's controls go missing in a panel, check `effectParameterFields` against the provider's real schema before blaming the provider: fields it can't map are left out without a warning.
+- **Root Cause**: `effectControlField` picks a field from `schema.type`. Flair writes a colour as `anyOf: [[r, g, b] channels 0–1, CSS colour string, optionally { const: "currentColor" }]` with no `type`, so the control matched nothing and returned `null`. That means "no field can edit this", and the control was dropped without a word.
+- **Solution / Workaround**:
+  - An `anyOf` control is edited as the branch that matches its default's shape: a hex default makes a colour field, and a channel default makes a vector field.
+  - Because the schema accepts both shapes, a saved value can still be channels while the field is a colour. `effectFieldValue` shows such channel values as hex, and the default for values a colour well can't show (`currentColor`, `rgb(…)`).
+  - When a provider's controls go missing in a panel, check `effectParameterFields` against the provider's real schema before blaming the provider: fields it can't map are left out without a warning.
 
 ### [core/effects] Effect Errors From a Provider May Not Be `instanceof` This Library's Classes
 

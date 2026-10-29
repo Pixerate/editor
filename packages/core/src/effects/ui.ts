@@ -32,12 +32,6 @@ function hexColour(value: unknown): string | undefined {
 	return `#${value.map((n: number) => Math.round(Math.min(1, Math.max(0, n)) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
-/**
- * Whether a control is a colour written as `anyOf` with no `type` of its own, the way Flair writes
- * them: `[r, g, b]` channels from 0 to 1, a CSS colour string, or `"currentColor"`.
- */
-const isAnyOfColour = (schema: JsonSchema) => !typeOf(schema) && !!schema.anyOf?.some((branch) => typeOf(branch) === 'string');
-
 /** Options for turning effect controls into fields. */
 export interface EffectFieldOptions {
 	/** Families offered by font controls (default: the system font catalog). */
@@ -55,8 +49,7 @@ export function isEffectFontControl(schema: JsonSchema): boolean {
 /**
  * One control as a parameter field: numbers and integers (sliders when bounded), switches,
  * choices (`enum`), font families (`format: "font"`, a choice of `options.fonts`), colours
- * (strings whose default is `#rrggbb`, or an `anyOf` of channels and a colour string whose default
- * is either), vectors (2–4 numbers) and text.
+ * (strings whose default is `#rrggbb`), vectors (2–4 numbers) and text.
  * `null` for a control no field can edit (objects, long lists).
  */
 /** The JSON Schema type a value has (`undefined` for none). */
@@ -83,10 +76,6 @@ export function effectControlField(name: string, schema: JsonSchema, fallback: E
 		return { ...base, type: type === 'integer' ? 'int' : 'number', default: typeof def === 'number' ? def : (min ?? 0), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(schema.multipleOf ? { step: schema.multipleOf } : {}) };
 	}
 	if (type === 'boolean') return { ...base, type: 'boolean', default: def === true };
-	if (isAnyOfColour(schema)) {
-		const hex = hexColour(def);
-		return hex ? { ...base, type: 'color', alpha: hex.length === 9, default: hex } : null;
-	}
 	if (isEffectFontControl(schema)) {
 		const fonts = options.fonts ?? SYSTEM_FONT_CATALOG;
 		const opts: Array<{ value: string; label: string; description: string }> = fonts.map((f) => ({ value: f.family, label: f.family, description: f.category }));
