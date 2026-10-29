@@ -101,7 +101,7 @@ function fakes(options: { failSheet?: boolean; noMatch?: boolean } = {}) {
 			if (options.failSheet) throw new Error('404');
 		}),
 		fontFaceSet: {
-			load: vi.fn(async (font: string) => (loads.push(font), options.noMatch ? [] : [{}]))
+			load: vi.fn(async (font: string, text?: string) => (loads.push(`${font} / ${text}`), options.noMatch ? [] : [{}]))
 		}
 	};
 }
@@ -141,7 +141,8 @@ describe('createStylesheetFontProvider', () => {
 		expect(listFonts).toHaveBeenCalledTimes(1);
 		// Anton has only 400: it asks for that face, not one the service would reject.
 		expect(f.sheets).toEqual(['https://fonts.test/Anton/400/normal']);
-		expect(f.loads).toEqual(['400 1em "Anton"']);
+		// With sample text, so the Latin subset (not just the one holding a space) is fetched.
+		expect(f.loads).toEqual(['400 1em "Anton" / AaBbZz09']);
 		expect(p.loaded('Anton', 700)).toBe(true);
 	});
 

@@ -10,7 +10,7 @@ import { nearestFontWeight, normalizeFontWeight } from './weight.js';
 
 /** The parts of `document.fonts` the stylesheet provider uses. */
 export interface StylesheetFontSetLike {
-	load(font: string): Promise<readonly unknown[]>;
+	load(font: string, text?: string): Promise<readonly unknown[]>;
 }
 
 export interface StylesheetFontProviderOptions {
@@ -26,6 +26,12 @@ export interface StylesheetFontProviderOptions {
 	addStylesheet?: (url: string) => Promise<void>;
 	/** Where faces are waited for (default `document.fonts`). */
 	fontFaceSet?: StylesheetFontSetLike;
+	/**
+	 * Characters the face must cover once loaded (default Latin letters and digits). Services split
+	 * a family into `unicode-range` subsets, and `document.fonts.load` without text fetches none of
+	 * the files a page needs for words.
+	 */
+	sampleText?: string;
 }
 
 function linkStylesheet(url: string): Promise<void> {
@@ -43,6 +49,8 @@ function linkStylesheet(url: string): Promise<void> {
 		doc.head.appendChild(link);
 	});
 }
+
+const SAMPLE_TEXT = 'AaBbZz09';
 
 const quoteFamily = (family: string) => `"${family.replace(/["\\]/g, '\\$&')}"`;
 
@@ -102,7 +110,7 @@ export function createStylesheetFontProvider(options: StylesheetFontProviderOpti
 				const w = listed.isVariable || !listed.weights.length ? wanted : nearestFontWeight(wanted, listed.weights);
 				const st: FontStyle = !listed.styles.length || listed.styles.includes(style ?? 'normal') ? (style ?? 'normal') : 'normal';
 				await sheet(options.stylesheetUrl(listed.family, w, st));
-				const matched = await set.load(`${st === 'normal' ? '' : `${st} `}${w} 1em ${quoteFamily(listed.family)}`);
+				const matched = await set.load(`${st === 'normal' ? '' : `${st} `}${w} 1em ${quoteFamily(listed.family)}`, options.sampleText ?? SAMPLE_TEXT);
 				if (!matched.length) throw new Error('No face matched.');
 				done.add(k);
 				return true;
