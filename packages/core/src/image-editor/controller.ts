@@ -19,6 +19,7 @@ import {
   LegacySerializedImageEditorState,
   SerializedImageEditorState,
 } from './types';
+import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -37,6 +38,7 @@ import {
   resizeSelection,
   selectionFromPixels,
   selectionFromTiles,
+  selectionFromRegion,
   serializeSelection,
   type PixelBuffer,
   type SelectionChannel,
@@ -613,6 +615,15 @@ export interface ShapeLayerInfo {
 }
 
 /** A new type layer: its text, where it goes, and its character and paragraph style. */
+/** A Type Mask: text laid out like `TextLayerInit` (no layer is made), selected by `mode`. */
+export interface TypeMaskInit extends Omit<TextLayerInit, keyof LayerPlacement | 'name' | 'opacity' | 'blend'> {
+  mode?: SelectionMode;
+  /** Feather radius in px (default 0). */
+  feather?: number;
+  /** Soft glyph edges (default true). */
+  antiAlias?: boolean;
+}
+
 export interface TextLayerInit extends LayerPlacement {
   text: string;
   /**
@@ -2791,20 +2802,64 @@ export class ImageEditorController {
    * hiding everything) or `path` (reveals inside the path given). Replaces an existing vector mask;
    * the raster mask is kept and both apply. One undo step. Returns the vector mask.
    */
-  public addVectorMask(id: string, from: 'reveal-all' | 'hide-all' | 'path' = 'reveal-all', path: VectorMaskPathInput = {}): VectorMask {
+  public addVectorMask(id: string, from: 'reveal-all' | 'hide-all' | 'path' | 'selection' = 'reveal-all', path: VectorMaskPathInput = {}, trace: SelectionToPathOptions = {}): VectorMask {
     this.vectorMaskLayer(id);
     let vm: VectorMask;
-    if (from === 'path') {
+    if (from === 'selection') {
+      // Layer › Vector Mask › Current Path, from the selection's traced outline.
+      const subpaths = this.traceSelection(trace);
+      vm = { components: [{ op: 'combine', subpaths }], fillRule: 'evenodd' };
+    } else if (from === 'path') {
       vm = { components: this.vectorMaskComponents(path) };
       if (path.fillRule === 'evenodd') vm.fillRule = 'evenodd';
     } else if (from === 'reveal-all' || from === 'hide-all') {
       if (path.components?.length || path.shape !== undefined || path.subpaths !== undefined) throw new LayerOperationError(`A ${from} vector mask starts empty; use from path to give a path.`);
       vm = { components: [], ...(from === 'reveal-all' ? { inverted: true } : {}) };
     } else {
-      throw new LayerOperationError(`Unknown vector mask source "${String(from)}". Use reveal-all, hide-all or path.`);
+      throw new LayerOperationError(`Unknown vector mask source "${String(from)}". Use reveal-all, hide-all, path or selection.`);
     }
     this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: vm }) as ImageLayer));
     return vm;
+  }
+
+  /** The selection's outline as subpaths; throws when nothing is selected or nothing is left to trace. */
+  private traceSelection(options: SelectionToPathOptions): VectorSubpath[] {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, then make a path from the selection.');
+    if (options.tolerance !== undefined && !(options.tolerance >= 0.1 && options.tolerance <= 10)) throw new LayerOperationError('tolerance must be from 0.1 to 10 px.');
+    const subpaths = selectionToSubpaths(sel, options);
+    if (!subpaths.length) throw new LayerOperationError('The selection is too small or too faint to trace (below minArea, or under half selected); lower minArea or threshold.');
+    return subpaths;
+  }
+
+  /**
+   * Make Work Path: the selection's outline as closed Bézier subpaths in document pixels, holes
+   * included (fill them even-odd), within `tolerance` px. Changes nothing. Throws without a selection.
+   */
+  public selectionToPath(options: SelectionToPathOptions = {}): { subpaths: VectorSubpath[]; svg: string; fillRule: 'evenodd'; bounds: CropBox | null; anchors: number } {
+    const subpaths = this.traceSelection(options);
+    const b = vectorMaskBounds({ components: [{ op: 'combine', subpaths }] });
+    const r = (n: number) => Math.round(n * 100) / 100;
+    return {
+      subpaths: roundSubpaths(subpaths),
+      svg: subpathsToSvgPath(subpaths),
+      fillRule: 'evenodd',
+      bounds: b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null,
+      anchors: subpaths.reduce((n, sp) => n + sp.anchors.length, 0),
+    };
+  }
+
+  /**
+   * Make Selection: fills a path (`shape`, `subpaths` or `components`, document pixels) into a
+   * selection combined with the current one by `mode`, with `feather` px and `antiAlias`. One
+   * undo step. Returns whether anything is selected.
+   */
+  public pathToSelection(path: VectorMaskPathInput, options: PathToSelectionOptions & { mode?: SelectionMode } = {}): boolean {
+    if (options.feather !== undefined && !(options.feather >= 0 && options.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    const components = this.vectorMaskComponents(path);
+    const { width, height } = this.naturalSize;
+    const mask = pathToSelectionMask(components, width, height, { ...options, fillRule: path.fillRule ?? options.fillRule });
+    return this.setSelection(mask, options.mode ?? 'replace');
   }
 
   /** Replaces a vector mask's path (its properties are kept). One undo step. Returns the vector mask. */
@@ -6096,6 +6151,57 @@ export class ImageEditorController {
    * text wrapped in `box`. Refused without a text shaper. Returns its id.
    */
   public addTextLayer(init: TextLayerInit): string {
+    const layer = this.layoutTypeLayer(init);
+    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
+    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
+    if (init.opacity !== undefined) layer.opacity = init.opacity;
+    if (init.blend !== undefined) layer.blend = init.blend;
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * Type Mask (horizontal or vertical): a selection in the shape of `text`, laid out and drawn as
+   * `addTextLayer` would place it (font, size, tracking, box, rotation), combined with the current
+   * selection by `mode`. Vertical type is laid out as vertical type layers are: columns down from
+   * (`x`, `y`), right to left, CJK upright and Latin turned. No layer is added. One undo step. Returns whether anything is selected.
+   */
+  public selectTextShape(init: TypeMaskInit): boolean {
+    const vertical = init.orientation === 'vertical';
+    if (init.orientation !== undefined && init.orientation !== 'horizontal' && !vertical) throw new LayerOperationError('orientation must be horizontal or vertical.');
+    if (init.feather !== undefined && !(init.feather >= 0 && init.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    const text = normalizeText(init.text);
+    if (!text.trim()) throw new LayerOperationError('The text is empty, so there is nothing to select; give some characters.');
+    const layer = this.layoutTypeLayer({ ...init, text, orientation: vertical ? 'vertical' : 'horizontal' });
+    const { width, height } = this.naturalSize;
+    const b = contentBounds(layer.surface);
+    const x0 = Math.max(0, b?.x ?? 0);
+    const y0 = Math.max(0, b?.y ?? 0);
+    const x1 = Math.min(width, b ? b.x + b.width : 0);
+    const y1 = Math.min(height, b ? b.y + b.height : 0);
+    let mask: SelectionMask;
+    if (!b || x1 <= x0 || y1 <= y0) mask = createSelectionMask(width, height);
+    else {
+      const rect = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+      const rgba = readRegion(layer.surface, rect);
+      const bytes = new Uint8Array(rect.width * rect.height);
+      const hard = init.antiAlias === false;
+      for (let i = 0; i < bytes.length; i++) {
+        const a = rgba[i * 4 + 3];
+        bytes[i] = hard ? (a >= 128 ? 255 : 0) : a;
+      }
+      mask = selectionFromRegion(width, height, rect, bytes);
+    }
+    if ((init.feather ?? 0) > 0 && mask.bounds) mask = modifySelectionMask(mask, 'feather', init.feather!);
+    return this.setSelection(mask.bounds ? mask : null, init.mode ?? 'replace');
+  }
+
+  /** A type layer laid out and drawn from `init` (not added): the shared part of `addTextLayer` and the type masks. */
+  private layoutTypeLayer(init: Omit<TextLayerInit, keyof LayerPlacement | 'name' | 'opacity' | 'blend'> & { name?: string }): TypeLayer {
     const text = normalizeText(init.text);
     if (!Number.isFinite(init.x) || !Number.isFinite(init.y)) throw new LayerOperationError('x and y must be numbers (document pixels).');
     const style = patchTextStyle({ ...DEFAULT_TEXT_STYLE, color: this.state.paint.foreground }, (init.style ?? {}) as Record<string, unknown>);
@@ -6108,19 +6214,9 @@ export class ImageEditorController {
     }
     const orientation = init.orientation === undefined ? 'horizontal' : textOrientation(init.orientation);
     if (init.rotation !== undefined && !Number.isFinite(init.rotation)) throw new LayerOperationError('rotation must be a number of degrees.');
-    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
-    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
     const t: AffineMatrix = [1, 0, 0, 1, init.x, init.y];
     const transform = init.rotation ? multiplyMatrices(t, rotateMatrix(init.rotation, { x: init.x, y: init.y })) : t;
-    const layer = createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, orientation, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
-    if (init.opacity !== undefined) layer.opacity = init.opacity;
-    if (init.blend !== undefined) layer.blend = init.blend;
-    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
-    this.commitLayers(next, () => {
-      this.state.activeLayerId = layer.id;
-      this.state.activeTarget = 'pixels';
-    });
-    return layer.id;
+    return createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, orientation, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
   }
 
   /**

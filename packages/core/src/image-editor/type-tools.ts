@@ -1,10 +1,11 @@
 import type { AgentTool } from '../tools/registry.js';
-import type { ImageEditorController, TextLayerInit } from './controller';
+import type { ImageEditorController, TextLayerInit, TypeMaskInit } from './controller';
 import { BLEND_MODES, type BlendMode } from './blend';
 import { findLayer } from './layers/model';
 import { LayerOperationError } from './layers/ops';
 import { requireTypeLayer } from './layers/text';
 import { describeLayer } from './layer-tools';
+import { selectionArea } from './selection/mask';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -216,5 +217,43 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     },
   };
 
-  return [listFonts, get, add, setText, setStyle, setParagraph, setFrame, setOrientation, toShape];
+  const typeMask: AgentTool = {
+    name: 'select_text_shape',
+    title: 'Select the shape of text',
+    description:
+      'Horizontal / Vertical Type Mask: selects the shape of text laid out as add_text_layer would place it (font family, size, weight, tracking, box, rotation; colour is ignored), combined with the current selection by mode. No layer is added. Vertical lays the text out as vertical type: columns down from (x, y), stacked right to left, CJK upright and Latin turned sideways. Use it to cut text out of an image (layer_via_copy), fill letters with a photo (add_layer_mask), or mask an adjustment. Check fonts with list_fonts first. One undo step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', minLength: 1, description: 'The text; \\n starts a new line (vertical: a new column).' },
+        x: { type: 'number', description: 'Document x of the origin, pixels (vertical: the first column\u2019s centre).' },
+        y: { type: 'number', description: 'Document y of the origin, pixels (horizontal: the first baseline; vertical: the top of the first column).' },
+        orientation: { ...ORIENTATION, description: 'horizontal (default) or vertical: columns top to bottom, right to left, as vertical type layers (CJK upright, Latin turned sideways unless styled upright).' },
+        box: {
+          type: 'object',
+          description: 'Wrap in this box, pixels (vertical: columns fill it from its right edge).',
+          properties: { width: { type: 'number', minimum: 1, description: 'Box width, pixels.' }, height: { type: 'number', minimum: 1, description: 'Box height, pixels.' } },
+          required: ['width', 'height'],
+          additionalProperties: false,
+        },
+        style: { type: 'object', description: 'Character style (size in px, family, weight, tracking…; colour is ignored).', properties: STYLE, additionalProperties: false },
+        paragraph: { type: 'object', description: 'Paragraph style (alignment, leading…).', properties: PARAGRAPH, additionalProperties: false },
+        rotation: { type: 'number', description: 'Degrees clockwise about the origin (default 0).' },
+        mode: { type: 'string', enum: ['replace', 'add', 'subtract', 'intersect'], description: 'How it combines with the current selection (default replace).' },
+        feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather radius in px (default 0).' },
+        antiAlias: { type: 'boolean', description: 'Soft glyph edges (default true).' },
+      },
+      required: ['text', 'x', 'y'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Select the shape of text', ...WRITE },
+    handler: (args) => {
+      const init = pick(args, ['text', 'x', 'y', 'orientation', 'box', 'style', 'paragraph', 'rotation', 'mode', 'feather', 'antiAlias']) as unknown as TypeMaskInit;
+      controller.selectTextShape(init);
+      const sel = controller.getSelection();
+      return { empty: !sel, bounds: sel?.bounds ?? null, area: Math.round(sel ? selectionArea(sel) : 0) };
+    },
+  };
+
+  return [listFonts, get, add, setText, setStyle, setParagraph, setFrame, setOrientation, toShape, typeMask];
 }

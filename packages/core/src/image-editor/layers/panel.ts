@@ -175,6 +175,7 @@ export type LayerMenuAction =
   | 'add-mask'
   | 'add-vector-mask'
   | 'add-vector-mask-hide'
+  | 'add-vector-mask-selection'
   | 'delete-vector-mask'
   | 'toggle-vector-mask'
   | 'rasterize-vector-mask'
@@ -232,6 +233,7 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'toggle-mask-link', label: active?.mask?.linked === false ? 'Link Layer Mask' : 'Unlink Layer Mask', enabled: Boolean(active?.mask && !active.mask.source) },
     { action: 'add-vector-mask', label: 'Add Vector Mask (Reveal All)', enabled: Boolean(active && active.type !== 'shape' && !active.mask?.source) },
     { action: 'add-vector-mask-hide', label: 'Add Vector Mask (Hide All)', enabled: Boolean(active && active.type !== 'shape' && !active.mask?.source) },
+    { action: 'add-vector-mask-selection', label: 'Add Vector Mask from Selection', enabled: Boolean(active && active.type !== 'shape' && !active.mask?.source) && hasSel },
     { action: 'delete-vector-mask', label: 'Delete Vector Mask', enabled: Boolean(active?.vectorMask) },
     { action: 'toggle-vector-mask', label: active?.vectorMask?.enabled === false ? 'Enable Vector Mask' : 'Disable Vector Mask', enabled: Boolean(active?.vectorMask) },
     { action: 'rasterize-vector-mask', label: 'Rasterize Vector Mask', enabled: Boolean(active?.vectorMask) },
@@ -311,6 +313,9 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
       case 'add-vector-mask':
       case 'add-vector-mask-hide':
         if (id) controller.addVectorMask(id, action === 'add-vector-mask' ? 'reveal-all' : 'hide-all');
+        break;
+      case 'add-vector-mask-selection':
+        if (id) controller.addVectorMask(id, 'selection');
         break;
       case 'delete-vector-mask':
         if (id) controller.removeVectorMask(id);

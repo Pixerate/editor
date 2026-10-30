@@ -110,6 +110,14 @@ describe('Svelte SelectionOptionsBar', () => {
     setValue(target.querySelector('input[aria-label="Feather"]')!, '4');
     expect(props.options.feather).toBe(4);
     expect(target.querySelector('[data-testid="color-range-options"]')).toBeNull();
+    // The Type Mask tools show their text, size and font.
+    expect(target.querySelector('[data-testid="type-mask-options"]')).toBeNull();
+    click(button('Vertical Type Mask'));
+    expect(props.options.tool).toBe('type-vertical');
+    setValue(target.querySelector('input[aria-label="Type mask text"]')!, 'SALE');
+    setValue(target.querySelector('input[aria-label="Type mask size"]')!, '120');
+    setValue(target.querySelector('input[aria-label="Type mask font"]')!, 'Inter');
+    expect(props.options).toMatchObject({ typeText: 'SALE', typeSize: 120, typeFamily: 'Inter' });
     click(button('Color Range'));
     expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');
@@ -318,7 +326,9 @@ describe('Svelte ChannelsPanel', () => {
     Object.defineProperty(input, 'files', { configurable: true, value: [new File([new Uint8Array([1, 2, 3])], 'Sky matte.png', { type: 'image/png' })] });
     load.mockImplementation(async () => controller.saveSelection({ name: 'Sky matte' }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 10));
+    // FileReader is asynchronous; wait for the load rather than a fixed time.
+    await vi.waitFor(() => expect(load).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
     flushSync();
     expect(load).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/), { name: 'Sky matte' });
     expect(target.querySelector('[data-testid="channel-row"][aria-current="true"]')!.textContent).toContain('Sky matte');

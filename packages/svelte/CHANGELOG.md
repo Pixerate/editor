@@ -1,5 +1,27 @@
 # @pixerate/editor-svelte
 
+## 0.141.0
+
+### Minor Changes
+
+- c3b9c8d: Type masks. `selectTextShape` (the Horizontal and Vertical Type Mask) selects the shape of text laid out as `addTextLayer` would place it (font, size, weight, tracking, box, rotation), combined by mode, with feather and anti-aliasing, without adding a layer, as one undo step. It works with any text shaper, because it uses the drawn glyphs' coverage rather than their outlines. Vertical type masks stack the characters in one column centred on the click; real vertical text layout is a follow-up in the shared text module. New agent tool `select_text_shape`. The selection tools gain `type` and `type-vertical` (a click places the text), with `typeText`, `typeSize` and `typeFamily` options, and the React and Svelte `SelectionOptionsBar` show Type Mask and Vertical Type Mask with text, size and font fields.
+
+### Patch Changes
+
+- Updated dependencies [c3b9c8d]
+  - @pixerate/editor@0.192.0
+
+## 0.140.0
+
+### Minor Changes
+
+- 313b60f: Selections ⇄ paths. `selectionToPath` (Make Work Path) traces the selection's outline into closed Bézier subpaths in document pixels, holes included (fill even-odd), within `tolerance` px (default 0.5), with square corners kept square. It returns compact SVG path data. `pathToSelection` (Make Selection) fills a path into the selection by mode, with feather and anti-aliasing. `addVectorMask(id, 'selection')`, the agent tool `add_vector_mask` `from: "selection"`, and a new Layers panel menu item "Add Vector Mask from Selection" turn the selection into a sharp, editable vector mask. New agent tools: `selection_to_path` (read-only) and `path_to_selection`. Lower level: `selectionToSubpaths`, `subpathsToSvgPath`, and `traceField` (now exported) with `squareCorners`. `getVectorMask` bounds now measure the curves rather than their handles.
+
+### Patch Changes
+
+- Updated dependencies [313b60f]
+  - @pixerate/editor@0.191.0
+
 ## 0.139.0
 
 ### Minor Changes
