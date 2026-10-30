@@ -1268,6 +1268,37 @@ export const VECTOR_TOOL_GLYPHS: Readonly<Record<VectorTool, string>> = {
 	distort: '≈'
 };
 
+/** A toolbar slot: related tools sharing one button, the first of them its default. */
+export interface VectorToolGroup {
+	id: string;
+	label: string;
+	tools: readonly VectorTool[];
+}
+
+/**
+ * Every tool in `VECTOR_TOOLS`, each in exactly one group, in toolbar order. Compact toolbars
+ * show one button per group and offer the rest of its tools in a flyout.
+ */
+export const VECTOR_TOOL_GROUPS: readonly VectorToolGroup[] = [
+	{ id: 'select', label: 'Select', tools: ['select'] },
+	{ id: 'direct', label: 'Direct Select', tools: ['direct'] },
+	{ id: 'draw', label: 'Draw', tools: ['pen', 'pencil', 'width'] },
+	{ id: 'shape', label: 'Shapes', tools: ['rect', 'ellipse', 'polygon', 'star', 'line'] },
+	{ id: 'frame', label: 'Frame', tools: ['frame'] },
+	{ id: 'type', label: 'Type', tools: ['type', 'typePath'] },
+	{ id: 'build', label: 'Build', tools: ['shapeBuilder', 'paintBucket'] },
+	{ id: 'cut', label: 'Cut', tools: ['eraser', 'scissors', 'knife'] },
+	{ id: 'gradient', label: 'Gradient', tools: ['gradient'] },
+	{ id: 'blend', label: 'Blend', tools: ['blend'] },
+	{ id: 'reshape', label: 'Reshape', tools: ['envelope', 'distort'] },
+	{ id: 'connector', label: 'Connector', tools: ['connector'] }
+];
+
+/** The group holding `tool`. */
+export function vectorToolGroup(tool: VectorTool): VectorToolGroup {
+	return VECTOR_TOOL_GROUPS.find((group) => group.tools.includes(tool)) ?? VECTOR_TOOL_GROUPS[0];
+}
+
 /** Tools that drag out a shape (they snap while hovering). */
 const SHAPE_TOOLS: ReadonlySet<VectorTool> = new Set(['rect', 'ellipse', 'polygon', 'star', 'line', 'frame']);
 
