@@ -1,5 +1,42 @@
 # @pixerate/editor-svelte
 
+## 0.134.0
+
+### Minor Changes
+
+- 6fde02b: Image editor selections: one agent tool per operation, Color Range presets and tool, and a selection-masking workflow skill.
+
+  - New agent tools: `select_all`, `deselect`, `invert_selection`, `select_rect`, `select_ellipse`, `select_polygon`, `magic_wand` (with `distance`), `select_color_range` (samples or a preset, `fuzziness`, `localized`, `invert`), `load_selection_from_image`, `load_selection_from_mask` and `set_selection_display`. `select_region` and `select_by_color` still work but are deprecated and will be removed in the next minor release.
+  - Core: `colorRangePreset` / `skinToneRange` and `COLOR_RANGE_PRESETS`, `controller.selectColorRangePreset`, `invert` on selection commands, `controller.setSelectionDisplay` / `getSelectionDisplay` (`'ants' | 'quickMask' | 'none'`), `invert` on `selectionFromLayerMask`, and `maskThumbnailClick`.
+  - `SelectionGesture` and `SelectionToolOptions`: a `range` (Color Range) tool, where a click samples a colour, Shift-click adds one and Alt-click removes one; `feather`, `fuzziness`, `localized` and `rangeInvert` options.
+  - React and Svelte: `SelectionOptionsBar` gains the wand's colour distance, a Feather field, Color Range options and presets, and an Ants / Quick Mask / Hidden display switch (new `selectionDisplay` prop). In `LayersPanel`, Ctrl/⌘-click on a mask thumbnail loads the mask as the selection (with Shift to add, Alt to subtract).
+  - Skills: new workflow skill `pixerate-image-selection-masking`; `pixerate-image-editor` documents the new tools.
+
+- cee9b4f: Image editor: the simple selection tools Photoshop has and we lacked.
+
+  - **Polygonal lasso** (`polygon` tool in `SelectionGesture`):
+    - Click to add corners. Shift snaps to 45°. Drag for a free-hand stretch.
+    - Double-click, Enter or a click on the first corner closes it. Backspace removes a corner and Escape cancels (`gesture.key`).
+    - The React and Svelte canvases route the keys and keep the outline showing between clicks.
+  - **Single row and column marquees** (`row` / `column` tools), `controller.selectLine` and the agent tool `select_line`.
+  - **Reselect:** `controller.reselect` / `canReselect` and the tool `reselect`.
+  - **Grow and Similar, by colour:**
+    - `growSelection` / `selectSimilar` in core, the same on the controller, and the tools `grow_selection` / `select_similar`.
+    - The distance-based operation is now called Expand / Contract: `modify_selection` `op` takes `expand` / `contract`, and `grow` / `shrink` still work as aliases.
+  - **Select a layer's pixels:**
+    - `controller.selectLayerTransparency`, the tool `select_layer_transparency` and `layerThumbnailClick`.
+    - Ctrl/⌘-click a layer thumbnail in `LayersPanel`, with Shift to add and Alt to subtract.
+    - A "Select Layer Pixels" item in the layer menu.
+  - **New mask sources:** `addLayerMask` and `add_layer_mask` take `from: 'hide-selection'` and `'transparency'`. The layer menu gets "Add Mask Hiding Selection" and "Add Mask from Transparency".
+  - **Options bar:** Reselect, Grow and Similar buttons, Expand and Contract labels, and a hint for the polygonal lasso.
+  - **Skills:** `pixerate-image-editor` and `pixerate-image-selection-masking` cover the new tools.
+
+### Patch Changes
+
+- Updated dependencies [6fde02b]
+- Updated dependencies [cee9b4f]
+  - @pixerate/editor@0.184.0
+
 ## 0.133.3
 
 ### Patch Changes
