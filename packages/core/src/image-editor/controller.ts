@@ -37,6 +37,8 @@ import type { ImageHistogram } from './histogram';
 import { applyAdjustments } from './filters';
 import {
   combineSelections,
+  selectionArea,
+  selectionValueAt,
   createSelectionMask,
   deserializeSelection,
   fullSelection,
@@ -54,7 +56,7 @@ import {
 import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
 import { colorRange, colorRangePreset, growSelection as growSelectionMask, magicWand, selectSimilar as selectSimilarMask, type GrowSimilarOptions, type ColorRangeOptions, type ColorRangePreset, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
-import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
+import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider, type SegmentationRequest } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
 import { layerMaskFromSelection, type LayerMaskProps } from './selection/layer-mask';
 import { selectionRing } from './selection/stroke';
@@ -509,6 +511,9 @@ export interface FocusAreaCommandOptions extends FocusAreaOptions {
 
 /** Options of {@link ImageEditorController.selectSky}. */
 export interface SkyCommandOptions extends SkyOptions {
+  /** With a segmentation provider set, ask it for the sky (default true); false finds it classically. */
+  useModel?: boolean;
+  signal?: AbortSignal;
   /** How the sky combines with the selection (default `replace`). */
   mode?: SelectionMode;
   /** Sample every layer (default true) or only the active pixel layer. */
@@ -517,6 +522,12 @@ export interface SkyCommandOptions extends SkyOptions {
 
 /** Options of {@link ImageEditorController.selectObject}. */
 export interface SelectObjectCommandOptions {
+  /**
+   * With a segmentation provider set, ask it for the object in the box or under the point (default
+   * true), falling back to GrabCut when nothing it returns fits; false always uses GrabCut.
+   */
+  useModel?: boolean;
+  signal?: AbortSignal;
   /** How the object combines with the selection (default `replace`). */
   mode?: SelectionMode;
   /** Sample every layer (default true) or only the active pixel layer. */
@@ -5195,12 +5206,56 @@ export class ImageEditorController {
   }
 
   /**
+   * Asks the segmentation provider (which must be set) for `request.target` in the flattened image
+   * and returns its results with masks decoded to pixels.
+   */
+  private async modelSegments(request: Omit<SegmentationRequest, 'image' | 'width' | 'height'>): Promise<DecodedSegmentationResult[]> {
+    const provider = this.segmentation!;
+    const { width, height } = this.naturalSize;
+    const image = await this.toDataURL({ format: 'image/png' });
+    const results = await provider.segment({ ...request, image, width, height });
+    request.signal?.throwIfAborted();
+    const decoded: DecodedSegmentationResult[] = [];
+    for (const r of results ?? []) decoded.push({ ...r, mask: r.mask !== undefined ? await this.decodeMaskImage(r.mask) : undefined });
+    return decoded;
+  }
+
+  /**
+   * The model's object for Object Selection: of what it returns, the pieces mostly inside the box
+   * (clipped to the box grown by a tenth) or those under the point. `null` when none fits.
+   */
+  private async modelObject(target: ObjectTarget, signal?: AbortSignal): Promise<SelectionMask | null> {
+    const { width, height } = this.naturalSize;
+    const decoded = await this.modelSegments(
+      'rect' in target
+        ? { target: 'the main object inside the box', box: target.rect, maxSegments: 4, signal }
+        : { target: 'the object at the point', point: target.point, maxSegments: 4, signal }
+    );
+    let union: SelectionMask | null = null;
+    for (const r of decoded) {
+      const one = segmentsToSelection(width, height, [r]);
+      if (!one?.bounds) continue;
+      if ('rect' in target) {
+        const r0 = target.rect;
+        const grow = 0.1 * Math.max(r0.width, r0.height);
+        const box = rectSelection(width, height, { x: r0.x - grow, y: r0.y - grow, width: r0.width + 2 * grow, height: r0.height + 2 * grow }, { antiAlias: false });
+        const inside = combineSelections(one, box, 'intersect');
+        if (!inside || selectionArea(inside) < selectionArea(one) * 0.5) continue;
+        union = combineSelections(union, inside, 'add');
+      } else if (selectionValueAt(one, target.point.x, target.point.y) >= 0.5) {
+        union = combineSelections(union, one, 'add');
+      }
+    }
+    return union;
+  }
+
+  /**
    * Object Selection: the object inside `target.rect` (natural pixels; what is outside the box is
    * background) or under `target.point`, found by GrabCut (colour models of object and background
    * plus a graph cut along edges), combined with the selection by `mode` as one undo step.
    * Resolves to the resulting selection.
    */
-  public async selectObject(target: ObjectTarget, options: SelectObjectCommandOptions = {}): Promise<SelectionMask | null> {
+  public async selectObject(target: ObjectTarget, options: SelectObjectCommandOptions = {}): Promise<{ selection: SelectionMask | null; method: 'model' | 'grabcut' }> {
     const { width, height } = this.naturalSize;
     if ('rect' in target) {
       const r = target.rect;
@@ -5211,10 +5266,18 @@ export class ImageEditorController {
     } else if (!(target.point.x >= 0 && target.point.y >= 0 && target.point.x < width && target.point.y < height)) {
       throw new Error(`(${target.point.x}, ${target.point.y}) is outside the image (0..${width - 1}, 0..${height - 1}); click on the object.`);
     }
+    if (this.segmentation && options.useModel !== false) {
+      const found = await this.modelObject(target, options.signal);
+      if (found) {
+        this.setSelection(found, options.mode ?? 'replace');
+        return { selection: this.state.selection ?? null, method: 'model' };
+      }
+      // Nothing from the model fits the box or point: find it classically instead.
+    }
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
     const region = selectObjectIn(pixels, target, { enhanceEdge: options.enhanceEdge });
     this.setSelection(region, options.mode ?? 'replace');
-    return this.state.selection ?? null;
+    return { selection: this.state.selection ?? null, method: 'grabcut' };
   }
 
   /**
@@ -5235,12 +5298,19 @@ export class ImageEditorController {
    * selection by `mode` as one undo step. Resolves to the selection and, when no sky was found
    * (the selection is then unchanged), why.
    */
-  public async selectSky(options: SkyCommandOptions = {}): Promise<{ selection: SelectionMask | null; note?: string }> {
+  public async selectSky(options: SkyCommandOptions = {}): Promise<{ selection: SelectionMask | null; method: 'model' | 'classical'; note?: string }> {
+    if (this.segmentation && options.useModel !== false) {
+      const { width, height } = this.naturalSize;
+      const sky = segmentsToSelection(width, height, await this.modelSegments({ target: 'the sky', signal: options.signal }));
+      if (!sky?.bounds) return { selection: this.state.selection ?? null, method: 'model', note: 'The segmentation model found no sky.' };
+      this.setSelection(sky, options.mode ?? 'replace');
+      return { selection: this.state.selection ?? null, method: 'model' };
+    }
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
     const { selection, reason } = findSky(pixels, options);
-    if (!selection.bounds) return { selection: this.state.selection ?? null, note: reason };
+    if (!selection.bounds) return { selection: this.state.selection ?? null, method: 'classical', note: reason };
     this.setSelection(selection, options.mode ?? 'replace');
-    return { selection: this.state.selection ?? null };
+    return { selection: this.state.selection ?? null, method: 'classical' };
   }
 
   /**
@@ -5472,13 +5542,7 @@ export class ImageEditorController {
     const description = target.trim();
     if (!description) throw new Error('Describe the subject to select.');
     const { width, height } = this.naturalSize;
-    const image = await this.toDataURL({ format: 'image/png' });
-    const results = await provider.segment({ image, width, height, target: description, maxSegments: options.maxSegments, signal: options.signal });
-    options.signal?.throwIfAborted();
-    const decoded: DecodedSegmentationResult[] = [];
-    for (const r of results ?? []) {
-      decoded.push({ ...r, mask: r.mask !== undefined ? await this.decodeMaskImage(r.mask) : undefined });
-    }
+    const decoded = await this.modelSegments({ target: description, maxSegments: options.maxSegments, signal: options.signal });
     const segments = decoded.map((r) => {
       const one = segmentsToSelection(width, height, [r]);
       return { label: r.label || description, bounds: one?.bounds ?? null, ...(r.score !== undefined ? { score: r.score } : {}) };

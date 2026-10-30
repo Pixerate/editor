@@ -13,6 +13,13 @@ export interface SegmentationRequest {
   target: string;
   /** Return at most this many objects (the provider's default when absent). */
   maxSegments?: number;
+  /**
+   * Object Selection: the box (natural pixels) the wanted object is in. A box-prompted model (SAM)
+   * should segment the object inside it; others can read `target`, which describes it too.
+   */
+  box?: CropBox;
+  /** Object Selection: a point (natural pixels) on the wanted object, for a point-prompted model. */
+  point?: ImagePoint;
   signal?: AbortSignal;
 }
 

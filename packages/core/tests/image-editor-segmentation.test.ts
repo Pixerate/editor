@@ -168,3 +168,54 @@ describe('planOutlineTrace', () => {
     expect(planOutlineTrace([square(0, 0, 1), square(2, 0, 1)], { maxOutlines: 1 }).filter((s) => s.type === 'press')).toHaveLength(1);
   });
 });
+
+describe('the segmentation model behind Select Sky and Object Selection', () => {
+  it('asks for the object in the box and keeps what lies mostly inside it', async () => {
+    const requests: SegmentationRequest[] = [];
+    const c = controllerWith({
+      segment: async (req) => {
+        requests.push(req);
+        return [
+          { label: 'cup', polygon: square(2, 2, 4) },
+          { label: 'table', polygon: square(12, 2, 6) },
+        ];
+      },
+    });
+    const out = await c.selectObject({ rect: { x: 1, y: 1, width: 7, height: 7 } });
+    expect(out.method).toBe('model');
+    expect(requests[0]).toMatchObject({ box: { x: 1, y: 1, width: 7, height: 7 }, maxSegments: 4 });
+    expect(c.getSelection()!.bounds).toEqual({ x: 2, y: 2, width: 4, height: 4 });
+    // A point keeps the piece under it.
+    const byPoint = await c.selectObject({ point: { x: 14, y: 4 } });
+    expect(byPoint.method).toBe('model');
+    expect(requests[1]).toMatchObject({ point: { x: 14, y: 4 } });
+    expect(c.getSelection()!.bounds).toEqual({ x: 12, y: 2, width: 6, height: 6 });
+  });
+
+  it('falls back to GrabCut when nothing the model returns fits, or when asked not to use it', async () => {
+    const segment = vi.fn(async () => [{ label: 'elsewhere', polygon: square(14, 1, 3) }]);
+    const c = controllerWith({ segment });
+    const data = new Uint8ClampedArray(20 * 10 * 4).fill(230);
+    for (let y = 3; y < 7; y++) for (let x = 3; x < 7; x++) data.set([30, 30, 30, 255], (y * 20 + x) * 4);
+    c.setSamplePixels({ width: 20, height: 10, data });
+    expect((await c.selectObject({ rect: { x: 1, y: 1, width: 8, height: 8 } })).method).toBe('grabcut');
+    expect(c.getSelection()!.bounds).toEqual({ x: 3, y: 3, width: 4, height: 4 });
+    segment.mockClear();
+    expect((await c.selectObject({ rect: { x: 1, y: 1, width: 8, height: 8 } }, { useModel: false })).method).toBe('grabcut');
+    expect(segment).not.toHaveBeenCalled();
+  });
+
+  it('asks for the sky, says when the model finds none, and finds it classically when asked', async () => {
+    const segment = vi.fn(async (req: SegmentationRequest) => (req.target === 'the sky' ? [{ label: 'sky', polygon: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 4 }, { x: 0, y: 4 }] }] : []));
+    const c = controllerWith({ segment });
+    expect(await c.selectSky()).toMatchObject({ method: 'model' });
+    expect(c.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 20, height: 4 });
+    segment.mockResolvedValueOnce([]);
+    expect(await c.selectSky()).toMatchObject({ method: 'model', note: expect.stringMatching(/found no sky/) });
+    // Classical: a plain brown image has no sky.
+    c.setSamplePixels({ width: 20, height: 10, data: new Uint8ClampedArray(20 * 10 * 4).map((_, i) => (i % 4 === 3 ? 255 : i % 4 === 0 ? 140 : 80)) });
+    segment.mockClear();
+    expect(await c.selectSky({ useModel: false })).toMatchObject({ method: 'classical', note: expect.stringMatching(/No sky/) });
+    expect(segment).not.toHaveBeenCalled();
+  });
+});
