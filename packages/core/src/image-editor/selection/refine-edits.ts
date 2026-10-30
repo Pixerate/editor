@@ -1,11 +1,13 @@
 /**
  * The Select and Mask workspace's strokes as plain data, so an agent can send what a person
  * paints: Quick Selection strokes (grow to the region's edges), Brush strokes (paint the
- * selection in or out directly) and Refine Edge Brush strokes (mark where the edge should be
- * re-estimated from the image, e.g. over hair).
+ * selection in or out directly), Refine Edge Brush strokes (mark where the edge should be
+ * re-estimated from the image, e.g. over hair), Lasso outlines and Object Selection boxes.
  */
 
-import type { ImagePoint } from '../types';
+import type { CropBox, ImagePoint } from '../types';
+import { polygonSelection } from './shapes';
+import { selectObjectIn } from './segment/grabcut';
 import { combineSelections, createSelectionMask, selectionFromRegion, type PixelBuffer, type SelectionMask } from './mask';
 import { quickSelectStroke } from './segment/quick';
 
@@ -13,9 +15,11 @@ import { quickSelectStroke } from './segment/quick';
 export type RefineEdit =
   | { kind: 'quick-select'; points: ImagePoint[]; size?: number; mode?: 'add' | 'subtract' }
   | { kind: 'brush'; points: ImagePoint[]; size?: number; mode?: 'add' | 'subtract'; hardness?: number }
-  | { kind: 'refine-brush'; points: ImagePoint[]; size?: number };
+  | { kind: 'refine-brush'; points: ImagePoint[]; size?: number }
+  | { kind: 'lasso'; points: ImagePoint[]; mode?: 'add' | 'subtract' }
+  | { kind: 'object'; rect?: CropBox; point?: ImagePoint; mode?: 'add' | 'subtract' };
 
-export const REFINE_EDIT_KINDS = ['quick-select', 'brush', 'refine-brush'] as const;
+export const REFINE_EDIT_KINDS = ['quick-select', 'brush', 'refine-brush', 'lasso', 'object'] as const;
 
 /**
  * Coverage of a round brush of diameter `size` dragged along `points` (one point is a dab), over
@@ -72,7 +76,19 @@ export function applyRefineEdits(
   let sel = selection?.bounds ? selection : null;
   let band: SelectionMask | null = null;
   for (const e of edits) {
+    if (e.kind === 'object') {
+      if (!pixels) throw new Error('Object Selection needs the image pixels.');
+      if (!e.rect === !e.point) throw new Error('An object edit takes rect (a box around the object) or point (on it), not both.');
+      const region = selectObjectIn(pixels, e.rect ? { rect: e.rect } : { point: e.point! });
+      sel = combineSelections(sel, region, e.mode ?? 'add');
+      continue;
+    }
     if (!e.points.length) throw new Error(`A ${e.kind} stroke needs at least one point.`);
+    if (e.kind === 'lasso') {
+      if (e.points.length < 3) throw new Error('A lasso edit needs at least 3 points.');
+      sel = combineSelections(sel, polygonSelection(width, height, e.points, {}), e.mode ?? 'add');
+      continue;
+    }
     if (e.kind === 'refine-brush') {
       band = combineSelections(band, brushStrokeMask(width, height, e.points, e.size ?? 40), 'add');
       continue;

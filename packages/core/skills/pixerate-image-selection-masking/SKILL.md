@@ -59,8 +59,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    - `refine_selection` snaps to real edges: radius 2–4 for hard edges, 8–20 for hair and fur;
      `smartRadius: true` for mixed edges. For flyaway hair beyond the radius, add `edits` with a
      `refine-brush` stroke along it (size covering the strands); fix misses and leaks in the same
-     call with `quick-select` or `brush` strokes (`mode: "subtract"` to remove). With a host
-     model, `refineMode: "object"` refines from the model's outline.
+     call with `quick-select`, `brush` or `lasso` strokes, or an `object` box (`mode:
+     "subtract"` to remove). These are the Select and Mask workspace's own tools, so a person
+     can open the same edits in the workspace. With a host model, `refineMode: "object"`
+     refines from the model's outline.
    - `shiftEdge` −10..−30 % tightens a refined edge that picked up background.
    **Check:** `percent` changed by roughly what you intended (a few percent at most for a
    cleanup).

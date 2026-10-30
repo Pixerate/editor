@@ -261,13 +261,25 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
           items: {
             type: 'object',
             properties: {
-              kind: { type: 'string', enum: ['quick-select', 'brush', 'refine-brush'], description: 'quick-select grows to edges; brush paints directly; refine-brush marks soft detail (hair) for the edge to be re-estimated.' },
-              points: { type: 'array', minItems: 1, items: pointSchema, description: 'The stroke path in natural image pixels (one point is a dab).' },
+              kind: {
+                type: 'string',
+                enum: ['quick-select', 'brush', 'refine-brush', 'lasso', 'object'],
+                description: 'quick-select grows to edges; brush paints directly; refine-brush marks soft detail (hair) for the edge to be re-estimated; lasso adds or removes a polygon; object adds or removes the object in rect or under point.',
+              },
+              points: { type: 'array', minItems: 1, items: pointSchema, description: 'The stroke path (or lasso outline, 3+ points) in natural image pixels; one point is a dab. Not for object.' },
+              rect: {
+                type: 'object',
+                properties: rectProperties,
+                required: ['x', 'y', 'width', 'height'],
+                additionalProperties: false,
+                description: 'object: a box around the object, in natural image pixels.',
+              },
+              point: { ...pointSchema, description: 'object: a point on the object, in natural image pixels.' },
               size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in natural image pixels (default 30 quick-select, 20 brush, 40 refine-brush).' },
-              mode: { type: 'string', enum: ['add', 'subtract'], description: 'quick-select and brush: add (default) or subtract.' },
+              mode: { type: 'string', enum: ['add', 'subtract'], description: 'quick-select, brush, lasso and object: add (default) or subtract.' },
               hardness: { type: 'number', minimum: 0, maximum: 1, description: 'brush: the solid share of the radius, 0..1 (default 1).' },
             },
-            required: ['kind', 'points'],
+            required: ['kind'],
             additionalProperties: false,
           },
         },
@@ -278,9 +290,14 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     annotations: writeAnnotations('Refine the selection edge'),
     handler: async (params) => {
       const edits = Array.isArray(params.edits)
-        ? (params.edits as any[]).map((e) => ({ ...e, points: (e.points ?? []).map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) }))
+        ? (params.edits as any[]).map((e) => (e.kind === 'object' ? { ...e } : { ...e, points: (e.points ?? []).map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) }))
         : [];
       for (const e of edits) {
+        if (e.kind === 'object') {
+          if (!e.rect === !e.point) throw new Error('An object edit takes rect (a box around the object) or point (on it).');
+          continue;
+        }
+        if (!e.points.length) throw new Error(`A ${e.kind} edit needs points.`);
         if (!e.points.every((p: { x: number; y: number }) => Number.isFinite(p.x) && Number.isFinite(p.y))) throw new Error('Each edit needs points of { x, y } in natural image pixels.');
         if (e.kind === 'refine-brush' && e.mode !== undefined) throw new Error('refine-brush strokes have no mode; they mark where the edge is re-estimated.');
       }

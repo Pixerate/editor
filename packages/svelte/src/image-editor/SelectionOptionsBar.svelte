@@ -2,6 +2,7 @@
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageRange from './controls/ImageRange.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
+  import SelectAndMaskWorkspace from './SelectAndMaskWorkspace.svelte';
   import type {
     ColorRangePreset,
     ImageEditorController,
@@ -109,6 +110,7 @@
   let subject = $state('');
   let segmenting = $state(false);
   let subjectStatus = $state<string | null>(null);
+  let workspace = $state(false);
   let skying = $state(false);
   let skyStatus = $state<string | null>(null);
   async function selectSky() {
@@ -426,6 +428,10 @@
       <p role="status" class="text-muted-foreground">{subjectStatus}</p>
     {/if}
   </form>
+  <button type="button" class={btn(false)} onclick={() => (workspace = true)}>Select and Mask…</button>
+  {#if workspace}
+    <SelectAndMaskWorkspace {controller} onclose={() => (workspace = false)} />
+  {/if}
   <div data-testid="select-sky" class="flex flex-col gap-1">
     <button type="button" class={btn(false)} disabled={skying} aria-busy={skying} onclick={() => void selectSky()}>
       {skying ? 'Selecting…' : 'Select Sky'}

@@ -15,3 +15,4 @@ export * from './path';
 export * from './magnetic';
 export * from './segment';
 export * from './refine-edits';
+export * from './select-and-mask';
