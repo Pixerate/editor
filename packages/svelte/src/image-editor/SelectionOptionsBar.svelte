@@ -203,6 +203,46 @@
   {#if options.tool === 'polygon'}
     <p class="text-muted-foreground">Click to add corners (Shift for 45°), drag for a free-hand stretch; double-click, Enter or a click on the first corner closes it, Backspace removes a corner, Escape cancels.</p>
   {/if}
+  {#if options.tool === 'type' || options.tool === 'type-vertical'}
+    <div data-testid="type-mask-options" class="flex flex-col gap-2">
+      <p class="text-muted-foreground">
+        {options.tool === 'type-vertical' ? 'Click where the column starts: the letters are stacked down from there, centred on the click.' : 'Click where the text starts (its baseline).'} Shift-click adds, Alt-click subtracts.
+      </p>
+      <label class="flex items-center gap-1 text-muted-foreground">
+        Text
+        <input
+          type="text"
+          aria-label="Type mask text"
+          value={options.typeText ?? 'Type'}
+          oninput={(e) => set({ typeText: (e.currentTarget as HTMLInputElement).value })}
+          class="min-w-0 flex-1 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+        />
+      </label>
+      <label class="flex items-center gap-1 text-muted-foreground">
+        Size
+        <input
+          type="number"
+          min="1"
+          step="1"
+          aria-label="Type mask size"
+          value={options.typeSize ?? 72}
+          oninput={(e) => set({ typeSize: Math.max(1, Number((e.currentTarget as HTMLInputElement).value) || 1) })}
+          class={numberInput}
+        />
+        px
+      </label>
+      <label class="flex items-center gap-1 text-muted-foreground">
+        Font
+        <input
+          type="text"
+          aria-label="Type mask font"
+          value={options.typeFamily ?? 'sans-serif'}
+          oninput={(e) => set({ typeFamily: (e.currentTarget as HTMLInputElement).value })}
+          class="min-w-0 flex-1 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+        />
+      </label>
+    </div>
+  {/if}
   {#if options.tool === 'range'}
     <div data-testid="color-range-options" class="flex flex-col gap-2">
       <p class="text-muted-foreground">Click a colour to select it; Shift-click adds a colour, Alt-click removes one.</p>

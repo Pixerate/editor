@@ -49,6 +49,8 @@ Detail for the `pixerate-image-editor` skill: how to draw and edit vector shapes
    refused: rasterize first. Masks, clipping, blend modes and effects work as on any layer.
 5. **Outlines and pixels**: `convert_text_to_shape` makes glyph outlines a shape layer (needs an
    outline font shaper; the browser canvas cannot); `rasterize_layer` makes it pixels.
+   For a selection in the shape of text (photo-filled letters, text cut out of the image) use
+   `select_text_shape`, the Type Mask: it lays the text out the same way but adds no layer.
 
 ## Photoshop files
 

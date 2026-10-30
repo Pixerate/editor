@@ -106,6 +106,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | A cutout, shape or text already on its own layer | `select_layer_transparency` (exact, soft where the layer is) |
 | A dead pixel row or column | `select_line`, then fill or heal it |
 | Smooth curves you can describe (a logo, a road, a lens) | `path_to_selection` with Bézier `subpaths` or SVG path data |
+| Letters (photo-filled text, text cut out of the image) | `select_text_shape` (check fonts with `list_fonts`), then `add_layer_mask` or `layer_via_copy` |
 
 ## Recipes
 
@@ -203,6 +204,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `add_vector_mask`, `set_vector_mask_path`, `set_vector_mask_properties`, `get_vector_mask`: sharp, editable path masks
 - `rasterize_vector_mask`, `remove_vector_mask`: turn a vector mask into pixels, or drop it
 - `selection_to_path`, `path_to_selection`: a selection's outline as Bézier paths, and a path back into a selection
+- `select_text_shape`: the Type Mask, a selection in the shape of text
 - `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only

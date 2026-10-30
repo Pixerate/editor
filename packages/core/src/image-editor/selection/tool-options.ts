@@ -3,7 +3,7 @@ import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'range';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'range' | 'type' | 'type-vertical';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
@@ -14,6 +14,8 @@ export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[
   { id: 'lasso', label: 'Lasso' },
   { id: 'polygon', label: 'Polygonal Lasso' },
   { id: 'range', label: 'Color Range' },
+  { id: 'type', label: 'Type Mask' },
+  { id: 'type-vertical', label: 'Vertical Type Mask' },
 ];
 
 /** Labels of the Color Range presets, in menu order. */
@@ -58,6 +60,12 @@ export interface SelectionToolOptions {
   localized?: number;
   /** Color Range: select everything except the sampled colours. */
   rangeInvert?: boolean;
+  /** Type Mask: the text to select (default "Type"). A click places its first baseline. */
+  typeText?: string;
+  /** Type Mask: font size in px (default 72). */
+  typeSize?: number;
+  /** Type Mask: font family (default sans-serif). */
+  typeFamily?: string;
 }
 
 export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
@@ -72,6 +80,9 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   fuzziness: 40,
   localized: 0,
   rangeInvert: false,
+  typeText: 'Type',
+  typeSize: 72,
+  typeFamily: 'sans-serif',
 };
 
 /**

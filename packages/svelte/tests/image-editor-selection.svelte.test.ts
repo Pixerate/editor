@@ -110,6 +110,14 @@ describe('Svelte SelectionOptionsBar', () => {
     setValue(target.querySelector('input[aria-label="Feather"]')!, '4');
     expect(props.options.feather).toBe(4);
     expect(target.querySelector('[data-testid="color-range-options"]')).toBeNull();
+    // The Type Mask tools show their text, size and font.
+    expect(target.querySelector('[data-testid="type-mask-options"]')).toBeNull();
+    click(button('Vertical Type Mask'));
+    expect(props.options.tool).toBe('type-vertical');
+    setValue(target.querySelector('input[aria-label="Type mask text"]')!, 'SALE');
+    setValue(target.querySelector('input[aria-label="Type mask size"]')!, '120');
+    setValue(target.querySelector('input[aria-label="Type mask font"]')!, 'Inter');
+    expect(props.options).toMatchObject({ typeText: 'SALE', typeSize: 120, typeFamily: 'Inter' });
     click(button('Color Range'));
     expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');

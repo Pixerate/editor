@@ -123,6 +123,25 @@ export class SelectionGesture {
       }
       return;
     }
+    if (options.tool === 'type' || options.tool === 'type-vertical') {
+      // Type Mask: the click is the text's origin (vertical: the column's centre and top baseline).
+      this.start = null;
+      try {
+        this.controller.selectTextShape({
+          text: options.typeText || 'Type',
+          x: point.x,
+          y: point.y,
+          orientation: options.tool === 'type-vertical' ? 'vertical' : 'horizontal',
+          style: { fontSize: options.typeSize ?? 72, fontFamily: options.typeFamily || 'sans-serif' },
+          mode: selectionModeFromModifiers(modifiers, options.mode),
+          feather: options.feather ?? 0,
+          antiAlias: options.antiAlias,
+        });
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+      }
+      return;
+    }
     if (options.tool === 'wand' || options.tool === 'range') {
       this.start = null;
       const common = {
