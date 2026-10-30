@@ -287,6 +287,26 @@ describe('React RefineEdgePanel', () => {
     expect(controller.getSelection()).toBeNull();
   });
 
+  it('offers object aware refinement only with a segmentation model', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 });
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    expect(container.querySelector('input[aria-label="Object aware"]')).toBeNull();
+    controller.setSegmentationProvider({ segment: async () => [] });
+    const calls: unknown[][] = [];
+    controller.refineSelectionTo = (async (...args: unknown[]) => {
+      calls.push(args);
+      return { output: 'selection', refineMode: 'object' };
+    }) as any;
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    await act(async () => (container.querySelector('input[aria-label="Object aware"]') as HTMLInputElement).click());
+    await act(async () => {
+      button('Refine Edge').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(calls[0][2]).toMatchObject({ refineMode: 'object' });
+  });
+
   it('reports a refine error when pixels are unavailable', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
     controller.selectAll();

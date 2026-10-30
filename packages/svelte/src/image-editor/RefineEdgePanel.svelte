@@ -50,6 +50,11 @@
   let newKind = $state<AdjustmentKind>('hueSaturation');
   let output = $state<RefineOutput>('selection');
   let decontaminate = $state(0);
+  let objectAware = $state(false);
+  const canObject = $derived.by(() => {
+    void tick;
+    return Boolean(controller.segmentationProvider);
+  });
   const toLayer = $derived(output === 'new-layer' || output === 'new-layer-with-mask');
   const target = $derived(list.find((l) => l.id === layerId) ?? list[list.length - 1]);
 
@@ -57,7 +62,10 @@
     busy = true;
     error = null;
     try {
-      await controller.refineSelectionTo({ ...params }, output, { decontaminate: toLayer ? decontaminate : 0 });
+      await controller.refineSelectionTo({ ...params }, output, {
+        decontaminate: toLayer ? decontaminate : 0,
+        refineMode: canObject && objectAware ? 'object' : 'color',
+      });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -102,6 +110,12 @@
     />
     Smart Radius
   </label>
+  {#if canObject}
+    <label class="flex items-center gap-2 text-foreground">
+      <input type="checkbox" aria-label="Object aware" checked={objectAware} onchange={(e) => (objectAware = (e.currentTarget as HTMLInputElement).checked)} />
+      Object aware (segmentation model)
+    </label>
+  {/if}
   <label class="flex items-center gap-2 text-muted-foreground">
     Output to
     <select
