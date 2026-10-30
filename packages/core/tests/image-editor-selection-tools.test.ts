@@ -214,3 +214,142 @@ describe('Color Range tool and feather in the selection gesture', () => {
     expect(c.getSelection()!.bounds!.width).toBeGreaterThan(6);
   });
 });
+
+describe('Phase 2 selection tools', () => {
+  // A gradient red square (x 2..5, shades 200..255) on white, and a separate red square at x 12..15.
+  const shades = (x: number): RGBA => (x >= 2 && x < 6 ? [200 + (x - 2) * 15, 0, 0, 255] : x >= 12 && x < 16 ? [215, 0, 0, 255] : [255, 255, 255, 255]);
+
+  it('grow_selection follows colour and stays connected; select_similar does not', async () => {
+    const { call, fails } = setup(shades);
+    await fails('grow_selection', {}, /Nothing is selected/);
+    await call('magic_wand', { x: 2, y: 3, tolerance: 0, antiAlias: false });
+    expect((await call('get_selection')).area).toBe(10);
+    expect((await call('grow_selection', { tolerance: 50 })).bounds).toEqual({ x: 2, y: 0, width: 4, height: 10 });
+    expect((await call('select_similar', { tolerance: 50 })).area).toBe(80);
+    await fails('select_similar', { tolerance: 500 }, /tolerance|maximum/);
+  });
+
+  it('modify_selection takes expand and contract (grow and shrink stay as aliases)', async () => {
+    const { call } = setup();
+    await call('select_rect', { x: 5, y: 3, width: 4, height: 4, antiAlias: false });
+    const expanded = await call('modify_selection', { op: 'expand', radius: 1 });
+    expect(expanded.bounds).toEqual({ x: 4, y: 2, width: 6, height: 6 });
+    expect((await call('modify_selection', { op: 'contract', radius: 1 })).bounds).toEqual({ x: 5, y: 3, width: 4, height: 4 });
+    expect((await call('modify_selection', { op: 'grow', radius: 1 })).bounds).toEqual(expanded.bounds);
+  });
+
+  it('select_line selects a 1 px row or column and checks the position', async () => {
+    const { call, fails } = setup();
+    expect(await call('select_line', { orientation: 'row', position: 4.7 })).toMatchObject({ area: 20, bounds: { x: 0, y: 4, width: 20, height: 1 } });
+    expect(await call('select_line', { orientation: 'column', position: 3, mode: 'add' })).toMatchObject({ area: 29 });
+    await fails('select_line', { orientation: 'row', position: 10 }, /outside the image \(0\.\.9\)/);
+    await fails('select_line', { orientation: 'diagonal', position: 1 }, /orientation|enum/i);
+  });
+
+  it('reselect brings back what deselect cleared', async () => {
+    const { c, call, fails } = setup();
+    await fails('reselect', {}, /no cleared selection/);
+    await call('select_rect', { x: 1, y: 1, width: 3, height: 3, antiAlias: false });
+    await call('deselect');
+    expect(await call('reselect')).toMatchObject({ area: 9 });
+    c.undo();
+    expect(c.getSelection()).toBeNull();
+  });
+
+  it('select_layer_transparency selects a layer’s pixels, and masks come from transparency or hide the selection', async () => {
+    const { c, call, fails } = setup();
+    const dot = new Uint8ClampedArray(3 * 2 * 4).fill(255);
+    const id = c.addPixelLayer({ name: 'Dot', pixels: { width: 3, height: 2, data: dot }, x: 4, y: 5 });
+    await fails('select_layer_transparency', { layerId: 'nope' }, /No layer "nope"/);
+    expect(await call('select_layer_transparency', { layerId: id })).toMatchObject({ area: 6, bounds: { x: 4, y: 5, width: 3, height: 2 } });
+    const empty = c.addPixelLayer({ name: 'Empty' });
+    expect((await call('select_layer_transparency', { layerId: empty })).empty).toBe(true);
+    const group = c.addGroup?.({ name: 'G' });
+    if (typeof group === 'string') await fails('select_layer_transparency', { layerId: group }, /no pixels of its own/);
+    expect((await call('select_layer_transparency', { layerId: 'background' })).percent).toBe(100);
+    await call('select_rect', { x: 0, y: 0, width: 5, height: 10, antiAlias: false });
+    const hidden = await call('add_layer_mask', { layerId: 'background', from: 'hide-selection' });
+    expect(hidden.mask).toBeDefined();
+    await call('load_selection_from_mask', { layerId: 'background' });
+    expect((await call('get_selection')).bounds).toEqual({ x: 5, y: 0, width: 15, height: 10 });
+    await call('add_layer_mask', { layerId: 'background', from: 'transparency' });
+    expect((await call('load_selection_from_mask', { layerId: 'background' })).percent).toBe(100);
+  });
+
+  it('plays the Phase 2 tools back on the Select panel', () => {
+    for (const name of ['select_line', 'grow_selection', 'select_similar', 'reselect', 'select_layer_transparency']) {
+      expect(imagePlaybackPanel(name), name).toBe('select');
+    }
+  });
+});
+
+describe('polygonal lasso and line gestures', () => {
+  async function gesture(tool: 'polygon' | 'row' | 'column') {
+    const { c } = setup();
+    const { SelectionGesture, DEFAULT_SELECTION_TOOL_OPTIONS } = await import('../src/image-editor');
+    return { c, g: new SelectionGesture(c, () => ({ ...DEFAULT_SELECTION_TOOL_OPTIONS, tool, antiAlias: false })) };
+  }
+
+  it('clicks add corners and a double-click closes', async () => {
+    const { c, g } = await gesture('polygon');
+    await g.begin({ x: 2, y: 2 });
+    g.end({ x: 2, y: 2 });
+    expect(g.active).toBe(true);
+    await g.begin({ x: 12, y: 2 });
+    g.end();
+    g.move({ x: 12, y: 8 });
+    expect(g.draftPath).toEqual([{ x: 2, y: 2 }, { x: 12, y: 2 }, { x: 12, y: 8 }]);
+    await g.begin({ x: 12, y: 8 });
+    g.end();
+    await g.begin({ x: 12, y: 8 }, { detail: 2 });
+    expect(g.active).toBe(false);
+    const b = c.getSelection()!.bounds!;
+    expect(b.y).toBe(2);
+    expect(b.x + b.width).toBe(12);
+  });
+
+  it('Enter closes, Backspace removes a corner, Escape cancels, Shift snaps to 45°', async () => {
+    const { c, g } = await gesture('polygon');
+    expect(g.key('Enter')).toBe(false);
+    await g.begin({ x: 1, y: 1 });
+    g.end();
+    await g.begin({ x: 9, y: 2 }, { shiftKey: true });
+    g.end();
+    expect(g.draftPath![1]!.y).toBeCloseTo(1, 5);
+    await g.begin({ x: 9, y: 9 });
+    g.end();
+    const before = g.draftPath!.length;
+    expect(g.key('Backspace')).toBe(true);
+    expect(g.draftPath!.length).toBe(before - 1);
+    expect(g.key('Escape')).toBe(true);
+    expect(g.active).toBe(false);
+    expect(c.getSelection()).toBeNull();
+    for (const p of [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 9, y: 9 }]) {
+      await g.begin(p);
+      g.end();
+    }
+    expect(g.key('Enter')).toBe(true);
+    expect(c.getSelection()).not.toBeNull();
+  });
+
+  it('a click on the first corner closes; a drag adds a free-hand stretch', async () => {
+    const { c, g } = await gesture('polygon');
+    await g.begin({ x: 1, y: 1 });
+    g.move({ x: 6, y: 1 });
+    g.move({ x: 9, y: 3 });
+    g.end({ x: 9, y: 5 });
+    expect(g.draftPath!.length).toBeGreaterThanOrEqual(4);
+    await g.begin({ x: 1.5, y: 1.5 });
+    expect(g.active).toBe(false);
+    expect(c.getSelection()).not.toBeNull();
+  });
+
+  it('single row and column tools select a line on click', async () => {
+    const row = await gesture('row');
+    await row.g.begin({ x: 3, y: 4 });
+    expect(row.c.getSelection()!.bounds).toEqual({ x: 0, y: 4, width: 20, height: 1 });
+    const col = await gesture('column');
+    await col.g.begin({ x: 3, y: 4 });
+    expect(col.c.getSelection()!.bounds).toEqual({ x: 3, y: 0, width: 1, height: 10 });
+  });
+});

@@ -32,6 +32,21 @@ export function maskThumbnailClick(
   }
 }
 
+/**
+ * A click on a layer's pixel thumbnail: Ctrl/⌘-click loads the layer's transparency as the
+ * selection (Shift adds, Alt subtracts, both intersect) and returns true; other clicks are left
+ * to the row (false).
+ */
+export function layerThumbnailClick(
+  controller: ImageEditorController,
+  layer: ImageLayer,
+  e: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }
+): boolean {
+  if (!(e.ctrlKey || e.metaKey)) return false;
+  controller.selectLayerTransparency(layer.id, { mode: selectionModeFromModifiers(e, 'replace') });
+  return true;
+}
+
 export interface LayerPanelRow {
   layer: ImageLayer;
   /** Nesting depth (0 = top level). */
@@ -140,6 +155,9 @@ export type LayerMenuAction =
   | 'via-cut'
   | 'add-mask'
   | 'add-mask-selection'
+  | 'add-mask-hide-selection'
+  | 'add-mask-transparency'
+  | 'select-transparency'
   | 'apply-mask'
   | 'delete-mask'
   | 'toggle-mask'
@@ -166,6 +184,7 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
   const below = loc ? siblings[loc.index - 1] : undefined;
   const hasSel = controller.hasSelection;
   const isPixel = active?.type === 'pixel';
+  const hasOwnPixels = active?.type === 'pixel' || active?.type === 'shape' || active?.type === 'type' || active?.type === 'smart';
   return [
     { action: 'new-layer', label: 'New Layer', enabled: true },
     { action: 'new-group', label: 'New Group', enabled: true },
@@ -180,6 +199,9 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'via-cut', label: 'Layer via Cut', enabled: isPixel && hasSel },
     { action: 'add-mask', label: 'Add Layer Mask', enabled: Boolean(active) },
     { action: 'add-mask-selection', label: 'Add Mask from Selection', enabled: Boolean(active) && hasSel },
+    { action: 'add-mask-hide-selection', label: 'Add Mask Hiding Selection', enabled: Boolean(active) && hasSel },
+    { action: 'add-mask-transparency', label: 'Add Mask from Transparency', enabled: hasOwnPixels },
+    { action: 'select-transparency', label: 'Select Layer Pixels', enabled: hasOwnPixels },
     { action: 'apply-mask', label: 'Apply Layer Mask', enabled: isPixel && Boolean(active?.mask) },
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
@@ -232,6 +254,15 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
         break;
       case 'add-mask':
         if (id) controller.addLayerMask(id, 'reveal-all');
+        break;
+      case 'add-mask-hide-selection':
+        if (id) controller.addLayerMask(id, 'hide-selection');
+        break;
+      case 'add-mask-transparency':
+        if (id) controller.addLayerMask(id, 'transparency');
+        break;
+      case 'select-transparency':
+        if (id) controller.selectLayerTransparency(id);
         break;
       case 'add-mask-selection':
         if (id) controller.addLayerMask(id, 'selection');

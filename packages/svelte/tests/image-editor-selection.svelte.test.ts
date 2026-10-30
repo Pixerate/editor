@@ -120,6 +120,34 @@ describe('Svelte SelectionOptionsBar', () => {
     await settle();
     expect(controller.getSelection()!.bounds).toEqual({ x: 10, y: 0, width: 10, height: 10 });
   });
+
+  it('reselects, grows by colour and selects similar colours', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const data = new Uint8ClampedArray(20 * 10 * 4);
+    for (let i = 0; i < 200; i++) data.set(i % 20 < 10 ? [220, 30, 30, 255] : [30, 30, 220, 255], i * 4);
+    controller.setSamplePixels({ width: 20, height: 10, data });
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    expect(button('Reselect').disabled).toBe(true);
+    controller.selectRect({ x: 0, y: 0, width: 2, height: 2 }, { antiAlias: false });
+    flushSync();
+    click(button('Similar'));
+    await settle();
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    click(button('Deselect'));
+    expect(button('Reselect').disabled).toBe(false);
+    click(button('Reselect'));
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    click(button('Polygonal Lasso'));
+    expect(target.textContent).toContain('double-click, Enter or a click on the first corner closes it');
+  });
 });
 
 describe('Svelte SelectionOptionsBar: Select Subject', () => {

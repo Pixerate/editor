@@ -25,8 +25,8 @@ export interface SelectionOptionsBarProps {
 }
 
 const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
-  { op: 'grow', label: 'Grow' },
-  { op: 'shrink', label: 'Shrink' },
+  { op: 'expand', label: 'Expand' },
+  { op: 'contract', label: 'Contract' },
   { op: 'feather', label: 'Feather' },
   { op: 'border', label: 'Border' },
   { op: 'smooth', label: 'Smooth' },
@@ -68,6 +68,16 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   const display: SelectionDisplay = selectionDisplay ?? (quickMask === undefined ? controller.getSelectionDisplay() : quickMask ? 'quickMask' : 'ants');
   const [preset, setPreset] = useState<ColorRangePreset>('reds');
   const [rangeStatus, setRangeStatus] = useState<string | null>(null);
+  const [colorStatus, setColorStatus] = useState<string | null>(null);
+  const runColor = async (op: 'grow' | 'similar') => {
+    setColorStatus(null);
+    const opts = { tolerance: options.tolerance, sampleMerged: options.sampleMerged, sample: options.sample };
+    try {
+      await (op === 'grow' ? controller.growSelection(opts) : controller.selectSimilar(opts));
+    } catch (err) {
+      setColorStatus(err instanceof Error ? err.message : String(err));
+    }
+  };
   const applyPreset = async () => {
     setRangeStatus(null);
     try {
@@ -158,6 +168,9 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             />
           </label>
         </div>
+      )}
+      {options.tool === 'polygon' && (
+        <p className="text-muted-foreground">Click to add corners (Shift for 45°), drag for a free-hand stretch; double-click, Enter or a click on the first corner closes it, Backspace removes a corner, Escape cancels.</p>
       )}
       {options.tool === 'range' && (
         <div data-testid="color-range-options" className="flex flex-col gap-2">
@@ -262,6 +275,15 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         <button type="button" className={btn(false)} onClick={() => controller.invertSelection()}>
           Inverse
         </button>
+        <button type="button" className={btn(false)} disabled={!controller.canReselect()} onClick={() => controller.reselect()}>
+          Reselect
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} title="Add connected pixels of a selected colour (wand tolerance)" onClick={() => void runColor('grow')}>
+          Grow
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} title="Add every pixel of a selected colour (wand tolerance)" onClick={() => void runColor('similar')}>
+          Similar
+        </button>
       </div>
       <div role="group" aria-label="Show selection" className="flex flex-wrap items-center gap-1">
         <span className="text-muted-foreground">Show</span>
@@ -291,6 +313,11 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </button>
         ))}
       </div>
+      {colorStatus && (
+        <p role="status" className="text-muted-foreground">
+          {colorStatus}
+        </p>
+      )}
       <p data-testid="selection-status" className="text-muted-foreground">
         {describeSelection(sel)}
       </p>

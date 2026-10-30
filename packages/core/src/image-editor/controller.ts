@@ -42,7 +42,7 @@ import {
   type SelectionMode,
 } from './selection/mask';
 import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
-import { colorRange, colorRangePreset, magicWand, type ColorRangeOptions, type ColorRangePreset, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
+import { colorRange, colorRangePreset, growSelection as growSelectionMask, magicWand, selectSimilar as selectSimilarMask, type GrowSimilarOptions, type ColorRangeOptions, type ColorRangePreset, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
@@ -2580,16 +2580,27 @@ export class ImageEditorController {
   }
 
   /**
-   * Adds a mask to a layer (one undo step): `reveal-all` (white), `hide-all` (black) or
-   * `selection` (the selection's coverage). Replaces an existing mask. Makes the mask the paint
+   * Adds a mask to a layer (one undo step): `reveal-all` (white), `hide-all` (black),
+   * `selection` (the selection's coverage), `hide-selection` (its inverse) or `transparency`
+   * (the layer's own alpha, so the pixels can then be made opaque and edited). Replaces an existing mask. Makes the mask the paint
    * target when the layer is active.
    */
-  public addLayerMask(id: string, from: 'reveal-all' | 'hide-all' | 'selection' = 'reveal-all', props: LayerMaskProps = {}): RasterMask {
+  public addLayerMask(
+    id: string,
+    from: 'reveal-all' | 'hide-all' | 'selection' | 'hide-selection' | 'transparency' = 'reveal-all',
+    props: LayerMaskProps = {}
+  ): RasterMask {
     const layer = requireLayer(this.state.layers, id).layer;
     let mask: RasterMask;
-    if (from === 'selection') {
-      const sel = this.state.selection;
-      if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, or use reveal-all / hide-all.');
+    if (from === 'selection' || from === 'hide-selection' || from === 'transparency') {
+      let sel: SelectionMask;
+      if (from === 'transparency') {
+        sel = this.layerTransparency(id);
+      } else {
+        const current = this.state.selection;
+        if (!current?.bounds) throw new LayerOperationError('Nothing is selected; select first, or use reveal-all / hide-all / transparency.');
+        sel = from === 'hide-selection' ? invertSelectionMask(current) : current;
+      }
       mask = this.maskFromSelection(sel, props);
       if (layer.type === 'pixel' && (layer.offset.x || layer.offset.y)) {
         // Masks live in the layer's space (they move with it).
@@ -4439,6 +4450,7 @@ export class ImageEditorController {
     const prev = normalizeSelection(this.state.selection ?? null);
     if (prev === next || (prev && next && sameSelection(prev, next))) return false;
     this.recordHistory();
+    if (!next && prev?.bounds) this.lastSelection = prev;
     this.state.selection = next;
     this.notify();
     return true;
@@ -4453,6 +4465,82 @@ export class ImageEditorController {
   /** Select › Deselect. */
   public deselect(): boolean {
     return this.setSelection(null);
+  }
+
+  /** The selection a Deselect cleared, for `reselect` (not saved, not part of history). */
+  private lastSelection: SelectionMask | null = null;
+
+  /** Whether `reselect` has a selection to bring back. */
+  public canReselect(): boolean {
+    const { width, height } = this.naturalSize;
+    return Boolean(this.lastSelection && this.lastSelection.width === width && this.lastSelection.height === height);
+  }
+
+  /** Select › Reselect: brings back the last selection a Deselect cleared, as one undo step. */
+  public reselect(): boolean {
+    if (!this.canReselect()) return false;
+    return this.setSelection(this.lastSelection);
+  }
+
+  /**
+   * Single Row / Single Column Marquee: a 1 px line across the whole image at `position`
+   * (natural pixels; y for a row, x for a column).
+   */
+  public selectLine(orientation: 'row' | 'column', position: number, options: SelectionCommandOptions = {}): boolean {
+    const { width, height } = this.naturalSize;
+    const max = orientation === 'row' ? height : width;
+    const at = Math.floor(position);
+    if (!Number.isFinite(position) || at < 0 || at >= max) {
+      throw new RangeError(`${orientation === 'row' ? 'y' : 'x'} ${position} is outside the image (0..${max - 1}).`);
+    }
+    const rect = orientation === 'row' ? { x: 0, y: at, width, height: 1 } : { x: at, y: 0, width: 1, height };
+    return this.shapeCommand(rectSelection(width, height, rect, { antiAlias: false }), options);
+  }
+
+  /** Select › Grow: adds connected pixels within `tolerance` of a selected colour (one undo step). */
+  public async growSelection(options: GrowSimilarOptions & SampleOptions = {}): Promise<boolean> {
+    const sel = this.state.selection;
+    if (!sel?.bounds) return false;
+    const pixels = await this.requirePixels(options);
+    return this.setSelection(growSelectionMask(pixels, sel, options));
+  }
+
+  /** Select › Similar: adds every pixel within `tolerance` of a selected colour (one undo step). */
+  public async selectSimilar(options: GrowSimilarOptions & SampleOptions = {}): Promise<boolean> {
+    const sel = this.state.selection;
+    if (!sel?.bounds) return false;
+    const pixels = await this.requirePixels(options);
+    return this.setSelection(selectSimilarMask(pixels, sel, options));
+  }
+
+  /**
+   * Load Selection from a layer's transparency (Ctrl/⌘-click its thumbnail): its alpha in
+   * document space, combined by `mode`. Works on pixel, shape, type and smart object layers.
+   */
+  public selectLayerTransparency(id: string, options: SelectionCommandOptions = {}): boolean {
+    const mask = this.layerTransparency(id);
+    return this.shapeCommand(mask, options);
+  }
+
+  private layerTransparency(id: string): SelectionMask {
+    const layer = requireLayer(this.state.layers, id).layer;
+    if (!hasSurface(layer)) {
+      throw new LayerOperationError(`Layer "${layer.name || id}" has no pixels of its own; only pixel, shape, type and smart object layers do.`);
+    }
+    const { width, height } = this.naturalSize;
+    const out = new Uint8Array(width * height);
+    const pixels = this.getLayerPixels(id);
+    if (!pixels) return createSelectionMask(width, height, out);
+    for (let y = 0; y < pixels.height; y++) {
+      const dy = y + pixels.y;
+      if (dy < 0 || dy >= height) continue;
+      for (let x = 0; x < pixels.width; x++) {
+        const dx = x + pixels.x;
+        if (dx < 0 || dx >= width) continue;
+        out[dy * width + dx] = pixels.data[(y * pixels.width + x) * 4 + 3];
+      }
+    }
+    return createSelectionMask(width, height, out);
   }
 
   /** Select › Inverse (with nothing selected, selects everything). */

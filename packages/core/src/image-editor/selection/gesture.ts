@@ -6,6 +6,18 @@ import { selectionModeFromModifiers, type SelectionToolOptions } from './tool-op
 export interface GestureModifiers {
   shiftKey?: boolean;
   altKey?: boolean;
+  /** The click count of a mouse event (2 on a double-click). */
+  detail?: number;
+}
+
+/** `point` moved onto the nearest 45° ray from `from` (Shift with the polygonal lasso). */
+export function snapTo45(from: ImagePoint, point: ImagePoint): ImagePoint {
+  const dx = point.x - from.x;
+  const dy = point.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return point;
+  const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  return { x: from.x + Math.cos(a) * len, y: from.y + Math.sin(a) * len };
 }
 
 /**
@@ -18,6 +30,11 @@ export interface GestureModifiers {
  *   eyedroppers).
  * - Rectangle / ellipse: drag a box; a click without a drag deselects (replace mode).
  * - Lasso: drag a free-hand path, closed on `end`.
+ * - Polygonal lasso: each click adds a corner (Shift: on a 45° ray from the last one), dragging
+ *   adds a free-hand stretch; a double-click, a click on the first corner or Enter (`key`)
+ *   closes it, Backspace removes the last corner and Escape cancels. It stays `active` between
+ *   clicks, so feed it pointer moves without a button too.
+ * - Single row / column: a click selects a 1 px line across the image.
  *
  * Shift adds, Alt subtracts, both intersect (overriding the options bar mode). While dragging,
  * {@link draftPath} is the outline to show (`RenderOptions.draftSelectionPath`).
@@ -27,6 +44,12 @@ export class SelectionGesture {
   private points: ImagePoint[] = [];
   private current: ImagePoint | null = null;
   private modifiers: GestureModifiers = {};
+  /** Polygonal lasso corners while one is being drawn. */
+  private polygon: ImagePoint[] | null = null;
+  private pressedAt: ImagePoint | null = null;
+  private freehand = false;
+  /** A click this close to the first corner (natural pixels) closes a polygonal lasso. */
+  public closeRadius = 8;
   /** The last error (e.g. pixels unavailable for the wand), for the UI to show. */
   public error: string | null = null;
 
@@ -36,11 +59,12 @@ export class SelectionGesture {
   ) {}
 
   get active(): boolean {
-    return this.start !== null;
+    return this.start !== null || this.polygon !== null;
   }
 
   /** The outline of the shape being drawn, or `null`. */
   get draftPath(): ImagePoint[] | null {
+    if (this.polygon) return this.current ? [...this.polygon, this.current] : this.polygon.slice();
     if (!this.start || !this.current) return null;
     const { tool } = this.getOptions();
     if (tool === 'lasso') return this.points.length > 1 ? this.points.slice() : null;
@@ -64,7 +88,41 @@ export class SelectionGesture {
   async begin(point: ImagePoint, modifiers: GestureModifiers = {}): Promise<void> {
     const options = this.getOptions();
     this.error = null;
+    if (this.polygon && options.tool !== 'polygon') this.cancel();
+    if (options.tool === 'polygon') {
+      this.pressedAt = point;
+      this.freehand = false;
+      if (!this.polygon) {
+        this.modifiers = modifiers;
+        this.polygon = [point];
+        this.current = point;
+        return;
+      }
+      const last = this.polygon[this.polygon.length - 1];
+      const p = modifiers.shiftKey ? snapTo45(last, point) : point;
+      const first = this.polygon[0];
+      if (this.polygon.length >= 3 && Math.hypot(p.x - first.x, p.y - first.y) <= this.closeRadius) {
+        this.close();
+        return;
+      }
+      if (Math.hypot(p.x - last.x, p.y - last.y) >= 0.5) this.polygon.push(p);
+      this.current = p;
+      if ((modifiers.detail ?? 1) >= 2) this.close();
+      return;
+    }
     this.modifiers = modifiers;
+    if (options.tool === 'row' || options.tool === 'column') {
+      this.start = null;
+      try {
+        this.controller.selectLine(options.tool, options.tool === 'row' ? point.y : point.x, {
+          mode: selectionModeFromModifiers(modifiers, options.mode),
+          feather: options.feather ?? 0,
+        });
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+      }
+      return;
+    }
     if (options.tool === 'wand' || options.tool === 'range') {
       this.start = null;
       const common = {
@@ -107,7 +165,19 @@ export class SelectionGesture {
   }
 
   /** Pointer move; returns true when the draft changed (re-render). */
-  move(point: ImagePoint): boolean {
+  move(point: ImagePoint, modifiers: GestureModifiers = {}): boolean {
+    if (this.polygon) {
+      const last = this.polygon[this.polygon.length - 1];
+      if (this.pressedAt && (this.freehand || Math.hypot(point.x - this.pressedAt.x, point.y - this.pressedAt.y) >= 3)) {
+        // Dragging with the button held draws free-hand, as the lasso does.
+        this.freehand = true;
+        if (Math.hypot(point.x - last.x, point.y - last.y) >= 0.5) this.polygon.push(point);
+        this.current = null;
+        return true;
+      }
+      this.current = modifiers.shiftKey ? snapTo45(last, point) : point;
+      return true;
+    }
     if (!this.start) return false;
     this.current = point;
     if (this.getOptions().tool === 'lasso') {
@@ -120,6 +190,12 @@ export class SelectionGesture {
 
   /** Pointer up: commits the shape. Returns true when the selection changed. */
   end(point?: ImagePoint, modifiers?: GestureModifiers): boolean {
+    if (this.polygon) {
+      if (point && this.freehand) this.move(point);
+      this.pressedAt = null;
+      this.freehand = false;
+      return false;
+    }
     if (!this.start) return false;
     if (point) this.move(point);
     const options = this.getOptions();
@@ -140,10 +216,42 @@ export class SelectionGesture {
     return options.tool === 'ellipse' ? this.controller.selectEllipse(rect, opts) : this.controller.selectRect(rect, opts);
   }
 
-  /** Abandons a drag without changing the selection. */
+  /** Closes a polygonal lasso and selects it. Returns true when the selection changed. */
+  close(): boolean {
+    const polygon = this.polygon;
+    if (!polygon) return false;
+    const options = this.getOptions();
+    this.cancel();
+    if (polygon.length < 3) return false;
+    return this.controller.selectPolygon(polygon, {
+      mode: selectionModeFromModifiers(this.modifiers, options.mode),
+      antiAlias: options.antiAlias,
+      feather: options.feather ?? 0,
+    });
+  }
+
+  /**
+   * Keys for a polygonal lasso being drawn: Enter closes it, Escape cancels, Backspace / Delete
+   * removes the last corner. Returns true when the key was used (the host prevents its default).
+   */
+  key(key: string): boolean {
+    if (!this.polygon) return false;
+    if (key === 'Enter') this.close();
+    else if (key === 'Escape') this.cancel();
+    else if (key === 'Backspace' || key === 'Delete') {
+      this.polygon.pop();
+      if (!this.polygon.length) this.cancel();
+    } else return false;
+    return true;
+  }
+
+  /** Abandons a drag (or a polygonal lasso) without changing the selection. */
   cancel(): void {
     this.start = null;
     this.current = null;
     this.points = [];
+    this.polygon = null;
+    this.pressedAt = null;
+    this.freehand = false;
   }
 }

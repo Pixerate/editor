@@ -230,9 +230,10 @@ export function shiftCoverage(src: ArrayLike<number>, w: number, h: number, amou
 // Selection-level wrappers
 // ---------------------------------------------------------------------------
 
-export type SelectionModifyOp = 'grow' | 'shrink' | 'feather' | 'border' | 'smooth';
+/** `expand` / `contract` are Photoshop's names; `grow` / `shrink` are the same operations, kept as aliases. */
+export type SelectionModifyOp = 'expand' | 'contract' | 'grow' | 'shrink' | 'feather' | 'border' | 'smooth';
 
-export const SELECTION_MODIFY_OPS: readonly SelectionModifyOp[] = ['grow', 'shrink', 'feather', 'border', 'smooth'];
+export const SELECTION_MODIFY_OPS: readonly SelectionModifyOp[] = ['expand', 'contract', 'feather', 'border', 'smooth', 'grow', 'shrink'];
 
 function wrap(mask: SelectionMask, coverage: Float32Array): SelectionMask {
   const out = new Uint8Array(coverage.length);
@@ -240,15 +241,17 @@ function wrap(mask: SelectionMask, coverage: Float32Array): SelectionMask {
   return createSelectionMask(mask.width, mask.height, out);
 }
 
-/** Select › Modify (grow = Expand, shrink = Contract, feather, border, smooth) by `radius` pixels. */
+/** Select › Modify (expand, contract, feather, border, smooth; grow and shrink are aliases) by `radius` pixels. */
 export function modifySelection(mask: SelectionMask, op: SelectionModifyOp, radius: number): SelectionMask {
   const r = Number.isFinite(radius) ? Math.max(0, radius) : 0;
   if (r === 0 && op !== 'border') return mask;
   const m = selectionToCoverage(mask);
   const { width: w, height: h } = mask;
   switch (op) {
+    case 'expand':
     case 'grow':
       return wrap(mask, expandCoverage(m, w, h, r));
+    case 'contract':
     case 'shrink':
       return wrap(mask, contractCoverage(m, w, h, r));
     case 'feather':
