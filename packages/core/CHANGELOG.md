@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.194.0
+
+### Minor Changes
+
+- d923ddc: Add image editor toolbar descriptors: `IMAGE_TOOL_GROUPS` and `imageToolGroup()` (Photoshop-style tool groups), `imageToolLabel()`, `IMAGE_TOOL_SHORTCUTS` and `imageToolForShortcut()`, and `imageToolCanvasMode()`, `imageToolPanel()` and `imagePanelTool()`, which link each tool to the canvas mode it draws in and the `layerPanels` panel holding its options. Hosts can build a toolbar where picking a tool opens its panel.
+
 ## 0.193.0
 
 ### Minor Changes
