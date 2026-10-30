@@ -38,6 +38,7 @@ import {
   resizeSelection,
   selectionFromPixels,
   selectionFromTiles,
+  selectionFromRegion,
   serializeSelection,
   type PixelBuffer,
   type SelectionChannel,
@@ -611,6 +612,17 @@ export interface ShapeLayerInfo {
 }
 
 /** A new type layer: its text, where it goes, and its character and paragraph style. */
+/** A Type Mask: text laid out like `TextLayerInit` (no layer is made), selected by `mode`. */
+export interface TypeMaskInit extends Omit<TextLayerInit, keyof LayerPlacement | 'name' | 'opacity' | 'blend'> {
+  /** Horizontal (default) or vertical: the characters stacked top to bottom, centred on `x`. */
+  orientation?: 'horizontal' | 'vertical';
+  mode?: SelectionMode;
+  /** Feather radius in px (default 0). */
+  feather?: number;
+  /** Soft glyph edges (default true). */
+  antiAlias?: boolean;
+}
+
 export interface TextLayerInit extends LayerPlacement {
   text: string;
   /**
@@ -6131,6 +6143,64 @@ export class ImageEditorController {
    * text wrapped in `box`. Refused without a text shaper. Returns its id.
    */
   public addTextLayer(init: TextLayerInit): string {
+    const layer = this.layoutTypeLayer(init);
+    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
+    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
+    if (init.opacity !== undefined) layer.opacity = init.opacity;
+    if (init.blend !== undefined) layer.blend = init.blend;
+    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
+    this.commitLayers(next, () => {
+      this.state.activeLayerId = layer.id;
+      this.state.activeTarget = 'pixels';
+    });
+    return layer.id;
+  }
+
+  /**
+   * Type Mask (horizontal or vertical): a selection in the shape of `text`, laid out and drawn as
+   * `addTextLayer` would place it (font, size, tracking, box, rotation), combined with the current
+   * selection by `mode`. Vertical type stacks the characters top to bottom, centred on `x`. No
+   * layer is added. One undo step. Returns whether anything is selected.
+   */
+  public selectTextShape(init: TypeMaskInit): boolean {
+    const vertical = init.orientation === 'vertical';
+    if (init.orientation !== undefined && init.orientation !== 'horizontal' && !vertical) throw new LayerOperationError('orientation must be horizontal or vertical.');
+    if (init.feather !== undefined && !(init.feather >= 0 && init.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    let text = normalizeText(init.text);
+    if (!text.trim()) throw new LayerOperationError('The text is empty, so there is nothing to select; give some characters.');
+    let paragraph = init.paragraph;
+    if (vertical) {
+      if (/\n/.test(text)) throw new LayerOperationError('Vertical type masks take one column; select each column separately (mode add) instead of line breaks.');
+      if (init.box) throw new LayerOperationError('Vertical type masks are point text; leave out box.');
+      text = Array.from(text).join('\n');
+      paragraph = { align: 'center', ...(paragraph ?? {}) };
+    }
+    const layer = this.layoutTypeLayer({ ...init, text, paragraph });
+    const { width, height } = this.naturalSize;
+    const b = contentBounds(layer.surface);
+    const x0 = Math.max(0, b?.x ?? 0);
+    const y0 = Math.max(0, b?.y ?? 0);
+    const x1 = Math.min(width, b ? b.x + b.width : 0);
+    const y1 = Math.min(height, b ? b.y + b.height : 0);
+    let mask: SelectionMask;
+    if (!b || x1 <= x0 || y1 <= y0) mask = createSelectionMask(width, height);
+    else {
+      const rect = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+      const rgba = readRegion(layer.surface, rect);
+      const bytes = new Uint8Array(rect.width * rect.height);
+      const hard = init.antiAlias === false;
+      for (let i = 0; i < bytes.length; i++) {
+        const a = rgba[i * 4 + 3];
+        bytes[i] = hard ? (a >= 128 ? 255 : 0) : a;
+      }
+      mask = selectionFromRegion(width, height, rect, bytes);
+    }
+    if ((init.feather ?? 0) > 0 && mask.bounds) mask = modifySelectionMask(mask, 'feather', init.feather!);
+    return this.setSelection(mask.bounds ? mask : null, init.mode ?? 'replace');
+  }
+
+  /** A type layer laid out and drawn from `init` (not added): the shared part of `addTextLayer` and the type masks. */
+  private layoutTypeLayer(init: Omit<TextLayerInit, keyof LayerPlacement | 'name' | 'opacity' | 'blend'> & { name?: string }): TypeLayer {
     const text = normalizeText(init.text);
     if (!Number.isFinite(init.x) || !Number.isFinite(init.y)) throw new LayerOperationError('x and y must be numbers (document pixels).');
     const style = patchTextStyle({ ...DEFAULT_TEXT_STYLE, color: this.state.paint.foreground }, (init.style ?? {}) as Record<string, unknown>);
@@ -6142,19 +6212,9 @@ export class ImageEditorController {
       frame = { kind: 'box', width, height };
     }
     if (init.rotation !== undefined && !Number.isFinite(init.rotation)) throw new LayerOperationError('rotation must be a number of degrees.');
-    if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
-    if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
     const t: AffineMatrix = [1, 0, 0, 1, init.x, init.y];
     const transform = init.rotation ? multiplyMatrices(t, rotateMatrix(init.rotation, { x: init.x, y: init.y })) : t;
-    const layer = createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
-    if (init.opacity !== undefined) layer.opacity = init.opacity;
-    if (init.blend !== undefined) layer.blend = init.blend;
-    const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
-    this.commitLayers(next, () => {
-      this.state.activeLayerId = layer.id;
-      this.state.activeTarget = 'pixels';
-    });
-    return layer.id;
+    return createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
   }
 
   /**

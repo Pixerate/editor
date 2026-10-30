@@ -182,6 +182,46 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       {options.tool === 'polygon' && (
         <p className="text-muted-foreground">Click to add corners (Shift for 45°), drag for a free-hand stretch; double-click, Enter or a click on the first corner closes it, Backspace removes a corner, Escape cancels.</p>
       )}
+      {(options.tool === 'type' || options.tool === 'type-vertical') && (
+        <div data-testid="type-mask-options" className="flex flex-col gap-2">
+          <p className="text-muted-foreground">
+            {options.tool === 'type-vertical' ? 'Click where the column starts: the letters are stacked down from there, centred on the click.' : 'Click where the text starts (its baseline).'} Shift-click adds, Alt-click subtracts.
+          </p>
+          <label className="flex items-center gap-1 text-muted-foreground">
+            Text
+            <input
+              type="text"
+              aria-label="Type mask text"
+              value={options.typeText ?? 'Type'}
+              onChange={(e) => set({ typeText: e.target.value })}
+              className="min-w-0 flex-1 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+            />
+          </label>
+          <label className="flex items-center gap-1 text-muted-foreground">
+            Size
+            <input
+              type="number"
+              min={1}
+              step={1}
+              aria-label="Type mask size"
+              value={options.typeSize ?? 72}
+              onChange={(e) => set({ typeSize: Math.max(1, Number(e.target.value) || 1) })}
+              className={numberInput}
+            />
+            px
+          </label>
+          <label className="flex items-center gap-1 text-muted-foreground">
+            Font
+            <input
+              type="text"
+              aria-label="Type mask font"
+              value={options.typeFamily ?? 'sans-serif'}
+              onChange={(e) => set({ typeFamily: e.target.value })}
+              className="min-w-0 flex-1 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+            />
+          </label>
+        </div>
+      )}
       {options.tool === 'range' && (
         <div data-testid="color-range-options" className="flex flex-col gap-2">
           <p className="text-muted-foreground">Click a colour to select it; Shift-click adds a colour, Alt-click removes one.</p>

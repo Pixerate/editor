@@ -102,6 +102,14 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => setValue(container.querySelector('input[aria-label="Feather"]')!, '4'));
     expect(opts().feather).toBe(4);
     expect(container.querySelector('[data-testid="color-range-options"]')).toBeNull();
+    // The Type Mask tools show their text, size and font.
+    expect(container.querySelector('[data-testid="type-mask-options"]')).toBeNull();
+    await act(async () => button('Vertical Type Mask').click());
+    expect(opts().tool).toBe('type-vertical');
+    await act(async () => setValue(container.querySelector('input[aria-label="Type mask text"]')!, 'SALE'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Type mask size"]')!, '120'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Type mask font"]')!, 'Inter'));
+    expect(opts()).toMatchObject({ typeText: 'SALE', typeSize: 120, typeFamily: 'Inter' });
     await act(async () => button('Color Range').click());
     expect(container.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     await act(async () => setValue(container.querySelector('input[aria-label="Fuzziness"]')!, '10'));
