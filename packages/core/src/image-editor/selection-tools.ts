@@ -936,6 +936,68 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const exportMaskTool: AgentTool = {
+    name: 'export_mask_image',
+    title: 'Export a mask as a PNG',
+    description:
+      'Writes the selection, an alpha channel (channelId) or a layer\'s painted mask (layerId) as a greyscale PNG: white = selected / revealed. Use it to look at a mask on its own, or to hand it to another tool or service; load_channel_from_image and load_selection_from_image read it back. Give at most one of channelId and layerId (neither = the selection). Changes nothing. Returns the image and its size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        channelId: channelIdSchema,
+        layerId: { type: 'string', minLength: 1, description: 'A layer whose painted mask to export (see list_layers).' },
+        invert: { type: 'boolean', description: 'Black = selected instead (default false).' },
+        maxSide: { type: 'integer', minimum: 16, maximum: 16384, description: 'Longest side in pixels; larger masks are scaled down (default 1024, never scaled up).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Export a mask as a PNG', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: (args) => {
+      if (args.channelId !== undefined && args.layerId !== undefined) throw new Error('Give channelId or layerId, not both (neither exports the selection).');
+      if (typeof args.layerId === 'string' && !controller.getLayer(args.layerId)) throw new Error(`No layer "${args.layerId}". Call list_layers for ids.`);
+      const source = typeof args.channelId === 'string' ? { channelId: args.channelId } : typeof args.layerId === 'string' ? { layerId: args.layerId } : 'selection';
+      const out = controller.exportMaskImage(source, { invert: args.invert === true, maxSide: typeof args.maxSide === 'number' ? args.maxSide : 1024 });
+      const what = source === 'selection' ? 'Selection' : 'channelId' in source ? `Channel ${source.channelId}` : `Mask of layer ${source.layerId}`;
+      return {
+        content: [
+          { type: 'image', data: out.dataUrl.slice(out.dataUrl.indexOf(',') + 1), mimeType: 'image/png' },
+          { type: 'text', text: `${what}, ${out.width}×${out.height}` },
+        ],
+        structuredContent: { width: out.width, height: out.height },
+      };
+    },
+  };
+
+  const loadChannelFromImageTool: AgentTool = {
+    name: 'load_channel_from_image',
+    title: 'Load a mask image into a new channel',
+    description:
+      'Stores a mask image (an AI segmentation, a matte, a PNG from export_mask_image) in a new alpha channel without touching the selection: white = selected by luminance, or one channel. Any size; it is resampled to the image. Load it as the selection later with load_selection_from_channel. One undo step. Returns the channel.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', minLength: 1, description: 'The mask as a data URL (data:image/png;base64,…) or an image URL.' },
+        name: { type: 'string', minLength: 1, description: 'Channel name (default "Alpha n").' },
+        channel: { type: 'string', enum: ['luminance', 'alpha', 'red', 'green', 'blue'], description: 'What to read as coverage (default luminance; alpha for a cutout PNG).' },
+        threshold: { type: 'number', minimum: 0, maximum: 255, description: 'Values at or above this are selected, the rest not (default: keep soft values).' },
+        invert: { type: 'boolean', description: 'Black = selected instead (default false).' },
+      },
+      required: ['image'],
+      additionalProperties: false,
+    },
+    annotations: { ...writeAnnotations('Load a mask image into a new channel'), openWorldHint: true },
+    handler: async (args) => {
+      if (typeof args.image !== 'string' || !args.image.trim()) throw new Error('image must be a data URL or image URL.');
+      const c = await controller.loadChannelFromImage(args.image, {
+        name: args.name as string | undefined,
+        channel: (args.channel as SelectionChannel | undefined) ?? 'luminance',
+        invert: args.invert === true,
+        threshold: typeof args.threshold === 'number' ? Math.min(255, Math.max(0, args.threshold)) : undefined,
+      });
+      return { channel: channelResult(c.id) };
+    },
+  };
+
   return [
     getSelection,
     selectAll,
@@ -971,6 +1033,8 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     channelPropsTool,
     duplicateChannelTool,
     deleteChannelTool,
+    exportMaskTool,
+    loadChannelFromImageTool,
     quickMaskTool,
   ];
 }

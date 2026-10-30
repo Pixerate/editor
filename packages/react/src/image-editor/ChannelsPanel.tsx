@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { AlphaChannel, ImageEditorController } from '@pixerate/editor/image-editor';
-import { channelThumbnail, selectionModeFromModifiers } from '@pixerate/editor/image-editor';
+import { MASK_FILE_ACCEPT, channelThumbnail, downloadMaskImage, openMaskFile, selectionModeFromModifiers } from '@pixerate/editor/image-editor';
 import { imageSectionTitleClass } from './styles';
 
 export interface ChannelsPanelProps {
@@ -34,8 +34,9 @@ const ChannelThumb: React.FC<{ channel: AlphaChannel; size: number }> = ({ chann
 /**
  * The Channels panel: the alpha channels (saved selections) with thumbnails, an eye to show
  * each as a tint, click to load it as the selection (Shift adds, Alt subtracts, both
- * intersect), double-click to rename; Save Selection, Duplicate and Delete; and the Quick Mask
- * mode switch (Q on the canvas). Every change is one undo step on the controller.
+ * intersect), double-click to rename; Save Selection, Duplicate and Delete; Import (a mask
+ * image into a new channel) and Export PNG (the active channel, else the selection); and the
+ * Quick Mask mode switch (Q on the canvas). Every change is one undo step on the controller.
  */
 export const ChannelsPanel: React.FC<ChannelsPanelProps> = ({ controller, thumbnailSize = 32, className = '' }) => {
   const [, setTick] = useState(0);
@@ -43,6 +44,7 @@ export const ChannelsPanel: React.FC<ChannelsPanelProps> = ({ controller, thumbn
   const [activeId, setActiveId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const channels = controller.getChannels();
   const active = channels.find((c) => c.id === activeId) ?? null;
   const hasSelection = Boolean(controller.getSelection());
@@ -51,6 +53,15 @@ export const ChannelsPanel: React.FC<ChannelsPanelProps> = ({ controller, thumbn
     setError(null);
     try {
       fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    try {
+      setActiveId((await openMaskFile(controller, file)).id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -135,6 +146,29 @@ export const ChannelsPanel: React.FC<ChannelsPanelProps> = ({ controller, thumbn
         >
           Delete
         </button>
+        <button type="button" className={btn()} title="Load a mask image (white = selected) into a new channel" onClick={() => fileInput.current?.click()}>
+          Import…
+        </button>
+        <button
+          type="button"
+          className={btn()}
+          disabled={!active && !hasSelection}
+          title={active ? 'Save the channel as a greyscale PNG' : 'Save the selection as a greyscale PNG'}
+          onClick={() => attempt(() => downloadMaskImage(controller, active ? { channelId: active.id } : 'selection', active?.name ?? 'selection'))}
+        >
+          Export PNG
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept={MASK_FILE_ACCEPT}
+          hidden
+          data-testid="channel-import-input"
+          onChange={(e) => {
+            void importFile(e.currentTarget.files?.[0]);
+            e.currentTarget.value = '';
+          }}
+        />
       </div>
       {error && (
         <p role="alert" className="text-destructive">
