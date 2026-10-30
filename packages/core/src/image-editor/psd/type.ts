@@ -175,7 +175,7 @@ function merged(levels: Array<EngineValue | undefined>): EngineValue {
   return E.dict(items);
 }
 
-function charStyle(d: EngineValue, fonts: string[], notes: Set<string>): TextStyle {
+function charStyle(d: EngineValue, fonts: string[], notes: Set<string>, vertical = false): TextStyle {
   const n = (k: string) => eNum(eGet(d, k));
   const flag = (k: string) => eBool(eGet(d, k));
   const s: TextStyle = { ...DEFAULT_TEXT_STYLE };
@@ -200,6 +200,9 @@ function charStyle(d: EngineValue, fonts: string[], notes: Set<string>): TextSty
   if (shift) s.baselineShift = shift;
   if (flag('Underline')) s.underline = true;
   if (flag('Strikethrough')) s.strikethrough = true;
+  // Standard Vertical Roman Alignment off: Latin set upright (BaselineDirection 1; 2, rotated, is the default).
+  if (vertical && n('BaselineDirection') === 1) s.upright = true;
+  if (vertical && n('BaselineDirection') === 3) notes.add('tate-chu-yoko (horizontal-in-vertical) text is set as the rest of the column');
   if (flag('FauxBold')) notes.add('faux bold is drawn as the regular weight');
   if (flag('FauxItalic')) notes.add('faux italic is drawn upright');
   if ((n('HorizontalScale') ?? 1) !== 1 || (n('VerticalScale') ?? 1) !== 1) notes.add('horizontal and vertical character scaling is drawn at 100 %');
@@ -244,6 +247,7 @@ export interface PsdTypeData {
   runs: TextRun[];
   paragraphs: ParagraphRun[];
   frame: TypeLayer['frame'];
+  orientation: 'horizontal' | 'vertical';
   transform: AffineMatrix;
   antiAlias: boolean;
   /** PostScript names the text uses. */
@@ -268,7 +272,7 @@ export function typeFromTySh(data: Uint8Array, notes: Set<string>): PsdTypeData 
   const anti = descGet(t.text, 'AntA');
   const antiAlias = !(anti?.type === 'enum' && (anti.value === 'Anno' || anti.value === 'antiAliasNone'));
   const ornt = descGet(t.text, 'Ornt');
-  if (ornt?.type === 'enum' && ornt.value === 'Vrtc') notes.add('vertical type is laid out horizontally');
+  const vertical = ornt?.type === 'enum' && ornt.value === 'Vrtc';
   if (t.warp) {
     const style = descGet(t.warp, 'warpStyle');
     if (style?.type === 'enum' && style.value !== 'warpNone') notes.add('warped text is drawn without its warp when edited');
@@ -323,7 +327,7 @@ export function typeFromTySh(data: Uint8Array, notes: Set<string>): PsdTypeData 
         const paraDefault = paraBases[paraAt(at)]?.charDefault;
         at += slens[i] ?? 0;
         const d = merged([eGet(sheet, 'StyleSheetData'), eGet(own, 'StyleSheetData'), eGet(paraDefault, 'StyleSheetData'), eGet(normalStyle, 'StyleSheetData')]);
-        return { length: slens[i] ?? 0, style: charStyle(d, fonts, notes) };
+        return { length: slens[i] ?? 0, style: charStyle(d, fonts, notes, vertical) };
       });
     }
     const shape = eArray(ePath(engine, ['EngineDict', 'Rendered', 'Shapes', 'Children']))[0];
@@ -341,6 +345,7 @@ export function typeFromTySh(data: Uint8Array, notes: Set<string>): PsdTypeData 
     runs: fitRuns(runs, text.length, DEFAULT_TEXT_STYLE),
     paragraphs: fitParagraphRuns(paragraphs, text),
     frame,
+    orientation: vertical ? 'vertical' : 'horizontal',
     transform,
     antiAlias,
     fonts: [...new Set(fonts.filter(Boolean))],
@@ -352,11 +357,12 @@ export function typeFromTySh(data: Uint8Array, notes: Set<string>): PsdTypeData 
 // ---------------------------------------------------------------------------
 
 /** What a type layer says, for deciding whether a `TySh` read from a file still describes it. */
-export function typeSignature(layer: Pick<TypeLayer, 'text' | 'runs' | 'paragraphs' | 'frame' | 'transform' | 'antiAlias'>): string {
-  return JSON.stringify([layer.text, layer.runs, layer.paragraphs, layer.frame, layer.transform ?? null, layer.antiAlias ?? true]);
+export function typeSignature(layer: Pick<TypeLayer, 'text' | 'runs' | 'paragraphs' | 'frame' | 'orientation' | 'transform' | 'antiAlias'>): string {
+  // Horizontal layers keep the signature they had before orientation existed.
+  return JSON.stringify([layer.text, layer.runs, layer.paragraphs, layer.frame, layer.transform ?? null, layer.antiAlias ?? true, ...(layer.orientation === 'vertical' ? ['vertical'] : [])]);
 }
 
-function styleSheetData(s: TextStyle, font: number): EngineValue {
+function styleSheetData(s: TextStyle, font: number, vertical = false): EngineValue {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(s.color.slice(i, i + 2), 16) / 255);
   return E.dict([
     ['Font', E.int(font)],
@@ -374,6 +380,7 @@ function styleSheetData(s: TextStyle, font: number): EngineValue {
     ['FontCaps', E.int(0)],
     ['Underline', E.bool(Boolean(s.underline))],
     ['Strikethrough', E.bool(Boolean(s.strikethrough))],
+    ['BaselineDirection', E.int(vertical && s.upright ? 1 : 2)],
     ['Ligatures', E.bool(true)],
     ['DLigatures', E.bool(false)],
     ['FillFlag', E.bool(true)],
@@ -426,10 +433,11 @@ export function buildEngineData(layer: TypeLayer, template: EngineValue | null):
     return fonts.length - 1;
   };
   const runs = fitRuns(layer.runs, layer.text.length, DEFAULT_TEXT_STYLE);
+  const vertical = layer.orientation === 'vertical';
   const sruns: EngineValue[] = [];
   const slens: EngineValue[] = [];
   runs.forEach((r, i) => {
-    sruns.push(E.dict([['StyleSheet', E.dict([['StyleSheetData', styleSheetData(r.style, fontIndex(postScriptFor(r.style)))]])]]));
+    sruns.push(E.dict([['StyleSheet', E.dict([['StyleSheetData', styleSheetData(r.style, fontIndex(postScriptFor(r.style)), vertical)]])]]));
     slens.push(E.int(r.length + (i === runs.length - 1 ? 1 : 0)));
   });
   if (!runs.length) {
@@ -476,10 +484,10 @@ export function buildEngineData(layer: TypeLayer, template: EngineValue | null):
   const child = E.dict([
     ['ShapeType', E.int(shapeType)],
     ['Procession', E.int(0)],
-    ['Lines', E.dict([['WritingDirection', E.int(0)], ['Children', E.array([])]])],
+    ['Lines', E.dict([['WritingDirection', E.int(vertical ? 2 : 0)], ['Children', E.array([])]])],
     ['Cookie', E.dict([['Photoshop', photoshop]])],
   ]);
-  eSet(dict, 'Rendered', E.dict([['Version', E.int(1)], ['Shapes', E.dict([['WritingDirection', E.int(0)], ['Children', E.array([child])]])]]));
+  eSet(dict, 'Rendered', E.dict([['Version', E.int(1)], ['Shapes', E.dict([['WritingDirection', E.int(vertical ? 2 : 0)], ['Children', E.array([child])]])]]));
   const fontSet = E.array(fonts.map(fontEntry));
   for (const key of ['ResourceDict', 'DocumentResources']) {
     let rd = eGet(e, key);
@@ -538,7 +546,7 @@ export function tyShForLayer(layer: TypeLayer): Uint8Array {
   };
   set('Txt ', { type: 'TEXT', value: layer.text.replace(/\n/g, '\r') });
   if (!descGet(text, 'textGridding')) set('textGridding', { type: 'enum', typeId: 'textGridding', value: 'None' });
-  set('Ornt', { type: 'enum', typeId: 'Ornt', value: 'Hrzn' });
+  set('Ornt', { type: 'enum', typeId: 'Ornt', value: layer.orientation === 'vertical' ? 'Vrtc' : 'Hrzn' });
   set('AntA', { type: 'enum', typeId: 'Annt', value: layer.antiAlias === false ? 'Anno' : 'AnSm' });
   const [l, t, r, b] = inkBounds(layer);
   const rect = (cls: string): DescValue => ({

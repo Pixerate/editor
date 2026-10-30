@@ -40,7 +40,21 @@ export interface TextStyle {
   strikethrough?: boolean;
   /** PostScript name from a PSD (`ArialMT`), kept so the exact face can be found and written back. */
   postScriptName?: string;
+  /**
+   * Vertical text only: set Latin and other horizontal-script characters upright, one under the
+   * other, instead of turned sideways (Photoshop's Standard Vertical Roman Alignment off). Default
+   * false. No effect on horizontal text.
+   */
+  upright?: boolean;
 }
+
+/**
+ * Which way text runs. `horizontal`: lines left to right, stacked downwards. `vertical`: columns
+ * top to bottom, stacked right to left; CJK characters stand upright and other scripts are turned
+ * 90° clockwise (unless their style is `upright`).
+ */
+export type TextOrientation = 'horizontal' | 'vertical';
+export const TEXT_ORIENTATIONS: readonly TextOrientation[] = ['horizontal', 'vertical'];
 
 /** A character style over `length` UTF-16 code units of the text, in order. */
 export interface TextRun {
@@ -79,6 +93,22 @@ export interface TextFont {
   postScriptName?: string;
 }
 
+/** How a shaper sets a character upright in a vertical column (pixels). */
+export interface TextVerticalMetrics {
+  /** Advance down the column. */
+  advance: number;
+  /** Distance from the top of the character's cell to its horizontal baseline. */
+  originY: number;
+  /** Whether the font has a vertical alternate (OpenType `vert`) the shaper draws with `{ vertical: true }`. */
+  alternate: boolean;
+}
+
+/** Options for drawing or outlining text. */
+export interface TextGlyphOptions {
+  /** Use the font's vertical alternates (`vert`), for upright characters in vertical text. */
+  vertical?: boolean;
+}
+
 /**
  * What layout and rendering need from fonts. Implement `outline` (glyph outlines, pure) or `draw`
  * (onto a 2D canvas), or both.
@@ -96,9 +126,16 @@ export interface TextShaper {
    */
   measure(text: string, font: TextFont): ArrayLike<number>;
   /** Glyph outlines of `text` with its start on the baseline at (`x`, `y`), pixels, y down. */
-  outline?(text: string, font: TextFont, x: number, y: number): BezierPath;
+  outline?(text: string, font: TextFont, x: number, y: number, options?: TextGlyphOptions): BezierPath;
   /** Draws `text` with its start on the baseline at (`x`, `y`) in the context's current transform, fill style and alpha. */
-  draw?(ctx: CanvasRenderingContext2D, text: string, font: TextFont, x: number, y: number): void;
+  draw?(ctx: CanvasRenderingContext2D, text: string, font: TextFont, x: number, y: number, options?: TextGlyphOptions): void;
+  /**
+   * Vertical metrics of one character (a code point) set upright, from the font's `vhea` / `vmtx`.
+   * Optional: without it, vertical layout uses the font's ascent + descent as the advance and its
+   * ascent as the origin, and has no vertical alternates (brackets and dashes are then turned
+   * sideways, and 、。 moved to the upper right of their cell).
+   */
+  vertical?(char: string, font: TextFont): TextVerticalMetrics;
   /** Families this shaper can draw (for font pickers and agents), when it can tell. */
   families?(): string[];
 }

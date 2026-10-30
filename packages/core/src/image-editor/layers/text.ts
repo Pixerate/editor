@@ -40,10 +40,10 @@ import {
   caretAt,
   DEFAULT_AUTO_LEADING,
   DEFAULT_TEXT_STYLE,
+  drawTextFragment,
   fitParagraphRuns,
   fitRuns,
   fontOf,
-  isTextSpace,
   layoutText,
   paragraphRanges,
   restyleRange,
@@ -53,12 +53,13 @@ import {
   textFragmentOutline,
   textIndexAt,
   textRectPath,
+  transformTextRect,
   type LaidChar,
   type LaidFragment,
   type LaidLine,
   type TextLayout,
 } from '../../text/layout';
-import type { TextFont, TextShaper } from '../../text/types';
+import { TEXT_ORIENTATIONS, type TextFont, type TextOrientation, type TextShaper } from '../../text/types';
 
 // The layout and shaper model moved to `src/text` so the vector editor shares them; these
 // re-exports keep the image editor's API as it was.
@@ -127,9 +128,10 @@ function inkBounds(layout: TextLayout): CropBox | null {
   let b: CropBox | null = null;
   for (const l of layout.lines) {
     for (const f of l.fragments) {
-      const pad = f.style.fontSize * 0.5;
+      const pad = f.style.fontSize * (l.matrix ? 1 : 0.5);
       const w = f.carets[f.carets.length - 1];
-      const r = { x: f.x - pad, y: f.y - l.ascent - pad, width: w + 2 * pad, height: l.ascent + l.descent + 2 * pad };
+      // Line space (the column's for vertical text) to text space.
+      const r = transformTextRect(l.matrix, { x: f.x - pad, y: l.baseline - l.ascent - pad + Math.min(0, f.y - l.baseline), width: w + 2 * pad, height: l.ascent + l.descent + 2 * pad + Math.abs(f.y - l.baseline) });
       if (!b) b = r;
       else {
         const x0 = Math.min(b.x, r.x);
@@ -222,9 +224,7 @@ function renderOnCanvas(layer: TypeLayer, shaper: TextShaper, region: CropBox, e
       const [r, g, b] = rgbOf(f.style.color);
       ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
       ctx.globalAlpha = f.style.opacity ?? 1;
-      const s = layer.text.slice(f.start, f.end);
-      if (!f.spaced) shaper.draw!(ctx, s, f.font, f.x, f.y);
-      else for (let k = 0; k < s.length; k++) if (!isTextSpace(s[k])) shaper.draw!(ctx, s[k], f.font, f.x + f.carets[k], f.y);
+      drawTextFragment(ctx, shaper, layer.text, f);
       for (const d of textDecorations(f, l)) ctx.fillRect(d.x, d.y, d.width, d.height);
     }
   }
@@ -274,7 +274,7 @@ function num(v: unknown, path: string, min: number, max: number): number {
 }
 
 /** Fields of `TextStyle` an edit can set (`null` clears an optional one). */
-export const TEXT_STYLE_FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'color', 'opacity', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough', 'postScriptName'] as const;
+export const TEXT_STYLE_FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'color', 'opacity', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough', 'upright', 'postScriptName'] as const;
 
 /** `base` with the given style fields changed, validated (`null` clears leading, tracking, …). */
 export function patchTextStyle(base: TextStyle, patch: Record<string, unknown>, path = 'style'): TextStyle {
@@ -302,6 +302,7 @@ export function patchTextStyle(base: TextStyle, patch: Record<string, unknown>, 
       case 'italic':
       case 'underline':
       case 'strikethrough':
+      case 'upright':
         if (typeof v !== 'boolean' && v !== null) fail(`${path}.${k} must be true or false.`);
         if (v) o[k] = true;
         else delete o[k];
@@ -401,8 +402,16 @@ export interface TypeLayerData {
   runs: TextRun[];
   paragraphs?: ParagraphRun[];
   frame: TypeLayer['frame'];
+  /** Default horizontal. */
+  orientation?: TextOrientation;
   transform?: AffineMatrix;
   name?: string;
+}
+
+/** An orientation from loose input (`horizontal` or `vertical`). */
+export function textOrientation(v: unknown, path = 'orientation'): TextOrientation {
+  if (!TEXT_ORIENTATIONS.includes(v as TextOrientation)) fail(`${path} must be ${TEXT_ORIENTATIONS.join(' or ')}, got ${JSON.stringify(v)}.`);
+  return v as TextOrientation;
 }
 
 /**
@@ -422,6 +431,7 @@ export function createTypeLayer(init: TypeLayerData, env: TextEnv, id = newLayer
     runs: fitRuns(init.runs, text.length, DEFAULT_TEXT_STYLE),
     paragraphs: fitParagraphRuns(init.paragraphs ?? [{ length: text.length, style: {} }], text),
     frame: init.frame,
+    ...(init.orientation === 'vertical' ? { orientation: 'vertical' as const } : {}),
     surface: emptySurface(4),
     offset: { x: 0, y: 0 },
   };
@@ -438,6 +448,7 @@ export function updateTypeLayer(layers: readonly ImageLayer[], id: string, chang
   const patch = change(current);
   const next: TypeLayer = { ...current, ...patch };
   if (!('annotation' in patch)) delete next.annotation;
+  if (next.orientation !== 'vertical') delete next.orientation;
   if ('text' in patch || 'runs' in patch) next.runs = fitRuns(next.runs, next.text.length, current.runs[0]?.style ?? DEFAULT_TEXT_STYLE);
   if (!next.runs.length) next.runs = [{ length: 0, style: styleAt(current.runs, 0, DEFAULT_TEXT_STYLE) }];
   if ('text' in patch || 'paragraphs' in patch) next.paragraphs = fitParagraphRuns(next.paragraphs, next.text);
@@ -475,7 +486,7 @@ export function typeFrame(layer: TypeLayer, shaper: TextShaper | null): CropBox 
 
 /** A type layer as a pixel layer with what it shows now (same id, name, mask, effects, blend). */
 export function typeAsPixelLayer(layer: TypeLayer): PixelLayer {
-  const { text: _t, runs: _r, paragraphs: _p, frame: _f, transform: _m, antiAlias: _a, rendering: _g, missingFonts: _mf, annotation: _an, psd: _psd, type: _ty, ...rest } = layer;
+  const { text: _t, runs: _r, paragraphs: _p, frame: _f, orientation: _o, transform: _m, antiAlias: _a, rendering: _g, missingFonts: _mf, annotation: _an, psd: _psd, type: _ty, ...rest } = layer;
   return { ...rest, type: 'pixel', surface: layer.surface, offset: { x: 0, y: 0 } };
 }
 

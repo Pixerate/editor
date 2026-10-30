@@ -106,6 +106,11 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   than splitting text into separate nodes, so it still edits as one paragraph. Create Outlines
   only for final artwork or logos that must not depend on fonts; keep a copy as text if it may
   change.
+  For Japanese, Chinese or Korean set in columns (signage, book spines, posters), use vertical
+  text (`textOrientation: "vertical"` or `vector.setTextOrientation`): CJK stands upright, Latin
+  turns sideways; set a short Latin range `upright: true` to stack it letter by letter. In an
+  area, columns that do not fit past the left edge are `overflow`. Vertical text cannot follow a
+  path.
 
 - **Clean paths.** Use the fewest anchors that describe the shape: anchors at extrema (top,
   bottom, left, right of a curve) and at true corners, handles horizontal or vertical at extrema,
@@ -260,12 +265,13 @@ arrays, to build or replace a stack in one call.
 | Command | Use it to |
 | --- | --- |
 | `vector.listFonts` | See which families the text shaper can draw and whether it gives glyph outlines (`outlines`); read it before choosing fonts or calling `vector.createOutlines`. Returns `{ shaper, outlines, families }`. |
-| `vector.addText` | Add point text (`x`, `y`: the first baseline's start), area text (`x`, `y`, `width`, `height`: wrapped in the box) or text along `path` (SVG path data, with `start`, `end`, `flip`, `orientation`, `baseline`). `font`, `paragraph`, `name`, `fill`, `stroke`, `strokeWidth` optional; black, no stroke by default. Returns the text summary (`id`, lines, bounds, overflow). |
-| `vector.getText` | Read a text node: text, base font, runs as `{ start, end, style }`, paragraph, frame, fill, stroke, laid-out lines, document bounds, `overflow`, `outlines`, shaper and missing fonts. Call before editing ranges. |
+| `vector.addText` | Add point text (`x`, `y`: the first baseline's start), area text (`x`, `y`, `width`, `height`: wrapped in the box) or text along `path` (SVG path data, with `start`, `end`, `flip`, `orientation`, `baseline`). `textOrientation: "vertical"` sets point or area text in columns down and right to left (`x`, `y` the top of the first column's centre; an area fills from its right edge). `font`, `paragraph`, `name`, `fill`, `stroke`, `strokeWidth` optional; black, no stroke by default. Returns the text summary (`id`, `orientation`, lines, bounds, overflow). |
+| `vector.getText` | Read a text node: text, base font, runs as `{ start, end, style }`, paragraph, frame, `orientation`, fill, stroke, laid-out lines, document bounds, `overflow`, `outlines`, shaper and missing fonts. Call before editing ranges. |
 | `vector.setText` | Replace `[start, end)` of the text with `text` (default the whole text; `start` = `end` inserts, `""` deletes). Inserted characters take the style before them. Returns the summary. |
-| `vector.setTextStyle` | Set character fields (`fontFamily`, `fontWeight`, `italic`, `fontSize`, `tracking`, `leading`, `baselineShift`, `underline`, `strikethrough`; null clears) and `fill` over `[start, end)`; the whole text (default) changes the base font and the node's fill. Returns the summary with runs. |
+| `vector.setTextStyle` | Set character fields (`fontFamily`, `fontWeight`, `italic`, `fontSize`, `tracking`, `leading`, `baselineShift`, `underline`, `strikethrough`, `upright` for Latin standing upright in vertical text; null clears) and `fill` over `[start, end)`; the whole text (default) changes the base font and the node's fill. Returns the summary with runs. |
 | `vector.setParagraphStyle` | Set `align` (left, center, right, justify), `autoLeading`, indents and spacing for the node's paragraphs. Returns the summary. |
 | `vector.setTextFrame` | Switch between point, area and path text (`kind`), resize an area (`width`, `height`), move the origin (`x`, `y`) or change path options. Returns the summary. |
+| `vector.setTextOrientation` | Set point or area text `horizontal` or `vertical` (columns top to bottom, right to left; CJK upright, Latin turned sideways unless `upright`). Text on a path cannot be vertical. Returns the summary. |
 | `vector.typeOnPath` | Turn path node `pathId` into text along it (it takes the path's place and drops its paint) with `text`, `font`, `paragraph` (`align` places it along the path) and path options. Returns the summary with the new id. |
 | `vector.createOutlines` | Turn text (`ids`, or text inside groups; default the selection) into paths of its glyph outlines, keeping paint, effects, filters, placement and id. Needs `outlines: true` from `vector.listFonts`. Returns `{ ids }`. |
 

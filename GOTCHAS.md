@@ -3102,6 +3102,24 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `LayerCompositor` turns each layer with a vector mask into a copy whose raster `mask` already includes the path (`resolveVectorMasks`), in `composite`, `compositeTiles` and `tile`. The base `composite` calls `this.compositeTiles`, which is overridden, so the stack was resolved twice. The copy still had `vectorMask`, so the second pass multiplied the path in again.
 - **Solution / Workaround**: The resolved copy deletes `vectorMask`, so resolving again is a no-op. Any future step that turns a layer property into its raster mask (or anything else the engine reads) must remove the property it consumed, because entry points that override each other can run the step more than once.
 
+### [core/text] Vertical Text Lays Out in Line Space: Some Layout Fields Are Not Text Space
+
+- **Issue / Symptom**: With vertical text, code that drew a caret from `caretAt(...).x/top/bottom`, a selection from `line.chars` and `line.baseline`, or an ink box from `fragment.x/y` put it on a horizontal line far from the columns.
+- **Root Cause**: `computeLayout` lays every orientation out in *line space* (x along the line, y across lines stacking down) and, for vertical text, turns that 90° clockwise into text space with `layout.matrix` / `line.matrix`. `LaidLine`, `LaidChar`, `LaidFragment.x/y/carets` and `caretAt().x/top/bottom` stay in line space; `bounds`, `fragment.glyphs`, `caretAt().from/to`, `textSelectionQuads`, `textDecorations`, `textFragmentOutline` and `textIndexAt`'s input are text space.
+- **Solution / Workaround**: Draw carets from `caretAt().from` / `to`, selections from `textSelectionQuads`, glyphs from `fragment.glyphs` (or `drawTextFragment` / `textFragmentOutline`), and map any other line-space box with `transformTextRect(line.matrix, …)` or `lineToTextSpace`. Move between lines with `textLineMove` and map arrow keys with `textArrowStep` (vertical: ↑ ↓ along a column, ← → between columns). For horizontal text the matrix is absent and both spaces are the same, so a mistake only shows with vertical text: test both.
+
+### [core/text] Kerning Must Not Reach Upright Characters in Vertical Text
+
+- **Issue / Symptom**: Upright CJK glyphs drifted off the column centre when a kerned pair (or any pair the shaper kerns) sat next to each other.
+- **Root Cause**: Advances come from `shaper.measure` over a whole style segment, so the caret after a character includes kerning with its neighbour. Upright characters are centred on the column by their horizontal advance; using the segment's caret difference took a kern meant for side-by-side glyphs.
+- **Solution / Workaround**: Layout measures each upright character on its own (`shaper.measure(char)`) for its width, and takes its advance down the column from `shaper.vertical` (`vhea` / `vmtx`), or ascent + descent when the shaper has none. Sideways characters keep the segment's (kerned) advances, as horizontal text does.
+
+### [core/image-editor/psd] Vertical Type in PSD: `Ornt`, `WritingDirection` and `BaselineDirection`
+
+- **Issue / Symptom**: Vertical Photoshop type came in laid out horizontally, and our vertical type would have gone out horizontal.
+- **Root Cause**: The orientation lives in the `TySh` descriptor (`Ornt`: `Hrzn` / `Vrtc`) and in EngineData's `Rendered.Shapes.WritingDirection` and `Lines.WritingDirection` (0 horizontal, 2 vertical). Upright Latin (Standard Vertical Roman Alignment off) is the style's `BaselineDirection`.
+- **Solution / Workaround**: Import reads `Ornt` into `TypeLayer.orientation` and `BaselineDirection` 1 into `upright` (2, rotated, is what ag-psd and our export write as the default; 3, tate-chu-yoko, is approximated with a note). Export writes all three. The value mapping and Photoshop's vertical point origin (we use the top of the first column's centre line, and a box's right edge) are inferred, not verified against Photoshop files: check a real vertical PSD before relying on exact placement. `typeSignature` adds `'vertical'` only for vertical layers so horizontal layers loaded from older documents keep their stored `TySh`.
+
 ### [vector/trace] Marching Squares Cuts Square Corners, So a Traced Rectangle Came Out Skewed
 
 - **Issue / Symptom**: `selection_to_path` on a rectangular selection gave a four-anchor path whose sides were slightly slanted, about half a pixel over the length of a side, instead of a rectangle.

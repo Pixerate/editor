@@ -577,6 +577,7 @@ function importType(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[]
     rendering: 'stored',
   };
   if (!data.antiAlias) layer.antiAlias = false;
+  if (data.orientation === 'vertical') layer.orientation = 'vertical';
   // The pixels are in layer space: `recordPixels` placed them at the record's rectangle already.
   layer.psd = { tySh: block.data.slice(), signature: typeSignature(layer) };
   const fill = u8Block(rec, 'iOpa');

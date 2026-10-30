@@ -718,6 +718,8 @@ export interface VectorCharacterStyle {
 	baselineShift?: number;
 	underline?: boolean;
 	strikethrough?: boolean;
+	/** Vertical text only: Latin and other horizontal scripts stand upright instead of turned sideways (default false). */
+	upright?: boolean;
 }
 
 /** Character style fields a run can set over the node's own style, plus its own fill. */
@@ -793,6 +795,13 @@ export interface VectorTextNode extends VectorNodeBase, VectorStyle {
 	runs?: VectorTextRun[] | null;
 	paragraph?: VectorParagraphStyle | null;
 	frame: VectorTextFrame;
+	/**
+	 * Missing = horizontal. `vertical` (point and area text): columns running down, stacked right to
+	 * left; point text starts at the top of the first column's centre line, area text fills its box
+	 * from the right edge. CJK characters stand upright, others turn sideways (unless `upright`).
+	 * Text on a path ignores it.
+	 */
+	orientation?: 'vertical';
 }
 
 /**

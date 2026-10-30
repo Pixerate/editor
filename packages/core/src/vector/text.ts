@@ -13,7 +13,7 @@
  */
 
 import { toBezierPath, transformBezierPath, type BezierPath } from '../canvas/pathops/bezier.js';
-import { caretAt, DEFAULT_AUTO_LEADING, fitRuns, isTextSpace, layoutText, restyleRange, spliceRuns, styleAt, textDecorations, textFragmentOutline, textIndexAt, textRectPath, type LaidFragment, type LaidLine, type TextLayout } from '../text/layout.js';
+import { caretAt, DEFAULT_AUTO_LEADING, fitRuns, isTextSpace, layoutText, lineToTextSpace, restyleRange, spliceRuns, styleAt, textDecorations, textFragmentOutline, textIndexAt, textLineRect, textRectPath, textSelectionQuads, type LaidFragment, type LaidLine, type TextLayout } from '../text/layout.js';
 import { createCanvasTextShaper, createMetricTextShaper, cssFontFamily } from '../text/shapers.js';
 import type { ParagraphStyle, TextFont, TextShaper, TextStyle } from '../text/types.js';
 import { applyMatrix, isIdentityMatrix } from '../geom/affine.js';
@@ -79,7 +79,7 @@ export function vectorTextFamilies(): string[] {
 export const DEFAULT_VECTOR_FONT: Readonly<VectorCharacterStyle> = { fontFamily: 'sans-serif', fontWeight: 400, fontSize: 24 };
 
 /** Character style fields, in the order agents see them. */
-export const VECTOR_CHARACTER_STYLE_KEYS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough'] as const;
+export const VECTOR_CHARACTER_STYLE_KEYS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough', 'upright'] as const;
 /** Paragraph style fields. */
 export const VECTOR_PARAGRAPH_STYLE_KEYS = ['align', 'autoLeading', 'firstLineIndent', 'startIndent', 'endIndent', 'spaceBefore', 'spaceAfter'] as const;
 
@@ -303,7 +303,7 @@ export interface VectorTextLayout {
 	shaper: string;
 	glyphs: VectorTextGlyph[];
 	fragments: VectorTextFragment[];
-	/** Lines: their text range and baseline (node space for point and area text). */
+	/** Lines: their text range and baseline (node space for point and area text; for vertical text `baseline` is a column's centre x and `x` its top y). */
 	lines: { start: number; end: number; baseline: number; x: number; width: number }[];
 	/** Where text space (the shared layout's) starts in the node: the frame's origin. */
 	origin: Vec2;
@@ -318,7 +318,7 @@ export interface VectorTextLayout {
 }
 
 /** The node as the shared engine's text block (text space). */
-function textBlock(node: VectorTextNode): { text: string; runs: Array<{ length: number; style: TextStyle }>; paragraphs: Array<{ length: number; style: ParagraphStyle }>; frame: { kind: 'point' } | { kind: 'box'; width: number; height: number } } {
+function textBlock(node: VectorTextNode): { text: string; runs: Array<{ length: number; style: TextStyle }>; paragraphs: Array<{ length: number; style: ParagraphStyle }>; frame: { kind: 'point' } | { kind: 'box'; width: number; height: number }; orientation?: 'vertical' } {
 	const runs = vectorTextRuns(node);
 	const keys: string[] = [];
 	const text = node.frame.kind === 'path' ? node.text.replace(/\n/g, ' ') : node.text;
@@ -332,7 +332,8 @@ function textBlock(node: VectorTextNode): { text: string; runs: Array<{ length: 
 			return { length: r.end - r.start, style: { ...r.style, color: `#${i}` } as TextStyle };
 		}),
 		paragraphs: [{ length: text.length, style: { ...(node.paragraph ?? {}), ...(node.frame.kind === 'path' ? { align: 'left' as const } : {}) } }],
-		frame: node.frame.kind === 'area' ? { kind: 'box', width: Math.max(0, node.frame.width), height: Math.max(0, node.frame.height) } : { kind: 'point' }
+		frame: node.frame.kind === 'area' ? { kind: 'box', width: Math.max(0, node.frame.width), height: Math.max(0, node.frame.height) } : { kind: 'point' },
+		...(node.orientation === 'vertical' && node.frame.kind !== 'path' ? { orientation: 'vertical' as const } : {})
 	};
 }
 
@@ -372,13 +373,23 @@ function computeLayout(node: VectorTextNode, shaper: TextShaper): VectorTextLayo
 	};
 	if (frame.kind !== 'path') {
 		text.lines.forEach((l, li) => {
-			if (frame.kind === 'area' && li > 0 && l.baseline + l.descent > frame.height + 1e-6) {
+			// Lines stack across the box: down its height, or (vertical columns) leftwards across its width.
+			if (frame.kind === 'area' && li > 0 && l.baseline + l.descent > (l.matrix ? frame.width : frame.height) + 1e-6) {
 				overflow = true;
 				return;
 			}
-			lines.push({ start: l.start, end: l.end, baseline: origin.y + l.baseline, x: origin.x + l.x, width: l.width });
+			if (l.matrix) {
+				const top = lineToTextSpace(text, { x: l.x, y: l.baseline });
+				lines.push({ start: l.start, end: l.end, baseline: origin.x + top.x, x: origin.y + top.y, width: l.width });
+			} else lines.push({ start: l.start, end: l.end, baseline: origin.y + l.baseline, x: origin.x + l.x, width: l.width });
 			for (const f of l.fragments) {
 				const from = glyphs.length;
+				if (f.glyphs) {
+					// Vertical text: each character as the engine places it, upright or turned.
+					for (const g of f.glyphs) glyphs.push({ index: g.index, char: block.text.slice(g.index, g.index + g.length), x: origin.x + g.x, y: origin.y + g.y, angle: g.angle, advance: g.advance, ascent: g.ascent, descent: g.descent, fragment: fragments.length });
+					fragments.push({ style: styleOf(f), font: f.font, ...(fillOf(f) !== undefined ? { fill: fillOf(f) } : {}), from, to: glyphs.length, line: lines.length - 1, laid: { fragment: f, line: l } });
+					continue;
+				}
 				for (let k = 0; k < f.end - f.start; k++) {
 					const index = f.start + k;
 					const ch = block.text[index];
@@ -551,7 +562,7 @@ export function vectorTextPaths(node: VectorTextNode): VectorTextPaths {
 		const glyphs = layout.glyphs.slice(f.from, f.to);
 		if (!glyphs.length) return;
 		if (!outlines) {
-			if (node.frame.kind === 'path') {
+			if (node.frame.kind === 'path' || layout.text.orientation === 'vertical') {
 				for (const g of glyphs) if (!isTextSpace(g.char)) out.push(...polygon(glyphBox(g)));
 			} else {
 				const first = glyphs[0];
@@ -601,7 +612,7 @@ function polygon(pts: Vec2[]): BezierPath {
  * stroke settings and fill rule, with `fill` replacing the top fill's paint when given.
  */
 export function vectorTextPaintSource(node: VectorTextNode, fill?: VectorPaint, subpaths: VectorSubpath[] = []): VectorPathNode {
-	const { type: _t, text: _x, font: _f, runs: _r, paragraph: _p, frame: _fr, ...rest } = node;
+	const { type: _t, text: _x, font: _f, runs: _r, paragraph: _p, frame: _fr, orientation: _o, ...rest } = node;
 	const out: VectorPathNode = { ...rest, type: 'path', subpaths, fillRule: 'nonzero' };
 	if (fill === undefined) return out;
 	if (Array.isArray(out.fills) && out.fills.length) {
@@ -639,7 +650,7 @@ export function vectorTextCaret(node: VectorTextNode, index: number): VectorText
 		// Point and area text: the shared engine's caret (it knows empty lines and line ends).
 		const c = caretAt(layout.text, index);
 		const o = layout.origin;
-		return { top: { x: o.x + c.x, y: o.y + c.top }, bottom: { x: o.x + c.x, y: o.y + c.bottom }, line: c.line };
+		return { top: { x: o.x + c.from.x, y: o.y + c.from.y }, bottom: { x: o.x + c.to.x, y: o.y + c.to.y }, line: c.line };
 	}
 	const g = glyphs.find((x) => x.index >= index);
 	if (g && g.index === index) return at(g, 0);
@@ -685,6 +696,10 @@ export function vectorTextSelectionQuads(node: VectorTextNode, start: number, en
 	const layout = layoutVectorText(node);
 	const picked = layout.glyphs.filter((g) => g.index >= start && g.index < end);
 	if (node.frame.kind === 'path') return picked.map(glyphBox);
+	if (layout.text.orientation === 'vertical') {
+		const o = layout.origin;
+		return textSelectionQuads(layout.text, start, end).map((q) => q.map((p) => ({ x: o.x + p.x, y: o.y + p.y })));
+	}
 	const byLine = new Map<number, VectorTextGlyph[]>();
 	for (const g of picked) {
 		const line = layout.fragments[g.fragment].line;
@@ -733,6 +748,7 @@ export function patchVectorCharacterStyle<T extends Partial<VectorCharacterStyle
 			case 'italic':
 			case 'underline':
 			case 'strikethrough':
+			case 'upright':
 				if (typeof v !== 'boolean' && v !== null) fail(`${path}.${k} must be true or false.`);
 				if (v) out[k] = true;
 				else delete out[k];
@@ -817,8 +833,15 @@ export function normalizeVectorTextRuns(text: string, runs: readonly VectorTextR
 	return cleaned;
 }
 
+/** An orientation from loose input: `horizontal` (returned as undefined, the default) or `vertical`. */
+export function vectorTextOrientation(value: unknown, path = 'orientation'): 'vertical' | undefined {
+	if (value === undefined || value === null || value === 'horizontal') return undefined;
+	if (value !== 'vertical') fail(`${path} must be horizontal or vertical, got ${JSON.stringify(value)}.`);
+	return 'vertical';
+}
+
 /** A text node read from untrusted data (JSON, SVG data attributes, agents): fields validated and normalised. */
-export function sanitizeVectorTextFields(value: Record<string, unknown>): Pick<VectorTextNode, 'text' | 'font' | 'runs' | 'paragraph' | 'frame'> {
+export function sanitizeVectorTextFields(value: Record<string, unknown>): Pick<VectorTextNode, 'text' | 'font' | 'runs' | 'paragraph' | 'frame' | 'orientation'> {
 	const text = typeof value.text === 'string' ? value.text.replace(/\r\n?/g, '\n') : '';
 	const font = patchVectorCharacterStyle({ ...DEFAULT_VECTOR_FONT }, (value.font as Record<string, unknown>) ?? {}, 'font');
 	const runs = Array.isArray(value.runs)
@@ -834,7 +857,8 @@ export function sanitizeVectorTextFields(value: Record<string, unknown>): Pick<V
 		: null;
 	const paragraph = value.paragraph ? patchVectorParagraphStyle({}, value.paragraph as Record<string, unknown>) : null;
 	const frame = sanitizeVectorTextFrame(value.frame ?? { kind: 'point', x: 0, y: 0 });
-	return { text, font, ...(runs ? { runs } : {}), ...(paragraph && Object.keys(paragraph).length ? { paragraph } : {}), frame };
+	const orientation = vectorTextOrientation(value.orientation);
+	return { text, font, ...(runs ? { runs } : {}), ...(paragraph && Object.keys(paragraph).length ? { paragraph } : {}), frame, ...(orientation ? { orientation } : {}) };
 }
 
 /** A range of the text from loose input: [start, end) in UTF-16 code units (default the whole text). */
@@ -1007,6 +1031,13 @@ export function vectorTextBoxOutline(node: VectorTextNode): BezierPath {
 	layout.text.lines.forEach((l, i) => {
 		const line = layout.lines[i];
 		if (!line) return;
+		if (l.matrix) {
+			const r = textLineRect(l);
+			const o = layout.origin;
+			const h = Math.max(r.height, 1);
+			out.push(...polygon([{ x: o.x + r.x, y: o.y + r.y }, { x: o.x + r.x + r.width, y: o.y + r.y }, { x: o.x + r.x + r.width, y: o.y + r.y + h }, { x: o.x + r.x, y: o.y + r.y + h }]));
+			return;
+		}
 		const top = line.baseline - l.ascent;
 		const bottom = line.baseline + l.descent;
 		const w = Math.max(l.width, 1);

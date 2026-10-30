@@ -124,7 +124,7 @@ export class SelectionGesture {
       return;
     }
     if (options.tool === 'type' || options.tool === 'type-vertical') {
-      // Type Mask: the click is the text's origin (vertical: the column's centre and top baseline).
+      // Type Mask: the click is the text's origin (vertical: the top of the first column's centre line).
       this.start = null;
       try {
         this.controller.selectTextShape({

@@ -96,6 +96,23 @@ describe('Svelte shape and type options bars', () => {
     expect(c.getTextLayer(id).runs[0].style.fontSize).toBe(30);
   });
 
+  it('TypeOptionsBar turns the active type layer vertical and sets Latin upright', () => {
+    const c = controller();
+    const id = c.addTextLayer({ text: 'AB', x: 40, y: 10, style: { fontFamily: 'Box', fontSize: 20 } });
+    let options = DEFAULT_TYPE_TOOL_OPTIONS;
+    component = mount(TypeOptionsBar, { target, props: { controller: c, options, onchange: (o: typeof options) => (options = o) } });
+    flushSync();
+    expect(button('Horizontal').getAttribute('aria-pressed')).toBe('true');
+    click(button('Vertical'));
+    expect(c.getTextLayer(id).orientation).toBe('vertical');
+    expect(options.orientation).toBe('vertical');
+    expect(button('Vertical').getAttribute('aria-pressed')).toBe('true');
+    click(button('Upright Latin'));
+    expect(c.getTextLayer(id).runs[0].style.upright).toBe(true);
+    click(button('Horizontal'));
+    expect(c.getTextLayer(id).orientation).toBe('horizontal');
+  });
+
   it('LayersPanel shows shape and type thumbnails with a kind badge, and warns about missing fonts', () => {
     const c = controller();
     c.addShapeLayer({ shape: { kind: 'rect', x: 10, y: 10, width: 40, height: 40 } });

@@ -42,16 +42,19 @@ describe('type masks', () => {
     expect(c.getSelection()).toBeNull();
   });
 
-  it('stacks vertical text into one centred column', async () => {
-    const { call, fails } = setup();
+  it('lays vertical text out as vertical type: Latin turned sideways down a column, line breaks as columns', async () => {
+    const { call } = setup();
+    // Box font: ascent 80, descent 20 at 100 px, so a turned glyph's baseline sits 30 left of the
+    // column centre and its 70 px height rises to the right; its 50 px width runs down from y + 5.
     const sel = await call('select_text_shape', { text: 'AB', x: 200, y: 100, style: STYLE, orientation: 'vertical', antiAlias: false });
-    expect(sel.bounds.x).toBe(175);
-    expect(sel.bounds.width).toBe(50);
-    expect(sel.bounds.y).toBe(30);
-    expect(sel.bounds.height).toBeGreaterThan(150);
+    expect(sel.bounds).toEqual({ x: 170, y: 105, width: 70, height: 110 });
     expect(sel.area).toBe(2 * 50 * 70);
-    await fails('select_text_shape', { text: 'A\nB', x: 200, y: 100, orientation: 'vertical' }, /one column/);
-    await fails('select_text_shape', { text: 'AB', x: 200, y: 100, orientation: 'vertical', box: { width: 100, height: 100 } }, /point text/);
+    // A line break starts the next column, 120 px (auto leading) to the left.
+    const two = await call('select_text_shape', { text: 'A\nB', x: 200, y: 100, style: STYLE, orientation: 'vertical', antiAlias: false });
+    expect(two.bounds).toEqual({ x: 50, y: 105, width: 190, height: 50 });
+    // A box fills from its right edge.
+    const boxed = await call('select_text_shape', { text: 'A', x: 100, y: 50, style: STYLE, orientation: 'vertical', box: { width: 200, height: 200 }, antiAlias: false });
+    expect(boxed.bounds.x + boxed.bounds.width).toBe(300 - 50 + 40);
   });
 
   it('combines by mode, feathers, and refuses empty text', async () => {
@@ -79,7 +82,7 @@ describe('type masks', () => {
     opts = { ...opts, tool: 'type-vertical', typeText: 'AB' };
     await g.begin({ x: 200, y: 100 }, { shiftKey: true });
     expect(c.getSelection()!.bounds!.x).toBe(15);
-    expect(c.getSelection()!.bounds!.width).toBe(210);
+    expect(c.getSelection()!.bounds!.width).toBe(240 - 15);
   });
 
   it('plays select_text_shape back on the Select panel', () => {
