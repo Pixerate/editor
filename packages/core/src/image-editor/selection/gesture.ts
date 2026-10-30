@@ -50,6 +50,9 @@ export function snapTo45(from: ImagePoint, point: ImagePoint): ImagePoint {
  *   last anchor to the pointer (snapped to the strongest edge within the width) and places
  *   anchors as it goes (frequency); a click adds one, and closing and the keys are as the
  *   polygonal lasso's. The first click reads the pixels (async).
+ * - Quick Selection: drag (or click) a brush stroke; on `end` it grows into the region painted on,
+ *   out to its edges (async: await {@link settled}). With the New mode and a selection already
+ *   there, strokes add, as in Photoshop; Alt subtracts.
  * - Single row / column: a click selects a 1 px line across the image.
  *
  * Shift adds, Alt subtracts, both intersect (overriding the options bar mode). While dragging,
@@ -69,6 +72,7 @@ export class SelectionGesture {
   public closeRadius = 8;
   /** The last error (e.g. pixels unavailable for the wand), for the UI to show. */
   public error: string | null = null;
+  private pending: Promise<void> = Promise.resolve();
 
   constructor(
     readonly controller: ImageEditorController,
@@ -77,6 +81,11 @@ export class SelectionGesture {
 
   get active(): boolean {
     return this.start !== null || this.polygon !== null || this.magnetic !== null;
+  }
+
+  /** Resolves once a Quick Selection stroke has been applied. */
+  get settled(): Promise<void> {
+    return this.pending;
   }
 
   /** The anchors of a Magnetic Lasso being drawn (empty otherwise). */
@@ -91,7 +100,7 @@ export class SelectionGesture {
     if (this.polygon) return this.current ? [...this.polygon, this.current] : this.polygon.slice();
     if (!this.start || !this.current) return null;
     const { tool } = this.getOptions();
-    if (tool === 'lasso') return this.points.length > 1 ? this.points.slice() : null;
+    if (tool === 'lasso' || tool === 'quick') return this.points.length > 1 ? this.points.slice() : null;
     const rect = normalizeRect({
       x: this.start.x,
       y: this.start.y,
@@ -229,7 +238,8 @@ export class SelectionGesture {
     }
     if (!this.start) return false;
     this.current = point;
-    if (this.getOptions().tool === 'lasso') {
+    const drawn = this.getOptions().tool;
+    if (drawn === 'lasso' || drawn === 'quick') {
       const last = this.points[this.points.length - 1];
       if (Math.hypot(point.x - last.x, point.y - last.y) < 0.5) return false;
       this.points.push(point);
@@ -250,6 +260,28 @@ export class SelectionGesture {
     if (point) this.move(point);
     const options = this.getOptions();
     const mode = selectionModeFromModifiers(modifiers ?? this.modifiers, options.mode);
+    if (options.tool === 'quick') {
+      const stroke = this.points;
+      this.start = null;
+      this.current = null;
+      this.points = [];
+      // With New and a selection already there, the brush adds (Photoshop switches it to Add).
+      const strokeMode = mode === 'replace' && this.controller.getSelection() ? 'add' : mode;
+      this.pending = this.controller
+        .quickSelect([stroke], {
+          size: options.quickSize ?? 30,
+          mode: strokeMode,
+          sampleAllLayers: options.quickSampleAll ?? true,
+          enhanceEdge: options.quickEnhance ?? false,
+        })
+        .then(
+          () => undefined,
+          (err) => {
+            this.error = err instanceof Error ? err.message : String(err);
+          }
+        );
+      return false;
+    }
     const path = this.draftPath;
     const rect = normalizeRect({
       x: this.start.x,

@@ -125,6 +125,12 @@ describe('Svelte SelectionOptionsBar', () => {
     setValue(target.querySelector('input[aria-label="Magnetic lasso contrast"]')!, '30');
     setValue(target.querySelector('input[aria-label="Magnetic lasso frequency"]')!, '80');
     expect(props.options).toMatchObject({ tool: 'magnetic', magneticWidth: 24, magneticContrast: 30, magneticFrequency: 80 });
+    // Quick Selection shows its size, Sample all layers and Auto-enhance.
+    click(button('Quick Selection'));
+    setValue(target.querySelector('input[aria-label="Quick selection size"]')!, '60');
+    click(target.querySelector('[aria-label="Auto-enhance edges"]') as HTMLElement);
+    click(target.querySelector('[aria-label="Sample all layers"]') as HTMLElement);
+    expect(props.options).toMatchObject({ tool: 'quick', quickSize: 60, quickEnhance: true, quickSampleAll: false });
     click(button('Color Range'));
     expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');

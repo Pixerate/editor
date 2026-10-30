@@ -229,6 +229,26 @@
       </label>
     </div>
   {/if}
+  {#if options.tool === 'quick'}
+    <div data-testid="quick-selection-options" class="flex flex-col gap-2">
+      <p class="text-muted-foreground">Paint inside the area: the selection grows out to its edges. Each stroke adds (Alt-drag subtracts).</p>
+      <label class="flex flex-col gap-1">
+        <span class="flex justify-between text-muted-foreground">
+          <span>Size</span>
+          <span class="font-mono">{options.quickSize ?? 30} px</span>
+        </span>
+        <ImageRange label="Quick selection size" min={1} max={500} step={1} value={options.quickSize ?? 30} oninput={(v) => set({ quickSize: v })} />
+      </label>
+      <label class="flex items-center gap-2 text-foreground">
+        <ImageCheckbox label="Sample all layers" checked={options.quickSampleAll ?? true} onchange={(on) => set({ quickSampleAll: on })} />
+        Sample all layers
+      </label>
+      <label class="flex items-center gap-2 text-foreground">
+        <ImageCheckbox label="Auto-enhance edges" checked={options.quickEnhance ?? false} onchange={(on) => set({ quickEnhance: on })} />
+        Auto-enhance edges
+      </label>
+    </div>
+  {/if}
   {#if options.tool === 'type' || options.tool === 'type-vertical'}
     <div data-testid="type-mask-options" class="flex flex-col gap-2">
       <p class="text-muted-foreground">

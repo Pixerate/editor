@@ -3131,3 +3131,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With the Magnetic Lasso, Backspace removed the last anchor, but the anchor count didn't drop: a new anchor appeared in the same place.
 - **Root Cause**: After removing the anchor, the gesture rebuilt the live path to the pointer, and that rebuild places anchors every `frequency` px. The pointer was still far from the previous anchor, so it placed one again at once.
 - **Solution / Workaround**: `followEdges(point, false)` rebuilds the live path without placing anchors. Anchors are only placed again once the pointer moves. Use the same flag for any other rebuild that isn't caused by pointer movement.
+
+### [core/image-editor/selection] Graph Cut Took Hundreds of Milliseconds on a Small Grid With Fractional Capacities
+
+- **Issue / Symptom**: A Quick Selection stroke on a plain background took over 300 ms in max-flow on a 116 × 87 grid, while the same stroke elsewhere took 2 ms.
+- **Root Cause**: The capacities were floating-point colour costs. After subtracting a path's flow, a residual that should be zero was left a hair above it, so the search kept finding paths that could carry almost nothing and pushed thousands of them.
+- **Solution / Workaround**: Round capacities to whole numbers (`UNITS = 64` steps per unit of cost) before handing them to `GridGraph`. With integers the bottleneck edge reaches exactly zero. The whole-image case dropped from about 430 ms to about 110 ms. Do the same for any other graph built on `GridGraph`.

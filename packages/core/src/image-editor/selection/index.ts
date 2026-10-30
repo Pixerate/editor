@@ -13,3 +13,4 @@ export * from './channels';
 export * from './mask-files';
 export * from './path';
 export * from './magnetic';
+export * from './segment';
