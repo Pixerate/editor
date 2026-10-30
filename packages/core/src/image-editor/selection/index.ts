@@ -8,3 +8,4 @@ export * from './overlay';
 export * from './tool-options';
 export * from './gesture';
 export * from './segmentation';
+export * from './stroke';

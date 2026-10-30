@@ -145,6 +145,13 @@ describe('Svelte SelectionOptionsBar', () => {
     expect(button('Reselect').disabled).toBe(false);
     click(button('Reselect'));
     expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    click(button('Crop to Selection'));
+    expect(controller.getState().crop).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    const layers = controller.getLayers().length;
+    click(button('Copy Merged'));
+    click(button('Paste Into'));
+    expect(controller.getLayers().length).toBe(layers + 1);
+    expect(controller.getLayers()[controller.getLayers().length - 1]!.mask).toBeDefined();
     click(button('Polygonal Lasso'));
     expect(target.textContent).toContain('double-click, Enter or a click on the first corner closes it');
   });

@@ -64,6 +64,16 @@
     return controller.canReselect();
   });
   let colorStatus = $state<string | null>(null);
+  let strokeWidth = $state(4);
+  let strokeLocation = $state<'inside' | 'center' | 'outside'>('outside');
+  function edit(fn: () => unknown) {
+    colorStatus = null;
+    try {
+      fn();
+    } catch (err) {
+      colorStatus = err instanceof Error ? err.message : String(err);
+    }
+  }
   async function runColor(op: 'grow' | 'similar') {
     colorStatus = null;
     const opts = { tolerance: options.tolerance, sampleMerged: options.sampleMerged, sample: options.sample };
@@ -310,6 +320,44 @@
     {#each MODIFY_OPS as m (m.op)}
       <button type="button" class={btn(false)} disabled={!sel} onclick={() => controller.modifySelection(m.op, radius)}>{m.label}</button>
     {/each}
+  </div>
+  <div role="group" aria-label="Edit selection" class="flex flex-wrap items-center gap-1">
+    <label class="flex items-center gap-1 text-muted-foreground">
+      Stroke
+      <input
+        type="number"
+        min="1"
+        max="250"
+        step="1"
+        aria-label="Stroke width"
+        value={strokeWidth}
+        oninput={(e) => (strokeWidth = Math.min(250, Math.max(1, Number((e.currentTarget as HTMLInputElement).value) || 1)))}
+        class={numberInput}
+      />
+      px
+    </label>
+    <ImageSelect
+      label="Stroke location"
+      value={strokeLocation}
+      options={[
+        { value: 'outside', label: 'Outside' },
+        { value: 'center', label: 'Center' },
+        { value: 'inside', label: 'Inside' },
+      ]}
+      onchange={(v) => (strokeLocation = v as 'inside' | 'center' | 'outside')}
+    />
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.strokeSelection({ width: strokeWidth, location: strokeLocation }))}>Stroke</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.cropToSelection())}>Crop to Selection</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.contentAwareFill({ output: 'new-layer' }))}>Content-Aware Fill</button>
+  </div>
+  <div role="group" aria-label="Clipboard" class="flex flex-wrap gap-1">
+    <button type="button" class={btn(false)} onclick={() => edit(() => controller.copyPixels())}>Copy</button>
+    <button type="button" class={btn(false)} onclick={() => edit(() => controller.copyPixels({ merged: true }))}>Copy Merged</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.cutPixels())}>Cut</button>
+    <button type="button" class={btn(false)} onclick={() => edit(() => controller.pastePixels('new-layer'))}>Paste</button>
+    <button type="button" class={btn(false)} onclick={() => edit(() => controller.pastePixels('in-place'))}>Paste in Place</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.pastePixels('into'))}>Paste Into</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.pastePixels('outside'))}>Paste Outside</button>
   </div>
   {#if colorStatus}
     <p role="status" class="text-muted-foreground">{colorStatus}</p>

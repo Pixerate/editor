@@ -59,10 +59,15 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    **Check:** `percent` changed by roughly what you intended (a few percent at most for a
    cleanup).
 5. **Output.** Choose by goal:
-   - A local adjustment: `apply_selection_as_mask` with `kind` (one step).
+   - A local adjustment: `add_adjustment_layer` while the selection is active (it is masked
+     by it), or `apply_selection_as_mask` with `kind`. Filters (`apply_effect`,
+     `add_smart_filter`) are also limited to an active selection.
    - A cutout: `layer_via_copy` (the original stays), or `add_layer_mask` `from: "selection"` on
      the layer itself.
-   - Painting or fills inside it: keep the selection active and paint.
+   - Painting or fills inside it: keep the selection active and paint; `stroke_selection` for
+     an outline that follows it.
+   - Removing what it covers: `content_aware_fill` `output: "new-layer"`.
+   - A copy elsewhere: `copy_pixels`, then `paste_pixels` (`into` masks it by a selection).
    Soften with the mask's own `feather` / `density` rather than `modify_selection` `feather`, so
    it stays adjustable.
 6. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
@@ -114,6 +119,14 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   a smart object's filters.
 - **Clip a texture or colour to a layer:** put it directly above and set `clipped: true` with
   `set_layer_properties`; no selection is needed.
+- **Remove an object:** select it with a 2–4 px margin (`modify_selection` `expand`), then
+  `content_aware_fill` `output: "new-layer"`; try another `seed` if the fill repeats texture,
+  and mask out what is wrong.
+- **Outline a cutout:** `select_layer_transparency` on it, then `stroke_selection`
+  `location: "outside"` on a new layer below it.
+- **Crop to a subject:** select it, then `crop_to_selection` (non-destructive).
+- **Put a picture into a shape:** select the shape, `copy_pixels` the picture, then
+  `paste_pixels` `mode: "into"`.
 - **Picture inside a frame:** mask the picture with the frame's shape, then
   `set_layer_mask_properties` `linked: false` so the picture moves under a fixed mask; link it
   again afterwards.
@@ -135,6 +148,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - **Deselected by mistake:** `reselect` brings it back (or `undo_image`).
 - **Empty selection:** `modify_selection`, `refine_selection` and `apply_selection_as_mask` fail
   on it. Select first.
+- **A forgotten selection limits new layers and filters:** `add_adjustment_layer`,
+  `apply_effect` and `add_smart_filter` mask themselves by it. `deselect` first for a global
+  change, or pass `useSelection: false`.
 - **Hidden selection still applies:** with `set_selection_display` `none`, paint and fills are
   still limited to it. `deselect` before a whole-layer edit.
 - **Wrong coordinates:** use natural image pixels, not preview pixels. On a cropped or rotated
@@ -167,6 +183,11 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `add_layer_mask`, `set_layer_mask_properties`, `apply_layer_mask`, `remove_layer_mask`: layer masks
 - `set_smart_filter_mask`: limit smart filters
 - `layer_via_copy`: lift the selection onto a new layer
+- `stroke_selection`: an outline along the selection edge
+- `crop_to_selection`: crop to the selection's bounds
+- `content_aware_fill`: remove what is selected
+- `copy_pixels`, `cut_pixels`, `paste_pixels`: the editor clipboard
+- `add_adjustment_layer`, `apply_effect`, `add_smart_filter`: masked by an active selection
 - `paint_stroke`: paint on a mask with `channel: "mask"`
 - `undo_image`: take back a step
 - `set_layer_properties`: clipping

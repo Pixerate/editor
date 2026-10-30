@@ -293,6 +293,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: After `currentTime` is set, a `<video>` keeps `readyState >= 2` and draws its old frame until `seeked` fires. A canvas that has drawn cross-origin media without CORS is tainted, and `getImageData` throws a `SecurityError`.
 - **Solution / Workaround**: `VideoPreviewEngine` marks a frame incomplete while any media layer is missing or `seeking`, and `VideoPreviewPixels.next(time)` waits for a complete drawing of that time (or times out with a reason). Serve media with `Access-Control-Allow-Origin` (the engine sets `crossOrigin = "anonymous"`); `VideoPreviewPixels.read()` turns the `SecurityError` into a message that says so. Luma computed from equal channels can come out a hair under the value (39.99999…), so scope bins are nudged before flooring.
 
+### [core/image-editor] A Command Built From Other Commands Must Run in `asOneStep`
+
+- **Issue / Symptom**: Paste Into (a new layer, then its mask), Cut (copy, then clear) and a smart filter added with a selection (the filter, then its mask) took two undo steps. One undo left a layer without its mask, or a filter whose mask had already gone.
+- **Root Cause**: Each public command (`addPixelLayer`, `addLayerMask`, `clearPixels`, `setSmartFilterMask`) records its own history step through `commitLayers`. `setSmartFilterMask`'s `commitToHistory = false` does not help when the step before it was recorded by a different call.
+- **Solution / Workaround**: Wrap the calls in the controller's private `asOneStep(fn)`. It records one step before `fn`, and `recordHistory` is a no-op while it runs. If `fn` throws, the step is dropped and the state is restored, so a failure never leaves half a change. Test each composite command with a single `undo()`.
+
 ### [core/image-editor] AI Results Must Be Computed From the Composite When They Become Layers
 
 - **Issue / Symptom**: Sending the original source image to an inpainting hook in a layered document would give a result that ignores everything painted on the layers above. Added as a new layer on top, it would then hide those edits inside the selection.

@@ -255,3 +255,32 @@ export class SelectionGesture {
     this.freehand = false;
   }
 }
+
+/**
+ * Edit shortcuts in select mode, as in Photoshop: Ctrl/⌘+C copies (with Shift, Copy Merged),
+ * Ctrl/⌘+X cuts, Ctrl/⌘+V pastes (with Shift, in place; with Alt+Shift, into the selection),
+ * Ctrl/⌘+D deselects, Ctrl/⌘+Shift+D reselects and Ctrl/⌘+Shift+I inverts. Returns true when
+ * the key was used (the host prevents its default); errors go to `onError`.
+ */
+export function handleSelectionShortcut(
+  controller: ImageEditorController,
+  e: { key: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean },
+  onError?: (message: string) => void
+): boolean {
+  if (!(e.ctrlKey || e.metaKey)) return false;
+  const key = e.key.toLowerCase();
+  const run = (fn: () => unknown) => {
+    try {
+      fn();
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : String(err));
+    }
+    return true;
+  };
+  if (key === 'c') return run(() => controller.copyPixels({ merged: Boolean(e.shiftKey) }));
+  if (key === 'x' && !e.shiftKey) return run(() => controller.cutPixels());
+  if (key === 'v') return run(() => controller.pastePixels(e.shiftKey && e.altKey ? 'into' : e.shiftKey ? 'in-place' : 'new-layer'));
+  if (key === 'd') return run(() => (e.shiftKey ? controller.reselect() : controller.deselect()));
+  if (key === 'i' && e.shiftKey) return run(() => controller.invertSelection());
+  return false;
+}

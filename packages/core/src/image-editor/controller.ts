@@ -46,7 +46,9 @@ import { colorRange, colorRangePreset, growSelection as growSelectionMask, magic
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
-import type { LayerMaskProps } from './selection/layer-mask';
+import { layerMaskFromSelection, type LayerMaskProps } from './selection/layer-mask';
+import { selectionRing } from './selection/stroke';
+import { contentAwareFill as contentAwareFillPixels } from '../paint/heal';
 import type { AdjustmentLayerMask } from './types';
 import { DEFAULT_ADJUSTMENTS_VALUES, DEFAULT_DEPTH_MASK_VALUES, DEFAULT_TRANSFORM_VALUES } from './layers/defaults';
 import {
@@ -471,6 +473,11 @@ export interface AdjustmentLayerInit<K extends AdjustmentKind = AdjustmentKind> 
   aboveId?: string;
   /** Put the new layer at the top of this group. */
   parentId?: string;
+  /**
+   * Mask the new layer with the selection when there is one and no `mask` is given (Photoshop's
+   * behaviour). Default false here, for compatibility; the agent tool and the panels pass true.
+   */
+  useSelection?: boolean;
 }
 
 /** A new pixel layer: empty, a solid colour over the canvas, or given pixels, plus its properties and position. */
@@ -669,6 +676,35 @@ export interface FillOptions {
   /** Limit to the selection when there is one (default true). */
   useSelection?: boolean;
 }
+
+/** Edit › Stroke (see `strokeSelection`). */
+export interface StrokeSelectionOptions extends Omit<FillOptions, 'useSelection'> {
+  /** Width of the band in pixels (0 < width ≤ 250). */
+  width: number;
+  /** Where the band lies against the selection edge (default `outside`). */
+  location?: 'inside' | 'center' | 'outside';
+}
+
+/** Edit › Content-Aware Fill (see `contentAwareFill`). */
+export interface ContentAwareFillOptions {
+  /** The pixel layer to sample and fill (default the active layer). */
+  layerId?: string;
+  /** `current` (default) paints into the layer; `new-layer` puts the fill on a new layer above it. */
+  output?: 'current' | 'new-layer';
+  /** How far around the selection to sample, in pixels (default its larger side, at least 32). */
+  sampleRadius?: number;
+  /** Random seed: the same seed gives the same fill (default 0). */
+  seed?: number;
+}
+
+/** Pixels on the editor's clipboard: RGBA, and where they were copied from (document pixels). */
+export interface ClipboardImage extends PixelBuffer {
+  x?: number;
+  y?: number;
+}
+
+export type PasteMode = 'new-layer' | 'in-place' | 'into' | 'outside';
+export const PASTE_MODES: readonly PasteMode[] = ['new-layer', 'in-place', 'into', 'outside'];
 
 /** What a stroke, fill or clear changed. */
 export interface PaintStrokeResult {
@@ -1577,8 +1613,16 @@ export class ImageEditorController {
   public async applyEffectFilter(
     layerId: string,
     effect: string,
-    options: { values?: Record<string, EffectValue>; index?: number; enabled?: boolean; blend?: string; opacity?: number } = {}
-  ): Promise<{ layerId: string; filter: SmartFilter; converted: boolean }> {
+    options: {
+      values?: Record<string, EffectValue>;
+      index?: number;
+      enabled?: boolean;
+      blend?: string;
+      opacity?: number;
+      /** Limit the filter to the selection (sets the filter mask from it, same undo step). Default false. */
+      useSelection?: boolean;
+    } = {}
+  ): Promise<{ layerId: string; filter: SmartFilter; converted: boolean; masked: boolean }> {
     const d = await this.describeEffect(effect, 'filter');
     const values = resolveEffectValues(d, options.values);
     const found = findLayer(this.state.layers, layerId);
@@ -1595,8 +1639,11 @@ export class ImageEditorController {
     }
     const filter = normalizeSmartFilter({ kind: 'effect', effect: d.id, provider: this.effects.require().id, name: d.name, values, enabled: options.enabled !== false, blend: options.blend, opacity: options.opacity });
     const res = addSmartFilterOp(layers, id, filter, this.canvasSize, options.index);
-    this.commitLayers(res.layers);
-    return { layerId: id, filter: res.filter, converted };
+    const masked = this.asOneStep(() => {
+      this.commitLayers(res.layers);
+      return this.maskFiltersWithSelection(id, options.useSelection);
+    });
+    return { layerId: id, filter: res.filter, converted, masked };
   }
 
   /**
@@ -1851,8 +1898,40 @@ export class ImageEditorController {
     }
   }
 
+  /** Set while `asOneStep` runs: the step is already recorded, so nested commands add none. */
+  private historyGrouped = false;
+
+  /**
+   * Runs `fn` as one undo step: history is recorded once, before it, and the commands it calls
+   * record none. If `fn` throws, the step is dropped and the state goes back to before it, so a
+   * failure never leaves half a change.
+   */
+  private asOneStep<T>(fn: () => T): T {
+    if (this.historyGrouped || this.isApplyingHistory) return fn();
+    this.recordHistory();
+    const entry = this.undoStack[this.undoStack.length - 1];
+    this.historyGrouped = true;
+    try {
+      return fn();
+    } catch (err) {
+      if (this.undoStack[this.undoStack.length - 1] === entry) {
+        this.undoStack.pop();
+        this.isApplyingHistory = true;
+        try {
+          this.restoreHistoryEntry(entry);
+        } finally {
+          this.isApplyingHistory = false;
+        }
+        this.notify();
+      }
+      throw err;
+    } finally {
+      this.historyGrouped = false;
+    }
+  }
+
   private recordHistory(): void {
-    if (this.isApplyingHistory) return;
+    if (this.isApplyingHistory || this.historyGrouped) return;
     this.docRevision++;
     this.undoStack.push(this.captureHistoryEntry());
     if (this.undoStack.length > this.maxHistoryDepth) {
@@ -3106,10 +3185,23 @@ export class ImageEditorController {
   }
 
   /** Adds a smart filter (`develop` or `blur`, with `blend` and `opacity`) at `index` (default the top), as one undo step. */
-  public addSmartFilter(id: string, filter: Record<string, unknown> & { kind: string }, index?: number): SmartFilter {
+  public addSmartFilter(id: string, filter: Record<string, unknown> & { kind: string }, index?: number, options: { useSelection?: boolean } = {}): SmartFilter {
     const res = addSmartFilterOp(this.state.layers, id, normalizeSmartFilter(filter), this.canvasSize, index);
-    this.commitLayers(res.layers);
-    return res.filter;
+    return this.asOneStep(() => {
+      this.commitLayers(res.layers);
+      this.maskFiltersWithSelection(id, options.useSelection);
+      return res.filter;
+    });
+  }
+
+  /**
+   * After adding a smart filter: with `useSelection` and a selection, sets the filter mask from
+   * it in the same undo step (Photoshop limits a filter to the selection). Returns whether it did.
+   */
+  private maskFiltersWithSelection(id: string, useSelection: boolean | undefined): boolean {
+    if (!useSelection || !this.state.selection?.bounds) return false;
+    this.setSmartFilterMask(id, 'selection', {}, false);
+    return true;
   }
 
   /** Changes one smart filter (one undo step, or none with `commitToHistory = false` during a drag). */
@@ -4020,13 +4112,185 @@ export class ImageEditorController {
     return this.fillOrClear(options, 'erase');
   }
 
-  private fillOrClear(options: FillOptions, mode: 'paint' | 'erase'): PaintStrokeResult {
-    const target = this.paintTarget(options.layerId, options.channel, mode === 'paint' ? 'fill' : 'clear');
+  /**
+   * Edit › Stroke: paints a band `width` px wide along the selection's edge, `inside` it, on the
+   * `center` of the edge or `outside` it (default), with `color` (default the foreground),
+   * `opacity` and `blend`, on a layer's pixels or mask. One undo step. Returns the changed bounds.
+   */
+  public strokeSelection(options: StrokeSelectionOptions): PaintStrokeResult {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, then stroke the selection.');
+    const width = options.width;
+    if (!(width > 0 && width <= 250)) throw new LayerOperationError('width must be greater than 0 and at most 250 px.');
+    const location = options.location ?? 'outside';
+    if (location !== 'inside' && location !== 'center' && location !== 'outside') {
+      throw new LayerOperationError(`Unknown location "${String(location)}"; use inside, center or outside.`);
+    }
+    const ring = selectionRing(sel, width, location);
+    if (!ring.bounds) return { layerId: options.layerId ?? this.state.activeLayerId ?? '', channel: 'pixels', bounds: null, dabs: 0 };
+    return this.fillOrClear(options, 'paint', ring);
+  }
+
+  /**
+   * Image › Crop to the selection's bounds (one undo step). Returns the crop box (natural
+   * pixels). Throws without a selection.
+   */
+  public cropToSelection(): CropBox {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select the area to keep, then crop to it.');
+    const crop = { ...sel.bounds };
+    this.setCrop(crop);
+    return crop;
+  }
+
+  /**
+   * Edit › Content-Aware Fill: fills the selection with texture synthesised from around it
+   * (PatchMatch, as the Spot Healing Brush's content-aware mode), blended by the selection's
+   * coverage. `output` `current` paints into the layer; `new-layer` puts the fill on a new layer
+   * above it. Samples within `sampleRadius` px of the selection (default its larger side, at
+   * least 32). Deterministic for a `seed`. One undo step. 8-bit documents only for now.
+   */
+  public contentAwareFill(options: ContentAwareFillOptions = {}): { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select what to remove, then fill it.');
+    if (this.bitDepth !== 8) throw new LayerOperationError('Content-Aware Fill works on 8-bit documents for now; set_bit_depth 8 first, or use spot_heal.');
+    const output = options.output ?? 'current';
+    if (output !== 'current' && output !== 'new-layer') throw new LayerOperationError(`Unknown output "${String(output)}"; use current or new-layer.`);
+    const target = this.paintTarget(options.layerId, 'pixels', 'fill');
+    const { width, height } = this.naturalSize;
+    const b = sel.bounds;
+    const margin = Math.max(32, Math.round(options.sampleRadius ?? Math.max(b.width, b.height)));
+    const x0 = Math.max(0, b.x - margin);
+    const y0 = Math.max(0, b.y - margin);
+    const win = { x: x0, y: y0, width: Math.min(width, b.x + b.width + margin) - x0, height: Math.min(height, b.y + b.height + margin) - y0 };
+    if (win.width * win.height > 16_000_000) throw new LayerOperationError('The area to fill and sample is too large (over 16 MP); fill a smaller selection or lower sampleRadius.');
+    const layerRect = { x: win.x - target.offset.x, y: win.y - target.offset.y, width: win.width, height: win.height };
+    const before = readRegion(target.surface, layerRect);
+    const img = new Float32Array(before.length);
+    for (let i = 0; i < before.length; i++) img[i] = before[i];
+    const coverage = new Float32Array(win.width * win.height);
+    const hole = new Uint8Array(win.width * win.height);
+    for (let y = 0; y < win.height; y++) {
+      for (let x = 0; x < win.width; x++) {
+        const c = sel.data[(win.y + y) * sel.width + win.x + x] / 255;
+        coverage[y * win.width + x] = c;
+        hole[y * win.width + x] = c > 0 ? 1 : 0;
+      }
+    }
+    const filled = contentAwareFillPixels(win.width, win.height, 4, img, hole, { seed: options.seed ?? 0 });
+    const out = new Uint8ClampedArray(before.length);
+    for (let i = 0; i < coverage.length; i++) {
+      const k = coverage[i];
+      for (let c = 0; c < 4; c++) {
+        const p = i * 4 + c;
+        out[p] = output === 'new-layer' ? (c === 3 ? Math.round(filled[p] * k) : filled[p]) : before[p] + (filled[p] - before[p]) * k;
+      }
+    }
+    if (output === 'new-layer') {
+      const crop = { x: b.x - win.x, y: b.y - win.y, width: b.width, height: b.height };
+      const data = new Uint8ClampedArray(b.width * b.height * 4);
+      for (let y = 0; y < b.height; y++) data.set(out.subarray(((crop.y + y) * win.width + crop.x) * 4, ((crop.y + y) * win.width + crop.x + b.width) * 4), y * b.width * 4);
+      const id = this.addPixelLayer({ name: 'Content-Aware Fill', pixels: { width: b.width, height: b.height, data }, x: b.x, y: b.y, aboveId: target.id });
+      return { layerId: id, bounds: { ...b }, output };
+    }
+    const surface = writeRegion(target.surface, layerRect, out);
+    this.commitLayers(mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, 'pixels', surface)));
+    return { layerId: target.id, bounds: { ...b }, output };
+  }
+
+  /** The pixel clipboard (Copy / Cut), or null. */
+  private clipboard: ClipboardImage | null = null;
+
+  /** What Copy or Cut last put on the editor's clipboard, or null. */
+  public getClipboard(): ClipboardImage | null {
+    return this.clipboard;
+  }
+
+  /** Puts pixels on the editor's clipboard (e.g. an image pasted from the system clipboard). */
+  public setClipboard(image: ClipboardImage | null): void {
+    if (image && (image.data.length !== image.width * image.height * 4 || image.width < 1 || image.height < 1)) {
+      throw new LayerOperationError('Clipboard pixels must be RGBA with width × height × 4 bytes.');
+    }
+    this.clipboard = image;
+  }
+
+  /**
+   * Edit › Copy (or Copy Merged with `merged`): the selected pixels of a pixel layer (default the
+   * active one) or of the whole visible image, cropped to the selection's bounds, with the
+   * selection's soft edge in their alpha. Without a selection, the whole canvas. Not an undo step.
+   */
+  public copyPixels(options: { layerId?: string; merged?: boolean } = {}): ClipboardImage {
+    const { width, height } = this.naturalSize;
+    const sel = this.state.selection?.bounds ? this.state.selection : null;
+    const rect = sel?.bounds ?? { x: 0, y: 0, width, height };
+    let data: Uint8ClampedArray;
+    if (options.merged) {
+      data = new Uint8ClampedArray(this.compositePixels(rect).data);
+    } else {
+      const id = options.layerId ?? this.state.activeLayerId;
+      if (!id) throw new LayerOperationError('No layer given and none is active; pass layerId, or merged: true to copy the visible image.');
+      const layer = requireLayer(this.state.layers, id).layer;
+      if (layer.type !== 'pixel') throw new LayerOperationError(`Layer "${layer.name || id}" is not a pixel layer; copy merged, or rasterize it first.`);
+      data = readRegion(this.surfaceOf(layer), { x: rect.x - layer.offset.x, y: rect.y - layer.offset.y, width: rect.width, height: rect.height });
+    }
+    if (sel) {
+      for (let y = 0; y < rect.height; y++) {
+        for (let x = 0; x < rect.width; x++) {
+          const k = sel.data[(rect.y + y) * sel.width + rect.x + x];
+          const p = (y * rect.width + x) * 4 + 3;
+          data[p] = Math.round((data[p] * k) / 255);
+        }
+      }
+    }
+    this.clipboard = { width: rect.width, height: rect.height, x: rect.x, y: rect.y, data };
+    return this.clipboard;
+  }
+
+  /** Edit › Cut: Copy, then clear the selected pixels, as one undo step. */
+  public cutPixels(options: { layerId?: string } = {}): ClipboardImage {
+    return this.asOneStep(() => {
+      const clip = this.copyPixels({ layerId: options.layerId });
+      this.clearPixels({ layerId: options.layerId, channel: 'pixels' });
+      return clip;
+    });
+  }
+
+  /**
+   * Edit › Paste as a new pixel layer above the active one (one undo step): `new-layer` centred
+   * on the selection (or the canvas), `in-place` where it was copied, `into` centred in the
+   * selection with the selection as its mask (Paste Into), or `outside` with the inverse
+   * (Paste Outside). Returns the new layer id and where it went.
+   */
+  public pastePixels(mode: PasteMode = 'new-layer', image: ClipboardImage | null = this.clipboard): { layerId: string; bounds: CropBox; masked: boolean } {
+    if (!image) throw new LayerOperationError('The clipboard is empty; copy_pixels first.');
+    if (!PASTE_MODES.includes(mode)) throw new LayerOperationError(`Unknown paste mode "${String(mode)}"; use ${PASTE_MODES.join(', ')}.`);
+    const sel = this.state.selection?.bounds ? this.state.selection : null;
+    if ((mode === 'into' || mode === 'outside') && !sel) throw new LayerOperationError(`Paste ${mode === 'into' ? 'Into' : 'Outside'} needs a selection; select where it goes first.`);
+    const { width, height } = this.naturalSize;
+    let x: number;
+    let y: number;
+    if (mode === 'in-place' && image.x !== undefined && image.y !== undefined) {
+      x = image.x;
+      y = image.y;
+    } else {
+      const frame = sel?.bounds ?? { x: 0, y: 0, width, height };
+      x = Math.round(frame.x + (frame.width - image.width) / 2);
+      y = Math.round(frame.y + (frame.height - image.height) / 2);
+    }
+    return this.asOneStep(() => {
+      const id = this.addPixelLayer({ name: 'Pasted', pixels: { width: image.width, height: image.height, data: new Uint8ClampedArray(image.data) }, x, y });
+      if (mode === 'into' || mode === 'outside') this.addLayerMask(id, mode === 'into' ? 'selection' : 'hide-selection');
+      return { layerId: id, bounds: { x, y, width: image.width, height: image.height }, masked: mode === 'into' || mode === 'outside' };
+    });
+  }
+
+  private fillOrClear(options: FillOptions, mode: 'paint' | 'erase', coverageMask?: SelectionMask): PaintStrokeResult {
+    const target = this.paintTarget(options.layerId, options.channel, mode === 'paint' ? (coverageMask ? 'stroke' : 'fill') : 'clear');
     const { width, height } = this.naturalSize;
     const opacity = options.opacity ?? 1;
     if (!(opacity >= 0 && opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
     const blend = (parseBlend(options.blend) as BlendMode | undefined) ?? 'normal';
-    const sel = options.useSelection !== false && this.state.selection?.bounds ? this.state.selection : null;
+    const sel = coverageMask ?? (options.useSelection !== false && this.state.selection?.bounds ? this.state.selection : null);
     const region = sel?.bounds ?? { x: 0, y: 0, width, height };
     const coverage = new CoverageMap();
     const ones = new Float32Array(region.width * region.height);
@@ -4217,7 +4481,7 @@ export class ImageEditorController {
       enabled: spec.enabled,
       opacity: spec.opacity,
       blend: spec.blend,
-      mask: spec.mask ?? undefined,
+      mask: spec.mask ?? (spec.useSelection && this.state.selection?.bounds ? layerMaskFromSelection(this.state.selection) : undefined),
     });
     while (ids.has(layer.id)) layer.id = newLayerId('adj');
     const { width, height } = this.naturalSize;
