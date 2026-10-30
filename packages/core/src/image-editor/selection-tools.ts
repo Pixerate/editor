@@ -238,7 +238,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'refine_selection',
     title: 'Refine the selection edge',
     description:
-      'Select and Mask / Refine Edge: snaps the selection edge to the image within radius pixels (edge-aware guided filter), then smooth (0-100), feather (px), contrast (0-100) and shiftEdge (-100..100 %), and puts the result where output says: the selection (default), a layer-mask on layerId (default the active layer; then deselects), a new-layer of its selected pixels, or a new-layer-with-mask (a masked copy); the new-layer outputs hide the source layer. decontaminate (0-100, new-layer outputs only) replaces the old background colour in soft edges (hair, fur) with the subject\'s own. Use it after loading a coarse AI mask, or to cut a subject out cleanly. One undoable step. Returns the selection and, for layer outputs, layerId and newLayerId.',
+      'Select and Mask / Refine Edge: snaps the selection edge to the image within radius pixels (edge-aware guided filter), then smooth (0-100), feather (px), contrast (0-100) and shiftEdge (-100..100 %), and puts the result where output says: the selection (default), a layer-mask on layerId (default the active layer; then deselects), a new-layer of its selected pixels, or a new-layer-with-mask (a masked copy); the new-layer outputs hide the source layer. decontaminate (0-100, new-layer outputs only) replaces the old background colour in soft edges (hair, fur) with the subject\'s own. Use it after loading a coarse AI mask, or to cut a subject out cleanly. edits are the Select and Mask workspace\'s strokes, applied first in order: quick-select (grows to the region\'s edges), brush (paints the selection in or out) and refine-brush (marks hair or fur for the edge to be re-estimated there); with edits, an empty selection is a valid start. refineMode object (needs a host segmentation model) refines from the model\'s outline of the object. One undoable step. Returns the selection, refineMode and, for layer outputs, layerId and newLayerId.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -255,12 +255,36 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         },
         layerId: { type: 'string', description: 'The layer for layer outputs (default the active layer; see list_layers). New-layer outputs need a pixel layer.' },
         decontaminate: { type: 'number', minimum: 0, maximum: 100, description: 'Decontaminate Colors amount 0-100 (default 0), only with output new-layer or new-layer-with-mask.' },
+        edits: {
+          type: 'array',
+          description: 'Strokes applied before refining, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: ['quick-select', 'brush', 'refine-brush'], description: 'quick-select grows to edges; brush paints directly; refine-brush marks soft detail (hair) for the edge to be re-estimated.' },
+              points: { type: 'array', minItems: 1, items: pointSchema, description: 'The stroke path in natural image pixels (one point is a dab).' },
+              size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in natural image pixels (default 30 quick-select, 20 brush, 40 refine-brush).' },
+              mode: { type: 'string', enum: ['add', 'subtract'], description: 'quick-select and brush: add (default) or subtract.' },
+              hardness: { type: 'number', minimum: 0, maximum: 1, description: 'brush: the solid share of the radius, 0..1 (default 1).' },
+            },
+            required: ['kind', 'points'],
+            additionalProperties: false,
+          },
+        },
+        refineMode: { type: 'string', enum: ['color', 'object'], description: 'color (default): refine from the image colours; object: from a host segmentation model\'s outline of the object (needs a model).' },
       },
       additionalProperties: false,
     },
     annotations: writeAnnotations('Refine the selection edge'),
     handler: async (params) => {
-      if (!controller.getSelection()) throw new Error('Nothing is selected.');
+      const edits = Array.isArray(params.edits)
+        ? (params.edits as any[]).map((e) => ({ ...e, points: (e.points ?? []).map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) }))
+        : [];
+      for (const e of edits) {
+        if (!e.points.every((p: { x: number; y: number }) => Number.isFinite(p.x) && Number.isFinite(p.y))) throw new Error('Each edit needs points of { x, y } in natural image pixels.');
+        if (e.kind === 'refine-brush' && e.mode !== undefined) throw new Error('refine-brush strokes have no mode; they mark where the edge is re-estimated.');
+      }
+      if (!controller.getSelection() && !edits.length) throw new Error('Nothing is selected.');
       const result = await controller.refineSelectionTo(
         {
           radius: num(params.radius, 8),
@@ -271,7 +295,12 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
           shiftEdge: num(params.shiftEdge, 0),
         },
         (params.output as RefineOutput | undefined) ?? 'selection',
-        { layerId: typeof params.layerId === 'string' ? params.layerId : undefined, decontaminate: num(params.decontaminate, 0) }
+        {
+          layerId: typeof params.layerId === 'string' ? params.layerId : undefined,
+          decontaminate: num(params.decontaminate, 0),
+          edits,
+          refineMode: params.refineMode === 'object' ? 'object' : 'color',
+        }
       );
       return { ...summary(controller), ...result };
     },

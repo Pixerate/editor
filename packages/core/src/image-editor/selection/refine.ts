@@ -200,19 +200,22 @@ export function edgeWidth(guide: readonly [Float32Array, Float32Array, Float32Ar
 
 /**
  * Refines soft coverage `m` (`w × h`, 0..1) with `guide` (three 0..1 planes, required when
- * `radius > 0`): edge-aware re-estimation in a band around the edge, then smooth, feather,
- * contrast and shift edge, in that order.
+ * `radius > 0` or a `band` is given): edge-aware re-estimation in a band around the edge, then
+ * smooth, feather, contrast and shift edge, in that order. `band` (0..1 per pixel, the Refine
+ * Edge Brush) adds to the band where it is painted, so hair or fur far from the edge is
+ * re-estimated too.
  */
 export function refineCoverage(
   guide: readonly [Float32Array, Float32Array, Float32Array] | null,
   m: Float32Array,
   w: number,
   h: number,
-  params: RefineEdgeParams = {}
+  params: RefineEdgeParams = {},
+  band: ArrayLike<number> | null = null
 ): Float32Array {
   const p = normalizeRefineEdgeParams(params);
   let a: Float32Array = Float32Array.from(m);
-  if (p.radius > 0 && guide) {
+  if ((p.radius > 0 || band) && guide) {
     const n = w * h;
     const boundary = new Uint8Array(n);
     let any = false;
@@ -231,14 +234,16 @@ export function refineCoverage(
         }
       }
     }
-    if (any) {
+    if (any || band) {
       const dist = distanceTransform(boundary, w, h);
-      const r = gfRadius(p);
+      // Painted strands need a window of some size even when the edge radius is 0.
+      const r = band ? Math.max(4, gfRadius(p)) : gfRadius(p);
       const q = guidedFilterColor(guide, m, w, h, r);
       const widths = p.smartRadius ? edgeWidth(guide, w, h, r) : null;
       for (let i = 0; i < n; i++) {
         const reff = widths ? Math.min(Math.max(p.radius, 1.5), Math.max(1.5, widths[i])) : p.radius;
-        const wgt = Math.min(1, Math.max(0, reff + 1 - dist[i]));
+        const edge = p.radius > 0 ? Math.min(1, Math.max(0, reff + 1 - dist[i])) : 0;
+        const wgt = band ? Math.max(edge, Math.min(1, Math.max(0, band[i]))) : edge;
         if (wgt > 0) {
           const qi = Math.min(1, Math.max(0, q[i]));
           a[i] = m[i] + (qi - m[i]) * wgt;
@@ -287,18 +292,27 @@ export function guidePlanes(pixels: PixelBuffer, win?: CropBox): [Float32Array, 
  * same size). Work is confined to the mask's bounds grown by {@link refineEdgeHalo}, so a small
  * selection on a large image stays cheap.
  */
-export function refineSelection(pixels: PixelBuffer | null, mask: SelectionMask, params: RefineEdgeParams = {}): SelectionMask {
+export function refineSelection(pixels: PixelBuffer | null, mask: SelectionMask, params: RefineEdgeParams = {}, refineBrush: SelectionMask | null = null): SelectionMask {
   const p = normalizeRefineEdgeParams(params);
   if (pixels && (pixels.width !== mask.width || pixels.height !== mask.height)) {
     throw new Error('Refine Edge needs pixels the size of the selection');
   }
   if (!mask.bounds) return mask;
-  const halo = refineEdgeHalo(p);
+  const brush = refineBrush?.bounds ? refineBrush : null;
   // The guided filter reads 2r beyond the band; the window must hold that too.
-  const x0 = Math.max(0, mask.bounds.x - halo);
-  const y0 = Math.max(0, mask.bounds.y - halo);
-  const x1 = Math.min(mask.width, mask.bounds.x + mask.bounds.width + halo);
-  const y1 = Math.min(mask.height, mask.bounds.y + mask.bounds.height + halo);
+  const halo = refineEdgeHalo(p) + (brush ? 2 * Math.max(4, gfRadius(p)) : 0);
+  const b = brush
+    ? {
+        x: Math.min(mask.bounds.x, brush.bounds!.x),
+        y: Math.min(mask.bounds.y, brush.bounds!.y),
+        r: Math.max(mask.bounds.x + mask.bounds.width, brush.bounds!.x + brush.bounds!.width),
+        btm: Math.max(mask.bounds.y + mask.bounds.height, brush.bounds!.y + brush.bounds!.height),
+      }
+    : { x: mask.bounds.x, y: mask.bounds.y, r: mask.bounds.x + mask.bounds.width, btm: mask.bounds.y + mask.bounds.height };
+  const x0 = Math.max(0, b.x - halo);
+  const y0 = Math.max(0, b.y - halo);
+  const x1 = Math.min(mask.width, b.r + halo);
+  const y1 = Math.min(mask.height, b.btm + halo);
   const ww = x1 - x0;
   const wh = y1 - y0;
   const m = new Float32Array(ww * wh);
@@ -306,8 +320,17 @@ export function refineSelection(pixels: PixelBuffer | null, mask: SelectionMask,
     const src = (y0 + y) * mask.width + x0;
     for (let x = 0; x < ww; x++) m[y * ww + x] = mask.data[src + x] / 255;
   }
-  const guide = pixels && p.radius > 0 ? guidePlanes(pixels, { x: x0, y: y0, width: ww, height: wh }) : null;
-  const refined = refineCoverage(guide, m, ww, wh, p);
+  const guide = pixels && (p.radius > 0 || brush) ? guidePlanes(pixels, { x: x0, y: y0, width: ww, height: wh }) : null;
+  let band: Float32Array | null = null;
+  if (brush) {
+    band = new Float32Array(ww * wh);
+    const bd = brush.data;
+    for (let y = 0; y < wh; y++) {
+      const src = (y0 + y) * mask.width + x0;
+      for (let x = 0; x < ww; x++) band[y * ww + x] = bd[src + x] / 255;
+    }
+  }
+  const refined = refineCoverage(guide, m, ww, wh, p, band);
   const out = new Uint8Array(mask.width * mask.height);
   for (let y = 0; y < wh; y++) {
     const dst = (y0 + y) * mask.width + x0;

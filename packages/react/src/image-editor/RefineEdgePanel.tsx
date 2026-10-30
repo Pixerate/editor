@@ -36,6 +36,8 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
   const [newKind, setNewKind] = useState<AdjustmentKind>('hueSaturation');
   const [output, setOutput] = useState<RefineOutput>('selection');
   const [decontaminate, setDecontaminate] = useState(0);
+  const [objectAware, setObjectAware] = useState(false);
+  const canObject = Boolean(controller.segmentationProvider);
   const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
   const sel = selection === undefined ? controller.getSelection() : selection;
   const list = layers ?? controller.getAdjustmentLayers();
@@ -45,7 +47,10 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
     setBusy(true);
     setError(null);
     try {
-      await controller.refineSelectionTo(params, output, { decontaminate: toLayer ? decontaminate : 0 });
+      await controller.refineSelectionTo(params, output, {
+        decontaminate: toLayer ? decontaminate : 0,
+        refineMode: canObject && objectAware ? 'object' : 'color',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -81,6 +86,12 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
         <input type="checkbox" checked={params.smartRadius} onChange={(e) => setParams({ ...params, smartRadius: e.target.checked })} />
         Smart Radius
       </label>
+      {canObject && (
+        <label className="flex items-center gap-2 text-foreground">
+          <input type="checkbox" aria-label="Object aware" checked={objectAware} onChange={(e) => setObjectAware(e.target.checked)} />
+          Object aware (segmentation model)
+        </label>
+      )}
       <label className="flex items-center gap-2 text-muted-foreground">
         Output to
         <select

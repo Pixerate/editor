@@ -58,6 +58,7 @@ import { colorRange, colorRangePreset, growSelection as growSelectionMask, magic
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider, type SegmentationRequest } from './selection/segmentation';
 import { decontaminateColors, refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
+import { applyRefineEdits, type RefineEdit } from './selection/refine-edits';
 import { layerMaskFromSelection, type LayerMaskProps } from './selection/layer-mask';
 import { selectionRing } from './selection/stroke';
 import { DEFAULT_CHANNEL_COLOR, describeChannel, deserializeChannels, serializeChannels, type AlphaChannel } from './selection/channels';
@@ -519,6 +520,8 @@ export interface RefineOutputResult {
   layerId?: string;
   /** The layer it made (`new-layer`, `new-layer-with-mask`). */
   newLayerId?: string;
+  /** How the edge was refined: by colour, or with the segmentation model (object aware). */
+  refineMode: 'color' | 'object';
 }
 
 /** Options of {@link ImageEditorController.selectSky}. */
@@ -5462,14 +5465,23 @@ export class ImageEditorController {
    * - `new-layer-with-mask`: a copy of the layer masked by the selection, the source hidden.
    * `decontaminate` (0..100, new-layer outputs only) replaces the old background's colour in the
    * soft edge with the subject's own (see `decontaminateColors`).
+   *
+   * `edits` are the workspace's strokes, applied first in order (Quick Selection, Brush and
+   * Refine Edge Brush; see `RefineEdit`); with them, an empty selection is a valid start.
+   * `refineMode: 'object'` asks the segmentation provider for the object in the selection's
+   * bounds and refines from its outline, kept to near the selection's edge.
    */
   public async refineSelectionTo(
     params: RefineEdgeParams,
     output: RefineOutput = 'selection',
-    options: SampleOptions & { layerId?: string; decontaminate?: number } = {}
+    options: SampleOptions & { layerId?: string; decontaminate?: number; edits?: RefineEdit[]; refineMode?: 'color' | 'object'; signal?: AbortSignal } = {}
   ): Promise<RefineOutputResult> {
-    const sel = this.state.selection;
-    if (!sel?.bounds) throw new Error('Nothing is selected; select first.');
+    const edits = options.edits ?? [];
+    const refineMode = options.refineMode ?? 'color';
+    if (!this.state.selection?.bounds && !edits.length) throw new Error('Nothing is selected; select first, or pass edits that paint a selection.');
+    if (refineMode === 'object' && !this.segmentation) {
+      throw new Error('Object aware refinement needs a segmentation model (setSegmentationProvider); use refineMode color.');
+    }
     const amount = Math.min(100, Math.max(0, options.decontaminate ?? 0)) / 100;
     const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
     if (amount > 0 && !toLayer) throw new Error('Decontaminate colors writes the cleaned colours to a new layer: use output new-layer or new-layer-with-mask.');
@@ -5480,16 +5492,32 @@ export class ImageEditorController {
       const layer = requireLayer(this.state.layers, layerId).layer;
       if (toLayer && layer.type !== 'pixel') throw new LayerOperationError(`Output ${output} needs a pixel layer; "${layerId}" is a ${layer.type} layer.`);
     }
-    const pixels = (params.radius ?? 0) > 0 ? await this.requirePixels(options) : null;
-    const refined = refineSelectionMask(pixels, sel, params);
+    const needsPixels = (params.radius ?? 0) > 0 || edits.some((e) => e.kind !== 'brush');
+    const pixels = needsPixels ? await this.requirePixels(options) : null;
+    const { width, height } = this.naturalSize;
+    const edited = applyRefineEdits(pixels, this.state.selection ?? null, edits, width, height);
+    let sel = edited.selection;
+    if (!sel?.bounds) throw new Error('The edits leave nothing selected; paint with mode add first.');
+    if (refineMode === 'object') {
+      // The model's outline of the object in the selection's box, kept to near the selection, so
+      // it corrects the edge without pulling in other objects.
+      const b = sel.bounds;
+      const found = await this.modelObject({ rect: b }, options.signal);
+      if (!found) throw new Error('The segmentation model found no object in the selection; use refineMode color.');
+      const near = modifySelectionMask(sel, 'expand', Math.max(4, params.radius ?? 8));
+      const clipped = combineSelections(found, near, 'intersect');
+      if (!clipped?.bounds) throw new Error('The segmentation model found no object in the selection; use refineMode color.');
+      sel = clipped;
+    }
+    const refined = refineSelectionMask(pixels, sel, params, edited.refineBrush);
     if (!refined.bounds) throw new Error('Refining left nothing selected; use a smaller shiftEdge or contrast.');
     return this.asOneStep(() => {
       this.setSelection(refined);
-      if (output === 'selection') return { output };
+      if (output === 'selection') return { output, refineMode };
       if (output === 'layer-mask') {
         this.addLayerMask(layerId!, 'selection');
         this.setSelection(null);
-        return { output, layerId };
+        return { output, layerId, refineMode };
       }
       let newLayerId: string;
       if (output === 'new-layer') newLayerId = this.layerViaCopy({ layerId });
@@ -5501,7 +5529,7 @@ export class ImageEditorController {
       if (amount > 0) this.decontaminateLayer(newLayerId, layerId!, refined, amount, Math.max(4, params.radius ?? 0));
       this.setLayerProperties(layerId!, { visible: false });
       this.setSelection(null);
-      return { output, layerId, newLayerId };
+      return { output, layerId, newLayerId, refineMode };
     });
   }
 
