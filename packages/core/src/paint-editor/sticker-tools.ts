@@ -4,7 +4,7 @@
  * recolour, reorder and delete. Each change is one undo step and redraws the layer.
  */
 
-import type { AgentTool } from '../tools/registry.js';
+import type { PaintAgentTool } from './hosted';
 import type { PaintEditorController } from './controller';
 import { STAMP_KINDS } from './stickers';
 
@@ -13,7 +13,7 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: fal
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 const LAYER_ID = { type: 'string', description: 'Sticker layer id from list_layers (default the active layer).' } as const;
 
-export function createPaintStickerTools(c: PaintEditorController): AgentTool[] {
+export function createPaintStickerTools(c: PaintEditorController): PaintAgentTool[] {
   return [
     {
       name: 'list_stickers',
@@ -21,6 +21,7 @@ export function createPaintStickerTools(c: PaintEditorController): AgentTool[] {
       description: 'Lists a layer’s stickers bottom first: id, stamp, x, y (centre, document pixels), size (diameter px), rotation (degrees clockwise), color, opacity. Empty for a layer without stickers. Changes nothing.',
       inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
       annotations: { title: 'List stickers', ...READ },
+      coordinates: { out: ['stickers[]'] },
       handler: ({ layerId }) => ({ layerId: layerId ?? c.document.activeLayerId, stickers: c.listStickers(layerId) }),
     },
     {
@@ -44,6 +45,7 @@ export function createPaintStickerTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Change a sticker', ...WRITE },
+      coordinates: { in: [''], out: [''] },
       handler: ({ layerId, id, ...update }) => c.updateSticker(layerId, id, update),
     },
     {

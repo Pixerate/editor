@@ -4,7 +4,7 @@
  * drying of wet strokes.
  */
 
-import type { AgentTool } from '../tools/registry.js';
+import type { PaintAgentTool } from './hosted';
 import type { PaintEditorController } from './controller';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -12,7 +12,7 @@ const SET = { readOnlyHint: false, destructiveHint: false, idempotentHint: true,
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const LAYER_ID = { type: 'string', description: 'Pixel layer id from list_layers (default the active layer).' } as const;
 
-export function createPaintThickTools(c: PaintEditorController): AgentTool[] {
+export function createPaintThickTools(c: PaintEditorController): PaintAgentTool[] {
   return [
     {
       name: 'set_lighting',
@@ -37,6 +37,7 @@ export function createPaintThickTools(c: PaintEditorController): AgentTool[] {
       description: 'Reads a layer’s thick paint: where the relief is (bounds, layer pixels), its highest point (0..255) and the lighting. relief is null when the layer is flat. Changes nothing.',
       inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
       annotations: { title: 'Read a layer’s relief', ...READ },
+      coordinates: { out: ['relief.bounds'] },
       handler: ({ layerId }) => ({ relief: c.reliefOf(layerId), lighting: c.getLighting() }),
     },
     {

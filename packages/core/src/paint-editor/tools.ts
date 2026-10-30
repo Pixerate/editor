@@ -7,6 +7,7 @@
 
 import { withPaintPlayback } from './playback';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
+import { fromDocument, hostedSchema, hostedText, lazyController, toDocument, type PaintAgentTool, type PaintOrigin } from './hosted';
 import { createPigmentTools } from '../paint/pigment-tools';
 import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { PAINT_GRADIENT_JSON_SCHEMA, PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
@@ -54,13 +55,24 @@ export interface PaintEditorToolProviderOptions {
    * Set it when one registry holds several editors of this kind, each attached under its own surface id.
    */
   playbackSurface?: string;
+  /**
+   * Hosts the document as a layer on a larger canvas: where document (0, 0) sits in host
+   * coordinates. Every position the tools take is then a host coordinate and every position they
+   * return is one too (strokes, picks, bounds, guides, stencils, stickers, wet areas); the
+   * descriptions say canvas coordinates. Directors receive document pixels.
+   */
+  origin?: PaintOrigin;
+  /** Bare tool names to leave out (e.g. `new_canvas`, `export_psd` when the host owns the canvas). */
+  exclude?: readonly string[];
+  /** Called after each successful write (every tool not marked read-only), e.g. so the host can save. */
+  onChange?: (info: { tool: string }) => void;
 }
 
 const TIP = {
   type: 'object',
   description: 'The tip (the shared brush engine). Missing fields keep their current values.',
   properties: {
-    size: { type: 'number', minimum: 1, maximum: MAX_BRUSH_SIZE, description: 'Diameter in document pixels.' },
+    size: { type: 'number', minimum: 1, maximum: MAX_BRUSH_SIZE, description: 'Diameter in pixels.' },
     hardness: { type: 'number', minimum: 0, maximum: 1, description: 'Edge hardness, 0 (soft) .. 1 (hard).' },
     spacing: { type: 'number', minimum: 0.01, maximum: 10, description: 'Dab spacing as a fraction of the diameter (0.05 is smooth, 1 is dotted).' },
     angle: { type: 'number', minimum: -360, maximum: 360, description: 'Tip angle in degrees, counter-clockwise; with rotation stroke or barrel it is added to the stroke direction or pen rotation.' },
@@ -328,11 +340,14 @@ function brushSummary(b: PaintBrush) {
   };
 }
 
-/** Agent tools for one paint editor. */
-export function createPaintEditorToolProvider(controller: PaintEditorController, options: PaintEditorToolProviderOptions = {}): AgentToolProvider {
-  const c = controller;
-  const tools: AgentTool[] = [];
-  const add = (t: AgentTool) => tools.push(t);
+/**
+ * Agent tools for one paint editor. Pass a getter to create the document lazily: it is first
+ * called when a tool runs, never on registration.
+ */
+export function createPaintEditorToolProvider(controller: PaintEditorController | (() => PaintEditorController), options: PaintEditorToolProviderOptions = {}): AgentToolProvider {
+  const c = typeof controller === 'function' ? lazyController(controller) : controller;
+  const tools: PaintAgentTool[] = [];
+  const add = (t: PaintAgentTool) => tools.push(t);
   /** Runs `command` through the director when there is one (its error becomes the tool error), else `direct`. */
   const act = async <T>(command: PaintAgentCommand, direct: () => T): Promise<T> => {
     if (!options.director) return direct();
@@ -347,9 +362,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     name: 'get_canvas_info',
     title: 'Get the canvas',
     description:
-      'Reads the canvas: size in pixels and dpi, its origin (where (0, 0) is relative to the canvas it was extended from), the paper (preset, colour, grain depth), the active layer, the active brush id, the paint colour, the view (zoom, rotation, mirror), the hand, how many strokes are recorded, the undo / redo labels, and the blend modes. Call it first.',
+      'Reads the canvas: size in pixels and dpi, its origin (where (0, 0) is relative to the canvas it was extended from), bounds (the rectangle the painting covers, in the coordinates every other tool takes), the paper (preset, colour, grain depth), the active layer, the active brush id, the paint colour, the view (zoom, rotation, mirror), the hand, how many strokes are recorded, the undo / redo labels, and the blend modes. Call it first.',
     inputSchema: EMPTY,
     annotations: { title: 'Get the canvas', ...READ },
+    coordinates: { out: ['bounds'] },
     handler: () => {
       const s = c.getState();
       const d = s.document;
@@ -358,6 +374,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
         height: d.canvas.height,
         dpi: d.canvas.dpi,
         origin: { ...(d.origin ?? { x: 0, y: 0 }) },
+        bounds: { x: 0, y: 0, width: d.canvas.width, height: d.canvas.height },
         paper: { preset: d.paper.preset, name: d.paper.name, color: d.paper.color, depth: d.paper.depth },
         activeLayerId: d.activeLayerId,
         layerCount: c.listLayers().length,
@@ -504,6 +521,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       'Lists the layers top first: id, name, type (pixel or group), visibility, opacity, blend, clipping, locks, whether it is active, the painted bounds in document pixels (null when empty), parent and depth.',
     inputSchema: EMPTY,
     annotations: { title: 'List layers', ...READ },
+    coordinates: { out: ['layers[].bounds'] },
     handler: () => ({ layers: c.listLayers(), activeLayerId: c.document.activeLayerId }),
   });
 
@@ -522,6 +540,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Add a layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
     handler: (a) => c.addLayer({ name: a.name, type: a.type, aboveId: a.aboveId, parentId: a.parentId }),
   });
 
@@ -558,6 +577,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Change a layer', ...SET },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId, ...u }) => c.updateLayer(layerId, u as { blend?: BlendMode }),
   });
 
@@ -585,6 +605,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Makes a layer active: strokes, fills and clears without a layerId go to it. Editor state, not an undo step. Returns the layer.',
     inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Layer id from list_layers.' } }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Choose the active layer', ...SET },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId }) => {
       c.setActiveLayer(layerId);
       return c.describeLayer(c.getLayer(layerId)!);
@@ -606,6 +627,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Copies a layer (a group with its children) directly above it; the copy becomes active. One undo step. Returns the copy.',
     inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Layer id from list_layers.' } }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Duplicate a layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId }) => c.duplicateLayer(layerId),
   });
 
@@ -624,6 +646,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Reorder a layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId, index, parentId }) => c.moveLayer(layerId, index, parentId),
   });
 
@@ -633,6 +656,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Merges a pixel layer into the pixel layer directly below it, which keeps its name, opacity and blend. One undo step. Returns the merged layer.',
     inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'The upper layer, from list_layers.' } }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Merge a layer down', ...DESTRUCTIVE },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId }) => c.mergeDown(layerId),
   });
 
@@ -654,6 +678,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Fill a layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
     handler: (a) => act({ kind: 'fill', fill: a }, () => c.fillLayer(a)),
   });
 
@@ -663,6 +688,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
     description: 'Removes every pixel of a pixel layer. One undo step. Returns the layer id and the bounds that were cleared (null if it was empty).',
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
     annotations: { title: 'Clear a layer', ...DESTRUCTIVE },
+    coordinates: { out: ['bounds'] },
     handler: ({ layerId }) => c.clearLayer(layerId),
   });
 
@@ -842,6 +868,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Pick a colour', ...READ },
+    coordinates: { in: [''] },
     handler: ({ x, y, layerId }) => c.pickColor(x, y, { layerId }),
   });
 
@@ -896,6 +923,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Paint a brush stroke', ...WRITE },
+    coordinates: { in: ['points[]'], out: ['bounds'] },
     handler: async (a) => {
       await c.wetIdle();
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
@@ -918,6 +946,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'List recorded strokes', ...READ },
+    coordinates: { out: ['strokes[].bounds', 'strokes[].points[]'] },
     handler: ({ ids, last }) => {
       const all = c.getStrokes();
       const picked = ids ? all.filter((s) => ids.includes(s.id)) : all.slice(-(last ?? 100));
@@ -975,6 +1004,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
       additionalProperties: false,
     },
     annotations: { title: 'Replay strokes, varied', ...WRITE },
+    coordinates: { in: ['origin'], out: ['bounds'] },
     handler: (a) => {
       const replay = a as Parameters<PaintEditorController['replayStrokes']>[0];
       return act({ kind: 'replay', replay }, () => c.replayStrokes(replay));
@@ -1103,12 +1133,32 @@ export function createPaintEditorToolProvider(controller: PaintEditorController,
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
 
+  const exclude = new Set(options.exclude ?? []);
+  const description = 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.';
   return withPaintPlayback({
     id: options.id ?? 'paint-editor',
     namespace: options.namespace,
     title: 'Paint editor',
-    description: 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.',
+    description: options.origin ? `${description} It is a layer of a larger canvas: every position is in canvas coordinates.` : description,
     skill: 'pixerate-paint-editor',
-    tools
+    tools: tools.filter((t) => !exclude.has(t.name)).map((t) => hostTool(t, options)),
   }, { director: !!options.director, surface: options.playbackSurface });
+}
+
+/** Applies `origin` (positions in and out, host wording) and `onChange` to one tool. */
+function hostTool({ coordinates, ...tool }: PaintAgentTool, { origin, onChange }: PaintEditorToolProviderOptions): AgentTool {
+  if (!origin && !onChange) return tool;
+  const write = !tool.annotations?.readOnlyHint;
+  const done = (result: unknown) => {
+    if (write) onChange?.({ tool: tool.name });
+    return origin && coordinates?.out ? fromDocument(result, coordinates.out, origin) : result;
+  };
+  return {
+    ...tool,
+    ...(origin ? { description: hostedText(tool.description ?? ''), inputSchema: hostedSchema(tool.inputSchema) } : {}),
+    handler: (args, context) => {
+      const r = tool.handler(origin && coordinates?.in ? toDocument(args, coordinates.in, origin) : args, context);
+      return r instanceof Promise ? r.then(done) : done(r);
+    },
+  };
 }
