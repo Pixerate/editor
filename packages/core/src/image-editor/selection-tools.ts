@@ -499,6 +499,35 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const selectFocusAreaTool: AgentTool = {
+    name: 'select_focus_area',
+    title: 'Select the focus area',
+    description:
+      'Select › Focus Area: selects the parts of the image that are in focus (sharp detail, above the image noise), with the edge fitted to the image, combined with the selection by mode. Use it to separate a sharp subject from a blurred background (shallow depth of field), e.g. before blurring or darkening the background. Raise range to take in less sharp areas, raise noise if grain in the background gets selected. One undoable step. Returns the selection and noiseLevel (σ of the image noise in levels of 255).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        range: { type: 'number', minimum: 0, maximum: 100, description: 'In-Focus Range 0..100 (default 50): higher takes in less sharp areas too.' },
+        noise: { type: 'number', minimum: 0, maximum: 100, description: 'Image Noise Level 0..100 (default 0): raise it when grain is selected as detail.' },
+        softness: { type: 'number', minimum: 0, maximum: 100, description: 'Soften the edge over this many natural pixels (default 4; 0 for a hard edge).' },
+        mode: modeSchema,
+        sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select the focus area', true),
+    handler: async (args) => {
+      const { noiseLevel } = await controller.selectFocusArea({
+        range: args.range === undefined ? undefined : num(args.range, 50),
+        noise: args.noise === undefined ? undefined : num(args.noise, 0),
+        softness: args.softness === undefined ? undefined : num(args.softness, 4),
+        mode: parseSelectionMode(args.mode),
+        sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+      });
+      return { ...summary(controller), noiseLevel };
+    },
+  };
+
   const magicWandTool: AgentTool = {
     name: 'magic_wand',
     title: 'Magic wand',
@@ -1105,6 +1134,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     quickSelectTool,
     selectObjectTool,
     createImageSubjectSelectionTool(controller),
+    selectFocusAreaTool,
     lineTool,
     magicWandTool,
     colorRangeTool,

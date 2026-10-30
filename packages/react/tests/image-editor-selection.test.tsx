@@ -196,6 +196,27 @@ describe('React SelectionOptionsBar: Select Subject', () => {
   });
 });
 
+describe('React SelectionOptionsBar: Focus Area', () => {
+  it('selects the focus area with the range, noise and softness from the options', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const calls: unknown[] = [];
+    controller.selectFocusArea = (async (opts: unknown) => {
+      calls.push(opts);
+      return { selection: null, noiseLevel: 0 };
+    }) as any;
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => setValue(container.querySelector('input[aria-label="In-focus range"]')!, '70'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Image noise level"]')!, '20'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Focus soften edge"]')!, '0'));
+    await act(async () => {
+      button('Select Focus Area').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(calls).toEqual([{ range: 70, noise: 20, softness: 0, mode: 'replace' }]);
+    expect(container.querySelector('[data-testid="focus-area"] [role="status"]')!.textContent).toContain('No part');
+  });
+});
+
 describe('React RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

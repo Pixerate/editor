@@ -109,6 +109,26 @@
   let subject = $state('');
   let segmenting = $state(false);
   let subjectStatus = $state<string | null>(null);
+  let focusing = $state(false);
+  let focusStatus = $state<string | null>(null);
+  async function selectFocusArea() {
+    if (focusing) return;
+    focusing = true;
+    focusStatus = null;
+    try {
+      const { selection } = await controller.selectFocusArea({
+        range: options.focusRange ?? 50,
+        noise: options.focusNoise ?? 0,
+        softness: options.focusSoftness ?? 4,
+        mode: options.mode,
+      });
+      focusStatus = selection ? null : 'No part of the image stands out as in focus.';
+    } catch (err) {
+      focusStatus = err instanceof Error ? err.message : String(err);
+    } finally {
+      focusing = false;
+    }
+  }
   async function selectSubject() {
     const target = subject.trim();
     if ((canSegment && !target) || segmenting) return;
@@ -391,6 +411,38 @@
       <p role="status" class="text-muted-foreground">{subjectStatus}</p>
     {/if}
   </form>
+  <details data-testid="focus-area" class="flex flex-col gap-2">
+    <summary class="cursor-pointer text-foreground">Focus Area</summary>
+    <div class="flex flex-col gap-2 pt-2">
+      <label class="flex flex-col gap-1">
+        <span class="flex justify-between text-muted-foreground">
+          <span>In-focus range</span>
+          <span class="font-mono">{options.focusRange ?? 50}</span>
+        </span>
+        <ImageRange label="In-focus range" min={0} max={100} step={1} value={options.focusRange ?? 50} oninput={(v) => set({ focusRange: v })} />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="flex justify-between text-muted-foreground">
+          <span>Image noise level</span>
+          <span class="font-mono">{options.focusNoise ?? 0}</span>
+        </span>
+        <ImageRange label="Image noise level" min={0} max={100} step={1} value={options.focusNoise ?? 0} oninput={(v) => set({ focusNoise: v })} />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="flex justify-between text-muted-foreground">
+          <span>Soften edge</span>
+          <span class="font-mono">{options.focusSoftness ?? 4} px</span>
+        </span>
+        <ImageRange label="Focus soften edge" min={0} max={50} step={1} value={options.focusSoftness ?? 4} oninput={(v) => set({ focusSoftness: v })} />
+      </label>
+      <button type="button" class={btn(false)} disabled={focusing} aria-busy={focusing} onclick={() => void selectFocusArea()}>
+        {focusing ? 'Selecting…' : 'Select Focus Area'}
+      </button>
+      {#if focusStatus}
+        <p role="status" class="text-muted-foreground">{focusStatus}</p>
+      {/if}
+    </div>
+  </details>
   <label class="flex items-center gap-2 text-foreground">
     <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onchange={(on) => set({ antiAlias: on })} />
     Anti-alias

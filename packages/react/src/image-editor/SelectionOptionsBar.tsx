@@ -122,6 +122,26 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       setSegmenting(false);
     }
   };
+  const [focusing, setFocusing] = useState(false);
+  const [focusStatus, setFocusStatus] = useState<string | null>(null);
+  const selectFocusArea = async () => {
+    if (focusing) return;
+    setFocusing(true);
+    setFocusStatus(null);
+    try {
+      const { selection } = await controller.selectFocusArea({
+        range: options.focusRange ?? 50,
+        noise: options.focusNoise ?? 0,
+        softness: options.focusSoftness ?? 4,
+        mode: options.mode,
+      });
+      setFocusStatus(selection ? null : 'No part of the image stands out as in focus.');
+    } catch (err) {
+      setFocusStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFocusing(false);
+    }
+  };
   return (
     <div data-testid="selection-options-bar" className={`flex flex-col gap-3 text-xs ${className}`}>
       <div role="group" aria-label="Selection tool" className="flex flex-wrap gap-1">
@@ -378,6 +398,40 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </p>
         )}
       </form>
+      <details data-testid="focus-area" className="flex flex-col gap-2">
+        <summary className="cursor-pointer text-foreground">Focus Area</summary>
+        <div className="flex flex-col gap-2 pt-2">
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>In-focus range</span>
+              <span className="font-mono">{options.focusRange ?? 50}</span>
+            </span>
+            <ImageRange label="In-focus range" min={0} max={100} step={1} value={options.focusRange ?? 50} onChange={(v) => set({ focusRange: v })} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Image noise level</span>
+              <span className="font-mono">{options.focusNoise ?? 0}</span>
+            </span>
+            <ImageRange label="Image noise level" min={0} max={100} step={1} value={options.focusNoise ?? 0} onChange={(v) => set({ focusNoise: v })} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Soften edge</span>
+              <span className="font-mono">{options.focusSoftness ?? 4} px</span>
+            </span>
+            <ImageRange label="Focus soften edge" min={0} max={50} step={1} value={options.focusSoftness ?? 4} onChange={(v) => set({ focusSoftness: v })} />
+          </label>
+          <button type="button" className={btn(false)} disabled={focusing} aria-busy={focusing} onClick={() => void selectFocusArea()}>
+            {focusing ? 'Selecting…' : 'Select Focus Area'}
+          </button>
+          {focusStatus && (
+            <p role="status" className="text-muted-foreground">
+              {focusStatus}
+            </p>
+          )}
+        </div>
+      </details>
       <label className="flex items-center gap-2 text-foreground">
         <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onChange={(on) => set({ antiAlias: on })} />
         Anti-alias

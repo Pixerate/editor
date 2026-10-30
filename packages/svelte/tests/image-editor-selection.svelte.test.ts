@@ -220,6 +220,33 @@ describe('Svelte SelectionOptionsBar: Select Subject', () => {
   });
 });
 
+describe('Svelte SelectionOptionsBar: Focus Area', () => {
+  it('selects the focus area with the range, noise and softness from the options', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const calls: unknown[] = [];
+    controller.selectFocusArea = (async (opts: unknown) => {
+      calls.push(opts);
+      return { selection: null, noiseLevel: 0 };
+    }) as any;
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    setValue(target.querySelector('input[aria-label="In-focus range"]')!, '70');
+    setValue(target.querySelector('input[aria-label="Image noise level"]')!, '20');
+    setValue(target.querySelector('input[aria-label="Focus soften edge"]')!, '0');
+    click(button('Select Focus Area'));
+    await settle();
+    expect(calls).toEqual([{ range: 70, noise: 20, softness: 0, mode: 'replace' }]);
+    expect(target.querySelector('[data-testid="focus-area"] [role="status"]')!.textContent).toContain('No part');
+  });
+});
+
 describe('Svelte RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

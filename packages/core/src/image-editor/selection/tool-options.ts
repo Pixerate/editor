@@ -79,6 +79,12 @@ export interface SelectionToolOptions {
   objectSampleAll?: boolean;
   /** Object Selection: smoother, less blocky edges (Auto-Enhance; default false). */
   objectEnhance?: boolean;
+  /** Focus Area: In-Focus Range 0..100 (default 50). */
+  focusRange?: number;
+  /** Focus Area: Image Noise Level 0..100 (default 0). */
+  focusNoise?: number;
+  /** Focus Area: soften the edge over this many pixels (default 4). */
+  focusSoftness?: number;
   /** Type Mask: the text to select (default "Type"). A click places its first baseline. */
   typeText?: string;
   /** Type Mask: font size in px (default 72). */
@@ -107,6 +113,9 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   quickEnhance: false,
   objectSampleAll: true,
   objectEnhance: false,
+  focusRange: 50,
+  focusNoise: 0,
+  focusSoftness: 4,
   typeText: 'Type',
   typeSize: 72,
   typeFamily: 'sans-serif',

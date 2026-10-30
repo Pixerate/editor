@@ -113,7 +113,7 @@ describe('image editor agent tools', () => {
     const { tools } = registry.listTools();
     expect(tools.map((t) => baseToolName(t.name))).toEqual([
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
-      'get_selection', 'select_all', 'deselect', 'invert_selection', 'select_rect', 'select_ellipse', 'select_polygon', 'quick_select', 'select_object', 'select_subject', 'select_line', 'magic_wand',
+      'get_selection', 'select_all', 'deselect', 'invert_selection', 'select_rect', 'select_ellipse', 'select_polygon', 'quick_select', 'select_object', 'select_subject', 'select_focus_area', 'select_line', 'magic_wand',
       'select_color_range', 'load_selection_from_image', 'load_selection_from_mask', 'select_layer_transparency',
       'grow_selection', 'select_similar', 'reselect', 'set_selection_display',
       'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
