@@ -1,7 +1,7 @@
 import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from './schema.js';
 import { ToolRegistryView, type ToolViewOptions } from './view.js';
 import { stripPrototypeKeys } from './safe-json.js';
-import type { ToolPlanner } from './playback.js';
+import type { PlaybackStep, ToolPlanner } from './playback.js';
 import type { PresenceActorInfo } from './presence.js';
 
 /**
@@ -54,6 +54,12 @@ export interface ToolCallContext {
 	 * (`await context.stage?.()`), so they appear one by one; without playback it is absent.
 	 */
 	stage?: () => Promise<void>;
+	/**
+	 * Set by agent playback while the handler runs: acts out cursor steps (surface coordinates) the
+	 * handler only learns mid-call, such as the outline a model returned, before it lands its change.
+	 * `commit`, `stage` and `open` steps are ignored. Without playback it is absent.
+	 */
+	perform?: (steps: readonly PlaybackStep[]) => Promise<void>;
 }
 
 /** Options for `callTool`. */

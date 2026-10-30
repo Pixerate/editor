@@ -14,6 +14,8 @@ export interface PresenceActor {
 	y: number;
 	/** The button is down (dragging). */
 	pressed: boolean;
+	/** What a drag traces while `pressed`: `path` for a freehand outline (a lasso), else a box from the press. */
+	gesture?: 'path';
 	/** A short note shown next to the cursor (what the agent is doing). */
 	message?: string;
 	/** A rectangle (surface coordinates) the agent is working on, drawn as a highlight ring. */
@@ -168,33 +170,48 @@ export interface PresenceDragBox {
 	height: number;
 }
 
+/** An agent's drag so far: the box from the press to the cursor, and the points it passed through. */
+export interface PresenceDrag extends PresenceDragBox {
+	/** The cursor positions since the press, in order (the press first). */
+	path: readonly { x: number; y: number }[];
+	/** `path` when the agent traces an outline (see `PresenceActor.gesture`); a box drag otherwise. */
+	gesture?: 'path';
+}
+
 /**
  * Follows a presence store for an agent's drag (press, move, release) and reports the box from
- * the press to the cursor, so a surface can draw its own drag feedback (a crop box or a marquee
- * being pulled out) under the agent's cursor. `onEnd` runs on release, or when the cursor leaves
+ * the press to the cursor and the path it took, so a surface can draw its own drag feedback (a crop
+ * box, a marquee being pulled out or a lasso being traced) under the agent's cursor. `onEnd` runs on release, or when the cursor leaves
  * the surface mid-drag. Pass the result to `PresenceStore.subscribe`.
  */
 export function trackPresenceDrag(handlers: {
-	onDrag: (box: PresenceDragBox) => void;
+	onDrag: (drag: PresenceDrag) => void;
 	onEnd: () => void;
 }): (state: PresenceState) => void {
 	let start: { id: string; x: number; y: number } | null = null;
+	let path: { x: number; y: number }[] = [];
 	return (state) => {
 		const actor = start ? state.actors.find((a) => a.id === start!.id) : state.actors.find((a) => a.pressed);
 		if (!start) {
 			if (!actor) return;
 			start = { id: actor.id, x: actor.x, y: actor.y };
+			path = [{ x: actor.x, y: actor.y }];
 		}
 		if (!actor || !actor.pressed) {
 			start = null;
+			path = [];
 			handlers.onEnd();
 			return;
 		}
+		const last = path[path.length - 1]!;
+		if (last.x !== actor.x || last.y !== actor.y) path.push({ x: actor.x, y: actor.y });
 		handlers.onDrag({
 			x: Math.min(start.x, actor.x),
 			y: Math.min(start.y, actor.y),
 			width: Math.abs(actor.x - start.x),
 			height: Math.abs(actor.y - start.y),
+			path: path.slice(),
+			...(actor.gesture ? { gesture: actor.gesture } : {}),
 		});
 	};
 }

@@ -7,7 +7,7 @@ import { describeSelection } from './selection/tool-options';
 import { SELECTION_MODES, parseSelectionMode, selectionArea } from './selection/mask';
 import { SELECTION_MODIFY_OPS, type SelectionModifyOp } from './selection/modify';
 import { layerMaskFromSelection } from './selection/layer-mask';
-import { withImagePlayback } from './playback';
+import { planOutlineTrace, withImagePlayback } from './playback';
 
 const modeSchema: JsonSchema = {
   type: 'string',
@@ -300,12 +300,16 @@ export function createImageSubjectSelectionTool(controller: ImageEditorControlle
       additionalProperties: false,
     },
     annotations: { ...writeAnnotations('Select a subject'), openWorldHint: true },
-    handler: async ({ target, maxSegments, mode, feather }) => {
+    handler: async ({ target, maxSegments, mode, feather }, context) => {
       if (typeof target !== 'string' || !target.trim()) throw new Error('target must describe what to select.');
+      const perform = context?.perform;
       const { segments } = await controller.selectSubject(target, {
         mode: parseSelectionMode(mode),
         feather: num(feather, 0),
         maxSegments: typeof maxSegments === 'number' ? Math.max(1, Math.round(maxSegments)) : undefined,
+        signal: context?.signal,
+        // Under playback the cursor traces what the model found, as a lasso, before it is selected.
+        beforeApply: perform ? (outlines) => perform(planOutlineTrace(outlines)) : undefined,
       });
       return { ...summary(controller), found: segments };
     },

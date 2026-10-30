@@ -34,7 +34,8 @@ export type PlaybackStep =
 	| { type: 'target'; ref: PlaybackRef; ms?: number }
 	| { type: 'focus'; rect: PlaybackRect | null }
 	| { type: 'say'; text: string; ms?: number }
-	| { type: 'press' }
+	/** Button down. `gesture: 'path'` tells the surface the drag that follows traces an outline (a lasso), not a box. */
+	| { type: 'press'; gesture?: 'path' }
 	| { type: 'release' }
 	/** Move with the button down (the cursor only; the change lands at `commit`). */
 	| { type: 'drag'; to: PlaybackPoint; ms?: number }
@@ -520,6 +521,14 @@ export class AgentPlayback {
 			// A staged plan runs the handler alongside the steps; `stage` steps let its parts through.
 			const gate = run.steps.some((s) => s.type === 'stage') ? createStageGate() : null;
 			if (gate) call.context.stage = gate.wait;
+			// Steps the handler learns only while it runs (an outline a model returned), played before it lands its change.
+			call.context.perform = async (extra) => {
+				for (const step of extra) {
+					if (step.type === 'commit' || step.type === 'stage' || step.type === 'open') continue;
+					record(step);
+					await this.step(presence, locate, id, step, wait, instant);
+				}
+			};
 			let pending: Promise<unknown> | null = null;
 			try {
 				for (const step of run.steps) {
@@ -565,12 +574,13 @@ export class AgentPlayback {
 				}
 			} catch (error) {
 				gate?.open();
-				presence.set({ id, pressed: false, message: `✗ ${error instanceof Error ? error.message : String(error)}`.slice(0, 140) });
+				presence.set({ id, pressed: false, gesture: undefined, message: `✗ ${error instanceof Error ? error.message : String(error)}`.slice(0, 140) });
 				await wait(900);
 				throw error;
 			} finally {
 				if (!readOnly) surface.endGesture?.();
-				presence.set({ id, pressed: false });
+				call.context.perform = undefined;
+				presence.set({ id, pressed: false, gesture: undefined });
 			}
 
 			if (isErrorResult(result)) {
@@ -638,10 +648,10 @@ export class AgentPlayback {
 				presence.set({ id, message: step.text });
 				return wait(step.ms ?? readingTime(step.text));
 			case 'press':
-				presence.set({ id, pressed: true });
+				presence.set({ id, pressed: true, gesture: step.gesture });
 				return wait(90);
 			case 'release':
-				presence.set({ id, pressed: false });
+				presence.set({ id, pressed: false, gesture: undefined });
 				return wait(60);
 			case 'type': {
 				const total = step.ms ?? Math.min(900, 40 * step.text.length + 150);

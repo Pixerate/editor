@@ -45,6 +45,9 @@ describe('planImageToolPlayback', () => {
 	});
 
 	it('traces strokes, drags boxes, clicks positions and visits sliders', () => {
+		const lasso = planImageToolPlayback('select_region', { shape: 'polygon', points: [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 5, y: 8 }] })!;
+		expect(lasso.find((s) => s.type === 'press')).toEqual({ type: 'press', gesture: 'path' });
+		expect(planImageToolPlayback('select_region', { shape: 'rect', x: 1, y: 1, width: 5, height: 5 })!.find((s) => s.type === 'press')).toEqual({ type: 'press' });
 		expect(planImageToolPlayback('clone_stamp', { points: [{ x: 1, y: 2 }, { x: 5, y: 2 }, { x: 9, y: 4 }] })!.map((s) => s.type)).toEqual(['open', 'move', 'press', 'drag', 'drag', 'release']);
 		expect(planImageToolPlayback('select_region', { shape: 'rect', x: 2, y: 3, width: 10, height: 5 })!.slice(1)).toEqual([
 			{ type: 'move', to: { x: 2, y: 3 } },

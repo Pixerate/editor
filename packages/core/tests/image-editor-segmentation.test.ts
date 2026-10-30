@@ -7,7 +7,9 @@ import {
   selectionArea,
   type SegmentationProvider,
   type SegmentationRequest,
+  planOutlineTrace,
 } from '../src/image-editor';
+import type { PlaybackStep } from '../src/tools';
 
 const fakeImage = (w: number, h: number) =>
   ({ width: w, height: h, naturalWidth: w, naturalHeight: h, src: '' }) as unknown as HTMLImageElement;
@@ -103,5 +105,51 @@ describe('createImageSegmentationToolProvider', () => {
     const out: any = await tool.handler({ target: 'the cat', maxSegments: 1 }, {} as never);
     expect(out).toMatchObject({ empty: false, bounds: { x: 1, y: 1, width: 3, height: 3 }, found: [{ label: 'cat' }] });
     await expect(Promise.resolve().then(() => tool.handler({ target: '' }, {} as never))).rejects.toThrow(/target/);
+  });
+
+  it('traces what the model found under playback before selecting it', async () => {
+    const c = controllerWith({ segment: async () => [{ label: 'cat', polygon: square(1, 1, 3) }] });
+    const [tool] = (() => {
+      const p = createImageSegmentationToolProvider(c, { id: 'img' });
+      return typeof p.tools === 'function' ? p.tools() : p.tools;
+    })();
+    const performed: PlaybackStep[][] = [];
+    const selectedWhenTraced: boolean[] = [];
+    await tool.handler({ target: 'the cat' }, {
+      perform: async (steps: readonly PlaybackStep[]) => {
+        selectedWhenTraced.push(Boolean(c.getState().selection?.bounds));
+        performed.push([...steps]);
+      },
+    } as never);
+    expect(selectedWhenTraced).toEqual([false]);
+    const [steps] = performed;
+    expect(steps[0]).toEqual({ type: 'move', to: { x: 1, y: 1 } });
+    expect(steps[1]).toEqual({ type: 'press', gesture: 'path' });
+    // Closed: the trace returns to where it started.
+    expect(steps.at(-2)).toMatchObject({ type: 'drag', to: { x: 1, y: 1 } });
+    expect(c.getState().selection?.bounds).toEqual({ x: 1, y: 1, width: 3, height: 3 });
+  });
+
+  it('passes the outlines (or a mask result\'s bounds) to beforeApply', async () => {
+    const mask = { width: 20, height: 10, data: new Uint8ClampedArray(20 * 10 * 4) };
+    for (let y = 2; y < 6; y++) for (let x = 10; x < 14; x++) mask.data.set([255, 255, 255, 255], (y * 20 + x) * 4);
+    const c = controllerWith({ segment: async () => [{ polygon: square(1, 1, 3) }, { mask }] });
+    const seen: unknown[] = [];
+    await c.selectSubject('things', { beforeApply: (outlines) => void seen.push(outlines) });
+    expect(seen).toHaveLength(1);
+    const [outlines] = seen as { x: number; y: number }[][][];
+    expect(outlines[0]).toEqual(square(1, 1, 3));
+    expect(outlines[1]).toHaveLength(4);
+  });
+});
+
+describe('planOutlineTrace', () => {
+  it('traces each closed outline as a lasso drag, thinning long ones', () => {
+    const ring = Array.from({ length: 100 }, (_, i) => ({ x: Math.cos(i / 16) * 10, y: Math.sin(i / 16) * 10 }));
+    const steps = planOutlineTrace([square(0, 0, 4), ring, [{ x: 0, y: 0 }]], { maxPoints: 16 });
+    const presses = steps.filter((s) => s.type === 'press');
+    expect(presses).toEqual([{ type: 'press', gesture: 'path' }, { type: 'press', gesture: 'path' }]);
+    expect(steps.filter((s) => s.type === 'drag').length).toBe(4 + 15);
+    expect(planOutlineTrace([square(0, 0, 1), square(2, 0, 1)], { maxOutlines: 1 }).filter((s) => s.type === 'press')).toHaveLength(1);
   });
 });
