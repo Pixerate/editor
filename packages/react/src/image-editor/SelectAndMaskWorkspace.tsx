@@ -161,6 +161,11 @@ export const SelectAndMaskWorkspace: React.FC<SelectAndMaskWorkspaceProps> = ({ 
             Undo Stroke
           </button>
           <span className="font-mono text-muted-foreground">{Math.round(zoom * 100)}%</span>
+          {session.computing && (
+            <span role="status" className="text-muted-foreground">
+              Updating preview…
+            </span>
+          )}
         </div>
         <div className="flex-1 overflow-hidden flex items-center justify-center bg-muted/30">
           <canvas

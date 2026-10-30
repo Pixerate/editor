@@ -5,6 +5,12 @@
 
 import { selectionFromRegion, type PixelBuffer, type SelectionMask } from '../mask';
 
+/**
+ * Progress of a long selection: `fraction` 0..1 done and what it is doing. The segmentations call
+ * it between their stages; in a worker it is posted back to the page.
+ */
+export type SelectionProgress = (fraction: number, stage: string) => void;
+
 /** The reduced image the segmentations work on (sRGB, 0..255 per channel). */
 export interface WorkImage {
   /** Natural size of the image it was made from. */

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import SelectionWorker from '@pixerate/editor/image-editor/selection-worker?worker';
 import { ImageEditor, ImageEditorCanvas, useAgentToolProvider, useImageEditor, type ImageEditorCanvasMode } from '@pixerate/editor-react';
 import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@pixerate/editor/image-editor';
 import { useDemoEffects } from '../demoEffects';
@@ -47,6 +48,12 @@ export function ImageEditorTab() {
   const [selectedImage, setSelectedImage] = useState<string>(SAMPLE_IMAGES[0].url);
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const editor = useImageEditor();
+  // The long selections (Select Subject, Sky, Focus Area, Object and Quick Selection, the Select
+  // and Mask preview) run in a worker, so the page stays responsive.
+  useEffect(() => {
+    editor.controller.setSelectionWorker(() => new SelectionWorker());
+    return () => editor.controller.setSelectionWorker(null);
+  }, [editor.controller]);
   // A second editor for the standalone canvas below, with its own small toolbar.
   const canvasOnly = useImageEditor();
   const [canvasMode, setCanvasMode] = useState<ImageEditorCanvasMode>('paint');

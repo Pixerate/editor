@@ -21,11 +21,11 @@ import {
 } from './types';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
-import { quickSelectStroke } from './selection/segment/quick';
-import { selectObjectIn, type ObjectTarget } from './selection/segment/grabcut';
-import { findSubject } from './selection/segment/subject';
-import { focusArea, type FocusAreaOptions } from './selection/segment/focus';
-import { findSky, type SkyOptions } from './selection/segment/sky';
+import type { ObjectTarget } from './selection/segment/grabcut';
+import { SelectionWorkerClient, runSelectionJob, serializeMask, type SelectionJob, type SelectionJobResult, type SelectionWorkerFactory } from './selection/worker';
+import type { SelectionProgress } from './selection/segment/work';
+import type { FocusAreaOptions } from './selection/segment/focus';
+import type { SkyOptions } from './selection/segment/sky';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -492,6 +492,8 @@ export interface SampleOptions {
 
 /** Options of {@link ImageEditorController.quickSelect}. */
 export interface QuickSelectCommandOptions {
+  signal?: AbortSignal;
+  onProgress?: SelectionProgress;
   /** Brush diameter in natural pixels (default 30). */
   size?: number;
   /** How the strokes combine with the selection (default `replace`: the first replaces, the rest add). */
@@ -504,6 +506,7 @@ export interface QuickSelectCommandOptions {
 
 /** Options of {@link ImageEditorController.selectFocusArea}. */
 export interface FocusAreaCommandOptions extends FocusAreaOptions {
+  signal?: AbortSignal;
   /** How the area combines with the selection (default `replace`). */
   mode?: SelectionMode;
   /** Sample every layer (default true) or only the active pixel layer. */
@@ -537,6 +540,7 @@ export interface SkyCommandOptions extends SkyOptions {
 
 /** Options of {@link ImageEditorController.selectObject}. */
 export interface SelectObjectCommandOptions {
+  onProgress?: SelectionProgress;
   /**
    * With a segmentation provider set, ask it for the object in the box or under the point (default
    * true), falling back to GrabCut when nothing it returns fits; false always uses GrabCut.
@@ -1461,6 +1465,7 @@ export class ImageEditorController {
   private compositor = new LayerCompositor();
   /** The segmentation provider behind `selectSubject` (see `setSegmentationProvider`). */
   private segmentation: SegmentationProvider | null = null;
+  private selectionWorker: SelectionWorkerClient | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
   public readonly effects = new EffectsSlot();
   /** Renders provider effects: effect smart filter results and effect layers. */
@@ -1474,6 +1479,7 @@ export class ImageEditorController {
     this.effectsEngine.subscribe(() => this.queueEffectRefresh('incomplete'));
     if (options.effects) this.effects.set(options.effects);
     if (options.segmentation) this.segmentation = options.segmentation;
+    if (options.selectionWorker) this.selectionWorker = new SelectionWorkerClient(options.selectionWorker);
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
     if (options.textShaper !== undefined) this.textShaperValue = options.textShaper;
     this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
@@ -1689,6 +1695,33 @@ export class ImageEditorController {
   /** The registered segmentation provider, or `null` (then `selectSubject` finds the most salient subject without a model). */
   public get segmentationProvider(): SegmentationProvider | null {
     return this.segmentation;
+  }
+
+  /**
+   * Runs the long selections in a Web Worker made by `factory` (or with `null`, on the page again).
+   * A worker that is cancelled or fails is replaced by a fresh one on the next job.
+   */
+  public setSelectionWorker(factory: SelectionWorkerFactory | null): void {
+    this.selectionWorker?.terminate();
+    this.selectionWorker = factory ? new SelectionWorkerClient(factory) : null;
+  }
+
+  /** Whether the long selections run in a worker. */
+  public get hasSelectionWorker(): boolean {
+    return this.selectionWorker !== null;
+  }
+
+  /**
+   * Runs a long selection job on `pixels`: in the worker when there is one, else here (which
+   * blocks the page until it is done). `signal` cancels it (rejecting with an `AbortError`);
+   * `onProgress` hears its stages. The document is not changed.
+   */
+  public async runSelectionJob(job: SelectionJob, pixels: PixelBuffer, options: { signal?: AbortSignal; onProgress?: SelectionProgress } = {}): Promise<SelectionJobResult> {
+    options.signal?.throwIfAborted();
+    if (this.selectionWorker) return this.selectionWorker.run(job, pixels, options);
+    const result = runSelectionJob(job, pixels, options.onProgress);
+    options.signal?.throwIfAborted();
+    return result;
   }
 
   /** Registers (or with `null` removes) the segmentation provider. Not an edit: no undo step. */
@@ -5211,11 +5244,22 @@ export class ImageEditorController {
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
     const mode = options.mode ?? 'replace';
     let sel: SelectionMask | null = this.state.selection ?? null;
-    strokes.forEach((stroke, i) => {
+    for (let i = 0; i < strokes.length; i++) {
       const m: SelectionMode = mode === 'replace' && i > 0 ? 'add' : mode;
-      const region = quickSelectStroke(pixels, stroke, { size: options.size, selection: sel, grow: m === 'add', enhanceEdge: options.enhanceEdge });
-      sel = combineSelections(sel, region, m);
-    });
+      const job: SelectionJob = {
+        op: 'quick',
+        stroke: strokes[i],
+        size: options.size,
+        grow: m === 'add',
+        enhanceEdge: options.enhanceEdge,
+        selection: m === 'add' && sel?.bounds ? serializeMask(sel) : null,
+      };
+      const { mask } = await this.runSelectionJob(job, pixels, {
+        signal: options.signal,
+        onProgress: options.onProgress && ((f, stage) => options.onProgress!((i + f) / strokes.length, stage)),
+      });
+      sel = combineSelections(sel, mask, m);
+    }
     this.setSelection(sel, 'replace');
     return this.state.selection ?? null;
   }
@@ -5290,7 +5334,7 @@ export class ImageEditorController {
       // Nothing from the model fits the box or point: find it classically instead.
     }
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
-    const region = selectObjectIn(pixels, target, { enhanceEdge: options.enhanceEdge });
+    const { mask: region } = await this.runSelectionJob({ op: 'object', target, enhanceEdge: options.enhanceEdge }, pixels, options);
     this.setSelection(region, options.mode ?? 'replace');
     return { selection: this.state.selection ?? null, method: 'grabcut' };
   }
@@ -5302,7 +5346,11 @@ export class ImageEditorController {
    */
   public async selectFocusArea(options: FocusAreaCommandOptions = {}): Promise<{ selection: SelectionMask | null; noiseLevel: number }> {
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
-    const { selection, noiseLevel } = focusArea(pixels, options);
+    const { mask: selection, noiseLevel = 0 } = await this.runSelectionJob(
+      { op: 'focus', options: { range: options.range, noise: options.noise, softness: options.softness } },
+      pixels,
+      options
+    );
     this.setSelection(selection, options.mode ?? 'replace');
     return { selection: this.state.selection ?? null, noiseLevel };
   }
@@ -5322,7 +5370,7 @@ export class ImageEditorController {
       return { selection: this.state.selection ?? null, method: 'model' };
     }
     const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
-    const { selection, reason } = findSky(pixels, options);
+    const { mask: selection, reason } = await this.runSelectionJob({ op: 'sky', options: { threshold: options.threshold, softness: options.softness } }, pixels, options);
     if (!selection.bounds) return { selection: this.state.selection ?? null, method: 'classical', note: reason };
     this.setSelection(selection, options.mode ?? 'replace');
     return { selection: this.state.selection ?? null, method: 'classical' };
@@ -5648,6 +5696,8 @@ export class ImageEditorController {
       beforeApply?: (outlines: ImagePoint[][]) => void | Promise<void>;
       /** Without a model: smoother, less blocky edges (Auto-Enhance). */
       enhanceEdge?: boolean;
+      /** Without a model: hears the stages of finding the subject. */
+      onProgress?: SelectionProgress;
     } = {}
   ): Promise<{ segments: { label: string; bounds: CropBox | null; score?: number }[]; method: 'model' | 'saliency'; note?: string }> {
     const provider = this.segmentation;
@@ -5655,7 +5705,7 @@ export class ImageEditorController {
       // No model: the most salient subject, found classically. It can't choose by description.
       const pixels = await this.requirePixels({});
       options.signal?.throwIfAborted();
-      const { selection, reason } = findSubject(pixels, { enhanceEdge: options.enhanceEdge });
+      const { mask: selection, reason } = await this.runSelectionJob({ op: 'subject', enhanceEdge: options.enhanceEdge }, pixels, options);
       if (selection.bounds) this.shapeCommand(selection, options);
       const unused = target.trim() ? ` "${target.trim()}" was not used to choose it.` : '';
       return {

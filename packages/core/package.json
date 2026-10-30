@@ -174,6 +174,16 @@
         "default": "./dist/image-editor/index.cjs"
       }
     },
+    "./image-editor/selection-worker": {
+      "import": {
+        "types": "./dist/image-editor/selection-worker.d.ts",
+        "default": "./dist/image-editor/selection-worker.js"
+      },
+      "require": {
+        "types": "./dist/image-editor/selection-worker.d.cts",
+        "default": "./dist/image-editor/selection-worker.cjs"
+      }
+    },
     "./paint-editor": {
       "import": {
         "types": "./dist/paint-editor/index.d.ts",

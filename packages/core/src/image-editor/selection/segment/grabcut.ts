@@ -9,7 +9,7 @@
 import type { CropBox, ImagePoint } from '../../types';
 import { createSelectionMask, type PixelBuffer, type SelectionMask } from '../mask';
 import { GridGraph } from './maxflow';
-import { UNITS, smoothnessWeights, upscaleRegion, workImage, type Rect, type WorkImage } from './work';
+import { UNITS, smoothnessWeights, upscaleRegion, workImage, type Rect, type SelectionProgress, type WorkImage } from './work';
 
 const K = 5;
 
@@ -163,7 +163,8 @@ export interface GrabCutSetup {
 }
 
 /** GrabCut over the setup's window; returns 1 for the object per window pixel. */
-export function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: number): Uint8Array {
+/** GrabCut over the setup's window; `onRound` is called after each round with the share done. */
+export function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: number, onRound?: (fraction: number) => void): Uint8Array {
   const { width: w, rgb } = work;
   const { roi, hardBg, hardFg } = setup;
   const { x: rx, y: ry, width: rw, height: rh } = roi;
@@ -209,6 +210,7 @@ export function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: 
       if (v !== label[p]) changed++;
       label[p] = v;
     }
+    onRound?.((iter + 1) / iterations);
     if (changed <= n * 0.001) break;
   }
   return label;
@@ -253,6 +255,7 @@ export interface ObjectSelectionOptions {
   enhanceEdge?: boolean;
   /** Most rounds of fitting and cutting (default 5; it stops early once the labels settle). */
   iterations?: number;
+  onProgress?: SelectionProgress;
 }
 
 /** What to select: a box around the object, or a point on it (natural pixels). */
@@ -265,7 +268,11 @@ export type ObjectTarget = { rect: CropBox } | { point: ImagePoint };
  * nothing stands out.
  */
 export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, options: ObjectSelectionOptions = {}): SelectionMask {
+  const report = options.onProgress;
+  report?.(0, 'Reducing the image');
   const work = workImage(pixels);
+  report?.(0.1, 'Finding the object');
+  const round = (fraction: number) => report?.(0.1 + 0.8 * fraction, 'Finding the object');
   const { width: w, height: h, scale } = work;
   const iterations = Math.max(1, Math.round(options.iterations ?? 5));
   const enhance = options.enhanceEdge ?? false;
@@ -293,9 +300,12 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
         hardBg[y * roi.width + x] = inside ? 0 : 1;
       }
     }
-    const label = grabCutLabels(work, { roi, initial, hardBg, hardFg: null }, iterations);
+    const label = grabCutLabels(work, { roi, initial, hardBg, hardFg: null }, iterations, round);
     keepMainPieces(label, roi.width, roi.height, null);
-    return upscaleRegion(work, pixels, roi, label, enhance);
+    report?.(0.9, 'Scaling up');
+    const out = upscaleRegion(work, pixels, roi, label, enhance);
+    report?.(1, 'Done');
+    return out;
   }
   const px = Math.min(w - 1, Math.max(0, Math.floor(target.point.x * scale)));
   const py = Math.min(h - 1, Math.max(0, Math.floor(target.point.y * scale)));
@@ -323,7 +333,7 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
         if (Math.hypot(rx + x - px, ry + y - py) <= 1.5) hardFg[p] = 1;
       }
     }
-    const label = grabCutLabels(work, { roi, initial, hardBg, hardFg }, iterations);
+    const label = grabCutLabels(work, { roi, initial, hardBg, hardFg }, iterations, round);
     keepMainPieces(label, roi.width, roi.height, (py - ry) * roi.width + (px - rx));
     // Reaching the band means the object may run on past the window: look again in a larger one.
     let touches = false;
@@ -335,7 +345,12 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
         }
       }
     }
-    if (!touches || whole) return upscaleRegion(work, pixels, roi, label, enhance);
+    if (!touches || whole) {
+      report?.(0.9, 'Scaling up');
+      const out = upscaleRegion(work, pixels, roi, label, enhance);
+      report?.(1, 'Done');
+      return out;
+    }
     half = Math.round(half * 1.6);
   }
 }

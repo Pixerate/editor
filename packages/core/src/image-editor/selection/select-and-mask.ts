@@ -5,7 +5,8 @@
  * the workspace and an agent produce the same result in one undo step.
  *
  * The preview is computed on a copy reduced to {@link PREVIEW_SIZE} px (or at full size with High
- * Quality Preview) and drawn as RGBA in the chosen view mode.
+ * Quality Preview), in the controller's selection worker when it has one, and drawn as RGBA in
+ * the chosen view mode.
  */
 
 import type { ImageEditorController, RefineOutput, RefineOutputResult } from '../controller';
@@ -13,6 +14,7 @@ import type { ImagePoint } from '../types';
 import { createSelectionMask, resizeSelection, type PixelBuffer, type SelectionMask } from './mask';
 import { DEFAULT_REFINE_EDGE_PARAMS, refineSelection, type RefineEdgeParams } from './refine';
 import { applyRefineEdits, type RefineEdit } from './refine-edits';
+import { serializeMask } from './worker';
 
 export type SelectAndMaskView = 'onion-skin' | 'marching-ants' | 'overlay' | 'on-black' | 'on-white' | 'black-white' | 'on-layers';
 export type SelectAndMaskTool = 'quick-select' | 'refine-brush' | 'brush' | 'object' | 'lasso' | 'hand' | 'zoom';
@@ -140,6 +142,9 @@ export class SelectAndMaskSession {
   public note: string | null = null;
   /** Bumped each time the preview changes, so a UI can redraw. */
   public revision = 0;
+  /** True while the worker computes a preview. */
+  public computing = false;
+  private dirty = false;
 
   constructor(readonly controller: ImageEditorController) {
     this.base = controller.getSelection();
@@ -210,13 +215,20 @@ export class SelectAndMaskSession {
     this.baseMask = this.base?.bounds ? (s === 1 ? this.base : resizeSelection(this.base, w, h)) : null;
   }
 
-  /** Recomputes the preview mask from the base selection, the strokes and the settings. */
+  /**
+   * Recomputes the preview mask from the base selection, the strokes and the settings: at once on
+   * the page, or in the worker, where one job runs at a time and the newest state follows it.
+   */
   recompute(): void {
     const px = this.previewPixels;
     if (!px) return;
+    this.note = this.settingsValue.refineMode === 'object' ? 'Object aware refinement asks the segmentation model on OK; the preview refines by colour.' : null;
+    if (this.controller.hasSelectionWorker) {
+      void this.recomputeInWorker();
+      return;
+    }
     const { scale } = this.previewSize;
     const edits = [...this.editsList, ...(this.live ? [this.live] : [])].map((e) => scaleEdit(e, scale));
-    this.note = this.settingsValue.refineMode === 'object' ? 'Object aware refinement asks the segmentation model on OK; the preview refines by colour.' : null;
     try {
       const { selection, refineBrush } = applyRefineEdits(px, this.baseMask, edits, px.width, px.height);
       this.previewMask = selection?.bounds ? refineSelection(px, selection, scaleParams(this.settingsValue.params, scale), refineBrush) : null;
@@ -226,6 +238,39 @@ export class SelectAndMaskSession {
       this.error = err instanceof Error ? err.message : String(err);
     }
     this.emit();
+  }
+
+  private async recomputeInWorker(): Promise<void> {
+    if (this.computing) {
+      this.dirty = true;
+      return;
+    }
+    this.computing = true;
+    do {
+      this.dirty = false;
+      const px = this.previewPixels!;
+      const { scale } = this.previewSize;
+      const edits = [...this.editsList, ...(this.live ? [this.live] : [])].map((e) => scaleEdit(e, scale));
+      try {
+        const { mask } = await this.controller.runSelectionJob(
+          { op: 'refine-preview', base: this.baseMask ? serializeMask(this.baseMask) : null, edits, params: scaleParams(this.settingsValue.params, scale) },
+          px
+        );
+        this.previewMask = mask.bounds ? mask : null;
+        this.error = null;
+      } catch (err) {
+        this.previewMask = null;
+        this.error = err instanceof Error ? err.message : String(err);
+      }
+      this.emit();
+    } while (this.dirty);
+    this.computing = false;
+    this.emit();
+  }
+
+  /** Resolves once no preview is being computed (immediately without a worker). */
+  async idle(): Promise<void> {
+    while (this.computing) await new Promise((r) => setTimeout(r, 5));
   }
 
   /** Coverage 0..1 of the preview at (x, y) in preview pixels (for tests and hover readouts). */
