@@ -167,10 +167,18 @@ describe('quick_select', () => {
     const g = new SelectionGesture(c, () => opts);
     await g.begin({ x: 60, y: 90 });
     g.move({ x: 80, y: 92 });
-    expect(g.draftPath).toHaveLength(2);
+    // While dragging, the selection grows as a preview: shown, but not an edit yet.
+    await g.previewed;
+    expect(g.draftPath).toBeNull();
+    const preview = c.getState().selectionPreview!;
+    expect(Math.abs(selectionArea(preview) - RED) / RED).toBeLessThan(0.06);
+    expect(c.getSelection()).toBeNull();
+    expect(c.canUndo).toBe(false);
     g.end({ x: 80, y: 92 });
     await g.settled;
+    expect(c.getState().selectionPreview).toBeUndefined();
     expect(Math.abs(selectionArea(c.getSelection()) - RED) / RED).toBeLessThan(0.06);
+    expect(c.canUndo).toBe(true);
     // New mode with a selection already there adds.
     await g.begin({ x: 180, y: 90 });
     g.end();
@@ -180,6 +188,17 @@ describe('quick_select', () => {
     g.end(undefined, { altKey: true });
     await g.settled;
     expect(Math.abs(selectionArea(c.getSelection()) - RED) / RED).toBeLessThan(0.06);
+  });
+
+  it('drops the preview when a stroke is cancelled', async () => {
+    const { c } = setup();
+    const g = new SelectionGesture(c, () => ({ ...DEFAULT_SELECTION_TOOL_OPTIONS, tool: 'quick' as const, quickSize: 8 }));
+    await g.begin({ x: 60, y: 90 });
+    await g.previewed;
+    expect(c.getState().selectionPreview).toBeDefined();
+    g.cancel();
+    expect(c.getState().selectionPreview).toBeUndefined();
+    expect(c.getSelection()).toBeNull();
   });
 
   it('reports when the pixels cannot be read, and plays back on the Select panel', async () => {

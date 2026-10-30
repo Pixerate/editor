@@ -397,6 +397,11 @@ export interface ImageEditorState {
    * selected. Recorded in undo history and saved as `selection` in `toJSON()`.
    */
   selection?: SelectionMask | null;
+  /**
+   * A selection shown in place of `selection` while a gesture is in progress (Quick Selection
+   * growing as the brush moves). View state: not an edit, not in history, not saved.
+   */
+  selectionPreview?: SelectionMask | null;
   /** Quick Mask view: tint the unselected area instead of drawing marching ants (view state). */
   quickMask?: boolean;
   /** How the canvas shows the selection (view state; `quickMask` mirrors `'quickMask'`). */

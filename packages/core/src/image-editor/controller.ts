@@ -5173,6 +5173,18 @@ export class ImageEditorController {
     return true;
   }
 
+  /**
+   * Shows `mask` in place of the selection while a gesture runs (Quick Selection as the brush
+   * moves; `null` shows nothing selected), or with `undefined` stops. View state only: no undo
+   * step, not saved.
+   */
+  public setSelectionPreview(mask: SelectionMask | null | undefined): void {
+    if (this.state.selectionPreview === mask) return;
+    if (mask === undefined) delete this.state.selectionPreview;
+    else this.state.selectionPreview = mask;
+    this.notify();
+  }
+
   /** Select › All. */
   public selectAll(): boolean {
     const { width, height } = this.naturalSize;
