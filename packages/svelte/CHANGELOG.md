@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.138.0
+
+### Minor Changes
+
+- a3ca1b2: Mask views, as in Photoshop. Alt-click a layer's mask thumbnail to show the mask alone in grey, and Alt+Shift-click it (or press the backslash key) to show what it hides as a red overlay over the image; do the same again to go back. `setMaskView` / `getMaskView` on the controller (view state: no undo step, not saved), `handleMaskViewKey` for hosts, and the agent tool `set_mask_view`. `capture_view` draws the mask view when `includeOverlays` is true, so an agent can check a mask. The React and Svelte `LayersPanel` mark the shown mask in its thumbnail's label.
+
+### Patch Changes
+
+- Updated dependencies [a3ca1b2]
+  - @pixerate/editor@0.189.0
+
 ## 0.137.1
 
 ### Patch Changes
