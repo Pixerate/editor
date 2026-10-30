@@ -191,7 +191,9 @@ describe('React SelectionOptionsBar: Select Subject', () => {
       button('Select Subject').click();
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(calls).toEqual([['the dog', { mode: 'replace' }]]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('the dog');
+    expect(calls[0][1]).toMatchObject({ mode: 'replace' });
     expect(container.querySelector('[data-testid="select-subject"] [role="status"]')!.textContent).toContain('Nothing matching');
   });
 });
@@ -209,8 +211,30 @@ describe('React SelectionOptionsBar: Select Sky', () => {
       button('Select Sky').click();
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(calls).toEqual([{ mode: 'replace' }]);
+    expect(calls[0]).toMatchObject({ mode: 'replace' });
     expect(container.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toContain('No sky');
+  });
+});
+
+describe('React SelectionOptionsBar: progress', () => {
+  it('shows a long selection\'s progress and cancels it', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.selectSky = ((opts: { signal: AbortSignal; onProgress: (f: number, s: string) => void }) =>
+      new Promise((_, reject) => {
+        opts.onProgress(0.4, 'Growing the sky');
+        opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })));
+      })) as any;
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => button('Select Sky').click());
+    const bar = container.querySelector('[data-testid="selection-progress"] [role="progressbar"]')!;
+    expect(bar.getAttribute('aria-valuenow')).toBe('40');
+    expect(container.textContent).toContain('Growing the sky');
+    await act(async () => {
+      container.querySelector('[data-testid="selection-progress"] button')!.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(container.querySelector('[data-testid="selection-progress"]')).toBeNull();
+    expect(container.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toBe('Cancelled.');
   });
 });
 
@@ -230,7 +254,7 @@ describe('React SelectionOptionsBar: Focus Area', () => {
       button('Select Focus Area').click();
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(calls).toEqual([{ range: 70, noise: 20, softness: 0, mode: 'replace' }]);
+    expect(calls[0]).toMatchObject({ range: 70, noise: 20, softness: 0, mode: 'replace' });
     expect(container.querySelector('[data-testid="focus-area"] [role="status"]')!.textContent).toContain('No part');
   });
 });

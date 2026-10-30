@@ -57,6 +57,10 @@
     void tick;
     return session.note;
   });
+  const computing = $derived.by(() => {
+    void tick;
+    return session.computing;
+  });
 
   // Draw the preview whenever it changes.
   $effect(() => {
@@ -168,6 +172,9 @@
       <span class="text-muted-foreground">{edits} strokes</span>
       <button type="button" class={button} disabled={!edits} onclick={() => session.undoEdit()}>Undo Stroke</button>
       <span class="font-mono text-muted-foreground">{Math.round(zoom * 100)}%</span>
+      {#if computing}
+        <span role="status" class="text-muted-foreground">Updating preview…</span>
+      {/if}
     </div>
     <div class="flex-1 overflow-hidden flex items-center justify-center bg-muted/30">
       <canvas

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { ColorRangePreset, ImageEditorController, SelectionDisplay, SelectionMask, SelectionModifyOp, SelectionToolOptions } from '@pixerate/editor/image-editor';
 import {
   COLOR_RANGE_PRESETS,
@@ -104,6 +104,20 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       setRangeStatus(err instanceof Error ? err.message : String(err));
     }
   };
+  // The long selection running now (Select Subject, Sky, Focus Area): its progress and Cancel.
+  const [task, setTask] = useState<{ stage: string; fraction: number } | null>(null);
+  const taskAbort = useRef<AbortController | null>(null);
+  const tracked = () => {
+    const abort = new AbortController();
+    taskAbort.current = abort;
+    setTask({ stage: 'Starting', fraction: 0 });
+    return { signal: abort.signal, onProgress: (fraction: number, stage: string) => setTask({ stage, fraction }) };
+  };
+  const untrack = () => {
+    taskAbort.current = null;
+    setTask(null);
+  };
+  const failure = (err: unknown) => ((err as { name?: string })?.name === 'AbortError' ? 'Cancelled.' : err instanceof Error ? err.message : String(err));
   const [subject, setSubject] = useState('');
   const [segmenting, setSegmenting] = useState(false);
   const [subjectStatus, setSubjectStatus] = useState<string | null>(null);
@@ -114,12 +128,13 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
     setSegmenting(true);
     setSubjectStatus(null);
     try {
-      const { segments, method, note } = await controller.selectSubject(canSegment ? target : '', { mode: options.mode });
+      const { segments, method, note } = await controller.selectSubject(canSegment ? target : '', { mode: options.mode, ...tracked() });
       // Without a model, say only when nothing stood out.
       setSubjectStatus(segments.length ? null : method === 'saliency' ? (note ?? 'Nothing stands out from the background.') : `Nothing matching “${target}” was found.`);
     } catch (err) {
-      setSubjectStatus(err instanceof Error ? err.message : String(err));
+      setSubjectStatus(failure(err));
     } finally {
+      untrack();
       setSegmenting(false);
     }
   };
@@ -131,11 +146,12 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
     setSkying(true);
     setSkyStatus(null);
     try {
-      const { note } = await controller.selectSky({ mode: options.mode });
+      const { note } = await controller.selectSky({ mode: options.mode, ...tracked() });
       setSkyStatus(note ?? null);
     } catch (err) {
-      setSkyStatus(err instanceof Error ? err.message : String(err));
+      setSkyStatus(failure(err));
     } finally {
+      untrack();
       setSkying(false);
     }
   };
@@ -151,11 +167,13 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         noise: options.focusNoise ?? 0,
         softness: options.focusSoftness ?? 4,
         mode: options.mode,
+        ...tracked(),
       });
       setFocusStatus(selection ? null : 'No part of the image stands out as in focus.');
     } catch (err) {
-      setFocusStatus(err instanceof Error ? err.message : String(err));
+      setFocusStatus(failure(err));
     } finally {
+      untrack();
       setFocusing(false);
     }
   };
@@ -415,6 +433,24 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </p>
         )}
       </form>
+      {task && (
+        <div data-testid="selection-progress" className="flex items-center gap-2">
+          <div
+            role="progressbar"
+            aria-label={task.stage}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(task.fraction * 100)}
+            className="flex-1 h-1.5 rounded bg-muted overflow-hidden"
+          >
+            <div className="h-full bg-primary" style={{ width: `${Math.round(task.fraction * 100)}%` }} />
+          </div>
+          <span className="text-muted-foreground">{task.stage}</span>
+          <button type="button" className={btn(false)} onClick={() => taskAbort.current?.abort()}>
+            Cancel
+          </button>
+        </div>
+      )}
       <button type="button" className={btn(false)} onClick={() => setWorkspace(true)}>
         Select and Mask…
       </button>

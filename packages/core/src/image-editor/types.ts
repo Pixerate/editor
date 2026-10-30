@@ -1,3 +1,4 @@
+import type { SelectionWorkerFactory } from './selection/worker';
 import type { GlobalLight } from '../raster/effects/model';
 import type { EffectPattern } from '../raster/effects/patterns';
 import type { BlendMode } from './blend';
@@ -533,6 +534,13 @@ export interface ImageEditorOptions {
    * `setSegmentationProvider`.
    */
   segmentation?: SegmentationProvider | null;
+  /**
+   * Makes the Web Worker the long selections run in (Select Subject, Object Selection, Focus
+   * Area, Select Sky, Quick Selection, the Select and Mask preview), e.g. with Vite
+   * `() => new SelectionWorker()` from `@pixerate/editor/image-editor/selection-worker?worker`.
+   * Without one they run on the page. Change it later with `setSelectionWorker`.
+   */
+  selectionWorker?: SelectionWorkerFactory | null;
 }
 
 export interface InpaintOptions {

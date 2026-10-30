@@ -107,6 +107,20 @@
     void tick;
     return Boolean(controller.segmentationProvider);
   });
+  // The long selection running now (Select Subject, Sky, Focus Area): its progress and Cancel.
+  let task = $state<{ stage: string; fraction: number } | null>(null);
+  let taskAbort: AbortController | null = null;
+  function tracked() {
+    const abort = new AbortController();
+    taskAbort = abort;
+    task = { stage: 'Starting', fraction: 0 };
+    return { signal: abort.signal, onProgress: (fraction: number, stage: string) => (task = { stage, fraction }) };
+  }
+  function untracked() {
+    taskAbort = null;
+    task = null;
+  }
+  const failure = (err: unknown) => ((err as { name?: string })?.name === 'AbortError' ? 'Cancelled.' : err instanceof Error ? err.message : String(err));
   let subject = $state('');
   let segmenting = $state(false);
   let subjectStatus = $state<string | null>(null);
@@ -118,11 +132,12 @@
     skying = true;
     skyStatus = null;
     try {
-      const { note } = await controller.selectSky({ mode: options.mode });
+      const { note } = await controller.selectSky({ mode: options.mode, ...tracked() });
       skyStatus = note ?? null;
     } catch (err) {
-      skyStatus = err instanceof Error ? err.message : String(err);
+      skyStatus = failure(err);
     } finally {
+      untracked();
       skying = false;
     }
   }
@@ -138,11 +153,13 @@
         noise: options.focusNoise ?? 0,
         softness: options.focusSoftness ?? 4,
         mode: options.mode,
+        ...tracked(),
       });
       focusStatus = selection ? null : 'No part of the image stands out as in focus.';
     } catch (err) {
-      focusStatus = err instanceof Error ? err.message : String(err);
+      focusStatus = failure(err);
     } finally {
+      untracked();
       focusing = false;
     }
   }
@@ -152,12 +169,13 @@
     segmenting = true;
     subjectStatus = null;
     try {
-      const { segments, method, note } = await controller.selectSubject(canSegment ? target : '', { mode: options.mode });
+      const { segments, method, note } = await controller.selectSubject(canSegment ? target : '', { mode: options.mode, ...tracked() });
       // Without a model, say only when nothing stood out.
       subjectStatus = segments.length ? null : method === 'saliency' ? (note ?? 'Nothing stands out from the background.') : `Nothing matching “${target}” was found.`;
     } catch (err) {
-      subjectStatus = err instanceof Error ? err.message : String(err);
+      subjectStatus = failure(err);
     } finally {
+      untracked();
       segmenting = false;
     }
   }
@@ -428,6 +446,22 @@
       <p role="status" class="text-muted-foreground">{subjectStatus}</p>
     {/if}
   </form>
+  {#if task}
+    <div data-testid="selection-progress" class="flex items-center gap-2">
+      <div
+        role="progressbar"
+        aria-label={task.stage}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(task.fraction * 100)}
+        class="flex-1 h-1.5 rounded bg-muted overflow-hidden"
+      >
+        <div class="h-full bg-primary" style:width="{Math.round(task.fraction * 100)}%"></div>
+      </div>
+      <span class="text-muted-foreground">{task.stage}</span>
+      <button type="button" class={btn(false)} onclick={() => taskAbort?.abort()}>Cancel</button>
+    </div>
+  {/if}
   <button type="button" class={btn(false)} onclick={() => (workspace = true)}>Select and Mask…</button>
   {#if workspace}
     <SelectAndMaskWorkspace {controller} onclose={() => (workspace = false)} />

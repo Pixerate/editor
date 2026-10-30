@@ -9,13 +9,14 @@
 import { boxMean, guidedFilterColor } from '../refine';
 import { createSelectionMask, type PixelBuffer, type SelectionMask } from '../mask';
 import { softMaskToSelection, workLuma, workPlanes } from './guided';
-import { workImage } from './work';
+import { workImage, type SelectionProgress } from './work';
 
 export interface SkyOptions {
   /** 0..100 (default 50): higher takes in less sky-like pixels (haze, a sunset glow). */
   threshold?: number;
   /** Soften the edge over this many natural pixels (default 4; 0 for a hard edge). */
   softness?: number;
+  onProgress?: SelectionProgress;
 }
 
 export interface FoundSky {
@@ -46,7 +47,10 @@ const sigmoid = (v: number) => 1 / (1 + Math.exp(-v));
 
 /** The sky in `pixels`, as a selection of the whole image (empty, with a reason, when there is none). */
 export function findSky(pixels: PixelBuffer, options: SkyOptions = {}): FoundSky {
+  const report = options.onProgress;
+  report?.(0, 'Reducing the image');
   const work = workImage(pixels, SKY_SIZE);
+  report?.(0.2, 'Scoring the sky');
   const { width: w, height: h, rgb, scale } = work;
   const n = w * h;
   const L = new Float32Array(n);
@@ -86,6 +90,7 @@ export function findSky(pixels: PixelBuffer, options: SkyOptions = {}): FoundSky
   const threshold = Math.min(100, Math.max(0, options.threshold ?? 50));
   const t = 0.55 - (threshold - 50) * 0.006;
   // Grow down from the top rows through scoring pixels, without jumping across an edge.
+  report?.(0.5, 'Growing the sky');
   const sky = new Uint8Array(n);
   const stack: number[] = [];
   const seedRows = Math.max(1, Math.round(h * 0.04));
@@ -146,6 +151,7 @@ export function findSky(pixels: PixelBuffer, options: SkyOptions = {}): FoundSky
     front = next;
   }
   if (count < n * 0.005) return { selection: createSelectionMask(pixels.width, pixels.height), reason: 'No sky was found along the top of the image.' };
+  report?.(0.7, 'Fitting the edge');
   let mask: Float32Array = Float32Array.from(sky);
   const softness = Math.max(0, options.softness ?? 4) * scale;
   if (softness > 0) {
@@ -153,5 +159,7 @@ export function findSky(pixels: PixelBuffer, options: SkyOptions = {}): FoundSky
     mask = new Float32Array(n);
     for (let i = 0; i < n; i++) mask[i] = Math.min(1, Math.max(0, fitted[i]));
   }
-  return { selection: softMaskToSelection(work, mask) };
+  const selection = softMaskToSelection(work, mask);
+  report?.(1, 'Done');
+  return { selection };
 }

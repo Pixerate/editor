@@ -9,7 +9,7 @@ import type { PixelBuffer, SelectionMask } from '../mask';
 import { boxMean, guidedFilterColor } from '../refine';
 import { softMaskToSelection, workLuma, workPlanes } from './guided';
 import { otsuThreshold } from './subject';
-import { workImage } from './work';
+import { workImage, type SelectionProgress } from './work';
 
 export interface FocusAreaOptions {
   /** In-Focus Range 0..100 (default 50): higher takes in less sharp areas too. */
@@ -18,6 +18,7 @@ export interface FocusAreaOptions {
   noise?: number;
   /** Soften the edge over this many natural pixels (default 4; 0 for a hard edge). */
   softness?: number;
+  onProgress?: SelectionProgress;
 }
 
 export interface FocusAreaResult {
@@ -46,7 +47,10 @@ function estimateNoise(luma: Float32Array, w: number, h: number): number {
 
 /** The in-focus areas of `pixels` as a selection of the whole image. */
 export function focusArea(pixels: PixelBuffer, options: FocusAreaOptions = {}): FocusAreaResult {
+  const report = options.onProgress;
+  report?.(0, 'Reducing the image');
   const work = workImage(pixels, FOCUS_SIZE);
+  report?.(0.2, 'Measuring sharpness');
   const { width: w, height: h, scale } = work;
   const n = w * h;
   const luma = workLuma(work);
@@ -68,6 +72,7 @@ export function focusArea(pixels: PixelBuffer, options: FocusAreaOptions = {}): 
   const energy = boxMean(detail, w, h, r);
   const sharp = new Float32Array(n);
   for (let i = 0; i < n; i++) sharp[i] = Math.log1p(Math.sqrt(energy[i]) * 400);
+  report?.(0.5, 'Separating what is in focus');
   const sorted = Float32Array.from(sharp).sort();
   const top = sorted[Math.floor(n * 0.995)] || 1;
   for (let i = 0; i < n; i++) sharp[i] = Math.min(1, sharp[i] / top);
@@ -87,10 +92,13 @@ export function focusArea(pixels: PixelBuffer, options: FocusAreaOptions = {}): 
   // surroundings: pull the edge back by that much.
   const pulled = boxMean(mask, w, h, Math.max(1, Math.round(r / 2)));
   for (let i = 0; i < n; i++) mask[i] = pulled[i] >= 0.999 ? 1 : 0;
+  report?.(0.7, 'Fitting the edge');
   const softness = Math.max(0, options.softness ?? 4) * scale;
   if (softness > 0) {
     const fitted = guidedFilterColor(workPlanes(work), mask, w, h, Math.max(1, Math.round(softness * 2)), 1e-3);
     for (let i = 0; i < n; i++) mask[i] = Math.min(1, Math.max(0, fitted[i]));
   }
-  return { selection: softMaskToSelection(work, mask), noiseLevel: Math.round(sigma * 255 * 10) / 10 };
+  const selection = softMaskToSelection(work, mask);
+  report?.(1, 'Done');
+  return { selection, noiseLevel: Math.round(sigma * 255 * 10) / 10 };
 }

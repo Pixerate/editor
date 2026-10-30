@@ -504,7 +504,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: writeAnnotations('Quick Selection'),
-    handler: async (args) => {
+    handler: async (args, context) => {
       const strokes = Array.isArray(args.strokes)
         ? args.strokes.map((s: any) => (Array.isArray(s) ? s.map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) : []))
         : [];
@@ -516,6 +516,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         mode: parseSelectionMode(args.mode),
         sampleAllLayers: args.sampleAllLayers as boolean | undefined,
         enhanceEdge: args.enhanceEdge as boolean | undefined,
+        signal: context?.signal,
       });
       return summary(controller);
     },
@@ -545,7 +546,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: { ...writeAnnotations('Object Selection'), openWorldHint: true },
-    handler: async (args) => {
+    handler: async (args, context) => {
       const rect = args.rect as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined;
       const point = args.point as { x?: unknown; y?: unknown } | undefined;
       if (!rect && !point) throw new Error('Pass rect (a box around the object) or point (a point on it).');
@@ -555,6 +556,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         sampleAllLayers: args.sampleAllLayers as boolean | undefined,
         enhanceEdge: args.enhanceEdge as boolean | undefined,
         useModel: args.useModel as boolean | undefined,
+        signal: context?.signal,
       };
       const { method } = rect
         ? await controller.selectObject({ rect: { x: num(rect.x, NaN), y: num(rect.y, NaN), width: num(rect.width, NaN), height: num(rect.height, NaN) } }, options)
@@ -580,13 +582,14 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: writeAnnotations('Select the focus area', true),
-    handler: async (args) => {
+    handler: async (args, context) => {
       const { noiseLevel } = await controller.selectFocusArea({
         range: args.range === undefined ? undefined : num(args.range, 50),
         noise: args.noise === undefined ? undefined : num(args.noise, 0),
         softness: args.softness === undefined ? undefined : num(args.softness, 4),
         mode: parseSelectionMode(args.mode),
         sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+        signal: context?.signal,
       });
       return { ...summary(controller), noiseLevel };
     },
@@ -609,13 +612,14 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: { ...writeAnnotations('Select the sky', true), openWorldHint: true },
-    handler: async (args) => {
+    handler: async (args, context) => {
       const { note, method } = await controller.selectSky({
         threshold: args.threshold === undefined ? undefined : num(args.threshold, 50),
         softness: args.softness === undefined ? undefined : num(args.softness, 4),
         mode: parseSelectionMode(args.mode),
         sampleAllLayers: args.sampleAllLayers as boolean | undefined,
         useModel: args.useModel as boolean | undefined,
+        signal: context?.signal,
       });
       return { ...summary(controller), method, ...(note ? { note } : {}) };
     },

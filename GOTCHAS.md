@@ -3143,3 +3143,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: With output `new-layer` and Decontaminate Colors, edge pixels turned dark and bluish instead of taking the subject's colour.
 - **Root Cause**: The background colour was estimated from the new layer's own pixels. Layer via Copy creates a surface that covers only the selection's bounds, so `readRegion` returned transparent black outside them, and those zeros were averaged in as the background.
 - **Solution / Workaround**: `decontaminateLayer` estimates colours from the source layer, whose background is still there, and writes only RGB into the new layer, keeping the new layer's alpha. Any edge-colour estimate on a cut-out layer should read the layer it was cut from.
+
+### [core/image-editor/selection] A Selection Job in a Worker Can't Be Interrupted, Only Ended
+
+- **Issue / Symptom**: Cancelling a long selection (Select Subject on a large image) did nothing until it had finished.
+- **Root Cause**: The segmentations are synchronous. A worker handles one message at a time, so a "cancel" message waits until the running job returns.
+- **Solution / Workaround**: `SelectionWorkerClient` cancels by terminating the worker and rejecting its pending jobs with an `AbortError`. The next job starts a fresh worker from the factory and sends the pixels again, because the new worker has none of the old one's cached images. That is why `setSelectionWorker` takes a factory, not a `Worker`. On the page, without a worker, a job can't be stopped part-way: the signal is checked before and after it, and an aborted job's result is discarded.
+
+### [core/image-editor] Library Worker Entry: Bundled by the Host, Inert When Imported Elsewhere
+
+- **Issue / Symptom**: The algorithms the selection worker needs import many modules, so the `Function.prototype.toString` Blob trick used for the wet-paint worker can't build it. Also, `check:packages` imports every subpath in Node, where a worker entry that set `self.onmessage` would fail.
+- **Root Cause**: A worker made from one function's source contains only that function. Node has no `self`.
+- **Solution / Workaround**: `@pixerate/editor/image-editor/selection-worker` is a normal package entry that the host bundles as a worker, for example `import SelectionWorker from '…/selection-worker?worker'` in Vite. It starts only when `self` exists, `window` doesn't, and `self.postMessage` is a function, so importing it anywhere else does nothing. `SelectionWorkerLike` types its event handlers loosely so a DOM `Worker` fits without a cast.

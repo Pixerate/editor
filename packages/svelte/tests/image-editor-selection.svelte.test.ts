@@ -215,7 +215,9 @@ describe('Svelte SelectionOptionsBar: Select Subject', () => {
     setValue(target.querySelector('input[aria-label="Subject to select"]')!, 'the dog');
     click(button('Select Subject'));
     await settle();
-    expect(calls).toEqual([['the dog', { mode: 'replace' }]]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('the dog');
+    expect(calls[0][1]).toMatchObject({ mode: 'replace' });
     expect(target.querySelector('[data-testid="select-subject"] [role="status"]')!.textContent).toContain('Nothing matching');
   });
 });
@@ -239,8 +241,36 @@ describe('Svelte SelectionOptionsBar: Select Sky', () => {
     flushSync();
     click(button('Select Sky'));
     await settle();
-    expect(calls).toEqual([{ mode: 'replace' }]);
+    expect(calls[0]).toMatchObject({ mode: 'replace' });
     expect(target.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toContain('No sky');
+  });
+});
+
+describe('Svelte SelectionOptionsBar: progress', () => {
+  it('shows a long selection\'s progress and cancels it', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.selectSky = ((opts: { signal: AbortSignal; onProgress: (f: number, s: string) => void }) =>
+      new Promise((_, reject) => {
+        opts.onProgress(0.4, 'Growing the sky');
+        opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })));
+      })) as any;
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    click(button('Select Sky'));
+    const bar = target.querySelector('[data-testid="selection-progress"] [role="progressbar"]')!;
+    expect(bar.getAttribute('aria-valuenow')).toBe('40');
+    expect(target.textContent).toContain('Growing the sky');
+    click(target.querySelector('[data-testid="selection-progress"] button'));
+    await settle();
+    expect(target.querySelector('[data-testid="selection-progress"]')).toBeNull();
+    expect(target.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toBe('Cancelled.');
   });
 });
 
@@ -266,7 +296,7 @@ describe('Svelte SelectionOptionsBar: Focus Area', () => {
     setValue(target.querySelector('input[aria-label="Focus soften edge"]')!, '0');
     click(button('Select Focus Area'));
     await settle();
-    expect(calls).toEqual([{ range: 70, noise: 20, softness: 0, mode: 'replace' }]);
+    expect(calls[0]).toMatchObject({ range: 70, noise: 20, softness: 0, mode: 'replace' });
     expect(target.querySelector('[data-testid="focus-area"] [role="status"]')!.textContent).toContain('No part');
   });
 });

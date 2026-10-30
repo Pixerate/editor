@@ -15,7 +15,7 @@
 import type { PixelBuffer, SelectionMask } from '../mask';
 import { createSelectionMask } from '../mask';
 import { grabCutLabels, keepMainPieces } from './grabcut';
-import { upscaleRegion, workImage, type WorkImage } from './work';
+import { upscaleRegion, workImage, type SelectionProgress, type WorkImage } from './work';
 
 /** sRGB (0..255) to CIE L*a*b* (D65). */
 function toLab(r: number, g: number, b: number): [number, number, number] {
@@ -218,11 +218,16 @@ export interface FoundSubject {
  * The most salient subject of `pixels` as a selection of the whole image (empty, with a reason,
  * when nothing stands out from the background).
  */
-export function findSubject(pixels: PixelBuffer, options: { enhanceEdge?: boolean } = {}): FoundSubject {
+export function findSubject(pixels: PixelBuffer, options: { enhanceEdge?: boolean; onProgress?: SelectionProgress } = {}): FoundSubject {
+  const report = options.onProgress;
+  report?.(0, 'Reducing the image');
   const work = workImage(pixels);
   const { width: w, height: h } = work;
+  report?.(0.1, 'Grouping into superpixels');
   const sp = slicSuperpixels(work);
+  report?.(0.3, 'Measuring what stands out');
   const sal = superpixelSaliency(sp, w, h);
+  report?.(0.4, 'Finding the subject');
   const t = otsuThreshold(sal, sp.size);
   const n = w * h;
   const initial = new Uint8Array(n);
@@ -246,11 +251,14 @@ export function findSubject(pixels: PixelBuffer, options: { enhanceEdge?: boolea
   for (let i = 0; i < n; i++) guessed += initial[i];
   if (!guessed || guessed > n * 0.95) return empty('Nothing stands out from the background.');
   const roi = { x: 0, y: 0, width: w, height: h };
-  const label = grabCutLabels(work, { roi, initial, hardBg, hardFg }, 5);
+  const label = grabCutLabels(work, { roi, initial, hardBg, hardFg }, 5, (f) => report?.(0.4 + 0.5 * f, 'Finding the subject'));
   keepMainPieces(label, w, h, null);
   let kept = 0;
   for (let i = 0; i < n; i++) kept += label[i];
   if (kept < n * 0.002) return empty('Nothing stands out from the background.');
   if (kept > n * 0.97) return empty('The whole image looks like one subject; select it with select_all instead.');
-  return { selection: upscaleRegion(work, pixels, roi, label, options.enhanceEdge ?? false) };
+  report?.(0.9, 'Scaling up');
+  const selection = upscaleRegion(work, pixels, roi, label, options.enhanceEdge ?? false);
+  report?.(1, 'Done');
+  return { selection };
 }
