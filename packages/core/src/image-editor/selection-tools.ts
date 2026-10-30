@@ -1104,6 +1104,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     selectPolygonTool,
     quickSelectTool,
     selectObjectTool,
+    createImageSubjectSelectionTool(controller),
     lineTool,
     magicWandTool,
     colorRangeTool,
@@ -1153,58 +1154,59 @@ export function createImageSubjectSelectionTool(controller: ImageEditorControlle
     name: 'select_subject',
     title: 'Select a subject',
     description:
-      'Select › Subject: an AI segmentation model finds the objects matching target (a description such as "the dog", "the house", "the sky") in the flattened image and selects their outlines, combined with the selection by mode. Use it to cut a subject out by its contour (then layer_via_copy for a layer of just that subject); describe one object precisely to get only that one. One undoable step. Returns the selection and the objects found (label, bounds); none found leaves the selection unchanged.',
+      'Select › Subject: selects the main subject of the flattened image, combined with the selection by mode. With a segmentation model set by the host, target (a description such as "the dog" or "the house") chooses which objects; describe one object precisely to get only that one. Without a model, the subject that stands out most from the background is found classically (superpixel saliency and GrabCut): target cannot choose it, and method "saliency" and a note say so. Then check it with capture_view and fix it with quick_select or select_object. One undoable step. Returns the selection, the objects found (label, bounds), method ("model" or "saliency") and any note; none found leaves the selection unchanged.',
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', minLength: 1, description: 'What to select, in words.' },
+        target: { type: 'string', description: 'What to select, in words. Needed with a model; ignored without one.' },
         maxSegments: {
           type: 'integer',
           minimum: 1,
           maximum: 32,
-          description: 'Select at most this many matching objects (default the model’s; 1 for a single subject).',
+          description: 'With a model: select at most this many matching objects (default the model’s; 1 for a single subject).',
         },
         mode: modeSchema,
         feather: { type: 'number', minimum: 0, description: 'Feather radius in pixels (default 0).' },
+        enhanceEdge: { type: 'boolean', description: 'Without a model: smoother, less blocky edges (Auto-Enhance; default false).' },
       },
-      required: ['target'],
       additionalProperties: false,
     },
     annotations: { ...writeAnnotations('Select a subject'), openWorldHint: true },
-    handler: async ({ target, maxSegments, mode, feather }, context) => {
-      if (typeof target !== 'string' || !target.trim()) throw new Error('target must describe what to select.');
+    handler: async ({ target, maxSegments, mode, feather, enhanceEdge }, context) => {
+      if (target !== undefined && typeof target !== 'string') throw new Error('target must be a description in words.');
+      if (controller.segmentationProvider && !String(target ?? '').trim()) throw new Error('target must describe what to select (a model is set, and it selects by description).');
       const perform = context?.perform;
-      const { segments } = await controller.selectSubject(target, {
+      const { segments, method, note } = await controller.selectSubject(String(target ?? ''), {
         mode: parseSelectionMode(mode),
         feather: num(feather, 0),
         maxSegments: typeof maxSegments === 'number' ? Math.max(1, Math.round(maxSegments)) : undefined,
+        enhanceEdge: enhanceEdge === true,
         signal: context?.signal,
         // Under playback the cursor traces what the model found, as a lasso, before it is selected.
         beforeApply: perform ? (outlines) => perform(planOutlineTrace(outlines)) : undefined,
       });
-      return { ...summary(controller), found: segments };
+      return { ...summary(controller), found: segments, method, ...(note ? { note } : {}) };
     },
   };
 }
 
 /**
- * Agent tools that need the controller's segmentation provider (`select_subject`). The list is
- * empty while no provider is set, so a host can register this once and the tool appears when a
- * model is available.
+ * @deprecated `select_subject` is now one of the selection tools of `createImageEditorToolProvider`
+ * (it works without a model too), so this provider lists no tools; it stays so hosts that register
+ * it keep working. Remove it from your registry.
  */
 export function createImageSegmentationToolProvider(
   controller: ImageEditorController,
   options: ImageSegmentationToolProviderOptions = {}
 ): AgentToolProvider {
-  const tool = createImageSubjectSelectionTool(controller);
   return withImagePlayback(
     {
       id: options.id ?? 'image-segmentation',
       namespace: options.namespace,
       title: 'Image segmentation',
-      description: 'Select › Subject: select objects in the image by description through an AI segmentation model.',
+      description: 'Deprecated: select_subject is in the image editor tool provider.',
       skill: 'pixerate-image-editor',
-      tools: () => (controller.segmentationProvider ? [tool] : []),
+      tools: () => [],
     },
     options.playbackSurface
   );

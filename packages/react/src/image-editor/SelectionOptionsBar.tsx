@@ -108,12 +108,14 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   const [subjectStatus, setSubjectStatus] = useState<string | null>(null);
   const selectSubject = async () => {
     const target = subject.trim();
-    if (!target || segmenting) return;
+    const canSegment = Boolean(controller.segmentationProvider);
+    if ((canSegment && !target) || segmenting) return;
     setSegmenting(true);
     setSubjectStatus(null);
     try {
-      const { segments } = await controller.selectSubject(target, { mode: options.mode });
-      setSubjectStatus(segments.length ? null : `Nothing matching “${target}” was found.`);
+      const { segments, method, note } = await controller.selectSubject(canSegment ? target : '', { mode: options.mode });
+      // Without a model, say only when nothing stood out.
+      setSubjectStatus(segments.length ? null : method === 'saliency' ? (note ?? 'Nothing stands out from the background.') : `Nothing matching “${target}” was found.`);
     } catch (err) {
       setSubjectStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -340,16 +342,16 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         />
         px
       </label>
-      {controller.segmentationProvider && (
-        <form
-          data-testid="select-subject"
-          className="flex flex-col gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void selectSubject();
-          }}
-        >
-          <div className="flex gap-1">
+      <form
+        data-testid="select-subject"
+        className="flex flex-col gap-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void selectSubject();
+        }}
+      >
+        <div className="flex gap-1">
+          {controller.segmentationProvider && (
             <input
               type="text"
               aria-label="Subject to select"
@@ -359,17 +361,23 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
               onChange={(e) => setSubject(e.currentTarget.value)}
               className="min-w-0 flex-1 bg-background border border-border rounded px-2 py-1 text-foreground"
             />
-            <button type="submit" className={btn(false)} disabled={segmenting || !subject.trim()} aria-busy={segmenting}>
-              {segmenting ? 'Selecting…' : 'Select Subject'}
-            </button>
-          </div>
-          {subjectStatus && (
-            <p role="status" className="text-muted-foreground">
-              {subjectStatus}
-            </p>
           )}
-        </form>
-      )}
+          <button
+            type="submit"
+            className={btn(false)}
+            disabled={segmenting || (Boolean(controller.segmentationProvider) && !subject.trim())}
+            aria-busy={segmenting}
+            title={controller.segmentationProvider ? undefined : 'Selects the subject that stands out most (no segmentation model is set)'}
+          >
+            {segmenting ? 'Selecting…' : 'Select Subject'}
+          </button>
+        </div>
+        {subjectStatus && (
+          <p role="status" className="text-muted-foreground">
+            {subjectStatus}
+          </p>
+        )}
+      </form>
       <label className="flex items-center gap-2 text-foreground">
         <ImageCheckbox label="Anti-alias" checked={options.antiAlias} onChange={(on) => set({ antiAlias: on })} />
         Anti-alias

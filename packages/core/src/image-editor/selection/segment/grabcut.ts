@@ -152,7 +152,7 @@ function initialComponents(rgb: Float32Array, ids: number[], comp: Uint8Array): 
 }
 
 /** Pixels fixed to one side, and a starting guess, over a window of the work image. */
-interface GrabCutSetup {
+export interface GrabCutSetup {
   roi: Rect;
   /** Per window pixel: 1 = starts inside the object. */
   initial: Uint8Array;
@@ -163,7 +163,7 @@ interface GrabCutSetup {
 }
 
 /** GrabCut over the setup's window; returns 1 for the object per window pixel. */
-function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: number): Uint8Array {
+export function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: number): Uint8Array {
   const { width: w, rgb } = work;
   const { roi, hardBg, hardFg } = setup;
   const { x: rx, y: ry, width: rw, height: rh } = roi;
@@ -218,7 +218,7 @@ function grabCutLabels(work: WorkImage, setup: GrabCutSetup, iterations: number)
  * Keeps the object's main parts: the pieces (4-connected) holding `seed` (window index), or
  * without one, every piece at least a fifth the size of the largest.
  */
-function keepMainPieces(label: Uint8Array, rw: number, rh: number, seed: number | null): void {
+export function keepMainPieces(label: Uint8Array, rw: number, rh: number, seed: number | null): void {
   const n = rw * rh;
   const piece = new Int32Array(n).fill(-1);
   const sizes: number[] = [];

@@ -23,6 +23,7 @@ import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsTo
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import { quickSelectStroke } from './selection/segment/quick';
 import { selectObjectIn, type ObjectTarget } from './selection/segment/grabcut';
+import { findSubject } from './selection/segment/subject';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -1641,7 +1642,7 @@ export class ImageEditorController {
     this.notify();
   }
 
-  /** The registered segmentation provider, or `null` (then `selectSubject` is unavailable). */
+  /** The registered segmentation provider, or `null` (then `selectSubject` finds the most salient subject without a model). */
   public get segmentationProvider(): SegmentationProvider | null {
     return this.segmentation;
   }
@@ -5395,19 +5396,35 @@ export class ImageEditorController {
    * Select › Subject: asks the segmentation provider for the objects matching `target` ("the
    * dog", "the sky") in the flattened image and selects their shapes, combined with the
    * selection by `mode`, as one undo step. Returns what was found (labels and bounds in natural
-   * pixels); an empty list leaves the selection as it was. Throws without a provider.
+   * pixels); an empty list leaves the selection as it was. Without a provider, the subject that
+   * stands out most is found classically (superpixels, saliency, Otsu, GrabCut): `target` can't
+   * choose it, and `method: 'saliency'` and a `note` say so.
    */
   public async selectSubject(
-    target: string,
+    target = '',
     options: SelectionCommandOptions & {
       maxSegments?: number;
       signal?: AbortSignal;
       /** Called with the outlines found (image pixels; a mask-only result's bounds) before the selection changes, e.g. to trace them with an agent's cursor. */
       beforeApply?: (outlines: ImagePoint[][]) => void | Promise<void>;
+      /** Without a model: smoother, less blocky edges (Auto-Enhance). */
+      enhanceEdge?: boolean;
     } = {}
-  ): Promise<{ segments: { label: string; bounds: CropBox | null; score?: number }[] }> {
+  ): Promise<{ segments: { label: string; bounds: CropBox | null; score?: number }[]; method: 'model' | 'saliency'; note?: string }> {
     const provider = this.segmentation;
-    if (!provider) throw new Error('Select Subject needs a segmentation provider (setSegmentationProvider).');
+    if (!provider) {
+      // No model: the most salient subject, found classically. It can't choose by description.
+      const pixels = await this.requirePixels({});
+      options.signal?.throwIfAborted();
+      const { selection, reason } = findSubject(pixels, { enhanceEdge: options.enhanceEdge });
+      if (selection.bounds) this.shapeCommand(selection, options);
+      const unused = target.trim() ? ` "${target.trim()}" was not used to choose it.` : '';
+      return {
+        segments: selection.bounds ? [{ label: 'subject', bounds: selection.bounds }] : [],
+        method: 'saliency',
+        note: reason ?? `No segmentation model is set, so the subject that stands out most was selected.${unused}`,
+      };
+    }
     const description = target.trim();
     if (!description) throw new Error('Describe the subject to select.');
     const { width, height } = this.naturalSize;
@@ -5433,7 +5450,7 @@ export class ImageEditorController {
       options.signal?.throwIfAborted();
     }
     if (mask) this.shapeCommand(mask, options);
-    return { segments: segments.filter((s) => s.bounds) };
+    return { segments: segments.filter((s) => s.bounds), method: 'model' };
   }
 
   /** Quick Mask view (tints the unselected area). View state: no undo step. */
