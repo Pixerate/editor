@@ -123,6 +123,12 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => (container.querySelector('[aria-label="Auto-enhance edges"]') as HTMLElement).click());
     await act(async () => (container.querySelector('[aria-label="Sample all layers"]') as HTMLElement).click());
     expect(opts()).toMatchObject({ tool: 'quick', quickSize: 60, quickEnhance: true, quickSampleAll: false });
+    // Object Selection shows Sample all layers and Auto-enhance.
+    await act(async () => button('Object Selection').click());
+    expect(container.querySelector('[data-testid="object-selection-options"]')).not.toBeNull();
+    await act(async () => (container.querySelector('[aria-label="Object auto-enhance edges"]') as HTMLElement).click());
+    await act(async () => (container.querySelector('[aria-label="Object sample all layers"]') as HTMLElement).click());
+    expect(opts()).toMatchObject({ tool: 'object', objectEnhance: true, objectSampleAll: false });
     await act(async () => button('Color Range').click());
     expect(container.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     await act(async () => setValue(container.querySelector('input[aria-label="Fuzziness"]')!, '10'));

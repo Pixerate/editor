@@ -3,7 +3,7 @@ import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'magnetic' | 'quick' | 'range' | 'type' | 'type-vertical';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'magnetic' | 'quick' | 'object' | 'range' | 'type' | 'type-vertical';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
@@ -15,6 +15,7 @@ export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[
   { id: 'polygon', label: 'Polygonal Lasso' },
   { id: 'magnetic', label: 'Magnetic Lasso' },
   { id: 'quick', label: 'Quick Selection' },
+  { id: 'object', label: 'Object Selection' },
   { id: 'range', label: 'Color Range' },
   { id: 'type', label: 'Type Mask' },
   { id: 'type-vertical', label: 'Vertical Type Mask' },
@@ -74,6 +75,10 @@ export interface SelectionToolOptions {
   quickSampleAll?: boolean;
   /** Quick Selection: smoother, less blocky edges (Auto-Enhance; default false). */
   quickEnhance?: boolean;
+  /** Object Selection: read every layer (default true) or only the active pixel layer. */
+  objectSampleAll?: boolean;
+  /** Object Selection: smoother, less blocky edges (Auto-Enhance; default false). */
+  objectEnhance?: boolean;
   /** Type Mask: the text to select (default "Type"). A click places its first baseline. */
   typeText?: string;
   /** Type Mask: font size in px (default 72). */
@@ -100,6 +105,8 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   quickSize: 30,
   quickSampleAll: true,
   quickEnhance: false,
+  objectSampleAll: true,
+  objectEnhance: false,
   typeText: 'Type',
   typeSize: 72,
   typeFamily: 'sans-serif',
