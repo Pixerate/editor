@@ -94,6 +94,16 @@ describe('Svelte LayersPanel', () => {
     thumbs[thumbs.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
     flushSync();
     expect(c.getSelection()).not.toBeNull();
+    // Alt-click shows the mask alone in grey, and the thumbnail says so; again to go back.
+    const maskThumb = () => target.querySelector('[data-testid="layer-mask-thumbnail"]') as HTMLElement;
+    maskThumb().dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    flushSync();
+    expect(c.getMaskView()).toEqual({ layerId: c.getLayers()[1].id, mode: 'gray' });
+    expect(maskThumb().getAttribute('aria-label')).toContain('(shown)');
+    maskThumb().dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+    flushSync();
+    expect(c.getMaskView()).toBeNull();
+    expect(maskThumb().getAttribute('aria-label')).not.toContain('(shown)');
     click(target.querySelector('button[aria-label="Layer menu"]'));
     const del = Array.from(target.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === 'Delete Layer') as HTMLButtonElement;
     click(del);

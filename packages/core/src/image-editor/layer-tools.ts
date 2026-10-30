@@ -479,6 +479,29 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     },
   };
 
+  const maskView: AgentTool = {
+    name: 'set_mask_view',
+    title: 'Show a layer mask',
+    description:
+      "Shows a layer's mask on the canvas to check it: gray (the mask alone, white = revealed, as Alt-clicking its thumbnail does), overlay (a red tint over what it hides, as the backslash key does) or off (the image again). It changes only the view: no undo step, nothing saved, and render_preview and exports still show the image. Look with capture_view includeOverlays true, then turn it off. Fails when the layer has no painted mask. Returns the view.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        view: { type: 'string', enum: ['gray', 'overlay', 'off'], description: 'gray, overlay or off.' },
+        layerId: { ...LAYER_ID, description: 'The layer whose mask to show (default the active layer; see list_layers). Ignored for off.' },
+      },
+      required: ['view'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Show a layer mask', ...WRITE_IDEMPOTENT },
+    handler: ({ view, layerId }) => {
+      if (view !== 'gray' && view !== 'overlay' && view !== 'off') throw new Error(`Unknown view "${String(view)}". Use gray, overlay or off.`);
+      const id = view === 'off' || layerId === undefined ? undefined : exists(layerId);
+      const shown = controller.setMaskView(view, id);
+      return { view: shown?.mode ?? 'off', layerId: shown?.layerId ?? null };
+    },
+  };
+
   const maskProps: AgentTool = {
     name: 'set_layer_mask_properties',
     title: 'Set layer mask properties',
@@ -630,6 +653,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     addMask,
     applyMask,
     removeMask,
+    maskView,
     maskProps,
     viaCopy,
     rasterize,

@@ -447,6 +447,9 @@ export interface SelectionCommandOptions {
 /** How the canvas shows the selection: marching ants, a Quick Mask tint, or not at all. */
 export type SelectionDisplay = 'ants' | 'quickMask' | 'none';
 
+/** How a layer mask is shown on the canvas: alone in grey, or as a red tint over the image. */
+export type MaskViewMode = 'gray' | 'overlay';
+
 /** Where an AI result goes (see `applyInpaintedImage`, `applyBackgroundRemovedImage`). */
 export interface AIResultOptions {
   /** `new-layer`: a new layer (inpainting) or a mask (background removal); `replace`: the Background's pixels. Default: by `isMultiLayer`. */
@@ -5095,6 +5098,44 @@ export class ImageEditorController {
     this.state.selectionDisplay = display;
     this.state.quickMask = display === 'quickMask';
     this.notify();
+  }
+
+  // --- Mask views ---
+
+  /** The layer mask shown on the canvas, or `null` (see `setMaskView`). */
+  public getMaskView(): { layerId: string; mode: MaskViewMode } | null {
+    const view = this.state.maskView;
+    if (!view) return null;
+    const layer = this.getLayer(view.layerId);
+    return layer?.mask && !layer.mask.source ? view : null;
+  }
+
+  /**
+   * Shows a layer's mask on the canvas: `gray` alone in grey (Alt-click the mask thumbnail),
+   * `overlay` as a red tint over what it hides (the \ key), `off` back to the image. The layer
+   * defaults to the active one. View state: no undo step, not saved. Throws when the layer has
+   * no painted mask.
+   */
+  public setMaskView(mode: MaskViewMode | 'off', layerId?: string): { layerId: string; mode: MaskViewMode } | null {
+    if (mode !== 'off' && mode !== 'gray' && mode !== 'overlay') throw new Error(`Unknown mask view "${String(mode)}". Use gray, overlay or off.`);
+    if (mode === 'off') {
+      if (this.state.maskView) {
+        this.state.maskView = null;
+        this.notify();
+      }
+      return null;
+    }
+    const id = layerId ?? this.state.activeLayerId;
+    if (!id) throw new LayerOperationError('No layer given and none is active; pass layerId (see list_layers).');
+    const layer = requireLayer(this.state.layers, id).layer;
+    if (!layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask to show; add one with add_layer_mask.`);
+    if (layer.mask.source) throw new LayerOperationError(`Layer "${layer.name || id}" has a depth mask, which is computed, not painted, so it has no mask view.`);
+    const cur = this.state.maskView;
+    if (cur?.layerId !== id || cur.mode !== mode) {
+      this.state.maskView = { layerId: id, mode };
+      this.notify();
+    }
+    return this.state.maskView!;
   }
 
   // --- Alpha channels ---

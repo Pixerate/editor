@@ -25,6 +25,7 @@
     startMarchingAnts,
     handleSelectionShortcut,
     handleQuickMaskKey,
+    handleMaskViewKey,
     ShapeDrawGesture,
     TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -605,7 +606,7 @@
       if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
       // Leave Copy to the page while text on it is selected.
       if (window.getSelection?.()?.toString()) return;
-      if (handleQuickMaskKey(editor.controller, e)) {
+      if (handleQuickMaskKey(editor.controller, e) || handleMaskViewKey(editor.controller, e)) {
         e.preventDefault();
         return;
       }

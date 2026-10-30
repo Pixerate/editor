@@ -1,6 +1,8 @@
 import type { CaptureRenderRequest, CaptureSurface } from '../tools/capture.js';
 import type { ImageEditorController } from './controller';
-import type { SelectionMask } from './selection/mask';
+import { selectionToPixels, type SelectionMask } from './selection/mask';
+import { layerMaskSelection } from './selection/layer-mask';
+import { quickMaskPixels } from './selection/overlay';
 
 const NO_CANVAS = 'Rendering is not available in this environment.';
 
@@ -15,6 +17,24 @@ function selectionShade(selection: SelectionMask, doc: Document): HTMLCanvasElem
   for (let i = 0; i < selection.data.length; i++) {
     pixels.data[i * 4 + 3] = Math.round(150 * (1 - selection.data[i] / 255));
   }
+  context.putImageData(pixels, 0, 0);
+  return canvas;
+}
+
+/** A layer mask view (`gray` alone, or the red `overlay` over what it hides) as a canvas, natural pixels. */
+function maskViewCanvas(controller: ImageEditorController, doc: Document): HTMLCanvasElement | null {
+  const view = controller.getMaskView();
+  const layer = view ? controller.getLayer(view.layerId) : null;
+  const { width, height } = controller.getState().imageDimensions;
+  const mask = layer ? layerMaskSelection(layer, Math.round(width), Math.round(height)) : null;
+  if (!view || !mask) return null;
+  const canvas = doc.createElement('canvas');
+  canvas.width = mask.width;
+  canvas.height = mask.height;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  const pixels = context.createImageData(mask.width, mask.height);
+  pixels.data.set(view.mode === 'gray' ? selectionToPixels(mask, 'gray').data : quickMaskPixels(mask));
   context.putImageData(pixels, 0, 0);
   return canvas;
 }
@@ -44,6 +64,8 @@ async function renderImageRegion(controller: ImageEditorController, request: Cap
   context.drawImage(view, rect.x * kx, rect.y * ky, rect.width * kx, rect.height * ky, 0, 0, out.width, out.height);
   if (request.includeOverlays) {
     const s = request.scale;
+    const maskView = maskViewCanvas(controller, document);
+    if (maskView) context.drawImage(maskView, rect.x, rect.y, rect.width, rect.height, 0, 0, out.width, out.height);
     const selection = state.selection;
     if (selection?.bounds && selection.width === state.imageDimensions.width && selection.height === state.imageDimensions.height) {
       const shade = selectionShade(selection, document);
@@ -79,7 +101,7 @@ export function createImageCaptureSurface(controller: ImageEditorController): Ca
     units: 'image pixels',
     content: whole,
     selection: () => ({ rect: controller.getState().selection?.bounds ?? null }),
-    overlays: 'a shade over unselected pixels and the crop box outline',
+    overlays: 'a shade over unselected pixels, the crop box outline and a layer mask view (set_mask_view)',
     maxScale: 8,
     render: (request) => renderImageRegion(controller, request),
   };

@@ -10,6 +10,7 @@ import type { ImageEditorController, PaintStrokeSession } from '../controller';
 import type { ImagePoint } from '../types';
 import { shapeGeometryBounds } from './shape';
 import { userErrorMessage } from './ops';
+import { handleMaskViewKey } from '../selection/gesture';
 import { MAX_BRUSH_SIZE, type BrushSettings, type MixerSettings, type RetouchSettings } from '../../paint';
 
 const plain = { kind: 'plain' } as const;
@@ -194,13 +195,15 @@ const isTyping = (t: unknown) => {
  * Applies a paint shortcut. Returns true when it was one (the caller then prevents the default).
  * B / Shift+B (Mixer Brush) / E / V choose the tool; [ and ] change the size, with Shift the hardness by 25 %; 1..9 set the
  * opacity to 10..90 % and 0 to 100 %; D resets the colours to black and white; X swaps them; Q
- * toggles Quick Mask mode (painting then edits the selection).
+ * toggles Quick Mask mode (painting then edits the selection); the backslash key shows the active
+ * layer's mask as a red overlay.
  */
 export function handlePaintShortcut(controller: ImageEditorController, e: ShortcutEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return false;
   const brush = controller.getState().paint.brush;
   const set = (b: Partial<BrushSettings>) => controller.setPaintOptions({ brush: b });
   const key = e.key;
+  if (handleMaskViewKey(controller, e)) return true;
   switch (key.toLowerCase()) {
     case 'q':
       // Quick Mask mode: brushes, fills and the eraser then paint the selection.

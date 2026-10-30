@@ -51,6 +51,7 @@
       layers: s.layers,
       activeLayerId: s.activeLayerId,
       activeTarget: s.activeTarget,
+      maskView: controller.getMaskView(),
       rows: layerPanelRows(s.layers, s.activeLayerId),
       active: controller.getActiveLayer() ?? null,
       menu: layerMenu(controller),
@@ -374,7 +375,8 @@
             use:paint={maskThumb(layer)}
             role="button"
             tabindex="0"
-            aria-label={`${row.label} mask${layer.mask.enabled === false ? ' (disabled)' : ''}`}
+            aria-label={`${row.label} mask${layer.mask.enabled === false ? ' (disabled)' : ''}${snapshot.maskView?.layerId === layer.id ? ' (shown)' : ''}`}
+            title="Alt-click: show the mask alone · Alt+Shift-click: as an overlay"
             data-testid="layer-mask-thumbnail"
             style="width: {thumbnailSize}px; height: {thumbnailSize}px"
             class={thumbClass(row.active && snapshot.activeTarget === 'mask')}

@@ -10,6 +10,20 @@ import {
   type SelectionMask,
 } from './mask';
 import { gaussianBlur } from './modify';
+import { readRegion } from '../../raster/surface';
+import type { ImageLayer } from '../layers/model';
+
+/**
+ * A layer's painted mask over the `width × height` canvas as coverage (white = revealed), its
+ * pixels before density and feather; `null` without one (a depth mask is computed, not painted).
+ */
+export function layerMaskSelection(layer: ImageLayer, width: number, height: number): SelectionMask | null {
+  if (!layer.mask || layer.mask.source) return null;
+  const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+  const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+  const data = readRegion(layer.mask.surface, { x: -ox, y: -oy, width, height });
+  return createSelectionMask(width, height, new Uint8Array(data.buffer, data.byteOffset, data.length));
+}
 
 /** Properties of a layer mask that leave its pixels intact (Photoshop's Properties › Masks). */
 export interface LayerMaskProps {

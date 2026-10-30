@@ -285,6 +285,20 @@ export function handleSelectionShortcut(
   return false;
 }
 
+/**
+ * The backslash key (no modifiers) shows or hides the active layer's mask as a red overlay; it
+ * does nothing when the layer has no painted mask. Returns true when the key was used.
+ */
+export function handleMaskViewKey(controller: ImageEditorController, e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key !== '\\') return false;
+  const id = controller.getState().activeLayerId;
+  const layer = id ? controller.getLayer(id) : null;
+  if (!layer?.mask || layer.mask.source) return false;
+  const view = controller.getMaskView();
+  controller.setMaskView(view?.layerId === layer.id && view.mode === 'overlay' ? 'off' : 'overlay', layer.id);
+  return true;
+}
+
 /** Q (no modifiers) toggles Quick Mask mode. Returns true when the key was used. */
 export function handleQuickMaskKey(controller: ImageEditorController, e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'q') return false;
