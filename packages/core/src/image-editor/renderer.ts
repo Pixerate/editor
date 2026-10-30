@@ -397,7 +397,7 @@ export class ImageEditorRenderer {
     }
 
     // 4. Selection: marching ants or Quick Mask, through the same projection.
-    const display = options.selectionDisplay ?? (state.quickMask ? 'quickMask' : 'ants');
+    const display = options.selectionDisplay ?? state.selectionDisplay ?? (state.quickMask ? 'quickMask' : 'ants');
     if ((state.selection?.bounds && display !== 'none') || options.draftSelectionPath?.length) {
       ctx.save();
       try {

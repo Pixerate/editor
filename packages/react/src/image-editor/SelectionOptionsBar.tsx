@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import type { ImageEditorController, SelectionMask, SelectionModifyOp, SelectionToolOptions } from '@pixerate/editor/image-editor';
+import type { ColorRangePreset, ImageEditorController, SelectionDisplay, SelectionMask, SelectionModifyOp, SelectionToolOptions } from '@pixerate/editor/image-editor';
 import {
+  COLOR_RANGE_PRESETS,
+  COLOR_RANGE_PRESET_LABELS,
   SELECTION_MODES,
   SELECTION_MODE_LABELS,
   SELECTION_TOOLS,
@@ -17,6 +19,8 @@ export interface SelectionOptionsBarProps {
   selection?: SelectionMask | null;
   /** The current Quick Mask view flag (`state.quickMask`). */
   quickMask?: boolean;
+  /** How the canvas shows the selection (`state.selectionDisplay`); wins over `quickMask`. */
+  selectionDisplay?: SelectionDisplay;
   className?: string;
 }
 
@@ -28,15 +32,25 @@ const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
   { op: 'smooth', label: 'Smooth' },
 ];
 
+const DISPLAYS: { id: SelectionDisplay; label: string }[] = [
+  { id: 'ants', label: 'Ants' },
+  { id: 'quickMask', label: 'Quick Mask' },
+  { id: 'none', label: 'Hidden' },
+];
+
+const numberInput = 'w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground';
+
 const btn = (on: boolean) =>
   `px-2 py-1 rounded-md border text-[11px] transition-colors ${
     on ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border text-foreground hover:bg-accent hover:text-accent-foreground'
   }`;
 
 /**
- * Options bar of the selection tools: tool, mode (new / add / subtract / intersect), magic wand
- * tolerance and contiguous, anti-alias, sample merged, Select › All / Deselect / Inverse,
- * Modify (grow, shrink, feather, border, smooth) and the Quick Mask toggle. With a segmentation
+ * Options bar of the selection tools: tool, mode (new / add / subtract / intersect), feather,
+ * magic wand tolerance, contiguous and colour distance, Color Range (click to sample, Shift-click
+ * to add, Alt-click to remove; fuzziness, localized, invert, presets), anti-alias, sample merged,
+ * Select › All / Deselect / Inverse, Modify (grow, shrink, feather, border, smooth) and how the
+ * selection shows (marching ants, Quick Mask or hidden). With a segmentation
  * provider on the controller it adds Select › Subject (a description and a button).
  */
 export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
@@ -45,12 +59,30 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   onOptionsChange,
   selection,
   quickMask,
+  selectionDisplay,
   className = '',
 }) => {
   const [radius, setRadius] = useState(2);
   const set = (patch: Partial<SelectionToolOptions>) => onOptionsChange({ ...options, ...patch });
   const sel = selection === undefined ? controller.getSelection() : selection;
-  const qm = quickMask ?? Boolean(controller.getState().quickMask);
+  const display: SelectionDisplay = selectionDisplay ?? (quickMask === undefined ? controller.getSelectionDisplay() : quickMask ? 'quickMask' : 'ants');
+  const [preset, setPreset] = useState<ColorRangePreset>('reds');
+  const [rangeStatus, setRangeStatus] = useState<string | null>(null);
+  const applyPreset = async () => {
+    setRangeStatus(null);
+    try {
+      await controller.selectColorRangePreset(preset, {
+        mode: options.mode,
+        feather: options.feather ?? 0,
+        invert: options.rangeInvert ?? false,
+        falloff: options.fuzziness ?? 20,
+        sampleMerged: options.sampleMerged,
+        sample: options.sample,
+      });
+    } catch (err) {
+      setRangeStatus(err instanceof Error ? err.message : String(err));
+    }
+  };
   const [subject, setSubject] = useState('');
   const [segmenting, setSegmenting] = useState(false);
   const [subjectStatus, setSubjectStatus] = useState<string | null>(null);
@@ -98,6 +130,18 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             Contiguous
           </label>
           <label className="flex items-center gap-2 text-foreground">
+            Distance
+            <ImageSelect
+              label="Colour distance"
+              value={options.distance}
+              options={[
+                { value: 'rgb', label: 'RGB' },
+                { value: 'perceptual', label: 'Perceptual' },
+              ]}
+              onChange={(v) => set({ distance: v as 'rgb' | 'perceptual' })}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-foreground">
             <ImageCheckbox label="Sample adjusted image" checked={options.sampleMerged} onChange={(on) => set({ sampleMerged: on })} />
             Sample adjusted image
           </label>
@@ -115,6 +159,65 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </label>
         </div>
       )}
+      {options.tool === 'range' && (
+        <div data-testid="color-range-options" className="flex flex-col gap-2">
+          <p className="text-muted-foreground">Click a colour to select it; Shift-click adds a colour, Alt-click removes one.</p>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Fuzziness</span>
+              <span className="font-mono">{options.fuzziness ?? 40}</span>
+            </span>
+            <ImageRange label="Fuzziness" min={0} max={200} step={1} value={options.fuzziness ?? 40} onChange={(v) => set({ fuzziness: v })} />
+          </label>
+          <label className="flex items-center gap-1 text-muted-foreground">
+            Localized radius
+            <input
+              type="number"
+              min={0}
+              step={1}
+              aria-label="Localized radius"
+              value={options.localized ?? 0}
+              onChange={(e) => set({ localized: Math.max(0, Number(e.target.value) || 0) })}
+              className={numberInput}
+            />
+            px
+          </label>
+          <label className="flex items-center gap-2 text-foreground">
+            <ImageCheckbox label="Invert" checked={options.rangeInvert ?? false} onChange={(on) => set({ rangeInvert: on })} />
+            Invert
+          </label>
+          <div className="flex items-center gap-1">
+            <ImageSelect
+              label="Color Range preset"
+              value={preset}
+              options={COLOR_RANGE_PRESETS.map((p) => ({ value: p, label: COLOR_RANGE_PRESET_LABELS[p] }))}
+              onChange={(v) => setPreset(v as ColorRangePreset)}
+            />
+            <button type="button" className={btn(false)} onClick={() => void applyPreset()}>
+              Select
+            </button>
+          </div>
+          {rangeStatus && (
+            <p role="status" className="text-muted-foreground">
+              {rangeStatus}
+            </p>
+          )}
+        </div>
+      )}
+      <label className="flex items-center gap-1 text-muted-foreground">
+        Feather
+        <input
+          type="number"
+          min={0}
+          max={1000}
+          step={0.5}
+          aria-label="Feather"
+          value={options.feather ?? 0}
+          onChange={(e) => set({ feather: Math.max(0, Number(e.target.value) || 0) })}
+          className={numberInput}
+        />
+        px
+      </label>
       {controller.segmentationProvider && (
         <form
           data-testid="select-subject"
@@ -159,9 +262,14 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         <button type="button" className={btn(false)} onClick={() => controller.invertSelection()}>
           Inverse
         </button>
-        <button type="button" aria-pressed={qm} className={btn(qm)} onClick={() => controller.setQuickMask(!qm)}>
-          Quick Mask
-        </button>
+      </div>
+      <div role="group" aria-label="Show selection" className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground">Show</span>
+        {DISPLAYS.map((d) => (
+          <button key={d.id} type="button" aria-pressed={display === d.id} className={btn(display === d.id)} onClick={() => controller.setSelectionDisplay(d.id)}>
+            {d.label}
+          </button>
+        ))}
       </div>
       <div className="flex flex-wrap items-center gap-1">
         <label className="flex items-center gap-1 text-muted-foreground">
@@ -174,7 +282,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             aria-label="Modify radius"
             value={radius}
             onChange={(e) => setRadius(Math.max(0, Number(e.target.value) || 0))}
-            className="w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+            className={numberInput}
           />
         </label>
         {MODIFY_OPS.map(({ op, label }) => (

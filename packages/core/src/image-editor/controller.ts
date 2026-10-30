@@ -42,7 +42,7 @@ import {
   type SelectionMode,
 } from './selection/mask';
 import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionOptions } from './selection/shapes';
-import { colorRange, magicWand, type ColorRangeOptions, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
+import { colorRange, colorRangePreset, magicWand, type ColorRangeOptions, type ColorRangePreset, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider } from './selection/segmentation';
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
@@ -437,7 +437,12 @@ export interface SelectionCommandOptions {
   mode?: SelectionMode;
   /** Feather the new shape by this many pixels before combining (default 0). */
   feather?: number;
+  /** Invert the new shape before combining (Color Range › Invert; default false). */
+  invert?: boolean;
 }
+
+/** How the canvas shows the selection: marching ants, a Quick Mask tint, or not at all. */
+export type SelectionDisplay = 'ants' | 'quickMask' | 'none';
 
 /** Where an AI result goes (see `applyInpaintedImage`, `applyBackgroundRemovedImage`). */
 export interface AIResultOptions {
@@ -4458,7 +4463,8 @@ export class ImageEditorController {
   }
 
   private shapeCommand(mask: SelectionMask, options: SelectionCommandOptions): boolean {
-    const shaped = options.feather && options.feather > 0 ? modifySelectionMask(mask, 'feather', options.feather) : mask;
+    const feathered = options.feather && options.feather > 0 ? modifySelectionMask(mask, 'feather', options.feather) : mask;
+    const shaped = options.invert ? invertSelectionMask(feathered) : feathered;
     return this.setSelection(shaped, options.mode ?? 'replace');
   }
 
@@ -4577,6 +4583,19 @@ export class ImageEditorController {
     return this.getSelection();
   }
 
+  /**
+   * Select › Color Range with a preset: `reds` … `magentas`, `highlights` / `midtones` /
+   * `shadows` (with `falloff` levels, default 20) or `skinTones`. One undo step.
+   */
+  public async selectColorRangePreset(
+    preset: ColorRangePreset,
+    options: { falloff?: number } & SelectionCommandOptions & SampleOptions = {}
+  ): Promise<SelectionMask | null> {
+    const pixels = await this.requirePixels(options);
+    this.shapeCommand(colorRangePreset(pixels, preset, options), options);
+    return this.getSelection();
+  }
+
   /** Select › Modify: grow, shrink, feather, border or smooth by `radius` pixels (one undo step). */
   public modifySelection(op: SelectionModifyOp, radius: number): boolean {
     const sel = this.state.selection;
@@ -4669,8 +4688,25 @@ export class ImageEditorController {
 
   /** Quick Mask view (tints the unselected area). View state: no undo step. */
   public setQuickMask(on: boolean): void {
-    if (Boolean(this.state.quickMask) === on) return;
-    this.state.quickMask = on;
+    this.setSelectionDisplay(on ? 'quickMask' : 'ants');
+  }
+
+  /** How the canvas shows the selection (`state.selectionDisplay`). */
+  public getSelectionDisplay(): SelectionDisplay {
+    return this.state.selectionDisplay ?? (this.state.quickMask ? 'quickMask' : 'ants');
+  }
+
+  /**
+   * Shows the selection as marching ants, as a Quick Mask tint over the unselected area, or hides
+   * it (the selection still applies). View state: no undo step, not saved.
+   */
+  public setSelectionDisplay(display: SelectionDisplay): void {
+    if (display !== 'ants' && display !== 'quickMask' && display !== 'none') {
+      throw new Error(`Unknown selection display "${String(display)}". Use ants, quickMask or none.`);
+    }
+    if (this.getSelectionDisplay() === display) return;
+    this.state.selectionDisplay = display;
+    this.state.quickMask = display === 'quickMask';
     this.notify();
   }
 
@@ -4721,8 +4757,11 @@ export class ImageEditorController {
     return this.setLayerMask(layerId, withMaskProps(layer.mask, props), commitToHistory);
   }
 
-  /** Load Selection from a layer mask (its pixels; density and feather are not applied). */
-  public selectionFromLayerMask(layerId: string, mode: SelectionMode = 'replace'): boolean {
+  /**
+   * Load Selection from a layer mask (its pixels; density and feather are not applied), inverted
+   * with `invert`. False without a painted mask (a depth mask is computed, not painted).
+   */
+  public selectionFromLayerMask(layerId: string, mode: SelectionMode = 'replace', invert = false): boolean {
     const layer = this.getLayer(layerId);
     if (!layer?.mask || layer.mask.source) return false;
     const { width, height } = this.naturalSize;
@@ -4730,7 +4769,7 @@ export class ImageEditorController {
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
     const data = readRegion(layer.mask.surface, { x: -ox, y: -oy, width, height });
     const sel = createSelectionMask(width, height, new Uint8Array(data.buffer, data.byteOffset, data.length));
-    return this.setSelection(sel, mode);
+    return this.setSelection(invert ? invertSelectionMask(sel) : sel, mode);
   }
 
   // --- Histogram ---

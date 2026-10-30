@@ -87,6 +87,29 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => button('Quick Mask').click());
     expect(controller.getState().quickMask).toBe(true);
     expect(button('Quick Mask').getAttribute('aria-pressed')).toBe('true');
+    await act(async () => button('Hidden').click());
+    expect(controller.getSelectionDisplay()).toBe('none');
+    expect(controller.getState().quickMask).toBe(false);
+  });
+
+  it('shows the wand distance, feather and the Color Range options and presets', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    await act(async () => root.render(<Bar controller={controller} />));
+    const opts = () => JSON.parse(container.querySelector('[data-testid="opts"]')!.textContent!);
+    await act(async () => setValue(container.querySelector('select[aria-label="Colour distance"]')!, 'perceptual'));
+    expect(opts().distance).toBe('perceptual');
+    await act(async () => setValue(container.querySelector('input[aria-label="Feather"]')!, '4'));
+    expect(opts().feather).toBe(4);
+    expect(container.querySelector('[data-testid="color-range-options"]')).toBeNull();
+    await act(async () => button('Color Range').click());
+    expect(container.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
+    await act(async () => setValue(container.querySelector('input[aria-label="Fuzziness"]')!, '10'));
+    expect(opts().fuzziness).toBe(10);
+    await act(async () => setValue(container.querySelector('input[aria-label="Feather"]')!, '0'));
+    await act(async () => setValue(container.querySelector('select[aria-label="Color Range preset"]')!, 'blues'));
+    await act(async () => button('Select').click());
+    expect(controller.getSelection()!.bounds).toEqual({ x: 10, y: 0, width: 10, height: 10 });
   });
 });
 

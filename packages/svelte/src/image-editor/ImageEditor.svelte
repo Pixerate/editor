@@ -954,6 +954,7 @@
             onOptionsChange={(next) => (selectionOptions = next)}
             selection={editor.state.selection ?? null}
             quickMask={Boolean(editor.state.quickMask)}
+            selectionDisplay={editor.state.selectionDisplay}
           />
           {#if selectionError}
             <p role="alert" class="text-destructive">{selectionError}</p>

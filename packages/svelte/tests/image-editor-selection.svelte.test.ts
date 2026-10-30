@@ -86,6 +86,39 @@ describe('Svelte SelectionOptionsBar', () => {
     click(button('Quick Mask'));
     expect(controller.getState().quickMask).toBe(true);
     expect(button('Quick Mask').getAttribute('aria-pressed')).toBe('true');
+    click(button('Hidden'));
+    expect(controller.getSelectionDisplay()).toBe('none');
+    expect(controller.getState().quickMask).toBe(false);
+  });
+
+  it('shows the wand distance, feather and the Color Range options and presets', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const data = new Uint8ClampedArray(20 * 10 * 4);
+    for (let i = 0; i < 200; i++) data.set(i % 20 < 10 ? [220, 30, 30, 255] : [30, 30, 220, 255], i * 4);
+    controller.setSamplePixels({ width: 20, height: 10, data });
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    setValue(target.querySelector('select[aria-label="Colour distance"]')!, 'perceptual');
+    expect(props.options.distance).toBe('perceptual');
+    setValue(target.querySelector('input[aria-label="Feather"]')!, '4');
+    expect(props.options.feather).toBe(4);
+    expect(target.querySelector('[data-testid="color-range-options"]')).toBeNull();
+    click(button('Color Range'));
+    expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
+    setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');
+    expect(props.options.fuzziness).toBe(10);
+    setValue(target.querySelector('input[aria-label="Feather"]')!, '0');
+    setValue(target.querySelector('select[aria-label="Color Range preset"]')!, 'blues');
+    click(button('Select'));
+    await settle();
+    expect(controller.getSelection()!.bounds).toEqual({ x: 10, y: 0, width: 10, height: 10 });
   });
 });
 

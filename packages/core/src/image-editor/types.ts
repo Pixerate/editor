@@ -397,6 +397,8 @@ export interface ImageEditorState {
   selection?: SelectionMask | null;
   /** Quick Mask view: tint the unselected area instead of drawing marching ants (view state). */
   quickMask?: boolean;
+  /** How the canvas shows the selection (view state; `quickMask` mirrors `'quickMask'`). */
+  selectionDisplay?: 'ants' | 'quickMask' | 'none';
   /**
    * The layer stack, bottom to top. Opening an image gives one pixel layer, "Background", whose
    * pixels are the source image. Layers are immutable: compare them by identity.

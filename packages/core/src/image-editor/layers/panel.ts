@@ -10,6 +10,28 @@ import type { ImageEditorController } from '../controller';
 import { findLayer, type ImageLayer, type SmartFilter, type SmartObjectLayer } from './model';
 import type { LayerPlacement } from './ops';
 
+import { selectionModeFromModifiers } from '../selection/tool-options';
+
+/**
+ * A click on a layer's mask thumbnail, as in Photoshop: Ctrl/⌘-click loads the mask as the
+ * selection (with Shift adding, Alt subtracting, both intersecting), Shift-click turns the mask
+ * on or off, and a plain click makes the mask the paint target.
+ */
+export function maskThumbnailClick(
+  controller: ImageEditorController,
+  layer: ImageLayer,
+  e: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }
+): void {
+  if (!layer.mask) return;
+  if (e.ctrlKey || e.metaKey) {
+    controller.selectionFromLayerMask(layer.id, selectionModeFromModifiers(e, 'replace'));
+  } else if (e.shiftKey) {
+    controller.setLayerMaskProps(layer.id, { enabled: layer.mask.enabled === false });
+  } else {
+    controller.setActiveLayer(layer.id, 'mask');
+  }
+}
+
 export interface LayerPanelRow {
   layer: ImageLayer;
   /** Nesting depth (0 = top level). */

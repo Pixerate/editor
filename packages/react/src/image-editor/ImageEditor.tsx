@@ -983,6 +983,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 onOptionsChange={setSelectionOptions}
                 selection={state.selection ?? null}
                 quickMask={Boolean(state.quickMask)}
+                selectionDisplay={state.selectionDisplay}
               />
               {selectionError && (
                 <p role="alert" className="text-destructive">
