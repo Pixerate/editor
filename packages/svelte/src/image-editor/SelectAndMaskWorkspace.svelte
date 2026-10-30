@@ -127,7 +127,7 @@
     session.end();
   }
 
-  const toLayer = $derived(settings.output === 'new-layer' || settings.output === 'new-layer-with-mask');
+  const toLayer = $derived(settings.output !== 'selection' && settings.output !== 'layer-mask');
   const brushTool = $derived(settings.tool === 'quick-select' || settings.tool === 'brush' || settings.tool === 'refine-brush');
 
   const button =
@@ -258,14 +258,19 @@
     <span class={imageSectionTitleClass}>Output Settings</span>
     <label class="flex flex-col gap-1">
       <span class="flex justify-between text-muted-foreground">
-        <span>Decontaminate Colors{toLayer ? '' : ' (new layer outputs)'}</span>
+        <span>Decontaminate Colors{toLayer ? '' : ' (new layer or document outputs)'}</span>
         <span class="font-mono">{settings.decontaminate}%</span>
       </span>
       <ImageRange label="Workspace decontaminate amount" min={0} max={100} step={1} value={settings.decontaminate} disabled={!toLayer} oninput={(v) => set({ decontaminate: v })} />
     </label>
     <label class="flex items-center gap-2">
       Output To
-      <ImageSelect label="Output to" value={settings.output} options={REFINE_OUTPUTS.map((o) => ({ value: o.id, label: o.label }))} onchange={(v) => set({ output: v as RefineOutput })} />
+      <ImageSelect
+        label="Output to"
+        value={settings.output}
+        options={REFINE_OUTPUTS.filter((o) => !o.needsDocuments || controller.canOpenDocuments).map((o) => ({ value: o.id, label: o.label }))}
+        onchange={(v) => set({ output: v as RefineOutput })}
+      />
     </label>
     <label class="flex items-center gap-2">
       <ImageCheckbox label="Remember Settings" checked={settings.remember} onchange={(on) => set({ remember: on })} />

@@ -18,6 +18,7 @@ import {
   ImagePoint,
   LegacySerializedImageEditorState,
   SerializedImageEditorState,
+  DocumentOpener,
 } from './types';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
@@ -514,7 +515,7 @@ export interface FocusAreaCommandOptions extends FocusAreaOptions {
 }
 
 /** Where Select and Mask puts its result (Photoshop's Output To). */
-export type RefineOutput = 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask';
+export type RefineOutput = 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask' | 'new-document' | 'new-document-with-mask';
 
 /** What {@link ImageEditorController.refineSelectionTo} made. */
 export interface RefineOutputResult {
@@ -523,6 +524,8 @@ export interface RefineOutputResult {
   layerId?: string;
   /** The layer it made (`new-layer`, `new-layer-with-mask`). */
   newLayerId?: string;
+  /** The id the host's document opener returned (`new-document`, `new-document-with-mask`). */
+  documentId?: string;
   /** How the edge was refined: by colour, or with the segmentation model (object aware). */
   refineMode: 'color' | 'object';
 }
@@ -1466,6 +1469,7 @@ export class ImageEditorController {
   /** The segmentation provider behind `selectSubject` (see `setSegmentationProvider`). */
   private segmentation: SegmentationProvider | null = null;
   private selectionWorker: SelectionWorkerClient | null = null;
+  private documentOpener: DocumentOpener | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
   public readonly effects = new EffectsSlot();
   /** Renders provider effects: effect smart filter results and effect layers. */
@@ -1480,6 +1484,7 @@ export class ImageEditorController {
     if (options.effects) this.effects.set(options.effects);
     if (options.segmentation) this.segmentation = options.segmentation;
     if (options.selectionWorker) this.selectionWorker = new SelectionWorkerClient(options.selectionWorker);
+    if (options.openDocument) this.documentOpener = options.openDocument;
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
     if (options.textShaper !== undefined) this.textShaperValue = options.textShaper;
     this.maxHistoryBytes = options.maxHistoryBytes ?? 512 * 1024 * 1024;
@@ -1704,6 +1709,75 @@ export class ImageEditorController {
   public setSelectionWorker(factory: SelectionWorkerFactory | null): void {
     this.selectionWorker?.terminate();
     this.selectionWorker = factory ? new SelectionWorkerClient(factory) : null;
+  }
+
+  /** Sets (or with `null` removes) how new documents are opened (see `DocumentOpener`). Not an edit. */
+  public setDocumentOpener(opener: DocumentOpener | null): void {
+    if (this.documentOpener === opener) return;
+    this.documentOpener = opener;
+    this.notify();
+  }
+
+  /** Whether the host can open new documents (the New Document outputs are available). */
+  public get canOpenDocuments(): boolean {
+    return this.documentOpener !== null;
+  }
+
+  /**
+   * A new one-layer document from the selection (or `options.selection`) on a pixel layer
+   * (`layerId`, default the active one), the size of this image: the selected pixels on
+   * transparency, or with `withMask` the whole layer masked by the selection. This document is
+   * not changed. `decontaminate` (0..100) cleans the soft edge's colours as the new-layer
+   * outputs do.
+   */
+  public documentFromSelection(
+    options: { layerId?: string; withMask?: boolean; selection?: SelectionMask | null; decontaminate?: number; radius?: number } = {}
+  ): SerializedLayeredImageEditorState {
+    const id = options.layerId ?? this.state.activeLayerId;
+    if (!id) throw new LayerOperationError('No layer given and none is active; pass layerId (see list_layers).');
+    const layer = requireLayer(this.state.layers, id).layer;
+    if (layer.type !== 'pixel') throw new LayerOperationError(`A new document needs a pixel layer; "${id}" is a ${layer.type} layer.`);
+    const sel = options.selection ?? this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select what goes in the new document first.');
+    const { width, height } = this.naturalSize;
+    const surface = this.surfaceOf(layer);
+    let copy: PixelLayer;
+    if (options.withMask) {
+      let mask = this.maskFromSelection(sel);
+      if (layer.offset.x || layer.offset.y) mask = { ...mask, surface: translateSurface(mask.surface, -layer.offset.x, -layer.offset.y) };
+      copy = { ...layer, id: newLayerId(), surface, mask };
+    } else {
+      const sb = sel.bounds;
+      const src = { x: sb.x - layer.offset.x, y: sb.y - layer.offset.y, width: sb.width, height: sb.height };
+      const px = readRegion(surface, src);
+      const data = sel.data;
+      for (let y = 0; y < sb.height; y++) {
+        for (let x = 0; x < sb.width; x++) px[(y * sb.width + x) * 4 + 3] = Math.round(px[(y * sb.width + x) * 4 + 3] * (data[(sb.y + y) * width + sb.x + x] / 255));
+      }
+      copy = { ...layer, id: newLayerId(), surface: surfaceFromPixels({ width: src.width, height: src.height, data: px }, 4, src.x, src.y) };
+      delete copy.mask;
+    }
+    delete copy.source;
+    copy.visible = true;
+    const amount = Math.min(100, Math.max(0, options.decontaminate ?? 0)) / 100;
+    if (amount > 0) copy = { ...copy, surface: this.decontaminatedSurface(copy, layer, sel, amount, Math.max(4, options.radius ?? 0)) };
+    const { layers, assets, smartContents } = serializeLayers([copy]);
+    const out: SerializedLayeredImageEditorState = {
+      version: LAYERED_SCHEMA_VERSION,
+      width,
+      height,
+      layers,
+      assets,
+      activeLayerId: copy.id,
+      crop: null,
+      transform: { ...DEFAULT_TRANSFORM },
+      opacity: 1,
+    };
+    if (smartContents) out.smartContents = smartContents;
+    if (this.state.bitDepth === 16 || this.state.bitDepth === 32) out.bitDepth = this.state.bitDepth;
+    if (this.state.colorProfile) out.colorProfile = serializeColorProfile(this.state.colorProfile);
+    if (this.state.colorMode) out.colorMode = serializeColorMode(this.state.colorMode);
+    return out;
   }
 
   /** Whether the long selections run in a worker. */
@@ -5531,8 +5605,12 @@ export class ImageEditorController {
       throw new Error('Object aware refinement needs a segmentation model (setSegmentationProvider); use refineMode color.');
     }
     const amount = Math.min(100, Math.max(0, options.decontaminate ?? 0)) / 100;
-    const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
-    if (amount > 0 && !toLayer) throw new Error('Decontaminate colors writes the cleaned colours to a new layer: use output new-layer or new-layer-with-mask.');
+    const toDocument = output === 'new-document' || output === 'new-document-with-mask';
+    const toLayer = output === 'new-layer' || output === 'new-layer-with-mask' || toDocument;
+    if (amount > 0 && !toLayer) throw new Error('Decontaminate colors writes the cleaned colours to a new layer or document: use output new-layer, new-layer-with-mask, new-document or new-document-with-mask.');
+    if (toDocument && !this.documentOpener) {
+      throw new Error('This editor cannot open new documents (no document opener is set); use output new-layer or new-layer-with-mask instead.');
+    }
     let layerId: string | undefined;
     if (output !== 'selection') {
       layerId = options.layerId ?? this.state.activeLayerId ?? undefined;
@@ -5559,6 +5637,13 @@ export class ImageEditorController {
     }
     const refined = refineSelectionMask(pixels, sel, params, edited.refineBrush);
     if (!refined.bounds) throw new Error('Refining left nothing selected; use a smaller shiftEdge or contrast.');
+    if (toDocument) {
+      // This document stays as it is; the new one goes to the host.
+      const document = this.documentFromSelection({ layerId, withMask: output === 'new-document-with-mask', selection: refined, decontaminate: amount * 100, radius: params.radius });
+      const name = `${requireLayer(this.state.layers, layerId!).layer.name || 'Layer'} ${output === 'new-document' ? 'cutout' : 'masked'}`;
+      const documentId = await this.documentOpener!(document, { name, from: 'select-and-mask' });
+      return { output, layerId, refineMode, ...(documentId ? { documentId } : {}) };
+    }
     return this.asOneStep(() => {
       this.setSelection(refined);
       if (output === 'selection') return { output, refineMode };
@@ -5590,9 +5675,20 @@ export class ImageEditorController {
     const layer = requireLayer(this.state.layers, id).layer;
     const source = requireLayer(this.state.layers, sourceId).layer;
     if (layer.type !== 'pixel' || source.type !== 'pixel' || !coverage.bounds) return;
+    const surface = this.decontaminatedSurface(layer, source, coverage, amount, radius);
+    const next = mapLayer(this.state.layers, id, (l) => {
+      const updated = { ...(l as PixelLayer), surface };
+      delete updated.source;
+      return updated;
+    });
+    this.commitLayers(next);
+  }
+
+  /** `layer`'s surface with Decontaminate Colors applied along `coverage`'s soft edge, colours read from `source`. */
+  private decontaminatedSurface(layer: PixelLayer, source: PixelLayer, coverage: SelectionMask, amount: number, radius: number): TiledSurface {
     const { width, height } = this.naturalSize;
     const pad = Math.ceil(radius * 3);
-    const b = coverage.bounds;
+    const b = coverage.bounds!;
     const x0 = Math.max(0, b.x - pad);
     const y0 = Math.max(0, b.y - pad);
     const box = { x: x0, y: y0, width: Math.min(width, b.x + b.width + pad) - x0, height: Math.min(height, b.y + b.height + pad) - y0 };
@@ -5606,12 +5702,7 @@ export class ImageEditorController {
     const cleaned = decontaminateColors(original, cov, box.width, box.height, amount, radius);
     // The new layer's own alpha (Layer via Copy multiplied it by the coverage) stays.
     for (let i = 3; i < cleaned.length; i += 4) cleaned[i] = rgba[i];
-    const next = mapLayer(this.state.layers, id, (l) => {
-      const updated = { ...(l as PixelLayer), surface: writeRegion(surface, src, cleaned) };
-      delete updated.source;
-      return updated;
-    });
-    this.commitLayers(next);
+    return writeRegion(surface, src, cleaned);
   }
 
   /**

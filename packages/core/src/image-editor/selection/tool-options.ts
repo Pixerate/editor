@@ -154,11 +154,18 @@ export const REFINE_EDGE_CONTROLS: readonly RefineEdgeControl[] = [
 ];
 
 /** Select and Mask's outputs, in menu order. */
-export const REFINE_OUTPUTS: readonly { id: 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask'; label: string }[] = [
+export const REFINE_OUTPUTS: readonly {
+  id: 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask' | 'new-document' | 'new-document-with-mask';
+  label: string;
+  /** Needs a host that can open documents (`controller.canOpenDocuments`). */
+  needsDocuments?: boolean;
+}[] = [
   { id: 'selection', label: 'Selection' },
   { id: 'layer-mask', label: 'Layer Mask' },
   { id: 'new-layer', label: 'New Layer' },
   { id: 'new-layer-with-mask', label: 'New Layer with Layer Mask' },
+  { id: 'new-document', label: 'New Document', needsDocuments: true },
+  { id: 'new-document-with-mask', label: 'New Document with Layer Mask', needsDocuments: true },
 ];
 
 /** A one-line status: "No selection" or "W × H px selected (n % of the image)". */

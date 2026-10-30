@@ -311,6 +311,16 @@ describe('React RefineEdgePanel', () => {
     expect(controller.getSelection()).toBeNull();
   });
 
+  it('lists the new document outputs only when the host can open documents', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    const count = () => container.querySelectorAll('select[aria-label="Refine output"] option').length;
+    expect(count()).toBe(4);
+    controller.setDocumentOpener(() => undefined);
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    expect(count()).toBe(6);
+  });
+
   it('offers object aware refinement only with a segmentation model', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
     controller.selectRect({ x: 0, y: 0, width: 10, height: 10 });

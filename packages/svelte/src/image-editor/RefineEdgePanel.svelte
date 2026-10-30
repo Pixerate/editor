@@ -55,7 +55,11 @@
     void tick;
     return Boolean(controller.segmentationProvider);
   });
-  const toLayer = $derived(output === 'new-layer' || output === 'new-layer-with-mask');
+  const toLayer = $derived(output !== 'selection' && output !== 'layer-mask');
+  const outputs = $derived.by(() => {
+    void tick;
+    return REFINE_OUTPUTS.filter((o) => !o.needsDocuments || controller.canOpenDocuments);
+  });
   const target = $derived(list.find((l) => l.id === layerId) ?? list[list.length - 1]);
 
   async function refine() {
@@ -124,14 +128,14 @@
       onchange={(e) => (output = (e.currentTarget as HTMLSelectElement).value as RefineOutput)}
       class="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
     >
-      {#each REFINE_OUTPUTS as o (o.id)}
+      {#each outputs as o (o.id)}
         <option value={o.id}>{o.label}</option>
       {/each}
     </select>
   </label>
   <label class="flex flex-col gap-1">
     <span class="flex justify-between text-muted-foreground">
-      <span>Decontaminate colors{toLayer ? '' : ' (new layer outputs)'}</span>
+      <span>Decontaminate colors{toLayer ? '' : ' (new layer or document outputs)'}</span>
       <span class="font-mono">{decontaminate}%</span>
     </span>
     <input

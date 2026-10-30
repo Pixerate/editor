@@ -38,7 +38,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
   const [decontaminate, setDecontaminate] = useState(0);
   const [objectAware, setObjectAware] = useState(false);
   const canObject = Boolean(controller.segmentationProvider);
-  const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
+  const toLayer = output !== 'selection' && output !== 'layer-mask';
   const sel = selection === undefined ? controller.getSelection() : selection;
   const list = layers ?? controller.getAdjustmentLayers();
   const target = list.find((l) => l.id === layerId) ?? list[list.length - 1];
@@ -100,7 +100,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
           onChange={(e) => setOutput(e.target.value as RefineOutput)}
           className="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
         >
-          {REFINE_OUTPUTS.map((o) => (
+          {REFINE_OUTPUTS.filter((o) => !o.needsDocuments || controller.canOpenDocuments).map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
@@ -109,7 +109,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
       </label>
       <label className="flex flex-col gap-1">
         <span className="flex justify-between text-muted-foreground">
-          <span>Decontaminate colors{toLayer ? '' : ' (new layer outputs)'}</span>
+          <span>Decontaminate colors{toLayer ? '' : ' (new layer or document outputs)'}</span>
           <span className="font-mono">{decontaminate}%</span>
         </span>
         <input
