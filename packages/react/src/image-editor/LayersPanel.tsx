@@ -8,6 +8,7 @@ import {
   downloadPsd,
   dropPlacement,
   dropZone,
+  maskThumbnailClick,
   openPsdFile,
   layerBadge,
   layerHasThumbnail,
@@ -69,7 +70,8 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
 
 /**
  * The layer stack, top first: visibility, thumbnails, names (double-click to rename), locks,
- * mask thumbnails (click to paint the mask, Shift-click to disable it), drag to reorder or drop
+ * mask thumbnails (click to paint the mask, Shift-click to disable it, Ctrl/⌘-click to load it
+ * as the selection), drag to reorder or drop
  * into a group, opacity / fill / blend / clipping for the active layer, and the layer menu
  * (right-click a row, or the ⋯ button), an fx badge on rows with effects (click to switch them
  * on or off) and the active layer's effects. Every action is one undo step on the controller.
@@ -381,8 +383,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   selected={row.active && state.activeTarget === 'mask'}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (e.shiftKey) attempt(() => controller.setLayerMaskProps(layer.id, { enabled: layer.mask!.enabled === false }));
-                    else attempt(() => controller.setActiveLayer(layer.id, 'mask'));
+                    attempt(() => maskThumbnailClick(controller, layer, e));
                   }}
                 />
               )}

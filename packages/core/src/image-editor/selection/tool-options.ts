@@ -1,16 +1,31 @@
 import type { SelectionMask, SelectionMode } from './mask';
-import type { ColorDistance } from './wand';
+import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'lasso';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'lasso' | 'range';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
   { id: 'rect', label: 'Rectangle' },
   { id: 'ellipse', label: 'Ellipse' },
   { id: 'lasso', label: 'Lasso' },
+  { id: 'range', label: 'Color Range' },
 ];
+
+/** Labels of the Color Range presets, in menu order. */
+export const COLOR_RANGE_PRESET_LABELS: Record<ColorRangePreset, string> = {
+  reds: 'Reds',
+  yellows: 'Yellows',
+  greens: 'Greens',
+  cyans: 'Cyans',
+  blues: 'Blues',
+  magentas: 'Magentas',
+  highlights: 'Highlights',
+  midtones: 'Midtones',
+  shadows: 'Shadows',
+  skinTones: 'Skin Tones',
+};
 
 export const SELECTION_MODE_LABELS: Record<SelectionMode, string> = {
   replace: 'New',
@@ -32,6 +47,14 @@ export interface SelectionToolOptions {
   /** Sample the whole image (`composite`, default) or only the active pixel layer. */
   sample?: 'composite' | 'active-layer';
   distance: ColorDistance;
+  /** Feather new marquee, lasso, wand and Color Range selections by this many pixels (default 0). */
+  feather?: number;
+  /** Color Range: levels over which a sampled colour's coverage fades out (0..200, default 40). */
+  fuzziness?: number;
+  /** Color Range: limit each click to this radius in pixels (Localized Color Clusters; 0 = off). */
+  localized?: number;
+  /** Color Range: select everything except the sampled colours. */
+  rangeInvert?: boolean;
 }
 
 export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
@@ -42,6 +65,10 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   antiAlias: true,
   sampleMerged: false,
   distance: 'rgb',
+  feather: 0,
+  fuzziness: 40,
+  localized: 0,
+  rangeInvert: false,
 };
 
 /**

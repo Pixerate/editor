@@ -651,17 +651,17 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-vignette",
     prompt: "Darken the edges around the centre",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { say: "Selecting everything to read the image size.", tool: "image__select_all", args: {} },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "An ellipse over the centre, feathered, then inverted to get the edges.",
-        tool: "image__select_region",
+        tool: "image__select_ellipse",
         args: (ctx) => {
           const { width, height } = imageSize(ctx.results.sel);
-          return { shape: "ellipse", x: width * 0.12, y: height * 0.1, width: width * 0.76, height: height * 0.8, feather: Math.round(width / 12) };
+          return { x: width * 0.12, y: height * 0.1, width: width * 0.76, height: height * 0.8, feather: Math.round(width / 12) };
         },
       },
-      { tool: "image__select_region", args: { shape: "invert" } },
+      { tool: "image__invert_selection", args: {} },
       {
         say: "A Hue/Saturation layer masked to the edges darkens them without touching the pixels.",
         tool: "image__apply_selection_as_mask",
@@ -674,14 +674,14 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-transform",
     prompt: "Copy the centre onto its own layer and tilt it like a postcard",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { say: "Selecting everything to read the image size.", tool: "image__select_all", args: {} },
       { tool: "image__get_selection", args: {}, as: "sel" },
       {
         say: "A rectangle over the centre.",
-        tool: "image__select_region",
+        tool: "image__select_rect",
         args: (ctx) => {
           const { width, height } = imageSize(ctx.results.sel);
-          return { shape: "rect", x: width * 0.3, y: height * 0.3, width: width * 0.4, height: height * 0.4 };
+          return { x: width * 0.3, y: height * 0.3, width: width * 0.4, height: height * 0.4 };
         },
       },
       {
@@ -721,9 +721,9 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-retouch",
     prompt: "Clean up a spot, clone over a patch and lift the midtones",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { say: "Selecting everything to read the image size.", tool: "image__select_all", args: {} },
       { tool: "image__get_selection", args: {}, as: "sel" },
-      { tool: "image__select_region", args: { shape: "none" } },
+      { tool: "image__deselect", args: {} },
       { say: "Reading the layers, to find the photo.", tool: "image__list_layers", args: {}, as: "layers" },
       {
         say: "An empty layer for the retouching, so the photo stays untouched.",
@@ -778,9 +778,9 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     id: "image-poster",
     prompt: "Turn the photo into a sale poster with a badge and a headline",
     steps: [
-      { say: "Selecting everything to read the image size.", tool: "image__select_region", args: { shape: "all" } },
+      { say: "Selecting everything to read the image size.", tool: "image__select_all", args: {} },
       { tool: "image__get_selection", args: {}, as: "sel" },
-      { tool: "image__select_region", args: { shape: "none" } },
+      { tool: "image__deselect", args: {} },
       {
         say: "A rounded banner along the bottom, as a live shape layer.",
         tool: "image__add_shape_layer",

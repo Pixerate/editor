@@ -8,6 +8,7 @@
     downloadPsd,
     dropPlacement,
     dropZone,
+    maskThumbnailClick,
     layerBadge,
     layerEffectsBadge,
     layerHasThumbnail,
@@ -371,8 +372,7 @@
             class={thumbClass(row.active && snapshot.activeTarget === 'mask')}
             onclick={(e) => {
               e.stopPropagation();
-              if (e.shiftKey) attempt(() => controller.setLayerMaskProps(layer.id, { enabled: layer.mask!.enabled === false }));
-              else attempt(() => controller.setActiveLayer(layer.id, 'mask'));
+              attempt(() => maskThumbnailClick(controller, layer, e));
             }}
           ></canvas>
         {/if}

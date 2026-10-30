@@ -13,6 +13,9 @@ export interface GestureModifiers {
  * it pointer positions in natural image pixels (`canvasToImagePoint(..., false)`).
  *
  * - Magic wand: selects on `begin` (async, as it may read pixels).
+ * - Color Range: on `begin`, samples the colour under the pointer and selects every similar pixel
+ *   (with the modifiers, Shift-click adds a colour and Alt-click removes one, as the + and −
+ *   eyedroppers).
  * - Rectangle / ellipse: drag a box; a click without a drag deselects (replace mode).
  * - Lasso: drag a free-hand path, closed on `end`.
  *
@@ -62,17 +65,36 @@ export class SelectionGesture {
     const options = this.getOptions();
     this.error = null;
     this.modifiers = modifiers;
-    if (options.tool === 'wand') {
+    if (options.tool === 'wand' || options.tool === 'range') {
       this.start = null;
+      const common = {
+        sampleMerged: options.sampleMerged,
+        sample: options.sample,
+        feather: options.feather ?? 0,
+        mode: selectionModeFromModifiers(modifiers, options.mode),
+      };
       try {
+        if (options.tool === 'range') {
+          const pixels = await this.controller.getSamplePixels(common);
+          if (!pixels) throw new Error('The image pixels are not available to sample.');
+          const x = Math.min(pixels.width - 1, Math.max(0, Math.floor(point.x)));
+          const y = Math.min(pixels.height - 1, Math.max(0, Math.floor(point.y)));
+          const p = (y * pixels.width + x) * 4;
+          const color: [number, number, number] = [pixels.data[p], pixels.data[p + 1], pixels.data[p + 2]];
+          await this.controller.selectColorRange([{ color, at: point }], {
+            ...common,
+            fuzziness: options.fuzziness ?? 40,
+            localized: options.localized ? options.localized : undefined,
+            invert: options.rangeInvert ?? false,
+          });
+          return;
+        }
         await this.controller.magicWand(point, {
+          ...common,
           tolerance: options.tolerance,
           contiguous: options.contiguous,
           antiAlias: options.antiAlias,
           distance: options.distance,
-          sampleMerged: options.sampleMerged,
-          sample: options.sample,
-          mode: selectionModeFromModifiers(modifiers, options.mode),
         });
       } catch (err) {
         this.error = err instanceof Error ? err.message : String(err);
@@ -113,7 +135,7 @@ export class SelectionGesture {
     this.current = null;
     this.points = [];
     if (!path) return mode === 'replace' ? this.controller.deselect() : false;
-    const opts = { mode, antiAlias: options.antiAlias };
+    const opts = { mode, antiAlias: options.antiAlias, feather: options.feather ?? 0 };
     if (options.tool === 'lasso') return path.length >= 3 ? this.controller.selectPolygon(path, opts) : false;
     return options.tool === 'ellipse' ? this.controller.selectEllipse(rect, opts) : this.controller.selectRect(rect, opts);
   }

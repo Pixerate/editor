@@ -68,8 +68,11 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  * - `render_preview {maxSide}`: the rendered image as a PNG, longest side at most `maxSide`.
  * - `capture_view {region, rect?, ...}`: a screenshot of the whole image, the selection or a rect in
  *   natural pixels (up to 8× for close inspection), optionally with the selection shaded.
- * - Selections and masks: `get_selection`, `select_region`, `select_by_color`, `modify_selection`,
- *   `refine_selection`, `apply_selection_as_mask` (see `createImageSelectionTools`).
+ * - Selections and masks: `get_selection`, `select_all`, `deselect`, `invert_selection`,
+ *   `select_rect`, `select_ellipse`, `select_polygon`, `magic_wand`, `select_color_range`,
+ *   `load_selection_from_image`, `load_selection_from_mask`, `set_selection_display`,
+ *   `modify_selection`, `refine_selection`, `apply_selection_as_mask` and the deprecated
+ *   `select_region` / `select_by_color` (see `createImageSelectionTools`).
  * - Layers, geometry and history: `get_image_info`, `get_histogram`, `update_adjustment_layer`,
  *   `remove_adjustment_layer`, `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`,
  *   `flip_image`, `undo_image`, `redo_image` (see `createImageEditTools`).

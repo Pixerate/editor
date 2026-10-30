@@ -310,3 +310,66 @@ export function hueRange(pixels: PixelBuffer, center: number): SelectionMask {
   }
   return createSelectionMask(pixels.width, pixels.height, out);
 }
+
+/** Hue centres (degrees) of the Color Range colour presets. */
+export const HUE_RANGE_PRESETS = { reds: 0, yellows: 60, greens: 120, cyans: 180, blues: 240, magentas: 300 } as const;
+
+/** Select › Color Range › Select menu: colours, tones and skin tones. */
+export type ColorRangePreset = keyof typeof HUE_RANGE_PRESETS | ToneRangePreset | 'skinTones';
+
+export const COLOR_RANGE_PRESETS: readonly ColorRangePreset[] = [
+  ...(Object.keys(HUE_RANGE_PRESETS) as (keyof typeof HUE_RANGE_PRESETS)[]),
+  'highlights',
+  'midtones',
+  'shadows',
+  'skinTones',
+];
+
+export function isColorRangePreset(v: unknown): v is ColorRangePreset {
+  return typeof v === 'string' && (COLOR_RANGE_PRESETS as readonly string[]).includes(v);
+}
+
+const ramp = (v: number, lo: number, hi: number, soft: number) =>
+  v < lo ? Math.max(0, 1 - (lo - v) / soft) : v > hi ? Math.max(0, 1 - (v - hi) / soft) : 1;
+
+/**
+ * Select › Color Range › Skin Tones: a heuristic over hue (full at 5–40°, none by 60° and −20°),
+ * HSV saturation (0.12–0.8) and value (above 0.3), so it covers light to dark skin and leaves
+ * out neutrals and saturated oranges. It also picks up skin-like wood, sand and leather.
+ */
+export function skinToneRange(pixels: PixelBuffer): SelectionMask {
+  const n = checkPixels(pixels);
+  const out = new Uint8Array(n);
+  const d = pixels.data;
+  for (let i = 0; i < n; i++) {
+    const p = i * 4;
+    if (d[p + 3] <= 0) continue;
+    const r = d[p] / 255;
+    const g = d[p + 1] / 255;
+    const b = d[p + 2] / 255;
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    const chroma = mx - mn;
+    if (chroma <= 0 || mx <= 0) continue;
+    let hue: number;
+    if (mx === r) hue = (((g - b) / chroma) % 6 + 6) % 6;
+    else if (mx === g) hue = (b - r) / chroma + 2;
+    else hue = (r - g) / chroma + 4;
+    hue *= 60;
+    if (hue > 180) hue -= 360;
+    const k = ramp(hue, 5, 40, 20) * ramp(chroma / mx, 0.12, 0.8, 0.1) * ramp(mx, 0.3, 1, 0.15);
+    out[i] = coverageToByte(k);
+  }
+  return createSelectionMask(pixels.width, pixels.height, out);
+}
+
+/**
+ * A Color Range preset: `reds` … `magentas` (`hueRange`), `highlights` / `midtones` / `shadows`
+ * (`toneRange`, with `falloff` levels, default 20) or `skinTones` (`skinToneRange`).
+ */
+export function colorRangePreset(pixels: PixelBuffer, preset: ColorRangePreset, options: { falloff?: number } = {}): SelectionMask {
+  if (preset === 'skinTones') return skinToneRange(pixels);
+  if (preset === 'highlights' || preset === 'midtones' || preset === 'shadows') return toneRange(pixels, preset, options.falloff ?? 20);
+  if (preset in HUE_RANGE_PRESETS) return hueRange(pixels, HUE_RANGE_PRESETS[preset]);
+  throw new Error(`Unknown Color Range preset "${String(preset)}". Use one of ${COLOR_RANGE_PRESETS.join(', ')}.`);
+}

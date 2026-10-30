@@ -113,7 +113,9 @@ describe('image editor agent tools', () => {
     const { tools } = registry.listTools();
     expect(tools.map((t) => baseToolName(t.name))).toEqual([
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
-      'get_selection', 'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
+      'get_selection', 'select_all', 'deselect', 'invert_selection', 'select_rect', 'select_ellipse', 'select_polygon', 'magic_wand',
+      'select_color_range', 'load_selection_from_image', 'load_selection_from_mask', 'set_selection_display',
+      'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'set_bit_depth', 'undo_image', 'redo_image',
       'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',

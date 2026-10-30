@@ -15,6 +15,7 @@ that uses the tools can load the matching skill.
 | [`pixerate-chart`](pixerate-chart/SKILL.md) | Chart specs, data, series, presets, trendlines, Office and Mermaid charts. |
 | [`pixerate-diagram`](pixerate-diagram/SKILL.md) | Mermaid diagrams: nodes, edges, groups, layout. |
 | [`pixerate-image-editor`](pixerate-image-editor/SKILL.md) | Adjustments, adjustment layers, selections and masks. |
+| [`pixerate-image-selection-masking`](pixerate-image-selection-masking/SKILL.md) | Workflow: cutouts, background and sky replacement, local adjustments through masks; choosing a selection method, checking and refining edges, and outputting an editable mask. Built on `pixerate-image-editor`'s tools. |
 | [`pixerate-paint-editor`](pixerate-paint-editor/SKILL.md) | Natural-media painting: paper and grain, dry-media brushes, the brush library, strokes as data, pigment mixing. |
 | [`pixerate-animation-editor`](pixerate-animation-editor/SKILL.md) | Vector animation: shots, commands, timing, Flair and Lottie. |
 | [`pixerate-video-editor`](pixerate-video-editor/SKILL.md) | Non-linear video editing: tracks, clips, transitions, export. |
@@ -74,6 +75,12 @@ same change.
   `create*ToolProvider` / `create*Commands` factory is not mapped to a skill. A new domain
   gets a new skill directory, an entry in `expectedBySkill()` and `FACTORIES`, and a row in
   the table above.
+- **Workflow skills.** A skill that covers one job end to end on another skill's tools (for
+  example `pixerate-image-selection-masking` on `pixerate-image-editor`) has no tool table.
+  Its frontmatter adds `metadata` with `kind: workflow` and `reference: <skill>`, it lists the
+  tools it uses as bullets under `## Tools used`, and it is mapped in `WORKFLOWS` in the test
+  (and to `[]` in `expectedBySkill()`). The test checks that every tool it uses exists in the
+  reference skill.
 - **Workflows and practice.** The test cannot check advice. When a feature changes the best
   way to do something (a new batch tool, a new check, a better default), update the working
   method and best practices too.

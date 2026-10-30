@@ -4,7 +4,8 @@ import type { ImageEditorController } from './controller';
 import type { AdjustmentKind } from './types';
 import { ADJUSTMENT_KINDS, isAdjustmentKind } from './adjustment-layers';
 import { describeSelection } from './selection/tool-options';
-import { SELECTION_MODES, parseSelectionMode, selectionArea } from './selection/mask';
+import { SELECTION_MODES, parseSelectionMode, selectionArea, type SelectionChannel } from './selection/mask';
+import { COLOR_RANGE_PRESETS, isColorRangePreset, type ColorRangeSample } from './selection/wand';
 import { SELECTION_MODIFY_OPS, type SelectionModifyOp } from './selection/modify';
 import { layerMaskFromSelection } from './selection/layer-mask';
 import { planOutlineTrace, withImagePlayback } from './playback';
@@ -16,6 +17,45 @@ const modeSchema: JsonSchema = {
 };
 
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+
+const featherSchema: JsonSchema = { type: 'number', minimum: 0, maximum: 1000, description: 'Feather the new shape by this many pixels before combining (default 0).' };
+const antiAliasSchema: JsonSchema = { type: 'boolean', description: 'Soft one-pixel edge (default true).' };
+const sampleMergedSchema: JsonSchema = { type: 'boolean', description: 'Sample the adjusted image (adjustment layers and filters applied) rather than the pixels as painted (default false).' };
+const sampleSchema: JsonSchema = {
+  type: 'string',
+  enum: ['composite', 'active-layer'],
+  description: 'composite (default): all layers; active-layer: only the active pixel layer (see set_active_layer).',
+};
+const pointSchema: JsonSchema = {
+  type: 'object',
+  properties: { x: { type: 'number', description: 'x in natural image pixels.' }, y: { type: 'number', description: 'y in natural image pixels.' } },
+  required: ['x', 'y'],
+  additionalProperties: false,
+};
+const rectProperties: Record<string, JsonSchema> = {
+  x: { type: 'number', description: 'Left edge in natural image pixels.' },
+  y: { type: 'number', description: 'Top edge in natural image pixels.' },
+  width: { type: 'number', exclusiveMinimum: 0, description: 'Width in natural image pixels.' },
+  height: { type: 'number', exclusiveMinimum: 0, description: 'Height in natural image pixels.' },
+};
+
+function shapeOptions(args: Record<string, unknown>) {
+  return { mode: parseSelectionMode(args.mode), feather: num(args.feather, 0), antiAlias: args.antiAlias !== false };
+}
+
+function sampleOptions(args: Record<string, unknown>) {
+  if (args.sample !== undefined && args.sample !== 'composite' && args.sample !== 'active-layer') {
+    throw new Error(`Unknown sample "${String(args.sample)}". Use composite or active-layer.`);
+  }
+  return { sampleMerged: args.sampleMerged === true, sample: (args.sample as 'composite' | 'active-layer' | undefined) ?? 'composite' };
+}
+
+function rectOf(args: Record<string, unknown>) {
+  const rect = { x: num(args.x, NaN), y: num(args.y, NaN), width: num(args.width, NaN), height: num(args.height, NaN) };
+  if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) throw new Error('Pass numeric x, y, width and height in natural image pixels.');
+  if (rect.width <= 0 || rect.height <= 0) throw new Error('width and height must be greater than 0.');
+  return rect;
+}
 
 function summary(controller: ImageEditorController) {
   const sel = controller.getSelection();
@@ -40,9 +80,13 @@ const writeAnnotations = (title: string, idempotent = false) => ({
 });
 
 /**
- * Agent tools for selections and masks (part of `createImageEditorToolProvider`):
- * `get_selection`, `select_region`, `select_by_color`, `modify_selection`, `refine_selection`
- * and `apply_selection_as_mask`. Coordinates are natural pixels of the source image.
+ * Agent tools for selections and masks (part of `createImageEditorToolProvider`): reading
+ * (`get_selection`), selecting (`select_all`, `deselect`, `invert_selection`, `select_rect`,
+ * `select_ellipse`, `select_polygon`, `magic_wand`, `select_color_range`), loading
+ * (`load_selection_from_image`, `load_selection_from_mask`), the view
+ * (`set_selection_display`), editing (`modify_selection`, `refine_selection`) and masking
+ * (`apply_selection_as_mask`). `select_region` and `select_by_color` are deprecated aliases.
+ * Coordinates are natural pixels of the source image.
  */
 export function createImageSelectionTools(controller: ImageEditorController): AgentTool[] {
   const getSelection: AgentTool = {
@@ -59,7 +103,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_region',
     title: 'Select a region',
     description:
-      'Selects a rectangle or ellipse (x, y, width, height in natural image pixels), a polygon (the lasso: points along an outline, closed automatically), everything ("all"), nothing ("none") or the inverse of the current selection ("invert"). To cut out a subject, trace its contour with polygon (then refine_selection for soft edges such as fur or foliage) rather than selecting its bounding box. One undoable step.',
+      'Deprecated: use select_rect, select_ellipse, select_polygon, select_all, deselect or invert_selection (this alias goes in the next minor release). Selects a rectangle or ellipse (x, y, width, height in natural image pixels), a polygon (the lasso: points along an outline, closed automatically), everything ("all"), nothing ("none") or the inverse of the current selection ("invert"). To cut out a subject, trace its contour with polygon (then refine_selection for soft edges such as fur or foliage) rather than selecting its bounding box. One undoable step.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -127,7 +171,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_by_color',
     title: 'Select by colour',
     description:
-      'Magic wand at (x, y) with tolerance (0-255) and contiguous, or with "color" ("#rrggbb") every pixel of a similar colour (Color Range, fuzziness 0-200). One undoable step.',
+      'Deprecated: use magic_wand or select_color_range (this alias goes in the next minor release). Magic wand at (x, y) with tolerance (0-255) and contiguous, or with "color" ("#rrggbb") every pixel of a similar colour (Color Range, fuzziness 0-200). One undoable step.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -263,7 +307,308 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
-  return [getSelection, selectRegion, selectByColor, modify, refine, applyMask];
+  const selectAll: AgentTool = {
+    name: 'select_all',
+    title: 'Select all',
+    description: 'Select › All: selects the whole image. One undoable step. Returns the selection.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: writeAnnotations('Select all', true),
+    handler: () => {
+      controller.selectAll();
+      return summary(controller);
+    },
+  };
+
+  const deselect: AgentTool = {
+    name: 'deselect',
+    title: 'Deselect',
+    description: 'Select › Deselect: clears the selection, so later edits apply to the whole layer. One undoable step. Returns the (empty) selection.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: writeAnnotations('Deselect', true),
+    handler: () => {
+      controller.deselect();
+      return summary(controller);
+    },
+  };
+
+  const invert: AgentTool = {
+    name: 'invert_selection',
+    title: 'Invert the selection',
+    description: 'Select › Inverse: selects what was not selected (soft edges stay soft). With nothing selected, selects everything. One undoable step. Returns the selection.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: writeAnnotations('Invert the selection'),
+    handler: () => {
+      controller.invertSelection();
+      return summary(controller);
+    },
+  };
+
+  const selectRect: AgentTool = {
+    name: 'select_rect',
+    title: 'Select a rectangle',
+    description:
+      'Rectangular Marquee: selects x, y, width, height (natural image pixels), combined with the selection by mode. Use it for geometric areas (a frame, a screen, a strip along an edge); for a subject, trace its outline with select_polygon or use select_subject. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...rectProperties, mode: modeSchema, feather: featherSchema, antiAlias: antiAliasSchema },
+      required: ['x', 'y', 'width', 'height'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select a rectangle', true),
+    handler: (args) => {
+      controller.selectRect(rectOf(args), shapeOptions(args));
+      return summary(controller);
+    },
+  };
+
+  const selectEllipse: AgentTool = {
+    name: 'select_ellipse',
+    title: 'Select an ellipse',
+    description:
+      'Elliptical Marquee: selects the ellipse inscribed in x, y, width, height (natural image pixels), combined by mode. Use feather for a vignette. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...rectProperties, mode: modeSchema, feather: featherSchema, antiAlias: antiAliasSchema },
+      required: ['x', 'y', 'width', 'height'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select an ellipse', true),
+    handler: (args) => {
+      controller.selectEllipse(rectOf(args), shapeOptions(args));
+      return summary(controller);
+    },
+  };
+
+  const selectPolygonTool: AgentTool = {
+    name: 'select_polygon',
+    title: 'Select a polygon (lasso)',
+    description:
+      'Lasso: selects the polygon through points (natural image pixels, in order along the outline, closed automatically), combined by mode. To cut out a subject, follow its contour closely (more points give a tighter edge), then refine_selection for hair or foliage. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        points: { type: 'array', minItems: 3, items: pointSchema, description: 'At least 3 vertices along the outline, in order, in natural image pixels.' },
+        mode: modeSchema,
+        feather: featherSchema,
+        antiAlias: antiAliasSchema,
+      },
+      required: ['points'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select a polygon (lasso)', true),
+    handler: (args) => {
+      const list = Array.isArray(args.points) ? args.points.map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) : [];
+      if (list.length < 3 || !list.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+        throw new Error('points needs at least 3 { x, y } vertices in natural image pixels.');
+      }
+      controller.selectPolygon(list, shapeOptions(args));
+      return summary(controller);
+    },
+  };
+
+  const magicWandTool: AgentTool = {
+    name: 'magic_wand',
+    title: 'Magic wand',
+    description:
+      'Magic Wand: selects pixels similar in colour to the one at (x, y). tolerance 0..255 (default 32) is the largest channel difference (rgb) or ΔE scaled so 255 ≈ ΔE 100 (perceptual, closer to how colours look); contiguous (default true) keeps only the region connected to the seed. Best on flat backdrops and solid colours; check percent with get_selection before using it. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Seed x in natural image pixels.' },
+        y: { type: 'number', description: 'Seed y in natural image pixels.' },
+        tolerance: { type: 'number', minimum: 0, maximum: 255, description: 'Colour tolerance 0..255 (default 32).' },
+        contiguous: { type: 'boolean', description: 'Only the region connected to the seed (default true); false selects every similar pixel.' },
+        distance: { type: 'string', enum: ['rgb', 'perceptual'], description: 'How colour difference is measured: rgb (default, as Photoshop) or perceptual (CIE ΔE).' },
+        antiAlias: antiAliasSchema,
+        sampleMerged: sampleMergedSchema,
+        sample: sampleSchema,
+        mode: modeSchema,
+        feather: featherSchema,
+      },
+      required: ['x', 'y'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Magic wand', true),
+    handler: async (args) => {
+      const x = num(args.x, NaN);
+      const y = num(args.y, NaN);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('Pass the seed point x and y in natural image pixels.');
+      const { width, height } = controller.getState().imageDimensions;
+      if (x < 0 || y < 0 || x >= width || y >= height) throw new Error(`(${x}, ${y}) is outside the image (0..${width - 1}, 0..${height - 1}).`);
+      if (args.distance !== undefined && args.distance !== 'rgb' && args.distance !== 'perceptual') {
+        throw new Error(`Unknown distance "${String(args.distance)}". Use rgb or perceptual.`);
+      }
+      await controller.magicWand(
+        { x, y },
+        {
+          ...shapeOptions(args),
+          ...sampleOptions(args),
+          tolerance: Math.min(255, Math.max(0, num(args.tolerance, 32))),
+          contiguous: args.contiguous !== false,
+          distance: (args.distance as 'rgb' | 'perceptual' | undefined) ?? 'rgb',
+        }
+      );
+      return summary(controller);
+    },
+  };
+
+  const colorRangeTool: AgentTool = {
+    name: 'select_color_range',
+    title: 'Select a colour range',
+    description:
+      'Select › Color Range: selects every pixel matching samples (colours, each optionally at the x, y where it was picked) or a preset (reds … magentas, highlights, midtones, shadows, skinTones), softly: coverage falls off with colour distance over fuzziness levels. localized limits each positioned sample to a radius. invert selects everything else. Pass samples or preset, not both. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        samples: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 32,
+          items: {
+            type: 'object',
+            properties: {
+              color: { type: 'string', pattern: '^#?[0-9a-fA-F]{6}$', description: 'The sampled colour, #rrggbb.' },
+              x: { type: 'number', description: 'Where it was picked (natural image pixels), for localized.' },
+              y: { type: 'number', description: 'Where it was picked (natural image pixels), for localized.' },
+            },
+            required: ['color'],
+            additionalProperties: false,
+          },
+          description: 'Colours to select (the + eyedropper adds one). Read colours from capture_view or a seed pixel.',
+        },
+        preset: { type: 'string', enum: [...COLOR_RANGE_PRESETS], description: 'A preset range instead of samples.' },
+        fuzziness: {
+          type: 'number',
+          minimum: 0,
+          maximum: 200,
+          description: 'Colour samples: levels over which coverage fades to 0 (default 40). Tone presets: falloff in levels around the range (default 20). Ignored by colour and skin presets.',
+        },
+        localized: { type: 'number', exclusiveMinimum: 0, description: 'Localized Color Clusters: positioned samples fade to 0 at this many pixels from where they were picked (default off).' },
+        invert: { type: 'boolean', description: 'Select everything except the range (default false).' },
+        sampleMerged: sampleMergedSchema,
+        sample: sampleSchema,
+        mode: modeSchema,
+        feather: featherSchema,
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select a colour range', true),
+    handler: async (args) => {
+      const hasSamples = Array.isArray(args.samples) && args.samples.length > 0;
+      if (hasSamples === (args.preset !== undefined)) throw new Error('Pass samples (colours to match) or preset, not both.');
+      const common = { ...sampleOptions(args), mode: parseSelectionMode(args.mode), feather: num(args.feather, 0), invert: args.invert === true };
+      if (!hasSamples) {
+        if (!isColorRangePreset(args.preset)) throw new Error(`Unknown preset "${String(args.preset)}". Use one of ${COLOR_RANGE_PRESETS.join(', ')}.`);
+        await controller.selectColorRangePreset(args.preset, { ...common, falloff: num(args.fuzziness, 20) });
+      } else {
+        const samples: ColorRangeSample[] = (args.samples as any[]).map((s, i) => {
+          if (typeof s?.color !== 'string' || !/^#?[0-9a-f]{6}$/i.test(s.color.trim())) throw new Error(`samples[${i}].color must be #rrggbb.`);
+          const at = typeof s.x === 'number' && typeof s.y === 'number' ? { x: s.x, y: s.y } : undefined;
+          return at ? { color: s.color, at } : { color: s.color };
+        });
+        const localized = typeof args.localized === 'number' && args.localized > 0 ? args.localized : undefined;
+        await controller.selectColorRange(samples, { ...common, fuzziness: num(args.fuzziness, 40), localized });
+      }
+      return summary(controller);
+    },
+  };
+
+  const loadFromImage: AgentTool = {
+    name: 'load_selection_from_image',
+    title: 'Load a selection from a mask image',
+    description:
+      'Loads a selection from a mask image (an AI segmentation, a saved matte): white = selected by luminance, or one channel. Any size; it is resampled to the image. threshold (0..255) makes it hard-edged; leave it unset to keep soft edges. Follow with refine_selection for a coarse mask. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', minLength: 1, description: 'The mask as a data URL (data:image/png;base64,…) or an image URL.' },
+        channel: { type: 'string', enum: ['luminance', 'alpha', 'red', 'green', 'blue'], description: 'What to read as coverage (default luminance; alpha for a cutout PNG).' },
+        threshold: { type: 'number', minimum: 0, maximum: 255, description: 'Values at or above this are selected, the rest not (default: keep soft values).' },
+        invert: { type: 'boolean', description: 'Black = selected instead (default false).' },
+        mode: modeSchema,
+      },
+      required: ['image'],
+      additionalProperties: false,
+    },
+    annotations: { ...writeAnnotations('Load a selection from a mask image', true), openWorldHint: true },
+    handler: async (args) => {
+      if (typeof args.image !== 'string' || !args.image.trim()) throw new Error('image must be a data URL or image URL.');
+      const channel = (args.channel as SelectionChannel | undefined) ?? 'luminance';
+      if (!['luminance', 'alpha', 'red', 'green', 'blue'].includes(channel)) throw new Error(`Unknown channel "${String(channel)}". Use luminance, alpha, red, green or blue.`);
+      await controller.loadSelectionFromImage(args.image, {
+        channel,
+        invert: args.invert === true,
+        threshold: typeof args.threshold === 'number' ? Math.min(255, Math.max(0, args.threshold)) : undefined,
+        mode: parseSelectionMode(args.mode),
+      });
+      return summary(controller);
+    },
+  };
+
+  const loadFromMask: AgentTool = {
+    name: 'load_selection_from_mask',
+    title: 'Load a selection from a layer mask',
+    description:
+      'Load Selection from a layer\'s mask (Ctrl/⌘-click its mask thumbnail): the mask\'s pixels become the selection, combined by mode (density and feather are not applied). Use it to reuse a mask on another layer or to edit it as a selection. Fails when the layer has no painted mask. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', minLength: 1, description: 'The layer whose mask to load (see list_layers).' },
+        invert: { type: 'boolean', description: 'Select what the mask hides instead (default false).' },
+        mode: modeSchema,
+      },
+      required: ['layerId'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Load a selection from a layer mask', true),
+    handler: (args) => {
+      const id = String(args.layerId ?? '');
+      const layer = controller.getLayer(id);
+      if (!layer) throw new Error(`No layer "${id}". Call list_layers for ids.`);
+      if (!layer.mask) throw new Error(`Layer "${id}" has no mask. Add one with add_layer_mask, or pick a layer with a mask.`);
+      if (layer.mask.source) throw new Error(`Layer "${id}" has a computed (depth) mask, not a painted one, so it cannot be loaded as a selection.`);
+      controller.selectionFromLayerMask(id, parseSelectionMode(args.mode), args.invert === true);
+      return summary(controller);
+    },
+  };
+
+  const display: AgentTool = {
+    name: 'set_selection_display',
+    title: 'Show or hide the selection',
+    description:
+      'How the canvas shows the selection: ants (marching ants), quickMask (a red tint over what is not selected, to judge soft edges and feather) or none (hidden; it still limits edits). View state only: no undo step, not saved. Returns the display and the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: { display: { type: 'string', enum: ['ants', 'quickMask', 'none'], description: 'ants, quickMask or none.' } },
+      required: ['display'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Show or hide the selection', true),
+    handler: (args) => {
+      controller.setSelectionDisplay(args.display as 'ants' | 'quickMask' | 'none');
+      return { display: controller.getSelectionDisplay(), selection: summary(controller) };
+    },
+  };
+
+  return [
+    getSelection,
+    selectAll,
+    deselect,
+    invert,
+    selectRect,
+    selectEllipse,
+    selectPolygonTool,
+    magicWandTool,
+    colorRangeTool,
+    loadFromImage,
+    loadFromMask,
+    display,
+    selectRegion,
+    selectByColor,
+    modify,
+    refine,
+    applyMask,
+  ];
 }
 
 /** Options for `createImageSegmentationToolProvider`. */

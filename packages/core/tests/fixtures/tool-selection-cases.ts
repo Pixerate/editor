@@ -31,7 +31,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	// Image editor
 	{ task: 'Make the photo brighter and increase the contrast', expect: ['image-editor__set_adjustments', 'image-editor__add_adjustment_layer'] },
 	{ task: 'Crop the image to a square', expect: ['image-editor__set_crop'] },
-	{ task: 'Select the sky by its blue colour', expect: ['image-editor__select_by_color'] },
+	{ task: 'Select the sky by its blue colour', expect: ['image-editor__select_color_range', 'image-editor__magic_wand', 'image-editor__select_by_color'] },
 	{ task: 'Hide part of a layer with a mask', expect: ['image-editor__add_layer_mask', 'image-editor__apply_selection_as_mask'] },
 	{ task: 'Remove a blemish from the portrait', expect: ['image-editor__spot_heal', 'image-editor__heal_brush'] },
 	{ task: 'Add a headline in bold type to the image', expect: ['image-editor__add_text_layer'] },

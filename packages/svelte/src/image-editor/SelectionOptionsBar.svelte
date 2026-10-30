@@ -3,12 +3,16 @@
   import ImageRange from './controls/ImageRange.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
   import type {
+    ColorRangePreset,
     ImageEditorController,
+    SelectionDisplay,
     SelectionMask,
     SelectionModifyOp,
     SelectionToolOptions,
   } from '@pixerate/editor/image-editor';
   import {
+    COLOR_RANGE_PRESETS,
+    COLOR_RANGE_PRESET_LABELS,
     SELECTION_MODES,
     SELECTION_MODE_LABELS,
     SELECTION_TOOLS,
@@ -24,10 +28,12 @@
     selection?: SelectionMask | null;
     /** The Quick Mask view flag (`state.quickMask`). Omit to follow the controller. */
     quickMask?: boolean;
+    /** How the canvas shows the selection (`state.selectionDisplay`); wins over `quickMask`. */
+    selectionDisplay?: SelectionDisplay;
     class?: string;
   }
 
-  let { controller, options, onOptionsChange, selection, quickMask, class: className = '' }: Props = $props();
+  let { controller, options, onOptionsChange, selection, quickMask, selectionDisplay, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -38,10 +44,35 @@
     void tick;
     return selection === undefined ? controller.getSelection() : selection;
   });
-  const qm = $derived.by(() => {
+  const display = $derived.by((): SelectionDisplay => {
     void tick;
-    return quickMask ?? Boolean(controller.getState().quickMask);
+    return selectionDisplay ?? (quickMask === undefined ? controller.getSelectionDisplay() : quickMask ? 'quickMask' : 'ants');
   });
+  const DISPLAYS: { id: SelectionDisplay; label: string }[] = [
+    { id: 'ants', label: 'Ants' },
+    { id: 'quickMask', label: 'Quick Mask' },
+    { id: 'none', label: 'Hidden' },
+  ];
+  const numberInput = 'w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground';
+
+  // Color Range presets.
+  let preset = $state<ColorRangePreset>('reds');
+  let rangeStatus = $state<string | null>(null);
+  async function applyPreset() {
+    rangeStatus = null;
+    try {
+      await controller.selectColorRangePreset(preset, {
+        mode: options.mode,
+        feather: options.feather ?? 0,
+        invert: options.rangeInvert ?? false,
+        falloff: options.fuzziness ?? 20,
+        sampleMerged: options.sampleMerged,
+        sample: options.sample,
+      });
+    } catch (err) {
+      rangeStatus = err instanceof Error ? err.message : String(err);
+    }
+  }
 
   let radius = $state(2);
 
@@ -115,6 +146,18 @@
         Contiguous
       </label>
       <label class="flex items-center gap-2 text-foreground">
+        Distance
+        <ImageSelect
+          label="Colour distance"
+          value={options.distance}
+          options={[
+            { value: 'rgb', label: 'RGB' },
+            { value: 'perceptual', label: 'Perceptual' },
+          ]}
+          onchange={(v) => set({ distance: v as 'rgb' | 'perceptual' })}
+        />
+      </label>
+      <label class="flex items-center gap-2 text-foreground">
         <ImageCheckbox label="Sample adjusted image" checked={options.sampleMerged} onchange={(on) => set({ sampleMerged: on })} />
         Sample adjusted image
       </label>
@@ -132,6 +175,61 @@
       </label>
     </div>
   {/if}
+  {#if options.tool === 'range'}
+    <div data-testid="color-range-options" class="flex flex-col gap-2">
+      <p class="text-muted-foreground">Click a colour to select it; Shift-click adds a colour, Alt-click removes one.</p>
+      <label class="flex flex-col gap-1">
+        <span class="flex justify-between text-muted-foreground">
+          <span>Fuzziness</span>
+          <span class="font-mono">{options.fuzziness ?? 40}</span>
+        </span>
+        <ImageRange label="Fuzziness" min={0} max={200} step={1} value={options.fuzziness ?? 40} oninput={(v) => set({ fuzziness: v })} />
+      </label>
+      <label class="flex items-center gap-1 text-muted-foreground">
+        Localized radius
+        <input
+          type="number"
+          min="0"
+          step="1"
+          aria-label="Localized radius"
+          value={options.localized ?? 0}
+          oninput={(e) => set({ localized: Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0) })}
+          class={numberInput}
+        />
+        px
+      </label>
+      <label class="flex items-center gap-2 text-foreground">
+        <ImageCheckbox label="Invert" checked={options.rangeInvert ?? false} onchange={(on) => set({ rangeInvert: on })} />
+        Invert
+      </label>
+      <div class="flex items-center gap-1">
+        <ImageSelect
+          label="Color Range preset"
+          value={preset}
+          options={COLOR_RANGE_PRESETS.map((p) => ({ value: p, label: COLOR_RANGE_PRESET_LABELS[p] }))}
+          onchange={(v) => (preset = v as ColorRangePreset)}
+        />
+        <button type="button" class={btn(false)} onclick={() => void applyPreset()}>Select</button>
+      </div>
+      {#if rangeStatus}
+        <p role="status" class="text-muted-foreground">{rangeStatus}</p>
+      {/if}
+    </div>
+  {/if}
+  <label class="flex items-center gap-1 text-muted-foreground">
+    Feather
+    <input
+      type="number"
+      min="0"
+      max="1000"
+      step="0.5"
+      aria-label="Feather"
+      value={options.feather ?? 0}
+      oninput={(e) => set({ feather: Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0) })}
+      class={numberInput}
+    />
+    px
+  </label>
   {#if canSegment}
     <form
       data-testid="select-subject"
@@ -167,7 +265,12 @@
     <button type="button" class={btn(false)} onclick={() => controller.selectAll()}>Select All</button>
     <button type="button" class={btn(false)} disabled={!sel} onclick={() => controller.deselect()}>Deselect</button>
     <button type="button" class={btn(false)} onclick={() => controller.invertSelection()}>Inverse</button>
-    <button type="button" aria-pressed={qm} class={btn(qm)} onclick={() => controller.setQuickMask(!qm)}>Quick Mask</button>
+  </div>
+  <div role="group" aria-label="Show selection" class="flex flex-wrap items-center gap-1">
+    <span class="text-muted-foreground">Show</span>
+    {#each DISPLAYS as d (d.id)}
+      <button type="button" aria-pressed={display === d.id} class={btn(display === d.id)} onclick={() => controller.setSelectionDisplay(d.id)}>{d.label}</button>
+    {/each}
   </div>
   <div class="flex flex-wrap items-center gap-1">
     <label class="flex items-center gap-1 text-muted-foreground">
@@ -180,7 +283,7 @@
         aria-label="Modify radius"
         value={radius}
         oninput={(e) => (radius = Math.max(0, Number((e.currentTarget as HTMLInputElement).value) || 0))}
-        class="w-14 bg-background border border-border rounded px-1 py-0.5 text-foreground"
+        class={numberInput}
       />
     </label>
     {#each MODIFY_OPS as m (m.op)}

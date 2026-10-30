@@ -174,6 +174,8 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-talking-head-edit': toolNames(createVideoDialogueToolProvider(new VideoEditorController(), { id: 'video-dialogue' })),
 		'pixerate-bgm-alignment': toolNames(createVideoMusicToolProvider(new VideoEditorController(), { id: 'video-music' })),
+		// Workflow skills own no provider (see WORKFLOWS); they have no tool table.
+		'pixerate-image-selection-masking': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -264,6 +266,16 @@ const FACTORIES: Record<string, string> = {
 	createCanvasExplosionToolProvider: 'pixerate-canvas'
 };
 
+/**
+ * Workflow skills: one job end to end, built on a reference skill's tools. Each declares
+ * `metadata.kind: workflow` and `metadata.reference`, and lists the tools it uses under
+ * `## Tools used` as bullets starting with backticked names, which must all exist in the
+ * reference skill.
+ */
+const WORKFLOWS: Record<string, string> = {
+	'pixerate-image-selection-masking': 'pixerate-image-editor'
+};
+
 function walk(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
 		e.isDirectory() ? walk(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []
@@ -313,6 +325,27 @@ describe('agent skills', () => {
 	it('ships the skills in the npm package', () => {
 		const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 		expect(pkg.files).toContain('skills');
+	});
+
+	describe.each(Object.entries(WORKFLOWS))('workflow %s', (name, reference) => {
+		it('declares its kind and reference skill', () => {
+			const text = readFileSync(join(SKILLS_DIR, name, 'SKILL.md'), 'utf8');
+			const front = /^---\n([\s\S]*?)\n---\n/.exec(text)![1];
+			expect(front).toMatch(/^metadata:\n(?:\s+.*\n)*?\s+kind: workflow$/m);
+			expect(front).toMatch(new RegExp(`^\\s+reference: ${reference}$`, 'm'));
+			expect(expected[reference], `reference skill ${reference}`).toBeDefined();
+		});
+
+		it('uses only tools its reference skill documents', () => {
+			const { body } = readSkill(name);
+			const section = /^## Tools used\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(body);
+			expect(section, 'a ## Tools used section').not.toBeNull();
+			const used = [...section![1].matchAll(/^- (.*?):/gm)].flatMap((m) => [...m[1]!.matchAll(/`([a-z0-9_]+)`/g)].map((n) => n[1]!));
+			expect(used.length).toBeGreaterThan(0);
+			const known = new Set(expected[reference]);
+			expect(used.filter((n) => !known.has(n)), `tools not in ${reference}`).toEqual([]);
+			expect(body.split('\n').length, 'workflow skills stay short').toBeLessThanOrEqual(250);
+		});
 	});
 
 	describe.each(Object.keys(expected))('%s', (name) => {

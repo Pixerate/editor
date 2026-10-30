@@ -47,9 +47,8 @@ batching.
 3. **Write in few steps.** Put every base change of one correction into one `set_adjustments`
    call (one undo step) with a `label`. Create layers with their `params` in the same
    `add_adjustment_layer` call rather than adding a neutral layer and then setting it.
-4. **Local edits:** select (`select_region`, `select_by_color`, `select_subject`), refine (`modify_selection`,
-   `refine_selection`), check with `get_selection` (area, percent, bounds), then
-   `apply_selection_as_mask` with a `kind` to create the masked layer in one step.
+4. **Local edits:** select, refine, check with `get_selection`, then `apply_selection_as_mask`
+   with a `kind`. Load `pixerate-image-selection-masking` for cutouts, masks and local edits.
 5. **Verify.** `render_preview` after each group of corrections, not after each slider, then
    `get_histogram` (it reads the last render) for clipping. Compare against the previous
    preview; read the `applied` and `clamped` lists that writes return. `undo_image` takes back a
@@ -63,7 +62,7 @@ batching.
 2. **New content goes on its own layer**: `add_pixel_layer` (empty, a colour fill or a PNG at
    `x`, `y`), `layer_via_copy` to lift a selection onto a layer, `duplicate_layer` before a
    risky change. Name layers by intent. Split out a subject by its outline, not its box
-   (`select_subject`, or a `select_region` polygon, then `refine_selection`), then `layer_via_copy`.
+   (`select_subject`, or a `select_polygon`, then `refine_selection`), then `layer_via_copy`.
 3. **Shape layers non-destructively**: masks (`add_layer_mask` from the selection, or
    reveal-all / hide-all, softened with `density` / `feather`) instead of deleting pixels;
    `clipped: true` (via `set_layer_properties`) to limit a layer or adjustment to the layer below;
@@ -214,10 +213,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
   0..255 (`{ input, output }`); keep `(0,0)` and `(255,255)` and move quarter-tones by 10..25.
 - **Neutral greys.** Use `temperature` / `tint` (or `colorBalance` midtones) so known-neutral
   areas (white walls, grey roads, clouds) have no cast; then add warmth deliberately if wanted.
-- **Masks: select, refine, then mask.** Clean the selection before masking: `smooth` for
-  jagged wand edges, `refine_selection` for hair and soft edges, feather in proportion to the
-  image (a few px for hard objects, tens of px for sky or vignette transitions). Use the mask's
-  own `feather` and `density` on `apply_selection_as_mask` so softening stays adjustable.
+- **Masks:** select, refine, then mask; see `pixerate-image-selection-masking`.
 - **Blend modes for tone-only or colour-only changes:** `luminosity` applies a curves or
   levels layer without shifting hue or saturation; `color` applies a tint without changing
   brightness; `soft-light` / `overlay` for gentle contrast.
@@ -244,8 +240,6 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 - **Scale proportionally** unless asked to stretch: give `scaleX` and `scaleY` the same value.
   Keep the subject in frame: after a scale about `center` the layer can run past the canvas,
   which `bounds` in the result shows.
-- **Unlink a mask** (`set_layer_mask_properties` `linked: false`) when the pixels should move
-  under a fixed mask (a picture inside a frame); link it again afterwards.
 - **Smart objects for anything you may scale again.** Convert first, then transform as often as
   needed; set exact sizes with `set_smart_object_transform` `scaleX` / `scaleY` (percent of the
   contents) rather than chaining relative scales. Prefer smart filters over layer filters when
@@ -283,7 +277,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `search_effects` | Find provider effects (when the host registered an effects provider; else `available: false`): `query`, `kind`, `category`, `use` (filter for smart filters; generator, overlay, title for effect layers). See `references/provider-effects.md`. |
 | `describe_effect` | Read an effect's `controls` (strict JSON Schema with ranges and units), `defaults`, `presets` and `inputs` before applying it. |
 | `list_applied_effects` | Read the provider effects per layer: effect smart filters (`role: smart filter`, with blend and opacity) and an effect layer's own effect (`generator`), with `available` false when the provider lacks one. Works without a provider. |
-| `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and `select_region`, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
+| `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and the select tools, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
 
@@ -291,8 +285,19 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
 | `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
-| `select_region` | Select by `shape`: `rect` or `ellipse` (with `x`, `y`, `width`, `height` in natural pixels), `polygon` (the lasso: `points`, at least 3 `{x, y}` along the outline, closed automatically), `all`, `none` or `invert`. `mode` replace (default), add, subtract or intersect; `feather` px (default 0). Returns the selection summary. |
-| `select_by_color` | Magic wand from a seed (`x`, `y`, `tolerance` 0..255 default 32, `contiguous` default true) or Color Range for every similar pixel (`color` "#rrggbb", `fuzziness` 0..200 default 40). `sampleMerged: true` samples the adjusted image instead of the source; `sample: "active-layer"` samples only the active pixel layer (pick it with `set_active_layer`) instead of the whole image. `mode` as above. Use it for skies, backdrops and flat-coloured objects. |
+| `select_all` | Select › All. Returns the selection summary (`empty`, `bounds`, `area`, `percent`). |
+| `deselect` | Clear the selection so edits apply to the whole layer. Returns the empty summary. |
+| `invert_selection` | Select › Inverse (soft edges stay soft; with nothing selected, selects all). Returns the summary. |
+| `select_rect` | Rectangular marquee: `x`, `y`, `width`, `height` (natural px), `mode` (replace, add, subtract, intersect), `feather` px, `antiAlias`. Returns the summary. |
+| `select_ellipse` | Elliptical marquee inscribed in `x`, `y`, `width`, `height`; same options. A feathered ellipse makes a vignette. Returns the summary. |
+| `select_polygon` | The lasso: `points` (at least 3 `{x, y}` along the outline, closed automatically), `mode`, `feather`, `antiAlias`. Trace a subject's contour, not its box. Returns the summary. |
+| `magic_wand` | Select similar colour from `x`, `y`: `tolerance` 0..255 (default 32), `contiguous` (default true), `distance` `rgb` or `perceptual`, `sampleMerged`, `sample` (`composite` or `active-layer`), `mode`, `feather`. For flat backdrops and solid colours. Returns the summary. |
+| `select_color_range` | Color Range, soft: `samples` (`[{color, x?, y?}]`) or a `preset` (reds … magentas, highlights, midtones, shadows, skinTones); `fuzziness` (samples 0..200, default 40; tone presets' falloff, default 20), `localized` px radius around positioned samples, `invert`, `sample`, `mode`, `feather`. Returns the summary. |
+| `load_selection_from_image` | Load a mask image (`image` data URL or URL; white = selected) by `channel` (luminance, alpha, red, green, blue), with `threshold`, `invert`, `mode`. For AI or saved mattes; then `refine_selection`. Returns the summary. |
+| `load_selection_from_mask` | Load a layer's mask as the selection (`layerId`, `invert`, `mode`); fails without a painted mask. Returns the summary. |
+| `set_selection_display` | Show the selection as `ants`, `quickMask` (tint over the unselected area, to judge soft edges) or `none`. View only, no undo step. |
+| `select_region` | Deprecated alias (removed next minor): `shape` rect, ellipse, polygon, all, none or invert. Use the tools above. |
+| `select_by_color` | Deprecated alias (removed next minor): wand (`x`, `y`) or one `color`. Use `magic_wand` or `select_color_range`. |
 | `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
 | `refine_selection` | Refine Edge: snap the selection edge to image edges within `radius` px (0..64, default 8), with `smartRadius`, `smooth` 0..100, `feather` px, `contrast` 0..100 and `shiftEdge` -100..100 %. Use on hair, fur, foliage or after loading a coarse AI mask. |
 | `update_adjustment_layer` | Change a layer's `enabled` (false hides it without deleting), `blend`, `opacity` (0..1) or `name` in one undo step. Returns the layer. Its parameters change with `set_adjustments`. Toggle `enabled` to compare a layer's effect before and after. |
@@ -484,12 +489,6 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An imag
   never tint arrows, labels or watermarks. `list_layers` shows where each one went.
 - `invert` and `threshold` are destructive-looking creative effects; never use them for a
   correction the user did not ask for. Posterize `levels` below ~8 bands visibly.
-- Selection coordinates ignore crop and rotation: they are source-image pixels. A rectangle in
-  the cropped preview's coordinates lands in the wrong place on a cropped image.
-- `select_by_color` without `x`/`y` or `color` fails. Large `tolerance` / `fuzziness` floods the
-  selection: start low (wand 20..40, range 30..60), check `percent`, and add with `mode: add`.
-- `modify_selection`, `refine_selection` and `apply_selection_as_mask` fail with "Nothing is
-  selected." when the selection is empty; select first.
 - Transforms refuse hidden layers, layers with `locks.position` or `locks.pixels`, and adjustment,
   annotation and group layers (transform a layer's mask with `channel: "mask"` after unlinking
   it). A result larger than about 11 600 × 11 600 px is refused.
