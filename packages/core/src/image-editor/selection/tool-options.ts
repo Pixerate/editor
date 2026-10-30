@@ -3,7 +3,7 @@ import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'magnetic' | 'range' | 'type' | 'type-vertical';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'magnetic' | 'quick' | 'range' | 'type' | 'type-vertical';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
@@ -14,6 +14,7 @@ export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[
   { id: 'lasso', label: 'Lasso' },
   { id: 'polygon', label: 'Polygonal Lasso' },
   { id: 'magnetic', label: 'Magnetic Lasso' },
+  { id: 'quick', label: 'Quick Selection' },
   { id: 'range', label: 'Color Range' },
   { id: 'type', label: 'Type Mask' },
   { id: 'type-vertical', label: 'Vertical Type Mask' },
@@ -67,6 +68,12 @@ export interface SelectionToolOptions {
   magneticContrast?: number;
   /** Magnetic Lasso: how often anchors are placed as the pointer moves (0..100, default 57). */
   magneticFrequency?: number;
+  /** Quick Selection: brush diameter in natural pixels (default 30). */
+  quickSize?: number;
+  /** Quick Selection: read every layer (default true) or only the active pixel layer. */
+  quickSampleAll?: boolean;
+  /** Quick Selection: smoother, less blocky edges (Auto-Enhance; default false). */
+  quickEnhance?: boolean;
   /** Type Mask: the text to select (default "Type"). A click places its first baseline. */
   typeText?: string;
   /** Type Mask: font size in px (default 72). */
@@ -90,6 +97,9 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   magneticWidth: 10,
   magneticContrast: 10,
   magneticFrequency: 57,
+  quickSize: 30,
+  quickSampleAll: true,
+  quickEnhance: false,
   typeText: 'Type',
   typeSize: 72,
   typeFamily: 'sans-serif',

@@ -208,6 +208,26 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </label>
         </div>
       )}
+      {options.tool === 'quick' && (
+        <div data-testid="quick-selection-options" className="flex flex-col gap-2">
+          <p className="text-muted-foreground">Paint inside the area: the selection grows out to its edges. Each stroke adds (Alt-drag subtracts).</p>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Size</span>
+              <span className="font-mono">{options.quickSize ?? 30} px</span>
+            </span>
+            <ImageRange label="Quick selection size" min={1} max={500} step={1} value={options.quickSize ?? 30} onChange={(v) => set({ quickSize: v })} />
+          </label>
+          <label className="flex items-center gap-2 text-foreground">
+            <ImageCheckbox label="Sample all layers" checked={options.quickSampleAll ?? true} onChange={(on) => set({ quickSampleAll: on })} />
+            Sample all layers
+          </label>
+          <label className="flex items-center gap-2 text-foreground">
+            <ImageCheckbox label="Auto-enhance edges" checked={options.quickEnhance ?? false} onChange={(on) => set({ quickEnhance: on })} />
+            Auto-enhance edges
+          </label>
+        </div>
+      )}
       {(options.tool === 'type' || options.tool === 'type-vertical') && (
         <div data-testid="type-mask-options" className="flex flex-col gap-2">
           <p className="text-muted-foreground">

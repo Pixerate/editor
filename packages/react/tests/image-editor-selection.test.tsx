@@ -117,6 +117,12 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => setValue(container.querySelector('input[aria-label="Magnetic lasso contrast"]')!, '30'));
     await act(async () => setValue(container.querySelector('input[aria-label="Magnetic lasso frequency"]')!, '80'));
     expect(opts()).toMatchObject({ tool: 'magnetic', magneticWidth: 24, magneticContrast: 30, magneticFrequency: 80 });
+    // Quick Selection shows its size, Sample all layers and Auto-enhance.
+    await act(async () => button('Quick Selection').click());
+    await act(async () => setValue(container.querySelector('input[aria-label="Quick selection size"]')!, '60'));
+    await act(async () => (container.querySelector('[aria-label="Auto-enhance edges"]') as HTMLElement).click());
+    await act(async () => (container.querySelector('[aria-label="Sample all layers"]') as HTMLElement).click());
+    expect(opts()).toMatchObject({ tool: 'quick', quickSize: 60, quickEnhance: true, quickSampleAll: false });
     await act(async () => button('Color Range').click());
     expect(container.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     await act(async () => setValue(container.querySelector('input[aria-label="Fuzziness"]')!, '10'));

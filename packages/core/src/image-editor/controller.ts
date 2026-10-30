@@ -21,6 +21,7 @@ import {
 } from './types';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
+import { quickSelectStroke } from './selection/segment/quick';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -480,6 +481,18 @@ export interface SampleOptions {
   sampleMerged?: boolean;
   /** Pixels to use instead of reading the source image (natural size, RGBA). */
   pixels?: PixelBuffer;
+}
+
+/** Options of {@link ImageEditorController.quickSelect}. */
+export interface QuickSelectCommandOptions {
+  /** Brush diameter in natural pixels (default 30). */
+  size?: number;
+  /** How the strokes combine with the selection (default `replace`: the first replaces, the rest add). */
+  mode?: SelectionMode;
+  /** Sample every layer (default true) or only the active pixel layer. */
+  sampleAllLayers?: boolean;
+  /** Smoother, less blocky edges (Photoshop's Auto-Enhance). Default false. */
+  enhanceEdge?: boolean;
 }
 
 /** A new adjustment layer: its kind plus optional initial values and position. */
@@ -5123,6 +5136,32 @@ export class ImageEditorController {
   public async snapToEdges(points: ImagePoint[], options: MagneticEdgeOptions & SampleOptions = {}): Promise<ImagePoint[]> {
     const pixels = await this.requirePixels(options);
     return snapPolygonToEdges(pixels, points, options);
+  }
+
+  /**
+   * Quick Selection: each stroke (the brush's path in natural pixels) grows into the region it is
+   * painted on, out to that region's edges, and is combined with the selection by `mode`; with
+   * `replace`, the first stroke replaces it and the rest add, as the brush does. All strokes are
+   * one undo step. Resolves to the resulting selection.
+   */
+  public async quickSelect(strokes: ImagePoint[][], options: QuickSelectCommandOptions = {}): Promise<SelectionMask | null> {
+    if (!strokes.length || strokes.some((s) => !s.length)) throw new Error('Pass at least one stroke, each with at least one point.');
+    const { width, height } = this.naturalSize;
+    for (const s of strokes) {
+      if (!s.some((p) => p.x >= 0 && p.y >= 0 && p.x < width && p.y < height)) {
+        throw new Error(`A stroke lies entirely outside the image (0..${width - 1}, 0..${height - 1}); paint over the area to select.`);
+      }
+    }
+    const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
+    const mode = options.mode ?? 'replace';
+    let sel: SelectionMask | null = this.state.selection ?? null;
+    strokes.forEach((stroke, i) => {
+      const m: SelectionMode = mode === 'replace' && i > 0 ? 'add' : mode;
+      const region = quickSelectStroke(pixels, stroke, { size: options.size, selection: sel, grow: m === 'add', enhanceEdge: options.enhanceEdge });
+      sel = combineSelections(sel, region, m);
+    });
+    this.setSelection(sel, 'replace');
+    return this.state.selection ?? null;
   }
 
   /**

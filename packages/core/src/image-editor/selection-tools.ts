@@ -424,6 +424,46 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const quickSelectTool: AgentTool = {
+    name: 'quick_select',
+    title: 'Quick Selection',
+    description:
+      'Quick Selection: paints brush strokes (paths in natural image pixels) that each grow into the region they are painted on, out to its edges (a graph cut on colour and edges), combined with the selection by mode. With replace (default) the first stroke replaces the selection and later ones add, as the brush does; use mode subtract to take an area back out. Best for a subject or area that differs from its surroundings: paint inside it, away from the edge, then check with get_selection and capture_view and add or subtract strokes where it leaked or fell short. All strokes are one undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        strokes: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'array', minItems: 1, items: pointSchema, description: 'One stroke: the brush path, in order (one point is a dab).' },
+          description: 'Brush strokes in natural image pixels, applied in order.',
+        },
+        size: { type: 'number', minimum: 1, maximum: 2500, description: 'Brush diameter in natural image pixels (default 30). Smaller for a narrow area, larger for a broad one.' },
+        mode: modeSchema,
+        sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
+        enhanceEdge: { type: 'boolean', description: 'Smoother, less blocky edges (Auto-Enhance; default false). Use it before masking a smooth-edged subject.' },
+      },
+      required: ['strokes'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Quick Selection'),
+    handler: async (args) => {
+      const strokes = Array.isArray(args.strokes)
+        ? args.strokes.map((s: any) => (Array.isArray(s) ? s.map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) : []))
+        : [];
+      if (!strokes.length || strokes.some((s: { x: number; y: number }[]) => !s.length || !s.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))) {
+        throw new Error('strokes needs at least one stroke of { x, y } points in natural image pixels.');
+      }
+      await controller.quickSelect(strokes, {
+        size: args.size === undefined ? undefined : num(args.size, 30),
+        mode: parseSelectionMode(args.mode),
+        sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+        enhanceEdge: args.enhanceEdge as boolean | undefined,
+      });
+      return summary(controller);
+    },
+  };
+
   const magicWandTool: AgentTool = {
     name: 'magic_wand',
     title: 'Magic wand',
@@ -1027,6 +1067,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     selectRect,
     selectEllipse,
     selectPolygonTool,
+    quickSelectTool,
     lineTool,
     magicWandTool,
     colorRangeTool,
