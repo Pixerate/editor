@@ -115,10 +115,12 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 
 ## Recipes
 
-- **Cut out a subject onto a new background:** select (table), refine, then `layer_via_copy`.
-  Add the new background with `add_pixel_layer` and move it under the cutout (`move_layer`).
-  `render_preview` and look for a halo; if there is one, load the copy's pixels back as a
-  selection, `shrink` 1 px, and mask.
+- **Cut out a subject onto a new background:** select (table), then `refine_selection` with
+  `output: "new-layer-with-mask"` (revisable) and, for hair or fur, `decontaminate` 50–100 so
+  the old background's colour leaves the soft edge. Add the new background with
+  `add_pixel_layer` and move it under the cutout (`move_layer`). `render_preview` and look for a
+  halo; if there is one, raise `decontaminate`, or load the mask as a selection, `contract`
+  1 px, and output again.
 - **Replace the sky:** `select_sky` (or `magic_wand` / `select_color_range` `preset: "blues"`
   if it finds none), `add` missed patches, `refine_selection` radius 8–16 along the horizon and trees, then
   `add_layer_mask` on the new sky layer. Match it with a clipped curves layer (`clipped: true`).
@@ -176,7 +178,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   background, and drop `snapToEdges` where the edge is too faint.
 - **Over-feathering hard objects:** a 10 px feather on a product looks like a glow. Keep hard
   edges at 0–2 px and refine soft ones instead.
-- **Halo:** the old background shows as a light or dark fringe. `contract` 1–2 px or
+- **Halo:** the old background shows as a light or dark fringe. `decontaminate` on a
+  new-layer output for soft edges; for hard ones `contract` 1–2 px or
   `shiftEdge` negative before masking.
 - **Baking too early:** `apply_layer_mask`, `merge_down` and `layer_via_copy` with `cut: true`
   are hard to revise. Keep masks until the user is happy.

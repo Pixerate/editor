@@ -3137,3 +3137,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A Quick Selection stroke on a plain background took over 300 ms in max-flow on a 116 × 87 grid, while the same stroke elsewhere took 2 ms.
 - **Root Cause**: The capacities were floating-point colour costs. After subtracting a path's flow, a residual that should be zero was left a hair above it, so the search kept finding paths that could carry almost nothing and pushed thousands of them.
 - **Solution / Workaround**: Round capacities to whole numbers (`UNITS = 64` steps per unit of cost) before handing them to `GridGraph`. With integers the bottleneck edge reaches exactly zero. The whole-image case dropped from about 430 ms to about 110 ms. Do the same for any other graph built on `GridGraph`.
+
+### [core/image-editor/selection] Decontaminating a Layer via Copy Read Black as the Background
+
+- **Issue / Symptom**: With output `new-layer` and Decontaminate Colors, edge pixels turned dark and bluish instead of taking the subject's colour.
+- **Root Cause**: The background colour was estimated from the new layer's own pixels. Layer via Copy creates a surface that covers only the selection's bounds, so `readRegion` returned transparent black outside them, and those zeros were averaged in as the background.
+- **Solution / Workaround**: `decontaminateLayer` estimates colours from the source layer, whose background is still there, and writes only RGB into the new layer, keeping the new layer's alpha. Any edge-colour estimate on a cut-out layer should read the layer it was cut from.

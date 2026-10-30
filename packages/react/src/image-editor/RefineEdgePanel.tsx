@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import type { AdjustmentKind, AdjustmentLayer, ImageEditorController, RefineEdgeParams, SelectionMask } from '@pixerate/editor/image-editor';
+import type { AdjustmentKind, AdjustmentLayer, ImageEditorController, RefineEdgeParams, RefineOutput, SelectionMask } from '@pixerate/editor/image-editor';
 import {
   ADJUSTMENT_KINDS,
   REFINE_EDGE_CONTROLS,
+  REFINE_OUTPUTS,
   adjustmentKindLabel,
   layerMaskFromSelection,
 } from '@pixerate/editor/image-editor';
@@ -33,6 +34,9 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
   const [error, setError] = useState<string | null>(null);
   const [layerId, setLayerId] = useState('');
   const [newKind, setNewKind] = useState<AdjustmentKind>('hueSaturation');
+  const [output, setOutput] = useState<RefineOutput>('selection');
+  const [decontaminate, setDecontaminate] = useState(0);
+  const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
   const sel = selection === undefined ? controller.getSelection() : selection;
   const list = layers ?? controller.getAdjustmentLayers();
   const target = list.find((l) => l.id === layerId) ?? list[list.length - 1];
@@ -41,7 +45,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
     setBusy(true);
     setError(null);
     try {
-      await controller.refineSelection(params);
+      await controller.refineSelectionTo(params, output, { decontaminate: toLayer ? decontaminate : 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -76,6 +80,38 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
       <label className="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={params.smartRadius} onChange={(e) => setParams({ ...params, smartRadius: e.target.checked })} />
         Smart Radius
+      </label>
+      <label className="flex items-center gap-2 text-muted-foreground">
+        Output to
+        <select
+          aria-label="Refine output"
+          value={output}
+          onChange={(e) => setOutput(e.target.value as RefineOutput)}
+          className="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
+        >
+          {REFINE_OUTPUTS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="flex justify-between text-muted-foreground">
+          <span>Decontaminate colors{toLayer ? '' : ' (new layer outputs)'}</span>
+          <span className="font-mono">{decontaminate}%</span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          aria-label="Decontaminate amount"
+          disabled={!toLayer}
+          value={decontaminate}
+          onChange={(e) => setDecontaminate(Number(e.target.value))}
+          className={imageRangeClass}
+        />
       </label>
       <div className="flex gap-1">
         <button type="button" className={button} disabled={!sel || busy} onClick={refine}>
