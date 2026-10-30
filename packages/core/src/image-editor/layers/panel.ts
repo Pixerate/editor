@@ -14,8 +14,9 @@ import { selectionModeFromModifiers } from '../selection/tool-options';
 
 /**
  * A click on a layer's mask thumbnail, as in Photoshop: Ctrl/⌘-click loads the mask as the
- * selection (with Shift adding, Alt subtracting, both intersecting), Shift-click turns the mask
- * on or off, and a plain click makes the mask the paint target.
+ * selection (with Shift adding, Alt subtracting, both intersecting), Alt-click shows the mask
+ * alone in grey (Alt+Shift-click as a red overlay; again to go back to the image), Shift-click
+ * turns the mask on or off, and a plain click makes the mask the paint target.
  */
 export function maskThumbnailClick(
   controller: ImageEditorController,
@@ -25,6 +26,10 @@ export function maskThumbnailClick(
   if (!layer.mask) return;
   if (e.ctrlKey || e.metaKey) {
     controller.selectionFromLayerMask(layer.id, selectionModeFromModifiers(e, 'replace'));
+  } else if (e.altKey && !layer.mask.source) {
+    const mode = e.shiftKey ? 'overlay' : 'gray';
+    const view = controller.getMaskView();
+    controller.setMaskView(view?.layerId === layer.id && view.mode === mode ? 'off' : mode, layer.id);
   } else if (e.shiftKey) {
     controller.setLayerMaskProps(layer.id, { enabled: layer.mask.enabled === false });
   } else {

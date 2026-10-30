@@ -22,6 +22,7 @@ import {
   startMarchingAnts,
   handleSelectionShortcut,
   handleQuickMaskKey,
+  handleMaskViewKey,
   ShapeDrawGesture,
   TypeToolGesture,
   DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -554,7 +555,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       // Leave Copy to the page while text on it is selected.
       if (window.getSelection?.()?.toString()) return;
       const gesture = selectionGestureRef.current;
-      if (handleQuickMaskKey(controller, e)) {
+      if (handleQuickMaskKey(controller, e) || handleMaskViewKey(controller, e)) {
         e.preventDefault();
         return;
       }

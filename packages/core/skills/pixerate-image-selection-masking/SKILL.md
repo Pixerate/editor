@@ -82,7 +82,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    `load_selection_from_image`).
 7. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
    **Check:** no fringe of the old background colour, no stair-steps, no visible line where an
-   adjustment ends. Fix by loading the mask back (`load_selection_from_mask`), refining, and
+   adjustment ends. To judge a layer mask itself, `set_mask_view` `gray` (or `overlay`) and
+   `capture_view` with `includeOverlays: true`; holes and stray grey show plainly there. Set it
+   back to `off` afterwards. Fix by loading the mask back (`load_selection_from_mask`), refining, and
    masking again.
 
 ## Decision table
@@ -192,6 +194,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `load_selection_from_image`: AI or saved mattes
 - `load_selection_from_mask`: a layer mask back to a selection
 - `set_selection_display`: ants, Quick Mask tint or hidden
+- `set_mask_view`: a layer mask alone in grey or as a red overlay, to check it
 - `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only

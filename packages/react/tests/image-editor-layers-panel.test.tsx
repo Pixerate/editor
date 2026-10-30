@@ -77,6 +77,14 @@ describe('React LayersPanel', () => {
     await act(async () => thumbs[thumbs.length - 1]!.dispatchEvent(new win.MouseEvent('click', { bubbles: true, metaKey: true })));
     expect(c.getSelection()).not.toBeNull();
     expect(c.getLayers()[1].mask!.enabled).toBe(false);
+    // Alt-click shows the mask alone in grey, and the thumbnail says so; again to go back.
+    const maskThumb = () => container.querySelector('[data-testid="layer-mask-thumbnail"]') as HTMLElement;
+    await act(async () => maskThumb().dispatchEvent(new win.MouseEvent('click', { bubbles: true, altKey: true })));
+    expect(c.getMaskView()).toEqual({ layerId: c.getLayers()[1].id, mode: 'gray' });
+    expect(maskThumb().getAttribute('aria-label')).toContain('(shown)');
+    await act(async () => maskThumb().dispatchEvent(new win.MouseEvent('click', { bubbles: true, altKey: true })));
+    expect(c.getMaskView()).toBeNull();
+    expect(maskThumb().getAttribute('aria-label')).not.toContain('(shown)');
     // The menu: delete via the ⋯ menu.
     await act(async () => (container.querySelector('button[aria-label="Layer menu"]') as HTMLButtonElement).click());
     const del = Array.from(container.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === 'Delete Layer') as HTMLButtonElement;

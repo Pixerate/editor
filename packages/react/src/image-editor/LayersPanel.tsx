@@ -37,10 +37,11 @@ const rowClass = (active: boolean) =>
   `flex items-center gap-1.5 px-1.5 py-1 rounded cursor-pointer select-none ${active ? 'bg-primary/30 ring-1 ring-primary' : 'hover:bg-muted'}`;
 
 /** Draws a thumbnail (RGBA pixels) into a small canvas; nothing without a 2D context. */
-const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: string; onClick?: (e: React.MouseEvent) => void; selected?: boolean; testId?: string }> = ({
+const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: string; title?: string; onClick?: (e: React.MouseEvent) => void; selected?: boolean; testId?: string }> = ({
   pixels,
   size,
   label,
+  title,
   onClick,
   selected,
   testId,
@@ -61,6 +62,7 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
       ref={ref}
       role={onClick ? 'button' : 'img'}
       aria-label={label}
+      title={title}
       data-testid={testId}
       onClick={onClick}
       style={{ width: size, height: size }}
@@ -72,7 +74,7 @@ const Thumbnail: React.FC<{ pixels: PixelBuffer | null; size: number; label: str
 /**
  * The layer stack, top first: visibility, thumbnails, names (double-click to rename), locks,
  * mask thumbnails (click to paint the mask, Shift-click to disable it, Ctrl/⌘-click to load it
- * as the selection; Ctrl/⌘-click a layer thumbnail to select its pixels), drag to reorder or drop
+ * as the selection, Alt-click to show it alone in grey, Alt+Shift-click as a red overlay; Ctrl/⌘-click a layer thumbnail to select its pixels), drag to reorder or drop
  * into a group, opacity / fill / blend / clipping for the active layer, and the layer menu
  * (right-click a row, or the ⋯ button), an fx badge on rows with effects (click to switch them
  * on or off) and the active layer's effects. Every action is one undo step on the controller.
@@ -99,6 +101,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
   const commitNext = useRef(true);
 
   const state = controller.getState();
+  const maskView = controller.getMaskView();
   const rows = layerPanelRows(state.layers, state.activeLayerId);
   const active = controller.getActiveLayer();
 
@@ -386,7 +389,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                 <Thumbnail
                   pixels={maskThumb(layer)}
                   size={thumbnailSize}
-                  label={`${row.label} mask${layer.mask.enabled === false ? ' (disabled)' : ''}`}
+                  label={`${row.label} mask${layer.mask.enabled === false ? ' (disabled)' : ''}${maskView?.layerId === layer.id ? ' (shown)' : ''}`}
+                  title="Alt-click: show the mask alone · Alt+Shift-click: as an overlay"
                   testId="layer-mask-thumbnail"
                   selected={row.active && state.activeTarget === 'mask'}
                   onClick={(e) => {

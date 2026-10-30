@@ -401,6 +401,11 @@ export interface ImageEditorState {
   /** How the canvas shows the selection (view state; `quickMask` mirrors `'quickMask'`). */
   selectionDisplay?: 'ants' | 'quickMask' | 'none';
   /**
+   * A layer mask shown on the canvas (view state, not saved): `gray` shows the mask alone in
+   * grey (Alt-click its thumbnail), `overlay` tints what it hides in red over the image (the \ key).
+   */
+  maskView?: { layerId: string; mode: 'gray' | 'overlay' } | null;
+  /**
    * Quick Mask mode: painting and fills without a layer edit the selection itself (white
    * selects, black deselects), shown as a tint. View state; the edits are undo steps.
    */

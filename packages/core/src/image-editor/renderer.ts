@@ -20,9 +20,9 @@ import { adjustmentLayersKey } from './adjustment-layers';
 import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './blend';
 import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
-import { buildLayerMaskPlanes } from './selection/layer-mask';
+import { buildLayerMaskPlanes, layerMaskSelection } from './selection/layer-mask';
 import { selectionOutline, quickMaskPixels, type QuickMaskStyle } from './selection/overlay';
-import { createSelectionMask } from './selection/mask';
+import { createSelectionMask, selectionToPixels } from './selection/mask';
 import type { SelectionMask } from './selection/mask';
 import { LayerCompositor, type CompositorSources } from './layers/compositor';
 import { flattenLayers, type ImageLayer, type PixelLayer } from './layers/model';
@@ -395,6 +395,27 @@ export class ImageEditorRenderer {
       }
 
       ctx.restore();
+    }
+
+    // A layer mask view: the mask alone in grey, or its rubylith over the image.
+    const maskView = state.maskView;
+    if (maskView) {
+      const layer = flattenLayers(state.layers ?? []).find((l) => l.id === maskView.layerId);
+      const mask = layer ? this.maskViewSelection(layer, Math.round(state.imageDimensions.width), Math.round(state.imageDimensions.height)) : null;
+      if (mask) {
+        ctx.save();
+        try {
+          applyImageProjectionToContext(ctx, projection);
+          ctx.beginPath();
+          ctx.rect(region.x, region.y, region.width, region.height);
+          ctx.clip();
+          if (maskView.mode === 'gray') this.drawMaskGray(ctx, mask);
+          else this.drawMaskOverlay(ctx, mask, { color: [255, 0, 0], opacity: 0.5, indicates: 'masked' });
+        } catch {
+          // Overlays are best effort (headless / mocked contexts).
+        }
+        ctx.restore();
+      }
     }
 
     // 4. Selection: marching ants or Quick Mask, through the same projection.
@@ -902,6 +923,34 @@ export class ImageEditorRenderer {
   }
 
   private overlayCache = new WeakMap<SelectionMask, { key: string; canvas: HTMLCanvasElement }>();
+  private maskViewCache = new WeakMap<object, { key: string; mask: SelectionMask }>();
+  private grayCache = new WeakMap<SelectionMask, HTMLCanvasElement>();
+
+  /** A layer's mask as canvas-sized coverage for its mask view, kept while the mask is unchanged. */
+  private maskViewSelection(layer: ImageLayer, width: number, height: number): SelectionMask | null {
+    if (!layer.mask || layer.mask.source || width < 1 || height < 1) return null;
+    const key = `${width}x${height}:${layer.type === 'pixel' ? `${layer.offset.x},${layer.offset.y}` : ''}`;
+    const cached = this.maskViewCache.get(layer.mask.surface);
+    if (cached?.key === key) return cached.mask;
+    const mask = layerMaskSelection(layer, width, height);
+    if (mask) this.maskViewCache.set(layer.mask.surface, { key, mask });
+    return mask;
+  }
+
+  /** A mask alone in grey (white = revealed), opaque, drawn in natural image space. */
+  private drawMaskGray(ctx: CanvasRenderingContext2D, mask: SelectionMask): void {
+    let canvas = this.grayCache.get(mask);
+    if (!canvas) {
+      canvas = this.createCanvas(mask.width, mask.height);
+      const mctx = canvas.getContext('2d');
+      if (!mctx || typeof mctx.createImageData !== 'function') return;
+      const img = mctx.createImageData(mask.width, mask.height);
+      img.data.set(selectionToPixels(mask, 'gray').data);
+      mctx.putImageData(img, 0, 0);
+      this.grayCache.set(mask, canvas);
+    }
+    ctx.drawImage(canvas, 0, 0, mask.width, mask.height);
+  }
 
   /** A channel's tint (colour, opacity, masked or selected area), drawn in natural image space. */
   private drawMaskOverlay(ctx: CanvasRenderingContext2D, mask: SelectionMask, style: QuickMaskStyle): void {
