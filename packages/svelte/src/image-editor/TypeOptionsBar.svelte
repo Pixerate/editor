@@ -1,13 +1,13 @@
 <script lang="ts">
   import ImageColor from './controls/ImageColor.svelte';
   import { imageChipClass } from './styles.js';
-  import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
-  import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
+  import type { ImageEditorController, TextAlign, TextEditSession, TextOrientation, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
+  import { TEXT_ALIGNS, TEXT_ORIENTATIONS } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
 
   /**
-   * The type tool's options: font family (from the editor's fonts), size, bold, italic, colour and
-   * alignment. While text is being edited they style the selection (or the whole text); with a
+   * The type tool's options: font family (from the editor's fonts), size, bold, italic, colour,
+   * alignment and orientation (horizontal or vertical type, with upright Latin in vertical text). While text is being edited they style the selection (or the whole text); with a
    * type layer active they style all of it; otherwise they set what the next text uses.
    */
   interface Props {
@@ -32,6 +32,7 @@
     return untrack(() => s.subscribe(() => tick++));
   });
   const ALIGN_LABELS: Record<TextAlign, string> = { left: 'Left', center: 'Centre', right: 'Right', justify: 'Justify' };
+  const ORIENTATION_LABELS: Record<TextOrientation, string> = { horizontal: 'Horizontal', vertical: 'Vertical' };
   
 
   const view = $derived.by(() => {
@@ -45,9 +46,18 @@
       ...(here.fontWeight ? { fontWeight: here.fontWeight } : {}),
       ...(session?.alive ? { italic: Boolean(here.italic), color: here.color ?? options.color } : {}),
     };
+    const typeId = !session && active?.type === 'type' ? active.id : null;
+    // The orientation of the text being edited or the active type layer, else the tool's.
+    const editedId = session?.alive ? session.layerId : typeId;
+    const edited = editedId ? controller.getLayer(editedId) : null;
+    const orientation: TextOrientation = edited?.type === 'type' ? (edited.orientation ?? 'horizontal') : (options.orientation ?? 'horizontal');
+    const upright = Boolean(session?.alive ? here.upright : edited?.type === 'type' && edited.runs[0]?.style.upright);
     return {
       shown,
-      typeId: !session && active?.type === 'type' ? active.id : null,
+      editedId,
+      orientation,
+      upright,
+      typeId,
       missing: active?.type === 'type' ? (active.missingFonts ?? []) : [],
       fonts: controller.listFonts(),
     };
@@ -69,6 +79,24 @@
         if (Object.keys(s).length) controller.setTextStyle(view.typeId, s);
         if (p) controller.setParagraphStyle(view.typeId, p);
       }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  function orient(next: TextOrientation) {
+    onchange({ ...options, orientation: next });
+    try {
+      error = null;
+      if (view.editedId) controller.setTextOrientation(view.editedId, next);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  function toggleUpright() {
+    try {
+      error = null;
+      if (session?.alive) session.setStyle({ upright: !view.upright });
+      else if (view.typeId) controller.setTextStyle(view.typeId, { upright: !view.upright });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -108,7 +136,15 @@
       <button type="button" aria-pressed={options.align === a} class={imageChipClass(options.align === a)} onclick={() => style({ align: a })}>{ALIGN_LABELS[a]}</button>
     {/each}
   </div>
-  <p class="text-[10px] text-muted-foreground">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
+  <div class="flex gap-1" role="toolbar" aria-label="Orientation">
+    {#each TEXT_ORIENTATIONS as o (o)}
+      <button type="button" aria-pressed={view.orientation === o} class={imageChipClass(view.orientation === o)} onclick={() => orient(o)}>{ORIENTATION_LABELS[o]}</button>
+    {/each}
+    {#if view.orientation === 'vertical' && view.editedId}
+      <button type="button" aria-pressed={view.upright} class={imageChipClass(view.upright)} title="Set Latin upright, one letter under the other (else turned sideways)" onclick={toggleUpright}>Upright Latin</button>
+    {/if}
+  </div>
+  <p class="text-[10px] text-muted-foreground">Click to type point text (vertical: a column down from the click), drag for a paragraph box, click text to edit it. Esc finishes.</p>
   {#if view.missing.length > 0}
     <p role="status" class="text-amber-600" data-testid="type-missing-fonts">Missing {view.missing.length === 1 ? 'font' : 'fonts'}: {view.missing.join(', ')}</p>
   {/if}

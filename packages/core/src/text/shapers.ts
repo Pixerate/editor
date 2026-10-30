@@ -138,7 +138,14 @@ export interface OutlineFontFace {
   ascender: number;
   descender: number;
   getAdvanceWidth(text: string, fontSize: number, options?: { kerning?: boolean }): number;
-  getPath(text: string, x: number, y: number, fontSize: number, options?: { kerning?: boolean }): { commands: OutlinePathCommand[] };
+  /** `vertical`: the font's vertical alternates (`vert`), where it has them (faces without `getVerticalMetrics` ignore it). */
+  getPath(text: string, x: number, y: number, fontSize: number, options?: { kerning?: boolean; vertical?: boolean }): { commands: OutlinePathCommand[] };
+  /**
+   * Vertical metrics of one character set upright, in font units: its advance down the column, the
+   * distance from the top of its cell to its baseline, and whether it has a vertical alternate.
+   * Optional (opentype.js lacks it): vertical text then uses the ascender and descender.
+   */
+  getVerticalMetrics?(char: string): { advance: number; originY: number; alternate: boolean };
   names?: { fontFamily?: Record<string, string>; postScriptName?: Record<string, string> };
   tables?: { os2?: { usWeightClass?: number; fsSelection?: number } };
 }
@@ -210,8 +217,15 @@ export function createOutlineTextShaper(fonts: ReadonlyArray<OutlineFontFace | O
       for (let i = 1; i <= text.length; i++) out.push(face.getAdvanceWidth(text.slice(0, i), font.size, { kerning: true }));
       return out;
     },
-    outline(text, font, x, y) {
-      return toPath(pick(font).entry.face.getPath(text, x, y, font.size, { kerning: true }).commands);
+    outline(text, font, x, y, opts) {
+      return toPath(pick(font).entry.face.getPath(text, x, y, font.size, opts?.vertical ? { kerning: true, vertical: true } : { kerning: true }).commands);
+    },
+    vertical(char, font) {
+      const { face } = pick(font).entry;
+      const k = font.size / face.unitsPerEm;
+      const v = face.getVerticalMetrics?.(char);
+      if (v) return { advance: v.advance * k, originY: v.originY * k, alternate: v.alternate };
+      return { advance: (face.ascender - face.descender) * k, originY: face.ascender * k, alternate: false };
     },
     families() {
       return [...new Set(entries.map((e) => e.family))];

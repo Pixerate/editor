@@ -18,6 +18,10 @@ export interface VectorTextPanelData {
 	align: VectorTextAlign | null;
 	/** The frame kind of a single text node. */
 	frame: 'point' | 'area' | 'path' | null;
+	/** The orientation of the text edited (`null` when it mixes, or for new text). */
+	orientation: 'horizontal' | 'vertical' | null;
+	/** Whether the text edited can turn vertical (none of it is on a path). */
+	canOrient: boolean;
 	/** Families the shaper can draw (always the generic ones too). */
 	families: string[];
 	/** Whether the shaper gives outlines (Create Outlines works). */
@@ -39,7 +43,7 @@ export const VECTOR_FONT_WEIGHTS: readonly { value: number; label: string }[] = 
 	{ value: 900, label: 'Black' }
 ];
 
-const FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough'] as const;
+const FIELDS = ['fontFamily', 'fontWeight', 'italic', 'fontSize', 'tracking', 'leading', 'baselineShift', 'underline', 'strikethrough', 'upright'] as const;
 
 /**
  * The text panel for `state`: shown while a Type tool is active or text is selected; null
@@ -75,7 +79,7 @@ export function getVectorTextPanel(state: Pick<VectorEditorState, 'document' | '
 		styles.push(font);
 	}
 	const same = <K extends (typeof FIELDS)[number]>(k: K): VectorCharacterStyle[K] | null => {
-		const values = styles.map((s) => s[k] ?? (k === 'italic' || k === 'underline' || k === 'strikethrough' ? false : k === 'leading' ? null : k === 'tracking' || k === 'baselineShift' ? 0 : null));
+		const values = styles.map((s) => s[k] ?? (k === 'italic' || k === 'underline' || k === 'strikethrough' || k === 'upright' ? false : k === 'leading' ? null : k === 'tracking' || k === 'baselineShift' ? 0 : null));
 		return values.every((v) => v === values[0]) ? ((values[0] ?? null) as VectorCharacterStyle[K] | null) : null;
 	};
 	const font = Object.fromEntries(FIELDS.map((k) => [k, same(k)])) as VectorTextPanelData['font'];
@@ -83,7 +87,11 @@ export function getVectorTextPanel(state: Pick<VectorEditorState, 'document' | '
 	const align = alignSource.every((a) => a === alignSource[0]) ? (alignSource[0] as VectorTextAlign) : null;
 	const ids = target === 'range' ? [edited!.id] : nodes.map((n) => n.id);
 	const frameNode = target === 'range' ? edited : nodes.length === 1 ? nodes[0] : undefined;
-	return { target, ids, font, align, frame: frameNode?.frame.kind ?? null, families: vectorTextFamilies(), outlines: vectorTextHasOutlines(), pathId };
+	const edits = target === 'range' ? [edited!] : nodes;
+	const orientations = edits.map((n) => n.orientation ?? 'horizontal');
+	const orientation = orientations.length && orientations.every((o) => o === orientations[0]) ? orientations[0] : null;
+	const canOrient = edits.length > 0 && edits.every((n) => n.frame.kind !== 'path');
+	return { target, ids, font, align, frame: frameNode?.frame.kind ?? null, orientation, canOrient, families: vectorTextFamilies(), outlines: vectorTextHasOutlines(), pathId };
 }
 
 /**
@@ -115,4 +123,11 @@ export function applyVectorParagraphStyle(controller: VectorEditorController, pa
 		return;
 	}
 	controller.styleTexts({ paragraph: patch }, { ids: panel.ids, ...options });
+}
+
+/** Sets the text being edited or selected horizontal or vertical (one undo step); nothing for new-text defaults or path text. */
+export function applyVectorTextOrientation(controller: VectorEditorController, orientation: 'horizontal' | 'vertical'): void {
+	const panel = getVectorTextPanel(controller.getState());
+	if (!panel || !panel.canOrient) return;
+	controller.styleTexts({ orientation }, { ids: panel.ids });
 }

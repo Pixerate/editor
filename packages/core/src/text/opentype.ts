@@ -2,9 +2,10 @@
  * A small OpenType reader: enough of a font file to set Latin, Cyrillic, Greek and CJK text as
  * outlines without a third-party library. It reads TrueType (`glyf`) and CFF (`CFF `, CID-keyed
  * included) outlines, `cmap` (formats 4 and 12), horizontal metrics, `kern` (format 0) and `GPOS`
- * pair kerning (lookup type 2, formats 1 and 2, the `kern` feature), and the family, PostScript
- * name, weight and style. It does not apply `GSUB` (ligatures, contextual forms) or complex-script
- * shaping, so Arabic, Indic and similar scripts set as isolated glyphs.
+ * pair kerning (lookup type 2, formats 1 and 2, the `kern` feature), vertical metrics (`vhea`,
+ * `vmtx`, `VORG`) and vertical alternates (`GSUB` single substitutions of the `vert` feature), and
+ * the family, PostScript name, weight and style. It applies no other `GSUB` (ligatures, contextual
+ * forms) or complex-script shaping, so Arabic, Indic and similar scripts set as isolated glyphs.
  *
  * The result has the shape of opentype.js's `Font` that `createOutlineTextShaper` takes, so hosts
  * can pass either. Written from the OpenType specification (TrueType glyph outlines, the CFF
@@ -33,6 +34,11 @@ export interface OpenTypeFont extends OutlineFontFace {
   kerning(left: number, right: number): number;
   /** A glyph's outline in font units, y up, origin on the baseline. */
   glyphPath(glyph: number): OutlinePathCommand[];
+  /** Whether the font has vertical metrics (`vhea` and `vmtx`). */
+  readonly hasVerticalMetrics: boolean;
+  /** A glyph's vertical alternate (the `vert` feature), or the glyph itself when it has none. */
+  verticalGlyph(glyph: number): number;
+  getVerticalMetrics(char: string): { advance: number; originY: number; alternate: boolean };
 }
 
 const fail = (message: string): never => {
@@ -826,6 +832,63 @@ function gposKerning(view: DataView, t: Table | undefined): ((a: number, b: numb
   };
 }
 
+/** Every glyph a coverage table lists, in coverage order. */
+function coverageGlyphs(view: DataView, at: number): number[] {
+  const format = view.getUint16(at);
+  const n = view.getUint16(at + 2);
+  const out: number[] = [];
+  if (format === 1) for (let i = 0; i < n; i++) out.push(view.getUint16(at + 4 + i * 2));
+  else if (format === 2)
+    for (let i = 0; i < n; i++) {
+      const r = at + 4 + i * 6;
+      for (let g = view.getUint16(r); g <= view.getUint16(r + 2); g++) out.push(g);
+    }
+  return out;
+}
+
+/** Vertical alternates: the single substitutions (lookup type 1) of `GSUB`'s `vert` feature. */
+function gsubVertical(view: DataView, t: Table | undefined): Map<number, number> {
+  const out = new Map<number, number>();
+  if (!t || t.length < 10) return out;
+  const base = t.offset;
+  const features = base + view.getUint16(base + 6);
+  const lookups = base + view.getUint16(base + 8);
+  const ids = new Set<number>();
+  const nf = view.getUint16(features);
+  for (let i = 0; i < nf; i++) {
+    const rec = features + 2 + i * 6;
+    let tag = '';
+    for (let k = 0; k < 4; k++) tag += String.fromCharCode(view.getUint8(rec + k));
+    if (tag !== 'vert') continue;
+    const f = features + view.getUint16(rec + 4);
+    const n = view.getUint16(f + 2);
+    for (let k = 0; k < n; k++) ids.add(view.getUint16(f + 4 + k * 2));
+  }
+  const nl = view.getUint16(lookups);
+  for (const id of [...ids].sort((a, b) => a - b)) {
+    if (id >= nl) continue;
+    const l = lookups + view.getUint16(lookups + 2 + id * 2);
+    const n = view.getUint16(l + 4);
+    for (let k = 0; k < n; k++) {
+      let type = view.getUint16(l);
+      let st = l + view.getUint16(l + 6 + k * 2);
+      if (type === 7) {
+        type = view.getUint16(st + 2);
+        st = st + view.getUint32(st + 4);
+      }
+      if (type !== 1) continue;
+      const format = view.getUint16(st);
+      const glyphs = coverageGlyphs(view, st + view.getUint16(st + 2));
+      glyphs.forEach((g, i) => {
+        if (out.has(g)) return;
+        if (format === 1) out.set(g, (g + view.getInt16(st + 4) + 65536) % 65536);
+        else if (format === 2 && i < view.getUint16(st + 4)) out.set(g, view.getUint16(st + 6 + i * 2));
+      });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Font
 // ---------------------------------------------------------------------------
@@ -902,6 +965,12 @@ export function parseOpenTypeFont(data: ArrayBuffer | ArrayBufferView, options: 
     if (i >= 0 && hmtx.offset + i * 4 + 2 <= hmtx.offset + hmtx.length) return view.getUint16(hmtx.offset + i * 4);
     return cffWidth?.(g) ?? 0;
   };
+  const vhea = tables.get('vhea');
+  const vmtx = tables.get('vmtx');
+  const numVMetrics = vhea && vhea.length >= 36 ? view.getUint16(vhea.offset + 34) : 0;
+  const hasVerticalMetrics = Boolean(vmtx && numVMetrics > 0);
+  const vorg = tables.get('VORG');
+  const vertSub = gsubVertical(view, tables.get('GSUB'));
   const kernPairs = readKern(view, tables.get('kern'));
   const gpos = gposKerning(view, tables.get('GPOS'));
   const kerning = (a: number, b: number) => (gpos ? gpos(a, b) : 0) || kernPairs.get(a * 65536 + b) || 0;
@@ -916,18 +985,47 @@ export function parseOpenTypeFont(data: ArrayBuffer | ArrayBufferView, options: 
     }
     return p;
   };
-  const glyphs = (text: string) => {
+  const verticalGlyph = (g: number) => vertSub.get(g) ?? g;
+  // Vertical metrics (OpenType's vertical origin): `vmtx` gives the advance and top side bearing,
+  // the origin is the glyph's top plus that bearing (`VORG` gives it directly for CFF fonts);
+  // without them, the advance is ascender − descender and the origin the ascender.
+  const vertOrigin = (g: number): number => {
+    if (vorg && vorg.length >= 8) {
+      const n = view.getUint16(vorg.offset + 6);
+      let lo = 0;
+      let hi = n - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const at = vorg.offset + 8 + mid * 4;
+        const v = view.getUint16(at);
+        if (v === g) return view.getInt16(at + 2);
+        if (v < g) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return view.getInt16(vorg.offset + 4);
+    }
+    if (!hasVerticalMetrics) return ascender;
+    const tsb = g < numVMetrics ? view.getInt16(vmtx!.offset + g * 4 + 2) : view.getInt16(vmtx!.offset + numVMetrics * 4 + (g - numVMetrics) * 2);
+    let top = -Infinity;
+    for (const c of glyphPath(g)) for (const v of [c.y, c.y1, c.y2]) if (v !== undefined && v > top) top = v;
+    return Number.isFinite(top) ? top + tsb : ascender;
+  };
+  const verticalAdvance = (g: number): number => {
+    if (!hasVerticalMetrics || g < 0 || g >= numGlyphs) return ascender - descender;
+    return view.getUint16(vmtx!.offset + Math.min(g, numVMetrics - 1) * 4);
+  };
+  const glyphs = (text: string, vertical = false) => {
     const out: number[] = [];
     for (const ch of text) {
       const cp = ch.codePointAt(0)!;
       // Lone surrogates (a caret inside a pair) and line breaks draw nothing.
       if ((cp >= 0xd800 && cp <= 0xdfff) || cp === 10 || cp === 13) continue;
-      out.push(glyphIndex(cp));
+      out.push(vertical ? verticalGlyph(glyphIndex(cp)) : glyphIndex(cp));
     }
     return out;
   };
-  const layout = (text: string, kern: boolean) => {
-    const gs = glyphs(text);
+  const layout = (text: string, kern: boolean, vertical = false) => {
+    const gs = glyphs(text, vertical);
     const xs: number[] = [];
     let x = 0;
     for (let i = 0; i < gs.length; i++) {
@@ -954,12 +1052,19 @@ export function parseOpenTypeFont(data: ArrayBuffer | ArrayBufferView, options: 
     advance,
     kerning,
     glyphPath,
+    hasVerticalMetrics,
+    verticalGlyph,
+    getVerticalMetrics(char) {
+      const g = glyphIndex(char.codePointAt(0) ?? 0);
+      const v = verticalGlyph(g);
+      return { advance: verticalAdvance(v), originY: vertOrigin(v), alternate: v !== g };
+    },
     getAdvanceWidth(text, fontSize, opts) {
       return (layout(text, opts?.kerning !== false).width * fontSize) / unitsPerEm;
     },
     getPath(text, x, y, fontSize, opts) {
       const k = fontSize / unitsPerEm;
-      const { gs, xs } = layout(text, opts?.kerning !== false);
+      const { gs, xs } = layout(text, opts?.kerning !== false, Boolean(opts?.vertical));
       const commands: OutlinePathCommand[] = [];
       gs.forEach((g, i) => {
         const ox = x + xs[i] * k;

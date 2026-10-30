@@ -3,6 +3,7 @@
     VECTOR_FONT_WEIGHTS,
     VECTOR_TEXT_ALIGN_OPTIONS,
     applyVectorParagraphStyle,
+    applyVectorTextOrientation,
     applyVectorTextStyle,
     getVectorTextPanel,
     type VectorEditorController,
@@ -12,7 +13,8 @@
 
   /**
    * Character and paragraph style of text: family, weight, size, italic, underline, strike-through,
-   * tracking, leading, alignment and point / area text. It edits the selected characters while text
+   * tracking, leading, alignment, horizontal / vertical orientation (with upright Latin in vertical
+   * text) and point / area text. It edits the selected characters while text
    * is being edited, else the selected text, else the defaults for new text. Type on a Path turns a
    * selected path into path text, and Create Outlines turns text into paths (with an outline
    * shaper). Each change is one undo step.
@@ -108,6 +110,22 @@
       <button type="button" class={buttonClass} aria-label="Underline" aria-pressed={f.underline === true} onclick={() => style({ underline: !f.underline })}><u>U</u></button>
       <button type="button" class={buttonClass} aria-label="Strike through" aria-pressed={f.strikethrough === true} onclick={() => style({ strikethrough: !f.strikethrough })}><s>S</s></button>
     </div>
+    {#if panel.target !== 'defaults'}
+      <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Orientation">
+        <button type="button" class={buttonClass} aria-pressed={panel.orientation === 'horizontal'} title="Horizontal text: lines left to right" onclick={() => applyVectorTextOrientation(controller, 'horizontal')}>Horizontal</button>
+        <button
+          type="button"
+          class={buttonClass}
+          aria-pressed={panel.orientation === 'vertical'}
+          disabled={!panel.canOrient}
+          title={panel.canOrient ? 'Vertical text: columns top to bottom, right to left' : 'Text on a path cannot be vertical'}
+          onclick={() => applyVectorTextOrientation(controller, 'vertical')}>Vertical</button
+        >
+        {#if panel.orientation === 'vertical'}
+          <button type="button" class={buttonClass} aria-pressed={f.upright === true} title="Set Latin upright, one letter under the other (else turned sideways)" onclick={() => style({ upright: !f.upright })}>Upright Latin</button>
+        {/if}
+      </div>
+    {/if}
     <div class="flex items-center gap-1">
       <label class="flex flex-1 items-center gap-1 text-xs text-foreground" title="Tracking (1/1000 em)">
         <span class="text-[11px] text-muted-foreground">VA</span>

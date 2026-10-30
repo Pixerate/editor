@@ -757,6 +757,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			runs,
 			paragraph: t.paragraph ?? {},
 			frame: t.frame,
+			orientation: t.orientation ?? 'horizontal',
 			fill: t.fill ?? null,
 			stroke: t.stroke ?? null,
 			lines: layout.lines.map((l) => ({ start: l.start, end: l.end, text: t.text.slice(l.start, l.end) })),
@@ -776,7 +777,13 @@ export function createVectorCommands(controller: VectorEditorController, options
 		leading: { type: ['number', 'null'], minimum: 0, maximum: 10000, description: 'Baseline-to-baseline distance in document units; null for auto (autoLeading × size).' },
 		baselineShift: { type: ['number', 'null'], minimum: -5000, maximum: 5000, description: 'Raises (positive) or lowers the text, document units (0 default).' },
 		underline: { type: 'boolean', description: 'Underline.' },
-		strikethrough: { type: 'boolean', description: 'Strike through.' }
+		strikethrough: { type: 'boolean', description: 'Strike through.' },
+		upright: { type: 'boolean', description: 'Vertical text only: Latin and other horizontal-script characters stand upright, one under the other, instead of turned sideways (default false).' }
+	} as const;
+	const ORIENTATION = {
+		type: 'string',
+		enum: ['horizontal', 'vertical'],
+		description: 'horizontal (default): lines left to right, stacked down. vertical: columns top to bottom, stacked right to left; CJK stands upright, Latin turns sideways unless styled upright. Point and area text only.'
 	} as const;
 	const PARAGRAPH_PROPS = {
 		align: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Alignment (default left). justify stretches area text lines but the last of a paragraph, and spreads path text over the path.' },
@@ -821,7 +828,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Add Text…',
 			keywords: ['text', 'type', 'label', 'title', 'headline', 'caption', 'paragraph', 'words'],
 			description:
-				'Adds text: point text whose first baseline starts at (x, y), area text wrapped in a box (x, y, width, height), or text along `path` (SVG path data, document units). Paragraphs are separated by "\\n". Paint defaults to black with no stroke; style it with fill / stroke here or vector.setStyle. One undo step. Returns vector.getText\'s summary of the new text (id, lines, bounds, overflow).',
+				'Adds text: point text whose first baseline starts at (x, y), area text wrapped in a box (x, y, width, height), or text along `path` (SVG path data, document units). textOrientation vertical sets point or area text in columns running down, right to left: (x, y) is then the top of the first column\'s centre line, and area text fills its box from the right edge. Paragraphs are separated by "\\n". Paint defaults to black with no stroke; style it with fill / stroke here or vector.setStyle. One undo step. Returns vector.getText\'s summary of the new text (id, lines, bounds, overflow).',
 			params: {
 				type: 'object',
 				properties: {
@@ -834,6 +841,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 					...PATH_TEXT_PROPS,
 					font: { type: 'object', properties: FONT_PROPS, additionalProperties: false, description: 'Character style (default the editor\'s text defaults: 24 sans-serif).' },
 					paragraph: { type: 'object', properties: PARAGRAPH_PROPS, additionalProperties: false, description: 'Paragraph style.' },
+					textOrientation: { ...ORIENTATION, description: `${ORIENTATION.description} Named textOrientation because orientation is the path text option.` },
 					name: { type: 'string', description: 'Layer name (default the text\'s start).' },
 					fill: PAINT,
 					stroke: PAINT,
@@ -856,6 +864,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 						...(params.path !== undefined ? { path: params.path as string, pathOptions } : {}),
 						...(params.font ? { font: params.font as Record<string, unknown> } : {}),
 						...(params.paragraph ? { paragraph: params.paragraph as Record<string, unknown> } : {}),
+						...(params.textOrientation !== undefined ? { orientation: params.textOrientation as 'horizontal' | 'vertical' } : {}),
 						...(params.fill !== undefined ? { fill: checkPaint(params.fill, 'fill') } : {}),
 						...(params.stroke !== undefined ? { stroke: checkPaint(params.stroke, 'stroke') } : {})
 					}, parentOf(params.parentId as string | undefined));
@@ -872,7 +881,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			readOnly: true,
 			keywords: ['text', 'type', 'read', 'font', 'runs'],
 			description:
-				'Reads a text node: its text, base font, runs (styled ranges as { start, end, style } in UTF-16 code units; style fields override the font, fill a range\'s colour), paragraph style, frame (point / area / path), fill and stroke, the laid-out lines (start, end, text), document bounds, overflow (text that does not fit its box or path), whether it draws as outlines, the shaper and missing fonts. Use the ranges with vector.setText and vector.setTextStyle.',
+				'Reads a text node: its text, base font, runs (styled ranges as { start, end, style } in UTF-16 code units; style fields override the font, fill a range\'s colour), paragraph style, frame (point / area / path), orientation (horizontal / vertical), fill and stroke, the laid-out lines (start, end, text), document bounds, overflow (text that does not fit its box or path), whether it draws as outlines, the shaper and missing fonts. Use the ranges with vector.setText and vector.setTextStyle.',
 			params: { type: 'object', properties: { id: { type: 'string', description: 'Text node id (from vector.list).' } }, required: ['id'], additionalProperties: false },
 			run: (_ctx: unknown, params: { id: string }) => textSummary(params.id)
 		},
@@ -960,6 +969,25 @@ export function createVectorCommands(controller: VectorEditorController, options
 				if (!Object.keys(patch).length) fail('Pass kind or a frame field to change.');
 				check(controller.setTextFrame(id, patch));
 				return textSummary(id);
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setTextOrientation`,
+			label: 'Type Orientation',
+			keywords: ['vertical text', 'vertical type', 'horizontal text', 'tategaki', 'columns', 'cjk', 'japanese', 'chinese', 'orientation'],
+			description:
+				'Sets point or area text horizontal (lines left to right) or vertical (columns top to bottom, stacked right to left; CJK upright, Latin turned sideways unless styled upright). The text, styles and frame stay. Text on a path cannot be vertical. One undo step. Returns the text summary with its orientation and lines (columns).',
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string', description: 'Text node id.' }, orientation: { ...ORIENTATION, description: 'horizontal or vertical.' } },
+				required: ['id', 'orientation'],
+				additionalProperties: false
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; orientation: 'horizontal' | 'vertical' }) => {
+				check(controller.setTextOrientation(params.id, params.orientation));
+				return textSummary(params.id);
 			}
 		},
 		{

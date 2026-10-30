@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import type { ImageEditorController, TextAlign, TextEditSession, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
-import { TEXT_ALIGNS } from '@pixerate/editor/image-editor';
+import type { ImageEditorController, TextAlign, TextEditSession, TextOrientation, TextStyle, TypeToolOptions } from '@pixerate/editor/image-editor';
+import { TEXT_ALIGNS, TEXT_ORIENTATIONS } from '@pixerate/editor/image-editor';
 import { imageChipClass } from './styles';
 import { ImageColor } from './controls/controls.js';
 
@@ -15,10 +15,11 @@ export interface TypeOptionsBarProps {
 
 
 const ALIGN_LABELS: Record<TextAlign, string> = { left: 'Left', center: 'Centre', right: 'Right', justify: 'Justify' };
+const ORIENTATION_LABELS: Record<TextOrientation, string> = { horizontal: 'Horizontal', vertical: 'Vertical' };
 
 /**
- * The type tool's options: font family (from the editor's fonts), size, bold, italic, colour and
- * alignment. While text is being edited they style the selection (or the whole text); with a
+ * The type tool's options: font family (from the editor's fonts), size, bold, italic, colour,
+ * alignment and orientation (horizontal or vertical type, with upright Latin in vertical text). While text is being edited they style the selection (or the whole text); with a
  * type layer active they style all of it; otherwise they set what the next text uses.
  */
 export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, options, onChange, session, className }) => {
@@ -38,6 +39,29 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
   };
   const fonts = controller.listFonts();
   const missing = active?.type === 'type' ? active.missingFonts ?? [] : [];
+  // The orientation of the text being edited or the active type layer, else the tool's.
+  const editedId = session?.alive ? session.layerId : typeId;
+  const edited = editedId ? controller.getLayer(editedId) : null;
+  const orientation: TextOrientation = edited?.type === 'type' ? (edited.orientation ?? 'horizontal') : (options.orientation ?? 'horizontal');
+
+  const orient = (next: TextOrientation) => {
+    onChange({ ...options, orientation: next });
+    try {
+      setError(null);
+      if (editedId) controller.setTextOrientation(editedId, next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const upright = () => {
+    try {
+      setError(null);
+      if (session?.alive) session.setStyle({ upright: !here.upright });
+      else if (typeId) controller.setTextStyle(typeId, { upright: !(edited?.type === 'type' && edited.runs[0]?.style.upright) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const style = (change: Partial<TypeToolOptions>) => {
     onChange({ ...options, ...change });
@@ -104,7 +128,25 @@ export const TypeOptionsBar: React.FC<TypeOptionsBarProps> = ({ controller, opti
           </button>
         ))}
       </div>
-      <p className="text-[10px] text-muted-foreground">Click to type point text, drag for a paragraph box, click text to edit it. Esc finishes.</p>
+      <div className="flex gap-1" role="toolbar" aria-label="Orientation">
+        {TEXT_ORIENTATIONS.map((o) => (
+          <button key={o} type="button" aria-pressed={orientation === o} className={imageChipClass(orientation === o)} onClick={() => orient(o)}>
+            {ORIENTATION_LABELS[o]}
+          </button>
+        ))}
+        {orientation === 'vertical' && editedId && (
+          <button
+            type="button"
+            aria-pressed={Boolean(session?.alive ? here.upright : edited?.type === 'type' && edited.runs[0]?.style.upright)}
+            className={imageChipClass(Boolean(session?.alive ? here.upright : edited?.type === 'type' && edited.runs[0]?.style.upright))}
+            title="Set Latin upright, one letter under the other (else turned sideways)"
+            onClick={upright}
+          >
+            Upright Latin
+          </button>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground">Click to type point text (vertical: a column down from the click), drag for a paragraph box, click text to edit it. Esc finishes.</p>
       {missing.length > 0 && (
         <p role="status" className="text-amber-600" data-testid="type-missing-fonts">
           Missing {missing.length === 1 ? 'font' : 'fonts'}: {missing.join(', ')}

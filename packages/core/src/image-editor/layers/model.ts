@@ -327,8 +327,8 @@ export interface ShapeLayer extends LayerBase {
 // Type layers
 // ---------------------------------------------------------------------------
 
-export type { TextStyle, TextRun, TextAlign, ParagraphStyle, ParagraphRun } from '../../text/types';
-export { TEXT_ALIGNS } from '../../text/types';
+export type { TextStyle, TextRun, TextAlign, TextOrientation, ParagraphStyle, ParagraphRun } from '../../text/types';
+export { TEXT_ALIGNS, TEXT_ORIENTATIONS } from '../../text/types';
 
 /** PSD data of a type layer kept for round trips (see the PSD module). */
 export interface TypePsdData {
@@ -359,6 +359,11 @@ export interface TypeLayer extends LayerBase {
    * `width × height` with its top-left at (0, 0).
    */
   frame: { kind: 'point'; origin?: 'baseline' | 'top' } | { kind: 'box'; width: number; height: number };
+  /**
+   * Missing = horizontal. `vertical`: columns running down, stacked right to left (point text:
+   * (0, 0) is the top of the first column's centre line; a box fills from its right edge).
+   */
+  orientation?: 'vertical';
   /** Text space → document (missing = identity). */
   transform?: AffineMatrix;
   /** Default true. */

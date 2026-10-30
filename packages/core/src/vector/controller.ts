@@ -202,10 +202,12 @@ import {
 	vectorTextName,
 	vectorTextPaths,
 	vectorTextPaintSource,
+	vectorTextOrientation,
 	vectorTextRange,
 	VectorTextError,
 	type VectorTextLayout
 } from './text.js';
+import { lineToTextSpace, textArrowStep, textLineMove } from '../text/layout.js';
 import { applyVectorHomography, sanitizeVectorPerspective, vectorHomography, vectorHomographyKeepsQuad, vectorPerspectiveMapPath, vectorPerspectivePlaneToFlat, vectorPerspectivePlanes } from './perspective.js';
 import { distortVectorNode, vectorBoxCorners, vectorDistortQuad, vectorShearForSide, vectorSkewMatrix, VECTOR_DISTORT_TOLERANCE, type VectorDistortMode } from './distort.js';
 import {
@@ -454,6 +456,8 @@ export interface VectorTextInput extends VectorStyle {
 	pathOptions?: Omit<Extract<VectorTextFrame, { kind: 'path' }>, 'kind' | 'path'>;
 	font?: Partial<VectorCharacterStyle>;
 	paragraph?: VectorParagraphStyle;
+	/** Point and area text: `vertical` sets columns running down, right to left (default horizontal). */
+	orientation?: 'horizontal' | 'vertical';
 	name?: string;
 }
 
@@ -8391,6 +8395,8 @@ export class VectorEditorController {
 		const own: VectorStyle = {};
 		for (const key of VECTOR_STYLE_KEYS) if (input[key] !== undefined) (own as Record<string, unknown>)[key] = input[key];
 		const text = input.text.replace(/\r\n?/g, '\n');
+		const orientation = vectorTextOrientation(input.orientation);
+		if (orientation && frame.kind === 'path') throw new VectorTextError('Text on a path cannot be vertical; leave orientation out, or set point or area text.');
 		const node: VectorTextNode = {
 			id: this.newId(),
 			type: 'text',
@@ -8399,7 +8405,8 @@ export class VectorEditorController {
 			text,
 			font,
 			...(Object.keys(paragraph).length ? { paragraph } : {}),
-			frame
+			frame,
+			...(orientation ? { orientation } : {})
 		};
 		return withStyle(node as unknown as VectorPathNode, own) as unknown as VectorTextNode;
 	}
@@ -8478,7 +8485,7 @@ export class VectorEditorController {
 	 * the selected text, including text inside selected groups), or a paragraph patch with
 	 * `paragraph`. One undo step for all of them.
 	 */
-	styleTexts(patch: { style?: Record<string, unknown>; paragraph?: Record<string, unknown> }, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
+	styleTexts(patch: { style?: Record<string, unknown>; paragraph?: Record<string, unknown>; orientation?: 'horizontal' | 'vertical' }, options: { ids?: readonly string[]; merge?: string } = {}): VectorActionResult {
 		const targets: VectorTextNode[] = [];
 		for (const id of options.ids ?? this.selection) {
 			const n = this.getNode(id);
@@ -8498,12 +8505,19 @@ export class VectorEditorController {
 					n = { ...n, paragraph };
 					if (!Object.keys(paragraph).length) delete (n as Partial<VectorTextNode>).paragraph;
 				}
+				if (patch.orientation !== undefined) {
+					const orientation = vectorTextOrientation(patch.orientation);
+					if (orientation && n.frame.kind === 'path') throw new VectorTextError('Text on a path cannot be vertical; set it as point or area text first.');
+					n = { ...n };
+					if (orientation) n.orientation = orientation;
+					else delete n.orientation;
+				}
 				next.set(t.id, n);
 			}
 		} catch (e) {
 			return { ok: false, message: e instanceof Error ? e.message : String(e) };
 		}
-		this.change(patch.paragraph && !patch.style ? 'Paragraph Style' : 'Character Style', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
+		this.change(patch.orientation !== undefined && !patch.style && !patch.paragraph ? 'Type Orientation' : patch.paragraph && !patch.style ? 'Paragraph Style' : 'Character Style', () => this.setDoc(mapTree(this.doc.nodes, (n) => next.get(n.id) ?? n)), options.merge);
 		return { ok: true };
 	}
 
@@ -8535,7 +8549,13 @@ export class VectorEditorController {
 			const cur = n.frame;
 			const box = layout.bounds ?? { x: 0, y: 0, width: 0, height: 0 };
 			let frame: VectorTextFrame;
-			if (kind === 'point') {
+			if (n.orientation === 'vertical' && kind === 'path') throw new VectorTextError('Text on a path cannot be vertical; call vector.setTextOrientation with horizontal first.');
+			if (kind === 'point' && n.orientation === 'vertical' && cur.kind !== 'point') {
+				// Vertical point text starts at the top of its first column's centre line.
+				const l = layout.text.lines[0];
+				const at = l ? lineToTextSpace(layout.text, { x: 0, y: l.baseline }) : { x: 0, y: 0 };
+				frame = sanitizeVectorTextFrame({ kind: 'point', x: (patch.x as number | undefined) ?? layout.origin.x + at.x, y: (patch.y as number | undefined) ?? layout.origin.y + at.y });
+			} else if (kind === 'point') {
 				const first = layout.lines[0];
 				const x = (patch.x as number | undefined) ?? (cur.kind === 'point' ? cur.x : (first?.x ?? box.x));
 				const y = (patch.y as number | undefined) ?? (cur.kind === 'point' ? cur.y : (first?.baseline ?? box.y));
@@ -8554,6 +8574,22 @@ export class VectorEditorController {
 				frame = sanitizeVectorTextFrame({ ...keep, ...options, kind: 'path', path });
 			} else throw new VectorTextError(`kind must be point, area or path, got ${JSON.stringify(kind)}.`);
 			return { ...n, frame };
+		});
+	}
+
+	/**
+	 * Horizontal ↔ vertical text (Type › Type Orientation) for point and area text: the text, styles
+	 * and frame stay; lines become columns running down, right to left, or back. One undo step.
+	 */
+	setTextOrientation(id: string, orientation: 'horizontal' | 'vertical'): VectorActionResult {
+		return this.editTextNode(id, 'Type Orientation', (n) => {
+			const next = vectorTextOrientation(orientation);
+			if (next && n.frame.kind === 'path') throw new VectorTextError('Text on a path cannot be vertical; set it as point or area text first (vector.setTextFrame).');
+			if (next === n.orientation) return n;
+			const out: VectorTextNode = { ...n };
+			if (next) out.orientation = next;
+			else delete out.orientation;
+			return out;
 		});
 	}
 
@@ -8738,7 +8774,12 @@ export class VectorEditorController {
 			return false;
 		}
 		const text = node.text;
-		const key = input.key;
+		let key = input.key;
+		// Vertical text: ↑ ↓ run along the column and ← → between columns; handled as their horizontal equivalents.
+		if (node.orientation === 'vertical' && node.frame.kind !== 'path' && (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown')) {
+			const step = textArrowStep('vertical', key);
+			key = step === 'previous' ? 'ArrowLeft' : step === 'next' ? 'ArrowRight' : step === 'line-before' ? 'ArrowUp' : 'ArrowDown';
+		}
 		const move = (to: number) => {
 			const focus = Math.max(0, Math.min(text.length, to));
 			this.textEdit = { ...t, focus, anchor: input.shift ? t.anchor : focus };
@@ -8833,11 +8874,7 @@ export class VectorEditorController {
 	private lineMove(node: VectorTextNode, index: number, dir: -1 | 1): number {
 		const layout = layoutVectorText(node);
 		if (node.frame.kind === 'path') return dir < 0 ? 0 : node.text.length;
-		const c = vectorTextCaret(node, index);
-		const lines = layout.text.lines;
-		const target = lines[c.line + dir];
-		if (!target) return dir < 0 ? 0 : node.text.length;
-		return vectorTextIndexAt(node, { x: c.top.x, y: layout.origin.y + target.baseline });
+		return textLineMove(layout.text, index, dir, node.text.length);
 	}
 
 	/** The topmost node of `type` under `p` (inside groups too, hit where it draws), or null. */

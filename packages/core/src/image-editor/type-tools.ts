@@ -27,6 +27,13 @@ const STYLE = {
   baselineShift: { type: ['number', 'null'], minimum: -5000, maximum: 5000, description: 'Pixels; positive raises the text (null resets to 0).' },
   underline: { type: 'boolean', description: 'Underline.' },
   strikethrough: { type: 'boolean', description: 'Strike through.' },
+  upright: { type: 'boolean', description: 'Vertical text only: set Latin and other horizontal-script characters upright, one under the other, instead of turned sideways (default false).' },
+} as const;
+
+const ORIENTATION = {
+  type: 'string',
+  enum: ['horizontal', 'vertical'],
+  description: 'horizontal (default): lines left to right, stacked down. vertical: columns top to bottom, stacked right to left; CJK stands upright, Latin turns sideways unless styled upright.',
 } as const;
 
 const PARAGRAPH = {
@@ -47,8 +54,8 @@ function pick(args: Record<string, unknown>, keys: readonly string[]): Record<st
 
 /**
  * Agent tools for type layers in the image editor: `list_fonts`, `get_text_layer`,
- * `add_text_layer`, `set_text`, `set_text_style`, `set_paragraph_style`, `set_text_frame` and
- * `convert_text_to_shape`. Every write is one undo step, validates first and returns the layer as
+ * `add_text_layer`, `set_text`, `set_text_style`, `set_paragraph_style`, `set_text_frame`,
+ * `set_text_orientation` and `convert_text_to_shape`. Every write is one undo step, validates first and returns the layer as
  * it is afterwards (with any missing fonts).
  */
 export function createImageTypeTools(controller: ImageEditorController): AgentTool[] {
@@ -77,7 +84,7 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     name: 'get_text_layer',
     title: 'Read a type layer',
     description:
-      'Returns a type layer’s text, its character runs and paragraphs as [start, end) ranges in UTF-16 code units with their styles, the frame (point text, or a paragraph box with its size), the text-to-document transform, the laid-out lines (range, baseline, width), the rendered bounds, missing fonts and whether the pixels are live or stored from a file. Call before editing text you did not write, to get the ranges. Changes nothing.',
+      'Returns a type layer’s text, its character runs and paragraphs as [start, end) ranges in UTF-16 code units with their styles, the frame (point text, or a paragraph box with its size), the orientation (horizontal or vertical), the text-to-document transform, the laid-out lines (range, baseline, width), the rendered bounds, missing fonts and whether the pixels are live or stored from a file. Call before editing text you did not write, to get the ranges. Changes nothing.',
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'Read a type layer', ...READ },
     handler: ({ layerId }) => controller.getTextLayer(typeId(layerId)),
@@ -87,7 +94,7 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     name: 'add_text_layer',
     title: 'Add a type layer',
     description:
-      'Adds a live type layer and makes it active: point text whose origin (x, y) is the first line’s baseline at its alignment edge, or paragraph text wrapped in box {width, height} with its top-left at (x, y). Line breaks in text start paragraphs. Style and paragraph settings apply to the whole text (change ranges later with set_text_style). Default style: 24 px sans-serif in the foreground colour. One undo step. Returns the layer and the text layer, including missingFonts.',
+      'Adds a live type layer and makes it active: point text whose origin (x, y) is the first line’s baseline at its alignment edge, or paragraph text wrapped in box {width, height} with its top-left at (x, y). orientation vertical sets columns running down from (x, y) (the top of the first column’s centre line; a box fills from its right edge), stacked right to left. Line breaks in text start paragraphs. Style and paragraph settings apply to the whole text (change ranges later with set_text_style). Default style: 24 px sans-serif in the foreground colour. One undo step. Returns the layer and the text layer, including missingFonts.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -103,6 +110,7 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
         },
         style: { type: 'object', description: 'Character style.', properties: STYLE, additionalProperties: false },
         paragraph: { type: 'object', description: 'Paragraph style.', properties: PARAGRAPH, additionalProperties: false },
+        orientation: ORIENTATION,
         rotation: { type: 'number', description: 'Degrees clockwise about the origin (default 0).' },
         name: { type: 'string', description: 'Layer name (default the start of the text).' },
         opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0..1 (default 1).' },
@@ -117,7 +125,7 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     },
     annotations: { title: 'Add a type layer', ...WRITE },
     handler: (args) => {
-      const init = pick(args, ['text', 'x', 'y', 'box', 'style', 'paragraph', 'rotation', 'name', 'opacity', 'blend', 'aboveId', 'belowId', 'parentId', 'index']) as unknown as TextLayerInit;
+      const init = pick(args, ['text', 'x', 'y', 'box', 'style', 'paragraph', 'orientation', 'rotation', 'name', 'opacity', 'blend', 'aboveId', 'belowId', 'parentId', 'index']) as unknown as TextLayerInit;
       if (init.blend !== undefined) init.blend = init.blend as BlendMode;
       const id = controller.addTextLayer(init);
       return { layer: layerSummary(id), text: controller.getTextLayer(id) };
@@ -185,6 +193,16 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     },
   };
 
+  const setOrientation: AgentTool = {
+    name: 'set_text_orientation',
+    title: 'Horizontal or vertical type',
+    description:
+      'Type › Orientation: sets a type layer horizontal (lines left to right) or vertical (columns top to bottom, right to left). The text, styles, frame and origin stay. One undo step. Returns the text layer with its orientation and new lines (columns).',
+    inputSchema: { type: 'object', properties: { layerId: LAYER_ID, orientation: { ...ORIENTATION, description: 'horizontal or vertical.' } }, required: ['layerId', 'orientation'], additionalProperties: false },
+    annotations: { title: 'Horizontal or vertical type', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, orientation }) => controller.setTextOrientation(typeId(layerId), orientation as 'horizontal' | 'vertical'),
+  };
+
   const toShape: AgentTool = {
     name: 'convert_text_to_shape',
     title: 'Convert text to a shape',
@@ -198,5 +216,5 @@ export function createImageTypeTools(controller: ImageEditorController): AgentTo
     },
   };
 
-  return [listFonts, get, add, setText, setStyle, setParagraph, setFrame, toShape];
+  return [listFonts, get, add, setText, setStyle, setParagraph, setFrame, setOrientation, toShape];
 }

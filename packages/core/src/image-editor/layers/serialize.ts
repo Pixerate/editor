@@ -214,6 +214,8 @@ export interface SerializedTypeLayer extends SerializedLayerBase {
   runs: TextRun[];
   paragraphs: ParagraphRun[];
   frame: TypeLayer['frame'];
+  /** Missing: horizontal. */
+  orientation?: 'vertical';
   transform?: number[];
   antiAlias?: false;
   fillOpacity?: number;
@@ -506,6 +508,7 @@ function serializeType(layer: TypeLayer, base: SerializedLayerBase, ctx: Seriali
     paragraphs: JSON.parse(JSON.stringify(layer.paragraphs)),
     frame: { ...layer.frame },
   };
+  if (layer.orientation === 'vertical') out.orientation = 'vertical';
   if (layer.transform) out.transform = [...layer.transform];
   if (layer.antiAlias === false) out.antiAlias = false;
   if (layer.fillOpacity !== undefined && layer.fillOpacity !== 1) out.fillOpacity = layer.fillOpacity;
@@ -559,6 +562,7 @@ function readType(r: Record<string, any>, base: LayerBase, ctx: DeserializeConte
     };
     if (!layer.runs.length) layer.runs = [{ length: 0, style: runs[0]?.style ?? DEFAULT_TEXT_STYLE }];
     if (m) layer.transform = m;
+    if (r.orientation === 'vertical') layer.orientation = 'vertical';
     if (r.antiAlias === false) layer.antiAlias = false;
     if (typeof r.fillOpacity === 'number' && r.fillOpacity !== 1) layer.fillOpacity = num(r.fillOpacity, 0, 1, 1);
     if (Array.isArray(r.missingFonts)) layer.missingFonts = r.missingFonts.filter((x: unknown) => typeof x === 'string');

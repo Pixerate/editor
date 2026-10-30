@@ -96,6 +96,7 @@ export function describeLayer(
       out.text = {
         text: layer.text.length > 80 ? `${layer.text.slice(0, 80)}…` : layer.text,
         frame: layer.frame.kind,
+        ...(layer.orientation === 'vertical' ? { orientation: 'vertical' } : {}),
         runs: layer.runs.length,
         rendering: layer.rendering === 'stored' ? 'stored' : 'live',
         missingFonts: layer.missingFonts ?? [],

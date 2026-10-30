@@ -86,6 +86,7 @@ import {
   type ShapeStroke,
   type ParagraphStyle,
   type TextStyle,
+  type TextOrientation,
   type TypeLayer,
   type ImageEffectAnimation,
   type ImageEffectGenerator,
@@ -129,6 +130,7 @@ import {
   restyleRange,
   styleAt,
   textIndexAt,
+  textOrientation,
   textOutlines,
   textMatrix,
   textRange,
@@ -142,6 +144,7 @@ import {
   type TextLayout,
   type TextShaper,
 } from './layers/text';
+import { lineToTextSpace } from '../text/layout';
 import { createCanvasTextShaper } from './layers/text-shapers';
 import type { VectorSubpath } from '../vector/types';
 import {
@@ -621,6 +624,11 @@ export interface TextLayerInit extends LayerPlacement {
   y: number;
   /** Paragraph (area) text: wrap inside a `width × height` box (pixels). Missing: point text. */
   box?: { width: number; height: number };
+  /**
+   * Default `horizontal`. `vertical`: columns running down, right to left (Photoshop's Vertical Type
+   * tool); (`x`, `y`) is then the top of the first column's centre line, or the box's top-left.
+   */
+  orientation?: TextOrientation;
   /** Character style of the whole text (default 24 px sans-serif, the foreground colour). */
   style?: Partial<TextStyle>;
   paragraph?: ParagraphStyle;
@@ -639,9 +647,10 @@ export interface TypeLayerInfo {
   runs: Array<{ start: number; end: number; style: TextStyle }>;
   paragraphs: Array<{ start: number; end: number; style: ParagraphStyle }>;
   frame: TypeLayer['frame'];
+  orientation: TextOrientation;
   /** Text space → document. */
   transform: AffineMatrix;
-  /** Laid-out lines: text range, baseline (text space) and width; empty without a shaper. */
+  /** Laid-out lines (vertical text: columns): text range, baseline (line space: the column's centre for vertical text) and length; empty without a shaper. */
   lines: Array<{ start: number; end: number; baseline: number; width: number }>;
   /** Rendered bounds in the document. */
   bounds: CropBox | null;
@@ -6066,6 +6075,7 @@ export class ImageEditorController {
       runs: ranges(layer.runs),
       paragraphs: ranges(layer.paragraphs),
       frame: { ...layer.frame },
+      orientation: layer.orientation ?? 'horizontal',
       transform: [...(layer.transform ?? [1, 0, 0, 1, 0, 0])] as unknown as AffineMatrix,
       lines,
       bounds: this.getLayerBounds(id),
@@ -6096,12 +6106,13 @@ export class ImageEditorController {
       if (!(Number.isFinite(width) && width >= 1 && Number.isFinite(height) && height >= 1)) throw new LayerOperationError('box.width and box.height must be at least 1 pixel.');
       frame = { kind: 'box', width, height };
     }
+    const orientation = init.orientation === undefined ? 'horizontal' : textOrientation(init.orientation);
     if (init.rotation !== undefined && !Number.isFinite(init.rotation)) throw new LayerOperationError('rotation must be a number of degrees.');
     if (init.opacity !== undefined && !(Number.isFinite(init.opacity) && init.opacity >= 0 && init.opacity <= 1)) throw new LayerOperationError('opacity must be between 0 and 1.');
     if (init.blend !== undefined && !isBlendMode(init.blend)) throw new LayerOperationError(`Unknown blend mode "${String(init.blend)}".`);
     const t: AffineMatrix = [1, 0, 0, 1, init.x, init.y];
     const transform = init.rotation ? multiplyMatrices(t, rotateMatrix(init.rotation, { x: init.x, y: init.y })) : t;
-    const layer = createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
+    const layer = createTypeLayer({ text, runs: [{ length: text.length, style }], paragraphs: [{ length: text.length, style: paragraph }], frame, orientation, transform, name: init.name ?? typeLayerName(text) }, this.textEnv());
     if (init.opacity !== undefined) layer.opacity = init.opacity;
     if (init.blend !== undefined) layer.blend = init.blend;
     const next = placeLayer(this.state.layers, layer, this.newLayerPlacement(init));
@@ -6190,20 +6201,55 @@ export class ImageEditorController {
       this.state.layers,
       id,
       (l) => {
-        if (frame.kind === 'box' && l.frame.kind === 'box') return { frame: { kind: 'box', width: frame.width, height: frame.height } };
-        if (!shaper) throw new LayerOperationError('Changing between point and paragraph text needs a text shaper to measure the text.');
-        const lines = layoutText(l, shaper).lines;
-        const first = lines[0];
-        // Keep the first line where it is: shift the text-space origin.
-        const dx = frame.kind === 'box' ? (first ? first.x : 0) : 0;
-        const dy = frame.kind === 'box' ? (first ? first.baseline - first.ascent : 0) : first ? first.baseline : 0;
         const m = textMatrix(l);
-        const shifted: AffineMatrix = [m[0], m[1], m[2], m[3], m[0] * dx + m[2] * dy + m[4], m[1] * dx + m[3] * dy + m[5]];
+        const shift = (dx: number, dy: number): AffineMatrix => [m[0], m[1], m[2], m[3], m[0] * dx + m[2] * dy + m[4], m[1] * dx + m[3] * dy + m[5]];
+        if (frame.kind === 'box' && l.frame.kind === 'box') {
+          const resized: Partial<TypeLayer> = { frame: { kind: 'box', width: frame.width, height: frame.height } };
+          // Vertical columns start at the box's right edge: keep that edge where it is.
+          if (l.orientation === 'vertical' && frame.width !== l.frame.width) resized.transform = shift(l.frame.width - frame.width, 0);
+          return resized;
+        }
+        if (!shaper) throw new LayerOperationError('Changing between point and paragraph text needs a text shaper to measure the text.');
+        const layout = layoutText(l, shaper);
+        const first = layout.lines[0];
+        // Keep the first line where it is: shift the text-space origin.
+        let dx: number;
+        let dy: number;
+        if (l.orientation === 'vertical') {
+          // A box's first column starts at its top-right; point text at the top of its centre line.
+          const at = !first ? { x: 0, y: 0 } : frame.kind === 'box' ? lineToTextSpace(layout, { x: first.x, y: first.baseline - first.ascent }) : lineToTextSpace(layout, { x: 0, y: first.baseline });
+          dx = frame.kind === 'box' ? at.x - frame.width : at.x;
+          dy = at.y;
+        } else {
+          dx = frame.kind === 'box' ? (first ? first.x : 0) : 0;
+          dy = frame.kind === 'box' ? (first ? first.baseline - first.ascent : 0) : first ? first.baseline : 0;
+        }
+        const shifted = shift(dx, dy);
         const nextFrame: TypeLayer['frame'] = frame.kind === 'box' ? { kind: 'box', width: frame.width, height: frame.height } : { kind: 'point' };
         return { frame: nextFrame, transform: shifted };
       },
       this.textEnv(),
       'change its frame'
+    );
+    this.commitLayers(layers, undefined, commitToHistory);
+    return this.typeInfo(id);
+  }
+
+  /**
+   * Horizontal ↔ vertical type (Type › Orientation): the text, styles, frame and origin stay; the
+   * lines become columns running down, stacked right to left, or back. One undo step. Returns the
+   * layer.
+   */
+  public setTextOrientation(id: string, orientation: TextOrientation, commitToHistory = true): TypeLayerInfo {
+    const next = textOrientation(orientation);
+    const layer = requireTypeLayer(this.state.layers, id);
+    if ((layer.orientation ?? 'horizontal') === next) return this.typeInfo(id);
+    const { layers } = updateTypeLayer(
+      this.state.layers,
+      id,
+      () => ({ orientation: next === 'vertical' ? 'vertical' : undefined }),
+      this.textEnv(),
+      'change its orientation'
     );
     this.commitLayers(layers, undefined, commitToHistory);
     return this.typeInfo(id);
@@ -6257,8 +6303,8 @@ export class ImageEditorController {
     if (!layout) return null;
     const c = caretAt(layout, Math.max(0, Math.min(layer.text.length, index)));
     const m = textMatrix(layer);
-    const at = (x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
-    return { top: at(c.x, c.top), bottom: at(c.x, c.bottom), line: c.line };
+    const at = (p: { x: number; y: number }) => ({ x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] });
+    return { top: at(c.from), bottom: at(c.to), line: c.line };
   }
 
   // --- Shape layers ---

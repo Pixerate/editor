@@ -3,6 +3,10 @@
  * the same three glyphs: `.notdef`, `A` (a 500 × 700 box, advance 600) and `V` (a triangle,
  * advance 600), units per em 1000, ascender 800, descender −200, and `AV` kerned by −100 (through
  * `kern` in the TrueType font and `GPOS` in the CFF font).
+ *
+ * `trueTypeFont(…, { vertical: true })` adds vertical setting: `一` (U+4E00) and `「` (U+300C) map
+ * to V and A, `vhea` / `vmtx` give A an advance of 1000 with a top side bearing of 100 (origin 800)
+ * and V 900 and 50 (origin 750), and `GSUB` `vert` substitutes V for A.
  */
 
 class Writer {
@@ -69,11 +73,12 @@ function hmtx() {
   return new Writer().u16(500).i16(0).u16(600).i16(50).u16(600).i16(0).bytes;
 }
 
-function cmap() {
-  // Format 4: 'A' (65) → 1, 'V' (86) → 2, then the 0xFFFF end segment.
-  const ends = [65, 86, 0xffff];
-  const starts = [65, 86, 0xffff];
-  const deltas = [1 - 65, 2 - 86, 1];
+function cmap(vertical = false) {
+  // Format 4: 'A' (65) → 1, 'V' (86) → 2 (and 「 → 1, 一 → 2), then the 0xFFFF end segment.
+  const map: Array<[number, number]> = vertical ? [[65, 1], [86, 2], [0x300c, 1], [0x4e00, 2]] : [[65, 1], [86, 2]];
+  const ends = [...map.map(([c]) => c), 0xffff];
+  const starts = [...map.map(([c]) => c), 0xffff];
+  const deltas = [...map.map(([c, g]) => g - c), 1];
   const seg = ends.length;
   const sub = new Writer().u16(4).u16(16 + seg * 8).u16(0).u16(seg * 2).u16(4).u16(1).u16(seg * 2 - 4);
   ends.forEach((e) => sub.u16(e));
@@ -151,10 +156,32 @@ function kern() {
   return new Writer().u16(0).u16(1).u16(0).u16(14 + 6).u16(1).u16(1).u16(6).u16(0).u16(0).u16(1).u16(2).i16(-100).bytes;
 }
 
+function vhea() {
+  return new Writer().u32(0x11000).i16(500).i16(-500).i16(0).u16(1000).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).i16(0).u16(3).bytes;
+}
+
+function vmtx() {
+  return new Writer().u16(1000).i16(100).u16(1000).i16(100).u16(900).i16(50).bytes;
+}
+
+/** GSUB with one feature, `vert`, whose single substitution (format 1, delta +1) turns A into V. */
+function gsubVert() {
+  const w = new Writer().u16(1).u16(0).u16(10).u16(12).u16(26);
+  w.u16(0); // script list: no scripts
+  w.u16(1).tag('vert').u16(8); // feature list
+  w.u16(0).u16(1).u16(0); // feature: lookup 0
+  w.u16(1).u16(4); // lookup list
+  w.u16(1).u16(0).u16(1).u16(8); // lookup: type 1, one subtable
+  w.u16(1).u16(6).i16(1); // single substitution, format 1, delta 1
+  w.u16(1).u16(1).u16(1); // coverage: glyph 1
+  return w.bytes;
+}
+
 /** A TrueType font (see the module comment). */
-export function trueTypeFont(family = 'Test Sans', weight = 400): Uint8Array {
+export function trueTypeFont(family = 'Test Sans', weight = 400, options: { vertical?: boolean } = {}): Uint8Array {
   const { glyf: g, loca } = glyf();
-  return sfnt(0x10000, { head: head(false), hhea: hhea(), maxp: maxp(false), hmtx: hmtx(), cmap: cmap(), name: nameTable(family, weight >= 700 ? 'Bold' : 'Regular'), 'OS/2': os2(weight), glyf: g, loca, kern: kern() });
+  const vertical = options.vertical ? { vhea: vhea(), vmtx: vmtx(), GSUB: gsubVert() } : {};
+  return sfnt(0x10000, { head: head(false), hhea: hhea(), maxp: maxp(false), hmtx: hmtx(), cmap: cmap(options.vertical), name: nameTable(family, weight >= 700 ? 'Bold' : 'Regular'), 'OS/2': os2(weight), glyf: g, loca, kern: kern(), ...vertical });
 }
 
 // --- CFF ---------------------------------------------------------------------

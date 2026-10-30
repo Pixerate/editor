@@ -9,7 +9,8 @@ import type { ImageEditorController, TypeLayerInfo } from '../controller';
 import type { ImagePoint } from '../types';
 import { applyMatrix } from '../../geom/affine';
 import { DEFAULT_TEXT_STYLE, caretAt, styleAt, textMatrix, typeLayerName, type TextLayout } from './text';
-import { findLayer, type LiveShapeKind, type ParagraphStyle, type TextAlign, type TextStyle, type TypeLayer } from './model';
+import { textArrowStep, textLineMove, textSelectionQuads } from '../../text/layout';
+import { findLayer, type LiveShapeKind, type ParagraphStyle, type TextAlign, type TextOrientation, type TextStyle, type TypeLayer } from './model';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -58,6 +59,8 @@ export interface TypeToolOptions {
   italic: boolean;
   color: string;
   align: TextAlign;
+  /** Horizontal Type or Vertical Type tool (missing = horizontal): what new text is set as. */
+  orientation?: TextOrientation;
 }
 
 export const DEFAULT_TYPE_TOOL_OPTIONS: TypeToolOptions = { fontFamily: 'sans-serif', fontSize: 32, fontWeight: 400, italic: false, color: '#111827', align: 'left' };
@@ -311,7 +314,11 @@ export class TextEditSession {
     return 1;
   }
 
-  /** Moves the caret (Shift extends the selection). */
+  /**
+   * Moves the caret (Shift extends the selection): `left` / `right` along the line, `up` / `down`
+   * between lines, `home` / `end` of the line, `start` / `finish` of the text. Arrow keys of vertical
+   * text map onto these through `textArrowStep` in `handleKey`.
+   */
   move(to: 'left' | 'right' | 'up' | 'down' | 'home' | 'end' | 'start' | 'finish', extend = false): void {
     const n = this.text.length;
     let f = this.focus;
@@ -330,15 +337,7 @@ export class TextEditSession {
           const last = line.chars[line.chars.length - 1];
           f = last ? Math.min(n, last.index + 1) : line.start;
           if (last && this.text[last.index] === ' ' && c.line < layout.lines.length - 1) f = last.index;
-        } else {
-          const target = layout.lines[c.line + (to === 'up' ? -1 : 1)];
-          if (!target) f = to === 'up' ? 0 : n;
-          else {
-            const hit = target.chars.find((ch) => c.x < ch.x + ch.advance / 2);
-            const last = target.chars[target.chars.length - 1];
-            f = hit ? hit.index : last ? last.index + 1 : target.start;
-          }
-        }
+        } else f = textLineMove(layout, f, to === 'up' ? -1 : 1, n);
       }
     }
     this.focus = f;
@@ -377,17 +376,17 @@ export class TextEditSession {
         this.insert('\n');
         return true;
       case 'ArrowLeft':
-        this.move(mod ? 'home' : 'left', e.shiftKey);
-        return true;
       case 'ArrowRight':
-        this.move(mod ? 'end' : 'right', e.shiftKey);
-        return true;
       case 'ArrowUp':
-        this.move(mod ? 'start' : 'up', e.shiftKey);
+      case 'ArrowDown': {
+        // Vertical text: ↑ ↓ run along the column, ← → between columns.
+        const step = textArrowStep(this.layer.orientation, e.key);
+        if (step === 'previous') this.move(mod ? 'home' : 'left', e.shiftKey);
+        else if (step === 'next') this.move(mod ? 'end' : 'right', e.shiftKey);
+        else if (step === 'line-before') this.move(mod ? 'start' : 'up', e.shiftKey);
+        else this.move(mod ? 'finish' : 'down', e.shiftKey);
         return true;
-      case 'ArrowDown':
-        this.move(mod ? 'finish' : 'down', e.shiftKey);
-        return true;
+      }
       case 'Home':
         this.move('home', e.shiftKey);
         return true;
@@ -444,20 +443,9 @@ export class TextEditSession {
       frame = [at(b.x, b.y), at(b.x + b.width, b.y), at(b.x + b.width, b.y + b.height), at(b.x, b.y + b.height)];
     }
     if (!layout) return { caret: null, selection: [], frame };
-    const selection: ImagePoint[][] = [];
-    if (this.start !== this.end) {
-      for (const l of layout.lines) {
-        const chars = l.chars.filter((c) => c.index >= this.start && c.index < this.end);
-        if (!chars.length) continue;
-        const x0 = chars[0].x;
-        const x1 = chars[chars.length - 1].x + chars[chars.length - 1].advance;
-        const top = l.baseline - l.ascent;
-        const bottom = l.baseline + l.descent;
-        selection.push([at(x0, top), at(x1, top), at(x1, bottom), at(x0, bottom)]);
-      }
-    }
+    const selection = textSelectionQuads(layout, this.start, this.end).map((q) => q.map((p) => at(p.x, p.y)));
     const c = caretAt(layout, this.focus);
-    return { caret: [at(c.x, c.top), at(c.x, c.bottom)], selection, frame };
+    return { caret: [at(c.from.x, c.from.y), at(c.to.x, c.to.y)], selection, frame };
   }
 
   /** Ends editing: an empty layer made for this session is deleted (as Photoshop does). Returns whether the layer remains. */
@@ -568,6 +556,7 @@ export class TypeToolGesture {
         ...(box ? { box } : {}),
         style: { fontFamily: o.fontFamily, fontSize: o.fontSize, fontWeight: o.fontWeight, italic: o.italic, color: o.color },
         paragraph: o.align !== 'left' ? { align: o.align } : {},
+        ...(o.orientation === 'vertical' ? { orientation: 'vertical' as const } : {}),
         name: 'Text',
       });
       this.session = new TextEditSession(this.controller, id, 0);

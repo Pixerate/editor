@@ -206,6 +206,7 @@ Shape tools (`shape-tools.ts`) and type tools (`type-tools.ts`) are on the image
 | `add_text_layer` | write | The layer and text layer. Point text at a baseline origin, or box text |
 | `set_text`, `set_text_style`, `set_paragraph_style` | write | The text layer; ranges are `start` / `end` from `get_text_layer` |
 | `set_text_frame` | write | The text layer, switched between point and box text |
+| `set_text_orientation` | write | The text layer, set horizontal or vertical (columns top to bottom, right to left) |
 | `convert_text_to_shape` | write (destructive) | The new shape and warnings; refuses without an outline shaper |
 
 The existing tools cover the rest: `list_layers` summarises shapes, `transform_layer` applies Free Transform with the rules above, `rasterize_layer` makes pixel layers, `paint_stroke` refuses `pixels` on rendered layers, and `inspect_psd` / `import_psd` / `export_psd` map them. Type tools that would draw text refuse with the reason when there is no shaper.

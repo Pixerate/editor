@@ -93,7 +93,7 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `add_shape_component`, `remove_shape_component`, `merge_shape_components` (see
  *   `createImageShapeTools`); `rasterize_layer` turns one into pixels.
  * - Type layers: `list_fonts`, `get_text_layer`, `add_text_layer`, `set_text`, `set_text_style`,
- *   `set_paragraph_style`, `set_text_frame`, `convert_text_to_shape` (see `createImageTypeTools`).
+ *   `set_paragraph_style`, `set_text_frame`, `set_text_orientation`, `convert_text_to_shape` (see `createImageTypeTools`).
  * - Colour management: `get_color_profile`, `assign_profile`, `convert_to_profile`,
  *   `set_proof_setup`, `convert_colors` (see `createImageColorTools`).
  * - Retouching: `clone_stamp`, `heal_brush`, `spot_heal`, `smudge`, `dodge`, `burn`, `sponge`,

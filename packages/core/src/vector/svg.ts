@@ -630,7 +630,7 @@ export function vectorDocumentToSvg(doc: VectorDocument, options: VectorSvgExpor
 	 */
 	const emitTextElement = (node: VectorTextNode, depth: number, attrs: string) => {
 		const geometry = vectorTextGeometryNode(node);
-		const fields = { text: node.text, font: node.font, ...(node.runs?.length ? { runs: node.runs } : {}), ...(node.paragraph ? { paragraph: node.paragraph } : {}), frame: node.frame, ...(node.effects?.length ? { effects: node.effects } : {}) };
+		const fields = { text: node.text, font: node.font, ...(node.runs?.length ? { runs: node.runs } : {}), ...(node.paragraph ? { paragraph: node.paragraph } : {}), frame: node.frame, ...(node.orientation ? { orientation: node.orientation } : {}), ...(node.effects?.length ? { effects: node.effects } : {}) };
 		let data = ` data-vector-text="${escapeAttr(JSON.stringify(fields))}"`;
 		if (hasVectorPaintStacks(node)) data += ` data-vector-fills="${escapeAttr(JSON.stringify(vectorFills(node)))}" data-vector-strokes="${escapeAttr(JSON.stringify(vectorStrokes(node)))}"`;
 		else {
