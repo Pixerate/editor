@@ -468,7 +468,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_object',
     title: 'Object Selection',
     description:
-      'Object Selection: selects the object inside rect (a box drawn loosely around it, natural image pixels; what lies outside the box is treated as background) or the object under point, found from the colours of object and background and the edges between them (GrabCut). Combined with the selection by mode. A box is more reliable than a point: make it a little larger than the object on every side. Check with get_selection and capture_view, then fix with quick_select strokes or select_object with mode add / subtract. One undoable step. Returns the selection.',
+      'Object Selection: selects the object inside rect (a box drawn loosely around it, natural image pixels; what lies outside the box is treated as background) or the object under point. With a host segmentation model it asks the model (falling back if nothing it returns fits); otherwise it finds the object from the colours of object and background and the edges between them (GrabCut). Combined with the selection by mode. A box is more reliable than a point: make it a little larger than the object on every side. Check with get_selection and capture_view, then fix with quick_select strokes or select_object with mode add / subtract. One undoable step. Returns the selection and method ("model" or "grabcut").',
     inputSchema: {
       type: 'object',
       properties: {
@@ -483,19 +483,26 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         mode: modeSchema,
         sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
         enhanceEdge: { type: 'boolean', description: 'Smoother, less blocky edges (Auto-Enhance; default false).' },
+        useModel: { type: 'boolean', description: 'Use the host segmentation model when there is one (default true); false always uses GrabCut.' },
       },
       additionalProperties: false,
     },
-    annotations: writeAnnotations('Object Selection'),
+    annotations: { ...writeAnnotations('Object Selection'), openWorldHint: true },
     handler: async (args) => {
       const rect = args.rect as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined;
       const point = args.point as { x?: unknown; y?: unknown } | undefined;
       if (!rect && !point) throw new Error('Pass rect (a box around the object) or point (a point on it).');
       if (rect && point) throw new Error('Pass rect or point, not both.');
-      const options = { mode: parseSelectionMode(args.mode), sampleAllLayers: args.sampleAllLayers as boolean | undefined, enhanceEdge: args.enhanceEdge as boolean | undefined };
-      if (rect) await controller.selectObject({ rect: { x: num(rect.x, NaN), y: num(rect.y, NaN), width: num(rect.width, NaN), height: num(rect.height, NaN) } }, options);
-      else await controller.selectObject({ point: { x: num(point!.x, NaN), y: num(point!.y, NaN) } }, options);
-      return summary(controller);
+      const options = {
+        mode: parseSelectionMode(args.mode),
+        sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+        enhanceEdge: args.enhanceEdge as boolean | undefined,
+        useModel: args.useModel as boolean | undefined,
+      };
+      const { method } = rect
+        ? await controller.selectObject({ rect: { x: num(rect.x, NaN), y: num(rect.y, NaN), width: num(rect.width, NaN), height: num(rect.height, NaN) } }, options)
+        : await controller.selectObject({ point: { x: num(point!.x, NaN), y: num(point!.y, NaN) } }, options);
+      return { ...summary(controller), method };
     },
   };
 
@@ -532,7 +539,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_sky',
     title: 'Select the sky',
     description:
-      'Select › Sky: selects the sky (blue, or bright and grey when overcast, smooth, reaching down from the top of the image, including patches seen through branches or gaps), with the edge fitted to the skyline, combined with the selection by mode. Use it to replace or recolour a sky or to adjust the land without it (invert_selection). Raise threshold to take in haze or a sunset glow, lower it if bright buildings come in. One undoable step. Returns the selection, and a note when no sky was found (the selection is then unchanged).',
+      'Select › Sky: selects the sky, combined with the selection by mode. With a host segmentation model it asks the model; otherwise it finds it classically (blue, or bright and grey when overcast, smooth, reaching down from the top of the image, including patches seen through branches or gaps) with the edge fitted to the skyline. Use it to replace or recolour a sky or to adjust the land without it (invert_selection). Raise threshold to take in haze or a sunset glow, lower it if bright buildings come in. One undoable step. Returns the selection, method ("model" or "classical"; threshold and softness apply to classical), and a note when no sky was found (the selection is then unchanged).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -540,18 +547,20 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         softness: { type: 'number', minimum: 0, maximum: 100, description: 'Soften the edge over this many natural pixels (default 4; 0 for a hard edge).' },
         mode: modeSchema,
         sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
+        useModel: { type: 'boolean', description: 'Use the host segmentation model when there is one (default true); false finds the sky classically.' },
       },
       additionalProperties: false,
     },
-    annotations: writeAnnotations('Select the sky', true),
+    annotations: { ...writeAnnotations('Select the sky', true), openWorldHint: true },
     handler: async (args) => {
-      const { note } = await controller.selectSky({
+      const { note, method } = await controller.selectSky({
         threshold: args.threshold === undefined ? undefined : num(args.threshold, 50),
         softness: args.softness === undefined ? undefined : num(args.softness, 4),
         mode: parseSelectionMode(args.mode),
         sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+        useModel: args.useModel as boolean | undefined,
       });
-      return { ...summary(controller), ...(note ? { note } : {}) };
+      return { ...summary(controller), method, ...(note ? { note } : {}) };
     },
   };
 
