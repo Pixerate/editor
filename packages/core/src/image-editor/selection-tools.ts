@@ -1,6 +1,6 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
-import type { ImageEditorController } from './controller';
+import type { ImageEditorController, RefineOutput } from './controller';
 import type { AdjustmentKind } from './types';
 import { ADJUSTMENT_KINDS, isAdjustmentKind } from './adjustment-layers';
 import { describeSelection } from './selection/tool-options';
@@ -238,31 +238,42 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'refine_selection',
     title: 'Refine the selection edge',
     description:
-      'Refine Edge: snaps the selection edge to the image within radius pixels (edge-aware guided filter), then smooth (0-100), feather (px), contrast (0-100) and shiftEdge (-100..100 %). Use it after loading a coarse AI mask. One undoable step.',
+      'Select and Mask / Refine Edge: snaps the selection edge to the image within radius pixels (edge-aware guided filter), then smooth (0-100), feather (px), contrast (0-100) and shiftEdge (-100..100 %), and puts the result where output says: the selection (default), a layer-mask on layerId (default the active layer; then deselects), a new-layer of its selected pixels, or a new-layer-with-mask (a masked copy); the new-layer outputs hide the source layer. decontaminate (0-100, new-layer outputs only) replaces the old background colour in soft edges (hair, fur) with the subject\'s own. Use it after loading a coarse AI mask, or to cut a subject out cleanly. One undoable step. Returns the selection and, for layer outputs, layerId and newLayerId.',
     inputSchema: {
       type: 'object',
       properties: {
-        radius: { type: 'number', minimum: 0, maximum: 64, description: 'Edge detection radius in pixels.' },
+        radius: { type: 'number', minimum: 0, maximum: 64, description: 'Edge detection radius in pixels (default 8).' },
         smartRadius: { type: 'boolean', description: 'Adapt the radius to hard and soft edges.' },
         smooth: { type: 'number', minimum: 0, maximum: 100, description: 'Smooth the edge outline (0-100).' },
         feather: { type: 'number', minimum: 0, maximum: 250, description: 'Feather the edge (pixels).' },
         contrast: { type: 'number', minimum: 0, maximum: 100, description: 'Sharpen the edge transition (0-100).' },
         shiftEdge: { type: 'number', minimum: -100, maximum: 100, description: 'Move the edge out (+) or in (-), in percent.' },
+        output: {
+          type: 'string',
+          enum: ['selection', 'layer-mask', 'new-layer', 'new-layer-with-mask'],
+          description: 'Where the result goes (default selection). layer-mask keeps every pixel and is easiest to revise; new-layer-with-mask too, on a copy.',
+        },
+        layerId: { type: 'string', description: 'The layer for layer outputs (default the active layer; see list_layers). New-layer outputs need a pixel layer.' },
+        decontaminate: { type: 'number', minimum: 0, maximum: 100, description: 'Decontaminate Colors amount 0-100 (default 0), only with output new-layer or new-layer-with-mask.' },
       },
       additionalProperties: false,
     },
     annotations: writeAnnotations('Refine the selection edge'),
     handler: async (params) => {
       if (!controller.getSelection()) throw new Error('Nothing is selected.');
-      await controller.refineSelection({
-        radius: num(params.radius, 8),
-        smartRadius: params.smartRadius === true,
-        smooth: num(params.smooth, 0),
-        feather: num(params.feather, 0),
-        contrast: num(params.contrast, 0),
-        shiftEdge: num(params.shiftEdge, 0),
-      });
-      return summary(controller);
+      const result = await controller.refineSelectionTo(
+        {
+          radius: num(params.radius, 8),
+          smartRadius: params.smartRadius === true,
+          smooth: num(params.smooth, 0),
+          feather: num(params.feather, 0),
+          contrast: num(params.contrast, 0),
+          shiftEdge: num(params.shiftEdge, 0),
+        },
+        (params.output as RefineOutput | undefined) ?? 'selection',
+        { layerId: typeof params.layerId === 'string' ? params.layerId : undefined, decontaminate: num(params.decontaminate, 0) }
+      );
+      return { ...summary(controller), ...result };
     },
   };
 

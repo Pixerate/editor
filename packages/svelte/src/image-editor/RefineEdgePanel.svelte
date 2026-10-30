@@ -5,11 +5,13 @@
     AdjustmentLayer,
     ImageEditorController,
     RefineEdgeParams,
+    RefineOutput,
     SelectionMask,
   } from '@pixerate/editor/image-editor';
   import {
     ADJUSTMENT_KINDS,
     REFINE_EDGE_CONTROLS,
+    REFINE_OUTPUTS,
     adjustmentKindLabel,
     layerMaskFromSelection,
   } from '@pixerate/editor/image-editor';
@@ -46,13 +48,16 @@
   let error = $state<string | null>(null);
   let layerId = $state('');
   let newKind = $state<AdjustmentKind>('hueSaturation');
+  let output = $state<RefineOutput>('selection');
+  let decontaminate = $state(0);
+  const toLayer = $derived(output === 'new-layer' || output === 'new-layer-with-mask');
   const target = $derived(list.find((l) => l.id === layerId) ?? list[list.length - 1]);
 
   async function refine() {
     busy = true;
     error = null;
     try {
-      await controller.refineSelection({ ...params });
+      await controller.refineSelectionTo({ ...params }, output, { decontaminate: toLayer ? decontaminate : 0 });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -96,6 +101,36 @@
       onchange={(e) => (params = { ...params, smartRadius: (e.currentTarget as HTMLInputElement).checked })}
     />
     Smart Radius
+  </label>
+  <label class="flex items-center gap-2 text-muted-foreground">
+    Output to
+    <select
+      aria-label="Refine output"
+      value={output}
+      onchange={(e) => (output = (e.currentTarget as HTMLSelectElement).value as RefineOutput)}
+      class="flex-1 bg-background border border-border rounded px-1 py-1 text-foreground"
+    >
+      {#each REFINE_OUTPUTS as o (o.id)}
+        <option value={o.id}>{o.label}</option>
+      {/each}
+    </select>
+  </label>
+  <label class="flex flex-col gap-1">
+    <span class="flex justify-between text-muted-foreground">
+      <span>Decontaminate colors{toLayer ? '' : ' (new layer outputs)'}</span>
+      <span class="font-mono">{decontaminate}%</span>
+    </span>
+    <input
+      type="range"
+      min="0"
+      max="100"
+      step="1"
+      aria-label="Decontaminate amount"
+      disabled={!toLayer}
+      value={decontaminate}
+      oninput={(e) => (decontaminate = Number((e.currentTarget as HTMLInputElement).value))}
+      class={imageRangeClass}
+    />
   </label>
   <div class="flex gap-1">
     <button type="button" class={button} disabled={!sel || busy} onclick={refine}>Refine Edge</button>

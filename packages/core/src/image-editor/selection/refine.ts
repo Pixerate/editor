@@ -315,3 +315,57 @@ export function refineSelection(pixels: PixelBuffer | null, mask: SelectionMask,
   }
   return createSelectionMask(mask.width, mask.height, out);
 }
+
+/**
+ * Decontaminate Colors: along a soft edge, a pixel's colour is part subject and part the old
+ * background (C = αF + (1 − α)B), which shows as a fringe once the subject is on a new background.
+ * Each edge pixel's colour is replaced (by `amount`, 0..1) with an estimate of the subject's own
+ * colour: unmixed from the background's local mean where the pixel is mostly subject, and the
+ * subject's local mean where it is mostly background. Only RGB changes; pixels fully in or out
+ * are kept. `rgba` and `coverage` (0..255) cover the same `w × h` region; returns new RGBA.
+ */
+export function decontaminateColors(rgba: ArrayLike<number>, coverage: ArrayLike<number>, w: number, h: number, amount: number, radius = 8): Uint8ClampedArray {
+  const out = Uint8ClampedArray.from(rgba);
+  const n = w * h;
+  const k = Math.min(1, Math.max(0, amount));
+  if (k === 0) return out;
+  const r = Math.max(2, Math.round(radius));
+  // Local means of the colour of what is fully in (fg) and fully out (bg), by channel.
+  const fgW = new Float32Array(n);
+  const bgW = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    fgW[i] = coverage[i] >= 250 ? 1 : 0;
+    bgW[i] = coverage[i] <= 5 ? 1 : 0;
+  }
+  const meanOf = (weights: Float32Array, radiusPx: number) => {
+    const wm = boxMean(weights, w, h, radiusPx);
+    const planes = [0, 1, 2].map((c) => {
+      const v = new Float32Array(n);
+      for (let i = 0; i < n; i++) v[i] = rgba[i * 4 + c] * weights[i];
+      const m = boxMean(v, w, h, radiusPx);
+      for (let i = 0; i < n; i++) m[i] = wm[i] > 1e-6 ? m[i] / wm[i] : NaN;
+      return m;
+    });
+    return { weight: wm, planes };
+  };
+  const fg = meanOf(fgW, r);
+  // Wider for the subject's colour, so thin strands far from solid subject still find one.
+  const fgWide = meanOf(fgW, r * 3);
+  const bg = meanOf(bgW, r);
+  for (let i = 0; i < n; i++) {
+    const c = coverage[i];
+    if (c <= 5 || c >= 250) continue;
+    const a = c / 255;
+    for (let ch = 0; ch < 3; ch++) {
+      const C = rgba[i * 4 + ch];
+      const B = bg.planes[ch][i];
+      const Fm = Number.isNaN(fg.planes[ch][i]) ? fgWide.planes[ch][i] : fg.planes[ch][i];
+      let F: number;
+      if (a >= 0.5 && !Number.isNaN(B)) F = (C - (1 - a) * B) / a;
+      else if (!Number.isNaN(Fm)) F = Fm;
+      else F = C;
+      out[i * 4 + ch] = Math.round(C + k * (Math.min(255, Math.max(0, F)) - C));
+    }
+  }
+  return out;
+}

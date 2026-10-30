@@ -268,6 +268,25 @@ describe('React RefineEdgePanel', () => {
     expect(controller.getAdjustmentLayers()[0].mask).toBeUndefined();
   });
 
+  it('outputs to the chosen place, with decontamination only for new layers', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 });
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    const amount = container.querySelector('input[aria-label="Decontaminate amount"]') as HTMLInputElement;
+    expect(amount.disabled).toBe(true);
+    await act(async () => setValue(container.querySelector('select[aria-label="Refine output"]')!, 'new-layer'));
+    expect(amount.disabled).toBe(false);
+    await act(async () => setValue(amount, '60'));
+    await act(async () => {
+      button('Refine Edge').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(controller.getLayers()).toHaveLength(2);
+    expect(controller.getLayer('background')!.visible).toBe(false);
+    expect(controller.getSelection()).toBeNull();
+  });
+
   it('reports a refine error when pixels are unavailable', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
     controller.selectAll();

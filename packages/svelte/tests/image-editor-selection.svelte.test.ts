@@ -303,6 +303,25 @@ describe('Svelte RefineEdgePanel', () => {
     expect(controller.getAdjustmentLayers()[0].mask).toBeUndefined();
   });
 
+  it('outputs to the chosen place, with decontamination only for new layers', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 });
+    component = mount(RefineEdgePanel, { target, props: { controller } });
+    flushSync();
+    const amount = () => target.querySelector('input[aria-label="Decontaminate amount"]') as HTMLInputElement;
+    expect(amount().disabled).toBe(true);
+    setValue(target.querySelector('select[aria-label="Refine output"]')!, 'new-layer');
+    expect(amount().disabled).toBe(false);
+    setValue(amount(), '60');
+    click(button('Refine Edge'));
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(controller.getLayers()).toHaveLength(2);
+    expect(controller.getLayer('background')!.visible).toBe(false);
+    expect(controller.getSelection()).toBeNull();
+  });
+
   it('reports a refine error when pixels are unavailable', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
     controller.selectAll();

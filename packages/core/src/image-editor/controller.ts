@@ -57,7 +57,7 @@ import { ellipseSelection, polygonSelection, rectSelection, type ShapeSelectionO
 import { colorRange, colorRangePreset, growSelection as growSelectionMask, magicWand, selectSimilar as selectSimilarMask, type GrowSimilarOptions, type ColorRangeOptions, type ColorRangePreset, type ColorRangeSample, type MagicWandOptions } from './selection/wand';
 import { modifySelection as modifySelectionMask, type SelectionModifyOp } from './selection/modify';
 import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResult, type SegmentationProvider, type SegmentationRequest } from './selection/segmentation';
-import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
+import { decontaminateColors, refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
 import { layerMaskFromSelection, type LayerMaskProps } from './selection/layer-mask';
 import { selectionRing } from './selection/stroke';
 import { DEFAULT_CHANNEL_COLOR, describeChannel, deserializeChannels, serializeChannels, type AlphaChannel } from './selection/channels';
@@ -507,6 +507,18 @@ export interface FocusAreaCommandOptions extends FocusAreaOptions {
   mode?: SelectionMode;
   /** Sample every layer (default true) or only the active pixel layer. */
   sampleAllLayers?: boolean;
+}
+
+/** Where Select and Mask puts its result (Photoshop's Output To). */
+export type RefineOutput = 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask';
+
+/** What {@link ImageEditorController.refineSelectionTo} made. */
+export interface RefineOutputResult {
+  output: RefineOutput;
+  /** The layer the output came from (all but `selection`). */
+  layerId?: string;
+  /** The layer it made (`new-layer`, `new-layer-with-mask`). */
+  newLayerId?: string;
 }
 
 /** Options of {@link ImageEditorController.selectSky}. */
@@ -5439,6 +5451,91 @@ export class ImageEditorController {
     if (!sel?.bounds) return false;
     const pixels = (params.radius ?? 0) > 0 ? await this.requirePixels(options) : null;
     return this.setSelection(refineSelectionMask(pixels, sel, params));
+  }
+
+  /**
+   * Select and Mask's output: refines the selection with `params`, then puts the result where
+   * `output` says, as one undo step:
+   * - `selection`: the refined selection;
+   * - `layer-mask`: a mask on the layer (`layerId`, default the active one), then deselects;
+   * - `new-layer`: a new layer of the layer's selected pixels (Layer via Copy), the source hidden;
+   * - `new-layer-with-mask`: a copy of the layer masked by the selection, the source hidden.
+   * `decontaminate` (0..100, new-layer outputs only) replaces the old background's colour in the
+   * soft edge with the subject's own (see `decontaminateColors`).
+   */
+  public async refineSelectionTo(
+    params: RefineEdgeParams,
+    output: RefineOutput = 'selection',
+    options: SampleOptions & { layerId?: string; decontaminate?: number } = {}
+  ): Promise<RefineOutputResult> {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new Error('Nothing is selected; select first.');
+    const amount = Math.min(100, Math.max(0, options.decontaminate ?? 0)) / 100;
+    const toLayer = output === 'new-layer' || output === 'new-layer-with-mask';
+    if (amount > 0 && !toLayer) throw new Error('Decontaminate colors writes the cleaned colours to a new layer: use output new-layer or new-layer-with-mask.');
+    let layerId: string | undefined;
+    if (output !== 'selection') {
+      layerId = options.layerId ?? this.state.activeLayerId ?? undefined;
+      if (!layerId) throw new LayerOperationError('No layer given and none is active; pass layerId (see list_layers).');
+      const layer = requireLayer(this.state.layers, layerId).layer;
+      if (toLayer && layer.type !== 'pixel') throw new LayerOperationError(`Output ${output} needs a pixel layer; "${layerId}" is a ${layer.type} layer.`);
+    }
+    const pixels = (params.radius ?? 0) > 0 ? await this.requirePixels(options) : null;
+    const refined = refineSelectionMask(pixels, sel, params);
+    if (!refined.bounds) throw new Error('Refining left nothing selected; use a smaller shiftEdge or contrast.');
+    return this.asOneStep(() => {
+      this.setSelection(refined);
+      if (output === 'selection') return { output };
+      if (output === 'layer-mask') {
+        this.addLayerMask(layerId!, 'selection');
+        this.setSelection(null);
+        return { output, layerId };
+      }
+      let newLayerId: string;
+      if (output === 'new-layer') newLayerId = this.layerViaCopy({ layerId });
+      else {
+        newLayerId = this.duplicateLayer(layerId!);
+        this.addLayerMask(newLayerId, 'selection');
+        this.state.activeTarget = 'pixels';
+      }
+      if (amount > 0) this.decontaminateLayer(newLayerId, layerId!, refined, amount, Math.max(4, params.radius ?? 0));
+      this.setLayerProperties(layerId!, { visible: false });
+      this.setSelection(null);
+      return { output, layerId, newLayerId };
+    });
+  }
+
+  /**
+   * Decontaminate Colors along the soft edge of `coverage`: the colours are estimated from the
+   * source layer (whose background is still there) and written into layer `id`'s RGB, keeping
+   * its alpha.
+   */
+  private decontaminateLayer(id: string, sourceId: string, coverage: SelectionMask, amount: number, radius: number): void {
+    const layer = requireLayer(this.state.layers, id).layer;
+    const source = requireLayer(this.state.layers, sourceId).layer;
+    if (layer.type !== 'pixel' || source.type !== 'pixel' || !coverage.bounds) return;
+    const { width, height } = this.naturalSize;
+    const pad = Math.ceil(radius * 3);
+    const b = coverage.bounds;
+    const x0 = Math.max(0, b.x - pad);
+    const y0 = Math.max(0, b.y - pad);
+    const box = { x: x0, y: y0, width: Math.min(width, b.x + b.width + pad) - x0, height: Math.min(height, b.y + b.height + pad) - y0 };
+    const src = { x: box.x - layer.offset.x, y: box.y - layer.offset.y, width: box.width, height: box.height };
+    const surface = this.surfaceOf(layer);
+    const rgba = readRegion(surface, src);
+    const original = readRegion(this.surfaceOf(source), { x: box.x - source.offset.x, y: box.y - source.offset.y, width: box.width, height: box.height });
+    const cov = new Uint8Array(box.width * box.height);
+    const all = coverage.data;
+    for (let y = 0; y < box.height; y++) cov.set(all.subarray((box.y + y) * width + box.x, (box.y + y) * width + box.x + box.width), y * box.width);
+    const cleaned = decontaminateColors(original, cov, box.width, box.height, amount, radius);
+    // The new layer's own alpha (Layer via Copy multiplied it by the coverage) stays.
+    for (let i = 3; i < cleaned.length; i += 4) cleaned[i] = rgba[i];
+    const next = mapLayer(this.state.layers, id, (l) => {
+      const updated = { ...(l as PixelLayer), surface: writeRegion(surface, src, cleaned) };
+      delete updated.source;
+      return updated;
+    });
+    this.commitLayers(next);
   }
 
   /**

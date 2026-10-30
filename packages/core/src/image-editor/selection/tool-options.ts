@@ -153,6 +153,14 @@ export const REFINE_EDGE_CONTROLS: readonly RefineEdgeControl[] = [
   { id: 'shiftEdge', label: 'Shift Edge', min: -100, max: 100, step: 1, unit: '%' },
 ];
 
+/** Select and Mask's outputs, in menu order. */
+export const REFINE_OUTPUTS: readonly { id: 'selection' | 'layer-mask' | 'new-layer' | 'new-layer-with-mask'; label: string }[] = [
+  { id: 'selection', label: 'Selection' },
+  { id: 'layer-mask', label: 'Layer Mask' },
+  { id: 'new-layer', label: 'New Layer' },
+  { id: 'new-layer-with-mask', label: 'New Layer with Layer Mask' },
+];
+
 /** A one-line status: "No selection" or "W × H px selected (n % of the image)". */
 export function describeSelection(mask: SelectionMask | null | undefined): string {
   if (!mask || !mask.bounds) return 'No selection';
