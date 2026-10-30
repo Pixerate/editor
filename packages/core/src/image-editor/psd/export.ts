@@ -31,6 +31,7 @@ import {
 import { descBool } from './descriptor';
 import type { CropBox } from '../types';
 import { PsdError, PsdWriter, encodeLegacyName } from './binary';
+import { alphaChannelResources, type PsdAlphaChannel } from './channels';
 import { writeAdjustmentBlock } from './adjust';
 import { encodeRle, encodeZipPredicted } from './compression';
 import {
@@ -69,6 +70,8 @@ export interface PsdExportInput {
   layers: readonly ImageLayer[];
   /** The composite, `width × height` RGBA, written as the merged image. */
   merged: ArrayLike<number>;
+  /** Alpha channels, written as extra merged planes with their names and display info. */
+  alphaChannels?: readonly PsdAlphaChannel[];
   /** Pixels per inch (default 72). */
   resolution?: number;
   /** The document's patterns; those the effects use are embedded (built-in ones too). */
@@ -517,6 +520,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
       planes = transparent ? dp : dp.slice(0, 3);
     }
   }
+  for (const ch of input.alphaChannels ?? []) {
+    if (ch.data.length !== n) throw new PsdError(`Alpha channel "${ch.name}" has ${ch.data.length} values, expected ${n}.`);
+    planes.push(planeAtDepth(ch.data, depth));
+  }
   const planeBytes = n * (depth >> 3);
   const merged = new Uint8Array(planeBytes * planes.length);
   planes.forEach((p, i) => merged.set(p, i * planeBytes));
@@ -539,6 +546,7 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     { id: 1057, name: '', data: version.result() },
   ];
   if (input.iccProfile?.length) resources.push({ id: 1039, name: '', data: input.iccProfile });
+  resources.push(...alphaChannelResources(input.alphaChannels ?? []));
   if (input.globalLight) {
     const i32 = (v: number) => {
       const w = new PsdWriter();

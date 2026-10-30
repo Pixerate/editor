@@ -816,6 +816,126 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     handler: (args) => controller.pastePixels((args.mode as 'new-layer' | 'in-place' | 'into' | 'outside' | undefined) ?? 'new-layer'),
   };
 
+  const channelIdSchema: JsonSchema = { type: 'string', minLength: 1, description: 'The alpha channel (see list_channels).' };
+  const channelResult = (id: string) => controller.describeChannels().find((c) => c.id === id)!;
+
+  const listChannels: AgentTool = {
+    name: 'list_channels',
+    title: 'List alpha channels',
+    description:
+      'Lists the alpha channels (saved selections kept with the document): id, name, bounds, percent of the image covered, overlay color, opacity, what the tint indicates and whether it is visible. Also whether Quick Mask mode is on.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'List alpha channels', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: () => ({ channels: controller.describeChannels(), quickMask: controller.quickMaskEditing }),
+  };
+
+  const saveSelectionTool: AgentTool = {
+    name: 'save_selection',
+    title: 'Save the selection to a channel',
+    description:
+      'Select › Save Selection: stores the selection in a new alpha channel (name, default "Alpha n"), or with channelId combines it into that channel by mode (replace, add, subtract, intersect). Save any selection that took work, so it can be loaded again with load_selection_from_channel. Fails when nothing is selected. One undo step. Returns the channel.',
+    inputSchema: {
+      type: 'object',
+      properties: { channelId: channelIdSchema, name: { type: 'string', minLength: 1, description: 'Name of a new channel, or a new name for channelId.' }, mode: modeSchema },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Save the selection to a channel'),
+    handler: (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select first, then save it.');
+      const c = controller.saveSelection({ channelId: args.channelId as string | undefined, name: args.name as string | undefined, mode: parseSelectionMode(args.mode) });
+      return { channel: channelResult(c.id) };
+    },
+  };
+
+  const loadChannelTool: AgentTool = {
+    name: 'load_selection_from_channel',
+    title: 'Load a selection from a channel',
+    description:
+      'Select › Load Selection from an alpha channel (invert for its inverse), combined with the current selection by mode. One undo step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: { channelId: channelIdSchema, invert: { type: 'boolean', description: 'Load the inverse (default false).' }, mode: modeSchema },
+      required: ['channelId'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Load a selection from a channel', true),
+    handler: (args) => {
+      controller.loadSelectionFromChannel(String(args.channelId), { mode: parseSelectionMode(args.mode), invert: args.invert === true });
+      return summary(controller);
+    },
+  };
+
+  const channelPropsTool: AgentTool = {
+    name: 'set_channel_properties',
+    title: 'Change an alpha channel',
+    description:
+      'Renames an alpha channel or changes its overlay: color (#rrggbb), opacity (0..1), indicates (masked: tint the unselected area, or selected) and visible (show the tint on the canvas). Pixels do not change. One undo step. Returns the channel.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        channelId: channelIdSchema,
+        name: { type: 'string', minLength: 1, description: 'New name.' },
+        color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Overlay colour #rrggbb.' },
+        opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Overlay opacity 0..1.' },
+        indicates: { type: 'string', enum: ['masked', 'selected'], description: 'Which area the tint covers.' },
+        visible: { type: 'boolean', description: 'Show the channel as a tint on the canvas.' },
+      },
+      required: ['channelId'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Change an alpha channel', true),
+    handler: (args) => {
+      const { channelId, ...props } = args as Record<string, any>;
+      const c = controller.setChannelProperties(String(channelId), props);
+      return { channel: channelResult(c.id) };
+    },
+  };
+
+  const duplicateChannelTool: AgentTool = {
+    name: 'duplicate_channel',
+    title: 'Duplicate an alpha channel',
+    description: 'Copies an alpha channel (name, default "<name> copy") just after it, to keep a version before changing it. One undo step. Returns the copy.',
+    inputSchema: {
+      type: 'object',
+      properties: { channelId: channelIdSchema, name: { type: 'string', minLength: 1, description: 'Name of the copy.' } },
+      required: ['channelId'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Duplicate an alpha channel'),
+    handler: (args) => ({ channel: channelResult(controller.duplicateChannel(String(args.channelId), args.name as string | undefined).id) }),
+  };
+
+  const deleteChannelTool: AgentTool = {
+    name: 'delete_channel',
+    title: 'Delete an alpha channel',
+    description: 'Deletes an alpha channel (undo_image brings it back). Returns the remaining channels.',
+    inputSchema: { type: 'object', properties: { channelId: channelIdSchema }, required: ['channelId'], additionalProperties: false },
+    annotations: { title: 'Delete an alpha channel', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    handler: (args) => {
+      controller.deleteChannel(String(args.channelId));
+      return { channels: controller.describeChannels() };
+    },
+  };
+
+  const quickMaskTool: AgentTool = {
+    name: 'set_quick_mask',
+    title: 'Quick Mask mode',
+    description:
+      'Turns Quick Mask mode on or off (Q). On, the selection shows as a red tint and paint_stroke, fill_pixels, clear_pixels, stroke_selection and the retouch tools called without layerId edit the selection itself: white selects, black deselects, grey selects partly, and blur_stroke softens its edge. Each edit is one undo step. Turn it off before painting layers again. Returns the mode and the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: { enabled: { type: 'boolean', description: 'true to enter Quick Mask mode, false to leave it.' } },
+      required: ['enabled'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Quick Mask mode', true),
+    handler: (args) => {
+      if (typeof args.enabled !== 'boolean') throw new Error('enabled must be true or false.');
+      controller.setQuickMaskMode(args.enabled);
+      return { quickMask: controller.quickMaskEditing, selection: summary(controller) };
+    },
+  };
+
   return [
     getSelection,
     selectAll,
@@ -845,6 +965,13 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     copyTool,
     cutTool,
     pasteTool,
+    listChannels,
+    saveSelectionTool,
+    loadChannelTool,
+    channelPropsTool,
+    duplicateChannelTool,
+    deleteChannelTool,
+    quickMaskTool,
   ];
 }
 

@@ -34,6 +34,7 @@
   import BrushOptionsBar from './BrushOptionsBar.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import RefineEdgePanel from './RefineEdgePanel.svelte';
+  import ChannelsPanel from './ChannelsPanel.svelte';
   import FreeTransformOptionsBar from './FreeTransformOptionsBar.svelte';
   import ShapeOptionsBar from './ShapeOptionsBar.svelte';
   import TypeOptionsBar from './TypeOptionsBar.svelte';
@@ -978,6 +979,7 @@
             selection={editor.state.selection ?? null}
             layers={editor.state.adjustments.layers}
           />
+          <ChannelsPanel controller={editor.controller} />
         </div>
       {/if}
 

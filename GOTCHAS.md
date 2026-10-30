@@ -293,6 +293,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: After `currentTime` is set, a `<video>` keeps `readyState >= 2` and draws its old frame until `seeked` fires. A canvas that has drawn cross-origin media without CORS is tainted, and `getImageData` throws a `SecurityError`.
 - **Solution / Workaround**: `VideoPreviewEngine` marks a frame incomplete while any media layer is missing or `seeking`, and `VideoPreviewPixels.next(time)` waits for a complete drawing of that time (or times out with a reason). Serve media with `Access-Control-Allow-Origin` (the engine sets `crossOrigin = "anonymous"`); `VideoPreviewPixels.read()` turns the `SecurityError` into a message that says so. Luma computed from equal channels can come out a hair under the value (39.99999…), so scope bins are nudged before flooring.
 
+### [core/image-editor] Quick Mask Painting Writes the Selection, Not a Layer
+
+- **Issue / Symptom**: In Quick Mask mode, paint results report `layerId: 'quick-mask'`, which `getLayer` does not know. Code that looks up the painted layer from a result, or that limits a stroke by the selection, goes wrong.
+- **Root Cause**: The `quick-mask` paint target (`LayerTarget`) is the selection as a 1-channel surface. `_strokeUpdate`, `_strokeCommit` and `fillOrClear` turn the painted surface back into `state.selection`, and undo restores it from the history entry's `selection`. The selection must not clip strokes on this target, because it is what is being painted.
+- **Solution / Workaround**: Check `channel === 'quick-mask'` (or `QUICK_MASK_TARGET`) before using a result's `layerId`. New paint paths that commit through `withSurface` must branch on `quick-mask` the same way. Quick Mask surfaces are always 8-bit, even in 16- and 32-bit documents.
+
 ### [core/image-editor] A Command Built From Other Commands Must Run in `asOneStep`
 
 - **Issue / Symptom**: Paste Into (a new layer, then its mask), Cut (copy, then clear) and a smart filter added with a selection (the filter, then its mask) took two undo steps. One undo left a layer without its mask, or a filter whose mask had already gone.

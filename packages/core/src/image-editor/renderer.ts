@@ -21,7 +21,8 @@ import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './
 import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
 import { buildLayerMaskPlanes } from './selection/layer-mask';
-import { selectionOutline, quickMaskPixels } from './selection/overlay';
+import { selectionOutline, quickMaskPixels, type QuickMaskStyle } from './selection/overlay';
+import { createSelectionMask } from './selection/mask';
 import type { SelectionMask } from './selection/mask';
 import { LayerCompositor, type CompositorSources } from './layers/compositor';
 import { flattenLayers, type ImageLayer, type PixelLayer } from './layers/model';
@@ -398,14 +399,33 @@ export class ImageEditorRenderer {
 
     // 4. Selection: marching ants or Quick Mask, through the same projection.
     const display = options.selectionDisplay ?? state.selectionDisplay ?? (state.quickMask ? 'quickMask' : 'ants');
-    if ((state.selection?.bounds && display !== 'none') || options.draftSelectionPath?.length) {
+    // Visible alpha channels, each as its tint, under the selection's own overlay.
+    const shownChannels = (state.channels ?? []).filter((c) => c.visible);
+    if (shownChannels.length) {
       ctx.save();
       try {
         applyImageProjectionToContext(ctx, projection);
         ctx.beginPath();
         ctx.rect(region.x, region.y, region.width, region.height);
         ctx.clip();
-        if (state.selection?.bounds && display === 'quickMask') this.drawQuickMask(ctx, state.selection);
+        for (const c of shownChannels) this.drawMaskOverlay(ctx, c.mask, { color: hexRgb(c.color), opacity: c.opacity, indicates: c.indicates });
+      } catch {
+        // Overlays are best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+    // In Quick Mask mode an empty selection shows as all tinted (nothing selected yet).
+    const { width: iw, height: ih } = state.imageDimensions;
+    const quickMaskSel = display === 'quickMask' && state.quickMaskEditing && !state.selection?.bounds ? this.emptyMask(Math.round(iw), Math.round(ih)) : null;
+    if ((state.selection?.bounds && display !== 'none') || quickMaskSel || options.draftSelectionPath?.length) {
+      ctx.save();
+      try {
+        applyImageProjectionToContext(ctx, projection);
+        ctx.beginPath();
+        ctx.rect(region.x, region.y, region.width, region.height);
+        ctx.clip();
+        if (quickMaskSel) this.drawQuickMask(ctx, quickMaskSel);
+        else if (state.selection?.bounds && display === 'quickMask') this.drawQuickMask(ctx, state.selection);
         else if (state.selection?.bounds && display === 'ants') this.drawAnts(ctx, state.selection, projection.scale / u, options.antsOffset ?? 0);
         if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale / u);
       } catch {
@@ -870,6 +890,35 @@ export class ImageEditorRenderer {
 
   private quickMaskCache = new WeakMap<SelectionMask, HTMLCanvasElement>();
   private outlineCache = new WeakMap<SelectionMask, Float32Array>();
+
+  private emptyMaskCache: SelectionMask | null = null;
+
+  /** An empty selection of the image's size (Quick Mask mode with nothing selected). */
+  private emptyMask(width: number, height: number): SelectionMask {
+    const m = this.emptyMaskCache;
+    if (m && m.width === width && m.height === height) return m;
+    this.emptyMaskCache = createSelectionMask(Math.max(1, width), Math.max(1, height));
+    return this.emptyMaskCache;
+  }
+
+  private overlayCache = new WeakMap<SelectionMask, { key: string; canvas: HTMLCanvasElement }>();
+
+  /** A channel's tint (colour, opacity, masked or selected area), drawn in natural image space. */
+  private drawMaskOverlay(ctx: CanvasRenderingContext2D, mask: SelectionMask, style: QuickMaskStyle): void {
+    const key = `${style.color?.join(',')}|${style.opacity}|${style.indicates}`;
+    let cached = this.overlayCache.get(mask);
+    if (!cached || cached.key !== key) {
+      const canvas = this.createCanvas(mask.width, mask.height);
+      const mctx = canvas.getContext('2d');
+      if (!mctx || typeof mctx.createImageData !== 'function') return;
+      const img = mctx.createImageData(mask.width, mask.height);
+      img.data.set(quickMaskPixels(mask, style));
+      mctx.putImageData(img, 0, 0);
+      cached = { key, canvas };
+      this.overlayCache.set(mask, cached);
+    }
+    ctx.drawImage(cached.canvas, 0, 0, mask.width, mask.height);
+  }
 
   /** Rubylith over the unselected area, drawn in natural image space. */
   private drawQuickMask(ctx: CanvasRenderingContext2D, selection: SelectionMask): void {
@@ -1529,4 +1578,12 @@ function removeAnnotationLayers(layers: readonly ImageLayer[]): ImageLayer[] {
     out.push(l.type === 'group' ? { ...l, children: removeAnnotationLayers(l.children) } : l);
   }
   return out;
+}
+
+/** `#rrggbb` as `[r, g, b]` 0..255 (red for anything else). */
+function hexRgb(hex: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return [255, 0, 0];
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }

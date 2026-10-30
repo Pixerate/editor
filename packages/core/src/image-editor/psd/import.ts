@@ -8,6 +8,7 @@
  * with a warning naming the layers.
  */
 
+import { readAlphaChannels, type PsdAlphaChannel } from './channels';
 import type { BlendMode } from '../blend';
 import { emptySurface, surfaceFromPixels, translateSurface } from '../../raster/surface';
 import { decodePng } from '../../raster/png';
@@ -151,6 +152,8 @@ export interface PsdImportResult {
   sourceMode?: { mode: 'cmyk'; profile: DocumentColorProfile } | { mode: 'lab' };
   /** The bits per channel the layers keep: 16 or 32 for such files (not indexed or bitmap), else 8. */
   bitDepth: 8 | 16 | 32;
+  /** The file's alpha channels (saved selections), as 8-bit planes. */
+  alphaChannels?: PsdAlphaChannel[];
 }
 
 export interface PsdImportOptions {
@@ -838,6 +841,17 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
     const bg = mergedLayer(ctx);
     if (bg) layers = [bg];
   }
+  // Alpha channels: merged planes after the colour planes and the transparency plane.
+  let alphaChannels: PsdAlphaChannel[] = [];
+  const hasTransparency = header.channels > ctx.colorCount && (file.layers.length === 0 || file.mergedAlpha);
+  const firstAlpha = ctx.colorCount + (hasTransparency ? 1 : 0);
+  if (!ctx.skipPixels && header.channels > firstAlpha) {
+    try {
+      alphaChannels = readAlphaChannels(decodeMergedImage(file), header, firstAlpha, (id) => resource(file, id), (m) => warn.extra.push(m));
+    } catch (e) {
+      warn.extra.push(`The alpha channels could not be read (${e instanceof Error ? e.message : String(e)}).`);
+    }
+  }
   const i32 = (b: Uint8Array | undefined) => (b && b.length >= 4 ? new DataView(b.buffer, b.byteOffset, 4).getInt32(0) : undefined);
   const angle = i32(resource(file, 1037));
   const altitude = i32(resource(file, 1049));
@@ -853,6 +867,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       ? { globalLight: { angle: Math.max(-360, Math.min(360, angle ?? 120)), altitude: Math.max(0, Math.min(90, altitude ?? 30)) } }
       : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
+    ...(alphaChannels.length ? { alphaChannels } : {}),
     ...(cmykProfile ? { sourceMode: { mode: 'cmyk' as const, profile: cmykProfile } } : header.colorMode === MODE_LAB ? { sourceMode: { mode: 'lab' as const } } : {}),
     ...(resource(file, 1039) ? { iccProfile: resource(file, 1039)!.slice() } : {}),
     bitDepth: (header.depth === 16 || header.depth === 32) && header.colorMode !== MODE_INDEXED && header.colorMode !== MODE_BITMAP ? header.depth : 8,

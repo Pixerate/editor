@@ -15,8 +15,8 @@ const TARGET = {
   layerId: { type: 'string', description: 'Layer to paint (default the active layer; see list_layers).' },
   channel: {
     type: 'string',
-    enum: ['pixels', 'mask', 'filter-mask'],
-    description: "pixels (default for a pixel layer), the layer's mask, or a smart object's smart filter mask (filter-mask): black hides, white reveals.",
+    enum: ['pixels', 'mask', 'filter-mask', 'quick-mask'],
+    description: "pixels (default for a pixel layer), the layer's mask, or a smart object's smart filter mask (filter-mask): black hides, white reveals. In Quick Mask mode (set_quick_mask), quick-mask (the default when no layerId is given) paints the selection: white selects, black deselects.",
   },
 } as const;
 

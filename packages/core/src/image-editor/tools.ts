@@ -72,7 +72,9 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  *   `select_rect`, `select_ellipse`, `select_polygon`, `select_line`, `magic_wand`,
  *   `select_color_range`, `grow_selection`, `select_similar`, `reselect`,
  *   `select_layer_transparency`, `stroke_selection`, `crop_to_selection`, `content_aware_fill`,
- *   `copy_pixels`, `cut_pixels`, `paste_pixels`,
+ *   `copy_pixels`, `cut_pixels`, `paste_pixels`, alpha channels (`list_channels`, `save_selection`,
+ *   `load_selection_from_channel`, `set_channel_properties`, `duplicate_channel`,
+ *   `delete_channel`), `set_quick_mask`,
  *   `load_selection_from_image`, `load_selection_from_mask`, `set_selection_display`,
  *   `modify_selection`, `refine_selection`, `apply_selection_as_mask` and the deprecated
  *   `select_region` / `select_by_color` (see `createImageSelectionTools`).

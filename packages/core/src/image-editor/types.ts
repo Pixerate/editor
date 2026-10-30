@@ -2,6 +2,7 @@ import type { GlobalLight } from '../raster/effects/model';
 import type { EffectPattern } from '../raster/effects/patterns';
 import type { BlendMode } from './blend';
 import type { SelectionMask, SerializedSelection } from './selection/mask';
+import type { AlphaChannel, SerializedAlphaChannel } from './selection/channels';
 import type { ImageLayer, LayerTarget } from './layers/model';
 import type { SerializedLayeredImageEditorState } from './layers/serialize';
 import type { PaintOptions } from './controller';
@@ -400,6 +401,13 @@ export interface ImageEditorState {
   /** How the canvas shows the selection (view state; `quickMask` mirrors `'quickMask'`). */
   selectionDisplay?: 'ants' | 'quickMask' | 'none';
   /**
+   * Quick Mask mode: painting and fills without a layer edit the selection itself (white
+   * selects, black deselects), shown as a tint. View state; the edits are undo steps.
+   */
+  quickMaskEditing?: boolean;
+  /** Alpha channels: saved selections kept with the document, recorded in undo history. */
+  channels?: AlphaChannel[];
+  /**
    * The layer stack, bottom to top. Opening an image gives one pixel layer, "Background", whose
    * pixels are the source image. Layers are immutable: compare them by identity.
    */
@@ -464,6 +472,8 @@ export interface LegacySerializedImageEditorState {
   annotations: Annotation[];
   /** The active selection, run-length encoded. Missing when nothing is selected. */
   selection?: SerializedSelection;
+  /** Alpha channels (saved selections), run-length encoded. */
+  channels?: SerializedAlphaChannel[];
 }
 
 /**

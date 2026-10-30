@@ -48,6 +48,7 @@ import { segmentationOutlines, segmentsToSelection, type DecodedSegmentationResu
 import { refineSelection as refineSelectionMask, type RefineEdgeParams } from './selection/refine';
 import { layerMaskFromSelection, type LayerMaskProps } from './selection/layer-mask';
 import { selectionRing } from './selection/stroke';
+import { DEFAULT_CHANNEL_COLOR, describeChannel, deserializeChannels, serializeChannels, type AlphaChannel } from './selection/channels';
 import { contentAwareFill as contentAwareFillPixels } from '../paint/heal';
 import type { AdjustmentLayerMask } from './types';
 import { DEFAULT_ADJUSTMENTS_VALUES, DEFAULT_DEPTH_MASK_VALUES, DEFAULT_TRANSFORM_VALUES } from './layers/defaults';
@@ -677,6 +678,9 @@ export interface FillOptions {
   useSelection?: boolean;
 }
 
+/** The `layerId` paint results report for Quick Mask edits (the selection, not a layer). */
+export const QUICK_MASK_TARGET = 'quick-mask';
+
 /** Edit › Stroke (see `strokeSelection`). */
 export interface StrokeSelectionOptions extends Omit<FillOptions, 'useSelection'> {
   /** Width of the band in pixels (0 < width ≤ 250). */
@@ -1204,6 +1208,7 @@ interface HistoryEntry {
   globalLight?: GlobalLight;
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
+  channels?: AlphaChannel[];
   source: SourceSnapshot;
   bitDepth?: BitDepth;
   colorProfile?: DocumentColorProfile;
@@ -1404,6 +1409,10 @@ export class ImageEditorController {
       } catch {
         // A damaged selection is dropped; the rest of the state still loads.
       }
+    }
+    if (options.initialState?.channels) {
+      const channels = deserializeChannels(options.initialState.channels, this.naturalSize, this.lastLoadProblems);
+      if (channels.length) this.state.channels = channels;
     }
 
     this.initialSnapshot = this.captureHistoryEntry();
@@ -1852,6 +1861,7 @@ export class ImageEditorController {
       transform: { ...s.transform },
       outputOpacity: s.outputOpacity,
       selection: s.selection ?? null,
+      ...(s.channels?.length ? { channels: s.channels } : {}),
       source: {
         sourceUrl: s.sourceUrl,
         element: this.imageElement,
@@ -1888,6 +1898,8 @@ export class ImageEditorController {
     if (entry.colorMode) s.colorMode = entry.colorMode;
     else delete s.colorMode;
     s.selection = entry.selection;
+    if (entry.channels?.length) s.channels = entry.channels;
+    else delete s.channels;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
     s.sourceUrl = entry.source.sourceUrl;
@@ -3798,6 +3810,12 @@ export class ImageEditorController {
 
   /** Resolves and validates what a stroke, fill or clear paints into. */
   private paintTarget(layerId: string | undefined, channel: LayerTarget | undefined, action: string) {
+    if (channel === 'quick-mask' || (channel === undefined && layerId === undefined && this.state.quickMaskEditing)) {
+      if (!this.state.quickMaskEditing) {
+        throw new LayerOperationError(`Quick Mask is off; turn it on (set_quick_mask) to ${action} on the selection, or target a layer.`, `Turn on Quick Mask (Q) to ${action} on the selection.`);
+      }
+      return { id: QUICK_MASK_TARGET, layer: null as unknown as ImageLayer, channel: 'quick-mask' as LayerTarget, offset: { x: 0, y: 0 }, surface: this.quickMaskSurface(), lockTransparency: false };
+    }
     const id = layerId ?? this.state.activeLayerId;
     if (!id) throw new LayerOperationError(`No layer given and none is active; pass layerId (see list_layers) to ${action}.`, `Pick a layer to ${action} on in the Layers panel.`);
     const layer = requireLayer(this.state.layers, id).layer;
@@ -3869,10 +3887,11 @@ export class ImageEditorController {
       opacity: brush.opacity,
       blend: target.channel !== 'pixels' ? 'normal' : brush.blend,
       lockTransparency: target.lockTransparency,
-      selection: this.state.selection?.bounds ? this.state.selection : null,
+      // In Quick Mask mode the selection is what is painted, so it does not limit the stroke.
+      selection: target.channel !== 'quick-mask' && this.state.selection?.bounds ? this.state.selection : null,
       offset: target.offset,
     };
-    const depth = target.channel !== 'filter-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
+    const depth = target.channel !== 'filter-mask' && target.channel !== 'quick-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
     if (tool === 'mixer') return new PaintStrokeSession(this, target, this.mixerStroke(init, brush), apply, depth);
     // The retouching tools work on the deep samples too (sources read at depth).
     if (isRetouchTool(tool)) return new PaintStrokeSession(this, target, this.retouchStroke(tool, init, brush, target, apply), apply, depth);
@@ -4052,6 +4071,11 @@ export class ImageEditorController {
 
   /** @internal Shows a stroke's live surface (no history). */
   public _strokeUpdate(layerId: string, channel: LayerTarget, surface: TiledSurface, rects: CropBox[]): void {
+    if (channel === 'quick-mask') {
+      this.state.selection = this.selectionFromSurface(surface, this.state.selection ?? null, rects);
+      this.notify();
+      return;
+    }
     this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
     // A filter mask re-renders the smart object (and feathering spreads the change): redraw it all.
     this.notify(channel === 'filter-mask' ? undefined : rects);
@@ -4059,7 +4083,9 @@ export class ImageEditorController {
 
   /** @internal Commits a finished stroke as one undo step (`before` is the pre-stroke state). */
   public _strokeCommit(before: HistoryEntryHandle, layerId: string, channel: LayerTarget, surface: TiledSurface | null): void {
-    if (surface) {
+    if (channel === 'quick-mask') {
+      this.state.selection = surface ? this.selectionFromSurface(surface) : (before as unknown as HistoryEntry).selection;
+    } else if (surface) {
       const prev = (before as unknown as HistoryEntry).layers;
       this.state.layers = mapLayer(this.state.layers, layerId, (l) => this.withSurface(l, channel, surface));
       if (this.bitDepth !== 8) this.state.layers = keepDeepLayers(prev, this.state.layers);
@@ -4290,7 +4316,8 @@ export class ImageEditorController {
     const opacity = options.opacity ?? 1;
     if (!(opacity >= 0 && opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
     const blend = (parseBlend(options.blend) as BlendMode | undefined) ?? 'normal';
-    const sel = coverageMask ?? (options.useSelection !== false && this.state.selection?.bounds ? this.state.selection : null);
+    const quickMask = target.channel === 'quick-mask';
+    const sel = coverageMask ?? (!quickMask && options.useSelection !== false && this.state.selection?.bounds ? this.state.selection : null);
     const region = sel?.bounds ?? { x: 0, y: 0, width, height };
     const coverage = new CoverageMap();
     const ones = new Float32Array(region.width * region.height);
@@ -4316,8 +4343,14 @@ export class ImageEditorController {
       selection: null,
       offset: target.offset,
     };
-    const depth = target.channel !== 'filter-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
+    const depth = target.channel !== 'filter-mask' && target.channel !== 'quick-mask' && this.bitDepth !== 8 ? this.bitDepth : null;
     const surface = paintCoverageInto(target.surface, coverage, apply, [region], depth);
+    if (quickMask) {
+      this.recordHistory();
+      this.state.selection = this.selectionFromSurface(surface);
+      this.notify();
+      return { layerId: target.id, channel: target.channel, bounds: region, dabs: 0 };
+    }
     const next = mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, target.channel, surface));
     this.commitLayers(next);
     return { layerId: target.id, channel: target.channel, bounds: region, dabs: 0 };
@@ -5057,9 +5090,177 @@ export class ImageEditorController {
       throw new Error(`Unknown selection display "${String(display)}". Use ants, quickMask or none.`);
     }
     if (this.getSelectionDisplay() === display) return;
+    // Leaving the tint view leaves Quick Mask mode too.
+    if (display !== 'quickMask') delete this.state.quickMaskEditing;
     this.state.selectionDisplay = display;
     this.state.quickMask = display === 'quickMask';
     this.notify();
+  }
+
+  // --- Alpha channels ---
+
+  /** The alpha channels (saved selections), in panel order. */
+  public getChannels(): readonly AlphaChannel[] {
+    return this.state.channels ?? [];
+  }
+
+  public getChannel(id: string): AlphaChannel | null {
+    return this.state.channels?.find((c) => c.id === id) ?? null;
+  }
+
+  private requireChannel(id: string): AlphaChannel {
+    const channel = this.getChannel(id);
+    if (!channel) {
+      const ids = this.getChannels().map((c) => `${c.id} (${c.name})`);
+      throw new LayerOperationError(`There is no alpha channel "${id}"; the channels are ${ids.join(', ') || 'none (save a selection first)'}.`);
+    }
+    return channel;
+  }
+
+  private setChannels(next: AlphaChannel[], commitToHistory = true): void {
+    if (commitToHistory) this.recordHistory();
+    if (next.length) this.state.channels = next;
+    else delete this.state.channels;
+    this.notify();
+  }
+
+  private newChannelId(): string {
+    const ids = new Set(this.getChannels().map((c) => c.id));
+    let n = this.getChannels().length + 1;
+    while (ids.has(`ch_${n}`)) n++;
+    return `ch_${n}`;
+  }
+
+  /**
+   * Select › Save Selection: a new alpha channel (`name`, default "Alpha n") holding the
+   * selection, or with `channelId` the selection combined into that channel by `mode` (replace,
+   * add, subtract, intersect). One undo step. Throws without a selection.
+   */
+  public saveSelection(options: { channelId?: string; name?: string; mode?: SelectionMode } = {}): AlphaChannel {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, then save the selection to a channel.');
+    const { width, height } = this.naturalSize;
+    const sized = sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height);
+    const channels = [...this.getChannels()];
+    if (options.channelId !== undefined) {
+      const existing = this.requireChannel(options.channelId);
+      const mask = combineSelections(existing.mask.bounds ? existing.mask : null, sized, options.mode ?? 'replace') ?? createSelectionMask(width, height);
+      const next = { ...existing, mask, ...(options.name?.trim() ? { name: options.name.trim() } : {}) };
+      this.setChannels(channels.map((c) => (c.id === existing.id ? next : c)));
+      return next;
+    }
+    const channel: AlphaChannel = {
+      id: this.newChannelId(),
+      name: options.name?.trim() || `Alpha ${channels.length + 1}`,
+      mask: sized,
+      color: DEFAULT_CHANNEL_COLOR,
+      opacity: 0.5,
+      indicates: 'masked',
+      visible: false,
+    };
+    this.setChannels([...channels, channel]);
+    return channel;
+  }
+
+  /**
+   * Select › Load Selection from an alpha channel (inverted with `invert`), combined with the
+   * selection by `mode`. One undo step.
+   */
+  public loadSelectionFromChannel(id: string, options: { mode?: SelectionMode; invert?: boolean } = {}): boolean {
+    const channel = this.requireChannel(id);
+    const mask = options.invert ? invertSelectionMask(channel.mask) : channel.mask;
+    return this.setSelection(mask.bounds ? mask : null, options.mode ?? 'replace');
+  }
+
+  /** Changes a channel's name, overlay colour, opacity, what it indicates or visibility (one undo step). */
+  public setChannelProperties(id: string, props: Partial<Pick<AlphaChannel, 'name' | 'color' | 'opacity' | 'indicates' | 'visible'>>): AlphaChannel {
+    const channel = this.requireChannel(id);
+    if (props.name !== undefined && !props.name.trim()) throw new LayerOperationError('A channel name cannot be empty.');
+    if (props.color !== undefined && !/^#[0-9a-f]{6}$/i.test(props.color)) throw new LayerOperationError('color must be #rrggbb.');
+    if (props.opacity !== undefined && !(props.opacity >= 0 && props.opacity <= 1)) throw new LayerOperationError('opacity must be from 0 to 1.');
+    if (props.indicates !== undefined && props.indicates !== 'masked' && props.indicates !== 'selected') throw new LayerOperationError('indicates must be masked or selected.');
+    const next: AlphaChannel = {
+      ...channel,
+      ...(props.name !== undefined ? { name: props.name.trim() } : {}),
+      ...(props.color !== undefined ? { color: props.color.toLowerCase() } : {}),
+      ...(props.opacity !== undefined ? { opacity: props.opacity } : {}),
+      ...(props.indicates !== undefined ? { indicates: props.indicates } : {}),
+      ...(props.visible !== undefined ? { visible: props.visible } : {}),
+    };
+    this.setChannels(this.getChannels().map((c) => (c.id === id ? next : c)));
+    return next;
+  }
+
+  /** Deletes an alpha channel (one undo step). */
+  public deleteChannel(id: string): void {
+    this.requireChannel(id);
+    this.setChannels(this.getChannels().filter((c) => c.id !== id));
+  }
+
+  /** Duplicates an alpha channel just after it (one undo step). Returns the copy. */
+  public duplicateChannel(id: string, name?: string): AlphaChannel {
+    const channel = this.requireChannel(id);
+    const copy: AlphaChannel = { ...channel, id: this.newChannelId(), name: name?.trim() || `${channel.name} copy` };
+    const channels = [...this.getChannels()];
+    channels.splice(channels.findIndex((c) => c.id === id) + 1, 0, copy);
+    this.setChannels(channels);
+    return copy;
+  }
+
+  /** Channel summaries (no pixels) for panels and agents. */
+  public describeChannels() {
+    return this.getChannels().map(describeChannel);
+  }
+
+  // --- Quick Mask mode ---
+
+  /** Whether Quick Mask mode is on (painting edits the selection). */
+  public get quickMaskEditing(): boolean {
+    return Boolean(this.state.quickMaskEditing);
+  }
+
+  /**
+   * Quick Mask mode (Q): on, the selection shows as a tint and painting, fills and strokes that
+   * name no layer edit the selection itself (white selects, black deselects, grey partly);
+   * off, it shows as marching ants again. View state: no undo step (the edits are).
+   */
+  public setQuickMaskMode(on: boolean): void {
+    if (this.quickMaskEditing === on) return;
+    if (on) this.state.quickMaskEditing = true;
+    else delete this.state.quickMaskEditing;
+    this.setSelectionDisplay(on ? 'quickMask' : 'ants');
+    this.notify();
+  }
+
+  /** The selection as a 1-channel surface to paint in Quick Mask mode. */
+  private quickMaskSurface(): TiledSurface {
+    const { width, height } = this.naturalSize;
+    const sel = this.state.selection;
+    if (!sel?.bounds) return emptySurface(1, 0);
+    const sized = sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height);
+    return surfaceFromPixels({ width, height, data: sized.data }, 1, 0, 0, 0);
+  }
+
+  /** The selection a painted Quick Mask surface stands for (`rects` changed since `base`). */
+  private selectionFromSurface(surface: TiledSurface, base: SelectionMask | null = null, rects?: CropBox[]): SelectionMask | null {
+    const { width, height } = this.naturalSize;
+    let data: Uint8Array;
+    if (base && rects && base.width === width && base.height === height) {
+      data = new Uint8Array(base.data);
+      for (const r of rects) {
+        const x0 = Math.max(0, Math.floor(r.x));
+        const y0 = Math.max(0, Math.floor(r.y));
+        const x1 = Math.min(width, Math.ceil(r.x + r.width));
+        const y1 = Math.min(height, Math.ceil(r.y + r.height));
+        if (x1 <= x0 || y1 <= y0) continue;
+        const part = readRegion(surface, { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+        for (let y = y0; y < y1; y++) data.set(part.subarray((y - y0) * (x1 - x0), (y - y0 + 1) * (x1 - x0)), y * width + x0);
+      }
+    } else {
+      const all = readRegion(surface, { x: 0, y: 0, width, height });
+      data = new Uint8Array(all.buffer, all.byteOffset, all.length);
+    }
+    return normalizeSelection(createSelectionMask(width, height, data));
   }
 
   // --- Layer masks ---
@@ -6310,6 +6511,17 @@ export class ImageEditorController {
     s.outputOpacity = 1;
     delete s.legacyOutputBlur;
     s.selection = null;
+    const psdChannels: AlphaChannel[] = (result.alphaChannels ?? []).map((c, k) => ({
+      id: `ch_${k + 1}`,
+      name: c.name,
+      mask: createSelectionMask(result.width, result.height, c.data),
+      color: c.color,
+      opacity: c.opacity,
+      indicates: c.indicates,
+      visible: false,
+    }));
+    if (psdChannels.length) s.channels = psdChannels;
+    else delete s.channels;
     s.selectedAnnotationId = null;
     s.activeLayerId = defaultActiveLayerId(s.layers);
     s.activeTarget = 'pixels';
@@ -6513,7 +6725,14 @@ export class ImageEditorController {
     const depth = color.colorMode && this.bitDepth === 32 ? 16 : this.bitDepth;
     // At 16 or 32 bits the merged image is composited at that depth too.
     const mergedDeep = depth === 8 ? undefined : workingToSamples(compositeDeep(prepared, canvas, sources, depth), depth);
-    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, ...color });
+    const alphaChannels = this.getChannels().map((c) => ({
+      name: c.name,
+      data: c.mask.width === width && c.mask.height === height ? c.mask.data : resizeSelection(c.mask, width, height).data,
+      color: c.color,
+      opacity: c.opacity,
+      indicates: c.indicates,
+    }));
+    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, alphaChannels, ...color });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -6608,6 +6827,7 @@ export class ImageEditorController {
     try {
       out = this.serializeState();
       if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
+      if (this.state.channels?.length) out.channels = serializeChannels(this.state.channels);
     } finally {
       if (root) {
         this.state = current;
@@ -6650,6 +6870,11 @@ export class ImageEditorController {
     }
     this.state.selection = selection;
     this.dropMismatchedSelection();
+    const problems: string[] = [];
+    const channels = deserializeChannels(data.channels, this.naturalSize, problems);
+    if (channels.length) this.state.channels = channels;
+    else delete this.state.channels;
+    if (problems.length) this.lastLoadProblems = [...this.lastLoadProblems, ...problems];
     this.notify();
   }
 

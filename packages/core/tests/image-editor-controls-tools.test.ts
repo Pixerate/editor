@@ -118,6 +118,7 @@ describe('image editor agent tools', () => {
       'grow_selection', 'select_similar', 'reselect', 'set_selection_display',
       'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'stroke_selection', 'crop_to_selection', 'content_aware_fill', 'copy_pixels', 'cut_pixels', 'paste_pixels',
+      'list_channels', 'save_selection', 'load_selection_from_channel', 'set_channel_properties', 'duplicate_channel', 'delete_channel', 'set_quick_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'set_bit_depth', 'undo_image', 'redo_image',
       'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',
@@ -145,7 +146,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'list_channels', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

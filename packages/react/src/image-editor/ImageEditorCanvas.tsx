@@ -21,6 +21,7 @@ import {
   watchCanvasViewport,
   startMarchingAnts,
   handleSelectionShortcut,
+  handleQuickMaskKey,
   ShapeDrawGesture,
   TypeToolGesture,
   DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -553,6 +554,10 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       // Leave Copy to the page while text on it is selected.
       if (window.getSelection?.()?.toString()) return;
       const gesture = selectionGestureRef.current;
+      if (handleQuickMaskKey(controller, e)) {
+        e.preventDefault();
+        return;
+      }
       if (handleSelectionShortcut(controller, e, (message) => report('select', message))) {
         e.preventDefault();
         return;
