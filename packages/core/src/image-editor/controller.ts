@@ -19,6 +19,7 @@ import {
   LegacySerializedImageEditorState,
   SerializedImageEditorState,
 } from './types';
+import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -2782,20 +2783,64 @@ export class ImageEditorController {
    * hiding everything) or `path` (reveals inside the path given). Replaces an existing vector mask;
    * the raster mask is kept and both apply. One undo step. Returns the vector mask.
    */
-  public addVectorMask(id: string, from: 'reveal-all' | 'hide-all' | 'path' = 'reveal-all', path: VectorMaskPathInput = {}): VectorMask {
+  public addVectorMask(id: string, from: 'reveal-all' | 'hide-all' | 'path' | 'selection' = 'reveal-all', path: VectorMaskPathInput = {}, trace: SelectionToPathOptions = {}): VectorMask {
     this.vectorMaskLayer(id);
     let vm: VectorMask;
-    if (from === 'path') {
+    if (from === 'selection') {
+      // Layer › Vector Mask › Current Path, from the selection's traced outline.
+      const subpaths = this.traceSelection(trace);
+      vm = { components: [{ op: 'combine', subpaths }], fillRule: 'evenodd' };
+    } else if (from === 'path') {
       vm = { components: this.vectorMaskComponents(path) };
       if (path.fillRule === 'evenodd') vm.fillRule = 'evenodd';
     } else if (from === 'reveal-all' || from === 'hide-all') {
       if (path.components?.length || path.shape !== undefined || path.subpaths !== undefined) throw new LayerOperationError(`A ${from} vector mask starts empty; use from path to give a path.`);
       vm = { components: [], ...(from === 'reveal-all' ? { inverted: true } : {}) };
     } else {
-      throw new LayerOperationError(`Unknown vector mask source "${String(from)}". Use reveal-all, hide-all or path.`);
+      throw new LayerOperationError(`Unknown vector mask source "${String(from)}". Use reveal-all, hide-all, path or selection.`);
     }
     this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: vm }) as ImageLayer));
     return vm;
+  }
+
+  /** The selection's outline as subpaths; throws when nothing is selected or nothing is left to trace. */
+  private traceSelection(options: SelectionToPathOptions): VectorSubpath[] {
+    const sel = this.state.selection;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, then make a path from the selection.');
+    if (options.tolerance !== undefined && !(options.tolerance >= 0.1 && options.tolerance <= 10)) throw new LayerOperationError('tolerance must be from 0.1 to 10 px.');
+    const subpaths = selectionToSubpaths(sel, options);
+    if (!subpaths.length) throw new LayerOperationError('The selection is too small or too faint to trace (below minArea, or under half selected); lower minArea or threshold.');
+    return subpaths;
+  }
+
+  /**
+   * Make Work Path: the selection's outline as closed Bézier subpaths in document pixels, holes
+   * included (fill them even-odd), within `tolerance` px. Changes nothing. Throws without a selection.
+   */
+  public selectionToPath(options: SelectionToPathOptions = {}): { subpaths: VectorSubpath[]; svg: string; fillRule: 'evenodd'; bounds: CropBox | null; anchors: number } {
+    const subpaths = this.traceSelection(options);
+    const b = vectorMaskBounds({ components: [{ op: 'combine', subpaths }] });
+    const r = (n: number) => Math.round(n * 100) / 100;
+    return {
+      subpaths: roundSubpaths(subpaths),
+      svg: subpathsToSvgPath(subpaths),
+      fillRule: 'evenodd',
+      bounds: b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null,
+      anchors: subpaths.reduce((n, sp) => n + sp.anchors.length, 0),
+    };
+  }
+
+  /**
+   * Make Selection: fills a path (`shape`, `subpaths` or `components`, document pixels) into a
+   * selection combined with the current one by `mode`, with `feather` px and `antiAlias`. One
+   * undo step. Returns whether anything is selected.
+   */
+  public pathToSelection(path: VectorMaskPathInput, options: PathToSelectionOptions & { mode?: SelectionMode } = {}): boolean {
+    if (options.feather !== undefined && !(options.feather >= 0 && options.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    const components = this.vectorMaskComponents(path);
+    const { width, height } = this.naturalSize;
+    const mask = pathToSelectionMask(components, width, height, { ...options, fillRule: path.fillRule ?? options.fillRule });
+    return this.setSelection(mask, options.mode ?? 'replace');
   }
 
   /** Replaces a vector mask's path (its properties are kept). One undo step. Returns the vector mask. */

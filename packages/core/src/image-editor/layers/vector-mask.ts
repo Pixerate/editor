@@ -10,7 +10,8 @@ import type { AffineMatrix } from '../../geom/types';
 import { emptySurface, readRegion, writeRegion } from '../../raster/surface';
 import { gaussianBlur } from '../../raster/blur';
 import type { ImageLayer, RasterMask, ShapeComponent, VectorMask } from './model';
-import { componentsCoverage, mapSubpaths, transformShapeComponents } from './shape';
+import { componentPath, componentsCoverage, mapSubpaths, transformShapeComponents } from './shape';
+import { flattenPath } from './vector-raster';
 
 /** Whether a vector mask takes part in compositing. */
 export function isActiveVectorMask(vm: VectorMask | undefined): vm is VectorMask {
@@ -143,22 +144,19 @@ export function followLayerMove<T extends ImageLayer>(layer: T, dx: number, dy: 
   return { ...layer, vectorMask: offsetVectorMask(vm, dx, dy) };
 }
 
-/** Bounds of a vector mask's paths (document pixels), or `null` when it has none. */
-export function vectorMaskBounds(vm: VectorMask): CropBox | null {
+/** Bounds of the area a vector mask's paths enclose (document pixels, the curves themselves, not their handles), or `null` when it has none. */
+export function vectorMaskBounds(vm: Pick<VectorMask, 'components'>): CropBox | null {
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
   let y1 = -Infinity;
   for (const c of vm.components) {
-    for (const sp of c.subpaths) {
-      for (const a of sp.anchors) {
-        for (const p of [a, a.in, a.out]) {
-          if (!p) continue;
-          x0 = Math.min(x0, p.x);
-          y0 = Math.min(y0, p.y);
-          x1 = Math.max(x1, p.x);
-          y1 = Math.max(y1, p.y);
-        }
+    for (const ring of flattenPath(componentPath(c))) {
+      for (let k = 0; k + 1 < ring.length; k += 2) {
+        x0 = Math.min(x0, ring[k]);
+        x1 = Math.max(x1, ring[k]);
+        y0 = Math.min(y0, ring[k + 1]);
+        y1 = Math.max(y1, ring[k + 1]);
       }
     }
   }

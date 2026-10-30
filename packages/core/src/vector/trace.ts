@@ -41,6 +41,11 @@ export interface VectorTraceOptions {
 	minArea?: number;
 	/** 0: straight sides and sharp corners; 1: as smooth as the outline allows (default 0.5). */
 	cornerRoundness?: number;
+	/**
+	 * Give hard pixel edges their square corners back: marching squares cuts each corner where an
+	 * axis-aligned edge turns with a half-pixel diagonal, which skews a traced rectangle (default false).
+	 */
+	squareCorners?: boolean;
 }
 
 /** The most pixels traced (larger images are refused; scale them down first). */
@@ -198,10 +203,55 @@ export function vectorTraceContours(field: ArrayLike<number>, w: number, h: numb
 	return out;
 }
 
+/**
+ * A contour with each half-pixel diagonal between an axis-aligned run and a perpendicular one
+ * replaced by the corner where the two runs meet. Soft (interpolated) edges are left alone.
+ */
+function squareContourCorners(ring: Point[]): Point[] {
+	const n = ring.length;
+	if (n < 4) return ring;
+	const eq = (u: number, v: number) => Math.abs(u - v) < 1e-9;
+	const out: Point[] = [];
+	for (let i = 0; i < n; i++) {
+		const a = ring[i];
+		const b = ring[(i + 1) % n];
+		const p = ring[(i - 1 + n) % n];
+		const q = ring[(i + 2) % n];
+		// About half a pixel each way (a threshold off 0.5 moves the crossing a little).
+		const diagonal = Math.abs(Math.abs(b[0] - a[0]) - 0.5) < 0.02 && Math.abs(Math.abs(b[1] - a[1]) - 0.5) < 0.02;
+		// The last pair wraps onto the first point: only when that point was kept as it is.
+		const wraps = i === n - 1;
+		let corner: Point | null = null;
+		if (diagonal && (!wraps || out[0] === ring[0])) {
+			if (eq(p[1], a[1]) && !eq(p[0], a[0]) && eq(q[0], b[0]) && !eq(q[1], b[1])) corner = [b[0], a[1]];
+			else if (eq(p[0], a[0]) && !eq(p[1], a[1]) && eq(q[1], b[1]) && !eq(q[0], b[0])) corner = [a[0], b[1]];
+		}
+		if (!corner) {
+			out.push(a);
+			continue;
+		}
+		out.push(corner);
+		// The pair's second point is consumed.
+		if (wraps) out.shift();
+		else i++;
+	}
+	if (out.length < 3) return ring;
+	// Start at a turn: simplification keeps the first point, which would otherwise sit mid-edge.
+	const m = out.length;
+	for (let k = 0; k < m; k++) {
+		const p = out[(k - 1 + m) % m];
+		const a = out[k];
+		const q = out[(k + 1) % m];
+		if (Math.abs((a[0] - p[0]) * (q[1] - a[1]) - (a[1] - p[1]) * (q[0] - a[0])) > 1e-6) return k ? [...out.slice(k), ...out.slice(0, k)] : out;
+	}
+	return out;
+}
+
 /** The loops of a field, simplified, filtered by area and given their nesting depth (outermost first). */
-function loopsOf(field: ArrayLike<number>, w: number, h: number, threshold: number, tolerance: number, minArea: number): Loop[] {
+function loopsOf(field: ArrayLike<number>, w: number, h: number, threshold: number, tolerance: number, minArea: number, square = false): Loop[] {
 	const loops: Loop[] = [];
-	for (const raw of vectorTraceContours(field, w, h, threshold)) {
+	for (const contour of vectorTraceContours(field, w, h, threshold)) {
+		const raw = square ? squareContourCorners(contour) : contour;
 		const area = signedArea(raw);
 		if (Math.abs(area) < Math.max(0, minArea)) continue;
 		const simple = simplifyRing(raw, Math.max(0.01, tolerance));
@@ -234,11 +284,11 @@ function loopSubpath(l: Loop, tolerance: number, roundness: number): VectorSubpa
 	return { closed: true, anchors };
 }
 
-/** The subpaths of a field's outline (holes included; fill even-odd). */
-function traceField(field: ArrayLike<number>, w: number, h: number, threshold: number, o: VectorTraceOptions): VectorSubpath[] {
+/** The subpaths of a field's outline (holes included; fill even-odd), in its pixel coordinates (pixel centres at +0.5). */
+export function traceField(field: ArrayLike<number>, w: number, h: number, threshold: number, o: VectorTraceOptions): VectorSubpath[] {
 	const tolerance = o.tolerance ?? 1;
 	const roundness = Math.min(1, Math.max(0, o.cornerRoundness ?? 0.5));
-	return loopsOf(field, w, h, threshold, tolerance, o.minArea ?? 10).map((l) => loopSubpath(l, tolerance, roundness));
+	return loopsOf(field, w, h, threshold, tolerance, o.minArea ?? 10, o.squareCorners === true).map((l) => loopSubpath(l, tolerance, roundness));
 }
 
 /**

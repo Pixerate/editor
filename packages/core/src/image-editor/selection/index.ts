@@ -11,3 +11,4 @@ export * from './segmentation';
 export * from './stroke';
 export * from './channels';
 export * from './mask-files';
+export * from './path';
