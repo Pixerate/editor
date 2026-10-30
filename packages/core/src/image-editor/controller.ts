@@ -35,6 +35,7 @@ import {
   invertSelection as invertSelectionMask,
   resizeSelection,
   selectionFromPixels,
+  selectionFromTiles,
   serializeSelection,
   type PixelBuffer,
   type SelectionChannel,
@@ -1957,14 +1958,18 @@ export class ImageEditorController {
   }
 
   /**
-   * Bytes of pixel tiles held only by undo / redo steps (not by the current state). The oldest
-   * undo steps are dropped while it exceeds `maxHistoryBytes`.
+   * Bytes of pixel, selection and channel tiles held only by undo / redo steps (not by the
+   * current state). The oldest undo steps are dropped while it exceeds `maxHistoryBytes`.
    */
   public get historyBytes(): number {
     const live = new Set<Tile>();
     collectStateTiles(this.state.layers, live);
+    collectSelectionTiles(this.state.selection, this.state.channels, live);
     const held = new Set<Tile>();
-    for (const e of [...this.undoStack, ...this.redoStack]) collectStateTiles(e.layers, held);
+    for (const e of [...this.undoStack, ...this.redoStack]) {
+      collectStateTiles(e.layers, held);
+      collectSelectionTiles(e.selection, e.channels, held);
+    }
     let n = 0;
     for (const t of held) if (!live.has(t)) n += t.data.byteLength;
     return n;
@@ -4075,7 +4080,7 @@ export class ImageEditorController {
   /** @internal Shows a stroke's live surface (no history). */
   public _strokeUpdate(layerId: string, channel: LayerTarget, surface: TiledSurface, rects: CropBox[]): void {
     if (channel === 'quick-mask') {
-      this.state.selection = this.selectionFromSurface(surface, this.state.selection ?? null, rects);
+      this.state.selection = this.selectionFromSurface(surface);
       this.notify();
       return;
     }
@@ -5284,30 +5289,13 @@ export class ImageEditorController {
     const { width, height } = this.naturalSize;
     const sel = this.state.selection;
     if (!sel?.bounds) return emptySurface(1, 0);
-    const sized = sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height);
-    return surfaceFromPixels({ width, height, data: sized.data }, 1, 0, 0, 0);
+    return (sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height)).surface;
   }
 
-  /** The selection a painted Quick Mask surface stands for (`rects` changed since `base`). */
-  private selectionFromSurface(surface: TiledSurface, base: SelectionMask | null = null, rects?: CropBox[]): SelectionMask | null {
+  /** The selection a painted Quick Mask surface stands for (it shares the surface's tiles). */
+  private selectionFromSurface(surface: TiledSurface): SelectionMask | null {
     const { width, height } = this.naturalSize;
-    let data: Uint8Array;
-    if (base && rects && base.width === width && base.height === height) {
-      data = new Uint8Array(base.data);
-      for (const r of rects) {
-        const x0 = Math.max(0, Math.floor(r.x));
-        const y0 = Math.max(0, Math.floor(r.y));
-        const x1 = Math.min(width, Math.ceil(r.x + r.width));
-        const y1 = Math.min(height, Math.ceil(r.y + r.height));
-        if (x1 <= x0 || y1 <= y0) continue;
-        const part = readRegion(surface, { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
-        for (let y = y0; y < y1; y++) data.set(part.subarray((y - y0) * (x1 - x0), (y - y0 + 1) * (x1 - x0)), y * width + x0);
-      }
-    } else {
-      const all = readRegion(surface, { x: 0, y: 0, width, height });
-      data = new Uint8Array(all.buffer, all.byteOffset, all.length);
-    }
-    return normalizeSelection(createSelectionMask(width, height, data));
+    return normalizeSelection(selectionFromTiles(width, height, surface));
   }
 
   // --- Layer masks ---
@@ -5315,7 +5303,7 @@ export class ImageEditorController {
   private maskFromSelection(sel: SelectionMask, props: LayerMaskProps = {}): RasterMask {
     const { width, height } = this.naturalSize;
     const sized = sel.width === width && sel.height === height ? sel : resizeSelection(sel, width, height);
-    const mask: RasterMask = { surface: surfaceFromPixels({ width, height, data: sized.data }, 1, 0, 0, 0), defaultValue: 0 };
+    const mask: RasterMask = { surface: sized.surface, defaultValue: 0 };
     return withMaskProps(mask, props);
   }
 
@@ -7181,6 +7169,12 @@ function isOpaqueInside(surface: PixelSurface, width: number, height: number): b
     for (let i = 3; i < row.length; i += 4) if (row[i] !== 255) return false;
   }
   return true;
+}
+
+/** The tiles of a selection and of the alpha channels. */
+function collectSelectionTiles(selection: SelectionMask | null | undefined, channels: readonly AlphaChannel[] | undefined, into: Set<Tile>): void {
+  if (selection) collectTiles(selection.surface, into);
+  for (const c of channels ?? []) collectTiles(c.mask.surface, into);
 }
 
 function collectStateTiles(layers: readonly ImageLayer[], into: Set<Tile>): void {

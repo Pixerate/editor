@@ -1,14 +1,20 @@
 // Portions ported from photocraft/crates/algo/src/selection.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
 import type { CropBox } from '../types';
+import { TILE, TiledSurface, contentBounds, finishTile, readPixel, readRegion, tileCoord, writeRegion, tileKey, uniformTile, type Tile, type TileKey } from '../../raster/surface';
 
 /**
  * A selection: one 8-bit coverage value per image pixel (0 = not selected, 255 = fully
  * selected), row-major over the whole source image in natural pixels — the same space as the
  * crop box and annotations. Soft values are partial selection (feathered or anti-aliased edges).
  *
+ * The coverage is stored as 256 × 256 tiles (`surface`, one byte per pixel, missing tiles are 0
+ * and every pixel outside the image is 0), so an empty or fully selected area costs nothing and
+ * masks share the tiles an operation did not change. `data` is the same coverage as one array,
+ * built on first read and cached for the few masks read most recently.
+ *
  * Treat a mask as immutable: every operation returns a new one, so history entries can share
- * them without copying.
+ * them without copying. Never write to `data`.
  */
 export interface SelectionMask {
   readonly width: number;
@@ -16,6 +22,8 @@ export interface SelectionMask {
   readonly data: Uint8Array;
   /** Bounding box of the non-zero coverage, or `null` when nothing is selected. */
   readonly bounds: CropBox | null;
+  /** The coverage as tiles (1 channel, default 0), shared with other masks where equal. */
+  readonly surface: TiledSurface;
 }
 
 /** How a new selection combines with the current one. */
@@ -87,18 +95,195 @@ export function computeSelectionBounds(width: number, height: number, data: Arra
   return { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
 }
 
+// ---------------------------------------------------------------------------
+// Tiled storage
+// ---------------------------------------------------------------------------
+
+const TILE_PIXELS = TILE * TILE;
+
+/** Masks whose `data` was read most recently keep it; older ones rebuild it from the tiles. */
+const MATERIALIZED_LIMIT = 4;
+const materialized = new Map<TiledSelectionMask, Uint8Array>();
+let lastRead: TiledSelectionMask | null = null;
+let lastData: Uint8Array | null = null;
+
+class TiledSelectionMask implements SelectionMask {
+  private cachedBounds: CropBox | null | undefined;
+  private weak: WeakRef<Uint8Array> | null = null;
+
+  constructor(
+    readonly width: number,
+    readonly height: number,
+    readonly surface: TiledSurface,
+    bounds?: CropBox | null,
+    data?: Uint8Array
+  ) {
+    this.cachedBounds = bounds;
+    if (data) this.remember(data);
+  }
+
+  get bounds(): CropBox | null {
+    if (this.cachedBounds === undefined) this.cachedBounds = contentBounds(this.surface);
+    return this.cachedBounds;
+  }
+
+  get data(): Uint8Array {
+    // Loops often read `mask.data[i]`: answer the latest mask without touching the cache.
+    if (lastRead === this) return lastData!;
+    let d = materialized.get(this);
+    if (d) {
+      // Most recently used last.
+      materialized.delete(this);
+      materialized.set(this, d);
+      lastRead = this;
+      lastData = d;
+      return d;
+    }
+    d = this.weak?.deref();
+    if (!d) {
+      const all = readRegion(this.surface, { x: 0, y: 0, width: this.width, height: this.height });
+      d = new Uint8Array(all.buffer, all.byteOffset, all.length);
+    }
+    this.remember(d);
+    return d;
+  }
+
+  private remember(d: Uint8Array): void {
+    lastRead = this;
+    lastData = d;
+    this.weak = typeof WeakRef === 'function' ? new WeakRef(d) : null;
+    materialized.set(this, d);
+    while (materialized.size > MATERIALIZED_LIMIT) materialized.delete(materialized.keys().next().value!);
+  }
+}
+
+/** Tile columns and rows covering a `width × height` image. */
+function tileGrid(width: number, height: number): { cols: number; rows: number } {
+  return { cols: Math.ceil(width / TILE), rows: Math.ceil(height / TILE) };
+}
+
+/** Whether tile (tx, ty) lies wholly inside the image. */
+function insideTile(tx: number, ty: number, width: number, height: number): boolean {
+  return (tx + 1) * TILE <= width && (ty + 1) * TILE <= height;
+}
+
+/** The tiles of `width × height` coverage bytes; all-zero tiles are left out, uniform ones shared. */
+function surfaceFromCoverage(width: number, height: number, data: ArrayLike<number>): TiledSurface {
+  const tiles = new Map<TileKey, Tile>();
+  const { cols, rows } = tileGrid(width, height);
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const ox = tx * TILE;
+      const oy = ty * TILE;
+      const w = Math.min(TILE, width - ox);
+      const h = Math.min(TILE, height - oy);
+      let lo = 255;
+      let hi = 0;
+      for (let y = 0; y < h && !(hi > 0 && lo < hi); y++) {
+        const row = (oy + y) * width + ox;
+        for (let x = 0; x < w; x++) {
+          const v = data[row + x];
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+      }
+      if (hi === 0) continue;
+      if (lo === hi && w === TILE && h === TILE) {
+        tiles.set(tileKey(tx, ty), uniformTile(1, hi));
+        continue;
+      }
+      const t = new Uint8ClampedArray(TILE_PIXELS);
+      for (let y = 0; y < h; y++) {
+        const row = (oy + y) * width + ox;
+        for (let x = 0; x < w; x++) t[y * TILE + x] = data[row + x];
+      }
+      tiles.set(tileKey(tx, ty), { data: t, uniform: null });
+    }
+  }
+  return new TiledSurface(1, tiles, 0);
+}
+
+/** `tile` with everything outside the image (`w × h` of it in use) set to 0, or `null` when nothing is left. */
+function clipTile(tile: Tile, w: number, h: number): Tile | null {
+  const d = tile.data;
+  let outside = false;
+  for (let y = 0; y < TILE && !outside; y++) {
+    for (let x = y < h ? w : 0; x < TILE; x++) {
+      if (d[y * TILE + x] !== 0) {
+        outside = true;
+        break;
+      }
+    }
+  }
+  if (!outside) return tile;
+  const t = new Uint8ClampedArray(TILE_PIXELS);
+  for (let y = 0; y < h; y++) t.set(d.subarray(y * TILE, y * TILE + w), y * TILE);
+  return finishTile(t, 1, 0);
+}
+
+/**
+ * A selection over `width × height` from a 1-channel tiled surface in image space (Quick Mask
+ * paint, a mask): its tiles are shared, and coverage outside the image is dropped. A surface
+ * whose default is not 0 is read out instead.
+ */
+export function selectionFromTiles(width: number, height: number, surface: TiledSurface): SelectionMask {
+  checkSize(width, height);
+  if (surface.channels !== 1) throw new Error('A selection needs a 1-channel surface');
+  if (surface.defaultValue !== 0) {
+    const all = readRegion(surface, { x: 0, y: 0, width, height });
+    return createSelectionMask(width, height, new Uint8Array(all.buffer, all.byteOffset, all.length));
+  }
+  const { cols, rows } = tileGrid(width, height);
+  let tiles: Map<TileKey, Tile> | null = null;
+  for (const [key, tile] of surface.tiles) {
+    const { tx, ty } = tileCoord(key);
+    let next: Tile | null = tile;
+    if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) next = null;
+    else if (!insideTile(tx, ty, width, height)) next = clipTile(tile, Math.min(TILE, width - tx * TILE), Math.min(TILE, height - ty * TILE));
+    if (next === tile) continue;
+    tiles ??= new Map(surface.tiles);
+    if (next) tiles.set(key, next);
+    else tiles.delete(key);
+  }
+  return new TiledSelectionMask(width, height, tiles ? new TiledSurface(1, tiles, 0) : surface);
+}
+
 /** Wraps coverage bytes (taken over, not copied) as a selection, computing its bounds. */
 export function createSelectionMask(width: number, height: number, data?: Uint8Array): SelectionMask {
   checkSize(width, height);
-  const bytes = data ?? new Uint8Array(width * height);
-  if (bytes.length !== width * height) throw new Error('Selection data does not match its size');
-  return { width, height, data: bytes, bounds: data ? computeSelectionBounds(width, height, bytes) : null };
+  if (!data) return new TiledSelectionMask(width, height, new TiledSurface(1, new Map(), 0), null);
+  if (data.length !== width * height) throw new Error('Selection data does not match its size');
+  return new TiledSelectionMask(width, height, surfaceFromCoverage(width, height, data), undefined, data);
+}
+
+/**
+ * A selection that is `data` (`rect.width × rect.height` coverage bytes) inside `rect` and
+ * nothing elsewhere, without allocating the whole image. `rect` must lie inside the image.
+ */
+export function selectionFromRegion(width: number, height: number, rect: CropBox, data: ArrayLike<number>): SelectionMask {
+  checkSize(width, height);
+  if (rect.x < 0 || rect.y < 0 || rect.x + rect.width > width || rect.y + rect.height > height) throw new Error('The region lies outside the selection');
+  return new TiledSelectionMask(width, height, writeRegion(new TiledSurface(1, new Map(), 0), rect, data));
 }
 
 /** Select › All. */
 export function fullSelection(width: number, height: number): SelectionMask {
   checkSize(width, height);
-  return { width, height, data: new Uint8Array(width * height).fill(255), bounds: { x: 0, y: 0, width, height } };
+  const tiles = new Map<TileKey, Tile>();
+  const { cols, rows } = tileGrid(width, height);
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      if (insideTile(tx, ty, width, height)) {
+        tiles.set(tileKey(tx, ty), uniformTile(1, 255));
+        continue;
+      }
+      const t = new Uint8ClampedArray(TILE_PIXELS);
+      const w = Math.min(TILE, width - tx * TILE);
+      for (let y = 0; y < Math.min(TILE, height - ty * TILE); y++) t.fill(255, y * TILE, y * TILE + w);
+      tiles.set(tileKey(tx, ty), { data: t, uniform: null });
+    }
+  }
+  return new TiledSelectionMask(width, height, new TiledSurface(1, tiles, 0), { x: 0, y: 0, width, height });
 }
 
 export function isSelectionEmpty(mask: SelectionMask | null | undefined): boolean {
@@ -110,7 +295,7 @@ export function selectionValueAt(mask: SelectionMask, x: number, y: number): num
   const xi = Math.floor(x);
   const yi = Math.floor(y);
   if (xi < 0 || yi < 0 || xi >= mask.width || yi >= mask.height) return 0;
-  return mask.data[yi * mask.width + xi] / 255;
+  return readPixel(mask.surface, xi, yi)[0] / 255;
 }
 
 /** 8-bit value of a coverage (clamped and rounded; NaN → 0). */
@@ -139,10 +324,13 @@ export function selectionToCoverage(mask: SelectionMask): Float32Array {
 export function selectionArea(mask: SelectionMask | null | undefined): number {
   if (!mask || !mask.bounds) return 0;
   let sum = 0;
-  const { x, y, width, height } = mask.bounds;
-  for (let yy = y; yy < y + height; yy++) {
-    const row = yy * mask.width;
-    for (let xx = x; xx < x + width; xx++) sum += mask.data[row + xx];
+  for (const tile of mask.surface.tiles.values()) {
+    if (tile.uniform !== null) {
+      sum += tile.uniform * TILE_PIXELS;
+      continue;
+    }
+    const d = tile.data;
+    for (let i = 0; i < d.length; i++) sum += d[i];
   }
   return sum / 255;
 }
@@ -164,22 +352,74 @@ export function combineSelections(
     return null;
   } else {
     if (prev.width !== next.width || prev.height !== next.height) throw new Error('Selections differ in size');
-    const a = prev.data;
-    const b = next.data;
-    const out = new Uint8Array(a.length);
-    if (mode === 'add') for (let i = 0; i < a.length; i++) out[i] = a[i] > b[i] ? a[i] : b[i];
-    else if (mode === 'subtract') for (let i = 0; i < a.length; i++) out[i] = a[i] > b[i] ? a[i] - b[i] : 0;
-    else for (let i = 0; i < a.length; i++) out[i] = a[i] < b[i] ? a[i] : b[i];
-    result = createSelectionMask(prev.width, prev.height, out);
+    result = new TiledSelectionMask(prev.width, prev.height, combineSurfaces(prev.surface, next.surface, mode));
   }
   return result.bounds ? result : null;
 }
 
+const FULL = 255;
+
+/** One tile of `a` combined with `b` by `mode`; `undefined` = nothing selected. Shares a tile when the result equals it. */
+function combineTile(a: Tile | undefined, b: Tile | undefined, mode: Exclude<SelectionMode, 'replace'>): Tile | undefined {
+  if (mode === 'add') {
+    if (!b || a?.uniform === FULL) return a;
+    if (!a || b.uniform === FULL) return b;
+  } else if (mode === 'subtract') {
+    if (!a || !b) return a;
+    if (b.uniform === FULL) return undefined;
+  } else {
+    if (!a || !b) return undefined;
+    if (a.uniform === FULL) return b;
+    if (b.uniform === FULL) return a;
+  }
+  const x = a.data;
+  const y = b.data;
+  const out = new Uint8ClampedArray(TILE_PIXELS);
+  if (mode === 'add') for (let i = 0; i < out.length; i++) out[i] = x[i] > y[i] ? x[i] : y[i];
+  else if (mode === 'subtract') for (let i = 0; i < out.length; i++) out[i] = x[i] > y[i] ? x[i] - y[i] : 0;
+  else for (let i = 0; i < out.length; i++) out[i] = x[i] < y[i] ? x[i] : y[i];
+  return finishTile(out, 1, 0) ?? undefined;
+}
+
+function combineSurfaces(a: TiledSurface, b: TiledSurface, mode: Exclude<SelectionMode, 'replace'>): TiledSurface {
+  const tiles = new Map<TileKey, Tile>();
+  for (const key of new Set([...a.tiles.keys(), ...b.tiles.keys()])) {
+    const tile = combineTile(a.tiles.get(key), b.tiles.get(key), mode);
+    if (tile) tiles.set(key, tile);
+  }
+  return new TiledSurface(1, tiles, 0);
+}
+
 /** Select › Inverse. */
 export function invertSelection(mask: SelectionMask): SelectionMask {
-  const out = new Uint8Array(mask.data.length);
-  for (let i = 0; i < out.length; i++) out[i] = 255 - mask.data[i];
-  return createSelectionMask(mask.width, mask.height, out);
+  const { width, height } = mask;
+  const tiles = new Map<TileKey, Tile>();
+  const { cols, rows } = tileGrid(width, height);
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const src = mask.surface.getTile(tx, ty);
+      const key = tileKey(tx, ty);
+      if (insideTile(tx, ty, width, height)) {
+        if (!src) tiles.set(key, uniformTile(1, FULL));
+        else if (src.uniform !== null) {
+          if (src.uniform !== FULL) tiles.set(key, uniformTile(1, FULL - src.uniform));
+        } else {
+          const out = new Uint8ClampedArray(TILE_PIXELS);
+          for (let i = 0; i < out.length; i++) out[i] = FULL - src.data[i];
+          const t = finishTile(out, 1, 0);
+          if (t) tiles.set(key, t);
+        }
+        continue;
+      }
+      const w = Math.min(TILE, width - tx * TILE);
+      const h = Math.min(TILE, height - ty * TILE);
+      const out = new Uint8ClampedArray(TILE_PIXELS);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * TILE + x] = FULL - (src ? src.data[y * TILE + x] : 0);
+      const t = finishTile(out, 1, 0);
+      if (t) tiles.set(key, t);
+    }
+  }
+  return new TiledSelectionMask(width, height, new TiledSurface(1, tiles, 0));
 }
 
 /** Bilinear resample to another size (e.g. an AI mask returned at a different resolution). */

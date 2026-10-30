@@ -34,7 +34,7 @@ import { rerenderText, textMatrix, typeFrame, type TextEnv } from './layers/text
 import type { TypeLayer } from './layers/model';
 import { LayerOperationError, requireLayer, requireUnlocked } from './layers/ops';
 import { contentsBox, isContentsDecoded, placementGeometry, renderSmartObject, setSmartPlacement } from './layers/smart';
-import { createSelectionMask, type SelectionMask } from './selection/mask';
+import { selectionFromTiles, type SelectionMask } from './selection/mask';
 import {
   geometryHomography,
   hasWarp,
@@ -541,8 +541,7 @@ export class FreeTransformSession {
       const result = part.base ? compositeSurfaceOver(part.base, moved) : moved;
       if (part.what === 'selection') {
         const { width, height } = this.host.canvas();
-        const data = new Uint8Array(readRegion(result, { x: 0, y: 0, width, height }).buffer);
-        const next = createSelectionMask(width, height, data);
+        const next = selectionFromTiles(width, height, result);
         selection = next.bounds ? next : null;
       } else if (part.what === 'pixels') {
         layers = mapLayer(layers, targetId!, (l) => {
