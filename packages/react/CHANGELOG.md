@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.134.0
+
+### Minor Changes
+
+- 7bb43e3: Select › Sky for the image editor. Each pixel is scored on colour (blue, or bright and grey when overcast), smoothness and height in the frame. The sky is grown down from the top rows through high-scoring pixels without crossing an edge, patches of the same colour seen through gaps are added, and the edge is fitted with the colour guided filter. React and Svelte have a Select Sky button in the selection options bar. Agents use `select_sky` (`threshold`, `softness`, `mode`), which returns a note when no sky is found. New exports: `findSky`, `controller.selectSky` and `SkyCommandOptions`.
+
+### Patch Changes
+
+- Updated dependencies [7bb43e3]
+  - @pixerate/editor@0.201.0
+
 ## 0.133.0
 
 ### Minor Changes
