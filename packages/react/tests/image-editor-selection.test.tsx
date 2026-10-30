@@ -424,3 +424,52 @@ describe('React ChannelsPanel', () => {
     click.mockRestore();
   });
 });
+
+describe('React Select and Mask workspace', () => {
+  const pointer = (el: Element, type: string, x: number, y: number, extra: Record<string, unknown> = {}) =>
+    el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1, ...extra }));
+
+  it('opens from the options bar, paints a brush stroke, changes the view, and applies with OK', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => button('Select and Mask…').click());
+    const dialog = container.querySelector('[data-testid="select-and-mask-workspace"]')!;
+    expect(dialog).not.toBeNull();
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    // The view, by its select and by its key.
+    await act(async () => setValue(dialog.querySelector('select[aria-label="View"]')!, 'on-black'));
+    expect((dialog.querySelector('select[aria-label="View"]') as HTMLSelectElement).value).toBe('on-black');
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'k' })));
+    expect((dialog.querySelector('select[aria-label="View"]') as HTMLSelectElement).value).toBe('black-white');
+    // Paint the left half with the brush (preview canvas mapped to the 20 × 10 image).
+    await act(async () => button('Brush').click());
+    await act(async () => setValue(dialog.querySelector('input[aria-label="Brush size"]')!, '6'));
+    await act(async () => setValue(dialog.querySelector('input[aria-label="Workspace Radius"]')!, '0'));
+    const canvas = dialog.querySelector('[data-testid="select-and-mask-preview"]')!;
+    (canvas as HTMLElement).getBoundingClientRect = () => ({ left: 0, top: 0, width: 20, height: 10, right: 20, bottom: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await act(async () => {
+      pointer(canvas, 'pointerdown', 3, 5);
+      pointer(canvas, 'pointermove', 7, 5);
+      pointer(canvas, 'pointerup', 7, 5);
+    });
+    expect(dialog.textContent).toContain('1 strokes');
+    expect(controller.getSelection()).toBeNull();
+    await act(async () => {
+      button('OK').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(container.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
+    expect(controller.getSelection()!.bounds!.x).toBe(0);
+  });
+
+  it('cancels with Escape and leaves the document as it was', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => button('Select and Mask…').click());
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(container.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
+    expect(controller.getSelection()).toBeNull();
+  });
+});

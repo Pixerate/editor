@@ -72,7 +72,20 @@ describe('refine_selection edits', () => {
     expect(c.getSelection()).toBeNull();
     await fails('refine_selection', { edits: [{ kind: 'brush', points: [{ x: 10, y: 30 }], mode: 'subtract' }] }, /leave nothing selected/);
     await fails('refine_selection', { edits: [{ kind: 'refine-brush', points: [{ x: 10, y: 30 }], mode: 'add' }] }, /no mode/);
-    await fails('refine_selection', { edits: [{ kind: 'lasso', points: [{ x: 10, y: 30 }] }] }, /kind|enum/);
+    await fails('refine_selection', { edits: [{ kind: 'magic', points: [{ x: 10, y: 30 }] }] }, /kind|enum/);
+    await fails('refine_selection', { edits: [{ kind: 'lasso', points: [{ x: 10, y: 30 }] }] }, /at least 3 points/);
+    await fails('refine_selection', { edits: [{ kind: 'object' }] }, /rect .* or point/);
+  });
+
+  it('adds a lasso and the object in a box', async () => {
+    const { c, call } = setup();
+    const lasso = await call('refine_selection', { radius: 0, edits: [{ kind: 'lasso', points: [{ x: 5, y: 5 }, { x: 25, y: 5 }, { x: 25, y: 25 }, { x: 5, y: 25 }] }] });
+    expect(lasso.bounds).toEqual({ x: 5, y: 5, width: 20, height: 20 });
+    c.deselect();
+    // The dark half of the ramp image is the object in a box around it.
+    const obj = await call('refine_selection', { radius: 0, edits: [{ kind: 'object', rect: { x: 0, y: 0, width: 70, height: 60 } }] });
+    expect(obj.bounds.x).toBe(0);
+    expect(obj.bounds.x + obj.bounds.width).toBeLessThan(65);
   });
 
   it('grows a quick-select stroke to the dark side', async () => {

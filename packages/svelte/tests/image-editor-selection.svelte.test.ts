@@ -452,3 +452,66 @@ describe('Svelte ChannelsPanel', () => {
   });
 });
 
+
+describe('Svelte Select and Mask workspace', () => {
+  const pointer = (el: Element, type: string, x: number, y: number) =>
+    el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+
+  function mountBar(controller: ImageEditorController) {
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+  }
+
+  it('opens from the options bar, paints a brush stroke, changes the view, and applies with OK', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    mountBar(controller);
+    click(button('Select and Mask…'));
+    await settle();
+    const dialog = target.querySelector('[data-testid="select-and-mask-workspace"]')!;
+    expect(dialog).not.toBeNull();
+    setValue(dialog.querySelector('select[aria-label="View"]')!, 'on-black');
+    flushSync();
+    expect((dialog.querySelector('select[aria-label="View"]') as HTMLSelectElement).value).toBe('on-black');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k' }));
+    flushSync();
+    expect((dialog.querySelector('select[aria-label="View"]') as HTMLSelectElement).value).toBe('black-white');
+    click(button('Brush'));
+    setValue(dialog.querySelector('input[aria-label="Brush size"]')!, '6');
+    setValue(dialog.querySelector('input[aria-label="Workspace Radius"]')!, '0');
+    flushSync();
+    const canvas = dialog.querySelector('[data-testid="select-and-mask-preview"]') as HTMLElement;
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 20, height: 10, right: 20, bottom: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    pointer(canvas, 'pointerdown', 3, 5);
+    pointer(canvas, 'pointermove', 7, 5);
+    pointer(canvas, 'pointerup', 7, 5);
+    flushSync();
+    expect(dialog.textContent).toContain('1 strokes');
+    expect(controller.getSelection()).toBeNull();
+    click(button('OK'));
+    await settle();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(target.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
+    expect(controller.getSelection()!.bounds!.x).toBe(0);
+  });
+
+  it('cancels with Escape and leaves the document as it was', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    mountBar(controller);
+    click(button('Select and Mask…'));
+    await settle();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushSync();
+    expect(target.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
+    expect(controller.getSelection()).toBeNull();
+  });
+});

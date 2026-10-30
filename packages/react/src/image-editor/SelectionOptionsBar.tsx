@@ -10,6 +10,7 @@ import {
 } from '@pixerate/editor/image-editor';
 import { imageRangeClass } from './styles';
 import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
+import { SelectAndMaskWorkspace } from './SelectAndMaskWorkspace';
 
 export interface SelectionOptionsBarProps {
   controller: ImageEditorController;
@@ -122,6 +123,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       setSegmenting(false);
     }
   };
+  const [workspace, setWorkspace] = useState(false);
   const [skying, setSkying] = useState(false);
   const [skyStatus, setSkyStatus] = useState<string | null>(null);
   const selectSky = async () => {
@@ -413,6 +415,10 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </p>
         )}
       </form>
+      <button type="button" className={btn(false)} onClick={() => setWorkspace(true)}>
+        Select and Mask…
+      </button>
+      {workspace && <SelectAndMaskWorkspace controller={controller} onClose={() => setWorkspace(false)} />}
       <div data-testid="select-sky" className="flex flex-col gap-1">
         <button type="button" className={btn(false)} disabled={skying} aria-busy={skying} onClick={() => void selectSky()}>
           {skying ? 'Selecting…' : 'Select Sky'}
