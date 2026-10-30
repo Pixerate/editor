@@ -24,6 +24,7 @@ import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnet
 import { quickSelectStroke } from './selection/segment/quick';
 import { selectObjectIn, type ObjectTarget } from './selection/segment/grabcut';
 import { findSubject } from './selection/segment/subject';
+import { focusArea, type FocusAreaOptions } from './selection/segment/focus';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -495,6 +496,14 @@ export interface QuickSelectCommandOptions {
   sampleAllLayers?: boolean;
   /** Smoother, less blocky edges (Photoshop's Auto-Enhance). Default false. */
   enhanceEdge?: boolean;
+}
+
+/** Options of {@link ImageEditorController.selectFocusArea}. */
+export interface FocusAreaCommandOptions extends FocusAreaOptions {
+  /** How the area combines with the selection (default `replace`). */
+  mode?: SelectionMode;
+  /** Sample every layer (default true) or only the active pixel layer. */
+  sampleAllLayers?: boolean;
 }
 
 /** Options of {@link ImageEditorController.selectObject}. */
@@ -5197,6 +5206,18 @@ export class ImageEditorController {
     const region = selectObjectIn(pixels, target, { enhanceEdge: options.enhanceEdge });
     this.setSelection(region, options.mode ?? 'replace');
     return this.state.selection ?? null;
+  }
+
+  /**
+   * Select › Focus Area: selects the parts of the image that are in focus (fine detail above the
+   * image's noise), fitted to its edges, combined with the selection by `mode` as one undo step.
+   * Resolves to the selection and the noise level measured (σ of luminance in levels).
+   */
+  public async selectFocusArea(options: FocusAreaCommandOptions = {}): Promise<{ selection: SelectionMask | null; noiseLevel: number }> {
+    const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
+    const { selection, noiseLevel } = focusArea(pixels, options);
+    this.setSelection(selection, options.mode ?? 'replace');
+    return { selection: this.state.selection ?? null, noiseLevel };
   }
 
   /**

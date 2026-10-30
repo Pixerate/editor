@@ -1,6 +1,6 @@
 /**
- * The reduced copy of the image the graph segmentations (Quick Selection, Object Selection) work
- * on, and scaling their result back up to the image with an anti-aliased edge.
+ * The reduced copy of the image the segmentations (Quick, Object and Subject Selection, Focus
+ * Area) work on, and scaling their result back up to the image.
  */
 
 import { selectionFromRegion, type PixelBuffer, type SelectionMask } from '../mask';
@@ -21,15 +21,17 @@ export interface WorkImage {
 /** Long side of the work image (the issue's 512²). */
 export const WORK_SIZE = 512;
 
-const workCache = new WeakMap<object, { maxSide: number; work: WorkImage }>();
+/** Per pixel buffer, a reduced copy per long side (512 for the graph cuts, more for Focus Area). */
+const workCache = new WeakMap<object, Map<number, WorkImage>>();
 
 /**
  * `pixels` reduced to at most {@link WORK_SIZE} px on the long side by area averaging (alpha
  * composited over white). Cached per pixel buffer.
  */
 export function workImage(pixels: PixelBuffer, maxSide = WORK_SIZE): WorkImage {
-  const cached = workCache.get(pixels.data as object);
-  if (cached && cached.maxSide === maxSide && cached.work.sourceWidth === pixels.width && cached.work.sourceHeight === pixels.height) return cached.work;
+  const sizes = workCache.get(pixels.data as object);
+  const cached = sizes?.get(maxSide);
+  if (cached && cached.sourceWidth === pixels.width && cached.sourceHeight === pixels.height) return cached;
   const { width: W, height: H, data } = pixels;
   const scale = Math.min(1, maxSide / Math.max(W, H));
   const w = Math.max(1, Math.round(W * scale));
@@ -58,7 +60,8 @@ export function workImage(pixels: PixelBuffer, maxSide = WORK_SIZE): WorkImage {
     rgb[i * 3 + 2] = sum[i * 3 + 2] / c;
   }
   const work: WorkImage = { sourceWidth: W, sourceHeight: H, width: w, height: h, scale: w / W, rgb };
-  workCache.set(pixels.data as object, { maxSide, work });
+  if (sizes) sizes.set(maxSide, work);
+  else workCache.set(pixels.data as object, new Map([[maxSide, work]]));
   return work;
 }
 
