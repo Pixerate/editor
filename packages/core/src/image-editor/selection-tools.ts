@@ -464,6 +464,41 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const selectObjectTool: AgentTool = {
+    name: 'select_object',
+    title: 'Object Selection',
+    description:
+      'Object Selection: selects the object inside rect (a box drawn loosely around it, natural image pixels; what lies outside the box is treated as background) or the object under point, found from the colours of object and background and the edges between them (GrabCut). Combined with the selection by mode. A box is more reliable than a point: make it a little larger than the object on every side. Check with get_selection and capture_view, then fix with quick_select strokes or select_object with mode add / subtract. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        rect: {
+          type: 'object',
+          properties: rectProperties,
+          required: ['x', 'y', 'width', 'height'],
+          additionalProperties: false,
+          description: 'A box around the object (x, y, width, height in natural image pixels). Pass this or point.',
+        },
+        point: { ...pointSchema, description: 'A point on the object (natural image pixels). Pass this or rect.' },
+        mode: modeSchema,
+        sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
+        enhanceEdge: { type: 'boolean', description: 'Smoother, less blocky edges (Auto-Enhance; default false).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Object Selection'),
+    handler: async (args) => {
+      const rect = args.rect as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined;
+      const point = args.point as { x?: unknown; y?: unknown } | undefined;
+      if (!rect && !point) throw new Error('Pass rect (a box around the object) or point (a point on it).');
+      if (rect && point) throw new Error('Pass rect or point, not both.');
+      const options = { mode: parseSelectionMode(args.mode), sampleAllLayers: args.sampleAllLayers as boolean | undefined, enhanceEdge: args.enhanceEdge as boolean | undefined };
+      if (rect) await controller.selectObject({ rect: { x: num(rect.x, NaN), y: num(rect.y, NaN), width: num(rect.width, NaN), height: num(rect.height, NaN) } }, options);
+      else await controller.selectObject({ point: { x: num(point!.x, NaN), y: num(point!.y, NaN) } }, options);
+      return summary(controller);
+    },
+  };
+
   const magicWandTool: AgentTool = {
     name: 'magic_wand',
     title: 'Magic wand',
@@ -1068,6 +1103,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     selectEllipse,
     selectPolygonTool,
     quickSelectTool,
+    selectObjectTool,
     lineTool,
     magicWandTool,
     colorRangeTool,

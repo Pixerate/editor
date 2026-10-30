@@ -53,6 +53,8 @@ export function snapTo45(from: ImagePoint, point: ImagePoint): ImagePoint {
  * - Quick Selection: drag (or click) a brush stroke; on `end` it grows into the region painted on,
  *   out to its edges (async: await {@link settled}). With the New mode and a selection already
  *   there, strokes add, as in Photoshop; Alt subtracts.
+ * - Object Selection: drag a box around an object, or click on it; on `end` the object is
+ *   selected (async: await {@link settled}).
  * - Single row / column: a click selects a 1 px line across the image.
  *
  * Shift adds, Alt subtracts, both intersect (overriding the options bar mode). While dragging,
@@ -83,7 +85,7 @@ export class SelectionGesture {
     return this.start !== null || this.polygon !== null || this.magnetic !== null;
   }
 
-  /** Resolves once a Quick Selection stroke has been applied. */
+  /** Resolves once a Quick Selection stroke or an Object Selection has been applied. */
   get settled(): Promise<void> {
     return this.pending;
   }
@@ -260,6 +262,23 @@ export class SelectionGesture {
     if (point) this.move(point);
     const options = this.getOptions();
     const mode = selectionModeFromModifiers(modifiers ?? this.modifiers, options.mode);
+    if (options.tool === 'object') {
+      const rect = normalizeRect({ x: this.start.x, y: this.start.y, width: this.current!.x - this.start.x, height: this.current!.y - this.start.y });
+      this.start = null;
+      this.current = null;
+      this.points = [];
+      // A drag of a few pixels or less is a click on the object.
+      const target = rect.width >= 4 && rect.height >= 4 ? { rect } : { point: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } };
+      this.pending = this.controller
+        .selectObject(target, { mode, sampleAllLayers: options.objectSampleAll ?? true, enhanceEdge: options.objectEnhance ?? false })
+        .then(
+          () => undefined,
+          (err) => {
+            this.error = err instanceof Error ? err.message : String(err);
+          }
+        );
+      return false;
+    }
     if (options.tool === 'quick') {
       const stroke = this.points;
       this.start = null;

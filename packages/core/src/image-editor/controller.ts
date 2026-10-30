@@ -22,6 +22,7 @@ import {
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import { quickSelectStroke } from './selection/segment/quick';
+import { selectObjectIn, type ObjectTarget } from './selection/segment/grabcut';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -492,6 +493,16 @@ export interface QuickSelectCommandOptions {
   /** Sample every layer (default true) or only the active pixel layer. */
   sampleAllLayers?: boolean;
   /** Smoother, less blocky edges (Photoshop's Auto-Enhance). Default false. */
+  enhanceEdge?: boolean;
+}
+
+/** Options of {@link ImageEditorController.selectObject}. */
+export interface SelectObjectCommandOptions {
+  /** How the object combines with the selection (default `replace`). */
+  mode?: SelectionMode;
+  /** Sample every layer (default true) or only the active pixel layer. */
+  sampleAllLayers?: boolean;
+  /** Smoother, less blocky edges (Auto-Enhance). Default false. */
   enhanceEdge?: boolean;
 }
 
@@ -5161,6 +5172,29 @@ export class ImageEditorController {
       sel = combineSelections(sel, region, m);
     });
     this.setSelection(sel, 'replace');
+    return this.state.selection ?? null;
+  }
+
+  /**
+   * Object Selection: the object inside `target.rect` (natural pixels; what is outside the box is
+   * background) or under `target.point`, found by GrabCut (colour models of object and background
+   * plus a graph cut along edges), combined with the selection by `mode` as one undo step.
+   * Resolves to the resulting selection.
+   */
+  public async selectObject(target: ObjectTarget, options: SelectObjectCommandOptions = {}): Promise<SelectionMask | null> {
+    const { width, height } = this.naturalSize;
+    if ('rect' in target) {
+      const r = target.rect;
+      if (!(r.width > 0 && r.height > 0)) throw new Error('The box needs a positive width and height.');
+      if (r.x >= width || r.y >= height || r.x + r.width <= 0 || r.y + r.height <= 0) {
+        throw new Error(`The box lies outside the image (0..${width}, 0..${height}); draw it around the object.`);
+      }
+    } else if (!(target.point.x >= 0 && target.point.y >= 0 && target.point.x < width && target.point.y < height)) {
+      throw new Error(`(${target.point.x}, ${target.point.y}) is outside the image (0..${width - 1}, 0..${height - 1}); click on the object.`);
+    }
+    const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
+    const region = selectObjectIn(pixels, target, { enhanceEdge: options.enhanceEdge });
+    this.setSelection(region, options.mode ?? 'replace');
     return this.state.selection ?? null;
   }
 

@@ -228,6 +228,19 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </label>
         </div>
       )}
+      {options.tool === 'object' && (
+        <div data-testid="object-selection-options" className="flex flex-col gap-2">
+          <p className="text-muted-foreground">Drag a box loosely around an object, or click on it. Shift adds, Alt subtracts.</p>
+          <label className="flex items-center gap-2 text-foreground">
+            <ImageCheckbox label="Object sample all layers" checked={options.objectSampleAll ?? true} onChange={(on) => set({ objectSampleAll: on })} />
+            Sample all layers
+          </label>
+          <label className="flex items-center gap-2 text-foreground">
+            <ImageCheckbox label="Object auto-enhance edges" checked={options.objectEnhance ?? false} onChange={(on) => set({ objectEnhance: on })} />
+            Auto-enhance edges
+          </label>
+        </div>
+      )}
       {(options.tool === 'type' || options.tool === 'type-vertical') && (
         <div data-testid="type-mask-options" className="flex flex-col gap-2">
           <p className="text-muted-foreground">

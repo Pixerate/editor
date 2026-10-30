@@ -249,6 +249,19 @@
       </label>
     </div>
   {/if}
+  {#if options.tool === 'object'}
+    <div data-testid="object-selection-options" class="flex flex-col gap-2">
+      <p class="text-muted-foreground">Drag a box loosely around an object, or click on it. Shift adds, Alt subtracts.</p>
+      <label class="flex items-center gap-2 text-foreground">
+        <ImageCheckbox label="Object sample all layers" checked={options.objectSampleAll ?? true} onchange={(on) => set({ objectSampleAll: on })} />
+        Sample all layers
+      </label>
+      <label class="flex items-center gap-2 text-foreground">
+        <ImageCheckbox label="Object auto-enhance edges" checked={options.objectEnhance ?? false} onchange={(on) => set({ objectEnhance: on })} />
+        Auto-enhance edges
+      </label>
+    </div>
+  {/if}
   {#if options.tool === 'type' || options.tool === 'type-vertical'}
     <div data-testid="type-mask-options" class="flex flex-col gap-2">
       <p class="text-muted-foreground">

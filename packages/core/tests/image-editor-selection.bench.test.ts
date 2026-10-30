@@ -6,9 +6,10 @@
 // Budgets from issue #390 (Phase 5), at 12 MP (4000 × 3000):
 // - a Quick Selection stroke: under 50 ms (once the reduced copy of the image exists; making it
 //   is a one-off per image, about 100 ms);
-// - the Magnetic Lasso: a pointer move well under a frame.
+// - the Magnetic Lasso: a pointer move well under a frame;
+// - Object Selection: no budget in the issue; it should stay under the 1 s set for Select Subject.
 import { describe, expect, it } from 'vitest';
-import { EdgeMap, liveWire, quickSelectStroke, selectionArea } from '../src/image-editor';
+import { EdgeMap, liveWire, quickSelectStroke, selectObjectIn, selectionArea } from '../src/image-editor';
 
 const W = 4000;
 const H = 3000;
@@ -49,6 +50,20 @@ describe.runIf(process.env.SELECTION_BENCH)('smart selection benchmark', () => {
     console.table({ 'first stroke (makes the reduced copy)': first, 'stroke (median)': median(strokes), 'stroke over most of the image': whole });
     expect(area).toBeGreaterThan(W * H * 0.7);
     expect(median(strokes)).toBeLessThan(50);
+  });
+
+  it('Object Selection on a 12 MP image', () => {
+    const px = photo();
+    quickSelectStroke(px, [{ x: 10, y: 10 }], { size: 10 });
+    let boxArea = 0;
+    let pointArea = 0;
+    const box = time(() => (boxArea = selectionArea(selectObjectIn(px, { rect: { x: 1100, y: 600, width: 1800, height: 1800 } }))));
+    const point = time(() => (pointArea = selectionArea(selectObjectIn(px, { point: { x: 2000, y: 1500 } }))));
+    console.table({ 'box (reduced copy already made)': box, point });
+    const disc = Math.PI * 800 * 800;
+    expect(Math.abs(boxArea - disc) / disc).toBeLessThan(0.02);
+    expect(Math.abs(pointArea - disc) / disc).toBeLessThan(0.02);
+    expect(Math.max(box, point)).toBeLessThan(1000);
   });
 
   it('Magnetic Lasso on a 12 MP image', () => {

@@ -131,6 +131,12 @@ describe('Svelte SelectionOptionsBar', () => {
     click(target.querySelector('[aria-label="Auto-enhance edges"]') as HTMLElement);
     click(target.querySelector('[aria-label="Sample all layers"]') as HTMLElement);
     expect(props.options).toMatchObject({ tool: 'quick', quickSize: 60, quickEnhance: true, quickSampleAll: false });
+    // Object Selection shows Sample all layers and Auto-enhance.
+    click(button('Object Selection'));
+    expect(target.querySelector('[data-testid="object-selection-options"]')).not.toBeNull();
+    click(target.querySelector('[aria-label="Object auto-enhance edges"]') as HTMLElement);
+    click(target.querySelector('[aria-label="Object sample all layers"]') as HTMLElement);
+    expect(props.options).toMatchObject({ tool: 'object', objectEnhance: true, objectSampleAll: false });
     click(button('Color Range'));
     expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');
