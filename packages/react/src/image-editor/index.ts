@@ -7,6 +7,7 @@ export * from './CurvesEditor';
 export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
+export * from './ChannelsPanel';
 export * from './LayersPanel';
 export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';

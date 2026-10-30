@@ -498,7 +498,11 @@ export type ImageLayer = PixelLayer | AdjustmentLayerNode | GroupLayer | Annotat
 export type ImageLayerType = ImageLayer['type'];
 
 /** Which part of the active layer painting targets (`filter-mask`: a smart object's filter mask). */
-export type LayerTarget = 'pixels' | 'mask' | 'filter-mask';
+/**
+ * What a paint, fill or retouch writes: a layer's pixels, its mask, a smart object's filter mask,
+ * or (in Quick Mask mode) the selection itself (`quick-mask`, not a layer).
+ */
+export type LayerTarget = 'pixels' | 'mask' | 'filter-mask' | 'quick-mask';
 
 // ---------------------------------------------------------------------------
 // Ids

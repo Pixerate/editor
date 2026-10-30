@@ -43,6 +43,8 @@ export interface QuickMaskStyle {
   color?: readonly [number, number, number];
   /** 0..1 (default 0.5): opacity over fully unselected pixels. */
   opacity?: number;
+  /** Tint the unselected area (`masked`, default) or the selected area (`selected`). */
+  indicates?: 'masked' | 'selected';
 }
 
 /**
@@ -52,12 +54,13 @@ export interface QuickMaskStyle {
 export function quickMaskPixels(mask: SelectionMask, style: QuickMaskStyle = {}): Uint8ClampedArray {
   const [r, g, b] = style.color ?? [255, 0, 0];
   const k = Math.min(1, Math.max(0, style.opacity ?? 0.5));
+  const selected = style.indicates === 'selected';
   const out = new Uint8ClampedArray(mask.data.length * 4);
   for (let i = 0, p = 0; i < mask.data.length; i++, p += 4) {
     out[p] = r;
     out[p + 1] = g;
     out[p + 2] = b;
-    out[p + 3] = Math.round((255 - mask.data[i]) * k);
+    out[p + 3] = Math.round((selected ? mask.data[i] : 255 - mask.data[i]) * k);
   }
   return out;
 }

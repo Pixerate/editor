@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ImageEditor, RefineEdgePanel, SelectionOptionsBar, useImageEditor } from '../src/image-editor';
+import { ChannelsPanel, ImageEditor, RefineEdgePanel, SelectionOptionsBar, useImageEditor } from '../src/image-editor';
 import {
   DEFAULT_SELECTION_TOOL_OPTIONS,
   ImageEditorController,
@@ -253,5 +253,31 @@ describe('React ImageEditor Select & Mask tab', () => {
     // Undo goes back to the wand selection.
     await act(async () => hook!.undo());
     expect(hook!.controller.getSelection()!.bounds).toEqual(wand.bounds);
+  });
+});
+
+describe('React ChannelsPanel', () => {
+  it('saves, loads, shows, duplicates and deletes channels, and toggles Quick Mask', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    await act(async () => root.render(<ChannelsPanel controller={controller} />));
+    expect(container.textContent).toContain('No channels');
+    expect(button('Save Selection').disabled).toBe(true);
+    await act(async () => void controller.selectRect({ x: 0, y: 0, width: 5, height: 10 }, { antiAlias: false }));
+    await act(async () => button('Save Selection').click());
+    const rows = () => container.querySelectorAll('[data-testid="channel-row"]');
+    expect(rows().length).toBe(1);
+    expect(rows()[0]!.textContent).toContain('Alpha 1');
+    await act(async () => void controller.deselect());
+    await act(async () => (rows()[0] as HTMLElement).click());
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 5, height: 10 });
+    await act(async () => (container.querySelector('button[aria-label="Show Alpha 1"]') as HTMLButtonElement).click());
+    expect(controller.getChannels()[0]!.visible).toBe(true);
+    await act(async () => button('Duplicate').click());
+    expect(controller.getChannels().map((c) => c.name)).toEqual(['Alpha 1', 'Alpha 1 copy']);
+    await act(async () => button('Delete').click());
+    expect(controller.getChannels().map((c) => c.name)).toEqual(['Alpha 1']);
+    await act(async () => button('Quick Mask').click());
+    expect(controller.quickMaskEditing).toBe(true);
+    expect(button('Quick Mask').getAttribute('aria-pressed')).toBe('true');
   });
 });

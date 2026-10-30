@@ -44,8 +44,8 @@ const TARGET = {
   layerId: { type: 'string', description: 'Layer to retouch (default the active layer; see list_layers).' },
   channel: {
     type: 'string',
-    enum: ['pixels', 'mask', 'filter-mask'],
-    description: "pixels (default for a pixel layer), the layer's mask, or a smart object's filter mask. Masks are grey values and sample only themselves.",
+    enum: ['pixels', 'mask', 'filter-mask', 'quick-mask'],
+    description: "pixels (default for a pixel layer), the layer's mask, or a smart object's filter mask. Masks are grey values and sample only themselves. In Quick Mask mode (set_quick_mask), quick-mask (the default when no layerId is given) paints the selection: white selects, black deselects.",
   },
 } as const;
 

@@ -193,7 +193,8 @@ const isTyping = (t: unknown) => {
 /**
  * Applies a paint shortcut. Returns true when it was one (the caller then prevents the default).
  * B / Shift+B (Mixer Brush) / E / V choose the tool; [ and ] change the size, with Shift the hardness by 25 %; 1..9 set the
- * opacity to 10..90 % and 0 to 100 %; D resets the colours to black and white; X swaps them.
+ * opacity to 10..90 % and 0 to 100 %; D resets the colours to black and white; X swaps them; Q
+ * toggles Quick Mask mode (painting then edits the selection).
  */
 export function handlePaintShortcut(controller: ImageEditorController, e: ShortcutEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return false;
@@ -201,6 +202,10 @@ export function handlePaintShortcut(controller: ImageEditorController, e: Shortc
   const set = (b: Partial<BrushSettings>) => controller.setPaintOptions({ brush: b });
   const key = e.key;
   switch (key.toLowerCase()) {
+    case 'q':
+      // Quick Mask mode: brushes, fills and the eraser then paint the selection.
+      controller.setQuickMaskMode(!controller.quickMaskEditing);
+      return true;
     case 'b':
       controller.setTool(e.shiftKey || key === 'B' ? 'mixer' : 'brush');
       return true;

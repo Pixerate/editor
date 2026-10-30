@@ -241,6 +241,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `get_adjustments` | Read the current state: `values` by control id, `process` version (1 or 2), and `layers` bottom to top with id, kind, params, opacity, blend, enabled and mask. Call first, and to find layer ids. |
 | `list_controls` | Get every base control (id, label, section, min, max, step, default, `requiresProcess`), each layer kind's settable controls (plus `opacity`), the blend mode ids and the `layers.<layerId>.<controlId>` path format. Call once per session before writing. |
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
+| `list_channels` | Read the alpha channels (saved selections): id, name, bounds, percent, overlay and visibility, and whether Quick Mask mode is on. |
 | `select_subject` | Select › Subject (only when the host has a segmentation model): `target` describes what to select ("the dog", "the sky"); an AI model finds the matching objects and selects their outlines, combined by `mode`. `maxSegments` 1 for a single subject. Returns the selection and `found` (label, bounds per object); nothing found leaves the selection unchanged. |
 | `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `shape`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`; shapes a `shape` summary of component ops and kinds and paint types, and `annotation` when migrated from one), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
@@ -395,6 +396,12 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `copy_pixels` | Copy the selected pixels of a layer (or with `merged` the visible image) to the editor clipboard, cropped to the selection with its soft edge. No undo step. Returns `width`, `height`, `x`, `y`. |
 | `cut_pixels` | Copy, then clear the selected pixels (one undo step). Returns the size and position. |
 | `paste_pixels` | Paste the clipboard as a new layer: `mode` `new-layer` (centred on the selection or canvas), `in-place`, `into` (masked by the selection) or `outside` (masked by its inverse). One undo step. Returns `layerId`, `bounds`, `masked`. |
+| `save_selection` | Save the selection to a new alpha channel (`name`), or into `channelId` by `mode`. Saved with the document and in PSD. Returns the `channel`. |
+| `load_selection_from_channel` | Load an alpha channel as the selection (`channelId`, `invert`, `mode`). Returns the summary. |
+| `set_channel_properties` | Rename a channel or change its overlay `color`, `opacity`, `indicates` (`masked` / `selected`) and `visible`. Returns the `channel`. |
+| `duplicate_channel` | Copy a channel (`name`, default "<name> copy"). Returns the copy. |
+| `delete_channel` | Delete a channel (undoable). Returns the remaining channels. |
+| `set_quick_mask` | Quick Mask mode (`enabled`): paint, fill and retouch tools without `layerId` edit the selection (white selects, black deselects); turn it off before painting layers. Returns the mode. |
 
 ### Save and open
 

@@ -13,6 +13,7 @@ import { normalizeProcessVersion } from '../color';
 import type { Annotation, CropBox, DepthMaskOptions, ImageTransform } from '../types';
 import type { EffectValue } from '../../effects/types';
 import type { SerializedSelection } from '../selection/mask';
+import type { SerializedAlphaChannel } from '../selection/channels';
 import { DEFAULT_DEPTH_MASK_VALUES } from './defaults';
 import type { SerializedColorMode, SerializedColorProfile } from '../color-management';
 import {
@@ -234,6 +235,8 @@ export interface SerializedLayeredImageEditorState {
   /** Blur migrated from a v1 / v2 document with adjustment layers (runs after the layers). */
   legacyOutputBlur?: number;
   selection?: SerializedSelection;
+  /** Alpha channels (saved selections), run-length encoded. */
+  channels?: SerializedAlphaChannel[];
   /** Global light for layer effects (missing = 120°, 30°). */
   globalLight?: GlobalLight;
   /** The document's patterns for pattern effects, each an RGBA PNG data URL. */
