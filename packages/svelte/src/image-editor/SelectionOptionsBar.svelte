@@ -58,6 +58,21 @@
   // Color Range presets.
   let preset = $state<ColorRangePreset>('reds');
   let rangeStatus = $state<string | null>(null);
+  const canReselect = $derived.by(() => {
+    void tick;
+    void sel;
+    return controller.canReselect();
+  });
+  let colorStatus = $state<string | null>(null);
+  async function runColor(op: 'grow' | 'similar') {
+    colorStatus = null;
+    const opts = { tolerance: options.tolerance, sampleMerged: options.sampleMerged, sample: options.sample };
+    try {
+      await (op === 'grow' ? controller.growSelection(opts) : controller.selectSimilar(opts));
+    } catch (err) {
+      colorStatus = err instanceof Error ? err.message : String(err);
+    }
+  }
   async function applyPreset() {
     rangeStatus = null;
     try {
@@ -100,8 +115,8 @@
   }
 
   const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
-    { op: 'grow', label: 'Grow' },
-    { op: 'shrink', label: 'Shrink' },
+    { op: 'expand', label: 'Expand' },
+    { op: 'contract', label: 'Contract' },
     { op: 'feather', label: 'Feather' },
     { op: 'border', label: 'Border' },
     { op: 'smooth', label: 'Smooth' },
@@ -174,6 +189,9 @@
         />
       </label>
     </div>
+  {/if}
+  {#if options.tool === 'polygon'}
+    <p class="text-muted-foreground">Click to add corners (Shift for 45°), drag for a free-hand stretch; double-click, Enter or a click on the first corner closes it, Backspace removes a corner, Escape cancels.</p>
   {/if}
   {#if options.tool === 'range'}
     <div data-testid="color-range-options" class="flex flex-col gap-2">
@@ -265,6 +283,9 @@
     <button type="button" class={btn(false)} onclick={() => controller.selectAll()}>Select All</button>
     <button type="button" class={btn(false)} disabled={!sel} onclick={() => controller.deselect()}>Deselect</button>
     <button type="button" class={btn(false)} onclick={() => controller.invertSelection()}>Inverse</button>
+    <button type="button" class={btn(false)} disabled={!canReselect} onclick={() => controller.reselect()}>Reselect</button>
+    <button type="button" class={btn(false)} disabled={!sel} title="Add connected pixels of a selected colour (wand tolerance)" onclick={() => void runColor('grow')}>Grow</button>
+    <button type="button" class={btn(false)} disabled={!sel} title="Add every pixel of a selected colour (wand tolerance)" onclick={() => void runColor('similar')}>Similar</button>
   </div>
   <div role="group" aria-label="Show selection" class="flex flex-wrap items-center gap-1">
     <span class="text-muted-foreground">Show</span>
@@ -290,5 +311,8 @@
       <button type="button" class={btn(false)} disabled={!sel} onclick={() => controller.modifySelection(m.op, radius)}>{m.label}</button>
     {/each}
   </div>
+  {#if colorStatus}
+    <p role="status" class="text-muted-foreground">{colorStatus}</p>
+  {/if}
   <p data-testid="selection-status" class="text-muted-foreground">{describeSelection(sel)}</p>
 </div>

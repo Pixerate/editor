@@ -430,12 +430,12 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'add_layer_mask',
     title: 'Add a layer mask',
     description:
-      'Adds a mask to any layer, replacing an existing one: from reveal-all (white, paint black to hide), hide-all (black, paint white to reveal) or selection (the selection\'s coverage). density 0..1 and feather px soften it non-destructively. One undo step. Returns the mask summary.',
+      'Adds a mask to any layer, replacing an existing one: from reveal-all (white, paint black to hide), hide-all (black, paint white to reveal), selection (Reveal Selection: the selection\'s coverage), hide-selection (its inverse) or transparency (the layer\'s own alpha, for pixel, shape, type and smart object layers). density 0..1 and feather px soften it non-destructively. One undo step. Returns the mask summary.',
     inputSchema: {
       type: 'object',
       properties: {
         layerId: LAYER_ID,
-        from: { type: 'string', enum: ['reveal-all', 'hide-all', 'selection'], description: 'What the mask starts as (default reveal-all).' },
+        from: { type: 'string', enum: ['reveal-all', 'hide-all', 'selection', 'hide-selection', 'transparency'], description: 'What the mask starts as (default reveal-all).' },
         density: { type: 'number', minimum: 0, maximum: 1, description: 'Mask density 0..1 (default 1).' },
         feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather σ in px (default 0).' },
       },
@@ -445,7 +445,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     annotations: { title: 'Add a layer mask', ...WRITE },
     handler: ({ layerId, from, density, feather }) => {
       const id = exists(layerId);
-      const mask = controller.addLayerMask(id, (from as 'reveal-all' | 'hide-all' | 'selection' | undefined) ?? 'reveal-all', {
+      const mask = controller.addLayerMask(id, (from as 'reveal-all' | 'hide-all' | 'selection' | 'hide-selection' | 'transparency' | undefined) ?? 'reveal-all', {
         density: density as number | undefined,
         feather: feather as number | undefined,
       });

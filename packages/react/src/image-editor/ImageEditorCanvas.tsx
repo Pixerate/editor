@@ -544,6 +544,23 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   };
 
   useEffect(() => {
+    if (mode !== 'select' || typeof window === 'undefined') return;
+    // The polygonal lasso: Enter closes it, Escape cancels, Backspace removes the last corner.
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      const gesture = selectionGestureRef.current;
+      if (gesture?.key(e.key)) {
+        e.preventDefault();
+        selectionDraftRef.current = gesture.draftPath;
+        void renderCanvas();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  useEffect(() => {
     if (mode !== 'paint' || typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent) => {
       if (handlePaintShortcut(controller, e)) e.preventDefault();
@@ -561,7 +578,11 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
       const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
-      void gesture.begin(imgPt, e).then(() => report('select', gesture.error));
+      void gesture.begin(imgPt, e).then(() => {
+        report('select', gesture.error);
+        selectionDraftRef.current = gesture.draftPath;
+        void renderCanvas();
+      });
       return;
     }
 
@@ -652,7 +673,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
 
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false))) {
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false), e)) {
         selectionDraftRef.current = gesture.draftPath;
         renderCanvas();
       }
@@ -807,7 +828,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       const gesture = selectionGestureRef.current!;
       if (gesture.active) {
         gesture.end(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false), e);
-        selectionDraftRef.current = null;
+        // A polygonal lasso stays open between clicks.
+        selectionDraftRef.current = gesture.draftPath;
         renderCanvas();
       }
       return;

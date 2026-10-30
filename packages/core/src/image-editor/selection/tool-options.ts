@@ -3,13 +3,16 @@ import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'lasso' | 'range';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'range';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
   { id: 'rect', label: 'Rectangle' },
   { id: 'ellipse', label: 'Ellipse' },
+  { id: 'row', label: 'Single Row' },
+  { id: 'column', label: 'Single Column' },
   { id: 'lasso', label: 'Lasso' },
+  { id: 'polygon', label: 'Polygonal Lasso' },
   { id: 'range', label: 'Color Range' },
 ];
 

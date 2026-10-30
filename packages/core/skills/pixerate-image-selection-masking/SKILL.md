@@ -50,7 +50,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    outline.
 4. **Clean it up.**
    - `modify_selection` `smooth` (2–4 px) removes wand speckle.
-   - `shrink` 1–2 px pulls the edge off a halo.
+   - `grow_selection` (tolerance 10–30) picks up the shades a wand click missed;
+     `select_similar` adds the same colours elsewhere in the image.
+   - `contract` 1–2 px pulls the edge off a halo.
    - `refine_selection` snaps to real edges: radius 2–4 for hard edges, 8–20 for hair and fur;
      `smartRadius: true` for mixed edges.
    - `shiftEdge` −10..−30 % tightens a refined edge that picked up background.
@@ -80,6 +82,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | Skin for retouching | `select_color_range` `preset: "skinTones"`, then `intersect` with a box around the face |
 | An AI matte or saved mask from the host | `load_selection_from_image` (soft: no `threshold`), then `refine_selection` |
 | An existing layer mask | `load_selection_from_mask` |
+| A cutout, shape or text already on its own layer | `select_layer_transparency` (exact, soft where the layer is) |
+| A dead pixel row or column | `select_line`, then fill or heal it |
 
 ## Recipes
 
@@ -98,6 +102,11 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   the short side.
 - **Graduated filter:** `select_rect` over the top third with a large `feather`, then a curves or
   hue/saturation layer through the mask.
+- **Hide part of a layer:** `add_layer_mask` (`hide-selection` hides what is selected), or paint
+  black on the mask with `paint_stroke` `channel: "mask"` and a soft brush (`hardness`
+  0..0.3); paint white to bring it back. Never erase.
+- **Edit a cutout's edge:** `add_layer_mask` `from: "transparency"` moves the layer's alpha into
+  a mask you can refine and repaint.
 - **Dodge and burn through masks:** an adjustment layer with a `hide-all` mask
   (`add_layer_mask`), then paint white on it with `paint_stroke` `channel: "mask"`, at low
   opacity.
@@ -117,10 +126,13 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   the contour.
 - **Over-feathering hard objects:** a 10 px feather on a product looks like a glow. Keep hard
   edges at 0–2 px and refine soft ones instead.
-- **Halo:** the old background shows as a light or dark fringe. `shrink` 1–2 px or
+- **Halo:** the old background shows as a light or dark fringe. `contract` 1–2 px or
   `shiftEdge` negative before masking.
 - **Baking too early:** `apply_layer_mask`, `merge_down` and `layer_via_copy` with `cut: true`
   are hard to revise. Keep masks until the user is happy.
+- **Expand is not Grow:** `modify_selection` `expand` moves the edge by distance;
+  `grow_selection` adds similar colour. Use the one that matches the problem.
+- **Deselected by mistake:** `reselect` brings it back (or `undo_image`).
 - **Empty selection:** `modify_selection`, `refine_selection` and `apply_selection_as_mask` fail
   on it. Select first.
 - **Hidden selection still applies:** with `set_selection_display` `none`, paint and fills are
@@ -136,13 +148,17 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `select_all`, `deselect`, `invert_selection`: whole-image selections
 - `select_rect`, `select_ellipse`: marquees
 - `select_polygon`: the lasso, along a contour
+- `select_line`: a single row or column
+- `select_layer_transparency`: a layer's own pixels
+- `grow_selection`, `select_similar`: add similar colour, connected or anywhere
+- `reselect`: undo a deselect
 - `magic_wand`: similar colour from a seed
 - `select_color_range`: colour samples, hue, tone and skin presets
 - `select_subject`: a subject by description (needs a host model)
 - `load_selection_from_image`: AI or saved mattes
 - `load_selection_from_mask`: a layer mask back to a selection
 - `set_selection_display`: ants, Quick Mask tint or hidden
-- `modify_selection`: grow, shrink, feather, border, smooth
+- `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only
 - `capture_view`: inspect the edge at pixel level
@@ -152,4 +168,5 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `set_smart_filter_mask`: limit smart filters
 - `layer_via_copy`: lift the selection onto a new layer
 - `paint_stroke`: paint on a mask with `channel: "mask"`
+- `undo_image`: take back a step
 - `set_layer_properties`: clipping

@@ -71,6 +71,11 @@ describe('React LayersPanel', () => {
     // Ctrl/⌘-click loads the mask as the selection.
     await act(async () => mask.dispatchEvent(new win.MouseEvent('click', { bubbles: true, ctrlKey: true })));
     expect(c.getSelection()).not.toBeNull();
+    // Ctrl/⌘-click on the pixel thumbnail selects the layer's pixels.
+    c.deselect();
+    const thumbs = container.querySelectorAll('[data-testid="layer-thumbnail"]');
+    await act(async () => thumbs[thumbs.length - 1]!.dispatchEvent(new win.MouseEvent('click', { bubbles: true, metaKey: true })));
+    expect(c.getSelection()).not.toBeNull();
     expect(c.getLayers()[1].mask!.enabled).toBe(false);
     // The menu: delete via the ⋯ menu.
     await act(async () => (container.querySelector('button[aria-label="Layer menu"]') as HTMLButtonElement).click());

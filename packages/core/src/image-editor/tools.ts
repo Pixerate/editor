@@ -69,7 +69,9 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  * - `capture_view {region, rect?, ...}`: a screenshot of the whole image, the selection or a rect in
  *   natural pixels (up to 8× for close inspection), optionally with the selection shaded.
  * - Selections and masks: `get_selection`, `select_all`, `deselect`, `invert_selection`,
- *   `select_rect`, `select_ellipse`, `select_polygon`, `magic_wand`, `select_color_range`,
+ *   `select_rect`, `select_ellipse`, `select_polygon`, `select_line`, `magic_wand`,
+ *   `select_color_range`, `grow_selection`, `select_similar`, `reselect`,
+ *   `select_layer_transparency`,
  *   `load_selection_from_image`, `load_selection_from_mask`, `set_selection_display`,
  *   `modify_selection`, `refine_selection`, `apply_selection_as_mask` and the deprecated
  *   `select_region` / `select_by_color` (see `createImageSelectionTools`).

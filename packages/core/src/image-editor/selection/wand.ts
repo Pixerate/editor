@@ -373,3 +373,85 @@ export function colorRangePreset(pixels: PixelBuffer, preset: ColorRangePreset, 
   if (preset in HUE_RANGE_PRESETS) return hueRange(pixels, HUE_RANGE_PRESETS[preset]);
   throw new Error(`Unknown Color Range preset "${String(preset)}". Use one of ${COLOR_RANGE_PRESETS.join(', ')}.`);
 }
+
+export interface GrowSimilarOptions {
+  /** 0..255, the largest per-channel difference from a selected colour (default 32, as the wand). */
+  tolerance?: number;
+}
+
+/**
+ * The colours of the selected pixels (coverage ≥ 50 %, opaque) as a 64³ grid of 4-level bins,
+ * widened by the tolerance (Chebyshev distance, so a bin matches when any selected colour is
+ * within `tolerance` levels on every channel, to the nearest 4 levels).
+ */
+function selectedColorBins(pixels: PixelBuffer, sel: SelectionMask, tolerance: number): Uint8Array {
+  const S = 64;
+  let bins = new Uint8Array(S * S * S);
+  const d = pixels.data;
+  const n = pixels.width * pixels.height;
+  for (let i = 0; i < n; i++) {
+    if (sel.data[i] < 128 || d[i * 4 + 3] === 0) continue;
+    bins[((d[i * 4] >> 2) * S + (d[i * 4 + 1] >> 2)) * S + (d[i * 4 + 2] >> 2)] = 1;
+  }
+  const r = Math.round(Math.max(0, tolerance) / 4);
+  if (r === 0) return bins;
+  // Separable max filter along each axis.
+  for (const stride of [1, S, S * S]) {
+    const out = new Uint8Array(bins.length);
+    for (let i = 0; i < bins.length; i++) {
+      if (!bins[i]) continue;
+      const c = Math.floor(i / stride) % S;
+      const lo = Math.max(0, c - r);
+      const hi = Math.min(S - 1, c + r);
+      const base = i - c * stride;
+      for (let k = lo; k <= hi; k++) out[base + k * stride] = 1;
+    }
+    bins = out;
+  }
+  return bins;
+}
+
+function matcher(pixels: PixelBuffer, sel: SelectionMask, options: GrowSimilarOptions): (i: number) => boolean {
+  if (sel.width !== pixels.width || sel.height !== pixels.height) throw new Error('The selection and the pixels differ in size');
+  const bins = selectedColorBins(pixels, sel, options.tolerance ?? 32);
+  const d = pixels.data;
+  return (i) => d[i * 4 + 3] > 0 && bins[(((d[i * 4] >> 2) << 6) + (d[i * 4 + 1] >> 2)) * 64 + (d[i * 4 + 2] >> 2)] === 1;
+}
+
+/**
+ * Select › Grow: adds the pixels connected (4-neighbours) to the selection whose colour is
+ * within `tolerance` of a selected colour. Unlike Expand, it follows colour, not distance.
+ */
+export function growSelection(pixels: PixelBuffer, sel: SelectionMask, options: GrowSimilarOptions = {}): SelectionMask {
+  checkPixels(pixels);
+  const match = matcher(pixels, sel, options);
+  const { width: w, height: h } = pixels;
+  const out = new Uint8Array(sel.data);
+  const stack: number[] = [];
+  for (let i = 0; i < out.length; i++) if (out[i] >= 128) stack.push(i);
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % w;
+    const y = (i - x) / w;
+    const visit = (j: number) => {
+      if (out[j] < 255 && match(j)) {
+        out[j] = 255;
+        stack.push(j);
+      }
+    };
+    if (x > 0) visit(i - 1);
+    if (x < w - 1) visit(i + 1);
+    if (y > 0) visit(i - w);
+    if (y < h - 1) visit(i + w);
+  }
+  return createSelectionMask(w, h, out);
+}
+
+/** Select › Similar: adds every pixel in the image whose colour is within `tolerance` of a selected colour. */
+export function selectSimilar(pixels: PixelBuffer, sel: SelectionMask, options: GrowSimilarOptions = {}): SelectionMask {
+  const n = checkPixels(pixels);
+  const match = matcher(pixels, sel, options);
+  const out = new Uint8Array(sel.data);
+  for (let i = 0; i < n; i++) if (match(i)) out[i] = 255;
+  return createSelectionMask(pixels.width, pixels.height, out);
+}

@@ -9,6 +9,7 @@
     dropPlacement,
     dropZone,
     maskThumbnailClick,
+    layerThumbnailClick,
     layerBadge,
     layerEffectsBadge,
     layerHasThumbnail,
@@ -334,6 +335,13 @@
             <canvas
               use:paint={thumb(layer)}
               aria-label={`${row.label} pixels`}
+              data-testid="layer-thumbnail"
+              onclick={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  e.stopPropagation();
+                  attempt(() => layerThumbnailClick(controller, layer, e));
+                }
+              }}
               style="width: {thumbnailSize}px; height: {thumbnailSize}px"
               class={thumbClass(row.active && snapshot.activeTarget === 'pixels' && Boolean(layer.mask))}
             ></canvas>

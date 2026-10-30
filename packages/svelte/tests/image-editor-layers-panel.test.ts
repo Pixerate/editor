@@ -89,6 +89,11 @@ describe('Svelte LayersPanel', () => {
     mask.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
     flushSync();
     expect(c.getSelection()).not.toBeNull();
+    c.deselect();
+    const thumbs = target.querySelectorAll('[data-testid="layer-thumbnail"]');
+    thumbs[thumbs.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    flushSync();
+    expect(c.getSelection()).not.toBeNull();
     click(target.querySelector('button[aria-label="Layer menu"]'));
     const del = Array.from(target.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === 'Delete Layer') as HTMLButtonElement;
     click(del);

@@ -111,6 +111,22 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => button('Select').click());
     expect(controller.getSelection()!.bounds).toEqual({ x: 10, y: 0, width: 10, height: 10 });
   });
+
+  it('reselects, grows by colour and selects similar colours', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    await act(async () => root.render(<Bar controller={controller} />));
+    expect(button('Reselect').disabled).toBe(true);
+    await act(async () => void controller.selectRect({ x: 0, y: 0, width: 2, height: 2 }, { antiAlias: false }));
+    await act(async () => button('Similar').click());
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    await act(async () => button('Deselect').click());
+    expect(button('Reselect').disabled).toBe(false);
+    await act(async () => button('Reselect').click());
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    await act(async () => button('Polygonal Lasso').click());
+    expect(container.textContent).toContain('double-click, Enter or a click on the first corner closes it');
+  });
 });
 
 describe('React SelectionOptionsBar: Select Subject', () => {

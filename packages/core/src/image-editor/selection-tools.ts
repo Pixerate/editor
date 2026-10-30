@@ -82,8 +82,9 @@ const writeAnnotations = (title: string, idempotent = false) => ({
 /**
  * Agent tools for selections and masks (part of `createImageEditorToolProvider`): reading
  * (`get_selection`), selecting (`select_all`, `deselect`, `invert_selection`, `select_rect`,
- * `select_ellipse`, `select_polygon`, `magic_wand`, `select_color_range`), loading
- * (`load_selection_from_image`, `load_selection_from_mask`), the view
+ * `select_ellipse`, `select_polygon`, `select_line`, `magic_wand`, `select_color_range`,
+ * `grow_selection`, `select_similar`, `reselect`), loading (`load_selection_from_image`,
+ * `load_selection_from_mask`, `select_layer_transparency`), the view
  * (`set_selection_display`), editing (`modify_selection`, `refine_selection`) and masking
  * (`apply_selection_as_mask`). `select_region` and `select_by_color` are deprecated aliases.
  * Coordinates are natural pixels of the source image.
@@ -212,7 +213,8 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
   const modify: AgentTool = {
     name: 'modify_selection',
     title: 'Modify the selection',
-    description: 'Select › Modify: grow, shrink, feather, border or smooth the selection by radius pixels. One undoable step.',
+    description:
+      'Select › Modify: expand, contract, feather, border or smooth the selection by radius pixels (grow and shrink are older names for expand and contract). Expand and contract move the edge by distance; to add pixels of similar colour use grow_selection or select_similar. One undoable step.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -590,6 +592,101 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const sampleTolerance: Record<string, JsonSchema> = {
+    tolerance: { type: 'number', minimum: 0, maximum: 255, description: 'Largest per-channel difference from a selected colour, 0..255 (default 32, as magic_wand).' },
+    sampleMerged: sampleMergedSchema,
+    sample: sampleSchema,
+  };
+
+  const growTool: AgentTool = {
+    name: 'grow_selection',
+    title: 'Grow the selection by colour',
+    description:
+      'Select › Grow: adds the pixels connected to the selection whose colour is within tolerance of a selected colour (to the nearest 4 levels). Use it after a magic_wand click that missed shades of the same area. Unlike modify_selection expand, it follows colour, not distance. Fails when nothing is selected. One undoable step. Returns the selection.',
+    inputSchema: { type: 'object', properties: sampleTolerance, additionalProperties: false },
+    annotations: writeAnnotations('Grow the selection by colour'),
+    handler: async (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select part of the area first (magic_wand, select_rect).');
+      await controller.growSelection({ ...sampleOptions(args), tolerance: Math.min(255, Math.max(0, num(args.tolerance, 32))) });
+      return summary(controller);
+    },
+  };
+
+  const similarTool: AgentTool = {
+    name: 'select_similar',
+    title: 'Select similar colours',
+    description:
+      'Select › Similar: adds every pixel in the image whose colour is within tolerance of a selected colour, connected or not. Fails when nothing is selected. One undoable step. Returns the selection.',
+    inputSchema: { type: 'object', properties: sampleTolerance, additionalProperties: false },
+    annotations: writeAnnotations('Select similar colours'),
+    handler: async (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select a sample of the colour first.');
+      await controller.selectSimilar({ ...sampleOptions(args), tolerance: Math.min(255, Math.max(0, num(args.tolerance, 32))) });
+      return summary(controller);
+    },
+  };
+
+  const lineTool: AgentTool = {
+    name: 'select_line',
+    title: 'Select a single row or column',
+    description:
+      'Single Row / Single Column Marquee: selects a 1 px line across the whole image, a row at y = position or a column at x = position (natural image pixels). Use it to fix a dead row or column of pixels, or to stretch an edge line. One undoable step. Returns the selection.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        orientation: { type: 'string', enum: ['row', 'column'], description: 'row (horizontal, at y) or column (vertical, at x).' },
+        position: { type: 'number', minimum: 0, description: 'y of the row or x of the column, in natural image pixels.' },
+        mode: modeSchema,
+      },
+      required: ['orientation', 'position'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select a single row or column', true),
+    handler: (args) => {
+      if (args.orientation !== 'row' && args.orientation !== 'column') throw new Error('orientation must be row or column.');
+      controller.selectLine(args.orientation, num(args.position, NaN), { mode: parseSelectionMode(args.mode) });
+      return summary(controller);
+    },
+  };
+
+  const reselectTool: AgentTool = {
+    name: 'reselect',
+    title: 'Reselect',
+    description:
+      'Select › Reselect: brings back the last selection that deselect (or select_region none) cleared. Fails when there is none (for example after reopening the document). One undoable step. Returns the selection.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: writeAnnotations('Reselect', true),
+    handler: () => {
+      if (!controller.canReselect()) throw new Error('There is no cleared selection to bring back.');
+      controller.reselect();
+      return summary(controller);
+    },
+  };
+
+  const transparencyTool: AgentTool = {
+    name: 'select_layer_transparency',
+    title: "Select a layer's pixels",
+    description:
+      "Load Selection from a layer's transparency (Ctrl/⌘-click its thumbnail): selects where the layer has pixels, soft where it is partly transparent, combined by mode. Use it to select a cutout, a shape or text exactly. Pixel, shape, type and smart object layers. One undoable step. Returns the selection.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', minLength: 1, description: 'The layer whose pixels to select (see list_layers).' },
+        mode: modeSchema,
+        feather: featherSchema,
+      },
+      required: ['layerId'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations("Select a layer's pixels", true),
+    handler: (args) => {
+      const id = String(args.layerId ?? '');
+      if (!controller.getLayer(id)) throw new Error(`No layer "${id}". Call list_layers for ids.`);
+      controller.selectLayerTransparency(id, { mode: parseSelectionMode(args.mode), feather: num(args.feather, 0) });
+      return summary(controller);
+    },
+  };
+
   return [
     getSelection,
     selectAll,
@@ -598,10 +695,15 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     selectRect,
     selectEllipse,
     selectPolygonTool,
+    lineTool,
     magicWandTool,
     colorRangeTool,
     loadFromImage,
     loadFromMask,
+    transparencyTool,
+    growTool,
+    similarTool,
+    reselectTool,
     display,
     selectRegion,
     selectByColor,

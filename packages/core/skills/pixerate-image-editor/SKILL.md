@@ -20,8 +20,7 @@ object places contents (pixels or a nested layer document) through a transform a
 re-rendered from the contents on every change. A shape layer holds vector paths with a fill and a
 stroke, rendered again from the paths on every change, so it stays sharp through any transform. A
 type layer holds live, styled text (point or paragraph) drawn with the editor's fonts.
-Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors, namespacing and command
-batching.
+Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors and batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
   `tint`, `saturation` (all -100..100, default 0), `blur` (0..30 px) and `opacity` (0..1).
@@ -136,15 +135,12 @@ drawing or editing either.
 
 1. **Paint on its own layer** (`add_pixel_layer`), not on the Background (active on a new image, so
    strokes without `layerId` land there) unless asked: a layer can be faded, masked or deleted.
-2. **Retouch through masks**: to hide part of a layer, add a mask and paint black on it
-   (`paint_stroke` with `channel: "mask"`, `color: "#000000"`); paint white to bring it back.
-   A soft brush (`hardness` 0..0.3) gives soft transitions.
+2. **Retouch through masks**, not the eraser (see `pixerate-image-selection-masking`).
 3. **One stroke is one call and one undo step.** Send the path's points in order (a few points
    per brush diameter is enough; dabs are spaced by `brush.spacing`). Use `opacity` for the
    overall strength and `flow` for gradual build-up within the stroke.
-4. **Limit paint with a selection** (select first, then `paint_stroke` / `fill_pixels`), or lock
-   transparency (`set_layer_properties` `locks.transparency`) to paint only where the layer
-   already has pixels.
+4. **Limit paint with a selection**, or lock transparency (`set_layer_properties`
+   `locks.transparency`) to paint only where the layer already has pixels.
 5. **Mix paint colours with `mix_colors`** when the user names paints and amounts ("two parts
    ultramarine to one part yellow", "a tint of red"). It mixes like pigment, so blue and yellow
    make green and white makes a tint, where averaging RGB gives grey or a dull pastel. Pass its
@@ -290,15 +286,20 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `invert_selection` | Select › Inverse (soft edges stay soft; with nothing selected, selects all). Returns the summary. |
 | `select_rect` | Rectangular marquee: `x`, `y`, `width`, `height` (natural px), `mode` (replace, add, subtract, intersect), `feather` px, `antiAlias`. Returns the summary. |
 | `select_ellipse` | Elliptical marquee inscribed in `x`, `y`, `width`, `height`; same options. A feathered ellipse makes a vignette. Returns the summary. |
+| `select_line` | Single row or column marquee: `orientation` `row` (at y) or `column` (at x), `position` in natural px, `mode`. A 1 px line across the image. Returns the summary. |
 | `select_polygon` | The lasso: `points` (at least 3 `{x, y}` along the outline, closed automatically), `mode`, `feather`, `antiAlias`. Trace a subject's contour, not its box. Returns the summary. |
 | `magic_wand` | Select similar colour from `x`, `y`: `tolerance` 0..255 (default 32), `contiguous` (default true), `distance` `rgb` or `perceptual`, `sampleMerged`, `sample` (`composite` or `active-layer`), `mode`, `feather`. For flat backdrops and solid colours. Returns the summary. |
 | `select_color_range` | Color Range, soft: `samples` (`[{color, x?, y?}]`) or a `preset` (reds … magentas, highlights, midtones, shadows, skinTones); `fuzziness` (samples 0..200, default 40; tone presets' falloff, default 20), `localized` px radius around positioned samples, `invert`, `sample`, `mode`, `feather`. Returns the summary. |
 | `load_selection_from_image` | Load a mask image (`image` data URL or URL; white = selected) by `channel` (luminance, alpha, red, green, blue), with `threshold`, `invert`, `mode`. For AI or saved mattes; then `refine_selection`. Returns the summary. |
+| `select_layer_transparency` | Select a layer's pixels (Ctrl/⌘-click its thumbnail): its alpha, soft where partly transparent, for pixel, shape, type and smart object layers; `mode`, `feather`. Returns the summary. |
 | `load_selection_from_mask` | Load a layer's mask as the selection (`layerId`, `invert`, `mode`); fails without a painted mask. Returns the summary. |
 | `set_selection_display` | Show the selection as `ants`, `quickMask` (tint over the unselected area, to judge soft edges) or `none`. View only, no undo step. |
 | `select_region` | Deprecated alias (removed next minor): `shape` rect, ellipse, polygon, all, none or invert. Use the tools above. |
 | `select_by_color` | Deprecated alias (removed next minor): wand (`x`, `y`) or one `color`. Use `magic_wand` or `select_color_range`. |
-| `modify_selection` | Grow, shrink, feather, border or smooth the selection (`op`) by `radius` px (0..500). Use shrink then feather to keep an adjustment from bleeding over an edge; smooth to remove wand speckle. Fails when nothing is selected. |
+| `modify_selection` | Expand, contract, feather, border or smooth the selection (`op`; `grow` / `shrink` are old names for expand / contract) by `radius` px (0..500). Contract then feather keeps an adjustment off an edge; smooth removes wand speckle. Fails when nothing is selected. |
+| `grow_selection` | Select › Grow: add connected pixels within `tolerance` (default 32) of a selected colour; follows colour, not distance. `sample`, `sampleMerged`. Fails when nothing is selected. Returns the summary. |
+| `select_similar` | Select › Similar: add every pixel in the image within `tolerance` of a selected colour, connected or not. Fails when nothing is selected. Returns the summary. |
+| `reselect` | Bring back the last selection `deselect` cleared (one undo step). Fails when there is none. Returns the summary. |
 | `refine_selection` | Refine Edge: snap the selection edge to image edges within `radius` px (0..64, default 8), with `smartRadius`, `smooth` 0..100, `feather` px, `contrast` 0..100 and `shiftEdge` -100..100 %. Use on hair, fur, foliage or after loading a coarse AI mask. |
 | `update_adjustment_layer` | Change a layer's `enabled` (false hides it without deleting), `blend`, `opacity` (0..1) or `name` in one undo step. Returns the layer. Its parameters change with `set_adjustments`. Toggle `enabled` to compare a layer's effect before and after. |
 | `move_adjustment_layer` | Move a layer to index `to` (0 = bottom, applied first; past the top means top). Order matters: a curves layer above a hue/saturation layer works on its output. Fails when the layer is already there. Returns the ids bottom to top. |
@@ -328,7 +329,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `transform_selection` | Transform only the selection outline (Transform Selection): the same numeric fields, `matrix` or `corners` as `transform_layer`, over the selection's bounds. Pixels do not change. Needs a selection. Returns the new selection `bounds`. |
 | `flip_layer` | Mirror a pixel layer, its selected pixels or a copy (`content`) `horizontal` or `vertical` about the frame's centre, exactly. For the whole image use `flip_image`. Returns the new `bounds`. |
 | `rotate_layer_90` | Turn a pixel layer, its selected pixels or a copy by `turn` 90 (clockwise), -90 or 180 about the frame's centre, landing on whole pixels (no resampling). For the whole image use `set_rotation`. Returns the new `bounds`. |
-| `add_layer_mask` | Mask any layer `from` `reveal-all`, `hide-all` or `selection`, with optional `density` / `feather`. Replaces an existing mask. Returns the mask summary. |
+| `add_layer_mask` | Mask any layer `from` `reveal-all`, `hide-all`, `selection`, `hide-selection` (its inverse) or `transparency` (the layer's own alpha), with optional `density` / `feather`. Replaces an existing mask. Returns the mask summary. |
 | `set_layer_mask_properties` | Change any layer mask's `density`, `feather`, `enabled` or `linked` (false: the mask stays put when the layer moves or transforms) without touching its pixels. |
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |

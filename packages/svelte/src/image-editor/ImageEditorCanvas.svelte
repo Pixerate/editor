@@ -595,6 +595,22 @@
   }
 
   $effect(() => {
+    if (mode !== 'select' || typeof window === 'undefined') return;
+    const gesture = selectionGesture;
+    // The polygonal lasso: Enter closes it, Escape cancels, Backspace removes the last corner.
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (gesture.key(e.key)) {
+        e.preventDefault();
+        selectionDraft = gesture.draftPath;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  $effect(() => {
     if (mode !== 'paint' || typeof window === 'undefined') return;
     const c = editor.controller;
     const onKey = (e: KeyboardEvent) => {
@@ -663,7 +679,10 @@
     if (mode === 'select') {
       const gesture = selectionGesture;
       const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
-      void gesture.begin(imgPt, e).then(() => report('select', gesture.error));
+      void gesture.begin(imgPt, e).then(() => {
+        report('select', gesture.error);
+        selectionDraft = gesture.draftPath;
+      });
       return;
     }
 
@@ -771,7 +790,7 @@
 
     if (mode === 'select') {
       const gesture = selectionGesture;
-      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false))) {
+      if (gesture.active && gesture.move(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), e)) {
         selectionDraft = gesture.draftPath;
         renderCanvas();
       }
@@ -924,7 +943,8 @@
       const gesture = selectionGesture;
       if (gesture.active) {
         gesture.end(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), e);
-        selectionDraft = null;
+        // A polygonal lasso stays open between clicks.
+        selectionDraft = gesture.draftPath;
         renderCanvas();
       }
       return;
