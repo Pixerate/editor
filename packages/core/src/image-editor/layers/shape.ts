@@ -350,6 +350,15 @@ function fillCoverage(geo: ShapeGeometry, rect: CropBox, rule: ShapeFillRule, in
   return acc;
 }
 
+/**
+ * Coverage (0..1) of `components` over `rect`, filled with `rule` and combined by their ops;
+ * `inverted` covers the outside instead. Used for vector masks.
+ */
+export function componentsCoverage(components: readonly ShapeComponent[], rect: CropBox, rule: ShapeFillRule = 'nonzero', inverted = false): Float32Array {
+  const geo = { fills: components.map((c) => ({ op: c.op, flat: flattenPath(componentPath(c)) })) } as ShapeGeometry;
+  return fillCoverage(geo, rect, rule, inverted) ?? new Float32Array(rect.width * rect.height);
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------

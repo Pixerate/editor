@@ -36,6 +36,7 @@ import {
   type PixelLayer,
   type RasterMask,
   type ShapeComponent,
+  type VectorMask,
   type ShapeLayer,
   type ShapePaint,
   type ShapeStroke,
@@ -83,8 +84,20 @@ interface SerializedLayerBase {
   blend: string;
   clipped?: boolean;
   mask?: SerializedRasterMask;
+  vectorMask?: SerializedVectorMask;
   locks?: LayerLocks;
   effects?: SerializedLayerEffects;
+}
+
+/** A stored vector mask: its components as JSON (document pixels) and its properties. */
+export interface SerializedVectorMask {
+  components: unknown[];
+  fillRule?: 'evenodd';
+  inverted?: true;
+  enabled?: false;
+  linked?: false;
+  density?: number;
+  feather?: number;
 }
 
 /** A layer's effects: the effect list as JSON plus the PSD block they came from (base64). */
@@ -360,6 +373,7 @@ function baseFields(layer: ImageLayer, ctx: SerializeContext): SerializedLayerBa
   };
   if (layer.clipped) out.clipped = true;
   if (layer.mask) out.mask = serializeMask(layer.mask, `${layer.id}-mask`, ctx);
+  if (layer.vectorMask) out.vectorMask = serializeVectorMask(layer.vectorMask);
   if (layer.locks && Object.values(layer.locks).some(Boolean)) out.locks = { ...layer.locks };
   if (layer.effects) out.effects = serializeEffects(layer.effects);
   return out;
@@ -386,6 +400,39 @@ export function deserializeEffects(raw: unknown): LayerEffects | undefined {
     }
   }
   return normalizeLayerEffects({ ...r, psd });
+}
+
+function serializeVectorMask(vm: VectorMask): SerializedVectorMask {
+  const out: SerializedVectorMask = { components: JSON.parse(JSON.stringify(vm.components)) };
+  if (vm.fillRule === 'evenodd') out.fillRule = 'evenodd';
+  if (vm.inverted) out.inverted = true;
+  if (vm.enabled === false) out.enabled = false;
+  if (vm.linked === false) out.linked = false;
+  if (vm.density !== undefined && vm.density !== 1) out.density = vm.density;
+  if (vm.feather) out.feather = vm.feather;
+  return out;
+}
+
+/** Restores a stored vector mask; throws on damaged components. */
+function readVectorMask(r: SerializedVectorMask): VectorMask {
+  if (!Array.isArray(r.components)) throw new Error('its components are missing');
+  const components: ShapeComponent[] = r.components.map((raw, i) => {
+    const c = raw as Record<string, unknown>;
+    const op = requireOperation(c?.op, `components[${i}].op`);
+    if (c?.live) {
+      const live = normalizeLiveShape(c.live, `components[${i}].live`);
+      return { op, subpaths: liveShapeSubpaths(live), live };
+    }
+    return { op, subpaths: Array.isArray(c?.subpaths) && !c.subpaths.length ? [] : normalizeSubpaths(c?.subpaths, `components[${i}].subpaths`) };
+  });
+  const vm: VectorMask = { components };
+  if (r.fillRule === 'evenodd') vm.fillRule = 'evenodd';
+  if (r.inverted === true) vm.inverted = true;
+  if (r.enabled === false) vm.enabled = false;
+  if (r.linked === false) vm.linked = false;
+  if (typeof r.density === 'number' && r.density !== 1) vm.density = num(r.density, 0, 1, 1);
+  if (typeof r.feather === 'number' && r.feather > 0) vm.feather = num(r.feather, 0, 1000, 0);
+  return vm;
 }
 
 function serializeMask(mask: RasterMask, hint: string, ctx: SerializeContext): SerializedRasterMask {
@@ -882,6 +929,13 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
   if (r.clipped === true) base.clipped = true;
   const mask = readMask(r.mask, ctx, `Layer "${base.name || id}"`);
   if (mask) base.mask = mask;
+  if (r.vectorMask && typeof r.vectorMask === 'object' && r.type !== 'shape') {
+    try {
+      base.vectorMask = readVectorMask(r.vectorMask);
+    } catch (err) {
+      ctx.problems.push(`The vector mask of layer "${base.name || id}" could not be read (${err instanceof Error ? err.message : String(err)}); it was left out.`);
+    }
+  }
   if (r.locks && typeof r.locks === 'object') {
     const locks: LayerLocks = {};
     for (const k of ['pixels', 'transparency', 'position', 'all'] as const) if (r.locks[k] === true) locks[k] = true;

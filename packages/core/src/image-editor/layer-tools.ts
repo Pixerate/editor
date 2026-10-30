@@ -1,4 +1,5 @@
 import type { AgentTool } from '../tools/registry.js';
+import { vectorMaskBounds } from './layers/vector-mask';
 import type { ImageEditorController } from './controller';
 import { contentBounds } from '../raster/surface';
 import { findLayer, type ImageLayer, type LayerFilter, type RasterMask } from './layers/model';
@@ -34,7 +35,7 @@ export function maskSummary(mask: RasterMask | undefined): Record<string, unknow
 
 /**
  * A plain description of a layer (and its children) for agents: ids, types, names, document
- * bounds, visibility, opacity, fill, blend, clipping, locks, mask and effects summaries and
+ * bounds, visibility, opacity, fill, blend, clipping, locks, mask, vector mask and effects summaries and
  * whether it is active. `boundsOf` gives a pixel layer's document bounds.
  */
 export function describeLayer(
@@ -52,6 +53,9 @@ export function describeLayer(
     clipped: Boolean(layer.clipped),
     locks: layer.locks ? { ...layer.locks } : {},
     mask: maskSummary(layer.mask),
+    vectorMask: layer.vectorMask
+      ? { enabled: layer.vectorMask.enabled !== false, linked: layer.vectorMask.linked !== false, inverted: layer.vectorMask.inverted === true, components: layer.vectorMask.components.length, bounds: vectorMaskBounds(layer.vectorMask) }
+      : null,
     effects: layer.effects
       ? { enabled: layer.effects.enabled, scale: layer.effects.scale ?? 1, items: layer.effects.items.map((e) => ({ id: e.id, kind: e.kind, enabled: e.enabled })) }
       : null,

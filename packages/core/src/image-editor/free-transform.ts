@@ -7,6 +7,7 @@
  * committed with full-quality resampling.
  */
 
+import { transformVectorMask } from './layers/vector-mask';
 import {
   TiledSurface,
   contentBounds,
@@ -491,6 +492,26 @@ export class FreeTransformSession {
 
   /** Resamples every part for the current geometry and shows it (or returns it, for commit). */
   private resample(final: boolean, preview: FreeTransformPreview = {}): { layers: ImageLayer[]; selection: SelectionMask | null } {
+    const out = this.resampleContent(final, preview);
+    return { ...out, layers: this.moveVectorMask(out.layers) };
+  }
+
+  /** A linked vector mask follows the layer's content through the same document-space map. */
+  private moveVectorMask(layers: ImageLayer[]): ImageLayer[] {
+    const g = this.geometryValue;
+    if (!this.layerId || this.copyId || !this.moves.includes('pixels') || isIdentityTransform(g)) return layers;
+    const vm = findLayer(layers, this.layerId)?.layer.vectorMask;
+    if (!vm || vm.linked === false) return layers;
+    const warp = hasWarp(g);
+    const f = warp ? transformMap(g) : null;
+    const h = warp ? null : geometryHomography(g);
+    const affine = !warp && h && Math.abs(h[6]) < 1e-12 && Math.abs(h[7]) < 1e-12 && Math.abs(h[8] - 1) < 1e-12 ? ([h[0], h[3], h[1], h[4], h[2], h[5]] as const) : undefined;
+    const map = (p: { x: number; y: number }) => (f ? f(p) : h ? applyHomography(h, p) : p) ?? p;
+    const moved = transformVectorMask(vm, map, affine);
+    return mapLayer(layers, this.layerId, (l) => ({ ...l, vectorMask: moved }) as ImageLayer);
+  }
+
+  private resampleContent(final: boolean, preview: FreeTransformPreview = {}): { layers: ImageLayer[]; selection: SelectionMask | null } {
     if (this.smart) return { layers: this.resampleSmart(final, preview), selection: this.startSelection };
     if (this.typeTarget) return { layers: this.resampleType(), selection: this.startSelection };
     const g = this.geometryValue;

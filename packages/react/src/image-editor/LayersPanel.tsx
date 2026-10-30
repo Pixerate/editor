@@ -9,6 +9,8 @@ import {
   dropPlacement,
   dropZone,
   maskThumbnailClick,
+  vectorMaskThumbnail,
+  vectorMaskThumbnailClick,
   layerThumbnailClick,
   openPsdFile,
   layerBadge,
@@ -141,6 +143,8 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
 
   const thumb = (layer: ImageLayer) => (layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null);
   const maskThumb = (layer: ImageLayer) => (layer.mask && !layer.mask.source ? controller.getLayerThumbnail(layer.id, { maxSide: 64, mask: true }) : null);
+  const vectorThumb = (layer: ImageLayer) =>
+    layer.vectorMask ? vectorMaskThumbnail(layer.vectorMask, state.imageDimensions.width, state.imageDimensions.height, 64) : null;
 
   const locked = (layer: ImageLayer) => Boolean(layer.locks?.all || layer.locks?.pixels || layer.locks?.position || layer.locks?.transparency);
 
@@ -396,6 +400,19 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
                   onClick={(e) => {
                     e.stopPropagation();
                     attempt(() => maskThumbnailClick(controller, layer, e));
+                  }}
+                />
+              )}
+              {layer.vectorMask && (
+                <Thumbnail
+                  pixels={vectorThumb(layer)}
+                  size={thumbnailSize}
+                  label={`${row.label} vector mask${layer.vectorMask.enabled === false ? ' (disabled)' : ''}`}
+                  title="Ctrl/⌘-click: load the path as the selection · Shift-click: turn it off or on"
+                  testId="layer-vector-mask-thumbnail"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    attempt(() => vectorMaskThumbnailClick(controller, layer, e));
                   }}
                 />
               )}

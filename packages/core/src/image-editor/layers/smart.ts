@@ -11,6 +11,7 @@
  * wrong before changing anything, like the other layer operations.
  */
 
+import { followLayerMove } from './vector-mask';
 import { blendTile } from '../../raster/compositor';
 import { gaussianBlur } from '../../raster/blur';
 import { MAX_EFFECT_REACH, effectsMargin } from '../../raster/effects/model';
@@ -506,6 +507,7 @@ export function offsetSmartObject(layers: readonly ImageLayer[], id: string, dx:
   const moveMask = (m: RasterMask | undefined) => (m && m.linked !== false && !m.source ? { ...m, surface: translateSurface(m.surface, mx, my) } : m);
   if (layer.mask) next.mask = moveMask(layer.mask);
   if (layer.smartFilters?.mask) next.smartFilters = { ...layer.smartFilters, mask: moveMask(layer.smartFilters.mask) };
+  next = followLayerMove(next, mx, my);
   // Shifting is exact unless a filter reads across the canvas edge, or the render was cut at its margin.
   const spatial = activeSmartFilters(layer.smartFilters).some((f) => f.kind === 'blur') || activeEffectSmartFilters(layer.smartFilters).length > 0;
   const b = contentBounds(layer.surface);

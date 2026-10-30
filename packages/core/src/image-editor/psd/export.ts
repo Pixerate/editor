@@ -8,6 +8,7 @@
  * baked, and no layer reading the document source (see `ImageEditorController.toPsd`).
  */
 
+import { VMSK_DISABLED, VMSK_NOT_LINKED, vectorBlockForComponents } from './paths';
 import { adjustmentKindLabel } from '../adjustment-layers';
 import { contentBounds, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 import { encodePng } from '../../raster/png';
@@ -336,6 +337,13 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     if (fx) blocks.push(fx);
     const locks = lockBits(layer);
     if (locks) blocks.push({ key: 'lspf', data: u32Bytes(locks >>> 0) });
+    const vm = layer.type !== 'shape' ? layer.vectorMask : undefined;
+    if (vm) {
+      const flags = (vm.linked === false ? VMSK_NOT_LINKED : 0) | (vm.enabled === false ? VMSK_DISABLED : 0);
+      blocks.push({ key: 'vmsk', data: vectorBlockForComponents(vm.components, vm.inverted === true, width, height, flags) });
+      if ((vm.density ?? 1) !== 1 || (vm.feather ?? 0) > 0) note('Vector mask density and feather are not written; the paths are', layer.name);
+      if (vm.fillRule === 'evenodd') note('Vector masks are written with the nonzero fill rule (Photoshop has no even-odd paths)', layer.name);
+    }
     return {
       opacity: Math.round(Math.min(1, Math.max(0, layer.opacity)) * 255),
       clipping: layer.clipped ? 1 : 0,

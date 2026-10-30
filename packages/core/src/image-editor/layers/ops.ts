@@ -4,6 +4,7 @@
  * new stack that shares every untouched layer. The controller wraps them with undo history.
  */
 
+import { followLayerMove } from './vector-mask';
 import type { BlendMode } from '../blend';
 import { isBlendMode } from '../blend';
 import type { CropBox } from '../types';
@@ -304,7 +305,8 @@ export function offsetLayer(layers: readonly ImageLayer[], id: string, offset: {
     // An unlinked mask stays where it is in the document, so it moves the other way in layer space.
     next.mask = { ...mask, surface: translateSurface(mask.surface, layer.offset.x - next.offset.x, layer.offset.y - next.offset.y) };
   }
-  return mapLayer(layers, id, () => next);
+  // A linked vector mask (document space) moves with the pixels.
+  return mapLayer(layers, id, () => followLayerMove(next, next.offset.x - layer.offset.x, next.offset.y - layer.offset.y));
 }
 
 /** Sets or removes (`null`) a layer's mask. */

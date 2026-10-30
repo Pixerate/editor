@@ -129,7 +129,7 @@ describe('image editor agent tools', () => {
       'get_smart_object', 'convert_to_smart_object', 'rasterize_smart_object', 'set_smart_object_transform', 'replace_smart_object_contents',
       'export_smart_object_contents', 'copy_smart_object', 'edit_smart_object_contents', 'close_smart_object_contents', 'add_smart_filter',
       'update_smart_filter', 'remove_smart_filter', 'move_smart_filter', 'set_smart_filters_enabled', 'set_smart_filter_mask',
-      'get_shape_layer', 'add_shape_layer', 'update_shape', 'set_shape_component', 'add_shape_component', 'remove_shape_component', 'merge_shape_components',
+      'get_shape_layer', 'add_shape_layer', 'update_shape', 'set_shape_component', 'add_shape_component', 'remove_shape_component', 'merge_shape_components', 'get_vector_mask', 'add_vector_mask', 'set_vector_mask_path', 'set_vector_mask_properties', 'rasterize_vector_mask', 'remove_vector_mask',
       'list_fonts', 'get_text_layer', 'add_text_layer', 'set_text', 'set_text_style', 'set_paragraph_style', 'set_text_frame', 'convert_text_to_shape',
       'list_layer_effects', 'add_layer_effect', 'update_layer_effect', 'remove_layer_effect', 'set_layer_effects_enabled', 'set_global_light',
       'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush', 'set_paint', 'get_paint',
@@ -146,7 +146,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

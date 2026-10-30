@@ -552,11 +552,12 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'load_selection_from_mask',
     title: 'Load a selection from a layer mask',
     description:
-      'Load Selection from a layer\'s mask (Ctrl/⌘-click its mask thumbnail): the mask\'s pixels become the selection, combined by mode (density and feather are not applied). Use it to reuse a mask on another layer or to edit it as a selection. Fails when the layer has no painted mask. One undoable step. Returns the selection.',
+      'Load Selection from a layer\'s mask (Ctrl/⌘-click its mask thumbnail): the raster mask\'s pixels, or with source vector the vector mask\'s path, become the selection, combined by mode (density and feather are not applied). Use it to reuse a mask on another layer or to edit it as a selection. Fails when the layer has no such mask. One undoable step. Returns the selection.',
     inputSchema: {
       type: 'object',
       properties: {
         layerId: { type: 'string', minLength: 1, description: 'The layer whose mask to load (see list_layers).' },
+        source: { type: 'string', enum: ['pixels', 'vector'], description: 'pixels: the raster (layer) mask (default); vector: the vector mask\'s path.' },
         invert: { type: 'boolean', description: 'Select what the mask hides instead (default false).' },
         mode: modeSchema,
       },
@@ -568,6 +569,11 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       const id = String(args.layerId ?? '');
       const layer = controller.getLayer(id);
       if (!layer) throw new Error(`No layer "${id}". Call list_layers for ids.`);
+      if (args.source === 'vector') {
+        if (!layer.vectorMask) throw new Error(`Layer "${id}" has no vector mask. Add one with add_vector_mask, or load its pixels mask (source pixels).`);
+        controller.selectionFromVectorMask(id, parseSelectionMode(args.mode), args.invert === true);
+        return summary(controller);
+      }
       if (!layer.mask) throw new Error(`Layer "${id}" has no mask. Add one with add_layer_mask, or pick a layer with a mask.`);
       if (layer.mask.source) throw new Error(`Layer "${id}" has a computed (depth) mask, not a painted one, so it cannot be loaded as a selection.`);
       controller.selectionFromLayerMask(id, parseSelectionMode(args.mode), args.invert === true);

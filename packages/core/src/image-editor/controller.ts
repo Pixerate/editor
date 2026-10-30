@@ -19,6 +19,7 @@ import {
   LegacySerializedImageEditorState,
   SerializedImageEditorState,
 } from './types';
+import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
 import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
@@ -78,6 +79,7 @@ import {
   type LiveShape,
   type ShapeComponent,
   type ShapeFillRule,
+  type VectorMask,
   type ShapeOperation,
   type ShapeLayer,
   type ShapePaint,
@@ -94,6 +96,7 @@ import {
   annotationOfShape,
   createShapeLayer,
   liveComponent,
+  componentsCoverage,
   mergeShapeComponents as mergeShapeComponentsOp,
   normalizeLiveShape,
   normalizeShapePaint,
@@ -545,6 +548,26 @@ export interface CloneSource {
  * 'star' | 'line', … }`, see `LiveShape`) or subpaths (`[{ anchors: [{ x, y, in?, out? }],
  * closed }]` or SVG path data), and how it combines with the components below it.
  */
+/** A vector mask's path: several `components`, or one `shape` / `subpaths` (with `op`). */
+export interface VectorMaskPathInput extends ShapeGeometryInput {
+  components?: ShapeGeometryInput[];
+  fillRule?: ShapeFillRule;
+}
+
+/** A vector mask as `getVectorMask` describes it. */
+export interface VectorMaskInfo {
+  layerId: string;
+  enabled: boolean;
+  linked: boolean;
+  inverted: boolean;
+  fillRule: ShapeFillRule;
+  density: number;
+  feather: number;
+  /** Bounds of the path's anchors and handles (document px), or `null` for an empty path. */
+  bounds: CropBox | null;
+  components: Array<{ index: number; op: ShapeOperation; live: LiveShape | null; subpaths: VectorSubpath[] }>;
+}
+
 export interface ShapeGeometryInput {
   shape?: LiveShape | Record<string, unknown>;
   subpaths?: VectorSubpath[] | string;
@@ -2669,6 +2692,7 @@ export class ImageEditorController {
       let moved: TypeLayer = { ...transformTypeLayer(layer, [1, 0, 0, 1, mx, my]), surface: translateSurface(layer.surface, mx, my) };
       const mask = layer.mask;
       if (mask && mask.linked !== false && !mask.source && (mx || my)) moved = { ...moved, mask: { ...mask, surface: translateSurface(mask.surface, mx, my) } };
+      moved = followLayerMove(moved, mx, my);
       this.commitLayers(mapLayer(this.state.layers, id, () => moved), undefined, commitToHistory);
       const t = moved.transform ?? [1, 0, 0, 1, 0, 0];
       return { offset: { x: Math.round(t[4]), y: Math.round(t[5]) }, bounds: this.getLayerBounds(id) };
@@ -2726,6 +2750,150 @@ export class ImageEditorController {
     this.commitLayers(setLayerMaskOp(this.state.layers, id, null), () => {
       if (this.state.activeLayerId === id) this.state.activeTarget = 'pixels';
     });
+  }
+
+  // --- Vector masks ---
+
+  /** The layer for a vector mask command: not a shape layer (its path is its vector mask), not a depth-masked one. */
+  private vectorMaskLayer(id: string): ImageLayer {
+    const layer = requireLayer(this.state.layers, id).layer;
+    const name = layer.name || id;
+    if (layer.type === 'shape') throw new LayerOperationError(`Layer "${name}" is a shape layer, whose path already is its vector mask; change it with set_shape_component, or rasterize the layer first.`);
+    if (layer.mask?.source) throw new LayerOperationError(`Layer "${name}" has a depth mask, which cannot be combined with a vector mask; remove the depth mask first.`);
+    return layer;
+  }
+
+  private requireVectorMask(id: string): { layer: ImageLayer; vm: VectorMask } {
+    const layer = this.vectorMaskLayer(id);
+    if (!layer.vectorMask) throw new LayerOperationError(`Layer "${layer.name || id}" has no vector mask; add one with add_vector_mask.`);
+    return { layer, vm: layer.vectorMask };
+  }
+
+  /** Components from a path spec: `components`, or one `shape` / `subpaths`. */
+  private vectorMaskComponents(path: VectorMaskPathInput): ShapeComponent[] {
+    if (path.components?.length && (path.shape !== undefined || path.subpaths !== undefined)) throw new LayerOperationError('Give components, or shape / subpaths, not both.');
+    if (path.fillRule !== undefined && path.fillRule !== 'nonzero' && path.fillRule !== 'evenodd') throw new LayerOperationError('fillRule must be nonzero or evenodd.');
+    const specs: ShapeGeometryInput[] = path.components?.length ? path.components : [path];
+    return specs.map((c, i) => this.componentFrom(c, path.components?.length ? `components[${i}].` : ''));
+  }
+
+  /**
+   * Layer › Vector Mask: `reveal-all` (an empty path showing everything), `hide-all` (an empty path
+   * hiding everything) or `path` (reveals inside the path given). Replaces an existing vector mask;
+   * the raster mask is kept and both apply. One undo step. Returns the vector mask.
+   */
+  public addVectorMask(id: string, from: 'reveal-all' | 'hide-all' | 'path' = 'reveal-all', path: VectorMaskPathInput = {}): VectorMask {
+    this.vectorMaskLayer(id);
+    let vm: VectorMask;
+    if (from === 'path') {
+      vm = { components: this.vectorMaskComponents(path) };
+      if (path.fillRule === 'evenodd') vm.fillRule = 'evenodd';
+    } else if (from === 'reveal-all' || from === 'hide-all') {
+      if (path.components?.length || path.shape !== undefined || path.subpaths !== undefined) throw new LayerOperationError(`A ${from} vector mask starts empty; use from path to give a path.`);
+      vm = { components: [], ...(from === 'reveal-all' ? { inverted: true } : {}) };
+    } else {
+      throw new LayerOperationError(`Unknown vector mask source "${String(from)}". Use reveal-all, hide-all or path.`);
+    }
+    this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: vm }) as ImageLayer));
+    return vm;
+  }
+
+  /** Replaces a vector mask's path (its properties are kept). One undo step. Returns the vector mask. */
+  public setVectorMaskPath(id: string, path: VectorMaskPathInput): VectorMask {
+    const { vm } = this.requireVectorMask(id);
+    const next: VectorMask = { ...vm, components: this.vectorMaskComponents(path) };
+    if (path.fillRule === 'evenodd') next.fillRule = 'evenodd';
+    else if (path.fillRule === 'nonzero') delete next.fillRule;
+    this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: next }) as ImageLayer));
+    return next;
+  }
+
+  /** Changes a vector mask's enabled, linked, inverted, density or feather (the path is kept). One undo step. */
+  public setVectorMaskProps(id: string, props: Partial<Pick<VectorMask, 'enabled' | 'linked' | 'inverted' | 'density' | 'feather'>>): VectorMask {
+    const { vm } = this.requireVectorMask(id);
+    if (props.density !== undefined && !(props.density >= 0 && props.density <= 1)) throw new LayerOperationError('density must be from 0 to 1.');
+    if (props.feather !== undefined && !(props.feather >= 0 && props.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    const next: VectorMask = { ...vm };
+    for (const k of ['enabled', 'linked', 'inverted'] as const) {
+      if (props[k] === undefined) continue;
+      if (typeof props[k] !== 'boolean') throw new LayerOperationError(`${k} must be true or false.`);
+      if (k === 'inverted' ? props[k] : !props[k]) next[k] = k === 'inverted';
+      else delete next[k];
+    }
+    if (props.density !== undefined) {
+      if (props.density === 1) delete next.density;
+      else next.density = props.density;
+    }
+    if (props.feather !== undefined) {
+      if (props.feather === 0) delete next.feather;
+      else next.feather = props.feather;
+    }
+    this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: next }) as ImageLayer));
+    return next;
+  }
+
+  /** Deletes a layer's vector mask (one undo step). */
+  public removeVectorMask(id: string): void {
+    this.requireVectorMask(id);
+    this.commitLayers(
+      mapLayer(this.state.layers, id, (l) => {
+        const next = { ...l };
+        delete next.vectorMask;
+        return next as ImageLayer;
+      })
+    );
+  }
+
+  /**
+   * Layer › Rasterize › Vector Mask: multiplies the path (with its density and feather) into the
+   * layer's raster mask, adding one when there is none, and removes the vector mask. The raster
+   * mask keeps its own properties. One undo step. Returns the raster mask.
+   */
+  public rasterizeVectorMask(id: string): RasterMask {
+    const { layer } = this.requireVectorMask(id);
+    const { width, height } = this.canvasSize;
+    const raster = layer.mask;
+    const plain = { ...layer, vectorMask: { ...layer.vectorMask!, enabled: true }, mask: raster ? { surface: raster.surface, defaultValue: raster.defaultValue } : undefined } as ImageLayer;
+    const baked = effectiveLayerMask(plain, width, height)!;
+    const mask: RasterMask = raster ? { ...raster, surface: baked.surface, defaultValue: baked.defaultValue } : baked;
+    this.commitLayers(
+      mapLayer(this.state.layers, id, (l) => {
+        const next = { ...l, mask } as ImageLayer;
+        delete next.vectorMask;
+        return next;
+      })
+    );
+    return mask;
+  }
+
+  /** Load Selection from a vector mask's path (density and feather are not applied), inverted with `invert`. */
+  public selectionFromVectorMask(id: string, mode: SelectionMode = 'replace', invert = false): boolean {
+    const { vm } = this.requireVectorMask(id);
+    const { width, height } = this.naturalSize;
+    const cov = componentsCoverage(vm.components, { x: 0, y: 0, width, height }, vm.fillRule ?? 'nonzero', (vm.inverted === true) !== invert);
+    const bytes = new Uint8Array(cov.length);
+    for (let i = 0; i < cov.length; i++) bytes[i] = Math.round(Math.min(1, Math.max(0, cov[i])) * 255);
+    return this.setSelection(createSelectionMask(width, height, bytes), mode);
+  }
+
+  /** A layer's vector mask with its paths (rounded), or `null` without one. */
+  public getVectorMask(id: string): VectorMaskInfo | null {
+    const layer = requireLayer(this.state.layers, id).layer;
+    const vm = layer.vectorMask;
+    if (!vm) return null;
+    const b = vectorMaskBounds(vm);
+    const r = (n: number) => Math.round(n * 1000) / 1000;
+    return {
+      layerId: id,
+      enabled: vm.enabled !== false,
+      linked: vm.linked !== false,
+      inverted: vm.inverted === true,
+      fillRule: vm.fillRule ?? 'nonzero',
+      density: vm.density ?? 1,
+      feather: vm.feather ?? 0,
+      bounds: b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null,
+      components: vm.components.map((c, index) => ({ index, op: c.op, live: c.live ? JSON.parse(JSON.stringify(c.live)) : null, subpaths: roundSubpaths(c.subpaths) })),
+    };
   }
 
   /** Changes any layer mask's density, feather, enabled or linked flag (pixels kept). Returns the mask. */

@@ -104,6 +104,21 @@ describe('Svelte LayersPanel', () => {
     flushSync();
     expect(c.getMaskView()).toBeNull();
     expect(maskThumb().getAttribute('aria-label')).not.toContain('(shown)');
+    // A vector mask from the menu: its own thumbnail, Shift-click turns it off.
+    const menuItem = async (label: string) => {
+      click(target.querySelector('button[aria-label="Layer menu"]'));
+      click(Array.from(target.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === label) as HTMLButtonElement);
+      await settle();
+    };
+    await menuItem('Add Vector Mask (Hide All)');
+    const vector = () => target.querySelector('[data-testid="layer-vector-mask-thumbnail"]') as HTMLElement | null;
+    expect(vector()).not.toBeNull();
+    vector()!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    flushSync();
+    expect(c.getLayers()[1].vectorMask!.enabled).toBe(false);
+    expect(vector()!.getAttribute('aria-label')).toContain('(disabled)');
+    await menuItem('Delete Vector Mask');
+    expect(vector()).toBeNull();
     click(target.querySelector('button[aria-label="Layer menu"]'));
     const del = Array.from(target.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === 'Delete Layer') as HTMLButtonElement;
     click(del);

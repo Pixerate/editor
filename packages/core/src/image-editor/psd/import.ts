@@ -8,6 +8,8 @@
  * with a warning naming the layers.
  */
 
+import { VMSK_DISABLED, VMSK_NOT_LINKED, componentsFromVectorBlock } from './paths';
+import type { VectorMask } from '../layers/model';
 import { readAlphaChannels, type PsdAlphaChannel } from './channels';
 import type { BlendMode } from '../blend';
 import { emptySurface, surfaceFromPixels, translateSurface } from '../../raster/surface';
@@ -325,7 +327,7 @@ function baseProps(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[])
     visible: (rec.flags & LAYER_FLAG_HIDDEN) === 0,
     opacity: percent(rec.opacity),
     blend: blend as BlendMode,
-  } as { name: string; visible: boolean; opacity: number; blend: BlendMode; clipped?: boolean; locks?: LayerLocks };
+  } as { name: string; visible: boolean; opacity: number; blend: BlendMode; clipped?: boolean; locks?: LayerLocks; vectorMask?: VectorMask };
   if (rec.clipping) props.clipped = true;
   const locks = locksOf(rec);
   if (locks) props.locks = locks;
@@ -333,9 +335,22 @@ function baseProps(ctx: Ctx, rec: PsdLayerRecord, name: string, notes: string[])
     ctx.warn.add('Artboards are not supported; they came in as plain groups, without their background colour and clipping', name);
     notes.push('artboard imported as a group');
   }
-  if (rec.blocks.some((b) => VECTOR_KEYS.includes(b.key)) && psdKind(rec) === 'pixel') {
-    ctx.warn.add('Vector masks are not supported and were ignored', name);
-    notes.push('vector mask ignored');
+  const vectorBlock = psdKind(rec) === 'shape' ? undefined : (rec.blocks.find((b) => b.key === 'vsms') ?? rec.blocks.find((b) => b.key === 'vmsk'));
+  if (vectorBlock) {
+    const read = componentsFromVectorBlock(vectorBlock.data, ctx.file.header.width, ctx.file.header.height);
+    if (read) {
+      const vm: VectorMask = { components: read.components };
+      if (read.inverted) vm.inverted = true;
+      if (read.flags & VMSK_NOT_LINKED) vm.linked = false;
+      if (read.flags & VMSK_DISABLED) vm.enabled = false;
+      const m = rec.mask;
+      if (m?.vectorDensity !== undefined && m.vectorDensity < 255) vm.density = percent(m.vectorDensity);
+      if (m?.vectorFeather !== undefined && m.vectorFeather > 0) vm.feather = Math.min(1000, m.vectorFeather);
+      props.vectorMask = vm;
+    } else {
+      ctx.warn.add('A vector mask could not be read and was ignored', name);
+      notes.push('vector mask ignored');
+    }
   }
   return props;
 }

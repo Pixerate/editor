@@ -1,0 +1,7 @@
+---
+'@pixerate/editor': minor
+'@pixerate/editor-react': minor
+'@pixerate/editor-svelte': minor
+---
+
+Vector masks (Layer › Vector Mask). Any layer except a shape layer can have a path that reveals it and stays sharp at any size: `vectorMask` on the layer holds shape components (live shapes or Bézier subpaths in document pixels) with `inverted`, `enabled`, `linked`, `density` and `feather`. The compositor multiplies it with the raster mask, so both apply. A linked vector mask moves with its layer and follows Free Transform, flips, 90° turns and warps. It is saved in the document JSON, and PSD files now keep vector masks on pixel, type, smart object, group and adjustment layers instead of dropping them. Density and feather are read from PSD but not written yet. Controller: `addVectorMask`, `setVectorMaskPath`, `setVectorMaskProps`, `removeVectorMask`, `rasterizeVectorMask`, `selectionFromVectorMask` and `getVectorMask`. Agent tools: `get_vector_mask`, `add_vector_mask`, `set_vector_mask_path`, `set_vector_mask_properties`, `rasterize_vector_mask` and `remove_vector_mask`, and `load_selection_from_mask` takes `source: "vector"`. `list_layers` summarises each layer's vector mask. The React and Svelte `LayersPanel` show a vector mask thumbnail (Ctrl/⌘-click loads the path as the selection, Shift-click turns it off) and menu items to add (Reveal All / Hide All), disable, rasterize and delete one.

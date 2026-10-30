@@ -9,6 +9,8 @@
     dropPlacement,
     dropZone,
     maskThumbnailClick,
+    vectorMaskThumbnail,
+    vectorMaskThumbnailClick,
     layerThumbnailClick,
     layerBadge,
     layerEffectsBadge,
@@ -144,6 +146,11 @@
   function thumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
     return layerHasThumbnail(layer) ? controller.getLayerThumbnail(layer.id, { maxSide: 64 }) : null;
+  }
+  function vectorThumb(layer: ImageLayer): PixelBuffer | null {
+    void tick;
+    const { width, height } = controller.getState().imageDimensions;
+    return layer.vectorMask ? vectorMaskThumbnail(layer.vectorMask, width, height, 64) : null;
   }
   function maskThumb(layer: ImageLayer): PixelBuffer | null {
     void tick;
@@ -383,6 +390,22 @@
             onclick={(e) => {
               e.stopPropagation();
               attempt(() => maskThumbnailClick(controller, layer, e));
+            }}
+          ></canvas>
+        {/if}
+        {#if layer.vectorMask}
+          <canvas
+            use:paint={vectorThumb(layer)}
+            role="button"
+            tabindex="0"
+            aria-label={`${row.label} vector mask${layer.vectorMask.enabled === false ? ' (disabled)' : ''}`}
+            title="Ctrl/⌘-click: load the path as the selection · Shift-click: turn it off or on"
+            data-testid="layer-vector-mask-thumbnail"
+            style="width: {thumbnailSize}px; height: {thumbnailSize}px"
+            class={thumbClass(false)}
+            onclick={(e) => {
+              e.stopPropagation();
+              attempt(() => vectorMaskThumbnailClick(controller, layer, e));
             }}
           ></canvas>
         {/if}

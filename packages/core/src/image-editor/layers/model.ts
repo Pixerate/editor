@@ -51,6 +51,30 @@ export type RasterMask = BaseRasterMask<DepthMaskOptions>;
 
 export interface LayerBase extends RasterLayerBase {
   mask?: RasterMask;
+  /** A vector mask (Photoshop's): a path that reveals the layer, on top of `mask`. Not on shape layers. */
+  vectorMask?: VectorMask;
+}
+
+/**
+ * A vector mask: shape components in document pixels (the same paths shape layers use) that
+ * reveal the layer inside them (outside with `inverted`). It stays sharp at any size; the
+ * compositor multiplies it with the layer's raster mask. No components hides everything
+ * (reveals everything when inverted).
+ */
+export interface VectorMask {
+  components: ShapeComponent[];
+  /** How overlapping subpaths fill (default nonzero). */
+  fillRule?: ShapeFillRule;
+  /** Reveal outside the path instead (default false). */
+  inverted?: boolean;
+  /** Disabled masks are kept but ignored (default true). */
+  enabled?: boolean;
+  /** `false`: the path stays put when the layer moves or transforms (default true). */
+  linked?: boolean;
+  /** 0..1 (default 1): at 0.5 the hidden area still shows half. */
+  density?: number;
+  /** Gaussian feather σ in px (default 0). */
+  feather?: number;
 }
 
 /** The base sliders of the old document-level adjustments, as a filter on one layer. */
