@@ -4066,6 +4066,33 @@ export class VectorEditorController {
 	}
 
 	/**
+	 * Moves a node to `index` among its siblings (bottom to top, 0 the bottom), as dragging it in
+	 * a layers panel does. Clipping groups and blends keep their order: their mask and keys are
+	 * placed by position.
+	 */
+	reorderNode(id: string, index: number): VectorActionResult {
+		const node = this.getNode(id);
+		if (!node) return { ok: false, message: `No node "${id}".` };
+		let parent = null as VectorGroupNode | null;
+		walkVectorNodes(this.doc.nodes, (n, p) => {
+			if (n.id === id) parent = p;
+		});
+		const group = parent;
+		if (group && (isVectorMaskGroup(group) || isVectorBlendGroup(group))) {
+			return { ok: false, message: 'The order inside a clipping group or blend is fixed.' };
+		}
+		const siblings = group ? group.children : this.doc.nodes;
+		const from = siblings.findIndex((n) => n.id === id);
+		const to = Math.max(0, Math.min(siblings.length - 1, Math.round(index)));
+		if (from === to) return { ok: true };
+		const next = [...siblings];
+		next.splice(from, 1);
+		next.splice(to, 0, node);
+		this.change('Move Layer', () => (group ? this.replaceNode(group.id, { ...group, children: next }) : this.setDoc(next)));
+		return { ok: true };
+	}
+
+	/**
 	 * Combines the selected paths (two or more) into one with a boolean operation. `subtract`
 	 * removes the upper shapes from the lowest one. The result takes the lowest shape's style
 	 * and place. Shapes take part as drawn (path effects and live booleans applied).

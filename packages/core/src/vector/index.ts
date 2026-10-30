@@ -55,3 +55,4 @@ export type { TextFont, TextShaper } from '../text/types.js';
 export * from './effect-tools.js';
 export * from './playback.js';
 export * from './editorDocument.js';
+export * from './layers.js';
