@@ -179,7 +179,7 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
         </div>
       )}
       {browse === 'filter' && layer && (
-        <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id)))} />
+        <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id, { useSelection: true })))} />
       )}
       {filters.length > 0 && layer && (
         <ol className="space-y-1" data-effect-part="filters" aria-label="Filters">

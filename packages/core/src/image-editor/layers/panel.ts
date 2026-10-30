@@ -528,6 +528,7 @@ export async function addLayerOfKind(
     if (isAdjustmentKind(kind)) {
       return controller.addAdjustmentLayer({
         kind,
+        useSelection: true,
         ...(init as object),
       });
     }

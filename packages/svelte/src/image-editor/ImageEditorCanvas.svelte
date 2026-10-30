@@ -23,6 +23,7 @@
     measureCanvasViewport,
     watchCanvasViewport,
     startMarchingAnts,
+    handleSelectionShortcut,
     ShapeDrawGesture,
     TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
@@ -601,6 +602,12 @@
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      // Leave Copy to the page while text on it is selected.
+      if (window.getSelection?.()?.toString()) return;
+      if (handleSelectionShortcut(editor.controller, e, (message) => report('select', message))) {
+        e.preventDefault();
+        return;
+      }
       if (gesture.key(e.key)) {
         e.preventDefault();
         selectionDraft = gesture.draftPath;

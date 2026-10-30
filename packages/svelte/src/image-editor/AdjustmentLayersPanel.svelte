@@ -101,7 +101,7 @@
   }
 
   function addLayer() {
-    selectedId = controller.addAdjustmentLayer(newKind);
+    selectedId = controller.addAdjustmentLayer({ kind: newKind, useSelection: true });
     channel = 'master';
     range = -1;
   }

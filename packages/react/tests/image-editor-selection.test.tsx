@@ -124,6 +124,14 @@ describe('React SelectionOptionsBar', () => {
     expect(button('Reselect').disabled).toBe(false);
     await act(async () => button('Reselect').click());
     expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    // Edit: crop, copy and paste through the options bar.
+    await act(async () => button('Crop to Selection').click());
+    expect(controller.getState().crop).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    const layers = controller.getLayers().length;
+    await act(async () => button('Copy Merged').click());
+    await act(async () => button('Paste Into').click());
+    expect(controller.getLayers().length).toBe(layers + 1);
+    expect(controller.getLayers()[controller.getLayers().length - 1]!.mask).toBeDefined();
     await act(async () => button('Polygonal Lasso').click());
     expect(container.textContent).toContain('double-click, Enter or a click on the first corner closes it');
   });

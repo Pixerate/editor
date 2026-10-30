@@ -162,7 +162,7 @@
     </div>
     {#if browse === 'filter'}
       {@const id = layer.id}
-      <EffectsBrowser {provider} uses={['filter']} title="Filters" onpick={(e) => ((browse = null), run(() => controller.applyEffectFilter(id, e.id)))} />
+      <EffectsBrowser {provider} uses={['filter']} title="Filters" onpick={(e) => ((browse = null), run(() => controller.applyEffectFilter(id, e.id, { useSelection: true })))} />
     {/if}
   {/if}
   {#if layer && all.some((f) => f.kind === 'effect')}

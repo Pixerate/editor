@@ -79,7 +79,7 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
     target: { noun: 'layer', id: 'A layer id from list_layers.' },
     applyUses: ['filter'],
     applyDetails:
-      'The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). Generators and overlays go on their own layer through add_effect_layer.',
+      'The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). With a selection, the filter mask is set from it in the same step, so the filter only changes the selected area (the result says masked); deselect first to filter the whole layer. Generators and overlays go on their own layer through add_effect_layer.',
     provider: () => controller.effectsProvider,
     readOnlyReason,
     list: (target) => {
@@ -89,8 +89,8 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         .filter((t) => target || t.effects.length);
     },
     apply: async (target, effect, args) => {
-      const r = await controller.applyEffectFilter(target, effect, { values: plainValues(args.values), index: args.index, enabled: args.enabled, opacity: args.opacity });
-      return result(r.layerId, r.filter.id, { converted: r.converted });
+      const r = await controller.applyEffectFilter(target, effect, { values: plainValues(args.values), index: args.index, enabled: args.enabled, opacity: args.opacity, useSelection: true });
+      return result(r.layerId, r.filter.id, { converted: r.converted, masked: r.masked });
     },
     update: async (target, instance, changes) => {
       const layer = layerOf(target);

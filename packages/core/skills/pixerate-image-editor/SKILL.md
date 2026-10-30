@@ -74,24 +74,9 @@ Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for 
 
 ### Free Transform
 
-1. **Read the frame first**: `get_transform_frame` says what a transform would move (`content`,
-   `moved`) and its `frame` (document bounds of the content) with its corners. Every transform
-   works on that frame: the numeric fields are percent of it and turn about one of its anchors.
-2. **Pick what moves** with `content`: `layer` (all its pixels and a linked mask), `selection`
-   (only the selected pixels, committed back into the same layer; the hole they leave is
-   transparent and the outline moves with them), `selection-copy` (Layer via Copy, then the copy
-   is transformed on a new layer; the original stays) or `auto` (selection when something is
-   selected). `channel: "mask"` moves an unlinked mask alone; `transform_selection` moves only
-   the outline.
-3. **Choose the tool by the change**: `transform_layer` with `scaleX` / `scaleY` (percent),
-   `rotate`, `skewX` / `skewY` (degrees), `dx` / `dy` and a `reference` anchor for scale, rotate
-   and skew; `corners` for Distort (each corner free) and Perspective (move two corners
-   symmetrically: the top pair in by the same amount narrows the top); `matrix` when you have one;
-   `warp_layer` for a preset bend (`style`, `bend`, `horizontal`, `vertical`) or a custom `mesh`;
-   `flip_layer` and `rotate_layer_90` for exact flips and quarter turns.
-4. **Transform once.** Every call resamples the pixels, so chained calls soften them: put scale,
-   rotation and move into one `transform_layer` call (or one matrix) instead of several.
-5. **Look**: `render_preview`, or `capture_view` at the edges; each call is one undo step.
+`get_transform_frame` first, pick `content` (`layer`, `selection`, `selection-copy`, `auto`), and
+put every change into one `transform_layer` call (each call resamples). Read
+[references/free-transform.md](references/free-transform.md) before transforming.
 
 ### Smart objects
 
@@ -280,7 +265,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | Tool | Use it to |
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
-| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
+| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. With a selection the layer is masked by it (`useSelection`, default true; `false` for a global layer; `masked` in the result). Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
 | `select_all` | Select › All. Returns the selection summary (`empty`, `bounds`, `area`, `percent`). |
 | `deselect` | Clear the selection so edits apply to the whole layer. Returns the empty summary. |
 | `invert_selection` | Select › Inverse (soft edges stay soft; with nothing selected, selects all). Returns the summary. |
@@ -354,7 +339,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `copy_smart_object` | Duplicate a smart object above it: `linked: true` shares the contents (edits show in both), `linked: false` (default, New Smart Object via Copy) gives independent contents. Returns the copy and its `contentsId`. |
 | `edit_smart_object_contents` | Open a smart object's contents as their own document (raster contents as one pixel layer, "Layer 0") with their own undo; all tools then act inside them. Returns the size, `layerIds`, `layers` and `editing` (the open path). Always close it. |
 | `close_smart_object_contents` | Close the innermost open contents: `save` true (default) writes them back and re-renders every linked instance (one undo step), false discards. Returns `layerId`, `changed`, `layerIds` and what is still `editing`. |
-| `add_smart_filter` | Add a `develop` (brightness … tint) or `blur` (`radius`) smart filter with its own `blend` and `opacity`, at `index` (default top); kinds may repeat. Returns the `filter` (with id) and the stack. |
+| `add_smart_filter` | Add a `develop` (brightness … tint) or `blur` (`radius`) smart filter with its own `blend` and `opacity`, at `index` (default top); kinds may repeat. With a selection the filter mask is set from it (`useSelection`, default true). Returns the `filter` (with id), the stack and `masked`. |
 | `update_smart_filter` | Change one smart filter's settings, `enabled`, `blend` or `opacity` (`filterId` from `get_smart_object`); kind `psd` filters take only the last three. Returns the filter and the stack. |
 | `remove_smart_filter` | Remove one smart filter (the filter mask goes with the last one). Returns the stack. |
 | `move_smart_filter` | Move a smart filter to `index` (0 = bottom, applied first). Returns the stack. |
@@ -398,12 +383,18 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
 | `import_psd` | Open a PSD / PSB (`data` base64, a `data:` URL is fine) as the document, replacing the layers, crop and rotation (one undo step). Returns the new `layers` tree with ids, `layerIds`, size and `warnings` naming the affected layers. Call `inspect_psd` first when losses matter. |
-| `apply_effect` | Run a provider filter effect on a layer as a smart filter (`target`, `effect`, `values`, `index`, `enabled`, `opacity`); a pixel, shape or type layer becomes a smart object in the same undo step (`converted`). Returns the filter id. |
+| `apply_effect` | Run a provider filter effect on a layer as a smart filter (`target`, `effect`, `values`, `index`, `enabled`, `opacity`); a pixel, shape or type layer becomes a smart object in the same undo step (`converted`). With a selection the filter mask is set from it (`masked`): deselect first to filter the whole layer. Returns the filter id. |
 | `update_effect` | Change an effect smart filter (`values` merged, `null` resets; `enabled`, `opacity`, `index`) or redraw an effect layer (`effect: "generator"`, values only). |
 | `remove_effect` | Remove an effect smart filter, or (`generator`) keep an effect layer's pixels as a plain layer. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `animate`, `name`, `aboveId` / `belowId`, `opacity`, `blend`). An effect with its own background (`backgroundOpacity` in `describe_effect`) starts with it transparent when there are layers below. Returns the layer id. |
 | `set_effect_layer` | Change an effect layer: swap its `effect` (its defaults plus `values`), pick the still frame (`time`, ms), or make it play in an animation (`animate: { duration }`; `null` for a still frame). The longest animating layer sets the animation's length. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
+| `stroke_selection` | Edit › Stroke: a band `width` px (≤ 250) `outside` (default), `inside` or `center` on the selection edge, with `color`, `opacity`, `blend`, on a layer's pixels or mask (`channel`). One undo step. Returns the changed `bounds`. |
+| `crop_to_selection` | Set the crop box to the selection's bounds (non-destructive; `reset_crop` undoes it). Returns the `crop`. |
+| `content_aware_fill` | Remove what is selected by synthesising texture from around it on a pixel layer; `output` `new-layer` (keeps the fill separate, recommended) or `current`; `sampleRadius`, `seed` (another seed, another fill). Select with a 2–4 px margin. 8-bit only. Returns `layerId` and `bounds`. |
+| `copy_pixels` | Copy the selected pixels of a layer (or with `merged` the visible image) to the editor clipboard, cropped to the selection with its soft edge. No undo step. Returns `width`, `height`, `x`, `y`. |
+| `cut_pixels` | Copy, then clear the selected pixels (one undo step). Returns the size and position. |
+| `paste_pixels` | Paste the clipboard as a new layer: `mode` `new-layer` (centred on the selection or canvas), `in-place`, `into` (masked by the selection) or `outside` (masked by its inverse). One undo step. Returns `layerId`, `bounds`, `masked`. |
 
 ### Save and open
 

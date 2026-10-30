@@ -69,6 +69,16 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   const [preset, setPreset] = useState<ColorRangePreset>('reds');
   const [rangeStatus, setRangeStatus] = useState<string | null>(null);
   const [colorStatus, setColorStatus] = useState<string | null>(null);
+  const [strokeWidth, setStrokeWidth] = useState(4);
+  const [strokeLocation, setStrokeLocation] = useState<'inside' | 'center' | 'outside'>('outside');
+  const edit = (fn: () => unknown) => {
+    setColorStatus(null);
+    try {
+      fn();
+    } catch (err) {
+      setColorStatus(err instanceof Error ? err.message : String(err));
+    }
+  };
   const runColor = async (op: 'grow' | 'similar') => {
     setColorStatus(null);
     const opts = { tolerance: options.tolerance, sampleMerged: options.sampleMerged, sample: options.sample };
@@ -312,6 +322,64 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
             {label}
           </button>
         ))}
+      </div>
+      <div role="group" aria-label="Edit selection" className="flex flex-wrap items-center gap-1">
+        <label className="flex items-center gap-1 text-muted-foreground">
+          Stroke
+          <input
+            type="number"
+            min={1}
+            max={250}
+            step={1}
+            aria-label="Stroke width"
+            value={strokeWidth}
+            onChange={(e) => setStrokeWidth(Math.min(250, Math.max(1, Number(e.target.value) || 1)))}
+            className={numberInput}
+          />
+          px
+        </label>
+        <ImageSelect
+          label="Stroke location"
+          value={strokeLocation}
+          options={[
+            { value: 'outside', label: 'Outside' },
+            { value: 'center', label: 'Center' },
+            { value: 'inside', label: 'Inside' },
+          ]}
+          onChange={(v) => setStrokeLocation(v as 'inside' | 'center' | 'outside')}
+        />
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.strokeSelection({ width: strokeWidth, location: strokeLocation }))}>
+          Stroke
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.cropToSelection())}>
+          Crop to Selection
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.contentAwareFill({ output: 'new-layer' }))}>
+          Content-Aware Fill
+        </button>
+      </div>
+      <div role="group" aria-label="Clipboard" className="flex flex-wrap gap-1">
+        <button type="button" className={btn(false)} onClick={() => edit(() => controller.copyPixels())}>
+          Copy
+        </button>
+        <button type="button" className={btn(false)} onClick={() => edit(() => controller.copyPixels({ merged: true }))}>
+          Copy Merged
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.cutPixels())}>
+          Cut
+        </button>
+        <button type="button" className={btn(false)} onClick={() => edit(() => controller.pastePixels('new-layer'))}>
+          Paste
+        </button>
+        <button type="button" className={btn(false)} onClick={() => edit(() => controller.pastePixels('in-place'))}>
+          Paste in Place
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.pastePixels('into'))}>
+          Paste Into
+        </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.pastePixels('outside'))}>
+          Paste Outside
+        </button>
       </div>
       {colorStatus && (
         <p role="status" className="text-muted-foreground">

@@ -9,6 +9,7 @@ import { COLOR_RANGE_PRESETS, isColorRangePreset, type ColorRangeSample } from '
 import { SELECTION_MODIFY_OPS, type SelectionModifyOp } from './selection/modify';
 import { layerMaskFromSelection } from './selection/layer-mask';
 import { planOutlineTrace, withImagePlayback } from './playback';
+import { BLEND_MODES } from './blend';
 
 const modeSchema: JsonSchema = {
   type: 'string',
@@ -687,6 +688,134 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const colorSchema: JsonSchema = { type: 'string', pattern: '^#?[0-9a-fA-F]{6}$', description: 'Colour #rrggbb (default the foreground colour).' };
+  const layerIdSchema: JsonSchema = { type: 'string', minLength: 1, description: 'The layer (see list_layers; default the active layer).' };
+  const requireLayerId = (v: unknown) => {
+    if (v === undefined) return undefined;
+    const id = String(v);
+    if (!controller.getLayer(id)) throw new Error(`No layer "${id}". Call list_layers for ids.`);
+    return id;
+  };
+
+  const strokeTool: AgentTool = {
+    name: 'stroke_selection',
+    title: 'Stroke the selection',
+    description:
+      'Edit › Stroke: paints a band width px wide along the selection edge, outside it (default), inside it or centred on it, with color, opacity and blend, on a layer\'s pixels or mask (channel). Use it for outlines, frames and borders that follow a shape. Fails when nothing is selected. One undo step. Returns the layer, channel and changed bounds.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        width: { type: 'number', exclusiveMinimum: 0, maximum: 250, description: 'Band width in pixels.' },
+        location: { type: 'string', enum: ['outside', 'inside', 'center'], description: 'Where the band lies against the edge (default outside).' },
+        color: colorSchema,
+        opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
+        blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id), description: 'Blend mode (default normal).' },
+        layerId: layerIdSchema,
+        channel: { type: 'string', enum: ['pixels', 'mask'], description: 'Paint the pixels (default) or the layer mask.' },
+      },
+      required: ['width'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Stroke the selection'),
+    handler: (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select the shape to outline first.');
+      return controller.strokeSelection({
+        width: num(args.width, NaN),
+        location: args.location as 'inside' | 'center' | 'outside' | undefined,
+        color: args.color as string | undefined,
+        opacity: args.opacity as number | undefined,
+        blend: args.blend as never,
+        layerId: requireLayerId(args.layerId),
+        channel: args.channel as 'pixels' | 'mask' | undefined,
+      });
+    },
+  };
+
+  const cropTool: AgentTool = {
+    name: 'crop_to_selection',
+    title: 'Crop to the selection',
+    description:
+      'Image › Crop to the selection: sets the crop box to the selection\'s bounds (non-destructive; reset_crop undoes it). Fails when nothing is selected. One undo step. Returns the crop box in natural image pixels.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: writeAnnotations('Crop to the selection', true),
+    handler: () => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select the area to keep first.');
+      return { crop: controller.cropToSelection() };
+    },
+  };
+
+  const fillTool: AgentTool = {
+    name: 'content_aware_fill',
+    title: 'Content-Aware Fill',
+    description:
+      'Edit › Content-Aware Fill: removes what is selected by filling it with texture and edges synthesised from around it (on a pixel layer, default the active one). Select the object with a small margin (expand 2–4 px) first. output current paints into the layer; new-layer puts the fill on its own layer above it, so it can be masked or removed (recommended). sampleRadius limits where it samples from. Deterministic for a seed. 8-bit documents. One undo step. Returns the layer id and filled bounds.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        output: { type: 'string', enum: ['new-layer', 'current'], description: 'new-layer or current (default current).' },
+        sampleRadius: { type: 'number', minimum: 32, maximum: 4000, description: 'Sample within this many pixels of the selection (default its larger side).' },
+        seed: { type: 'integer', minimum: 0, description: 'Random seed; another seed gives another fill to choose from (default 0).' },
+        layerId: layerIdSchema,
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Content-Aware Fill'),
+    handler: (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select what to remove first.');
+      return controller.contentAwareFill({
+        output: args.output as 'current' | 'new-layer' | undefined,
+        sampleRadius: args.sampleRadius as number | undefined,
+        seed: args.seed as number | undefined,
+        layerId: requireLayerId(args.layerId),
+      });
+    },
+  };
+
+  const copyTool: AgentTool = {
+    name: 'copy_pixels',
+    title: 'Copy pixels',
+    description:
+      'Edit › Copy: puts the selected pixels of a pixel layer (default the active one), or with merged everything visible (Copy Merged), on the editor clipboard, cropped to the selection with its soft edge as alpha. Without a selection, the whole canvas. The document does not change. Returns the copied size and where it came from; then paste_pixels.',
+    inputSchema: {
+      type: 'object',
+      properties: { layerId: layerIdSchema, merged: { type: 'boolean', description: 'Copy the visible image of all layers (default false).' } },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Copy pixels', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: (args) => {
+      const { width, height, x, y } = controller.copyPixels({ layerId: requireLayerId(args.layerId), merged: args.merged === true });
+      return { width, height, x, y };
+    },
+  };
+
+  const cutTool: AgentTool = {
+    name: 'cut_pixels',
+    title: 'Cut pixels',
+    description:
+      'Edit › Cut: copies the selected pixels of a pixel layer (default the active one) to the editor clipboard and clears them from the layer (transparent, or the background colour on a transparency-locked layer). One undo step. Returns the copied size and position; then paste_pixels.',
+    inputSchema: { type: 'object', properties: { layerId: layerIdSchema }, additionalProperties: false },
+    annotations: { title: 'Cut pixels', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    handler: (args) => {
+      if (!controller.getSelection()) throw new Error('Nothing is selected; select what to cut first (cutting everything would empty the layer).');
+      const { width, height, x, y } = controller.cutPixels({ layerId: requireLayerId(args.layerId) });
+      return { width, height, x, y };
+    },
+  };
+
+  const pasteTool: AgentTool = {
+    name: 'paste_pixels',
+    title: 'Paste pixels',
+    description:
+      'Edit › Paste the editor clipboard (from copy_pixels or cut_pixels) as a new pixel layer above the active one: new-layer (default, centred on the selection or the canvas), in-place (where it was copied), into (centred in the selection, masked by it: Paste Into) or outside (masked by its inverse). One undo step. Returns the new layerId, its bounds and whether it is masked.',
+    inputSchema: {
+      type: 'object',
+      properties: { mode: { type: 'string', enum: ['new-layer', 'in-place', 'into', 'outside'], description: 'Where and how to paste (default new-layer).' } },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Paste pixels'),
+    handler: (args) => controller.pastePixels((args.mode as 'new-layer' | 'in-place' | 'into' | 'outside' | undefined) ?? 'new-layer'),
+  };
+
   return [
     getSelection,
     selectAll,
@@ -710,6 +839,12 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     modify,
     refine,
     applyMask,
+    strokeTool,
+    cropTool,
+    fillTool,
+    copyTool,
+    cutTool,
+    pasteTool,
   ];
 }
 

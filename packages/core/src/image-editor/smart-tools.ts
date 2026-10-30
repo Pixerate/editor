@@ -290,13 +290,14 @@ export function createImageSmartObjectTools(controller: ImageEditorController): 
     name: 'add_smart_filter',
     title: 'Add a smart filter',
     description:
-      'Adds a smart filter to a smart object: develop (brightness, contrast, saturation, exposure, temperature, tint) or blur (radius px), with its own blend mode and opacity over the result below it. Filters run bottom to top on the placed contents, then the filter mask mixes in the unfiltered contents. Unlike layer filters, a kind can repeat. One undo step. Returns the filter (with its id) and the stack.',
+      'Adds a smart filter to a smart object: develop (brightness, contrast, saturation, exposure, temperature, tint) or blur (radius px), with its own blend mode and opacity over the result below it. Filters run bottom to top on the placed contents, then the filter mask mixes in the unfiltered contents. Unlike layer filters, a kind can repeat. With a selection (and useSelection, default true), the filter mask is set from it in the same step. One undo step. Returns the filter (with its id), the stack and masked.',
     inputSchema: {
       type: 'object',
       properties: {
         layerId: LAYER_ID,
         kind: { type: 'string', enum: ['develop', 'blur'], description: 'Filter kind.' },
         index: { type: 'integer', minimum: 0, description: 'Position in the stack, 0 = bottom, applied first (default the top).' },
+        useSelection: { type: 'boolean', description: 'With a selection, set the filter mask from it so the filter only changes the selected area (default true).' },
         ...FILTER_SETTINGS,
       },
       required: ['layerId', 'kind'],
@@ -305,8 +306,9 @@ export function createImageSmartObjectTools(controller: ImageEditorController): 
     annotations: { title: 'Add a smart filter', ...WRITE },
     handler: (args) => {
       const id = smartId(args.layerId);
-      const filter = controller.addSmartFilter(id, { kind: args.kind as string, ...settingsFrom(args) }, args.index as number | undefined);
-      return { layerId: id, filter, smartFilters: info(id).smartFilters };
+      const masked = args.useSelection !== false && controller.hasSelection;
+      const filter = controller.addSmartFilter(id, { kind: args.kind as string, ...settingsFrom(args) }, args.index as number | undefined, { useSelection: args.useSelection !== false });
+      return { layerId: id, filter, smartFilters: info(id).smartFilters, masked };
     },
   };
 

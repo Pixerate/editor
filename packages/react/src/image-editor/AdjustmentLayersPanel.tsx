@@ -221,7 +221,7 @@ export const AdjustmentLayersPanel: React.FC<AdjustmentLayersPanelProps> = ({ co
           type="button"
           className="px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={() => {
-            setSelectedId(controller.addAdjustmentLayer(newKind));
+            setSelectedId(controller.addAdjustmentLayer({ kind: newKind, useSelection: true }));
             setChannel('master');
             setRange(-1);
           }}

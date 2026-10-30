@@ -71,7 +71,8 @@ function adjustmentsSummary(adjustments: ImageAdjustments) {
  * - Selections and masks: `get_selection`, `select_all`, `deselect`, `invert_selection`,
  *   `select_rect`, `select_ellipse`, `select_polygon`, `select_line`, `magic_wand`,
  *   `select_color_range`, `grow_selection`, `select_similar`, `reselect`,
- *   `select_layer_transparency`,
+ *   `select_layer_transparency`, `stroke_selection`, `crop_to_selection`, `content_aware_fill`,
+ *   `copy_pixels`, `cut_pixels`, `paste_pixels`,
  *   `load_selection_from_image`, `load_selection_from_mask`, `set_selection_display`,
  *   `modify_selection`, `refine_selection`, `apply_selection_as_mask` and the deprecated
  *   `select_region` / `select_by_color` (see `createImageSelectionTools`).
@@ -228,7 +229,7 @@ export function createImageEditorToolProvider(
     name: 'add_adjustment_layer',
     title: 'Add an adjustment layer',
     description:
-      'Adds a non-destructive adjustment layer on top of the stack (one undoable step) and returns it. Kinds: ' +
+      'Adds a non-destructive adjustment layer on top of the stack (one undoable step) and returns it; with a selection it is masked by it (useSelection, default true; masked in the result says so). Kinds: ' +
       ADJUSTMENT_KINDS.map((k) => k.kind).join(', ') +
       '. Omitted params are neutral.',
     inputSchema: {
@@ -241,6 +242,7 @@ export function createImageEditorToolProvider(
         name: { type: 'string', description: 'Layer name shown in the layers panel.' },
         aboveId: { type: 'string', description: 'Put the layer directly above this layer (from list_layers). Default: above the other adjustment layers, below annotations.' },
         parentId: { type: 'string', description: 'Put the layer at the top of this group (from list_layers).' },
+        useSelection: { type: 'boolean', description: 'With a selection, mask the new layer with it so the adjustment only affects the selected area (default true; false for a global layer).' },
       },
       required: ['kind'],
       additionalProperties: false,
@@ -252,7 +254,7 @@ export function createImageEditorToolProvider(
       idempotentHint: false,
       openWorldHint: false,
     },
-    handler: ({ kind, params, opacity, blend, name, aboveId, parentId }) => {
+    handler: ({ kind, params, opacity, blend, name, aboveId, parentId, useSelection }) => {
       if (!isAdjustmentKind(kind)) throw new Error(`Unknown adjustment kind "${kind}".`);
       if (blend !== undefined && !isBlendMode(blend)) throw new Error(`Unknown blend mode "${blend}".`);
       if (aboveId !== undefined && parentId !== undefined) throw new Error('Give aboveId or parentId, not both.');
@@ -260,9 +262,9 @@ export function createImageEditorToolProvider(
         if (ref !== undefined && !controller.getLayer(ref as string)) throw new Error(`Unknown layer "${ref}". Call list_layers for ids.`);
       }
       if (parentId !== undefined && controller.getLayer(parentId as string)?.type !== 'group') throw new Error(`Layer "${parentId}" is not a group.`);
-      const id = controller.addAdjustmentLayer({ kind: kind as AdjustmentKind, params, opacity, blend, name, aboveId, parentId });
+      const id = controller.addAdjustmentLayer({ kind: kind as AdjustmentKind, params, opacity, blend, name, aboveId, parentId, useSelection: useSelection !== false });
       const layer = controller.getAdjustmentLayer(id)!;
-      return { layer: JSON.parse(JSON.stringify(layer)), index: controller.getAdjustmentLayers().findIndex((l) => l.id === id) };
+      return { layer: JSON.parse(JSON.stringify(layer)), index: controller.getAdjustmentLayers().findIndex((l) => l.id === id), masked: Boolean(layer.mask) };
     },
   };
 
