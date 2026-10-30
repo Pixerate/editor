@@ -259,7 +259,7 @@
   "dependencies": {},
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@pixerate/editor": ">=0.201.0 <1.0.0-0",
+    "@pixerate/editor": ">=0.202.0 <1.0.0-0",
     "@tiptap/core": "^2.27.3",
     "@tiptap/extension-bubble-menu": "^2.27.3",
     "@tiptap/extension-placeholder": "^2.27.3",
