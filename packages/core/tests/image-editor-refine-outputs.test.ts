@@ -106,8 +106,64 @@ describe('refine_selection outputs', () => {
     const { call, fails } = setup();
     await fails('refine_selection', {}, /Nothing is selected/);
     await call('select_rect', { x: 20, y: 10, width: 20, height: 20 });
-    await fails('refine_selection', { output: 'layer-mask', decontaminate: 50 }, /new-layer or new-layer-with-mask/);
+    await fails('refine_selection', { output: 'layer-mask', decontaminate: 50 }, /new layer or document/);
     await fails('refine_selection', { output: 'new-layer', layerId: 'nope' }, /nope/);
     await fails('refine_selection', { output: 'new-document' }, /output|enum/);
+  });
+});
+
+describe('new document outputs', () => {
+  it('hands a cut-out document to the host and leaves this one as it was', async () => {
+    const { c, call, fails } = setup();
+    await call('select_rect', { x: 20, y: 10, width: 20, height: 20 });
+    await fails('refine_selection', { radius: 0, output: 'new-document' }, /cannot open new documents/);
+    const opened: { doc: any; info: any }[] = [];
+    c.setDocumentOpener((doc, info) => {
+      opened.push({ doc, info });
+      return 'doc-2';
+    });
+    expect(c.canOpenDocuments).toBe(true);
+    const undoBefore = c.canUndo;
+    const out = await call('refine_selection', { radius: 0, output: 'new-document', decontaminate: 50 });
+    expect(out).toMatchObject({ output: 'new-document', documentId: 'doc-2', layerId: 'background' });
+    expect(opened[0].info).toEqual({ name: 'Background cutout', from: 'select-and-mask' });
+    // This document is unchanged: same layers, the selection still there, no new undo step.
+    expect(c.getLayers()).toHaveLength(1);
+    expect(c.getLayer('background')!.visible).toBe(true);
+    expect(c.getSelection()!.bounds).toEqual({ x: 20, y: 10, width: 20, height: 20 });
+    expect(c.canUndo).toBe(undoBefore);
+    // The new document loads with one layer: the square, transparent around it.
+    const d = setup().c;
+    d.loadJSON(opened[0].doc);
+    expect(d.getLayers()).toHaveLength(1);
+    const layer = d.getLayers()[0];
+    expect(d.compositePixels({ x: 30, y: 20, width: 1, height: 1 }, { layerIds: [layer.id] }).data[3]).toBe(255);
+    expect(d.compositePixels({ x: 5, y: 5, width: 1, height: 1 }, { layerIds: [layer.id] }).data[3]).toBe(0);
+  });
+
+  it('hands a masked copy with new-document-with-mask, and the UI lists the outputs only with an opener', async () => {
+    const { c, call } = setup();
+    let doc: any;
+    c.setDocumentOpener((d) => {
+      doc = d;
+    });
+    await call('select_rect', { x: 20, y: 10, width: 20, height: 20 });
+    const out = await call('refine_selection', { radius: 0, output: 'new-document-with-mask' });
+    expect(out.documentId).toBeUndefined();
+    const d = setup().c;
+    d.loadJSON(doc);
+    expect(d.getLayers()[0].mask).toBeDefined();
+    c.setDocumentOpener(null);
+    expect(c.canOpenDocuments).toBe(false);
+  });
+
+  it('builds the document without an opener too, refusing what it cannot copy', () => {
+    const { c } = setup();
+    expect(() => c.documentFromSelection()).toThrow(/Nothing is selected/);
+    c.selectRect({ x: 0, y: 0, width: 10, height: 10 });
+    const doc = c.documentFromSelection({ withMask: true });
+    expect(doc).toMatchObject({ width: W, height: H, crop: null });
+    expect(doc.layers).toHaveLength(1);
+    expect(() => c.documentFromSelection({ layerId: 'nope' })).toThrow(/nope/);
   });
 });

@@ -54,6 +54,17 @@ export function ImageEditorTab() {
     editor.controller.setSelectionWorker(() => new SelectionWorker());
     return () => editor.controller.setSelectionWorker(null);
   }, [editor.controller]);
+  // Select and Mask's New Document outputs: the demo has one image editor here, so the new
+  // document is downloaded as a document file instead of opened.
+  useEffect(() => {
+    editor.controller.setDocumentOpener((document, { name }) => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(document)], { type: 'application/json' }));
+      const link = Object.assign(window.document.createElement('a'), { href: url, download: `${name}.pixerate-image.json` });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    return () => editor.controller.setDocumentOpener(null);
+  }, [editor.controller]);
   // A second editor for the standalone canvas below, with its own small toolbar.
   const canvasOnly = useImageEditor();
   const [canvasMode, setCanvasMode] = useState<ImageEditorCanvasMode>('paint');
