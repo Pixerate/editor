@@ -99,6 +99,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | One object among others, where you can box it (a product on a table, a person in a group) | `select_object` with a `rect` a little larger than the object on every side; then `quick_select` add / subtract strokes for what it missed |
 | A subject with a clear outline (product, person, animal) | `select_subject` (with a host model, by description; without one it takes whatever stands out most, so check `method` and the result); else `select_object` around it, or `select_polygon` with `snapToEdges` (12–30 points within `width` of the edge), then `refine_selection` |
 | An area or subject that differs from its surroundings (a shirt, a sky, a car) | `quick_select` with strokes painted inside it, away from the edge (`size` a fraction of its width); `add` / `subtract` strokes where it fell short or leaked |
+| The sky (to replace, recolour, or to leave out with `invert_selection`) | `select_sky`; raise `threshold` for haze or a sunset glow, lower it if pale buildings come in |
 | A sharp subject on a blurred background (shallow depth of field) | `select_focus_area`; raise `range` if parts of the subject are missing, `noise` if grainy background comes in |
 | A low-contrast or busy outline the edges don't follow | `select_polygon` without `snapToEdges`, along the contour (20–60 points) |
 | Flat backdrop or solid colour (studio white, green screen, sky without clouds) | `magic_wand` on the backdrop (`tolerance` 20–40; `distance: "perceptual"` for gradients), then `invert_selection` |
@@ -118,8 +119,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   Add the new background with `add_pixel_layer` and move it under the cutout (`move_layer`).
   `render_preview` and look for a halo; if there is one, load the copy's pixels back as a
   selection, `shrink` 1 px, and mask.
-- **Replace the sky:** `magic_wand` or `select_color_range` `preset: "blues"` on the sky,
-  `add` missed patches, `refine_selection` radius 8–16 along the horizon and trees, then
+- **Replace the sky:** `select_sky` (or `magic_wand` / `select_color_range` `preset: "blues"`
+  if it finds none), `add` missed patches, `refine_selection` radius 8–16 along the horizon and trees, then
   `add_layer_mask` on the new sky layer. Match it with a clipped curves layer (`clipped: true`).
 - **Adjust only part of an image:** select, then `apply_selection_as_mask` with `kind` and
   `params`, and `feather` in proportion to the image (a few px for objects, 50–200 px for
@@ -205,6 +206,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `quick_select`: brush strokes that grow out to the region's edges
 - `select_object`: the object in a box or under a point
 - `select_focus_area`: what is in focus
+- `select_sky`: the sky
 - `select_line`: a single row or column
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere

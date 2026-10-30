@@ -5,3 +5,4 @@ export * from './grabcut';
 export * from './subject';
 export * from './guided';
 export * from './focus';
+export * from './sky';

@@ -109,6 +109,21 @@
   let subject = $state('');
   let segmenting = $state(false);
   let subjectStatus = $state<string | null>(null);
+  let skying = $state(false);
+  let skyStatus = $state<string | null>(null);
+  async function selectSky() {
+    if (skying) return;
+    skying = true;
+    skyStatus = null;
+    try {
+      const { note } = await controller.selectSky({ mode: options.mode });
+      skyStatus = note ?? null;
+    } catch (err) {
+      skyStatus = err instanceof Error ? err.message : String(err);
+    } finally {
+      skying = false;
+    }
+  }
   let focusing = $state(false);
   let focusStatus = $state<string | null>(null);
   async function selectFocusArea() {
@@ -411,6 +426,14 @@
       <p role="status" class="text-muted-foreground">{subjectStatus}</p>
     {/if}
   </form>
+  <div data-testid="select-sky" class="flex flex-col gap-1">
+    <button type="button" class={btn(false)} disabled={skying} aria-busy={skying} onclick={() => void selectSky()}>
+      {skying ? 'Selecting…' : 'Select Sky'}
+    </button>
+    {#if skyStatus}
+      <p role="status" class="text-muted-foreground">{skyStatus}</p>
+    {/if}
+  </div>
   <details data-testid="focus-area" class="flex flex-col gap-2">
     <summary class="cursor-pointer text-foreground">Focus Area</summary>
     <div class="flex flex-col gap-2 pt-2">

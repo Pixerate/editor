@@ -528,6 +528,33 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     },
   };
 
+  const selectSkyTool: AgentTool = {
+    name: 'select_sky',
+    title: 'Select the sky',
+    description:
+      'Select › Sky: selects the sky (blue, or bright and grey when overcast, smooth, reaching down from the top of the image, including patches seen through branches or gaps), with the edge fitted to the skyline, combined with the selection by mode. Use it to replace or recolour a sky or to adjust the land without it (invert_selection). Raise threshold to take in haze or a sunset glow, lower it if bright buildings come in. One undoable step. Returns the selection, and a note when no sky was found (the selection is then unchanged).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        threshold: { type: 'number', minimum: 0, maximum: 100, description: 'How sky-like a pixel must be, 0..100 (default 50): higher takes in less sky-like pixels.' },
+        softness: { type: 'number', minimum: 0, maximum: 100, description: 'Soften the edge over this many natural pixels (default 4; 0 for a hard edge).' },
+        mode: modeSchema,
+        sampleAllLayers: { type: 'boolean', description: 'Read every layer (default true); false reads only the active pixel layer.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Select the sky', true),
+    handler: async (args) => {
+      const { note } = await controller.selectSky({
+        threshold: args.threshold === undefined ? undefined : num(args.threshold, 50),
+        softness: args.softness === undefined ? undefined : num(args.softness, 4),
+        mode: parseSelectionMode(args.mode),
+        sampleAllLayers: args.sampleAllLayers as boolean | undefined,
+      });
+      return { ...summary(controller), ...(note ? { note } : {}) };
+    },
+  };
+
   const magicWandTool: AgentTool = {
     name: 'magic_wand',
     title: 'Magic wand',
@@ -1135,6 +1162,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     selectObjectTool,
     createImageSubjectSelectionTool(controller),
     selectFocusAreaTool,
+    selectSkyTool,
     lineTool,
     magicWandTool,
     colorRangeTool,
