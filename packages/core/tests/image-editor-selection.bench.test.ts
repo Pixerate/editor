@@ -7,9 +7,10 @@
 // - a Quick Selection stroke: under 50 ms (once the reduced copy of the image exists; making it
 //   is a one-off per image, about 100 ms);
 // - the Magnetic Lasso: a pointer move well under a frame;
-// - Object Selection: no budget in the issue; it should stay under the 1 s set for Select Subject.
+// - Object Selection: no budget in the issue; it should stay under the 1 s set for Select Subject;
+// - Select Subject without a model: under 1 s.
 import { describe, expect, it } from 'vitest';
-import { EdgeMap, liveWire, quickSelectStroke, selectObjectIn, selectionArea } from '../src/image-editor';
+import { EdgeMap, findSubject, liveWire, quickSelectStroke, selectObjectIn, selectionArea } from '../src/image-editor';
 
 const W = 4000;
 const H = 3000;
@@ -64,6 +65,17 @@ describe.runIf(process.env.SELECTION_BENCH)('smart selection benchmark', () => {
     expect(Math.abs(boxArea - disc) / disc).toBeLessThan(0.02);
     expect(Math.abs(pointArea - disc) / disc).toBeLessThan(0.02);
     expect(Math.max(box, point)).toBeLessThan(1000);
+  });
+
+  it('Select Subject without a model on a 12 MP image', () => {
+    const px = photo();
+    let area = 0;
+    const first = time(() => (area = selectionArea(findSubject(px).selection)));
+    const again = time(() => findSubject(px));
+    console.table({ 'first (makes the reduced copy)': first, again });
+    const disc = Math.PI * 800 * 800;
+    expect(Math.abs(area - disc) / disc).toBeLessThan(0.03);
+    expect(first).toBeLessThan(1000);
   });
 
   it('Magnetic Lasso on a 12 MP image', () => {

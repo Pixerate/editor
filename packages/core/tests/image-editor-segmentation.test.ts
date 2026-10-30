@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ToolRegistry } from '../src/tools';
 import {
   ImageEditorController,
+  createImageEditorToolProvider,
   createImageSegmentationToolProvider,
   segmentToSelection,
   segmentsToSelection,
@@ -8,6 +10,7 @@ import {
   type SegmentationProvider,
   type SegmentationRequest,
   planOutlineTrace,
+  createImageSubjectSelectionTool,
 } from '../src/image-editor';
 import type { PlaybackStep } from '../src/tools';
 
@@ -82,9 +85,16 @@ describe('ImageEditorController.selectSubject', () => {
     expect(c.getSelection()).toBe(before);
   });
 
-  it('needs a provider and a description', async () => {
+  it('needs a description with a provider, and falls back to the salient subject without one', async () => {
     const c = controllerWith(null);
-    await expect(c.selectSubject('dog')).rejects.toThrow(/segmentation provider/);
+    // A dark square in the middle of a light image.
+    const data = new Uint8ClampedArray(20 * 10 * 4).fill(230);
+    for (let y = 3; y < 7; y++) for (let x = 8; x < 12; x++) data.set([30, 30, 30, 255], (y * 20 + x) * 4);
+    c.setSamplePixels({ width: 20, height: 10, data });
+    const out = await c.selectSubject('dog');
+    expect(out).toMatchObject({ method: 'saliency', segments: [{ label: 'subject' }] });
+    expect(out.note).toMatch(/"dog" was not used/);
+    expect(c.getSelection()!.bounds).toEqual({ x: 8, y: 3, width: 4, height: 4 });
     c.setSegmentationProvider({ segment: async () => [] });
     expect(c.segmentationProvider).not.toBeNull();
     await expect(c.selectSubject('   ')).rejects.toThrow(/Describe/);
@@ -92,27 +102,32 @@ describe('ImageEditorController.selectSubject', () => {
 });
 
 describe('createImageSegmentationToolProvider', () => {
-  it('offers select_subject only while a provider is set, and plays it in the select panel', async () => {
+  it('is deprecated: select_subject is in the image editor provider, with or without a model', async () => {
     const c = controllerWith(null);
     const provider = createImageSegmentationToolProvider(c, { id: 'img' });
-    const list = () => (typeof provider.tools === 'function' ? provider.tools() : provider.tools);
-    expect(list()).toEqual([]);
-
+    expect(typeof provider.tools === 'function' ? provider.tools() : provider.tools).toEqual([]);
+    const registry = new ToolRegistry();
+    registry.register(createImageEditorToolProvider(c));
+    const name = registry.listTools().tools.map((t) => t.name).find((n) => n.endsWith('select_subject'))!;
+    expect(name).toBeTruthy();
+    // Without a model the description isn't needed.
+    const data = new Uint8ClampedArray(20 * 10 * 4).fill(230);
+    for (let y = 3; y < 7; y++) for (let x = 8; x < 12; x++) data.set([30, 30, 30, 255], (y * 20 + x) * 4);
+    c.setSamplePixels({ width: 20, height: 10, data });
+    const plain: any = await registry.callTool(name, {});
+    expect(plain.structuredContent).toMatchObject({ empty: false, method: 'saliency', found: [{ label: 'subject' }] });
+    expect(plain.structuredContent.note).toMatch(/No segmentation model/);
     c.setSegmentationProvider({ segment: async () => [{ label: 'cat', polygon: square(1, 1, 3) }] });
-    const [tool] = list();
-    expect(tool.name).toBe('select_subject');
-    expect(tool.plan?.({ target: 'the cat' })?.[0]).toEqual({ type: 'open', ref: { kind: 'panel', id: 'select' } });
-    const out: any = await tool.handler({ target: 'the cat', maxSegments: 1 }, {} as never);
-    expect(out).toMatchObject({ empty: false, bounds: { x: 1, y: 1, width: 3, height: 3 }, found: [{ label: 'cat' }] });
-    await expect(Promise.resolve().then(() => tool.handler({ target: '' }, {} as never))).rejects.toThrow(/target/);
+    const res: any = await registry.callTool(name, { target: 'the cat', maxSegments: 1 });
+    expect(res.structuredContent).toMatchObject({ empty: false, bounds: { x: 1, y: 1, width: 3, height: 3 }, found: [{ label: 'cat' }], method: 'model' });
+    const missing: any = await registry.callTool(name, { target: '' });
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).toMatch(/target must describe/);
   });
 
   it('traces what the model found under playback before selecting it', async () => {
     const c = controllerWith({ segment: async () => [{ label: 'cat', polygon: square(1, 1, 3) }] });
-    const [tool] = (() => {
-      const p = createImageSegmentationToolProvider(c, { id: 'img' });
-      return typeof p.tools === 'function' ? p.tools() : p.tools;
-    })();
+    const tool = createImageSubjectSelectionTool(c);
     const performed: PlaybackStep[][] = [];
     const selectedWhenTraced: boolean[] = [];
     await tool.handler({ target: 'the cat' }, {

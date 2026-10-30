@@ -185,8 +185,10 @@ describe('Svelte SelectionOptionsBar', () => {
 });
 
 describe('Svelte SelectionOptionsBar: Select Subject', () => {
-  it('shows only with a segmentation provider and selects the described subject', async () => {
+  it('selects the subject that stands out without a model, and the described one with a model', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    // A dark square on a light ground.
+    controller.setSamplePixels(pixels(20, 10, (x, y) => (x >= 8 && x < 12 && y >= 3 && y < 7 ? [30, 30, 30, 255] : [230, 230, 230, 255])));
     const props = $state({
       controller,
       options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
@@ -196,7 +198,11 @@ describe('Svelte SelectionOptionsBar: Select Subject', () => {
     });
     component = mount(SelectionOptionsBar, { target, props });
     flushSync();
-    expect(target.querySelector('[data-testid="select-subject"]')).toBeNull();
+    expect(target.querySelector('input[aria-label="Subject to select"]')).toBeNull();
+    click(button('Select Subject'));
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(controller.getSelection()!.bounds).toEqual({ x: 8, y: 3, width: 4, height: 4 });
 
     const calls: unknown[][] = [];
     controller.selectSubject = (async (...args: unknown[]) => {

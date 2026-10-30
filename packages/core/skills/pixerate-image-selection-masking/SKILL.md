@@ -97,7 +97,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | --- | --- |
 | Geometric areas: a frame, a screen, a band | `select_rect` / `select_ellipse`, with `feather` for soft transitions |
 | One object among others, where you can box it (a product on a table, a person in a group) | `select_object` with a `rect` a little larger than the object on every side; then `quick_select` add / subtract strokes for what it missed |
-| A subject with a clear outline (product, person, animal) | `select_subject` if the host has a model; else `select_object` around it, or `select_polygon` with `snapToEdges` (12–30 points within `width` of the edge), then `refine_selection` |
+| A subject with a clear outline (product, person, animal) | `select_subject` (with a host model, by description; without one it takes whatever stands out most, so check `method` and the result); else `select_object` around it, or `select_polygon` with `snapToEdges` (12–30 points within `width` of the edge), then `refine_selection` |
 | An area or subject that differs from its surroundings (a shirt, a sky, a car) | `quick_select` with strokes painted inside it, away from the edge (`size` a fraction of its width); `add` / `subtract` strokes where it fell short or leaked |
 | A low-contrast or busy outline the edges don't follow | `select_polygon` without `snapToEdges`, along the contour (20–60 points) |
 | Flat backdrop or solid colour (studio white, green screen, sky without clouds) | `magic_wand` on the backdrop (`tolerance` 20–40; `distance: "perceptual"` for gradients), then `invert_selection` |
@@ -158,6 +158,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   30–60), check `percent`, and grow with `mode: "add"`.
 - **Box instead of outline:** `select_rect` around a subject masks its background too. Trace
   the contour.
+- **Select Subject without a model picks the wrong thing:** it selects what stands out most from
+  the image's border, which may be a bright sign rather than the person. When `method` is
+  `saliency`, check with `capture_view`; if it's wrong, use `select_object` with a box.
 - **Object Selection takes part of the background:** inside the box, anything that looks
   unlike the background around the box counts as the object. Tighten the box, or `subtract` a
   `quick_select` stroke on the extra. With `point`, it may stop at an inner edge of a
@@ -212,7 +215,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `fill_pixels`, `blur_stroke`: fill or soften the selection in Quick Mask mode
 - `magic_wand`: similar colour from a seed
 - `select_color_range`: colour samples, hue, tone and skin presets
-- `select_subject`: a subject by description (needs a host model)
+- `select_subject`: a subject by description with a host model; without one, the most salient subject
 - `load_selection_from_image`: AI or saved mattes
 - `load_selection_from_mask`: a layer mask back to a selection
 - `set_selection_display`: ants, Quick Mask tint or hidden

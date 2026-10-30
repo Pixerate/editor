@@ -165,10 +165,17 @@ describe('React SelectionOptionsBar', () => {
 });
 
 describe('React SelectionOptionsBar: Select Subject', () => {
-  it('shows only with a segmentation provider and selects the described subject', async () => {
+  it('selects the subject that stands out without a model, and the described one with a model', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    // A dark square on a light ground.
+    controller.setSamplePixels(pixels(20, 10, (x, y) => (x >= 8 && x < 12 && y >= 3 && y < 7 ? [30, 30, 30, 255] : [230, 230, 230, 255])));
     await act(async () => root.render(<Bar controller={controller} />));
-    expect(container.querySelector('[data-testid="select-subject"]')).toBeNull();
+    expect(container.querySelector('input[aria-label="Subject to select"]')).toBeNull();
+    await act(async () => {
+      button('Select Subject').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(controller.getSelection()!.bounds).toEqual({ x: 8, y: 3, width: 4, height: 4 });
 
     controller.setSegmentationProvider({ segment: async () => [] });
     const calls: unknown[][] = [];
