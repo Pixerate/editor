@@ -38,6 +38,20 @@ export function maskThumbnailClick(
 }
 
 /**
+ * A click on a layer's vector mask thumbnail: Ctrl/⌘-click loads the path as the selection (Shift
+ * adds, Alt subtracts, both intersect) and Shift-click turns the vector mask on or off.
+ */
+export function vectorMaskThumbnailClick(
+  controller: ImageEditorController,
+  layer: ImageLayer,
+  e: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean }
+): void {
+  if (!layer.vectorMask) return;
+  if (e.ctrlKey || e.metaKey) controller.selectionFromVectorMask(layer.id, selectionModeFromModifiers(e, 'replace'));
+  else if (e.shiftKey) controller.setVectorMaskProps(layer.id, { enabled: layer.vectorMask.enabled === false });
+}
+
+/**
  * A click on a layer's pixel thumbnail: Ctrl/⌘-click loads the layer's transparency as the
  * selection (Shift adds, Alt subtracts, both intersect) and returns true; other clicks are left
  * to the row (false).
@@ -159,6 +173,11 @@ export type LayerMenuAction =
   | 'via-copy'
   | 'via-cut'
   | 'add-mask'
+  | 'add-vector-mask'
+  | 'add-vector-mask-hide'
+  | 'delete-vector-mask'
+  | 'toggle-vector-mask'
+  | 'rasterize-vector-mask'
   | 'add-mask-selection'
   | 'add-mask-hide-selection'
   | 'add-mask-transparency'
@@ -211,6 +230,11 @@ export function layerMenu(controller: ImageEditorController): LayerMenuItem[] {
     { action: 'delete-mask', label: 'Delete Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask', label: active?.mask?.enabled === false ? 'Enable Layer Mask' : 'Disable Layer Mask', enabled: Boolean(active?.mask) },
     { action: 'toggle-mask-link', label: active?.mask?.linked === false ? 'Link Layer Mask' : 'Unlink Layer Mask', enabled: Boolean(active?.mask && !active.mask.source) },
+    { action: 'add-vector-mask', label: 'Add Vector Mask (Reveal All)', enabled: Boolean(active && active.type !== 'shape' && !active.mask?.source) },
+    { action: 'add-vector-mask-hide', label: 'Add Vector Mask (Hide All)', enabled: Boolean(active && active.type !== 'shape' && !active.mask?.source) },
+    { action: 'delete-vector-mask', label: 'Delete Vector Mask', enabled: Boolean(active?.vectorMask) },
+    { action: 'toggle-vector-mask', label: active?.vectorMask?.enabled === false ? 'Enable Vector Mask' : 'Disable Vector Mask', enabled: Boolean(active?.vectorMask) },
+    { action: 'rasterize-vector-mask', label: 'Rasterize Vector Mask', enabled: Boolean(active?.vectorMask) },
     { action: 'rasterize', label: 'Rasterize Layer', enabled: active?.type === 'annotation' || active?.type === 'smart' || active?.type === 'shape' || active?.type === 'type' || (isPixel && Boolean(active?.type === 'pixel' && active.filters?.length)) },
     { action: 'convert-smart', label: 'Convert to Smart Object', enabled: Boolean(active && active.type !== 'annotation') },
     { action: 'edit-contents', label: 'Edit Contents', enabled: active?.type === 'smart' },
@@ -283,6 +307,19 @@ export async function runLayerMenuAction(controller: ImageEditorController, acti
         break;
       case 'toggle-mask-link':
         if (id && active?.mask) controller.setLayerMaskProps(id, { linked: active.mask.linked === false });
+        break;
+      case 'add-vector-mask':
+      case 'add-vector-mask-hide':
+        if (id) controller.addVectorMask(id, action === 'add-vector-mask' ? 'reveal-all' : 'hide-all');
+        break;
+      case 'delete-vector-mask':
+        if (id) controller.removeVectorMask(id);
+        break;
+      case 'toggle-vector-mask':
+        if (id && active?.vectorMask) controller.setVectorMaskProps(id, { enabled: active.vectorMask.enabled === false });
+        break;
+      case 'rasterize-vector-mask':
+        if (id) controller.rasterizeVectorMask(id);
         break;
       case 'rasterize':
         if (id) await controller.rasterizeLayer(id);

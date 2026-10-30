@@ -6,6 +6,7 @@
  * the host; pixel layers can carry develop and blur filters; masks can be depth masks.
  */
 
+import { resolveVectorMasks } from './vector-mask';
 import { applyAdjustmentLayers, applyAdjustmentLayersFloat } from '../adjustment-layers';
 import { DeepCompositor } from '../../raster/deep-compositor';
 import type { RasterRect } from '../../raster/surface';
@@ -187,6 +188,25 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
   constructor(options: CompositorOptions = {}) {
     super(PHOTO_PROFILE, options);
   }
+
+  // Vector masks reach the engine as part of each layer's raster mask (see `resolveVectorMasks`).
+  override composite(layers: readonly ImageLayer[], rect: RasterRect, sources: CompositorSources, options?: CompositeCallOptions): Uint8ClampedArray {
+    return super.composite(resolveVectorMasks(layers, sources.width, sources.height), rect, sources, options);
+  }
+
+  override compositeTiles(
+    layers: readonly ImageLayer[],
+    rect: RasterRect,
+    sources: CompositorSources,
+    onTile: (tx: number, ty: number, data: Uint8ClampedArray, changed: boolean) => void,
+    options?: CompositeCallOptions
+  ): void {
+    super.compositeTiles(resolveVectorMasks(layers, sources.width, sources.height), rect, sources, onTile, options);
+  }
+
+  override tile(layers: readonly ImageLayer[], tx: number, ty: number, sources: CompositorSources): Uint8ClampedArray {
+    return super.tile(resolveVectorMasks(layers, sources.width, sources.height), tx, ty, sources);
+  }
 }
 
 /**
@@ -204,5 +224,5 @@ export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, s
       return { reach: filterReach(filters), apply: (data, width, height, linear) => runLayerFiltersFloat(data, width, height, filters, linear) };
     },
   }, depth);
-  return deep.composite(layers, rect, sources);
+  return deep.composite(resolveVectorMasks(layers, sources.width, sources.height), rect, sources);
 }

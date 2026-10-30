@@ -36,6 +36,7 @@ export * from './layers/ops';
 export * from './layers/smart';
 export * from './smart-tools';
 export * from './layers/shape';
+export * from './layers/vector-mask';
 export * from './shape-tools';
 export * from './layers/text';
 export * from './layers/text-shapers';

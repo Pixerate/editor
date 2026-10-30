@@ -1,5 +1,5 @@
 import type { AgentTool } from '../tools/registry.js';
-import type { ImageEditorController, ShapeGeometryInput, ShapeLayerInit } from './controller';
+import type { ImageEditorController, ShapeGeometryInput, ShapeLayerInit, VectorMaskPathInput } from './controller';
 import { BLEND_MODES, type BlendMode } from './blend';
 import { findLayer } from './layers/model';
 import { LayerOperationError } from './layers/ops';
@@ -433,5 +433,134 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     handler: ({ layerId }) => controller.mergeShapeComponents(shapeId(layerId)),
   };
 
-  return [get, add, update, setComponent, addComponent, removeComponent, merge];
+  // --- Vector masks ---
+
+  const layerArg = (v: unknown) => {
+    const id = String(v ?? '');
+    if (!controller.getLayer(id)) throw new Error(`No layer "${id}". Call list_layers for ids.`);
+    return id;
+  };
+  const pathSpec = (args: Record<string, unknown>): VectorMaskPathInput => {
+    const spec: VectorMaskPathInput = { ...geometry(args) };
+    if (args.components !== undefined) spec.components = (args.components as Array<Record<string, unknown>>).map(geometry);
+    if (args.fillRule !== undefined) spec.fillRule = args.fillRule as VectorMaskPathInput['fillRule'];
+    return spec;
+  };
+  const PATH_PROPS = {
+    ...GEOMETRY,
+    components: {
+      type: 'array',
+      minItems: 1,
+      description: 'Several components instead of shape / subpaths, bottom first, each with its path operation (combine, subtract, intersect, exclude).',
+      items: { type: 'object', description: 'One component.', properties: { ...GEOMETRY, op: OP }, additionalProperties: false },
+    },
+    fillRule: { type: 'string', enum: ['nonzero', 'evenodd'], description: 'Winding rule within a component (default nonzero).' },
+  } as const;
+  const LAYER = { type: 'string', minLength: 1, description: 'The layer (see list_layers). Not a shape layer: its path already is its vector mask.' } as const;
+
+  const getVectorMask: AgentTool = {
+    name: 'get_vector_mask',
+    title: 'Read a vector mask',
+    description:
+      "Reads a layer's vector mask: enabled, linked, inverted, fill rule, density, feather, the bounds of its path and its components (op, live shape, subpaths in document pixels). Use it before set_vector_mask_path to edit the path. Returns null when the layer has none.",
+    inputSchema: { type: 'object', properties: { layerId: LAYER }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Read a vector mask', ...READ },
+    handler: ({ layerId }) => ({ vectorMask: controller.getVectorMask(layerArg(layerId)) }),
+  };
+
+  const addVectorMask: AgentTool = {
+    name: 'add_vector_mask',
+    title: 'Add a vector mask',
+    description:
+      "Layer › Vector Mask: a path that reveals the layer inside it and stays sharp at any size, on top of any raster mask (both apply). from path takes a live shape, free subpaths or components like add_shape_layer; reveal-all and hide-all start with an empty path. Use it for hard-edged geometric or traced cutouts that must stay editable; use add_layer_mask for soft or painted ones. A linked vector mask moves and transforms with the layer. Replaces an existing vector mask. One undo step. Returns the vector mask.",
+    inputSchema: {
+      type: 'object',
+      $defs: DEFS,
+      properties: {
+        layerId: LAYER,
+        from: { type: 'string', enum: ['path', 'reveal-all', 'hide-all'], description: 'path (default when a shape, subpaths or components are given), reveal-all or hide-all (an empty path).' },
+        ...PATH_PROPS,
+      },
+      required: ['layerId'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Add a vector mask', ...WRITE },
+    handler: (args) => {
+      const id = layerArg(args.layerId);
+      const spec = pathSpec(args);
+      const hasPath = spec.components?.length || spec.shape !== undefined || spec.subpaths !== undefined;
+      const from = (args.from as 'path' | 'reveal-all' | 'hide-all' | undefined) ?? (hasPath ? 'path' : 'reveal-all');
+      controller.addVectorMask(id, from, spec);
+      return { vectorMask: controller.getVectorMask(id) };
+    },
+  };
+
+  const setVectorMaskPath: AgentTool = {
+    name: 'set_vector_mask_path',
+    title: 'Replace a vector mask path',
+    description:
+      "Replaces the path of a layer's vector mask (shape, subpaths or components, document pixels); enabled, linked, inverted, density and feather are kept. Read the current path with get_vector_mask first to change part of it. One undo step. Returns the vector mask.",
+    inputSchema: { type: 'object', $defs: DEFS, properties: { layerId: LAYER, ...PATH_PROPS }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Replace a vector mask path', ...WRITE_IDEMPOTENT },
+    handler: (args) => {
+      const id = layerArg(args.layerId);
+      controller.setVectorMaskPath(id, pathSpec(args));
+      return { vectorMask: controller.getVectorMask(id) };
+    },
+  };
+
+  const setVectorMaskProps: AgentTool = {
+    name: 'set_vector_mask_properties',
+    title: 'Set vector mask properties',
+    description:
+      "Changes a layer's vector mask without touching its path: enabled (false ignores it), linked (false: it stays put when the layer moves or transforms), inverted (reveal outside the path), density 0..1 and feather in px (soften the edge without losing the path). One undo step. Returns the vector mask.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: LAYER,
+        enabled: { type: 'boolean', description: 'false ignores the vector mask but keeps it.' },
+        linked: { type: 'boolean', description: 'false keeps the path in place when the layer moves or transforms.' },
+        inverted: { type: 'boolean', description: 'true reveals outside the path instead.' },
+        density: { type: 'number', minimum: 0, maximum: 1, description: 'Density 0..1 (default 1): at 0.5 the hidden area still shows half.' },
+        feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather σ in px (default 0).' },
+      },
+      required: ['layerId'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Set vector mask properties', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, ...props }) => {
+      const id = layerArg(layerId);
+      controller.setVectorMaskProps(id, props as Parameters<typeof controller.setVectorMaskProps>[1]);
+      return { vectorMask: controller.getVectorMask(id) };
+    },
+  };
+
+  const rasterizeVectorMask: AgentTool = {
+    name: 'rasterize_vector_mask',
+    title: 'Rasterize a vector mask',
+    description:
+      "Layer › Rasterize › Vector Mask: multiplies the path (with its density and feather) into the layer's raster mask, adding one if needed, and removes the vector mask, so the mask can be painted. The path can no longer be edited (undo_image brings it back). One undo step. Returns the layer's raster mask summary.",
+    inputSchema: { type: 'object', properties: { layerId: LAYER }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Rasterize a vector mask', ...DESTRUCTIVE },
+    handler: ({ layerId }) => {
+      const id = layerArg(layerId);
+      const mask = controller.rasterizeVectorMask(id);
+      return { layerId: id, mask: { defaultValue: mask.defaultValue, density: mask.density ?? 1, feather: mask.feather ?? 0, enabled: mask.enabled !== false } };
+    },
+  };
+
+  const removeVectorMask: AgentTool = {
+    name: 'remove_vector_mask',
+    title: 'Delete a vector mask',
+    description: "Deletes a layer's vector mask without applying it (the raster mask, if any, stays). Disable it instead with set_vector_mask_properties enabled false to keep it. One undo step. Returns the layer id.",
+    inputSchema: { type: 'object', properties: { layerId: LAYER }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Delete a vector mask', ...DESTRUCTIVE },
+    handler: ({ layerId }) => {
+      const id = layerArg(layerId);
+      controller.removeVectorMask(id);
+      return { layerId: id, vectorMask: null };
+    },
+  };
+
+  return [get, add, update, setComponent, addComponent, removeComponent, merge, getVectorMask, addVectorMask, setVectorMaskPath, setVectorMaskProps, rasterizeVectorMask, removeVectorMask];
 }

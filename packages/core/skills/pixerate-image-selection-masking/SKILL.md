@@ -66,7 +66,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
      by it), or `apply_selection_as_mask` with `kind`. Filters (`apply_effect`,
      `add_smart_filter`) are also limited to an active selection.
    - A cutout: `layer_via_copy` (the original stays), or `add_layer_mask` `from: "selection"` on
-     the layer itself.
+     the layer itself. For a hard geometric or traced edge that must stay sharp and editable
+     (a product, a screen, a window), `add_vector_mask` with the path instead; it moves and
+     transforms with the layer, and `rasterize_vector_mask` turns it into paintable pixels.
    - Painting or fills inside it: keep the selection active and paint; `stroke_selection` for
      an outline that follows it.
    - Removing what it covers: `content_aware_fill` `output: "new-layer"`.
@@ -98,7 +100,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | Tones (shadows, highlights, a luminosity mask) | `select_color_range` with `preset` `shadows` / `midtones` / `highlights` |
 | Skin for retouching | `select_color_range` `preset: "skinTones"`, then `intersect` with a box around the face |
 | An AI matte or saved mask from the host | `load_selection_from_image` (soft: no `threshold`), then `refine_selection`; `load_channel_from_image` to keep it for later |
-| An existing layer mask | `load_selection_from_mask` |
+| An existing layer mask | `load_selection_from_mask` (`source: "vector"` for a vector mask) |
 | A cutout, shape or text already on its own layer | `select_layer_transparency` (exact, soft where the layer is) |
 | A dead pixel row or column | `select_line`, then fill or heal it |
 
@@ -195,6 +197,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `load_selection_from_mask`: a layer mask back to a selection
 - `set_selection_display`: ants, Quick Mask tint or hidden
 - `set_mask_view`: a layer mask alone in grey or as a red overlay, to check it
+- `add_vector_mask`, `set_vector_mask_path`, `set_vector_mask_properties`, `get_vector_mask`: sharp, editable path masks
+- `rasterize_vector_mask`, `remove_vector_mask`: turn a vector mask into pixels, or drop it
 - `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only

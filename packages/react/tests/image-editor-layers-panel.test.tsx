@@ -85,6 +85,20 @@ describe('React LayersPanel', () => {
     await act(async () => maskThumb().dispatchEvent(new win.MouseEvent('click', { bubbles: true, altKey: true })));
     expect(c.getMaskView()).toBeNull();
     expect(maskThumb().getAttribute('aria-label')).not.toContain('(shown)');
+    // A vector mask from the menu: its own thumbnail, Shift-click turns it off, Ctrl/⌘-click selects its path.
+    const menuItem = async (label: string) => {
+      await act(async () => (container.querySelector('button[aria-label="Layer menu"]') as HTMLButtonElement).click());
+      const item = Array.from(container.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === label) as HTMLButtonElement;
+      await act(async () => item.click());
+    };
+    await menuItem('Add Vector Mask (Hide All)');
+    const vector = () => container.querySelector('[data-testid="layer-vector-mask-thumbnail"]') as HTMLElement | null;
+    expect(vector()).not.toBeNull();
+    await act(async () => vector()!.dispatchEvent(new win.MouseEvent('click', { bubbles: true, shiftKey: true })));
+    expect(c.getLayers()[1].vectorMask!.enabled).toBe(false);
+    expect(vector()!.getAttribute('aria-label')).toContain('(disabled)');
+    await menuItem('Delete Vector Mask');
+    expect(vector()).toBeNull();
     // The menu: delete via the ⋯ menu.
     await act(async () => (container.querySelector('button[aria-label="Layer menu"]') as HTMLButtonElement).click());
     const del = Array.from(container.querySelectorAll('[role="menuitem"]')).find((b) => b.textContent === 'Delete Layer') as HTMLButtonElement;
