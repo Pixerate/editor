@@ -333,6 +333,8 @@ interface Level {
   h: number;
   img: Float32Array;
   hole: Uint8Array;
+  /** Pixels that may not be copied from (outside the sampling area), or null for none. */
+  exclude: Uint8Array | null;
 }
 
 /** Half-size level: known pixels averaged, a block is hole when any of it is. */
@@ -341,6 +343,8 @@ function downsample(l: Level, ch: number): Level {
   const h = Math.max(1, l.h >> 1);
   const img = new Float32Array(w * h * ch);
   const hole = new Uint8Array(w * h);
+  // A block is excluded when any of it is, so no source patch reaches into excluded pixels.
+  const exclude = l.exclude ? new Uint8Array(w * h) : null;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let n = 0;
@@ -350,6 +354,7 @@ function downsample(l: Level, ch: number): Level {
           const sx = Math.min(l.w - 1, 2 * x + dx);
           const sy = Math.min(l.h - 1, 2 * y + dy);
           const i = sy * l.w + sx;
+          if (exclude && l.exclude![i]) exclude[y * w + x] = 1;
           if (l.hole[i]) {
             hole[y * w + x] = 1;
             continue;
@@ -361,7 +366,7 @@ function downsample(l: Level, ch: number): Level {
       if (n) for (let c = 0; c < ch; c++) img[o + c] /= n;
     }
   }
-  return { w, h, img, hole };
+  return { w, h, img, hole, exclude };
 }
 
 /**
@@ -369,11 +374,25 @@ function downsample(l: Level, ch: number): Level {
  * continue across it: PatchMatch nearest-neighbour fields over 7 × 7 patches with patch voting
  * (Wexler et al. / Barnes et al.), run coarse to fine from a smooth fill. Deterministic for the
  * same input. Returns the filled image; pixels outside `hole` are unchanged. Falls back to a
- * smooth fill when there is no whole patch to copy from.
+ * smooth fill when there is no whole patch to copy from. `exclude` marks pixels no source patch
+ * may include (Content-Aware Fill's sampling area is everything else).
  */
-export function contentAwareFill(w: number, h: number, ch: number, img: ArrayLike<number>, hole: ArrayLike<boolean | number>, options: { iterations?: number; seed?: number } = {}): Float32Array {
+export function contentAwareFill(
+  w: number,
+  h: number,
+  ch: number,
+  img: ArrayLike<number>,
+  hole: ArrayLike<boolean | number>,
+  options: { iterations?: number; seed?: number; exclude?: ArrayLike<boolean | number> | null } = {}
+): Float32Array {
   const iters = options.iterations ?? 4;
-  const base: Level = { w, h, img: Float32Array.from(img), hole: Uint8Array.from(hole as ArrayLike<number>, (v) => (v ? 1 : 0)) };
+  const base: Level = {
+    w,
+    h,
+    img: Float32Array.from(img),
+    hole: Uint8Array.from(hole as ArrayLike<number>, (v) => (v ? 1 : 0)),
+    exclude: options.exclude ? Uint8Array.from(options.exclude as ArrayLike<number>, (v) => (v ? 1 : 0)) : null,
+  };
   const levels: Level[] = [base];
   // Coarser levels while the hole is still more than a couple of patches across.
   while (levels.length < 4) {
@@ -387,7 +406,7 @@ export function contentAwareFill(w: number, h: number, ch: number, img: ArrayLik
   let prevNnf: Int32Array | null = null;
   let prevW = 0;
   for (let li = levels.length - 1; li >= 0; li--) {
-    const { w: W, h: H, hole: holeL } = levels[li];
+    const { w: W, h: H, hole: holeL, exclude: excludeL } = levels[li];
     const cur = new Float32Array(levels[li].img);
     // Start: the coarser fill scaled up, or a smooth fill at the coarsest level.
     if (prevFill) {
@@ -399,7 +418,15 @@ export function contentAwareFill(w: number, h: number, ch: number, img: ArrayLik
       }
     } else cur.set(membraneFill(W, H, ch, cur, holeL));
     // Valid sources: whole patches with no hole in them.
-    const blocked = dilateMask(W, H, holeL, PATCH_R);
+    const holeBlocked = dilateMask(W, H, holeL, PATCH_R);
+    let blocked = holeBlocked;
+    if (excludeL) {
+      // Neither may a source patch cover excluded pixels; targets stay those touching the hole.
+      const off = dilateMask(W, H, excludeL, PATCH_R);
+      const sourceBlocked = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) sourceBlocked[i] = holeBlocked[i] || off[i] ? 1 : 0;
+      blocked = sourceBlocked;
+    }
     const valid: number[] = [];
     for (let y = PATCH_R; y < H - PATCH_R; y++) for (let x = PATCH_R; x < W - PATCH_R; x++) if (!blocked[y * W + x]) valid.push(y * W + x);
     if (!valid.length) {
@@ -410,7 +437,7 @@ export function contentAwareFill(w: number, h: number, ch: number, img: ArrayLik
     }
     // Targets: patch centres whose patch touches the hole (kept inside the image).
     const targets: number[] = [];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (blocked[y * W + x]) targets.push(y * W + x);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (holeBlocked[y * W + x]) targets.push(y * W + x);
     const nnf = new Int32Array(W * H).fill(-1);
     const cost = new Float64Array(W * H);
     const clampC = (v: number, n: number) => Math.min(n - 1 - PATCH_R, Math.max(PATCH_R, v));
