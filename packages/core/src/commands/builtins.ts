@@ -4,6 +4,7 @@ import type { AlignEdge, DistributeAxis, DistributeMode, ZOrderOperation } from 
 import { DEFAULT_ARRANGE_SHORTCUTS } from '../canvas/arrangeShortcuts.js';
 import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset } from '../canvas/brushTypes.js';
 import type { CommandParamsSchema, CommandSpec } from './registry.js';
+import type { PlaybackPoint, PlaybackStep } from '../tools/playback.js';
 import { ShortcutMap, type ShortcutBinding } from './shortcuts.js';
 import type { KeyboardEventLike, Platform } from './chords.js';
 
@@ -451,6 +452,31 @@ const BRUSH_PAINT_PARAM = {
 } as const;
 
 /**
+ * Agent playback for `canvas.drawFreehand`: traces the stroke (canvas coordinates) with the
+ * button down, through at most `max` of its points, paced by length (about 900 ms in all).
+ */
+export function planFreehandPlayback(points: unknown, max = 32): PlaybackStep[] | null {
+	if (!Array.isArray(points)) return null;
+	const all = points.filter((p): p is [number, number] => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])).map(([x, y]): PlaybackPoint => ({ x, y }));
+	if (!all.length) return null;
+	const step = (all.length - 1) / (max - 1);
+	const picked = all.length <= max ? all : Array.from({ length: max }, (_, i) => all[Math.round(i * step)]!);
+	const [first, ...rest] = picked;
+	const gap = (p: PlaybackPoint, i: number) => {
+		const prev = i ? rest[i - 1]! : first!;
+		return Math.hypot(p.x - prev.x, p.y - prev.y);
+	};
+	const total = rest.reduce((sum, p, i) => sum + gap(p, i), 0);
+	return [
+		{ type: 'move', to: first! },
+		{ type: 'press', gesture: 'path' },
+		...rest.map((p, i): PlaybackStep => ({ type: 'drag', to: p, ms: total > 0 ? Math.max(16, (900 * gap(p, i)) / total) : 16 })),
+		{ type: 'release' },
+		{ type: 'commit' }
+	];
+}
+
+/**
  * Agent / palette commands for freehand drawing: `canvas.drawFreehand` (a pen or highlighter
  * stroke through given points, optionally brushed with a dry paint preset and a pressure / tilt
  * profile; one undo step) and the read-only `canvas.listBrushes` (the dry presets it accepts).
@@ -496,6 +522,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 				}
 			},
 			enabled: () => options.readOnlyReason?.() || true,
+			plan: (_ctx: unknown, params: { points?: unknown }) => planFreehandPlayback(params.points),
 			run: (
 				_ctx: unknown,
 				params: {

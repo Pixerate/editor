@@ -7,7 +7,7 @@
  */
 
 import { WET_FLOW_KINDS } from '../paint/wet/flow';
-import type { AgentTool } from '../tools/registry.js';
+import type { PaintAgentTool } from './hosted';
 import type { PaintEditorController } from './controller';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -42,7 +42,7 @@ export const WET_PARAM_SCHEMA = {
   bleed: UNIT('Colour bleed between touching wet areas (default 0.3).'),
 } as const;
 
-export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
+export function createPaintWetTools(c: PaintEditorController): PaintAgentTool[] {
   const stillWet = () => c.wetState().wet;
   return [
     {
@@ -52,6 +52,7 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
         'Reads the wet media: whether any paint is still wet, the simulation clock (steps), whether time is paused, its speed (steps per second), the canvas tilt, the kernel running it (typescript, wasm, wasm-threads with the thread count, and a message when it runs slower than it could, e.g. without cross-origin isolation), and each wet layer: wet cells, where the water is (wetBounds), live tiles, its settings and flow map. Also engine: Engine B, the WebGPU accelerator (mode auto/off, state, reason, adapter, minTiles, activeTiles). Call it after wet strokes to see what is still wet.',
       inputSchema: EMPTY,
       annotations: { title: 'Get the wet paint', ...READ },
+      coordinates: { out: ['layers[].wetBounds', 'layers[].flow.center'] },
       handler: () => c.wetState(),
     },
     {
@@ -80,6 +81,7 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
         'Dries wet paint at once: everything settles where it is and the water goes, as a hair dryer at full blast would (the same deterministic bake that saving uses). On one layer or every wet layer, optionally only inside rect. Dried washes stay put: later washes glaze over them instead of mixing in. One undo step. Returns dried (each layer id with the rectangle that dried) and stillWet.',
       inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Only this layer (default every wet layer).' }, rect: RECT }, additionalProperties: false },
       annotations: { title: 'Dry the wet paint', ...WRITE },
+      coordinates: { in: ['rect'], out: ['dried[].bounds'] },
       handler: async ({ layerId, rect }) => {
         await c.wetIdle();
         return c.dryPaint({ layerId, rect });
@@ -96,6 +98,7 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Pre-wet the paper', ...WRITE },
+      coordinates: { in: ['rect'], out: ['rect'] },
       handler: async ({ layerId, rect, amount }) => {
         await c.wetIdle();
         return c.wetPaper({ layerId, rect, amount });
@@ -140,6 +143,7 @@ export function createPaintWetTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Set a flow map', ...SET },
+      coordinates: { in: ['center'], out: ['flow.center'] },
       handler: async ({ layerId, ...flow }) => {
         await c.wetIdle();
         return { layerId: layerId ?? c.document.activeLayerId, flow: c.setFlowMap(layerId, flow), stillWet: stillWet() };

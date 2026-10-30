@@ -5,7 +5,7 @@
  */
 
 import { PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
-import type { AgentTool } from '../tools/registry.js';
+import type { PaintAgentTool } from './hosted';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { HARMONY_KINDS } from './color';
 import type { PaintEditorController } from './controller';
@@ -36,12 +36,14 @@ const RECT = {
   required: ['x', 'y', 'width', 'height'],
   additionalProperties: false,
 } as const;
+/** Stencil position fields (see `PaintToolCoordinates`). */
+const STENCIL_POSITIONS = ['from', 'to', 'center', 'rect', 'points[]'];
 const PNG = { type: 'string', minLength: 1, description: 'The image as a PNG, base64 or a data:image/png URL.' } as const;
 
 const tracingInfo = (t: TracingImage | null) => (t ? { width: t.width, height: t.height, rect: t.rect, opacity: t.opacity, visible: t.visible, sampleColors: t.sampleColors } : null);
 const refInfo = ({ src: _s, ...r }: ReferenceImage) => r;
 
-export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
+export function createPaintGuideTools(c: PaintEditorController): PaintAgentTool[] {
   const guides = () => c.getState().guides;
   const STENCIL_GEOMETRY = {
     mode: { type: 'string', enum: ['guide', 'mask'], description: 'guide: strokes that start within snap px of the edge follow it; mask: paint lands only inside (or on the left of a line going from → to), outside with invert. Default guide for ruler and arc, mask for line and shape.' },
@@ -66,6 +68,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
       description: 'Reads the painting guides: symmetry (mode, centre, rotation, segments, mirror, and how many copies each stroke paints), the perspective guide (vanishing points, snap), the tracing image (size, placement, opacity, visibility, colour sampling), the reference images and the stencils (id, kind, mode, geometry).',
       inputSchema: EMPTY,
       annotations: { title: 'Get the painting guides', ...READ },
+      coordinates: { out: ['symmetry.center', 'perspective.points[]', 'tracing.rect', ...STENCIL_POSITIONS.map((p) => `stencils[].${p}`)] },
       handler: () => {
         const g = guides();
         return { symmetry: { ...g.symmetry, copies: symmetryCopies(g.symmetry).length }, perspective: g.perspective, tracing: tracingInfo(g.tracing), references: g.references.map(refInfo), stencils: g.stencils };
@@ -88,6 +91,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Set mirror or kaleidoscope painting', ...SET },
+      coordinates: { in: ['center'], out: ['center'] },
       handler: (a) => {
         const s = c.setSymmetry(a);
         return { ...s, copies: symmetryCopies(s).length };
@@ -108,6 +112,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Set the perspective guide', ...SET },
+      coordinates: { in: ['points[]'], out: ['points[]'] },
       handler: (a) => c.setPerspective(a),
     },
     {
@@ -127,6 +132,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Set a tracing image', ...WRITE },
+      coordinates: { in: ['rect'], out: ['rect'] },
       handler: (a) => tracingInfo(c.setTracingImage(a)),
     },
     {
@@ -144,6 +150,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         additionalProperties: false,
       },
       annotations: { title: 'Change the tracing image', ...SET },
+      coordinates: { in: ['rect'], out: ['rect'] },
       handler: (a) => tracingInfo(c.updateTracing(a)),
     },
     {
@@ -441,6 +448,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
         'Lays a stencil on the canvas: a ruler (straight edge to draw along) or an arc (circle or part of one) that pointer and agent strokes starting near it follow exactly, or a line (straight masking edge) or a shape (rect, ellipse or polygon template) that paint lands only inside of (outside with invert). Editor state saved with the document, not an undo step; replays keep the mask they were painted through. Returns the stencil with its id.',
       inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['ruler', 'arc', 'line', 'shape'], description: 'ruler, arc, line or shape.' }, ...STENCIL_GEOMETRY }, required: ['kind'], additionalProperties: false },
       annotations: { title: 'Lay a stencil', ...WRITE },
+      coordinates: { in: STENCIL_POSITIONS, out: STENCIL_POSITIONS },
       handler: (a) => c.addStencil(a as Parameters<PaintEditorController["addStencil"]>[0]),
     },
     {
@@ -449,6 +457,7 @@ export function createPaintGuideTools(c: PaintEditorController): AgentTool[] {
       description: 'Moves, reshapes, switches (guide or mask, invert) or hides (enabled false) a stencil by id from get_guides. Returns the stencil.',
       inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Stencil id from get_guides.' }, ...STENCIL_GEOMETRY }, required: ['id'], additionalProperties: false },
       annotations: { title: 'Change a stencil', ...SET },
+      coordinates: { in: STENCIL_POSITIONS, out: STENCIL_POSITIONS },
       handler: ({ id, ...update }) => c.updateStencil(id, update),
     },
     {

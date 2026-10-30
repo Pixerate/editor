@@ -17,7 +17,7 @@ import {
 	type Point
 } from '../src/canvas';
 import { CommandRegistry, createCommandToolProvider, createDrawCommands } from '../src/commands';
-import { ToolRegistry } from '../src/tools';
+import { PresenceStore, ToolRegistry, createAgentPlayback, createInstantPresenceClock } from '../src/tools';
 import { HistoryManager } from '../src/history';
 import { decodePng, parseDataUrl } from '../src/raster/png';
 
@@ -379,5 +379,40 @@ describe('renderCanvasBrushSwatch', () => {
 		expect(charcoal).not.toBe(airbrush);
 		expect(await renderCanvasBrushSwatch('charcoal-stick', { width: 80, height: 24 })).toBe(charcoal);
 		await expect(renderCanvasBrushSwatch('watercolor-round')).rejects.toThrow(/not a dry brush/);
+	});
+});
+
+describe('canvas.drawFreehand playback', () => {
+	it('traces the stroke on the canvas surface, downsampled and paced by length', async () => {
+		const env = setup();
+		const commands = new CommandRegistry();
+		commands.register(createDrawCommands(env.draw));
+		const registry = new ToolRegistry();
+		registry.register(createCommandToolProvider(commands));
+		const playback = createAgentPlayback({ clock: createInstantPresenceClock(), linger: 0 });
+		playback.install(registry);
+		playback.attach('canvas', { presence: new PresenceStore(), bounds: () => ({ x: 0, y: 0, width: 1000, height: 600 }) });
+		const record = playback.record();
+		const points = Array.from({ length: 200 }, (_, i) => [i, i < 100 ? 0 : (i - 100) * 3]);
+		const result = await registry.callTool('run_command', { id: 'canvas.drawFreehand', params: { points } });
+		expect(result.isError).toBeUndefined();
+		const played = record.filter((r) => r.surface === 'canvas').map((r) => r.step);
+		const types = played.map((s) => s.type).filter((t) => t !== 'focus' && t !== 'wait' && t !== 'say');
+		expect(types[0]).toBe('move');
+		expect(types[1]).toBe('press');
+		expect(types.slice(-2)).toEqual(['release', 'commit']);
+		expect(played.find((s) => s.type === 'move')).toEqual({ type: 'move', to: { x: 0, y: 0 } });
+		expect(played.find((s) => s.type === 'press')).toEqual({ type: 'press', gesture: 'path' });
+		const drags = played.filter((s): s is Extract<typeof s, { type: 'drag' }> => s.type === 'drag');
+		expect(drags.length).toBe(31);
+		expect(drags.at(-1)!.to).toEqual({ x: 199, y: 297 });
+		// The steep second half is longer, so its drags take longer.
+		expect(drags.at(-1)!.ms!).toBeGreaterThan(drags[0]!.ms!);
+		expect(env.nodes()).toHaveLength(1);
+	});
+
+	it('has no plan for canvas.listBrushes', () => {
+		const specs = createDrawCommands(setup().draw);
+		expect(specs.find((s) => s.id === 'canvas.listBrushes')!.plan).toBeUndefined();
 	});
 });
