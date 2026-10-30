@@ -284,3 +284,10 @@ export function handleSelectionShortcut(
   if (key === 'i' && e.shiftKey) return run(() => controller.invertSelection());
   return false;
 }
+
+/** Q (no modifiers) toggles Quick Mask mode. Returns true when the key was used. */
+export function handleQuickMaskKey(controller: ImageEditorController, e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'q') return false;
+  controller.setQuickMaskMode(!controller.quickMaskEditing);
+  return true;
+}

@@ -6,7 +6,7 @@ import {
   type SelectionToolOptions,
   DEFAULT_CANVAS_VIEWPORT,
 } from '@pixerate/editor/image-editor';
-import { ImageEditor, RefineEdgePanel, SelectionOptionsBar, createReactiveImageEditor } from '../src/image-editor';
+import { ChannelsPanel, ImageEditor, RefineEdgePanel, SelectionOptionsBar, createReactiveImageEditor } from '../src/image-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -266,5 +266,34 @@ describe('Svelte ImageEditor Select & Mask tab', () => {
     editor.controller.undo();
     expect(editor.controller.getSelection()!.bounds).toEqual(wand.bounds);
     editor.destroy();
+  });
+});
+
+describe('Svelte ChannelsPanel', () => {
+  it('saves, loads, shows, duplicates and deletes channels, and toggles Quick Mask', () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    component = mount(ChannelsPanel, { target, props: { controller } });
+    flushSync();
+    expect(target.textContent).toContain('No channels');
+    expect(button('Save Selection').disabled).toBe(true);
+    controller.selectRect({ x: 0, y: 0, width: 5, height: 10 }, { antiAlias: false });
+    flushSync();
+    click(button('Save Selection'));
+    const rows = () => target.querySelectorAll('[data-testid="channel-row"]');
+    expect(rows().length).toBe(1);
+    expect(rows()[0]!.textContent).toContain('Alpha 1');
+    controller.deselect();
+    flushSync();
+    click(rows()[0]!);
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 5, height: 10 });
+    click(target.querySelector('button[aria-label="Show Alpha 1"]'));
+    expect(controller.getChannels()[0]!.visible).toBe(true);
+    click(button('Duplicate'));
+    expect(controller.getChannels().map((c) => c.name)).toEqual(['Alpha 1', 'Alpha 1 copy']);
+    click(button('Delete'));
+    expect(controller.getChannels().map((c) => c.name)).toEqual(['Alpha 1']);
+    click(button('Quick Mask'));
+    expect(controller.quickMaskEditing).toBe(true);
+    expect(button('Quick Mask').getAttribute('aria-pressed')).toBe('true');
   });
 });

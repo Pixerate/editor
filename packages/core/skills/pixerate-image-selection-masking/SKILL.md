@@ -53,6 +53,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    - `grow_selection` (tolerance 10–30) picks up the shades a wand click missed;
      `select_similar` adds the same colours elsewhere in the image.
    - `contract` 1–2 px pulls the edge off a halo.
+   - Paint it directly: `set_quick_mask` `enabled: true`, then `paint_stroke` without
+     `layerId` (white adds, black removes, a soft brush feathers; `blur_stroke` softens a part
+     of the edge), then `set_quick_mask` `enabled: false`.
    - `refine_selection` snaps to real edges: radius 2–4 for hard edges, 8–20 for hair and fur;
      `smartRadius: true` for mixed edges.
    - `shiftEdge` −10..−30 % tightens a refined edge that picked up background.
@@ -70,7 +73,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    - A copy elsewhere: `copy_pixels`, then `paste_pixels` (`into` masks it by a selection).
    Soften with the mask's own `feather` / `density` rather than `modify_selection` `feather`, so
    it stays adjustable.
-6. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
+6. **Store.** `save_selection` with a clear name before you change a selection that took
+   work, and whenever it will be needed again (a second adjustment, a later refinement). Load
+   it with `load_selection_from_channel`; channels are saved with the document and in PSDs.
+7. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
    **Check:** no fringe of the old background colour, no stair-steps, no visible line where an
    adjustment ends. Fix by loading the mask back (`load_selection_from_mask`), refining, and
    masking again.
@@ -151,6 +157,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - **A forgotten selection limits new layers and filters:** `add_adjustment_layer`,
   `apply_effect` and `add_smart_filter` mask themselves by it. `deselect` first for a global
   change, or pass `useSelection: false`.
+- **Quick Mask left on:** while it is on, `paint_stroke` and `fill_pixels` without `layerId`
+  edit the selection, not the image. Turn it off when the selection is done.
 - **Hidden selection still applies:** with `set_selection_display` `none`, paint and fills are
   still limited to it. `deselect` before a whole-layer edit.
 - **Wrong coordinates:** use natural image pixels, not preview pixels. On a cropped or rotated
@@ -168,6 +176,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere
 - `reselect`: undo a deselect
+- `save_selection`, `load_selection_from_channel`, `list_channels`: keep selections as alpha channels
+- `set_channel_properties`, `duplicate_channel`, `delete_channel`: manage channels
+- `set_quick_mask`: paint the selection
+- `fill_pixels`, `blur_stroke`: fill or soften the selection in Quick Mask mode
 - `magic_wand`: similar colour from a seed
 - `select_color_range`: colour samples, hue, tone and skin presets
 - `select_subject`: a subject by description (needs a host model)
