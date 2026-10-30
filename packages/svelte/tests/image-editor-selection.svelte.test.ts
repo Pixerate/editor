@@ -352,6 +352,17 @@ describe('Svelte RefineEdgePanel', () => {
     expect(controller.getSelection()).toBeNull();
   });
 
+  it('lists the new document outputs only when the host can open documents', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    component = mount(RefineEdgePanel, { target, props: { controller } });
+    flushSync();
+    const count = () => target.querySelectorAll('select[aria-label="Refine output"] option').length;
+    expect(count()).toBe(4);
+    controller.setDocumentOpener(() => undefined);
+    flushSync();
+    expect(count()).toBe(6);
+  });
+
   it('offers object aware refinement only with a segmentation model', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
     controller.selectRect({ x: 0, y: 0, width: 10, height: 10 });

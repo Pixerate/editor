@@ -541,7 +541,22 @@ export interface ImageEditorOptions {
    * Without one they run on the page. Change it later with `setSelectionWorker`.
    */
   selectionWorker?: SelectionWorkerFactory | null;
+  /**
+   * Opens a new image document the editor made (Select and Mask's New Document outputs) the way
+   * the host shows documents: a tab, a window, a file. Without it those outputs are unavailable.
+   * Change it later with `setDocumentOpener`.
+   */
+  openDocument?: DocumentOpener | null;
 }
+
+/**
+ * Opens a new image document for the host: `document` loads with `loadJSON`; `info.name` is a
+ * suggested name. May return the new document's id (handed back to the caller and to agents).
+ */
+export type DocumentOpener = (
+  document: SerializedImageEditorState,
+  info: { name: string; from: 'select-and-mask' }
+) => string | void | Promise<string | void>;
 
 export interface InpaintOptions {
   prompt: string;

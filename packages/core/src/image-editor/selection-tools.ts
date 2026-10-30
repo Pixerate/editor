@@ -250,11 +250,12 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         shiftEdge: { type: 'number', minimum: -100, maximum: 100, description: 'Move the edge out (+) or in (-), in percent.' },
         output: {
           type: 'string',
-          enum: ['selection', 'layer-mask', 'new-layer', 'new-layer-with-mask'],
-          description: 'Where the result goes (default selection). layer-mask keeps every pixel and is easiest to revise; new-layer-with-mask too, on a copy.',
+          enum: ['selection', 'layer-mask', 'new-layer', 'new-layer-with-mask', 'new-document', 'new-document-with-mask'],
+          description:
+            'Where the result goes (default selection). layer-mask keeps every pixel and is easiest to revise; new-layer-with-mask too, on a copy. new-document and new-document-with-mask hand a new one-layer document to the host (only when the host can open documents; this one is unchanged) and return its documentId.',
         },
         layerId: { type: 'string', description: 'The layer for layer outputs (default the active layer; see list_layers). New-layer outputs need a pixel layer.' },
-        decontaminate: { type: 'number', minimum: 0, maximum: 100, description: 'Decontaminate Colors amount 0-100 (default 0), only with output new-layer or new-layer-with-mask.' },
+        decontaminate: { type: 'number', minimum: 0, maximum: 100, description: 'Decontaminate Colors amount 0-100 (default 0), only with the new-layer and new-document outputs.' },
         edits: {
           type: 'array',
           description: 'Strokes applied before refining, in order.',

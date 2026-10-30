@@ -479,7 +479,7 @@ export class SelectAndMaskSession {
     remembered = s.remember ? { ...s, params: { ...s.params } } : null;
     return this.controller.refineSelectionTo(s.params, s.output, {
       edits: [...this.editsList],
-      decontaminate: s.output === 'new-layer' || s.output === 'new-layer-with-mask' ? s.decontaminate : 0,
+      decontaminate: s.output === 'selection' || s.output === 'layer-mask' ? 0 : s.decontaminate,
       refineMode: s.refineMode,
     });
   }

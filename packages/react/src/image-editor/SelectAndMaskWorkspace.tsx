@@ -113,7 +113,7 @@ export const SelectAndMaskWorkspace: React.FC<SelectAndMaskWorkspaceProps> = ({ 
     session.end();
   };
 
-  const toLayer = settings.output === 'new-layer' || settings.output === 'new-layer-with-mask';
+  const toLayer = settings.output !== 'selection' && settings.output !== 'layer-mask';
   const brushTool = settings.tool === 'quick-select' || settings.tool === 'brush' || settings.tool === 'refine-brush';
 
   return (
@@ -255,7 +255,7 @@ export const SelectAndMaskWorkspace: React.FC<SelectAndMaskWorkspaceProps> = ({ 
         <span className={imageSectionTitleClass}>Output Settings</span>
         <label className="flex flex-col gap-1">
           <span className="flex justify-between text-muted-foreground">
-            <span>Decontaminate Colors{toLayer ? '' : ' (new layer outputs)'}</span>
+            <span>Decontaminate Colors{toLayer ? '' : ' (new layer or document outputs)'}</span>
             <span className="font-mono">{settings.decontaminate}%</span>
           </span>
           <ImageRange label="Workspace decontaminate amount" min={0} max={100} step={1} value={settings.decontaminate} disabled={!toLayer} onChange={(v) => set({ decontaminate: v })} />
@@ -265,7 +265,7 @@ export const SelectAndMaskWorkspace: React.FC<SelectAndMaskWorkspaceProps> = ({ 
           <ImageSelect
             label="Output to"
             value={settings.output}
-            options={REFINE_OUTPUTS.map((o) => ({ value: o.id, label: o.label }))}
+            options={REFINE_OUTPUTS.filter((o) => !o.needsDocuments || controller.canOpenDocuments).map((o) => ({ value: o.id, label: o.label }))}
             onChange={(v) => set({ output: v as RefineOutput })}
           />
         </label>
