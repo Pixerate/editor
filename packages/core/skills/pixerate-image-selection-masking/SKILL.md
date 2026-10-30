@@ -76,6 +76,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 6. **Store.** `save_selection` with a clear name before you change a selection that took
    work, and whenever it will be needed again (a second adjustment, a later refinement). Load
    it with `load_selection_from_channel`; channels are saved with the document and in PSDs.
+   To hand a mask to another tool or service, or to look at it alone, `export_mask_image`
+   writes the selection, a channel or a layer mask as a greyscale PNG; a matte that comes
+   back goes into a channel with `load_channel_from_image` (or straight to the selection with
+   `load_selection_from_image`).
 7. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
    **Check:** no fringe of the old background colour, no stair-steps, no visible line where an
    adjustment ends. To judge a layer mask itself, `set_mask_view` `gray` (or `overlay`) and
@@ -93,7 +97,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | A colour spread across the image (all the reds, a dress) | `select_color_range` with `samples` (several picks) or a hue `preset`; `localized` to keep one area |
 | Tones (shadows, highlights, a luminosity mask) | `select_color_range` with `preset` `shadows` / `midtones` / `highlights` |
 | Skin for retouching | `select_color_range` `preset: "skinTones"`, then `intersect` with a box around the face |
-| An AI matte or saved mask from the host | `load_selection_from_image` (soft: no `threshold`), then `refine_selection` |
+| An AI matte or saved mask from the host | `load_selection_from_image` (soft: no `threshold`), then `refine_selection`; `load_channel_from_image` to keep it for later |
 | An existing layer mask | `load_selection_from_mask` |
 | A cutout, shape or text already on its own layer | `select_layer_transparency` (exact, soft where the layer is) |
 | A dead pixel row or column | `select_line`, then fill or heal it |
@@ -180,6 +184,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `reselect`: undo a deselect
 - `save_selection`, `load_selection_from_channel`, `list_channels`: keep selections as alpha channels
 - `set_channel_properties`, `duplicate_channel`, `delete_channel`: manage channels
+- `export_mask_image`: a selection, channel or layer mask as a greyscale PNG
+- `load_channel_from_image`: a mask image into a new channel
 - `set_quick_mask`: paint the selection
 - `fill_pixels`, `blur_stroke`: fill or soften the selection in Quick Mask mode
 - `magic_wand`: similar colour from a seed

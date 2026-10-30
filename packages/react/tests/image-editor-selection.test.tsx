@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChannelsPanel, ImageEditor, RefineEdgePanel, SelectionOptionsBar, useImageEditor } from '../src/image-editor';
@@ -279,5 +279,34 @@ describe('React ChannelsPanel', () => {
     await act(async () => button('Quick Mask').click());
     expect(controller.quickMaskEditing).toBe(true);
     expect(button('Quick Mask').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('imports a mask image into a channel and exports the channel or selection as a PNG', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    await act(async () => root.render(<ChannelsPanel controller={controller} />));
+    expect(button('Export PNG').disabled).toBe(true);
+    const downloads: { href: string; download: string }[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push({ href: this.href, download: this.download });
+    });
+    await act(async () => void controller.selectRect({ x: 0, y: 0, width: 5, height: 10 }, { antiAlias: false }));
+    await act(async () => button('Export PNG').click());
+    expect(downloads[0]).toMatchObject({ download: 'selection.png' });
+    expect(downloads[0]!.href).toMatch(/^data:image\/png;base64,/);
+
+    const load = vi.spyOn(controller, 'loadChannelFromImage');
+    const input = container.querySelector('[data-testid="channel-import-input"]') as HTMLInputElement;
+    expect(input.accept).toContain('image/png');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File([new Uint8Array([1, 2, 3])], 'Sky matte.png', { type: 'image/png' })] });
+    load.mockImplementation(async () => controller.saveSelection({ name: 'Sky matte' }));
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(load).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/), { name: 'Sky matte' });
+    expect(container.querySelector('[data-testid="channel-row"][aria-current="true"]')!.textContent).toContain('Sky matte');
+    await act(async () => button('Export PNG').click());
+    expect(downloads[1]).toMatchObject({ download: 'Sky matte.png' });
+    click.mockRestore();
   });
 });

@@ -450,6 +450,9 @@ export type SelectionDisplay = 'ants' | 'quickMask' | 'none';
 /** How a layer mask is shown on the canvas: alone in grey, or as a red tint over the image. */
 export type MaskViewMode = 'gray' | 'overlay';
 
+/** What `exportMaskImage` writes: the selection, an alpha channel or a layer's painted mask. */
+export type MaskImageSource = 'selection' | { channelId: string } | { layerId: string };
+
 /** Where an AI result goes (see `applyInpaintedImage`, `applyBackgroundRemovedImage`). */
 export interface AIResultOptions {
   /** `new-layer`: a new layer (inpainting) or a mask (background removal); `replace`: the Background's pixels. Default: by `isMultiLayer`. */
@@ -5015,6 +5018,44 @@ export class ImageEditorController {
     return this.getSelection();
   }
 
+  /**
+   * Loads a mask image (a data URL / URL or RGBA pixels, any size, resampled) into a new alpha
+   * channel, read like `loadSelectionFromImage`. The selection does not change. One undo step.
+   */
+  public async loadChannelFromImage(
+    source: string | PixelBuffer,
+    options: { name?: string; channel?: SelectionChannel; invert?: boolean; threshold?: number } = {}
+  ): Promise<AlphaChannel> {
+    const mask = selectionFromPixels(await this.decodeMaskImage(source), options);
+    const { width, height } = this.naturalSize;
+    return this.addChannel(mask.width === width && mask.height === height ? mask : resizeSelection(mask, width, height), options.name);
+  }
+
+  /**
+   * A full-size greyscale PNG (white = selected / revealed) of the selection, an alpha channel or
+   * a layer's painted mask, as a data URL; `invert` swaps black and white, `maxSide` scales it
+   * down. Encoded in code, so it works without a canvas. Throws when the source is missing.
+   */
+  public exportMaskImage(source: MaskImageSource, options: { invert?: boolean; maxSide?: number } = {}): { width: number; height: number; dataUrl: string } {
+    let mask: SelectionMask;
+    if (source === 'selection') {
+      const sel = this.state.selection;
+      if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select first, or export a channel or a layer mask.');
+      mask = sel;
+    } else if ('channelId' in source) {
+      mask = this.requireChannel(source.channelId).mask;
+    } else {
+      const layer = requireLayer(this.state.layers, source.layerId).layer;
+      const coverage = this.layerMaskCoverage(source.layerId);
+      if (!coverage) throw new LayerOperationError(`Layer "${layer.name || source.layerId}" has no painted mask to export.`);
+      mask = coverage;
+    }
+    const k = options.maxSide ? Math.min(1, options.maxSide / Math.max(mask.width, mask.height)) : 1;
+    if (k < 1) mask = resizeSelection(mask, Math.max(1, Math.round(mask.width * k)), Math.max(1, Math.round(mask.height * k)));
+    if (options.invert) mask = invertSelectionMask(mask);
+    return { width: mask.width, height: mask.height, dataUrl: pngDataUrl(mask.width, mask.height, mask.data, 1) };
+  }
+
   /** A mask image (data URL / URL, or pixels as they are) as RGBA pixels. */
   private async decodeMaskImage(source: string | PixelBuffer): Promise<PixelBuffer> {
     if (typeof source !== 'string') return source;
@@ -5190,10 +5231,16 @@ export class ImageEditorController {
       this.setChannels(channels.map((c) => (c.id === existing.id ? next : c)));
       return next;
     }
+    return this.addChannel(sized, options.name);
+  }
+
+  /** Appends a new channel holding `mask` (canvas-sized) as one undo step. */
+  private addChannel(mask: SelectionMask, name?: string): AlphaChannel {
+    const channels = this.getChannels();
     const channel: AlphaChannel = {
       id: this.newChannelId(),
-      name: options.name?.trim() || `Alpha ${channels.length + 1}`,
-      mask: sized,
+      name: name?.trim() || `Alpha ${channels.length + 1}`,
+      mask,
       color: DEFAULT_CHANNEL_COLOR,
       opacity: 0.5,
       indicates: 'masked',
@@ -5356,14 +5403,20 @@ export class ImageEditorController {
    * with `invert`. False without a painted mask (a depth mask is computed, not painted).
    */
   public selectionFromLayerMask(layerId: string, mode: SelectionMode = 'replace', invert = false): boolean {
+    const sel = this.layerMaskCoverage(layerId);
+    if (!sel) return false;
+    return this.setSelection(invert ? invertSelectionMask(sel) : sel, mode);
+  }
+
+  /** A layer's painted mask over the canvas as a selection mask; null without one (or for a depth mask). */
+  private layerMaskCoverage(layerId: string): SelectionMask | null {
     const layer = this.getLayer(layerId);
-    if (!layer?.mask || layer.mask.source) return false;
+    if (!layer?.mask || layer.mask.source) return null;
     const { width, height } = this.naturalSize;
     const ox = layer.type === 'pixel' ? layer.offset.x : 0;
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
     const data = readRegion(layer.mask.surface, { x: -ox, y: -oy, width, height });
-    const sel = createSelectionMask(width, height, new Uint8Array(data.buffer, data.byteOffset, data.length));
-    return this.setSelection(invert ? invertSelectionMask(sel) : sel, mode);
+    return createSelectionMask(width, height, new Uint8Array(data.buffer, data.byteOffset, data.length));
   }
 
   // --- Histogram ---
