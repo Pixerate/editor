@@ -196,6 +196,24 @@ describe('React SelectionOptionsBar: Select Subject', () => {
   });
 });
 
+describe('React SelectionOptionsBar: Select Sky', () => {
+  it('selects the sky with the options bar mode and shows why when there is none', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const calls: unknown[] = [];
+    controller.selectSky = (async (opts: unknown) => {
+      calls.push(opts);
+      return { selection: null, note: 'No sky was found along the top of the image.' };
+    }) as any;
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => {
+      button('Select Sky').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(calls).toEqual([{ mode: 'replace' }]);
+    expect(container.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toContain('No sky');
+  });
+});
+
 describe('React SelectionOptionsBar: Focus Area', () => {
   it('selects the focus area with the range, noise and softness from the options', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

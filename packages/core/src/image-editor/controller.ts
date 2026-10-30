@@ -25,6 +25,7 @@ import { quickSelectStroke } from './selection/segment/quick';
 import { selectObjectIn, type ObjectTarget } from './selection/segment/grabcut';
 import { findSubject } from './selection/segment/subject';
 import { focusArea, type FocusAreaOptions } from './selection/segment/focus';
+import { findSky, type SkyOptions } from './selection/segment/sky';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -501,6 +502,14 @@ export interface QuickSelectCommandOptions {
 /** Options of {@link ImageEditorController.selectFocusArea}. */
 export interface FocusAreaCommandOptions extends FocusAreaOptions {
   /** How the area combines with the selection (default `replace`). */
+  mode?: SelectionMode;
+  /** Sample every layer (default true) or only the active pixel layer. */
+  sampleAllLayers?: boolean;
+}
+
+/** Options of {@link ImageEditorController.selectSky}. */
+export interface SkyCommandOptions extends SkyOptions {
+  /** How the sky combines with the selection (default `replace`). */
   mode?: SelectionMode;
   /** Sample every layer (default true) or only the active pixel layer. */
   sampleAllLayers?: boolean;
@@ -5218,6 +5227,20 @@ export class ImageEditorController {
     const { selection, noiseLevel } = focusArea(pixels, options);
     this.setSelection(selection, options.mode ?? 'replace');
     return { selection: this.state.selection ?? null, noiseLevel };
+  }
+
+  /**
+   * Select › Sky: selects the sky (blue, or bright and grey when overcast; smooth; grown down from
+   * the top of the image, with patches seen through gaps), fitted to its edges, combined with the
+   * selection by `mode` as one undo step. Resolves to the selection and, when no sky was found
+   * (the selection is then unchanged), why.
+   */
+  public async selectSky(options: SkyCommandOptions = {}): Promise<{ selection: SelectionMask | null; note?: string }> {
+    const pixels = await this.requirePixels({ sample: options.sampleAllLayers === false ? 'active-layer' : 'composite' });
+    const { selection, reason } = findSky(pixels, options);
+    if (!selection.bounds) return { selection: this.state.selection ?? null, note: reason };
+    this.setSelection(selection, options.mode ?? 'replace');
+    return { selection: this.state.selection ?? null };
   }
 
   /**

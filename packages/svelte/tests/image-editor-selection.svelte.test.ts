@@ -220,6 +220,30 @@ describe('Svelte SelectionOptionsBar: Select Subject', () => {
   });
 });
 
+describe('Svelte SelectionOptionsBar: Select Sky', () => {
+  it('selects the sky with the options bar mode and shows why when there is none', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const calls: unknown[] = [];
+    controller.selectSky = (async (opts: unknown) => {
+      calls.push(opts);
+      return { selection: null, note: 'No sky was found along the top of the image.' };
+    }) as any;
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    click(button('Select Sky'));
+    await settle();
+    expect(calls).toEqual([{ mode: 'replace' }]);
+    expect(target.querySelector('[data-testid="select-sky"] [role="status"]')!.textContent).toContain('No sky');
+  });
+});
+
 describe('Svelte SelectionOptionsBar: Focus Area', () => {
   it('selects the focus area with the range, noise and softness from the options', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

@@ -122,6 +122,21 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       setSegmenting(false);
     }
   };
+  const [skying, setSkying] = useState(false);
+  const [skyStatus, setSkyStatus] = useState<string | null>(null);
+  const selectSky = async () => {
+    if (skying) return;
+    setSkying(true);
+    setSkyStatus(null);
+    try {
+      const { note } = await controller.selectSky({ mode: options.mode });
+      setSkyStatus(note ?? null);
+    } catch (err) {
+      setSkyStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSkying(false);
+    }
+  };
   const [focusing, setFocusing] = useState(false);
   const [focusStatus, setFocusStatus] = useState<string | null>(null);
   const selectFocusArea = async () => {
@@ -398,6 +413,16 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
           </p>
         )}
       </form>
+      <div data-testid="select-sky" className="flex flex-col gap-1">
+        <button type="button" className={btn(false)} disabled={skying} aria-busy={skying} onClick={() => void selectSky()}>
+          {skying ? 'Selecting…' : 'Select Sky'}
+        </button>
+        {skyStatus && (
+          <p role="status" className="text-muted-foreground">
+            {skyStatus}
+          </p>
+        )}
+      </div>
       <details data-testid="focus-area" className="flex flex-col gap-2">
         <summary className="cursor-pointer text-foreground">Focus Area</summary>
         <div className="flex flex-col gap-2 pt-2">
