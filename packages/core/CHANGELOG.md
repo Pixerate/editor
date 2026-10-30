@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.183.0
+
+### Minor Changes
+
+- 729335f: Add `VECTOR_TOOL_GROUPS` and `vectorToolGroup()`: every vector tool sorted into toolbar groups (Draw, Shapes, Type, Cut, …) so compact toolbars can show one button per group with a flyout for the rest.
+
 ## 0.182.0
 
 ### Minor Changes
