@@ -182,6 +182,32 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       {options.tool === 'polygon' && (
         <p className="text-muted-foreground">Click to add corners (Shift for 45°), drag for a free-hand stretch; double-click, Enter or a click on the first corner closes it, Backspace removes a corner, Escape cancels.</p>
       )}
+      {options.tool === 'magnetic' && (
+        <div data-testid="magnetic-lasso-options" className="flex flex-col gap-2">
+          <p className="text-muted-foreground">Click on an edge, then move along it: the outline snaps to the edge and adds points as it goes. Click to add a point; double-click, Enter or a click on the start closes it, Backspace removes the last point, Escape cancels.</p>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Width</span>
+              <span className="font-mono">{options.magneticWidth ?? 10} px</span>
+            </span>
+            <ImageRange label="Magnetic lasso width" min={1} max={256} step={1} value={options.magneticWidth ?? 10} onChange={(v) => set({ magneticWidth: v })} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Contrast</span>
+              <span className="font-mono">{options.magneticContrast ?? 10}%</span>
+            </span>
+            <ImageRange label="Magnetic lasso contrast" min={1} max={100} step={1} value={options.magneticContrast ?? 10} onChange={(v) => set({ magneticContrast: v })} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="flex justify-between text-muted-foreground">
+              <span>Frequency</span>
+              <span className="font-mono">{options.magneticFrequency ?? 57}</span>
+            </span>
+            <ImageRange label="Magnetic lasso frequency" min={0} max={100} step={1} value={options.magneticFrequency ?? 57} onChange={(v) => set({ magneticFrequency: v })} />
+          </label>
+        </div>
+      )}
       {(options.tool === 'type' || options.tool === 'type-vertical') && (
         <div data-testid="type-mask-options" className="flex flex-col gap-2">
           <p className="text-muted-foreground">

@@ -386,11 +386,20 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_polygon',
     title: 'Select a polygon (lasso)',
     description:
-      'Lasso: selects the polygon through points (natural image pixels, in order along the outline, closed automatically), combined by mode. To cut out a subject, follow its contour closely (more points give a tighter edge), then refine_selection for hair or foliage. One undoable step. Returns the selection.',
+      'Lasso: selects the polygon through points (natural image pixels, in order along the outline, closed automatically), combined by mode. To cut out a subject, follow its contour closely (more points give a tighter edge), then refine_selection for hair or foliage. With snapToEdges (the Magnetic Lasso), each point snaps to the strongest edge within width px and the outline between points follows the edges of the image, so a rough outline a few dozen px per point is enough on a subject with a clear edge. One undoable step. Returns the selection (with snapToEdges, also outlinePoints: how many vertices the snapped outline has).',
     inputSchema: {
       type: 'object',
       properties: {
         points: { type: 'array', minItems: 3, items: pointSchema, description: 'At least 3 vertices along the outline, in order, in natural image pixels.' },
+        snapToEdges: {
+          type: 'object',
+          description: 'Magnetic Lasso: snap the outline to the edges of the image (the composite as painted) instead of joining the points with straight lines. Omit for a plain polygon.',
+          properties: {
+            width: { type: 'number', minimum: 1, maximum: 256, description: 'Detection width in px: each point snaps to the strongest edge this close (default 10). Keep points within it of the edge.' },
+            contrast: { type: 'number', minimum: 0.01, maximum: 1, description: 'Ignore edges with less contrast than this, 0.01..1 (default 0.1). Raise it on a noisy or textured background; lower it for a faint edge.' },
+          },
+          additionalProperties: false,
+        },
         mode: modeSchema,
         feather: featherSchema,
         antiAlias: antiAliasSchema,
@@ -399,13 +408,19 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       additionalProperties: false,
     },
     annotations: writeAnnotations('Select a polygon (lasso)', true),
-    handler: (args) => {
+    handler: async (args) => {
       const list = Array.isArray(args.points) ? args.points.map((p: any) => ({ x: num(p?.x, NaN), y: num(p?.y, NaN) })) : [];
       if (list.length < 3 || !list.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
         throw new Error('points needs at least 3 { x, y } vertices in natural image pixels.');
       }
-      controller.selectPolygon(list, shapeOptions(args));
-      return summary(controller);
+      const snap = args.snapToEdges as { width?: number; contrast?: number } | undefined;
+      if (!snap) {
+        controller.selectPolygon(list, shapeOptions(args));
+        return summary(controller);
+      }
+      const outline = await controller.snapToEdges(list, { width: snap.width, contrast: snap.contrast });
+      controller.selectPolygon(outline, shapeOptions(args));
+      return { ...summary(controller), outlinePoints: outline.length };
     },
   };
 

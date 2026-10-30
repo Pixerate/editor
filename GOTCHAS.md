@@ -3125,3 +3125,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `selection_to_path` on a rectangular selection gave a four-anchor path whose sides were slightly slanted, about half a pixel over the length of a side, instead of a rectangle.
 - **Root Cause**: Marching squares puts a contour point on each crossing between pixel centres, so a square corner becomes a half-pixel diagonal. Simplifying within the tolerance (0.5–1 px) then keeps one point of each diagonal, joining sides that should be axis-aligned at a slight angle. Simplification also always keeps a ring's first point, so a ring that starts mid-edge keeps a redundant anchor.
 - **Solution / Workaround**: `traceField` takes `squareCorners: true` (used for selections). It replaces each half-pixel diagonal between an axis-aligned run and a perpendicular one with the corner where the runs meet, and starts the ring at a turn. Interpolated (anti-aliased) edges aren't axis-aligned, so they're left alone. Diagonal tests need about ±0.02 px of slack, because a threshold of 128/255 moves crossings slightly off the half pixel. Leave it off for image tracing, where pixel-art corners may be meant to be cut.
+
+### [core/image-editor/selection] Magnetic Lasso: Backspace Did Nothing Because the Anchor Came Straight Back
+
+- **Issue / Symptom**: With the Magnetic Lasso, Backspace removed the last anchor, but the anchor count didn't drop: a new anchor appeared in the same place.
+- **Root Cause**: After removing the anchor, the gesture rebuilt the live path to the pointer, and that rebuild places anchors every `frequency` px. The pointer was still far from the previous anchor, so it placed one again at once.
+- **Solution / Workaround**: `followEdges(point, false)` rebuilds the live path without placing anchors. Anchors are only placed again once the pointer moves. Use the same flag for any other rebuild that isn't caused by pointer movement.

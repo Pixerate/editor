@@ -3,7 +3,7 @@ import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
 /** Selection tools of the image editor UI. */
-export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'range' | 'type' | 'type-vertical';
+export type SelectionToolKind = 'wand' | 'rect' | 'ellipse' | 'row' | 'column' | 'lasso' | 'polygon' | 'magnetic' | 'range' | 'type' | 'type-vertical';
 
 export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[] = [
   { id: 'wand', label: 'Magic Wand' },
@@ -13,6 +13,7 @@ export const SELECTION_TOOLS: readonly { id: SelectionToolKind; label: string }[
   { id: 'column', label: 'Single Column' },
   { id: 'lasso', label: 'Lasso' },
   { id: 'polygon', label: 'Polygonal Lasso' },
+  { id: 'magnetic', label: 'Magnetic Lasso' },
   { id: 'range', label: 'Color Range' },
   { id: 'type', label: 'Type Mask' },
   { id: 'type-vertical', label: 'Vertical Type Mask' },
@@ -60,6 +61,12 @@ export interface SelectionToolOptions {
   localized?: number;
   /** Color Range: select everything except the sampled colours. */
   rangeInvert?: boolean;
+  /** Magnetic Lasso: snap to the strongest edge within this many px (1..256, default 10). */
+  magneticWidth?: number;
+  /** Magnetic Lasso: ignore edges with less contrast than this, in % (1..100, default 10). */
+  magneticContrast?: number;
+  /** Magnetic Lasso: how often anchors are placed as the pointer moves (0..100, default 57). */
+  magneticFrequency?: number;
   /** Type Mask: the text to select (default "Type"). A click places its first baseline. */
   typeText?: string;
   /** Type Mask: font size in px (default 72). */
@@ -80,6 +87,9 @@ export const DEFAULT_SELECTION_TOOL_OPTIONS: SelectionToolOptions = {
   fuzziness: 40,
   localized: 0,
   rangeInvert: false,
+  magneticWidth: 10,
+  magneticContrast: 10,
+  magneticFrequency: 57,
   typeText: 'Type',
   typeSize: 72,
   typeFamily: 'sans-serif',

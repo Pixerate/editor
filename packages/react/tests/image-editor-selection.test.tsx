@@ -110,6 +110,13 @@ describe('React SelectionOptionsBar', () => {
     await act(async () => setValue(container.querySelector('input[aria-label="Type mask size"]')!, '120'));
     await act(async () => setValue(container.querySelector('input[aria-label="Type mask font"]')!, 'Inter'));
     expect(opts()).toMatchObject({ typeText: 'SALE', typeSize: 120, typeFamily: 'Inter' });
+    // The Magnetic Lasso shows its width, contrast and frequency.
+    await act(async () => button('Magnetic Lasso').click());
+    expect(container.querySelector('[data-testid="magnetic-lasso-options"]')).not.toBeNull();
+    await act(async () => setValue(container.querySelector('input[aria-label="Magnetic lasso width"]')!, '24'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Magnetic lasso contrast"]')!, '30'));
+    await act(async () => setValue(container.querySelector('input[aria-label="Magnetic lasso frequency"]')!, '80'));
+    expect(opts()).toMatchObject({ tool: 'magnetic', magneticWidth: 24, magneticContrast: 30, magneticFrequency: 80 });
     await act(async () => button('Color Range').click());
     expect(container.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     await act(async () => setValue(container.querySelector('input[aria-label="Fuzziness"]')!, '10'));
