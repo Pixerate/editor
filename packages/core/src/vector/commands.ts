@@ -3245,6 +3245,28 @@ export function createVectorCommands(controller: VectorEditorController, options
 		},
 		{
 			...base,
+			id: `${prefix}moveLayer`,
+			label: 'Move Layer…',
+			keywords: ['reorder', 'layer', 'order', 'into group', 'out of group', 'reparent', 'nest', 'z-index'],
+			description:
+				'Moves one node to a position among its siblings (0 the bottom; default the top), as dragging it in the layers panel does. With `parentId` it moves into that group, or with null to the top level; it stays where it is on the canvas.',
+			params: {
+				type: 'object',
+				properties: {
+					id: { type: 'string', description: 'The node to move.' },
+					index: { type: 'integer', minimum: 0, description: 'Position among its new siblings, bottom to top (default: the top).' },
+					parentId: { type: ['string', 'null'], description: 'The group to move into, or null for the top level (default: its current parent).' }
+				},
+				required: ['id']
+			},
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; index?: number; parentId?: string | null }) => {
+				check(controller.moveNode(params.id, { index: params.index, parentId: params.parentId }));
+				return { ok: true };
+			}
+		},
+		{
+			...base,
 			id: `${prefix}group`,
 			label: 'Group',
 			shortcut: 'Mod+G',

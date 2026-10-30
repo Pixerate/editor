@@ -246,6 +246,7 @@ arrays, to build or replace a stack in one call.
 | `vector.align` | Align `ids` on `edge` (left, center, right, top, middle, bottom) to their combined bounds, or to the artboard with `to: "artboard"` (also the default for a single node). |
 | `vector.distribute` | Give three or more nodes equal gaps in `direction` horizontal or vertical. |
 | `vector.arrange` | Change stacking `order` within each node's parent: front, forward, backward, back. |
+| `vector.moveLayer` | Move one node `id` to `index` among its siblings (0 the bottom; default the top); `parentId` moves it into a group, or `null` to the top level. It stays put on the canvas. |
 | `vector.group` | Group nodes that share a parent, with an optional `name`. Returns `{ id }`. |
 | `vector.ungroup` | Replace groups with their children (ungrouping a blend expands it). |
 | `vector.select` | Select nodes by `ids` (`add: true` to extend; an empty list clears). Selection is the default target of most commands. |
