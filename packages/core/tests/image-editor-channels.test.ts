@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ToolRegistry } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider, imagePlaybackPanel } from '../src/image-editor';
+import { base64ToBytes, decodePng } from '../src/raster/png';
 
 const W = 20;
 const H = 10;
+
+function createRegistry(c: ImageEditorController) {
+  const registry = new ToolRegistry();
+  registry.register(createImageEditorToolProvider(c));
+  return registry;
+}
 
 function setup() {
   const fake = { width: W, height: H, naturalWidth: W, naturalHeight: H, src: 'data:fake' } as unknown as HTMLImageElement;
@@ -67,6 +74,61 @@ describe('alpha channels', () => {
   });
 });
 
+describe('mask images', () => {
+  const decode = (dataUrl: string) => decodePng(base64ToBytes(dataUrl.slice(dataUrl.indexOf(',') + 1)));
+
+  it('exports the selection, a channel and a layer mask as greyscale PNGs', async () => {
+    const { c, call, fails } = setup();
+    await fails('export_mask_image', {}, /Nothing is selected/);
+    await call('select_rect', { x: 0, y: 0, width: 5, height: 10, antiAlias: false });
+    const res = await createRegistry(c).callTool('export_mask_image', {});
+    expect(res.isError).toBeFalsy();
+    expect(res.structuredContent).toEqual({ width: W, height: H });
+    expect(res.content[0]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    const png = decodePng(base64ToBytes((res.content[0] as { data: string }).data));
+    expect([png.width, png.height]).toEqual([W, H]);
+    expect([png.data[0], png.data[4 * 5]]).toEqual([255, 0]);
+
+    await call('save_selection', { name: 'Left' });
+    const inverted = decode(c.exportMaskImage({ channelId: 'ch_1' }, { invert: true }).dataUrl);
+    expect([inverted.data[0], inverted.data[4 * 5]]).toEqual([0, 255]);
+    expect(c.exportMaskImage('selection', { maxSide: 16 })).toMatchObject({ width: 16, height: 8 });
+
+    await fails('export_mask_image', { layerId: 'background' }, /no painted mask/);
+    await call('add_layer_mask', { layerId: 'background', from: 'hide-selection' });
+    const mask = decode(c.exportMaskImage({ layerId: 'background' }).dataUrl);
+    expect([mask.data[0], mask.data[4 * 5]]).toEqual([0, 255]);
+    await fails('export_mask_image', { channelId: 'ch_1', layerId: 'background' }, /not both/);
+    await fails('export_mask_image', { channelId: 'nope' }, /no alpha channel "nope"/);
+    await fails('export_mask_image', { layerId: 'nope' }, /No layer "nope"/);
+  });
+
+  it('loads an exported PNG back into a new channel as one undo step', async () => {
+    const { c, call, fails } = setup();
+    await call('select_rect', { x: 0, y: 0, width: 10, height: 10, antiAlias: false });
+    const png = decode(c.exportMaskImage('selection').dataUrl);
+    await call('deselect');
+    const channel = await c.loadChannelFromImage({ width: png.width, height: png.height, data: png.data }, { name: 'Imported' });
+    expect(channel).toMatchObject({ name: 'Imported', mask: { width: W, height: H } });
+    expect(c.describeChannels()[0]).toMatchObject({ percent: 50, bounds: { x: 0, y: 0, width: 10, height: 10 } });
+    expect(c.getSelection()).toBeNull();
+    // A smaller image is resampled to the canvas.
+    const small = decode(c.exportMaskImage({ channelId: channel.id }, { maxSide: 16 }).dataUrl);
+    expect((await c.loadChannelFromImage({ width: small.width, height: small.height, data: small.data })).mask).toMatchObject({ width: W, height: H });
+    c.undo();
+    c.undo();
+    expect(c.getChannels()).toEqual([]);
+
+    const spy = vi.spyOn(c, 'loadChannelFromImage');
+    spy.mockResolvedValue(channel);
+    c.redo();
+    expect((await call('load_channel_from_image', { image: 'data:image/png;base64,AAAA', name: 'Matte', channel: 'alpha', threshold: 128, invert: true })).channel).toMatchObject({ id: channel.id });
+    expect(spy).toHaveBeenCalledWith('data:image/png;base64,AAAA', { name: 'Matte', channel: 'alpha', threshold: 128, invert: true });
+    await fails('load_channel_from_image', {}, /image/);
+    await fails('load_channel_from_image', { image: 'x', channel: 'hue' }, /channel|enum/i);
+  });
+});
+
 describe('Quick Mask mode', () => {
   it('paints, fills and clears the selection itself, one undo step each', async () => {
     const { c, call, fails } = setup();
@@ -100,7 +162,7 @@ describe('Quick Mask mode', () => {
   });
 
   it('plays the channel tools back on the Select panel', () => {
-    for (const name of ['save_selection', 'load_selection_from_channel', 'set_channel_properties', 'duplicate_channel', 'delete_channel', 'set_quick_mask']) {
+    for (const name of ['save_selection', 'load_selection_from_channel', 'set_channel_properties', 'duplicate_channel', 'delete_channel', 'load_channel_from_image', 'set_quick_mask']) {
       expect(imagePlaybackPanel(name), name).toBe('select');
     }
   });

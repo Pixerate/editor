@@ -1,7 +1,7 @@
 <script lang="ts">
   import { imageSectionTitleClass } from './styles.js';
   import type { AlphaChannel, ImageEditorController } from '@pixerate/editor/image-editor';
-  import { channelThumbnail, selectionModeFromModifiers } from '@pixerate/editor/image-editor';
+  import { MASK_FILE_ACCEPT, channelThumbnail, downloadMaskImage, openMaskFile, selectionModeFromModifiers } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
 
   interface Props {
@@ -29,12 +29,23 @@
   let activeId = $state<string | null>(null);
   let renaming = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let fileInput = $state<HTMLInputElement | null>(null);
   const active = $derived(snapshot.channels.find((c) => c.id === activeId) ?? null);
 
   function attempt(fn: () => unknown) {
     error = null;
     try {
       fn();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    error = null;
+    try {
+      activeId = (await openMaskFile(controller, file)).id;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
@@ -65,7 +76,8 @@
 <!--
   The Channels panel: alpha channels (saved selections) with thumbnails, an eye to show each as a
   tint, click to load it as the selection (Shift adds, Alt subtracts, both intersect), double-click
-  to rename; Save Selection, Add to Channel, Duplicate and Delete; and the Quick Mask mode switch.
+  to rename; Save Selection, Add to Channel, Duplicate and Delete; Import (a mask image into a new
+  channel) and Export PNG (the active channel, else the selection); and the Quick Mask mode switch.
 -->
 <div data-testid="channels-panel" class="flex flex-col gap-2 text-xs {className}">
   <div class="flex items-center justify-between">
@@ -135,6 +147,25 @@
           controller.deleteChannel(active!.id);
           activeId = null;
         })}>Delete</button>
+    <button type="button" class={btn()} title="Load a mask image (white = selected) into a new channel" onclick={() => fileInput?.click()}>Import…</button>
+    <button
+      type="button"
+      class={btn()}
+      disabled={!active && !snapshot.hasSelection}
+      title={active ? 'Save the channel as a greyscale PNG' : 'Save the selection as a greyscale PNG'}
+      onclick={() => attempt(() => downloadMaskImage(controller, active ? { channelId: active.id } : 'selection', active?.name ?? 'selection'))}>Export PNG</button>
+    <input
+      bind:this={fileInput}
+      type="file"
+      accept={MASK_FILE_ACCEPT}
+      hidden
+      data-testid="channel-import-input"
+      onchange={(e) => {
+        const input = e.currentTarget as HTMLInputElement;
+        void importFile(input.files?.[0]);
+        input.value = '';
+      }}
+    />
   </div>
   {#if error}
     <p role="alert" class="text-destructive">{error}</p>
