@@ -4071,24 +4071,44 @@ export class VectorEditorController {
 	 * placed by position.
 	 */
 	reorderNode(id: string, index: number): VectorActionResult {
+		return this.moveNode(id, { index });
+	}
+
+	/**
+	 * Moves a node into group `parentId` (null: the top level; left out: where it is) at `index`
+	 * among its new siblings (bottom to top, 0 the bottom; left out: the top), as dragging it in a
+	 * layers panel does. It stays where it is on the canvas. Clipping groups and blends keep their
+	 * children: their mask and keys are placed by position.
+	 */
+	moveNode(id: string, options: { parentId?: string | null; index?: number } = {}): VectorActionResult {
 		const node = this.getNode(id);
-		if (!node) return { ok: false, message: `No node "${id}".` };
-		let parent = null as VectorGroupNode | null;
-		walkVectorNodes(this.doc.nodes, (n, p) => {
-			if (n.id === id) parent = p;
-		});
-		const group = parent;
-		if (group && (isVectorMaskGroup(group) || isVectorBlendGroup(group))) {
-			return { ok: false, message: 'The order inside a clipping group or blend is fixed.' };
+		const at = node && locateVectorNode(this.doc.nodes, id);
+		if (!node || !at) return { ok: false, message: `No node "${id}".` };
+		const fixed = (g: VectorGroupNode | null) => !!g && (isVectorMaskGroup(g) || isVectorBlendGroup(g));
+		if (fixed(at.parent)) return { ok: false, message: 'The order inside a clipping group or blend is fixed.' };
+		const parentId = options.parentId === undefined ? (at.parent?.id ?? null) : options.parentId;
+		const target = parentId === null ? null : this.getNode(parentId);
+		if (parentId !== null) {
+			if (target?.type !== 'group') return { ok: false, message: `"${parentId}" is not a group.` };
+			if (parentId === id || findVectorNode([node], parentId)) return { ok: false, message: 'A layer cannot go inside itself.' };
+			if (fixed(target)) return { ok: false, message: 'The order inside a clipping group or blend is fixed.' };
 		}
-		const siblings = group ? group.children : this.doc.nodes;
-		const from = siblings.findIndex((n) => n.id === id);
-		const to = Math.max(0, Math.min(siblings.length - 1, Math.round(index)));
-		if (from === to) return { ok: true };
+		const groupId = target?.id ?? null;
+		// The tree without the node, so its new siblings come from there (it may leave a group nested in the new parent).
+		const without = mapTree(this.doc.nodes, (n) => (n.id === id ? null : n));
+		const inGroup = groupId === null ? null : findVectorNode(without, groupId);
+		const siblings = inGroup?.type === 'group' ? inGroup.children : without;
+		const to = Math.max(0, Math.min(siblings.length, Math.round(options.index ?? siblings.length)));
+		if (groupId === (at.parent?.id ?? null) && to === at.index) return { ok: true };
+		// Keep it in place on the canvas: out of the old parent's space and into the new one's.
+		const from = vectorParentMatrix(this.doc.nodes, id) ?? IDENTITY_MATRIX;
+		const into = groupId === null ? IDENTITY_MATRIX : (vectorWorldMatrix(this.doc.nodes, groupId) ?? IDENTITY_MATRIX);
+		const m = multiplyMatrices(from, invertMatrix(into));
 		const next = [...siblings];
-		next.splice(from, 1);
-		next.splice(to, 0, node);
-		this.change('Move Layer', () => (group ? this.replaceNode(group.id, { ...group, children: next }) : this.setDoc(next)));
+		next.splice(to, 0, isIdentityMatrix(m) ? node : transformVectorNode(node, m));
+		this.change('Move Layer', () =>
+			this.setDoc(groupId === null ? next : mapTree(without, (n) => (n.id === groupId && n.type === 'group' ? { ...n, children: next } : n)))
+		);
 		return { ok: true };
 	}
 

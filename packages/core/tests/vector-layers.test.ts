@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { VectorEditorController, vectorLayerName, vectorLayerRows, type VectorDocument, type VectorNode } from '../src/vector';
+import { CommandRegistry, createCommandToolProvider } from '../src/commands';
+import { ToolRegistry } from '../src/tools';
+import { createVectorCommands, VectorEditorController, vectorLayerName, vectorLayerRows, vectorWorldMatrix, type VectorDocument, type VectorNode } from '../src/vector';
 
 const rect = (id: string, extra: Partial<VectorNode> = {}): VectorNode =>
 	({
@@ -68,5 +70,75 @@ describe('VectorEditorController.reorderNode', () => {
 	it('refuses unknown nodes', () => {
 		const c = new VectorEditorController({ document: doc([rect('a')]) });
 		expect(c.reorderNode('zz', 0).ok).toBe(false);
+	});
+});
+
+type Group = Extract<VectorNode, { type: 'group' }>;
+const ids = (nodes: readonly VectorNode[]) => nodes.map((n) => n.id);
+const firstAnchor = (c: VectorEditorController, id: string) => {
+	const m = vectorWorldMatrix(c.getDocument().nodes, id)!;
+	const n = c.getNode(id) as Extract<VectorNode, { type: 'path' }>;
+	const a = n.subpaths[0].anchors[1];
+	return { x: m[0] * a.x + m[2] * a.y + m[4], y: m[1] * a.x + m[3] * a.y + m[5] };
+};
+
+describe('VectorEditorController.moveNode', () => {
+	it('moves a node into a group at an index, as one undo step', () => {
+		const c = new VectorEditorController({ document: doc([rect('a'), { id: 'g', type: 'group', children: [rect('b'), rect('c')] } as VectorNode]) });
+		expect(c.moveNode('a', { parentId: 'g', index: 1 }).ok).toBe(true);
+		expect(ids(c.getDocument().nodes)).toEqual(['g']);
+		expect(ids((c.getDocument().nodes[0] as Group).children)).toEqual(['b', 'a', 'c']);
+		c.undo();
+		expect(ids(c.getDocument().nodes)).toEqual(['a', 'g']);
+	});
+
+	it('moves a node out to the top level, on top by default', () => {
+		const c = new VectorEditorController({ document: doc([{ id: 'g', type: 'group', children: [rect('b'), rect('c')] } as VectorNode, rect('a')]) });
+		expect(c.moveNode('b', { parentId: null }).ok).toBe(true);
+		expect(ids(c.getDocument().nodes)).toEqual(['g', 'a', 'b']);
+		expect(ids((c.getDocument().nodes[0] as Group).children)).toEqual(['c']);
+	});
+
+	it('keeps the node where it is on the canvas across group transforms', () => {
+		const g = { id: 'g', type: 'group', transform: [2, 0, 0, 2, 30, 10], children: [rect('b')] } as unknown as VectorNode;
+		const h = { id: 'h', type: 'group', transform: [1, 0, 0, 1, -5, 7], children: [] } as unknown as VectorNode;
+		const c = new VectorEditorController({ document: doc([g, h]) });
+		const before = firstAnchor(c, 'b');
+		expect(c.moveNode('b', { parentId: 'h' }).ok).toBe(true);
+		const after = firstAnchor(c, 'b');
+		expect(after.x).toBeCloseTo(before.x);
+		expect(after.y).toBeCloseTo(before.y);
+	});
+
+	it('moves a node out of a nested group into the group that holds it', () => {
+		const inner = { id: 'in', type: 'group', children: [rect('a'), rect('b')] } as VectorNode;
+		const c = new VectorEditorController({ document: doc([{ id: 'out', type: 'group', children: [inner] } as VectorNode]) });
+		expect(c.moveNode('a', { parentId: 'out', index: 0 }).ok).toBe(true);
+		const out = c.getDocument().nodes[0] as Group;
+		expect(ids(out.children)).toEqual(['a', 'in']);
+		expect(ids((out.children[1] as Group).children)).toEqual(['b']);
+	});
+
+	it('refuses moves into itself, into a non-group, or in or out of a clipping group', () => {
+		const masked = { id: 'm', type: 'group', mask: { type: 'clip' }, children: [rect('k'), rect('s')] } as unknown as VectorNode;
+		const c = new VectorEditorController({ document: doc([{ id: 'g', type: 'group', children: [rect('a')] } as VectorNode, rect('b'), masked]) });
+		expect(c.moveNode('g', { parentId: 'g' }).ok).toBe(false);
+		expect(c.moveNode('a', { parentId: 'b' }).ok).toBe(false);
+		expect(c.moveNode('b', { parentId: 'm' }).ok).toBe(false);
+		expect(c.moveNode('k', { parentId: null }).ok).toBe(false);
+	});
+});
+
+describe('vector.moveLayer command', () => {
+	it('moves a layer through the tool registry', async () => {
+		const c = new VectorEditorController({ document: doc([rect('a'), { id: 'g', type: 'group', children: [rect('b')] } as VectorNode]) });
+		const commands = new CommandRegistry();
+		for (const spec of createVectorCommands(c)) commands.register(spec);
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const run = (params: unknown) => tools.callTool('run_command', { id: 'vector.moveLayer', params });
+		expect((await run({ id: 'a', parentId: 'g', index: 0 })).isError).toBeFalsy();
+		expect(ids((c.getDocument().nodes[0] as Group).children)).toEqual(['a', 'b']);
+		expect((await run({ id: 'a', parentId: 'zz' })).isError).toBe(true);
 	});
 });
