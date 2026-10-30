@@ -96,7 +96,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 | Subject | Method |
 | --- | --- |
 | Geometric areas: a frame, a screen, a band | `select_rect` / `select_ellipse`, with `feather` for soft transitions |
-| A subject with a clear outline (product, person, animal) | `select_subject` if the host has a model; else `select_polygon` along the contour (20–60 points), then `refine_selection` |
+| A subject with a clear outline (product, person, animal) | `select_subject` if the host has a model; else `select_polygon` with `snapToEdges` (12–30 points within `width` of the edge), then `refine_selection` |
+| A low-contrast or busy outline the edges don't follow | `select_polygon` without `snapToEdges`, along the contour (20–60 points) |
 | Flat backdrop or solid colour (studio white, green screen, sky without clouds) | `magic_wand` on the backdrop (`tolerance` 20–40; `distance: "perceptual"` for gradients), then `invert_selection` |
 | A colour spread across the image (all the reds, a dress) | `select_color_range` with `samples` (several picks) or a hue `preset`; `localized` to keep one area |
 | Tones (shadows, highlights, a luminosity mask) | `select_color_range` with `preset` `shadows` / `midtones` / `highlights` |
@@ -155,6 +156,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   30–60), check `percent`, and grow with `mode: "add"`.
 - **Box instead of outline:** `select_rect` around a subject masks its background too. Trace
   the contour.
+- **Magnetic outline jumps to the wrong edge:** `snapToEdges` follows the strongest edge near
+  each point, which can be a shadow or a texture. Put points within `width` of the edge you
+  want, add points where it turns or runs past another edge, raise `contrast` on a busy
+  background, and drop `snapToEdges` where the edge is too faint.
 - **Over-feathering hard objects:** a 10 px feather on a product looks like a glow. Keep hard
   edges at 0–2 px and refine soft ones instead.
 - **Halo:** the old background shows as a light or dark fringe. `contract` 1–2 px or
@@ -183,7 +188,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `get_selection`: empty, bounds, area and percent after every step
 - `select_all`, `deselect`, `invert_selection`: whole-image selections
 - `select_rect`, `select_ellipse`: marquees
-- `select_polygon`: the lasso, along a contour
+- `select_polygon`: the lasso, along a contour; with `snapToEdges`, the Magnetic Lasso
 - `select_line`: a single row or column
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere

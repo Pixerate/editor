@@ -20,6 +20,7 @@ import {
   SerializedImageEditorState,
 } from './types';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
+import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
@@ -5112,6 +5113,16 @@ export class ImageEditorController {
   public selectPolygon(points: ImagePoint[], options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
     const { width, height } = this.naturalSize;
     return this.shapeCommand(polygonSelection(width, height, points, options), options);
+  }
+
+  /**
+   * Magnetic Lasso for a given outline: each point snaps to the strongest edge within `width` px
+   * and consecutive points (the last back to the first) are joined along the edges. Returns the
+   * snapped outline in natural pixels, for {@link selectPolygon}.
+   */
+  public async snapToEdges(points: ImagePoint[], options: MagneticEdgeOptions & SampleOptions = {}): Promise<ImagePoint[]> {
+    const pixels = await this.requirePixels(options);
+    return snapPolygonToEdges(pixels, points, options);
   }
 
   /**

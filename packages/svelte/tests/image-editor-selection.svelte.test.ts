@@ -118,6 +118,13 @@ describe('Svelte SelectionOptionsBar', () => {
     setValue(target.querySelector('input[aria-label="Type mask size"]')!, '120');
     setValue(target.querySelector('input[aria-label="Type mask font"]')!, 'Inter');
     expect(props.options).toMatchObject({ typeText: 'SALE', typeSize: 120, typeFamily: 'Inter' });
+    // The Magnetic Lasso shows its width, contrast and frequency.
+    click(button('Magnetic Lasso'));
+    expect(target.querySelector('[data-testid="magnetic-lasso-options"]')).not.toBeNull();
+    setValue(target.querySelector('input[aria-label="Magnetic lasso width"]')!, '24');
+    setValue(target.querySelector('input[aria-label="Magnetic lasso contrast"]')!, '30');
+    setValue(target.querySelector('input[aria-label="Magnetic lasso frequency"]')!, '80');
+    expect(props.options).toMatchObject({ tool: 'magnetic', magneticWidth: 24, magneticContrast: 30, magneticFrequency: 80 });
     click(button('Color Range'));
     expect(target.querySelector('[data-testid="color-range-options"]')).not.toBeNull();
     setValue(target.querySelector('input[aria-label="Fuzziness"]')!, '10');

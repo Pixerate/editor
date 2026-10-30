@@ -2,6 +2,18 @@ import type { ImagePoint } from '../types';
 import type { ImageEditorController } from '../controller';
 import { ellipsePoints, normalizeRect } from './shapes';
 import { selectionModeFromModifiers, type SelectionToolOptions } from './tool-options';
+import { EdgeMap, liveWire, magneticAnchorSpacing, simplifyPixelPath, snapToEdge } from './magnetic';
+
+interface MagneticDraft {
+  /** The fixed outline so far (pixel centres), from the first anchor to the last. */
+  fixed: ImagePoint[];
+  /** Indices into `fixed` of the anchors, clicked or placed automatically. */
+  anchors: number[];
+  /** The live path from the last anchor to the pointer. */
+  live: ImagePoint[];
+  /** `null` until the pixels have been read. */
+  edges: EdgeMap | null;
+}
 
 export interface GestureModifiers {
   shiftKey?: boolean;
@@ -34,6 +46,10 @@ export function snapTo45(from: ImagePoint, point: ImagePoint): ImagePoint {
  *   adds a free-hand stretch; a double-click, a click on the first corner or Enter (`key`)
  *   closes it, Backspace removes the last corner and Escape cancels. It stays `active` between
  *   clicks, so feed it pointer moves without a button too.
+ * - Magnetic lasso: a click sets the first anchor, then the outline follows the edges from the
+ *   last anchor to the pointer (snapped to the strongest edge within the width) and places
+ *   anchors as it goes (frequency); a click adds one, and closing and the keys are as the
+ *   polygonal lasso's. The first click reads the pixels (async).
  * - Single row / column: a click selects a 1 px line across the image.
  *
  * Shift adds, Alt subtracts, both intersect (overriding the options bar mode). While dragging,
@@ -48,6 +64,7 @@ export class SelectionGesture {
   private polygon: ImagePoint[] | null = null;
   private pressedAt: ImagePoint | null = null;
   private freehand = false;
+  private magnetic: MagneticDraft | null = null;
   /** A click this close to the first corner (natural pixels) closes a polygonal lasso. */
   public closeRadius = 8;
   /** The last error (e.g. pixels unavailable for the wand), for the UI to show. */
@@ -59,11 +76,18 @@ export class SelectionGesture {
   ) {}
 
   get active(): boolean {
-    return this.start !== null || this.polygon !== null;
+    return this.start !== null || this.polygon !== null || this.magnetic !== null;
+  }
+
+  /** The anchors of a Magnetic Lasso being drawn (empty otherwise). */
+  get magneticAnchors(): ImagePoint[] {
+    const m = this.magnetic;
+    return m ? m.anchors.map((i) => m.fixed[i]) : [];
   }
 
   /** The outline of the shape being drawn, or `null`. */
   get draftPath(): ImagePoint[] | null {
+    if (this.magnetic) return [...this.magnetic.fixed, ...this.magnetic.live.slice(1)];
     if (this.polygon) return this.current ? [...this.polygon, this.current] : this.polygon.slice();
     if (!this.start || !this.current) return null;
     const { tool } = this.getOptions();
@@ -88,7 +112,8 @@ export class SelectionGesture {
   async begin(point: ImagePoint, modifiers: GestureModifiers = {}): Promise<void> {
     const options = this.getOptions();
     this.error = null;
-    if (this.polygon && options.tool !== 'polygon') this.cancel();
+    if ((this.polygon && options.tool !== 'polygon') || (this.magnetic && options.tool !== 'magnetic')) this.cancel();
+    if (options.tool === 'magnetic') return this.magneticClick(point, modifiers, options);
     if (options.tool === 'polygon') {
       this.pressedAt = point;
       this.freehand = false;
@@ -185,6 +210,11 @@ export class SelectionGesture {
 
   /** Pointer move; returns true when the draft changed (re-render). */
   move(point: ImagePoint, modifiers: GestureModifiers = {}): boolean {
+    if (this.magnetic) {
+      this.current = point;
+      this.followEdges(point);
+      return true;
+    }
     if (this.polygon) {
       const last = this.polygon[this.polygon.length - 1];
       if (this.pressedAt && (this.freehand || Math.hypot(point.x - this.pressedAt.x, point.y - this.pressedAt.y) >= 3)) {
@@ -209,6 +239,7 @@ export class SelectionGesture {
 
   /** Pointer up: commits the shape. Returns true when the selection changed. */
   end(point?: ImagePoint, modifiers?: GestureModifiers): boolean {
+    if (this.magnetic) return false;
     if (this.polygon) {
       if (point && this.freehand) this.move(point);
       this.pressedAt = null;
@@ -237,7 +268,13 @@ export class SelectionGesture {
 
   /** Closes a polygonal lasso and selects it. Returns true when the selection changed. */
   close(): boolean {
-    const polygon = this.polygon;
+    let polygon = this.polygon;
+    const m = this.magnetic;
+    if (m) {
+      // The last stretch follows the edges back to the first anchor.
+      const tail = m.edges && m.fixed.length > 1 ? liveWire(m.edges, m.fixed[m.fixed.length - 1], m.fixed[0], this.corridor(m.fixed[m.fixed.length - 1], m.fixed[0])) : [];
+      polygon = simplifyPixelPath([...m.fixed, ...tail.slice(1, -1)]);
+    }
     if (!polygon) return false;
     const options = this.getOptions();
     this.cancel();
@@ -254,14 +291,96 @@ export class SelectionGesture {
    * removes the last corner. Returns true when the key was used (the host prevents its default).
    */
   key(key: string): boolean {
-    if (!this.polygon) return false;
+    if (!this.polygon && !this.magnetic) return false;
     if (key === 'Enter') this.close();
     else if (key === 'Escape') this.cancel();
     else if (key === 'Backspace' || key === 'Delete') {
-      this.polygon.pop();
-      if (!this.polygon.length) this.cancel();
+      const m = this.magnetic;
+      if (m) {
+        m.anchors.pop();
+        if (!m.anchors.length) this.cancel();
+        else {
+          m.fixed.length = m.anchors[m.anchors.length - 1] + 1;
+          m.live = [];
+          // No anchors placed until the pointer moves again, or this one would come straight back.
+          if (this.current) this.followEdges(this.current, false);
+        }
+      } else {
+        this.polygon!.pop();
+        if (!this.polygon!.length) this.cancel();
+      }
     } else return false;
     return true;
+  }
+
+  /** Corridor half-width for a live-wire between two points. */
+  private corridor(a: ImagePoint, b: ImagePoint): number {
+    return Math.max(2 * (this.getOptions().magneticWidth ?? 10), 16, Math.hypot(b.x - a.x, b.y - a.y) / 4);
+  }
+
+  private async magneticClick(point: ImagePoint, modifiers: GestureModifiers, options: SelectionToolOptions): Promise<void> {
+    const m = this.magnetic;
+    if (!m) {
+      this.modifiers = modifiers;
+      const draft: MagneticDraft = { fixed: [point], anchors: [0], live: [], edges: null };
+      this.magnetic = draft;
+      this.current = point;
+      try {
+        const pixels = await this.controller.getSamplePixels({ sampleMerged: options.sampleMerged, sample: options.sample });
+        if (!pixels) throw new Error('The image pixels are not available to find edges in.');
+        if (this.magnetic !== draft) return;
+        draft.edges = new EdgeMap(pixels, { contrast: (options.magneticContrast ?? 10) / 100 });
+        draft.fixed = [snapToEdge(draft.edges, point, options.magneticWidth ?? 10)];
+        if (this.current) this.followEdges(this.current);
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+        if (this.magnetic === draft) this.cancel();
+      }
+      return;
+    }
+    const first = m.fixed[0];
+    if (m.anchors.length >= 2 && Math.hypot(point.x - first.x, point.y - first.y) <= this.closeRadius) {
+      this.close();
+      return;
+    }
+    // A click fixes the live path and adds an anchor at its end.
+    this.current = point;
+    this.followEdges(point);
+    if (m.live.length > 1) {
+      m.fixed.push(...m.live.slice(1));
+      m.anchors.push(m.fixed.length - 1);
+      m.live = [];
+    }
+    if ((modifiers.detail ?? 1) >= 2) this.close();
+  }
+
+  /** Updates the live path to `point`, fixing anchors along it every `frequency` px (with `place`). */
+  private followEdges(point: ImagePoint, place = true): void {
+    const m = this.magnetic!;
+    const last = () => m.fixed[m.fixed.length - 1];
+    if (!m.edges) {
+      m.live = [last(), point];
+      return;
+    }
+    const options = this.getOptions();
+    const target = snapToEdge(m.edges, point, options.magneticWidth ?? 10);
+    const spacing = magneticAnchorSpacing(options.magneticFrequency ?? 57);
+    for (let guard = 0; guard < 64; guard++) {
+      const path = liveWire(m.edges, last(), target, this.corridor(last(), target));
+      let length = 0;
+      let k = 0;
+      for (k = 1; k < path.length; k++) {
+        length += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y);
+        if (length >= spacing) break;
+      }
+      if (!place || k >= path.length - 1) {
+        m.live = path;
+        return;
+      }
+      m.fixed.push(...path.slice(1, k + 1));
+      m.anchors.push(m.fixed.length - 1);
+    }
+    m.live = [last(), target];
   }
 
   /** Abandons a drag (or a polygonal lasso) without changing the selection. */
@@ -270,6 +389,7 @@ export class SelectionGesture {
     this.current = null;
     this.points = [];
     this.polygon = null;
+    this.magnetic = null;
     this.pressedAt = null;
     this.freehand = false;
   }
