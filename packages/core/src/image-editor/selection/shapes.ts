@@ -1,7 +1,7 @@
 // Portions ported from photocraft/crates/algo/src/selection.rs (MIT OR Apache-2.0, © ArtCraft Team and contributors). See THIRD_PARTY_NOTICES.md.
 
 import type { CropBox, ImagePoint } from '../types';
-import { createSelectionMask, coverageToByte, type SelectionMask } from './mask';
+import { createSelectionMask, coverageToByte, selectionFromRegion, type SelectionMask } from './mask';
 
 export interface ShapeSelectionOptions {
   /** Partial coverage along the edge (default true). */
@@ -29,8 +29,43 @@ export function polygonCoverage(
   height: number,
   antiAlias = true
 ): Float32Array {
+  const { box, coverage } = polygonCoverageBox(points, width, height, antiAlias);
+  if (!box || (box.width === width && box.height === height)) return box ? coverage : new Float32Array(width * height);
   const m = new Float32Array(width * height);
-  if (points.length < 3 || width <= 0 || height <= 0) return m;
+  for (let y = 0; y < box.height; y++) m.set(coverage.subarray(y * box.width, (y + 1) * box.width), (box.y + y) * width + box.x);
+  return m;
+}
+
+/**
+ * {@link polygonCoverage} over just the polygon's bounding box (clipped to the image): `coverage`
+ * is `box.width × box.height`; `box` is `null` when the polygon covers no pixel row or column.
+ */
+export function polygonCoverageBox(
+  points: readonly ImagePoint[],
+  width: number,
+  height: number,
+  antiAlias = true
+): { box: CropBox | null; coverage: Float32Array } {
+  const none = { box: null, coverage: new Float32Array(0) };
+  if (points.length < 3 || width <= 0 || height <= 0) return none;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const bx0 = Math.max(0, Math.floor(minX));
+  const by0 = Math.max(0, Math.floor(minY));
+  const bx1 = Math.min(width, Math.ceil(maxX));
+  const by1 = Math.min(height, Math.ceil(maxY));
+  if (!(bx1 > bx0 && by1 > by0)) return none;
+  const bw = bx1 - bx0;
+  const m = new Float32Array(bw * (by1 - by0));
   const sub = antiAlias ? 4 : 1;
   const edges: Edge[] = [];
   for (let i = 0; i < points.length; i++) {
@@ -44,8 +79,8 @@ export function polygonCoverage(
   let next = 0;
   let active: Edge[] = [];
   const xs: number[] = [];
-  for (let py = 0; py < height; py++) {
-    const row = py * width;
+  for (let py = by0; py < by1; py++) {
+    const row = (py - by0) * bw - bx0;
     for (let s = 0; s < sub; s++) {
       const y = py + (s + 0.5) / sub;
       while (next < edges.length && edges[next].top <= y) active.push(edges[next++]);
@@ -75,13 +110,7 @@ export function polygonCoverage(
     }
   }
   for (let i = 0; i < m.length; i++) if (m[i] > 1) m[i] = 1;
-  return m;
-}
-
-function toMask(width: number, height: number, coverage: Float32Array): SelectionMask {
-  const out = new Uint8Array(coverage.length);
-  for (let i = 0; i < out.length; i++) out[i] = coverageToByte(coverage[i]);
-  return createSelectionMask(width, height, out);
+  return { box: { x: bx0, y: by0, width: bw, height: by1 - by0 }, coverage: m };
 }
 
 /** Lasso / polygonal lasso: an even-odd polygon in natural image pixels. */
@@ -91,7 +120,11 @@ export function polygonSelection(
   points: readonly ImagePoint[],
   options: ShapeSelectionOptions = {}
 ): SelectionMask {
-  return toMask(width, height, polygonCoverage(points, width, height, options.antiAlias ?? true));
+  const { box, coverage } = polygonCoverageBox(points, width, height, options.antiAlias ?? true);
+  if (!box) return createSelectionMask(width, height);
+  const out = new Uint8Array(coverage.length);
+  for (let i = 0; i < out.length; i++) out[i] = coverageToByte(coverage[i]);
+  return selectionFromRegion(width, height, box, out);
 }
 
 /** Normalises a rectangle with a negative width or height. */

@@ -1,5 +1,6 @@
 import {
   deserializeSelection,
+  selectionArea,
   serializeSelection,
   type SelectionMask,
   type SerializedSelection,
@@ -35,9 +36,7 @@ export const DEFAULT_CHANNEL_COLOR = '#ff0000';
 /** A summary of a channel for agents and panels (no pixels). */
 export function describeChannel(channel: AlphaChannel) {
   const { mask, ...rest } = channel;
-  let sum = 0;
-  for (let i = 0; i < mask.data.length; i++) sum += mask.data[i];
-  const percent = Math.round((sum / 255 / Math.max(1, mask.data.length)) * 10000) / 100;
+  const percent = Math.round((selectionArea(mask) / Math.max(1, mask.width * mask.height)) * 10000) / 100;
   return { ...rest, bounds: mask.bounds, percent };
 }
 

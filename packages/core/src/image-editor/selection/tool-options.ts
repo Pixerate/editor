@@ -1,4 +1,4 @@
-import type { SelectionMask, SelectionMode } from './mask';
+import { selectionArea, type SelectionMask, type SelectionMode } from './mask';
 import type { ColorDistance, ColorRangePreset } from './wand';
 import type { RefineEdgeParams } from './refine';
 
@@ -109,9 +109,7 @@ export const REFINE_EDGE_CONTROLS: readonly RefineEdgeControl[] = [
 /** A one-line status: "No selection" or "W × H px selected (n % of the image)". */
 export function describeSelection(mask: SelectionMask | null | undefined): string {
   if (!mask || !mask.bounds) return 'No selection';
-  let sum = 0;
-  for (let i = 0; i < mask.data.length; i++) sum += mask.data[i];
-  const pct = (sum / 255 / mask.data.length) * 100;
+  const pct = (selectionArea(mask) / (mask.width * mask.height)) * 100;
   const shown = pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
   return `${mask.bounds.width} × ${mask.bounds.height} px selected (${shown}% of the image)`;
 }
