@@ -318,7 +318,9 @@ describe('Svelte ChannelsPanel', () => {
     Object.defineProperty(input, 'files', { configurable: true, value: [new File([new Uint8Array([1, 2, 3])], 'Sky matte.png', { type: 'image/png' })] });
     load.mockImplementation(async () => controller.saveSelection({ name: 'Sky matte' }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 10));
+    // FileReader is asynchronous; wait for the load rather than a fixed time.
+    await vi.waitFor(() => expect(load).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
     flushSync();
     expect(load).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/), { name: 'Sky matte' });
     expect(target.querySelector('[data-testid="channel-row"][aria-current="true"]')!.textContent).toContain('Sky matte');

@@ -301,7 +301,9 @@ describe('React ChannelsPanel', () => {
     load.mockImplementation(async () => controller.saveSelection({ name: 'Sky matte' }));
     await act(async () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 10));
+      // FileReader is asynchronous; wait for the load rather than a fixed time.
+      await vi.waitFor(() => expect(load).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 0));
     });
     expect(load).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/), { name: 'Sky matte' });
     expect(container.querySelector('[data-testid="channel-row"][aria-current="true"]')!.textContent).toContain('Sky matte');

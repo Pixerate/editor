@@ -1,5 +1,7 @@
 import type { AgentTool } from '../tools/registry.js';
 import type { ImageEditorController, ShapeGeometryInput, ShapeLayerInit, VectorMaskPathInput } from './controller';
+import type { SelectionToPathOptions } from './selection/path';
+import { selectionArea } from './selection/mask';
 import { BLEND_MODES, type BlendMode } from './blend';
 import { findLayer } from './layers/model';
 import { LayerOperationError } from './layers/ops';
@@ -457,6 +459,56 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     fillRule: { type: 'string', enum: ['nonzero', 'evenodd'], description: 'Winding rule within a component (default nonzero).' },
   } as const;
   const LAYER = { type: 'string', minLength: 1, description: 'The layer (see list_layers). Not a shape layer: its path already is its vector mask.' } as const;
+  const TRACE_PROPS = {
+    tolerance: { type: 'number', minimum: 0.1, maximum: 10, description: 'How far (px) the path may stray from the selection edge (default 0.5; lower is tighter, more anchors).' },
+    cornerRoundness: { type: 'number', minimum: 0, maximum: 1, description: '0: straight sides and sharp corners; 1: as smooth as the outline allows (default 0.5).' },
+    minArea: { type: 'number', minimum: 0, description: 'Islands and holes smaller than this many square px are left out (default 4).' },
+  } as const;
+  const TRACE_KEYS = ['tolerance', 'cornerRoundness', 'minArea'] as const;
+  const traceOptions = (args: Record<string, unknown>): SelectionToPathOptions => {
+    const o: SelectionToPathOptions = {};
+    for (const k of TRACE_KEYS) if (typeof args[k] === 'number') o[k] = args[k] as number;
+    return o;
+  };
+
+  const selectionToPath: AgentTool = {
+    name: 'selection_to_path',
+    title: 'Make a path from the selection',
+    description:
+      "Make Work Path: traces the selection's outline (where it is at least half selected) into closed Bézier subpaths in document pixels, holes included, within tolerance px. Changes nothing. Returns svg (compact SVG path data) and fillRule evenodd, ready for add_vector_mask, set_vector_mask_path or add_shape_layer (pass the svg as subpaths and fillRule evenodd), plus bounds and the anchor count. Use add_vector_mask from selection to do it in one step.",
+    inputSchema: { type: 'object', properties: { ...TRACE_PROPS, anchors: { type: 'boolean', description: 'Also return the subpaths as anchors with handles (default false: svg only).' } }, additionalProperties: false },
+    annotations: { title: 'Make a path from the selection', ...READ },
+    handler: (args) => {
+      const out = controller.selectionToPath(traceOptions(args));
+      const { subpaths, ...rest } = out;
+      return args.anchors === true ? out : rest;
+    },
+  };
+
+  const pathToSelection: AgentTool = {
+    name: 'path_to_selection',
+    title: 'Make a selection from a path',
+    description:
+      "Make Selection: fills a path (a live shape, free subpaths or SVG path data, or components, in document pixels, as add_shape_layer takes) into a selection, combined with the current one by mode, with feather px and antiAlias. Use it to select along Bézier curves, or to turn a path from selection_to_path or get_vector_mask back into a selection. One undo step. Returns the selection.",
+    inputSchema: {
+      type: 'object',
+      $defs: DEFS,
+      properties: {
+        ...PATH_PROPS,
+        feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather radius in px (default 0).' },
+        antiAlias: { type: 'boolean', description: 'Soft edges (default true); false makes every pixel fully in or out.' },
+        mode: { type: 'string', enum: ['replace', 'add', 'subtract', 'intersect'], description: 'How it combines with the current selection (default replace).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Make a selection from a path', ...WRITE },
+    handler: (args) => {
+      const mode = args.mode as 'replace' | 'add' | 'subtract' | 'intersect' | undefined;
+      controller.pathToSelection(pathSpec(args), { feather: args.feather as number | undefined, antiAlias: args.antiAlias as boolean | undefined, mode });
+      const sel = controller.getSelection();
+      return { empty: !sel, bounds: sel?.bounds ?? null, area: Math.round(sel ? selectionArea(sel) : 0) };
+    },
+  };
 
   const getVectorMask: AgentTool = {
     name: 'get_vector_mask',
@@ -472,14 +524,15 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     name: 'add_vector_mask',
     title: 'Add a vector mask',
     description:
-      "Layer › Vector Mask: a path that reveals the layer inside it and stays sharp at any size, on top of any raster mask (both apply). from path takes a live shape, free subpaths or components like add_shape_layer; reveal-all and hide-all start with an empty path. Use it for hard-edged geometric or traced cutouts that must stay editable; use add_layer_mask for soft or painted ones. A linked vector mask moves and transforms with the layer. Replaces an existing vector mask. One undo step. Returns the vector mask.",
+      "Layer › Vector Mask: a path that reveals the layer inside it and stays sharp at any size, on top of any raster mask (both apply). from path takes a live shape, free subpaths or components like add_shape_layer; from selection traces the current selection (within tolerance px); reveal-all and hide-all start with an empty path. Use it for hard-edged geometric or traced cutouts that must stay editable; use add_layer_mask for soft or painted ones. A linked vector mask moves and transforms with the layer. Replaces an existing vector mask. One undo step. Returns the vector mask.",
     inputSchema: {
       type: 'object',
       $defs: DEFS,
       properties: {
         layerId: LAYER,
-        from: { type: 'string', enum: ['path', 'reveal-all', 'hide-all'], description: 'path (default when a shape, subpaths or components are given), reveal-all or hide-all (an empty path).' },
+        from: { type: 'string', enum: ['path', 'selection', 'reveal-all', 'hide-all'], description: 'path (default when a shape, subpaths or components are given), selection (trace the current selection), reveal-all or hide-all (an empty path).' },
         ...PATH_PROPS,
+        ...TRACE_PROPS,
       },
       required: ['layerId'],
       additionalProperties: false,
@@ -489,8 +542,9 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
       const id = layerArg(args.layerId);
       const spec = pathSpec(args);
       const hasPath = spec.components?.length || spec.shape !== undefined || spec.subpaths !== undefined;
-      const from = (args.from as 'path' | 'reveal-all' | 'hide-all' | undefined) ?? (hasPath ? 'path' : 'reveal-all');
-      controller.addVectorMask(id, from, spec);
+      const from = (args.from as 'path' | 'selection' | 'reveal-all' | 'hide-all' | undefined) ?? (hasPath ? 'path' : 'reveal-all');
+      if (from !== 'selection' && TRACE_KEYS.some((k) => args[k] !== undefined)) throw new Error('tolerance, cornerRoundness and minArea apply only to from selection.');
+      controller.addVectorMask(id, from, spec, traceOptions(args));
       return { vectorMask: controller.getVectorMask(id) };
     },
   };
@@ -562,5 +616,5 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     },
   };
 
-  return [get, add, update, setComponent, addComponent, removeComponent, merge, getVectorMask, addVectorMask, setVectorMaskPath, setVectorMaskProps, rasterizeVectorMask, removeVectorMask];
+  return [get, add, update, setComponent, addComponent, removeComponent, merge, getVectorMask, addVectorMask, setVectorMaskPath, setVectorMaskProps, rasterizeVectorMask, removeVectorMask, selectionToPath, pathToSelection];
 }
