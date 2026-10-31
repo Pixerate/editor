@@ -266,6 +266,38 @@ export function dumbbell(): Scene {
   return draw('dumbbell', W, H, inside, object, background, 6);
 }
 
+/**
+ * A dark stone in a river that runs off three sides of the picture, under a band of trees, with
+ * a sunset's warm reflection around it: a small object inside a large region of other colours
+ * (like the boulders in the demo's lake).
+ */
+export function stoneInRiver(): Scene {
+  const inside = (x: number, y: number) => ((x - 735) / 30) ** 2 + ((y - 640) / 21) ** 2 < 1;
+  const water = fractal(51, 30);
+  const ripple = fractal(52, 8, 2);
+  const leaves = fractal(53, 20);
+  const rock = fractal(54, 10);
+  const object = (x: number, y: number): Rgb => {
+    const v = 62 + rock(x, y) * 14 + (y < 632 ? 22 : 0);
+    return [v + 6, v, v - 4];
+  };
+  const background = (x: number, y: number): Rgb => {
+    if (y < 330 + water(x, 0) * 30) return [40 + leaves(x, y) * 20, 70 + leaves(x, y) * 30, 50 + leaves(x, y) * 18];
+    // Pebbles: small dark stones scattered on a 70 px grid (none near the one selected).
+    const gx = Math.floor(x / 70);
+    const gy = Math.floor(y / 70);
+    const h = Math.sin(gx * 12.9898 + gy * 78.233) * 43758.5453;
+    const jx = gx * 70 + 35 + (h - Math.floor(h) - 0.5) * 40;
+    const jy = gy * 70 + 35 + (((h * 7) % 1) - 0.5) * 30;
+    if (Math.hypot(gx * 70 - 735, gy * 70 - 640) > 120 && ((x - jx) / 9) ** 2 + ((y - jy) / 6) ** 2 < 1) return [70, 66, 64];
+    const t = clamp01(0.5 + water(x, y) * 0.9 + ripple(x, y) * 0.5);
+    // The sunset's reflection: warm water around the stone, grey-blue further off.
+    const glow = clamp01(1.4 - Math.hypot((x - 700) / 4, y - 640) / 260);
+    return mix(mix([84, 96, 106], [214, 196, 186], t), [236, 150, 120], glow * 0.8);
+  };
+  return draw('stone in river', W, H, inside, object, background, 7);
+}
+
 export type ObjectSelectionTarget = { rect: CropBox } | { point: ImagePoint };
 
 export interface ObjectSelectionCase {
@@ -290,6 +322,7 @@ const scenes = {
   orange: once(() => orangeOnTable()),
   small: once(() => orangeOnTable(40, 820, 260)),
   dumbbell: once(dumbbell),
+  stone: once(stoneInRiver),
 };
 
 export const OBJECT_SELECTION_CASES: ObjectSelectionCase[] = [
@@ -308,6 +341,8 @@ export const OBJECT_SELECTION_CASES: ObjectSelectionCase[] = [
   { label: 'thin pole, box', scene: scenes.pole, target: box(550, 120, 650, 770) },
   { label: 'dumbbell, box', scene: scenes.dumbbell, target: box(320, 290, 880, 510) },
   { label: 'dumbbell, click', scene: scenes.dumbbell, target: { point: { x: 430, y: 400 } } },
+  { label: 'stone in river, box', scene: scenes.stone, target: box(690, 605, 780, 675) },
+  { label: 'stone in river, click', scene: scenes.stone, target: { point: { x: 735, y: 640 } } },
 ];
 
 export interface ObjectSelectionScore {
