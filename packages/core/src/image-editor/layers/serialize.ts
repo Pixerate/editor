@@ -258,6 +258,8 @@ export interface SerializedLayeredImageEditorState {
   /** Blur migrated from a v1 / v2 document with adjustment layers (runs after the layers). */
   legacyOutputBlur?: number;
   selection?: SerializedSelection;
+  /** The selection's recipe (live selections): the steps that made it, as JSON. */
+  selectionRecipe?: unknown[];
   /** Alpha channels (saved selections), run-length encoded. */
   channels?: SerializedAlphaChannel[];
   /** Document paths (the Paths panel). */

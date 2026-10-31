@@ -372,6 +372,7 @@ export type ImageEditorTool =
 export type ImageEditorFit = 'contain' | 'margin';
 
 import type { DocumentColorMode, DocumentColorProfile, ProofSetup } from './color-management';
+import type { SelectionRecipeStep } from './selection/recipe';
 import type { BitDepth } from '../raster/deep';
 
 export interface ImageEditorState {
@@ -407,6 +408,12 @@ export interface ImageEditorState {
    * growing as the brush moves). View state: not an edit, not in history, not saved.
    */
   selectionPreview?: SelectionMask | null;
+  /**
+   * Live selections: the steps that made `selection` (see `selection/recipe`), so they can be
+   * edited and replayed; null or missing when it is frozen (made or changed by something no step
+   * describes). Recorded in history and saved.
+   */
+  selectionRecipe?: SelectionRecipeStep[] | null;
   /**
    * `compare_selections`' overlay: the added area tinted green, the removed red. Shown while the
    * selection is still `selection` (any change hides it). View state: not in history, not saved.
@@ -497,6 +504,8 @@ export interface LegacySerializedImageEditorState {
   annotations: Annotation[];
   /** The active selection, run-length encoded. Missing when nothing is selected. */
   selection?: SerializedSelection;
+  /** The selection's recipe (live selections): the steps that made it, as JSON. */
+  selectionRecipe?: unknown[];
   /** Alpha channels (saved selections), run-length encoded. */
   channels?: SerializedAlphaChannel[];
   /** Document paths (the Paths panel). */

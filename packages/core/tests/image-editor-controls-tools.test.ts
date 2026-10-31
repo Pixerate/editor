@@ -113,7 +113,7 @@ describe('image editor agent tools', () => {
     const { tools } = registry.listTools();
     expect(tools.map((t) => baseToolName(t.name))).toEqual([
       'get_adjustments', 'list_controls', 'set_adjustments', 'add_adjustment_layer', 'render_preview', 'capture_view',
-      'get_selection', 'inspect_mask_edge', 'compare_selections', 'select_all', 'deselect', 'invert_selection', 'select_rect', 'select_ellipse', 'select_polygon', 'quick_select', 'select_object', 'select_subject', 'select_focus_area', 'select_sky', 'select_line', 'magic_wand',
+      'get_selection', 'inspect_mask_edge', 'compare_selections', 'get_selection_recipe', 'edit_selection_step', 'insert_selection_step', 'remove_selection_step', 'freeze_selection', 'select_all', 'deselect', 'invert_selection', 'select_rect', 'select_ellipse', 'select_polygon', 'quick_select', 'select_object', 'select_subject', 'select_focus_area', 'select_sky', 'select_line', 'magic_wand',
       'select_color_range', 'load_selection_from_image', 'load_selection_from_mask', 'select_layer_transparency',
       'grow_selection', 'select_similar', 'reselect', 'set_selection_display',
       'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
@@ -146,7 +146,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_edge_color', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'get_selection_recipe', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_edge_color', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

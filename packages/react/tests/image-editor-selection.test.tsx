@@ -336,6 +336,33 @@ describe('React SeparateSubjectPanel', () => {
   });
 });
 
+describe('React SelectionRecipePanel', () => {
+  it('lists the selection steps and edits, removes and freezes them', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 }, { antiAlias: false });
+    controller.selectRect({ x: 12, y: 0, width: 4, height: 10 }, { antiAlias: false, mode: 'add' });
+    await act(async () => root.render(<Bar controller={controller} />));
+    const rows = () => container.querySelectorAll('[data-testid="selection-step"]');
+    expect(rows()).toHaveLength(2);
+    expect(rows()[0].textContent).toContain('Rectangle 10 × 10 at 0, 0');
+    await act(async () => {
+      setValue(container.querySelector('select[aria-label="Step 2 mode"]') as HTMLSelectElement, 'subtract');
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(controller.getSelectionRecipe().steps[1]).toMatchObject({ mode: 'subtract' });
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    await act(async () => {
+      (container.querySelector('button[aria-label="Remove step 2"]') as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(rows()).toHaveLength(1);
+    await act(async () => button('Freeze').click());
+    expect(container.querySelector('[data-testid="selection-recipe"]')).toBeNull();
+    expect(controller.getSelection()!.bounds).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+  });
+});
+
 describe('React RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
