@@ -21,6 +21,7 @@ import {
   DocumentOpener,
 } from './types';
 import { inspectMaskEdge as inspectEdge, type InspectMaskEdgeOptions, type MaskEdgeReport } from './selection/inspect';
+import { selectionUncertainty as findUncertainty, type SelectionUncertainty, type SelectionUncertaintyOptions } from './selection/uncertainty';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import type { ObjectTarget } from './selection/segment/grabcut';
@@ -6055,9 +6056,18 @@ export class ImageEditorController {
   public async refineSelectionTo(
     params: RefineEdgeParams,
     output: RefineOutput = 'selection',
-    options: SampleOptions & { layerId?: string; decontaminate?: number; edits?: RefineEdit[]; refineMode?: 'color' | 'object'; signal?: AbortSignal } = {}
+    options: SampleOptions & {
+      layerId?: string;
+      decontaminate?: number;
+      edits?: RefineEdit[];
+      refineMode?: 'color' | 'object';
+      /** Refine only inside these rectangles (e.g. `selectionUncertainty().regions`); the rest stays as it was. */
+      regions?: CropBox[];
+      signal?: AbortSignal;
+    } = {}
   ): Promise<RefineOutputResult> {
     const edits = options.edits ?? [];
+    const regions = this.checkRegions(options.regions);
     const refineMode = options.refineMode ?? 'color';
     if (!this.state.selection?.bounds && !edits.length) throw new Error('Nothing is selected; select first, or pass edits that paint a selection.');
     if (refineMode === 'object' && !this.segmentation) {
@@ -6094,7 +6104,15 @@ export class ImageEditorController {
       if (!clipped?.bounds) throw new Error('The segmentation model found no object in the selection; use refineMode color.');
       sel = clipped;
     }
-    const refined = refineSelectionMask(pixels, sel, params, edited.refineBrush);
+    let refined = refineSelectionMask(pixels, sel, params, edited.refineBrush);
+    if (regions) {
+      // Only inside the regions: elsewhere the selection keeps its coverage (edits included).
+      const data = Uint8Array.from(sel.data);
+      for (const r of regions) {
+        for (let y = r.y; y < r.y + r.height; y++) data.set(refined.data.subarray(y * width + r.x, y * width + r.x + r.width), y * width + r.x);
+      }
+      refined = createSelectionMask(width, height, data);
+    }
     if (!refined.bounds) throw new Error('Refining left nothing selected; use a smaller shiftEdge or contrast.');
     if (toDocument) {
       // This document stays as it is; the new one goes to the host.
@@ -6599,6 +6617,39 @@ export class ImageEditorController {
     const image = own ?? { ...this.compositePixels(region), x: region.x, y: region.y };
     const report = inspectEdge(mask, image, options);
     return { target, ...(layer ? { layerId: layer.id } : {}), ...report };
+  }
+
+  /** Whole-pixel rectangles inside the canvas, or a useful error; undefined stays undefined. */
+  private checkRegions(regions: readonly CropBox[] | undefined): CropBox[] | undefined {
+    if (regions === undefined) return undefined;
+    const { width, height } = this.naturalSize;
+    if (!Array.isArray(regions) || !regions.length) throw new Error('regions must be a non-empty list of { x, y, width, height } (e.g. the uncertainRegions bounds); leave it out to refine everywhere.');
+    return regions.map((r, i) => {
+      const x = Math.max(0, Math.floor(r?.x));
+      const y = Math.max(0, Math.floor(r?.y));
+      const x1 = Math.min(width, Math.ceil(r?.x + r?.width));
+      const y1 = Math.min(height, Math.ceil(r?.y + r?.height));
+      if (![x, y, x1, y1].every(Number.isFinite) || x1 <= x || y1 <= y) throw new Error(`regions[${i}] must overlap the image (0..${width} × 0..${height}), got ${JSON.stringify(r)}.`);
+      return { x, y, width: x1 - x, height: y1 - y };
+    });
+  }
+
+  /**
+   * Where the selection is unsure of itself: the stretches of its edge with no image edge under
+   * them, widened into a band (a trimap's unknown), as a mask and regions with bounds and
+   * confidence, least confident first. Measured against the composite. Read-only; an empty
+   * selection has none.
+   */
+  public selectionUncertainty(options: SelectionUncertaintyOptions = {}): SelectionUncertainty {
+    const { width, height } = this.naturalSize;
+    const sel = this.getSelection();
+    if (!sel?.bounds) return findUncertainty(createSelectionMask(width, height), { x: 0, y: 0, width: 0, height: 0, data: new Uint8ClampedArray(0) }, options);
+    const b = sel.bounds;
+    const m = Math.max(8, Math.ceil(options.band ?? Math.max(2, Math.min(width, height) / 200)) + 4);
+    const x = Math.max(0, b.x - m);
+    const y = Math.max(0, b.y - m);
+    const region = { x, y, width: Math.min(width, b.x + b.width + m) - x, height: Math.min(height, b.y + b.height + m) - y };
+    return findUncertainty(sel, { ...this.compositePixels(region), x, y }, options);
   }
 
   /** A layer's painted mask over the canvas as a selection mask; null without one (or for a depth mask). */

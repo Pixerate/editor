@@ -320,6 +320,28 @@ describe('Svelte MaskEdgeCheck', () => {
   });
 });
 
+describe('Svelte RefineEdgePanel uncertain areas', () => {
+  it('refines only the uncertain areas, and says when there are none', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 }, { antiAlias: false });
+    component = mount(RefineEdgePanel, { target, props: { controller } });
+    flushSync();
+    click(target.querySelector('input[aria-label="Only uncertain areas"]'));
+    click(button('Refine Edge'));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(target.querySelector('[data-testid="refine-edge-panel"] [role="alert"]')!.textContent).toMatch(/No uncertain areas/);
+    controller.selectRect({ x: 0, y: 0, width: 6, height: 10 }, { antiAlias: false });
+    const before = controller.getSelection();
+    click(button('Refine Edge'));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(target.querySelector('[data-testid="refine-edge-panel"] [role="alert"]')).toBeNull();
+    expect(controller.getSelection()).not.toBe(before);
+  });
+});
+
 describe('Svelte RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });
