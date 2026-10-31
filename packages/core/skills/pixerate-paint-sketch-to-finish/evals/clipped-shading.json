@@ -1,0 +1,26 @@
+{
+	"prompt": "Add shading to the yellow shape on a separate layer that only affects the yellow and darkens it (multiply), so I can adjust or remove it later.",
+	"fixture": {
+		"editor": "paint",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "tool": "set_paper", "args": { "preset": "smooth" } },
+			{ "tool": "update_layer", "args": { "layerId": { "$read": "list_layers", "path": "layers.0.id" }, "name": "Flats" } },
+			{ "tool": "set_brush", "args": { "id": "marker" } },
+			{ "tool": "set_color", "args": { "color": "#f2c14e" } },
+			{ "tool": "paint_stroke", "args": { "points": [{ "x": 16, "y": 20 }, { "x": 48, "y": 20 }, { "x": 48, "y": 32 }, { "x": 16, "y": 32 }, { "x": 16, "y": 44 }, { "x": 48, "y": 44 }] } }
+		]
+	},
+	"checks": [
+		{ "why": "a multiply layer clipped to the layer below", "tool": "list_layers", "expect": { "layers": { "$some": { "blend": "multiply", "clipped": true } } } },
+		{ "why": "directly above the flats", "tool": "list_layers", "expect": { "layers": { "$expr": "(() => { const i = v.findIndex((l) => l.name === 'Flats'); return i > 0 && v[i - 1].clipped && v[i - 1].bounds !== null; })()" } } }
+	],
+	"solution": [
+		{ "tool": "add_layer", "args": { "name": "Shading" } },
+		{ "tool": "update_layer", "args": { "layerId": { "$read": "list_layers", "path": "layers.0.id" }, "blend": "multiply", "clipped": true } },
+		{ "tool": "set_brush", "args": { "id": "airbrush" } },
+		{ "tool": "set_color", "args": { "color": "#b08a6a" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 40, "y": 22 }, { "x": 46, "y": 42 }] } }
+	]
+}

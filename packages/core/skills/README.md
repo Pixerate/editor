@@ -47,6 +47,9 @@ request like "clean up this export" finds it.
 | [`pixerate-vector-icon-set`](pixerate-vector-icon-set/SKILL.md) | Vector (`pixerate-vector`) | Icons on one grid with padding, one stroke, cap, join and radius, crisp coordinates, clean paths, symbols and SVG export. |
 | [`pixerate-vector-logo`](pixerate-vector-logo/SKILL.md) | Vector (`pixerate-vector`) | Marks from primitives with live booleans, optical corrections, an aligned lockup, colour variants as symbols, outlined delivery files. |
 | [`pixerate-vector-illustration`](pixerate-vector-illustration/SKILL.md) | Vector (`pixerate-vector`) | Block in back to front, gradients and stacked fills for form, masks, blends, subtle shadows with one light, export. |
+| [`pixerate-paint-watercolour`](pixerate-paint-watercolour/SKILL.md) | Paint (`pixerate-paint-editor`) | Watercolour paper, light to dark with the paper's white kept, wet-in-wet and wet-on-dry washes, drying before glazing, steering the water. |
+| [`pixerate-paint-oil-impasto`](pixerate-paint-oil-impasto/SKILL.md) | Paint (`pixerate-paint-editor`) | A toned ground, thin block-in to thick paint, pigment mixing, impasto relief and its light. |
+| [`pixerate-paint-sketch-to-finish`](pixerate-paint-sketch-to-finish/SKILL.md) | Paint (`pixerate-paint-editor`) | Sketch, ink, flats under the lines, clipped shading and light, one named layer per pass. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -110,7 +113,8 @@ same change.
   `packages/core/tests/agent-skill-evals.test.ts`. An eval has a `prompt` (the task, in the
   user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }`,
   `{ "editor": "image", "width", "height", "background", "shapes" }` or `{ "editor":
-  "vector", "width", "height", "setup" }` with commands that draw the starting art), `checks` (a read-only
+  "vector", "width", "height", "setup" }` with commands that draw the starting art, or
+  `{ "editor": "paint", "width", "height", "setup" }` with tool calls), `checks` (a read-only
   tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place

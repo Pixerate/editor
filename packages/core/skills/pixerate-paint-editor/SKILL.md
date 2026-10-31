@@ -47,6 +47,15 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Undo**: one tool call that changes the painting is one undo step (`undo_paint`). Brush,
   colour, view, hand and the Mixer Brush load are editor state, not undo steps.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-paint-watercolour`: paper, light to dark, wet-in-wet and wet-on-dry, drying and glazing.
+- `pixerate-paint-oil-impasto`: toned ground, thin to thick, pigment mixing, impasto and its light.
+- `pixerate-paint-sketch-to-finish`: sketch, ink, flats, clipped shading and light, one layer per pass.
+
 ## Working method
 
 1. **Read.** `get_canvas_info` (size, paper, active layer, active brush, colour), then
@@ -82,8 +91,7 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
    `repeat` for hatching, grass, foliage, rows, fans or spirals, in one undo step.
 8. **Check** with `render_preview` after each block of work, not after each stroke.
    `pick_color` reads exact values. Undo what made it worse.
-9. **Watercolour** is its own way of working (see "Wet media" below): wet the paper or not,
-   lay washes light to dark, let them flow (`advance_wet_paint`), dry them (`dry_paint`), glaze.
+9. **Watercolour** is its own way of working: see "Wet media" below.
 10. **Deliver**: `export_image` (PNG, or JPEG / WebP in a browser), `export_psd` for Photoshop,
    `save_paint_document` to keep the painting with its strokes (when the host has storage).
 
@@ -133,71 +141,24 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 
   PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow
   as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
-- **Grow the canvas instead of starting big**: when the picture needs more room, call
-  `extend_canvas` with the pixels to add on each side (nothing painted moves relative to
-  anything else). Adding on the `left` or `top` shifts every coordinate you hold (stroke points,
-  guide and stencil positions, layer bounds) by (+left, +top); re-read with `list_layers` or use
-  the returned `rect` (the new canvas in the old coordinates). Wet paint dries first, so finish
-  or dry a wash (`dry_paint`) before extending. `set_canvas` only crops or grows at the
-  bottom-right and never moves the picture.
+- **Grow the canvas instead of starting big** with `extend_canvas` (pixels per side; nothing
+  painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you
+  hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first.
+  `set_canvas` only crops or grows at the bottom-right.
 - **Save brushes you build** (`set_brush` then `save_brush`), and share them with
   `export_brushes` / `import_brushes`.
 
 ## Wet media
 
-1. **Choose a watercolour paper** (`cold-pressed`, `rough-watercolor` for granulation and broken
-   edges, `hot-pressed` for smooth washes). Absorption, permeability and roughness of the paper
-   drive the simulation.
-2. **Plan light to dark.** Watercolour is transparent: you cannot paint light over dark (use
-   `gouache`, body 1, for that). Lay the lightest washes first.
-3. **Wet-in-wet or wet-on-dry.** `wet_paper` over an area first for soft, feathered, blooming
-   colour (skies, backgrounds); paint on dry paper for crisp edges with a darker rim.
-4. **Paint washes** with `watercolor-wash` (large, flat, very wet) in a few long strokes, then
-   shapes with `watercolor-round`, details with `watercolor-detail`. Colours touching while wet
-   bleed into each other; that is the point.
-5. **Let it flow, then dry.** `advance_wet_paint` (`seconds` 1..5) to let water spread, run and
-   bloom; `render_preview` shows the paint as it is now (wet paper looks a little darker).
-   `dry_paint` sets it where it is. Dry before glazing a second wash over a first, or the two
-   mix instead of layering.
-6. **Steer the water** with the wet tools: `add-water` (softens and lifts with `rewet`),
-   `hair-dryer` (stops a wash spreading), `blow` (pushes the water along the stroke),
-   `wet-blend` (evens out a wash), `wet-drag` (drags wet paint), `blot` (lifts wet paint: clouds,
-   highlights). `set_canvas_tilt` makes washes run downhill and very wet paint drip;
-   `set_flow_map` pushes water in a swirl, a direction or eddies.
-7. **Tune the medium** per layer with `set_wet_settings`: `granulation` (grainy pigment, needs a
-   rough paper), `edgeDarkening`, `bloom`, `bleed`, `viscosity` (runny .. thick), `evaporation`,
-   `pigmentWeight`, `pickup` (how easily dried paint lifts), `fixture` (staining).
-
-- **Saving dries the paint** (deterministically): the saved file and every export hold dried
-  pixels; the editor keeps painting wet. A dry brush, fill, merge or duplicate on a wet layer
-  dries it first (in the same undo step).
-- **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
-  no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
-- **The GPU only draws.** With WebGPU and a large wet area (16 tiles of 256 px by default), Engine B
-  shades the wet paint on the GPU; the CPU engine still computes every step, so the painting,
-  `dry_paint`, saving, export and replay come out the same with it on or off. `get_wet_paint`
-  shows it as `engine` (`state`, `reason`). Leave it on `auto`; `set_wet_engine` with `gpu` "off"
-  only when the user says the display looks wrong or the GPU is needed for something else.
+Watercolour, gouache and wet oil run on a fluid simulation: lay washes light to dark, let them
+flow (`advance_wet_paint`), dry them (`dry_paint`) before glazing. Nothing moves for an agent
+until you advance or dry it, and saving dries the paint. Load `pixerate-paint-watercolour`, and
+read [references/wet-media.md](references/wet-media.md) for the engine and the wet tools.
 
 ## Oils and thick paint
 
-- **Wet oil** (`oil-round`, `oil-flat`; any wet brush with `wet.medium: "oil"`) runs on the wet
-  simulation as a thick, slow-drying medium: it barely flows, stays wet for minutes of simulated
-  time, and the brush picks up and mixes the wet oil it meets (`behavior.pickup` / `mix`), so
-  colours blend on the canvas. A layer takes the medium's wet settings the first time it holds
-  wet paint; keep oil and watercolour on separate layers. `set_instant_dry` on makes every wet
-  stroke dry as it ends (strokes stay exactly as laid).
-- **Thick paint** (`engine: "impasto"`, category `impasto`) gives a layer relief (height) and
-  material (gloss, metallic) next to its colour, lit at render time by `set_lighting`
-  (azimuth, elevation, relief). Tools: `impasto-brush` (bristle ridges), `paint-tube` (blobs),
-  `palette-knife` (scrapes the relief flat and smears the paint), `paint-roller` (flat stippled
-  band), `gloop-pen` (glossy bead), `metallic-paint` (highlights in the paint's colour).
-- **Loading and thinner**: `wet.load` / `impasto.load` below 1 make the brush run out along a
-  long stroke (dry-brush ends); `thinner` makes paint flatter and more transparent.
-- **Light** is a view of the relief, not paint: move it (`set_lighting`) to read the texture
-  (a low elevation, 15..30°, shows brushwork best) and pick the final light before exporting.
-  `get_relief` reads a layer's relief; `flatten_relief` removes it but keeps the colour.
-- **Metallic paper**: `set_paper` `metallic` 0..1 makes the grain sparkle under the light.
+Wet oil barely flows and blends where the brush meets it; impasto brushes add relief lit by
+`set_lighting`. Load `pixerate-paint-oil-impasto`, and read [references/oils.md](references/oils.md).
 
 ## Gradient paint
 

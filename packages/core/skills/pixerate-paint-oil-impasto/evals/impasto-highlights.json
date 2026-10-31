@@ -1,0 +1,24 @@
+{
+	"prompt": "Add a thick impasto highlight stroke across the middle of this painting on its own layer, so I can remove it later, and light the paint from the top right.",
+	"fixture": {
+		"editor": "paint",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "tool": "set_paper", "args": { "preset": "cotton-canvas" } },
+			{ "tool": "fill_layer", "args": { "color": "#3b5b7a" } }
+		]
+	},
+	"checks": [
+		{ "why": "the highlight is on a new layer above the painting", "tool": "list_layers", "expect": { "layers": { "$length": { "$min": 2 }, "$expr": "v[0].type === 'pixel' && v[0].bounds !== null && v[v.length - 1].bounds !== null" } } },
+		{ "why": "thick paint with relief on that layer", "tool": "get_relief", "expect": { "relief": { "maxHeight": { "$min": 50 } } } },
+		{ "why": "lit from the top right", "tool": "get_relief", "expect": { "lighting": { "azimuth": { "$min": 20, "$max": 70 } } } }
+	],
+	"solution": [
+		{ "tool": "add_layer", "args": { "name": "Impasto highlights" } },
+		{ "tool": "set_brush", "args": { "id": "impasto-brush" } },
+		{ "tool": "set_color", "args": { "color": "#f4e7c5" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 8, "y": 32 }, { "x": 56, "y": 30 }] } },
+		{ "tool": "set_lighting", "args": { "azimuth": 45 } }
+	]
+}
