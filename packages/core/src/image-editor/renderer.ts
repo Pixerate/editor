@@ -22,7 +22,7 @@ import { canvasCompositeOperation, blendImageData, normalizeBlendMode } from './
 import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
 import { buildLayerMaskPlanes, layerMaskSelection } from './selection/layer-mask';
-import { selectionOutline, quickMaskPixels, type QuickMaskStyle } from './selection/overlay';
+import { selectionOutlinePaths, quickMaskPixels, type QuickMaskStyle } from './selection/overlay';
 import { selectionDiffPixels } from './selection/diff';
 import { createSelectionMask, selectionToPixels } from './selection/mask';
 import type { SelectionMask } from './selection/mask';
@@ -994,7 +994,7 @@ export class ImageEditorRenderer {
 
   private quickMaskCache = new WeakMap<SelectionMask, HTMLCanvasElement>();
   private diffCache = new WeakMap<object, HTMLCanvasElement>();
-  private outlineCache = new WeakMap<SelectionMask, Float32Array>();
+  private outlineCache = new WeakMap<SelectionMask, Float32Array[]>();
 
   private emptyMaskCache: SelectionMask | null = null;
 
@@ -1087,17 +1087,18 @@ export class ImageEditorRenderer {
    * screen pixels per natural pixel (the projection scale times the host's CSS scale).
    */
   private drawAnts(ctx: CanvasRenderingContext2D, selection: SelectionMask, scale: number, offset: number): void {
-    let segs = this.outlineCache.get(selection);
-    if (!segs) {
-      segs = selectionOutline(selection);
-      this.outlineCache.set(selection, segs);
+    let paths = this.outlineCache.get(selection);
+    if (!paths) {
+      paths = selectionOutlinePaths(selection);
+      this.outlineCache.set(selection, paths);
     }
-    if (!segs.length) return;
+    if (!paths.length) return;
     const px = 1 / (scale || 1);
+    // One subpath per outline, so the dash runs on around corners and along staircase edges.
     ctx.beginPath();
-    for (let i = 0; i < segs.length; i += 4) {
-      ctx.moveTo(segs[i], segs[i + 1]);
-      ctx.lineTo(segs[i + 2], segs[i + 3]);
+    for (const p of paths) {
+      ctx.moveTo(p[0], p[1]);
+      for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]);
     }
     ctx.lineWidth = px;
     ctx.strokeStyle = '#ffffff';
@@ -1110,6 +1111,7 @@ export class ImageEditorRenderer {
     ctx.stroke();
     if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
   }
+
 
   private drawDraftPath(ctx: CanvasRenderingContext2D, points: ImagePoint[], scale: number): void {
     const px = 1 / (scale || 1);
