@@ -310,14 +310,20 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
   const px = Math.min(w - 1, Math.max(0, Math.floor(target.point.x * scale)));
   const py = Math.min(h - 1, Math.max(0, Math.floor(target.point.y * scale)));
   // A box around the click with a band of background inside its edge: GrabCut as from a box,
-  // with the clicked pixels fixed to the object and only the piece holding them kept.
+  // with the clicked pixels fixed to the object and only the piece holding them kept. The object's
+  // colours are first learnt from a disk around the click, not the whole window: the window is
+  // mostly background, and starting from all of it the object took in whatever the band lacked
+  // (a shadow, a hill), and on reaching the whole image, everything.
   let half = Math.max(24, Math.round(0.3 * Math.max(w, h)));
+  let seed: number | null = null;
+  let reseeds = 0;
   for (;;) {
     const rx = Math.max(0, px - half);
     const ry = Math.max(0, py - half);
     const roi = { x: rx, y: ry, width: Math.min(w, px + half + 1) - rx, height: Math.min(h, py + half + 1) - ry };
     const whole = roi.width === w && roi.height === h;
     const band = Math.max(4, Math.round(0.15 * half));
+    const radius = seed ?? 0.3 * half;
     const n = roi.width * roi.height;
     const initial = new Uint8Array(n);
     const hardBg = new Uint8Array(n);
@@ -328,9 +334,10 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
     for (let y = 0; y < roi.height; y++) {
       for (let x = 0; x < roi.width; x++) {
         const p = y * roi.width + x;
+        const d = Math.hypot(rx + x - px, ry + y - py);
         if (inBand(x, y)) hardBg[p] = 1;
-        else initial[p] = 1;
-        if (Math.hypot(rx + x - px, ry + y - py) <= 1.5) hardFg[p] = 1;
+        else if (d <= radius) initial[p] = 1;
+        if (d <= 1.5) hardFg[p] = 1;
       }
     }
     const label = grabCutLabels(work, { roi, initial, hardBg, hardFg }, iterations, round);
@@ -345,6 +352,21 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
         }
       }
     }
+    if (!touches && reseeds < 2) {
+      // An object much smaller than the disk: its colours were learnt with the background's
+      // around it. Learn them again from a disk the size of what was found.
+      let found = 0;
+      let seeded = 0;
+      for (let p = 0; p < n; p++) {
+        found += label[p];
+        seeded += initial[p];
+      }
+      if (found * 2 < seeded) {
+        reseeds++;
+        seed = Math.max(2, 0.7 * Math.sqrt(found / Math.PI));
+        continue;
+      }
+    }
     if (!touches || whole) {
       report?.(0.9, 'Scaling up');
       const out = upscaleRegion(work, pixels, roi, label, enhance);
@@ -352,5 +374,6 @@ export function selectObjectIn(pixels: PixelBuffer, target: ObjectTarget, option
       return out;
     }
     half = Math.round(half * 1.6);
+    seed = null;
   }
 }

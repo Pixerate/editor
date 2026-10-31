@@ -173,10 +173,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - **Select Subject without a model picks the wrong thing:** it selects what stands out most from
   the image's border, which may be a bright sign rather than the person. When `method` is
   `saliency`, check with `capture_view`; if it's wrong, use `select_object` with a box.
-- **Object Selection takes part of the background:** inside the box, anything that looks
-  unlike the background around the box counts as the object. Tighten the box, or `subtract` a
-  `quick_select` stroke on the extra. With `point`, it may stop at an inner edge of a
-  multicoloured object: use a box instead.
+- **Object Selection takes part of the background:** without a model, anything in the box unlike
+  the background around it is the object (a shadow, a misty hill). Leave background on every side
+  (a box at the image's edge has none there), then `subtract` a `quick_select` stroke on extra.
+  `point` may stop at an inner edge, or miss parts coloured like the background: use a box.
 - **Quick Selection spills over a weak edge:** a stroke grows into neighbouring areas of a
   similar colour. Paint smaller strokes further from the edge, then a `subtract` stroke on the
   spill. Strokes near an edge also pull in the other side.
