@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ChannelsPanel, ImageEditor, RefineEdgePanel, SelectionOptionsBar, useImageEditor } from '../src/image-editor';
+import { ChannelsPanel, ImageEditor, PathsPanel, RefineEdgePanel, SelectionOptionsBar, useImageEditor } from '../src/image-editor';
 import {
   DEFAULT_SELECTION_TOOL_OPTIONS,
   ImageEditorController,
@@ -505,6 +505,36 @@ describe('React Select and Mask workspace', () => {
     await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' })));
     expect(container.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
     expect(controller.getSelection()).toBeNull();
+  });
+});
+
+describe('React PathsPanel', () => {
+  it('makes a work path, saves it, loads it as a selection, fills it and deletes it', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    await act(async () => root.render(<PathsPanel controller={controller} />));
+    expect(container.textContent).toContain('No paths');
+    expect(button('Make Work Path').disabled).toBe(true);
+    await act(async () => controller.selectRect({ x: 2, y: 2, width: 6, height: 5 }));
+    await act(async () => button('Make Work Path').click());
+    const row = () => container.querySelector('[data-testid="path-row"]') as HTMLElement;
+    expect(row().textContent).toBe('Work Path');
+    expect(row().getAttribute('aria-current')).toBe('true');
+    await act(async () => button('Save Path').click());
+    const input = container.querySelector('input[aria-label="Path name"]') as HTMLInputElement;
+    input.value = 'Box';
+    await act(async () => input.dispatchEvent(new win.FocusEvent('blur', { bubbles: true })));
+    await act(async () => input.dispatchEvent(new win.FocusEvent('focusout', { bubbles: true })));
+    expect(controller.getPaths()[0]).toMatchObject({ name: 'Box' });
+    expect(controller.getPaths()[0].work).toBeUndefined();
+    await act(async () => controller.deselect());
+    await act(async () => button('Load as Selection').click());
+    expect(controller.getSelection()!.bounds).toEqual({ x: 2, y: 2, width: 6, height: 5 });
+    await act(async () => controller.deselect());
+    await act(async () => button('Fill Path').click());
+    expect(controller.getSelection()).toBeNull();
+    await act(async () => button('Delete').click());
+    expect(controller.getPaths()).toHaveLength(0);
   });
 });
 

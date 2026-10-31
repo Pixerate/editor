@@ -186,3 +186,23 @@ export function vectorBlockForComponents(components: readonly ShapeComponent[], 
   });
   return writeVectorBlock({ subpaths, initialFill: subpaths.length === 0 && inverted }, (flags & ~VMSK_INVERT) | (inverted && subpaths.length ? VMSK_INVERT : 0));
 }
+
+/** Image resource ids of document paths: the Work Path, and the range saved paths use. */
+export const RESOURCE_WORK_PATH = 1025;
+export const RESOURCE_PATH_FIRST = 2000;
+export const RESOURCE_PATH_LAST = 2997;
+
+/** Shape components from a path resource (the path records of a saved path or the Work Path). */
+export function componentsFromPathResource(data: Uint8Array, width: number, height: number): { components: ShapeComponent[]; inverted: boolean } | null {
+  // A path resource is a vector block without its version and flags.
+  const block = new Uint8Array(8 + data.length);
+  new DataView(block.buffer).setUint32(0, 3);
+  block.set(data, 8);
+  const read = componentsFromVectorBlock(block, width, height);
+  return read ? { components: read.components, inverted: read.inverted } : null;
+}
+
+/** A path resource's data for shape components. */
+export function pathResourceForComponents(components: readonly ShapeComponent[], width: number, height: number): Uint8Array {
+  return vectorBlockForComponents(components, false, width, height).slice(8);
+}

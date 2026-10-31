@@ -96,25 +96,13 @@ drawing or editing either.
 
 ### Layer effects
 
-1. **Effects are live and per layer**: drop and inner shadows, outer and inner glows,
-   bevel & emboss, satin, colour / gradient / pattern overlays and strokes go on pixel,
-   annotation and group layers (not adjustment layers) and follow the layer's pixels as they
-   change. Add them with `add_layer_effect` (`kind` plus only the `settings` that differ from
-   Photoshop's defaults), tune them with `update_layer_effect` and read them back with
-   `list_layer_effects`. Each call is one undo step and returns the layer's effects. In the UI
-   they are the **Layer Style** section of **Layer Properties**; the separate **Effects** panel is
-   for provider effects (effect layers and filters), so say "layer style" when you tell the user
-   where a drop shadow or stroke lives.
-2. **Keep the ids**: `add_layer_effect` returns `effectId`; `update_layer_effect` and
-   `remove_layer_effect` need it. `list_layers` shows which layers have effects (ids and kinds
-   only).
-3. **Light consistently**: shadows and bevels follow the document's global light while
-   `useGlobalLight` is true (the default). Change the light for all of them with
-   `set_global_light`; give one effect its own `angle` only when it must differ.
-4. **Compare and size as a whole**: `set_layer_effects_enabled` with `enabled: false` hides
-   every effect of a layer (each keeps its own `enabled`); `scale` resizes them all (Scale
-   Effects), e.g. after resizing a layer's content.
-5. **Look after each change**: `render_preview` (with `layerId` for one layer alone).
+Live per-layer effects (shadows, glows, bevel, overlays, strokes): see `references/layer-effects.md`.
+
+### Paths
+
+1. **Keep outlines as paths**: `make_work_path` turns the selection into the Work Path (the next
+   one replaces it; `rename_path` saves it), `add_path` adds one from geometry.
+2. **Use them**: `path_to_selection` / `add_vector_mask` with `pathId`, `fill_path`, `stroke_path`.
 
 ### Painting
 
@@ -320,13 +308,23 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `remove_shape_component` | Delete one component (not the last: delete the layer instead). Returns the shape. |
 | `merge_shape_components` | Merge Shape Components: the combined area becomes one plain component (live shapes become paths); the look does not change. Returns the shape. |
 | `get_vector_mask` | Read-only. A layer's vector mask: enabled, linked, inverted, fill rule, density, feather, bounds and components (subpaths in document px), or null. Read it before editing the path. |
-| `add_vector_mask` | Layer › Vector Mask on any layer but a shape: `from` `path` (a `shape`, `subpaths` or `components`, like `add_shape_layer`), `selection` (traced, `tolerance` px), `reveal-all` or `hide-all` (empty path). Reveals inside the path, sharp at any size; it combines with the raster mask. Returns the vector mask. |
+| `add_vector_mask` | Layer › Vector Mask on any layer but a shape: `from` `path` (a `shape`, `subpaths` or `components`, like `add_shape_layer`, or a document path's `pathId`), `selection` (traced, `tolerance` px), `reveal-all` or `hide-all` (empty path). Reveals inside the path, sharp at any size; it combines with the raster mask. Returns the vector mask. |
 | `set_vector_mask_path` | Replace the vector mask's path (properties kept). Returns the vector mask. |
 | `set_vector_mask_properties` | `enabled`, `linked` (false: stays put when the layer moves), `inverted`, `density`, `feather` px; the path is kept. Returns the vector mask. |
 | `rasterize_vector_mask` | Multiply the path into the raster mask (adding one) and drop the vector mask, so it can be painted. Returns the mask summary. |
 | `remove_vector_mask` | Delete the vector mask (the raster mask stays). |
 | `selection_to_path` | Read-only. Make Work Path: the selection's outline as closed Bézier subpaths (`tolerance` px, `cornerRoundness`, `minArea`); returns `svg` and `fillRule: "evenodd"` to pass to `add_vector_mask`, `set_vector_mask_path` or `add_shape_layer`. |
-| `path_to_selection` | Make Selection: fill a path (`shape`, `subpaths`, `components`) into the selection by `mode`, with `feather` and `antiAlias`. Returns the selection. |
+| `path_to_selection` | Make Selection: fill a path (`shape`, `subpaths`, `components`, or a document path's `pathId`) into the selection by `mode`, with `feather` and `antiAlias`. Returns the selection. |
+| `list_paths` | Paths panel: saved paths and the Work Path (`work: true`) with ids, names, anchor counts and bounds. Read before the other path tools. |
+| `get_path` | One document path: summary, `svg` and `components` (anchors with handles) to edit and pass to `set_path_geometry`. |
+| `make_work_path` | Paths › Make Work Path: trace the selection into the Work Path (replacing the last one); `tolerance` px. Returns the path. |
+| `add_path` | A saved path from `shape`, `subpaths` (or SVG data) or `components`, with `name`. Returns the path. |
+| `set_path_geometry` | Replace a path's geometry (name kept). Returns the path. |
+| `rename_path` | Rename a path; renaming the Work Path saves it. Returns the path. |
+| `duplicate_path` | Copy a path as a saved path. Returns the copy. |
+| `delete_path` | Delete a path (undo brings it back). Returns the remaining paths. |
+| `fill_path` | Paths › Fill Path: fill a path's area on a pixel layer (`layerId`, `color`, `opacity`); the selection is untouched. |
+| `stroke_path` | Paths › Stroke Path: stroke along a path, `width` px centred, on a pixel layer; the selection is untouched. |
 | `convert_to_smart_object` | Convert sibling `layerIds` (default the active layer) to one smart object at the top one's position, optional `name`. One pixel layer keeps its id, look and properties (filters become smart filters); several layers, groups or adjustments nest as a layer document. Returns the `layer` and the `smartObject` summary. |
 | `rasterize_smart_object` | Turn a smart object into a pixel layer holding what it shows now (smart filters baked; same id, mask, effects, opacity, blend). Destructive: the contents and filters are gone. Returns the layer. |
 | `set_smart_object_transform` | Set a smart object's transform absolutely: `corners`, `matrix` (contents → document), or `scaleX` / `scaleY` (percent of the contents), `rotate`, `skewX`, `skewY`, `x`, `y` (where the contents' centre goes; unset numbers keep their values); `warp` preset or mesh in contents px, `null` removes it; `interpolation`. Re-renders from the contents. Returns `placement`, `masksMoved` and `bounds`. |
