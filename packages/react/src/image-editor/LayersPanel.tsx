@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ImageEditorController, ImageLayer, LayerMenuAction, LayerPanelRow, PixelBuffer } from '@pixerate/editor/image-editor';
 import { LayerEffectsPanel } from './LayerEffectsPanel';
 import { EdgeColorPanel } from './EdgeColorPanel';
+import { VectorMaskEdgesPanel } from './VectorMaskEdgesPanel';
 import {
   BIT_DEPTH_OPTIONS,
   BLEND_MODES,
@@ -284,6 +285,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({ controller, thumbnailS
       {active && (active.type === 'pixel' || active.type === 'shape' || active.type === 'type' || active.type === 'smart') && (
         <EdgeColorPanel key={active.id} controller={controller} layer={active} className="border-t border-border pt-1.5" />
       )}
+      {active?.vectorMask && <VectorMaskEdgesPanel controller={controller} layer={active} className="border-t border-border pt-1.5" />}
 
       {effects && active && active.type !== 'adjustment' && <LayerEffectsPanel controller={controller} className="border-t border-border pt-1.5" />}
 

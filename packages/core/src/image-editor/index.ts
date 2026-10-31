@@ -38,6 +38,7 @@ export * from './smart-tools';
 export * from './layers/shape';
 export * from './layers/vector-mask';
 export * from './layers/edge-color';
+export * from './layers/hybrid-mask';
 export * from './shape-tools';
 export * from './layers/text';
 export * from './layers/text-shapers';

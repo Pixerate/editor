@@ -6,7 +6,7 @@
  * the host; pixel layers can carry develop and blur filters; masks can be depth masks.
  */
 
-import { resolveVectorMasks } from './vector-mask';
+import { resolveVectorMasks, type LayerSurfaceOf } from './vector-mask';
 import { applyEdgeUnmix, hasEdgeUnmix, maskCoverageOverCanvas } from './edge-color';
 import { applyAdjustmentLayers, applyAdjustmentLayersFloat } from '../adjustment-layers';
 import { DeepCompositor } from '../../raster/deep-compositor';
@@ -138,6 +138,13 @@ function filterReach(filters: readonly LayerFilter[]): number {
 
 const filterSpecCache = new WeakMap<object, PixelFilterSpec | null>();
 
+/** The sources' surface lookup for hybrid vector masks' matte guide (pixel and smart object layers). */
+function guideSurfaces(sources: CompositorSources): LayerSurfaceOf | undefined {
+  const of = sources.surfaceOf;
+  if (!of) return undefined;
+  return (l) => (l.type === 'pixel' || l.type === 'smart' ? of(l) : undefined);
+}
+
 const maskIds = new WeakMap<object, number>();
 let nextMaskId = 1;
 const edgeSpecCache = new WeakMap<object, PixelFilterSpec>();
@@ -223,7 +230,7 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
 
   // Vector masks reach the engine as part of each layer's raster mask (see `resolveVectorMasks`).
   override composite(layers: readonly ImageLayer[], rect: RasterRect, sources: CompositorSources, options?: CompositeCallOptions): Uint8ClampedArray {
-    return super.composite(resolveVectorMasks(layers, sources.width, sources.height), rect, sources, options);
+    return super.composite(resolveVectorMasks(layers, sources.width, sources.height, guideSurfaces(sources)), rect, sources, options);
   }
 
   override compositeTiles(
@@ -233,11 +240,11 @@ export class LayerCompositor extends RasterCompositor<ImageLayer, CompositorSour
     onTile: (tx: number, ty: number, data: Uint8ClampedArray, changed: boolean) => void,
     options?: CompositeCallOptions
   ): void {
-    super.compositeTiles(resolveVectorMasks(layers, sources.width, sources.height), rect, sources, onTile, options);
+    super.compositeTiles(resolveVectorMasks(layers, sources.width, sources.height, guideSurfaces(sources)), rect, sources, onTile, options);
   }
 
   override tile(layers: readonly ImageLayer[], tx: number, ty: number, sources: CompositorSources): Uint8ClampedArray {
-    return super.tile(resolveVectorMasks(layers, sources.width, sources.height), tx, ty, sources);
+    return super.tile(resolveVectorMasks(layers, sources.width, sources.height, guideSurfaces(sources)), tx, ty, sources);
   }
 }
 
@@ -257,5 +264,5 @@ export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, s
       return { reach: filterReach(filters), apply: (data, width, height, linear) => runLayerFiltersFloat(data, width, height, filters, linear) };
     },
   }, depth);
-  return deep.composite(resolveVectorMasks(layers, sources.width, sources.height), rect, sources);
+  return deep.composite(resolveVectorMasks(layers, sources.width, sources.height, guideSurfaces(sources)), rect, sources);
 }

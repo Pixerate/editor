@@ -75,6 +75,24 @@ export interface VectorMask {
   density?: number;
   /** Gaussian feather σ in px (default 0). */
   feather?: number;
+  /**
+   * Hybrid mask: soft edge modes per path segment (see `hybridVectorMaskCoverage`); segments not
+   * listed are hard. Indices follow the path's components, subpaths and segments.
+   */
+  edges?: VectorMaskEdge[];
+}
+
+/** One segment's edge mode in a hybrid vector mask. */
+export interface VectorMaskEdge {
+  component: number;
+  subpath: number;
+  /** Segment index in the subpath (from anchor `segment` to the next). */
+  segment: number;
+  /** `feather`: a Gaussian falloff of `radius` px across the curve; `matte`: a corridor from `inner` px inside to `outer` px outside, solved from the layer's colours. */
+  mode: 'hard' | 'feather' | 'matte';
+  radius?: number;
+  inner?: number;
+  outer?: number;
 }
 
 /** The base sliders of the old document-level adjustments, as a filter on one layer. */

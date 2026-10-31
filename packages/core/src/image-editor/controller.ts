@@ -31,7 +31,9 @@ import { SelectionWorkerClient, runSelectionJob, serializeMask, type SelectionJo
 import type { SelectionProgress } from './selection/segment/work';
 import type { FocusAreaOptions } from './selection/segment/focus';
 import type { SkyOptions } from './selection/segment/sky';
-import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
+import { effectiveLayerMask, followLayerMove, isActiveVectorMask, layerGuide, vectorMaskBounds, vectorMaskCoverage } from './layers/vector-mask';
+import { subpathSegmentCount } from '../vector/geometry';
+import { VECTOR_MASK_EDGE_DEFAULTS, validVectorMaskEdges, vectorMaskSegments, type VectorMaskEdgeMode } from './layers/hybrid-mask';
 import { applyEdgeUnmix, hasEdgeUnmix, hasSoftBand, maskCoverageOverCanvas } from './layers/edge-color';
 import type { LayerEdgeColor } from '../raster/layers';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
@@ -98,6 +100,7 @@ import {
   type ShapeComponent,
   type ShapeFillRule,
   type VectorMask,
+  type VectorMaskEdge,
   type ShapeOperation,
   type ShapeLayer,
   type ShapePaint,
@@ -690,6 +693,10 @@ export interface VectorMaskInfo {
   /** Bounds of the path's anchors and handles (document px), or `null` for an empty path. */
   bounds: CropBox | null;
   components: Array<{ index: number; op: ShapeOperation; live: LiveShape | null; subpaths: VectorSubpath[] }>;
+  /** Hybrid mask: the segments with a soft edge mode (the rest are hard). */
+  edges: VectorMaskEdge[];
+  /** How many segments the path has (`{ component, subpath, segment }` address each). */
+  segmentCount: number;
 }
 
 export interface ShapeGeometryInput {
@@ -2669,6 +2676,10 @@ export class ImageEditorController {
   }
 
   /** The pixels a pixel layer, smart object or shape composites (the decoded source for the Background). */
+  /** A layer's real pixels for hybrid vector masks' matte guide (the Background's from the source). */
+  private readonly guideSurfaceOf = (layer: ImageLayer): PixelSurface | undefined =>
+    layer.type === 'pixel' || layer.type === 'smart' || layer.type === 'shape' || layer.type === 'type' ? this.surfaceOf(layer) : undefined;
+
   private surfaceOf(layer: PixelLayer | SmartObjectLayer | ShapeLayer | TypeLayer): PixelSurface {
     if (layer.type !== 'pixel' || layer.source !== 'document') return layer.surface;
     return this.sourceSurface() ?? layer.surface;
@@ -2906,7 +2917,7 @@ export class ImageEditorController {
   /** Whether the layer's mask (painted and vector, with feather) has a soft band. */
   private maskHasSoftBand(layer: ImageLayer): boolean {
     const { width, height } = this.naturalSize;
-    const mask = effectiveLayerMask(layer, width, height);
+    const mask = effectiveLayerMask(layer, width, height, this.guideSurfaceOf);
     if (!mask || mask.enabled === false || mask.source) return false;
     const ox = layer.type === 'pixel' ? layer.offset.x : 0;
     const oy = layer.type === 'pixel' ? layer.offset.y : 0;
@@ -3318,7 +3329,11 @@ export class ImageEditorController {
       this.commitLayers(layers, undefined, commitToHistory);
     } else {
       const { vm } = this.requireVectorMask(target.layerId);
-      this.commitLayers(mapLayer(this.state.layers, target.layerId, (l) => ({ ...l, vectorMask: { ...vm, components: next } }) as ImageLayer), undefined, commitToHistory);
+      const edges = validVectorMaskEdges(vm.edges, next);
+      const nextVm: VectorMask = { ...vm, components: next };
+      if (edges.length) nextVm.edges = edges;
+      else delete nextVm.edges;
+      this.commitLayers(mapLayer(this.state.layers, target.layerId, (l) => ({ ...l, vectorMask: nextVm }) as ImageLayer), undefined, commitToHistory);
     }
   }
 
@@ -3424,6 +3439,9 @@ export class ImageEditorController {
   public setVectorMaskPath(id: string, path: VectorMaskPathInput): VectorMask {
     const { vm } = this.requireVectorMask(id);
     const next: VectorMask = { ...vm, components: this.vectorMaskComponents(path) };
+    const kept = validVectorMaskEdges(vm.edges, next.components);
+    if (kept.length) next.edges = kept;
+    else delete next.edges;
     if (path.fillRule === 'evenodd') next.fillRule = 'evenodd';
     else if (path.fillRule === 'nonzero') delete next.fillRule;
     this.commitLayers(mapLayer(this.state.layers, id, (l) => ({ ...l, vectorMask: next }) as ImageLayer));
@@ -3476,7 +3494,7 @@ export class ImageEditorController {
     const { width, height } = this.canvasSize;
     const raster = layer.mask;
     const plain = { ...layer, vectorMask: { ...layer.vectorMask!, enabled: true }, mask: raster ? { surface: raster.surface, defaultValue: raster.defaultValue } : undefined } as ImageLayer;
-    const baked = effectiveLayerMask(plain, width, height)!;
+    const baked = effectiveLayerMask(plain, width, height, this.guideSurfaceOf)!;
     const mask: RasterMask = raster ? { ...raster, surface: baked.surface, defaultValue: baked.defaultValue } : baked;
     this.commitLayers(
       mapLayer(this.state.layers, id, (l) => {
@@ -3515,7 +3533,62 @@ export class ImageEditorController {
       feather: vm.feather ?? 0,
       bounds: b ? { x: r(b.x), y: r(b.y), width: r(b.width), height: r(b.height) } : null,
       components: vm.components.map((c, index) => ({ index, op: c.op, live: c.live ? JSON.parse(JSON.stringify(c.live)) : null, subpaths: roundSubpaths(c.subpaths) })),
+      edges: validVectorMaskEdges(vm.edges, vm.components).map((e) => ({ ...e })),
+      segmentCount: vectorMaskSegments(vm.components).length,
     };
+  }
+
+  /**
+   * Hybrid mask: a vector mask segment's edge mode. `hard` (the default) is the path's own sharp
+   * edge; `feather` blurs across it by `radius` px (default 4); `matte` solves a corridor from
+   * `inner` px inside to `outer` px outside (defaults 4 and 8) from the layer's colours, for hair
+   * and fur. Modes blend where they meet. One undo step. Returns the vector mask's info.
+   */
+  public setVectorMaskEdge(
+    id: string,
+    at: { component: number; subpath: number; segment: number },
+    mode: VectorMaskEdgeMode,
+    options: { radius?: number; inner?: number; outer?: number } = {},
+    commitToHistory = true
+  ): VectorMaskInfo {
+    const { layer, vm } = this.requireVectorMask(id);
+    const name = layer.name || id;
+    const sp = vm.components[at.component]?.subpaths[at.subpath];
+    const count = sp ? subpathSegmentCount(sp) : 0;
+    if (!sp || !Number.isInteger(at.segment) || at.segment < 0 || at.segment >= count) {
+      const where = vm.components.map((c, ci) => c.subpaths.map((p, si) => `component ${ci} subpath ${si}: segments 0..${subpathSegmentCount(p) - 1}`).join('; ')).join('; ');
+      throw new LayerOperationError(`The vector mask of "${name}" has no segment ${at.component}/${at.subpath}/${at.segment}; it has ${where || 'no segments'} (see get_vector_mask).`);
+    }
+    if (mode !== 'hard' && mode !== 'feather' && mode !== 'matte') throw new LayerOperationError(`mode must be hard, feather or matte, got "${String(mode)}".`);
+    const num = (v: number | undefined, what: string, lo: number, hi: number) => {
+      if (v === undefined) return undefined;
+      if (!(typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi)) throw new LayerOperationError(`${what} must be ${lo} to ${hi} px, got ${String(v)}.`);
+      return v;
+    };
+    const radius = num(options.radius, 'radius', 0.5, 250);
+    const inner = num(options.inner, 'inner', 0.5, 200);
+    const outer = num(options.outer, 'outer', 0.5, 200);
+    if (mode !== 'feather' && radius !== undefined) throw new LayerOperationError('radius is for feather edges; matte edges take inner and outer.');
+    if (mode !== 'matte' && (inner !== undefined || outer !== undefined)) throw new LayerOperationError('inner and outer are for matte edges; feather edges take radius.');
+    const same = (e: VectorMaskEdge) => e.component === at.component && e.subpath === at.subpath && e.segment === at.segment;
+    const edges = validVectorMaskEdges(vm.edges, vm.components).filter((e) => !same(e));
+    if (mode === 'feather') edges.push({ ...at, mode, radius: radius ?? VECTOR_MASK_EDGE_DEFAULTS.radius });
+    else if (mode === 'matte') edges.push({ ...at, mode, inner: inner ?? VECTOR_MASK_EDGE_DEFAULTS.inner, outer: outer ?? VECTOR_MASK_EDGE_DEFAULTS.outer });
+    const next: VectorMask = { ...vm };
+    if (edges.length) next.edges = edges;
+    else delete next.edges;
+    this.commitLayers(mapLayer(this.state.layers, layer.id, (l) => ({ ...l, vectorMask: next }) as ImageLayer), undefined, commitToHistory);
+    return this.getVectorMask(layer.id)!;
+  }
+
+  /** A layer's vector mask over the canvas as a selection mask, hybrid edges, feather and density included. */
+  private vectorMaskSelection(layer: ImageLayer): SelectionMask {
+    const { width, height } = this.naturalSize;
+    const vm = layer.vectorMask!;
+    const v = vectorMaskCoverage(vm, width, height, vm.edges?.length ? layerGuide(layer, width, height, this.guideSurfaceOf) : null);
+    const bytes = new Uint8Array(v.length);
+    for (let i = 0; i < v.length; i++) bytes[i] = Math.round(v[i] * 255);
+    return createSelectionMask(width, height, bytes);
   }
 
   /** Changes any layer mask's density, feather, enabled or linked flag (pixels kept). Returns the mask. */
@@ -6679,9 +6752,8 @@ export class ImageEditorController {
         mask = this.layerMaskCoverage(layer.id);
         if (!mask) throw new LayerOperationError(`Layer "${layer.name || layer.id}" has no painted mask; add one with add_layer_mask, or inspect its vector-mask.`);
       } else {
-        const { vm } = this.requireVectorMask(layer.id);
-        mask = pathToSelectionMask(vm.components, width, height, { fillRule: vm.fillRule });
-        if (vm.inverted) mask = invertSelectionMask(mask);
+        this.requireVectorMask(layer.id);
+        mask = this.vectorMaskSelection(layer);
       }
       if (!mask.bounds) throw new LayerOperationError(`The ${target} of "${layer.name || layer.id}" hides everything: there is no edge to inspect.`);
     } else {
@@ -6758,9 +6830,8 @@ export class ImageEditorController {
       case 'vector-mask': {
         const layer = this.getLayer(source.layerId);
         if (!layer) throw new LayerOperationError(`There is no layer "${source.layerId}" (see list_layers).`);
-        const { vm } = this.requireVectorMask(layer.id);
-        const mask = pathToSelectionMask(vm.components, width, height, { fillRule: vm.fillRule });
-        return vm.inverted ? invertSelectionMask(mask) : mask;
+        this.requireVectorMask(layer.id);
+        return this.vectorMaskSelection(layer);
       }
       default:
         throw new LayerOperationError(`Unknown selection source ${JSON.stringify(source)}. Use selection, history, channel, layer-mask or vector-mask.`);
@@ -8189,6 +8260,13 @@ export class ImageEditorController {
       const p = await prepareLayer(layer);
       // Edge colour is baked (decontamination, despill) or has no PSD form (the live cast).
       if (p?.edge) delete (p as { edge?: unknown }).edge;
+      // A hybrid vector mask has no PSD form: its coverage goes into the pixel mask.
+      if (p && isActiveVectorMask(layer.vectorMask) && layer.vectorMask.edges?.length) {
+        add('Hybrid vector masks (soft edge segments) were baked into pixel masks', layer.name);
+        const baked = effectiveLayerMask(layer, width, height, this.guideSurfaceOf);
+        if (baked) p.mask = baked;
+        delete p.vectorMask;
+      }
       // `exportPsd` writes it as Normal; the merged image keeps the paint mix.
       if (p?.blend === 'pigment') add('The Pigment blend mode has no PSD equivalent and was written as Normal', layer.name);
       return p;
@@ -8267,7 +8345,7 @@ export class ImageEditorController {
       }
       if (layer.filters?.some((f) => !f.enabled)) add('Disabled layer filters were left out', layer.name);
       delete out.filters;
-      const unmixMask = hasEdgeUnmix(layer.edge) ? effectiveLayerMask(layer, width, height) : undefined;
+      const unmixMask = hasEdgeUnmix(layer.edge) ? effectiveLayerMask(layer, width, height, this.guideSurfaceOf) : undefined;
       if (unmixMask && !unmixMask.source && unmixMask.enabled !== false) {
         add('Edge decontamination and despill were baked into the pixels', layer.name);
         const { x: ox, y: oy } = layer.offset;

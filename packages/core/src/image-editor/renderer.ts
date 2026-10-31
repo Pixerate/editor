@@ -649,10 +649,23 @@ export class ImageEditorRenderer {
           else ctx.lineTo(b.x, b.y);
         };
         ctx.beginPath();
-        e.curves.forEach(trace);
+        e.curves.forEach((c, i) => (e.curveModes?.[i] ?? 'hard') === 'hard' && trace(c));
         ctx.lineWidth = 1.5 * u;
         ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
         ctx.stroke();
+        // A hybrid vector mask's soft segments: feather amber and dashed, matte magenta and wide.
+        for (const [mode, color, width, dash] of [['feather', '#f59e0b', 2, [5, 3]], ['matte', '#d946ef', 3, []]] as const) {
+          if (!e.curveModes?.includes(mode)) continue;
+          ctx.beginPath();
+          e.curves.forEach((c, i) => e.curveModes![i] === mode && trace(c));
+          ctx.lineWidth = width * u;
+          ctx.strokeStyle = color;
+          ctx.setLineDash(dash.map((d) => d * u));
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.lineWidth = 1.5 * u;
+        ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
         if (e.preview) {
           ctx.beginPath();
           trace(e.preview);

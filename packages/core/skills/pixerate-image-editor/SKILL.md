@@ -310,10 +310,11 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `add_shape_component` | Add a live shape or path to a shape layer with `op` (`combine`, `subtract`, `intersect`, `exclude`), on top unless `index`. Use it for cut-outs, rings, badges. Returns the shape. |
 | `remove_shape_component` | Delete one component (not the last: delete the layer instead). Returns the shape. |
 | `merge_shape_components` | Merge Shape Components: the combined area becomes one plain component (live shapes become paths); the look does not change. Returns the shape. |
-| `get_vector_mask` | Read-only. A layer's vector mask: enabled, linked, inverted, fill rule, density, feather, bounds and components (subpaths in document px), or null. Read it before editing the path. |
+| `get_vector_mask` | Read-only. A layer's vector mask: enabled, linked, inverted, fill rule, density, feather, bounds, components (subpaths in document px), `edges` (hybrid soft segments) and `segmentCount`, or null. Read it before editing the path. |
 | `add_vector_mask` | Layer › Vector Mask on any layer but a shape: `from` `path` (a `shape`, `subpaths` or `components`, like `add_shape_layer`, or a document path's `pathId`), `selection` (traced, `tolerance` px), `reveal-all` or `hide-all` (empty path). Reveals inside the path, sharp at any size; it combines with the raster mask. Returns the vector mask. |
 | `set_vector_mask_path` | Replace the vector mask's path (properties kept). Returns the vector mask. |
 | `set_vector_mask_properties` | `enabled`, `linked` (false: stays put when the layer moves), `inverted`, `density`, `feather` px; the path is kept. Returns the vector mask. |
+| `set_vector_mask_edge` | Hybrid mask: one segment's edge (`component`, `subpath`, `segment`): `hard` (default), `feather` (`radius` px) or `matte` (a corridor `inner` px in to `outer` px out, solved from the layer's colours, for hair and fur). Modes blend where they meet. Check with `inspect_mask_edge` `target: "vector-mask"`. Returns the vector mask. |
 | `rasterize_vector_mask` | Multiply the path into the raster mask (adding one) and drop the vector mask, so it can be painted. Returns the mask summary. |
 | `remove_vector_mask` | Delete the vector mask (the raster mask stays). |
 | `selection_to_path` | Read-only. Make Work Path: the selection's outline as closed Bézier subpaths (`tolerance` px, `cornerRoundness`, `minArea`); returns `svg` and `fillRule: "evenodd"` to pass to `add_vector_mask`, `set_vector_mask_path` or `add_shape_layer`. |

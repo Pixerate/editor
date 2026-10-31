@@ -18,6 +18,7 @@ export * from './LayersPanel';
 export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';
 export * from './EdgeColorPanel';
+export * from './VectorMaskEdgesPanel';
 export * from './BrushOptionsBar';
 export * from './FreeTransformOptionsBar';
 export * from './ShapeOptionsBar';

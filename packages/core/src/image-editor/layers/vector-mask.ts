@@ -12,6 +12,7 @@ import { gaussianBlur } from '../../raster/blur';
 import type { ImageLayer, RasterMask, ShapeComponent, VectorMask } from './model';
 import { componentPath, componentsCoverage, mapSubpaths, transformShapeComponents } from './shape';
 import { flattenPath } from './vector-raster';
+import { hybridVectorMaskCoverage } from './hybrid-mask';
 
 /** Whether a vector mask takes part in compositing. */
 export function isActiveVectorMask(vm: VectorMask | undefined): vm is VectorMask {
@@ -19,11 +20,13 @@ export function isActiveVectorMask(vm: VectorMask | undefined): vm is VectorMask
 }
 
 /**
- * The vector mask's coverage (0..1) over the `width × height` canvas, with its feather and
- * density applied.
+ * The vector mask's coverage (0..1) over the `width × height` canvas, with its hybrid edges,
+ * feather and density applied.
  */
-export function vectorMaskCoverage(vm: VectorMask, width: number, height: number): Float32Array {
+export function vectorMaskCoverage(vm: VectorMask, width: number, height: number, guide: ArrayLike<number> | null = null): Float32Array {
   let v: Float32Array = componentsCoverage(vm.components, { x: 0, y: 0, width, height }, vm.fillRule ?? 'nonzero', vm.inverted === true);
+  // Hybrid edges (feathered and matte segments); `guide` is the layer's RGBA for matte corridors.
+  if (vm.edges?.length) v = hybridVectorMaskCoverage(vm, v, width, height, guide);
   if ((vm.feather ?? 0) > 0) v = gaussianBlur(v, width, height, vm.feather!, 'clamp');
   const density = vm.density ?? 1;
   if (density !== 1) for (let i = 0; i < v.length; i++) v[i] = 1 - density * (1 - v[i]);
@@ -48,17 +51,28 @@ function rasterCoverage(mask: RasterMask, ox: number, oy: number, width: number,
 
 const layerOffset = (layer: ImageLayer) => (layer.type === 'pixel' ? layer.offset : { x: 0, y: 0 });
 
+/** Where a layer's pixels really are (the Background's come from the source image). */
+export type LayerSurfaceOf = (layer: ImageLayer) => Parameters<typeof readRegion>[0] | undefined;
+
+/** A layer's own RGBA over the canvas (the guide for hybrid matte edges), or null without pixels. */
+export function layerGuide(layer: ImageLayer, width: number, height: number, surfaceOf?: LayerSurfaceOf): Uint8ClampedArray | null {
+  const surface = surfaceOf?.(layer) ?? (layer as { surface?: Parameters<typeof readRegion>[0] }).surface;
+  if (!surface || surface.channels !== 4) return null;
+  const { x: ox, y: oy } = layerOffset(layer);
+  return readRegion(surface, { x: -ox, y: -oy, width, height });
+}
+
 /**
  * The raster mask a layer composites with: its raster mask times its vector mask (layer space,
  * feather and density baked in), or the raster mask alone when there is no active vector mask.
  * A depth (parametric) mask cannot be combined, so it wins.
  */
-export function effectiveLayerMask(layer: ImageLayer, width: number, height: number): RasterMask | undefined {
+export function effectiveLayerMask(layer: ImageLayer, width: number, height: number, surfaceOf?: LayerSurfaceOf): RasterMask | undefined {
   const vm = layer.vectorMask;
   const raster = layer.mask;
   if (!isActiveVectorMask(vm) || raster?.source || width < 1 || height < 1) return raster;
   const { x: ox, y: oy } = layerOffset(layer);
-  const v = vectorMaskCoverage(vm, width, height);
+  const v = vectorMaskCoverage(vm, width, height, vm.edges?.length ? layerGuide(layer, width, height, surfaceOf) : null);
   let outside = outsideValue(vm);
   if (raster && raster.enabled !== false) {
     const r = rasterCoverage(raster, ox, oy, width, height);
@@ -91,18 +105,18 @@ function hasVectorMask(layers: readonly ImageLayer[]): boolean {
  * copy whose `mask` is `effectiveLayerMask` (cached per layer object and canvas size, so the
  * engine's tile caches keep working). Returns `layers` itself when there are none.
  */
-export function resolveVectorMasks(layers: readonly ImageLayer[], width: number, height: number): readonly ImageLayer[] {
+export function resolveVectorMasks(layers: readonly ImageLayer[], width: number, height: number, surfaceOf?: LayerSurfaceOf): readonly ImageLayer[] {
   if (!hasVectorMask(layers)) return layers;
-  return layers.map((l) => resolveLayer(l, width, height));
+  return layers.map((l) => resolveLayer(l, width, height, surfaceOf));
 }
 
-function resolveLayer(layer: ImageLayer, width: number, height: number): ImageLayer {
+function resolveLayer(layer: ImageLayer, width: number, height: number, surfaceOf?: LayerSurfaceOf): ImageLayer {
   let next = layer;
   if (layer.type === 'group' && hasVectorMask(layer.children)) {
     const key = `${width}x${height}`;
     const hit = resolved.get(layer);
     if (hit?.key === key) return hit.layer;
-    next = { ...layer, children: layer.children.map((c) => resolveLayer(c, width, height)) };
+    next = { ...layer, children: layer.children.map((c) => resolveLayer(c, width, height, surfaceOf)) };
     if (!isActiveVectorMask(layer.vectorMask)) {
       resolved.set(layer, { key, layer: next });
       return next;
@@ -112,7 +126,7 @@ function resolveLayer(layer: ImageLayer, width: number, height: number): ImageLa
   const key = `${width}x${height}:v`;
   const hit = resolved.get(layer);
   if (hit?.key === key) return hit.layer;
-  const mask = effectiveLayerMask(layer, width, height);
+  const mask = effectiveLayerMask(layer, width, height, surfaceOf);
   // The copy drops `vectorMask`: it is in `mask` now, and resolving again must not apply it twice.
   const out = { ...next, mask } as ImageLayer;
   delete out.vectorMask;

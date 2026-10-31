@@ -238,3 +238,21 @@ describe('React EdgeColorPanel', () => {
     expect(c.getLayer(hard)!.edge).toBeUndefined();
   });
 });
+
+describe('React VectorMaskEdgesPanel', () => {
+  it('lists soft vector mask edges and edits their mode and settings', async () => {
+    const c = controller();
+    const id = c.addPixelLayer({ name: 'Cutout', color: '#ff0000' });
+    c.addVectorMask(id, 'path', { shape: { kind: 'rect', x: 4, y: 2, width: 10, height: 6 } });
+    c.setVectorMaskEdge(id, { component: 0, subpath: 0, segment: 1 }, 'feather');
+    await act(async () => root.render(<LayersPanel controller={c} />));
+    expect(container.querySelectorAll('[data-testid="vector-mask-edge"]')).toHaveLength(1);
+    await act(async () => setValue(container.querySelector('select[aria-label="Edge mode"]') as HTMLSelectElement, 'matte'));
+    expect(c.getVectorMask(id)!.edges[0]).toMatchObject({ mode: 'matte', inner: 4, outer: 8 });
+    await act(async () => setValue(container.querySelector('input[aria-label="Edge matte outer"]') as HTMLInputElement, '12'));
+    expect(c.getVectorMask(id)!.edges[0]).toMatchObject({ mode: 'matte', outer: 12 });
+    await act(async () => setValue(container.querySelector('select[aria-label="Edge mode"]') as HTMLSelectElement, 'hard'));
+    expect(c.getVectorMask(id)!.edges).toEqual([]);
+    expect(container.querySelectorAll('[data-testid="vector-mask-edge"]')).toHaveLength(0);
+  });
+});
