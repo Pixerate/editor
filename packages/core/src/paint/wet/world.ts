@@ -1658,6 +1658,50 @@ export class WetWorld {
   }
 }
 
+/** A layer's base and flow map in a moved snapshot (see `moveWetSnapshot`). */
+export interface WetSnapshotLaneMove {
+  base?: TiledSurface;
+  flow?: WetFlowField | null;
+}
+
+/**
+ * `snap`, taken from a world `from` pixels in size, moved by (`dx`, `dy`) pixels for a world `to`
+ * pixels in size (a canvas grown on any side): every wet tile, with its water, pigment and
+ * deposits, lands `dx` / `dy` further right / down. The shift has to be whole wet tiles
+ * (`WET_TILE`); tiles that land outside `to` are dropped. `lane` gives each layer's base and flow
+ * map in the new coordinates (default: as they were). Restore it into a world of `to`'s size.
+ */
+export function moveWetSnapshot(
+  snap: WetSnapshot,
+  from: { width: number; height: number },
+  to: { width: number; height: number },
+  dx: number,
+  dy: number,
+  lane: (l: WetSnapshot['lanes'][number]) => WetSnapshotLaneMove = () => ({})
+): WetSnapshot {
+  if (!Number.isInteger(dx / WET_TILE) || !Number.isInteger(dy / WET_TILE)) throw new WetWorldError(`Wet paint moves by whole ${WET_TILE} px tiles, not (${dx}, ${dy}).`);
+  const a = makeLayout(from.width, from.height);
+  const b = makeLayout(to.width, to.height);
+  const tx0 = dx / WET_TILE;
+  const ty0 = dy / WET_TILE;
+  const slots = new Map<number, { planes: Float32Array; last: number }>();
+  let bytes = 0;
+  for (const [key, slot] of snap.slots) {
+    const index = Math.floor(key / a.perLane);
+    const t = key % a.perLane;
+    const tx = (t % a.tilesX) + tx0;
+    const ty = Math.floor(t / a.tilesX) + ty0;
+    if (tx < 0 || ty < 0 || tx >= b.tilesX || ty >= b.tilesY) continue;
+    slots.set(index * b.perLane + ty * b.tilesX + tx, slot);
+    bytes += slot.planes.byteLength;
+  }
+  const lanes = snap.lanes.map((l) => {
+    const moved = lane(l);
+    return { ...l, base: moved.base ?? l.base, flow: moved.flow === undefined ? l.flow : moved.flow };
+  });
+  return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, bytes };
+}
+
 function unionRect(a: RasterRect | null, b: RasterRect): RasterRect {
   if (!a) return { ...b };
   const x = Math.min(a.x, b.x);

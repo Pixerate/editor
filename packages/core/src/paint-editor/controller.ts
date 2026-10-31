@@ -724,9 +724,11 @@ export class PaintEditorController {
    * move by (left, top) in document pixels, `document.origin` moves by (−left, −top), and the view
    * pans so the picture stays still on screen.
    *
-   * Wet paint dries first (the wet simulation is canvas-sized), as with `setCanvas`; one undo step
-   * (undo brings back the old size, origin and guides, and the wet paint). Returns the new canvas,
-   * where it sits in the previous document's pixels, and the origin.
+   * Wet paint stays wet and moves with the picture when `left` and `top` are whole 256 px tiles
+   * (so a host growing a canvas while someone paints should grow it in tile steps); otherwise it
+   * dries first (the wet simulation is canvas-sized), as with `setCanvas`. One undo step (undo
+   * brings back the old size, origin and guides, and the wet paint). Returns the new canvas, where
+   * it sits in the previous document's pixels, and the origin.
    */
   extendCanvas(by: PaintCanvasExtension): PaintCanvasExtended {
     this.requireIdle('extending the canvas');
@@ -746,16 +748,32 @@ export class PaintEditorController {
     if (width > MAX_CANVAS_SIDE || height > MAX_CANVAS_SIDE) {
       throw new PaintEditorError(`The canvas would be ${width}×${height}; the limit is ${MAX_CANVAS_SIDE} px per side. Extend by less (it is ${was.width}×${was.height} now).`);
     }
+    // Wet layers whose paint moves still wet (their pixels are in canvas space, like the simulation's)
+    let keptWet: string[] = [];
     if (this.wet.world) {
-      // The wet simulation is canvas-sized: the paint dries first (one undo step with the change).
       this.requireWetIdle('extending the canvas');
-      this.dryLayersFirst(this.wet.wetLayerIds());
-      // Keep each layer's wet settings (a flow map's centre moves with the paint).
-      const settings = [...this.wet.settings];
-      this.wet.reset();
-      for (const [id, s] of settings) this.wet.settings.set(id, s.flow.center ? { ...s, flow: { ...s.flow, center: { x: s.flow.center.x + left, y: s.flow.center.y + top } } } : s);
+      if (this.wet.canExtend(left, top)) {
+        keptWet = this.wet.wetLayerIds();
+        if (keptWet.length) this.beginWetOp();
+      } else {
+        // The wet simulation is canvas-sized: the paint dries first (one undo step with the change).
+        this.dryLayersFirst(this.wet.wetLayerIds());
+      }
     }
-    const next: PaintDocumentState = { ...shiftDocument(this.withWetEvents(this.doc), left, top), canvas: { ...was, width, height } };
+    let next: PaintDocumentState = { ...shiftDocument(this.withWetEvents(this.doc), left, top), canvas: { ...was, width, height } };
+    for (const id of keptWet) {
+      const l = findLayer(next.layers, id)?.layer;
+      if (isPixelLayer(l)) next = { ...next, layers: mapLayer(next.layers, id, () => ({ ...l, surface: translateSurface(l.surface, l.offset.x, l.offset.y), offset: { x: 0, y: 0 } })) };
+    }
+    if (this.wet.world) {
+      if (keptWet.length) this.wet.extend(width, height, left, top, next.paper);
+      else {
+        // Keep each layer's wet settings (a flow map's centre moves with the paint).
+        const settings = [...this.wet.settings];
+        this.wet.reset();
+        for (const [id, s] of settings) this.wet.settings.set(id, s.flow.center ? { ...s, flow: { ...s.flow, center: { x: s.flow.center.x + left, y: s.flow.center.y + top } } } : s);
+      }
+    }
     // The new centre is (right − left, bottom − top) / 2 from the old one: pan by that on screen.
     const m = viewMatrix(this.view, was, { width: 0, height: 0 });
     const dx = (right - left) / 2;
@@ -764,6 +782,8 @@ export class PaintEditorController {
     const guidesBefore = this.guides;
     if (left || top) this.restoreGuides(shiftGuides(this.guides, left, top));
     this.commit('Extend canvas', next);
+    // The wet layers show the moved simulation (the same picture), now the document is the new size
+    if (keptWet.length) this.wet.syncDisplays();
     if (this.guides !== guidesBefore) this.undoStack[this.undoStack.length - 1].guides = { before: guidesBefore, after: this.guides };
     const origin = { ...(next.origin ?? { x: 0, y: 0 }) };
     return { canvas: { ...next.canvas }, rect: { x: 0 - left, y: 0 - top, width, height }, origin };

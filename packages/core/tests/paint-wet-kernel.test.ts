@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { WetWorld, flowField, normalizeFlow, pigmentOf, type WetPaperInput } from '../src/paint';
+import { WetWorld, flowField, moveWetSnapshot, normalizeFlow, pigmentOf, type WetPaperInput } from '../src/paint';
+import { WET_TILE } from '../src/paint/wet/model';
 import { WET_KERNEL_SOURCE_HASH } from '../src/paint/wet/kernel-wasm';
 
 const paper: WetPaperInput = {
@@ -160,4 +161,38 @@ describe('wet kernel', () => {
     expect(b.clock).toBe(a.clock);
     expect(digest(b)).toBe(digest(a));
   }, 300000);
+});
+
+describe('moveWetSnapshot', () => {
+  const wetWorld = () => {
+    const w = new WetWorld(600, 420, paper, { kernel: 'typescript', threads: 0 });
+    w.ensureLane('a');
+    w.paint('a', { x: 10, y: 10, width: 20, height: 20 }, null, 0.5, pigmentOf([0.1, 0.2, 0.8], 0).map((v) => v * 0.06));
+    w.paint('a', { x: 540, y: 380, width: 20, height: 20 }, null, 0.5, pigmentOf([0.8, 0.2, 0.1], 0).map((v) => v * 0.06));
+    return w;
+  };
+
+  it('moves every wet tile by whole tiles into a larger world, which then holds the same paint', () => {
+    const w = wetWorld();
+    const moved = moveWetSnapshot(w.snapshot(), w, { width: 1000, height: 700 }, WET_TILE, 0);
+    const big = new WetWorld(1000, 700, paper, { kernel: 'typescript', threads: 0 });
+    big.restore(moved);
+    expect(big.activeTiles()).toBe(w.activeTiles());
+    expect(big.waterAt('a', 20 + WET_TILE, 20)).toBeCloseTo(w.waterAt('a', 20, 20), 6);
+    expect(big.waterAt('a', 550 + WET_TILE, 390)).toBeCloseTo(w.waterAt('a', 550, 390), 6);
+    expect(big.waterAt('a', 20, 20)).toBe(0);
+  });
+
+  it('drops tiles that land outside the new world', () => {
+    const w = wetWorld();
+    const moved = moveWetSnapshot(w.snapshot(), w, { width: 600, height: 420 }, WET_TILE, 0);
+    const tilesX = Math.ceil(600 / WET_TILE);
+    expect([...moved.slots.keys()].every((k) => k % (tilesX * Math.ceil(420 / WET_TILE)) % tilesX >= 1)).toBe(true);
+    expect(moved.slots.size).toBeLessThan(w.snapshot().slots.size);
+  });
+
+  it('refuses a shift that is not whole tiles', () => {
+    const w = wetWorld();
+    expect(() => moveWetSnapshot(w.snapshot(), w, { width: 700, height: 420 }, 100, 0)).toThrow(/whole 256 px tiles/);
+  });
 });
