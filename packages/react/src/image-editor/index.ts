@@ -8,6 +8,7 @@ export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './MaskEdgeCheck';
+export * from './SelectionChangeCheck';
 export * from './SelectAndMaskWorkspace';
 export * from './ContentAwareFillWorkspace';
 export * from './ChannelsPanel';

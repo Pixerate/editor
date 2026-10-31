@@ -65,8 +65,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
      can open the same edits in the workspace. With a host model, `refineMode: "object"`
      refines from the model's outline.
    - `shiftEdge` −10..−30 % tightens a refined edge that picked up background.
-   **Check:** `percent` changed by roughly what you intended (a few percent at most for a
-   cleanup).
+   **Check:** `compare_selections` after the step: `added` / `removed` are what you meant and
+   `iou` stays near 1 for a cleanup (it tints the change on the canvas).
 5. **Output.** Choose by goal:
    - A local adjustment: `add_adjustment_layer` while the selection is active (it is masked
      by it), or `apply_selection_as_mask` with `kind`. Filters (`apply_effect`,
@@ -239,7 +239,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only
-- `inspect_mask_edge`: measured halo, alignment, jaggedness, softness, holes and islands of an edge
+- `inspect_mask_edge`, `compare_selections`: measure an edge (halo, alignment, jaggedness, holes, islands) and what a step changed (IoU)
 - `set_edge_decontamination`, `set_edge_despill`, `set_edge_ambient`, `get_edge_color`: live edge colour on a masked cutout
 - `capture_view`, `render_preview`: look at the edge at pixel level; check the result
 - `apply_selection_as_mask`: a masked adjustment layer in one step
