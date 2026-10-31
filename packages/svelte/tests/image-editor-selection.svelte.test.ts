@@ -301,6 +301,25 @@ describe('Svelte SelectionOptionsBar: Focus Area', () => {
   });
 });
 
+describe('Svelte MaskEdgeCheck', () => {
+  it('checks the selection edge in the Refine Edge panel and clears with a new selection', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 13, height: 10 }, { antiAlias: false });
+    component = mount(RefineEdgePanel, { target, props: { controller } });
+    flushSync();
+    click(button('Check Edge'));
+    const check = target.querySelector('[data-testid="mask-edge-check"]')!;
+    expect(check.textContent).toContain('Halo');
+    expect(target.querySelector('[data-testid="mask-edge-issues"]')!.textContent).toMatch(/^\s*Halo/);
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 }, { antiAlias: false });
+    flushSync();
+    expect(target.querySelector('[data-testid="mask-edge-issues"]')).toBeNull();
+    click(button('Check Edge'));
+    expect(check.textContent).toContain('The edge looks clean.');
+  });
+});
+
 describe('Svelte RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

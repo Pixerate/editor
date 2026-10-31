@@ -1,5 +1,6 @@
 <script lang="ts">
   import { imageRangeClass, imageSectionTitleClass } from './styles.js';
+  import MaskEdgeCheck from './MaskEdgeCheck.svelte';
   import type {
     AdjustmentKind,
     AdjustmentLayer,
@@ -157,6 +158,7 @@
   {#if error}
     <p role="alert" class="text-destructive">{error}</p>
   {/if}
+  <MaskEdgeCheck {controller} selection={sel} />
 
   <span class="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
   <div class="flex gap-1 items-center">
