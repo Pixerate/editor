@@ -117,7 +117,7 @@ describe('image editor agent tools', () => {
       'select_color_range', 'load_selection_from_image', 'load_selection_from_mask', 'select_layer_transparency',
       'grow_selection', 'select_similar', 'reselect', 'set_selection_display',
       'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
-      'stroke_selection', 'crop_to_selection', 'content_aware_fill', 'copy_pixels', 'cut_pixels', 'paste_pixels',
+      'stroke_selection', 'crop_to_selection', 'content_aware_fill', 'separate_subject', 'copy_pixels', 'cut_pixels', 'paste_pixels',
       'list_channels', 'save_selection', 'load_selection_from_channel', 'set_channel_properties', 'duplicate_channel', 'delete_channel', 'export_mask_image', 'load_channel_from_image', 'set_quick_mask',
       'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'set_bit_depth', 'undo_image', 'redo_image',

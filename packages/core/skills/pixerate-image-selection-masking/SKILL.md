@@ -157,8 +157,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - **Outline a cutout:** `select_layer_transparency` on it, then `stroke_selection`
   `location: "outside"` on a new layer below it.
 - **Crop to a subject:** select it, then `crop_to_selection` (non-destructive).
-- **Put a picture into a shape:** select the shape, `copy_pixels` the picture, then
-  `paste_pixels` `mode: "into"`.
+- **Put a picture into a shape:** select the shape, `copy_pixels` the picture, `paste_pixels` `mode: "into"`.
+- **Move, scale or relight a subject in its own scene:** select it, then `separate_subject`: a masked
+  subject layer over a background plate with the hole filled; refill a bad patch from `fillChannelId`.
 - **Picture inside a frame:** mask the picture with the frame's shape, then
   `set_layer_mask_properties` `linked: false` so the picture moves under a fixed mask; link it
   again afterwards.
@@ -246,9 +247,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `add_layer_mask`, `set_layer_mask_properties`, `apply_layer_mask`, `remove_layer_mask`: layer masks
 - `set_smart_filter_mask`: limit smart filters
 - `layer_via_copy`: lift the selection onto a new layer
-- `stroke_selection`: an outline along the selection edge
-- `crop_to_selection`: crop to the selection's bounds
-- `content_aware_fill`: remove what is selected
+- `stroke_selection`, `crop_to_selection`: an outline along the selection edge; crop to its bounds
+- `content_aware_fill`, `separate_subject`: remove what is selected; split a subject from a filled background
 - `copy_pixels`, `cut_pixels`, `paste_pixels`: the editor clipboard
 - `add_adjustment_layer`, `apply_effect`, `add_smart_filter`: masked by an active selection
 - `paint_stroke`: paint on a mask with `channel: "mask"`

@@ -316,6 +316,26 @@ describe('React SelectionChangeCheck', () => {
   });
 });
 
+describe('React SeparateSubjectPanel', () => {
+  it('separates the selected subject onto its own layer over a filled plate', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    const id = controller.addPixelLayer({ name: 'Photo', pixels: pixels(20, 10, halves) });
+    controller.selectRect({ x: 2, y: 2, width: 5, height: 5 });
+    const n = controller.getLayers().length;
+    await act(async () => root.render(<RefineEdgePanel controller={controller} />));
+    await act(async () => setValue(container.querySelector('input[aria-label="Separate grow"]') as HTMLInputElement, '2'));
+    await act(async () => {
+      button('Separate Subject').click();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(container.querySelector('[data-testid="separate-subject"] [role="alert"]')).toBeNull();
+    expect(controller.getLayers()).toHaveLength(n + 2);
+    expect(controller.getLayer(id)!.visible).toBe(false);
+    expect(controller.getLayers().at(-1)!.name).toBe('Photo subject');
+  });
+});
+
 describe('React RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

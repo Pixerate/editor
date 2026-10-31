@@ -1111,6 +1111,32 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       });
     },
   };
+  const separateTool: AgentTool = {
+    name: 'separate_subject',
+    title: 'Separate the subject from its background',
+    description:
+      'Separate Subject: splits the selected subject (select it first: select_subject, select_object, quick_select) from its background in one undo step. The subject goes to a copy of the layer masked by the selection, on top and made active; a second copy becomes the background plate, with the subject\'s area grown by dilate px and Content-Aware Filled (fill none leaves it transparent); an alpha channel marks the filled area, so a bad patch can be loaded (load_selection_from_channel), trimmed and filled again (content_aware_fill); the source layer is hidden. Use it to move, scale or relight a subject over its own rebuilt background. 8-bit pixel layers. Can be cancelled. Returns foregroundLayerId, plateLayerId, sourceLayerId, fillChannelId, filledBounds, dilate and fill.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: layerIdSchema,
+        dilate: { type: 'number', minimum: 0, maximum: 200, description: 'Grow the hole past the subject by this many px before filling, so no fringe of it stays in the plate (default 8).' },
+        fill: { type: 'string', enum: ['content-aware', 'none'], description: 'content-aware (default) rebuilds the background in the hole; none leaves it transparent.' },
+        seed: { type: 'integer', minimum: 0, description: 'Random seed for the fill; the same seed gives the same plate (default 0).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Separate the subject from its background'),
+    handler: async (args, context) =>
+      controller.separateSubject({
+        layerId: requireLayerId(args.layerId),
+        dilate: args.dilate as number | undefined,
+        fill: args.fill as 'content-aware' | 'none' | undefined,
+        seed: args.seed as number | undefined,
+        signal: context?.signal,
+      }),
+  };
+
 
   const copyTool: AgentTool = {
     name: 'copy_pixels',
@@ -1372,6 +1398,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     strokeTool,
     cropTool,
     fillTool,
+    separateTool,
     copyTool,
     cutTool,
     pasteTool,
