@@ -15,6 +15,7 @@ import { createSelectionMask, resizeSelection, type PixelBuffer, type SelectionM
 import { DEFAULT_REFINE_EDGE_PARAMS, refineSelection, type RefineEdgeParams } from './refine';
 import { applyRefineEdits, type RefineEdit } from './refine-edits';
 import { serializeMask } from './worker';
+import { flattenLayers } from '../layers/model';
 
 export type SelectAndMaskView = 'onion-skin' | 'marching-ants' | 'overlay' | 'on-black' | 'on-white' | 'black-white' | 'on-layers';
 export type SelectAndMaskTool = 'quick-select' | 'refine-brush' | 'brush' | 'object' | 'lasso' | 'hand' | 'zoom';
@@ -132,6 +133,9 @@ export class SelectAndMaskSession {
   private dragStart: ImagePoint | null = null;
   private pixels: PixelBuffer | null = null;
   private previewPixels: PixelBuffer | null = null;
+  /** The layers below the active one, composited (On Layers shows them where nothing is selected). */
+  private below: PixelBuffer | null = null;
+  private belowPreview: PixelBuffer | null = null;
   private base: SelectionMask | null;
   private previewMask: SelectionMask | null = null;
   private baseMask: SelectionMask | null = null;
@@ -171,9 +175,24 @@ export class SelectAndMaskSession {
       this.emit();
       return false;
     }
+    this.below = this.layersBelow();
     this.rescale();
     this.recompute();
     return true;
+  }
+
+  /** The visible layers under the active one, composited at full size, or null when there are none. */
+  private layersBelow(): PixelBuffer | null {
+    const active = this.controller.getState().activeLayerId;
+    const flat = flattenLayers(this.controller.getLayers()).filter((l) => l.type !== 'group');
+    const at = flat.findIndex((l) => l.id === active);
+    const ids = (at > 0 ? flat.slice(0, at) : []).filter((l) => l.visible).map((l) => l.id);
+    if (!ids.length) return null;
+    try {
+      return this.controller.compositePixels(undefined, { layerIds: ids });
+    } catch {
+      return null;
+    }
   }
 
   subscribe(listener: () => void): () => void {
@@ -212,6 +231,7 @@ export class SelectAndMaskSession {
     const w = Math.max(1, Math.round(px.width * s));
     const h = Math.max(1, Math.round(px.height * s));
     this.previewPixels = scalePixels(px, w, h);
+    this.belowPreview = this.below ? scalePixels(this.below, w, h) : null;
     this.baseMask = this.base?.bounds ? (s === 1 ? this.base : resizeSelection(this.base, w, h)) : null;
   }
 
@@ -342,8 +362,23 @@ export class SelectAndMaskSession {
           }
           break;
         }
+        case 'on-layers': {
+          // What is not selected shows the layers below (over a checkerboard where they are clear).
+          const under = this.belowPreview?.data;
+          let ur = checker;
+          let ug = checker;
+          let ub = checker;
+          if (under) {
+            const ua = under[p + 3] / 255;
+            ur = under[p] * ua + checker * (1 - ua);
+            ug = under[p + 1] * ua + checker * (1 - ua);
+            ub = under[p + 2] * ua + checker * (1 - ua);
+          }
+          o = [r + (ur - r) * hide, g + (ug - g) * hide, b + (ub - b) * hide];
+          break;
+        }
         default:
-          // Onion Skin and On Layers: what is not selected fades to transparency (a checkerboard).
+          // Onion Skin: what is not selected fades to transparency (a checkerboard).
           o = [r + (checker - r) * hide, g + (checker - g) * hide, b + (checker - b) * hide];
       }
       if (edgeBand && !edgeBand[i]) o = [o[0] * 0.15, o[1] * 0.15, o[2] * 0.15];

@@ -93,6 +93,30 @@ describe('Select and Mask session', () => {
     expect(at(s.render(), 75, 55)[0]).toBeLessThan(60);
   });
 
+  it('shows the layers below the active one in On Layers, and a checkerboard with none', async () => {
+    const c = controller();
+    // The grey-and-red scene is the Background; a blue layer on top is active.
+    const blue = c.addPixelLayer({ name: 'Blue', color: '#0000ff' });
+    c.setActiveLayer(blue);
+    c.selectRect({ x: 0, y: 0, width: 40, height: 60 });
+    const s = new SelectAndMaskSession(c);
+    await s.open();
+    s.update({ view: 'on-layers', params: { radius: 0 } });
+    const at = (x: number, y: number) => Array.from(s.render().slice((y * W + x) * 4, (y * W + x) * 4 + 3));
+    // Selected: the image (blue on top); not selected: the Background underneath.
+    expect(at(10, 5)).toEqual([0, 0, 255]);
+    expect(at(70, 5)).toEqual([120, 120, 120]);
+    expect(at(45, 30)).toEqual([220, 40, 40]);
+    // With only the Background, nothing is below: a checkerboard.
+    const d = controller();
+    d.selectRect({ x: 0, y: 0, width: 40, height: 60 });
+    const t = new SelectAndMaskSession(d);
+    await t.open();
+    t.update({ view: 'on-layers', params: { radius: 0 } });
+    const px = Array.from(t.render().slice((5 * W + 70) * 4, (5 * W + 70) * 4 + 3));
+    expect(px[0] === 255 || px[0] === 204).toBe(true);
+  });
+
   it('answers Photoshop\'s keys for views, tools, Show Edge and Show Original', async () => {
     const c = controller();
     const s = new SelectAndMaskSession(c);
