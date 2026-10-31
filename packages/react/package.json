@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-react",
-  "version": "0.139.0",
+  "version": "0.140.0",
   "description": "React bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
@@ -259,7 +259,7 @@
   "dependencies": {},
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@pixerate/editor": ">=0.209.0 <1.0.0-0",
+    "@pixerate/editor": ">=0.210.0 <1.0.0-0",
     "@tiptap/core": "^2.27.3",
     "@tiptap/extension-bubble-menu": "^2.27.3",
     "@tiptap/extension-placeholder": "^2.27.3",
