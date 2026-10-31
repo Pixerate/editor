@@ -7,20 +7,13 @@ description: How to colour-correct, composite and retouch a photo in the Pixerat
 
 The image editor holds a layer stack over a canvas the size of the source image. Opening an
 image gives one pixel layer, **Background**, whose pixels are the source and whose `develop`
-filter holds the base adjustments; adjustment layers sit above it (bottom to top, each through
-its mask, opacity and blend mode) and every annotation is its own layer on top (pen, rectangle,
-ellipse, line and arrow annotations are shape layers, text annotations type layers, that remember
-them). `list_layers`
-shows the whole stack. Edits never touch the source pixels. The base controls edit the develop
-filter of the active pixel layer (the Background unless another pixel layer is active); base
-`blur` blurs that layer (or, in documents saved before layers with blur and adjustment layers,
-the output after the layers), and base `opacity` is the output's alpha. Pixel, annotation, group
-and smart object layers can carry live effects (shadows, glows, bevels, overlays, strokes). A smart
-object places contents (pixels or a nested layer document) through a transform and smart filters,
-re-rendered from the contents on every change. A shape layer holds vector paths with a fill and a
-stroke, rendered again from the paths on every change, so it stays sharp through any transform. A
-type layer holds live, styled text (point or paragraph) drawn with the editor's fonts.
-Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for errors and batching.
+filter holds the base adjustments (the base controls edit the develop filter of the active pixel
+layer). Adjustment layers sit above it, each through its mask, opacity and blend mode, and
+annotations are shape and type layers on top. Edits never touch the source pixels; `list_layers`
+shows the whole stack. Pixel, group and smart object layers can carry live effects; a smart
+object places contents through a transform and smart filters; shape layers hold vector paths and
+type layers live text, re-rendered on every change. There is also an optional selection and a
+crop, rotation and flip. See `pixerate-agent-tools` for errors and batching.
 
 - **Control ids** for base adjustments: `brightness`, `contrast`, `exposure`, `temperature`,
   `tint`, `saturation` (all -100..100, default 0), `blur` (0..30 px) and `opacity` (0..1).
@@ -38,7 +31,10 @@ Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for 
 For these jobs, load the workflow skill too: it has the method, the checks between steps and
 the pitfalls, and uses the tools below.
 
+- `pixerate-image-photo-correction`: global correction in order (frame, light, colour, local, look), with clipping and neutral checks.
 - `pixerate-image-selection-masking`: cutouts, background and sky replacement, local adjustments through masks.
+- `pixerate-image-portrait-retouch`: blemishes, stray hairs, dodge and burn, eyes and teeth.
+- `pixerate-image-product-photo`: product on white, a grounding shadow, marketplace crops.
 
 ## Working method
 
@@ -46,19 +42,15 @@ the pitfalls, and uses the tools below.
    `get_image_info` for the image size, crop and rotation; `list_controls` once for control
    ids, ranges, layer kinds and blend modes; `render_preview` (default 512 px) to see the
    image, then `get_histogram` to judge exposure and clipping in numbers.
-2. **Plan the order of corrections** (see Best practices): straighten and crop first (so
-   later judgements are on the final frame), then global tone and white balance,
-   then contrast and tone curves, then colour, then local fixes through masks, then creative
-   looks.
+2. **Plan the order:** frame, light, colour, local, look (`pixerate-image-photo-correction`).
 3. **Write in few steps.** Put every base change of one correction into one `set_adjustments`
    call (one undo step) with a `label`. Create layers with their `params` in the same
    `add_adjustment_layer` call rather than adding a neutral layer and then setting it.
 4. **Local edits:** select, refine, check with `get_selection`, then `apply_selection_as_mask`
    with a `kind`. Load `pixerate-image-selection-masking` for cutouts, masks and local edits.
-5. **Verify.** `render_preview` after each group of corrections, not after each slider, then
-   `get_histogram` (it reads the last render) for clipping. Compare against the previous
-   preview; read the `applied` and `clamped` lists that writes return. `undo_image` takes back a
-   step that made things worse.
+5. **Verify** after each group of corrections: `measure_region` (no render needed) or
+   `render_preview` then `get_histogram`; read the `applied` and `clamped` lists writes return.
+   `undo_image` takes back a step that made things worse.
 
 ### Working with layers
 
@@ -92,12 +84,9 @@ filters, so nothing degrades. Read [references/smart-objects.md](references/smar
 
 ### Shapes and text
 
-Draw boxes, badges, arrows and callouts as shape layers (`add_shape_layer` with a live `shape`,
-then `set_shape_component` / `update_shape` / `add_shape_component`), and text as type layers
-(`add_text_layer`, then `set_text`, `set_text_style`, `set_paragraph_style` by `start` / `end`
-range). Both stay sharp through transforms and take effects, masks and blend modes; rasterize only
-to paint on them. Read [references/shapes-and-type.md](references/shapes-and-type.md) before
-drawing or editing either.
+Boxes, badges, arrows and callouts are shape layers (`add_shape_layer`), text is type layers
+(`add_text_layer`); both stay sharp and take effects, masks and blends. Read
+[references/shapes-and-type.md](references/shapes-and-type.md) before drawing or editing either.
 
 ### Layer effects
 
@@ -117,12 +106,11 @@ selection or locked transparency. Read [references/painting.md](references/paint
 ### Colour management
 
 Working space, profiles, soft proofing and print conversions: read [references/color-management.md](references/color-management.md).
+
 ### Retouching
 
-Clone Stamp, Healing Brush, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen and the
-History Brush: retouch on an empty layer with `sample: "current-below"`, pick `spot_heal` for small
-spots, `heal_brush` for larger flaws and `clone_stamp` to copy exactly (`set_clone_transform` scales,
-rotates or flips the source), and keep strokes short and soft. Read [references/retouching.md](references/retouching.md) first.
+Heal, clone, dodge and burn on layers above the photo (`sample: "current-below"`): load
+`pixerate-image-portrait-retouch`, and read [references/retouching.md](references/retouching.md) first.
 
 ### Photoshop files
 
@@ -135,27 +123,8 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 - **Non-destructive first.** Prefer an adjustment layer over pushing a base slider to its
   limit: layers can be masked, faded with `opacity`, blended and stacked. Use base sliders for
   global exposure and white balance, layers for everything you may want to tune later.
-- **Order of corrections** (as in a raw / Photoshop workflow): exposure and white balance
-  (`exposure`, `temperature`, `tint`) → black and white points and contrast (a `levels` layer,
-  then a gentle S-curve `curves` layer) → colour (`vibrance` before `saturation`,
-  `hueSaturation` per range, `colorBalance`) → local adjustments through masks → creative looks
-  (`photoFilter`, `blackWhite`, `posterize`). Correct before you stylise.
-- **Avoid clipping.** Set levels black and white points (`master.inBlack`, `master.inWhite`)
-  just inside where the image data starts (the histogram's `p1` / `p99`), not past it; large
-  `exposure` or `contrast` values blow highlights and crush shadows in the output. More than
-  about 0.5% of pixels in `clipping.highlightsPercent` or `shadowsPercent` on a normal photo
-  means detail is lost; check bright skies, skin and deep shadows in `render_preview` too.
-- **Straighten, then crop.** Level horizons with `set_rotation` (small angles such as -2.5);
-  any angle that is not a quarter turn leaves transparent corners, so crop inside them with
-  `set_crop` afterwards. Keep a standard aspect ratio (3:2, 4:3, 16:9, 1:1, 4:5) unless asked
-  otherwise, and do not crop away the subject's space to look or move into.
-- **Small moves.** Real corrections are usually within ±10..30 on these scales. Prefer
-  `vibrance` over `saturation` for portraits (it protects already-saturated colours and skin).
-- **Contrast through curves.** A curves S-curve keeps endpoints fixed and avoids the flat
-  greys that a big `contrast` value with low `exposure` produces. Curve points are levels
-  0..255 (`{ input, output }`); keep `(0,0)` and `(255,255)` and move quarter-tones by 10..25.
-- **Neutral greys.** Use `temperature` / `tint` (or `colorBalance` midtones) so known-neutral
-  areas (white walls, grey roads, clouds) have no cast; then add warmth deliberately if wanted.
+- **Correct in order** (frame, light, colour, local, look) and measure clipping and neutrals after
+  each step: `pixerate-image-photo-correction` has the method and settings.
 - **Masks:** select, refine, then mask; see `pixerate-image-selection-masking`.
 - **Blend modes for tone-only or colour-only changes:** `luminosity` applies a curves or
   levels layer without shifting hue or saturation; `color` applies a tint without changing
@@ -166,29 +135,8 @@ in the source frame at the document's bit depth, colour mode and profile. Read
   natural colour mixing and painterly strokes; it is not a Photoshop mode, so keep it off
   layers that must survive a PSD round trip. It costs about ten times a normal blend.
 - **Name layers** (`name`) by intent ("Sky darken", "Warm skin"), so the stack stays readable.
-- **Effects: subtle first.** A drop shadow reads as natural with a small `distance` (2..10 px),
-  a `size` a little larger than the distance, `opacity` 0.3..0.6 and the default multiply; a
-  hard, dark, far shadow looks pasted on. Glows want `screen` and a light colour; strokes on
-  text 1..4 px. Bevels: `depth` 1..2 and `size` a fraction of the shape's thickness.
-- **Outline-only looks** (an outlined title, a glass button): set the layer's `fillOpacity` to
-  0 with `set_layer_properties` and keep its effects; fill opacity hides the layer's own pixels,
-  layer `opacity` fades the effects too.
-- **Prefer an effect over painted pixels** for shadows, glows, outlines and colour fills of a
-  shape: it follows later edits and stays adjustable.
-- **Transforms: one resample, bicubic, whole pixels when you can.** Combine a scale, rotation and
-  move into one `transform_layer` call; use `rotate_layer_90` / `flip_layer` (exact) instead of
-  `rotate: 90` or `scaleX: -100`. `interpolation: "nearest"` keeps hard pixel art crisp; bicubic
-  (default) is right for photos, bilinear is a little softer. Enlarging past about 200 % shows
-  softness: prefer a larger source.
-- **Scale proportionally** unless asked to stretch: give `scaleX` and `scaleY` the same value.
-  Keep the subject in frame: after a scale about `center` the layer can run past the canvas,
-  which `bounds` in the result shows.
-- **Smart objects for anything you may scale again.** Convert first, then transform as often as
-  needed; set exact sizes with `set_smart_object_transform` `scaleX` / `scaleY` (percent of the
-  contents) rather than chaining relative scales. Prefer smart filters over layer filters when
-  the user may want to mask, blend or reorder them later.
-- **Linked or not**: duplicate a smart object `linked: true` for repeated elements that must stay
-  identical (a logo placed twice); use `linked: false` when the copies will be edited apart.
+- **Effects, transforms and smart objects** have their own best practices in
+  `references/layer-effects.md`, `references/free-transform.md` and `references/smart-objects.md`.
 - **Merge Down only onto an opaque, 100 % lower layer** when the result must look the same:
   the merged layer keeps the lower layer's opacity and blend, so a faded lower layer fades the
   merged content too, and a blend mode on the upper layer stops seeing what was below the lower
@@ -216,6 +164,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `list_layer_effects` | Read one layer's effects: `enabled` (master switch), `scale` (Scale Effects), `margin` (px they reach beyond the shape), `fromPsd`, and every effect with `id`, `kind`, `label` and all its settings. Also returns the `globalLight`, the `patterns` pattern effects can use and the effect `kinds`. Call before changing effects you did not add. |
 | `get_image_info` | Read the geometry: source `image` size, `crop` box (source pixels, or null), `rotation` degrees, `flipH` / `flipV`, the `output` size after crop and rotation, `bitDepth` (8, 16 or 32), the layer count and `canUndo` / `canRedo`. Call before cropping or selecting so coordinates are right. |
 | `get_histogram` | Judge exposure numerically: per channel and luminance `mean`, `p1` and `p99` (0..255), and `clipping` percent at pure black and white per channel. Reads the last render, so call `render_preview` first. `bins` (16, 32, 64 or 256) adds the counts. Cheaper than another image for checking a tonal change. |
+| `measure_region` | Measure a rectangle of the composited image (`x`, `y`, `width`, `height` in natural pixels; default the crop, else the whole image) without a render: the `get_histogram` summary plus `meanColor` (hex) and `cast` (`redBlue`, `greenMagenta` in levels; within about ±4 is neutral). Check a neutral reference, skin, a background or clipping after each correction. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart`, `shape` and `type` for Photoshop smart objects, shapes and text) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
 | `export_psd` | Save the document as an RGB PSD at its bit depth (PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |

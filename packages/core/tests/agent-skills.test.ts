@@ -177,6 +177,9 @@ function expectedBySkill(): Record<string, string[]> {
 		// Workflow skills own no provider (see WORKFLOWS); they have no tool table.
 		'pixerate-image-selection-masking': [],
 		'pixerate-spreadsheet-clean-import': [],
+		'pixerate-image-photo-correction': [],
+		'pixerate-image-product-photo': [],
+		'pixerate-image-portrait-retouch': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -275,7 +278,10 @@ const FACTORIES: Record<string, string> = {
  */
 const WORKFLOWS: Record<string, string> = {
 	'pixerate-image-selection-masking': 'pixerate-image-editor',
-	'pixerate-spreadsheet-clean-import': 'pixerate-spreadsheet'
+	'pixerate-spreadsheet-clean-import': 'pixerate-spreadsheet',
+	'pixerate-image-photo-correction': 'pixerate-image-editor',
+	'pixerate-image-product-photo': 'pixerate-image-editor',
+	'pixerate-image-portrait-retouch': 'pixerate-image-editor'
 };
 
 /** Workflow skills aim for this many body lines, and fail above `WORKFLOW_MAX_LINES`. */

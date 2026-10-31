@@ -1,0 +1,19 @@
+{
+	"prompt": "Crop to a square for the marketplace listing with the product centred, leaving some breathing room around it (the product should fill roughly two thirds of the frame).",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 90,
+		"background": [200, 198, 195],
+		"shapes": [{ "shape": "rect", "x": 40, "y": 25, "width": 40, "height": 40, "color": [30, 90, 160] }]
+	},
+	"checks": [
+		{ "why": "a square crop", "tool": "get_image_info", "expect": { "crop": { "$expr": "v && Math.abs(v.width - v.height) <= 1" } } },
+		{ "why": "the product is centred (within 2 px)", "tool": "get_image_info", "expect": { "crop": { "$expr": "v && Math.abs(v.x + v.width / 2 - 60) <= 2 && Math.abs(v.y + v.height / 2 - 45) <= 2" } } },
+		{ "why": "the product fills 60-85 % of the side", "tool": "get_image_info", "expect": { "crop": { "$expr": "v && 40 / v.width >= 0.6 && 40 / v.width <= 0.85" } } }
+	],
+	"solution": [
+		{ "tool": "get_image_info" },
+		{ "tool": "set_crop", "args": { "x": 32, "y": 17, "width": 56, "height": 56 } }
+	]
+}

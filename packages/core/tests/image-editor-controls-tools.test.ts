@@ -119,7 +119,7 @@ describe('image editor agent tools', () => {
       'select_region', 'select_by_color', 'modify_selection', 'refine_selection', 'apply_selection_as_mask',
       'stroke_selection', 'crop_to_selection', 'content_aware_fill', 'separate_subject', 'copy_pixels', 'cut_pixels', 'paste_pixels',
       'list_channels', 'save_selection', 'load_selection_from_channel', 'set_channel_properties', 'duplicate_channel', 'delete_channel', 'export_mask_image', 'load_channel_from_image', 'set_quick_mask',
-      'get_image_info', 'get_histogram', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
+      'get_image_info', 'get_histogram', 'measure_region', 'update_adjustment_layer', 'remove_adjustment_layer', 'move_adjustment_layer',
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'set_bit_depth', 'undo_image', 'redo_image',
       'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',
       'group_layers', 'add_group', 'ungroup_layer', 'merge_down', 'merge_visible', 'flatten_image', 'offset_layer', 'add_layer_mask',
@@ -146,7 +146,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'get_selection_recipe', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_edge_color', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'get_selection_recipe', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'measure_region', 'list_layers', 'get_edge_color', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {
@@ -260,6 +260,32 @@ describe('image editor agent tools', () => {
     expect(res.stats.luminance).toEqual({ mean: 128, p1: 128, p99: 128 });
     expect(res.bins.red).toHaveLength(16);
     expect(res.bins.red[15]).toBe(90);
+  });
+
+  it('measure_region measures the composite without a render, and checks its rectangle', async () => {
+    const controller = new ImageEditorController({ image: { width: 8, height: 6, naturalWidth: 8, naturalHeight: 6, src: 'data:fake' } as unknown as HTMLImageElement });
+    controller.setSamplePixels({ width: 8, height: 6, data: new Uint8ClampedArray(8 * 6 * 4).fill(128) });
+    const registry = new ToolRegistry();
+    registry.register(createImageEditorToolProvider(controller, { id: 'img' }));
+    const call = async (args: Record<string, unknown>) => (await registry.callTool('measure_region', args)).structuredContent as any;
+    const before = await call({ x: 0, y: 0, width: 4, height: 4 });
+    expect(before.rect).toEqual({ x: 0, y: 0, width: 4, height: 4 });
+    expect(before.samples).toBe(16);
+    expect(before.meanColor).toBe('#808080');
+    expect(before.cast).toEqual({ redBlue: 0, greenMagenta: 0 });
+    await registry.callTool('set_adjustments', { values: { temperature: 60 } });
+    const warm = await call({ x: 0, y: 0, width: 4, height: 4 });
+    expect(warm.cast.redBlue).toBeGreaterThan(before.cast.redBlue);
+    // Default: the crop when there is one.
+    await registry.callTool('set_crop', { x: 1, y: 1, width: 3, height: 2 });
+    expect((await call({})).rect).toEqual(controller.getState().crop);
+    const fail = async (args: Record<string, unknown>, re: RegExp) => {
+      const res = await registry.callTool('measure_region', args);
+      expect(res.isError).toBe(true);
+      expect((res.content[0] as any).text).toMatch(re);
+    };
+    await fail({ x: 0, y: 0 }, /x, y, width and height together/);
+    await fail({ x: 0, y: 0, width: 99999, height: 1 }, /runs past the image/);
   });
 
   it('render_preview reports an error where canvases are unavailable', async () => {

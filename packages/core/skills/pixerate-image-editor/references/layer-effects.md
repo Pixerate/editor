@@ -22,3 +22,15 @@ Read this before `add_layer_effect`, `update_layer_effect`, `set_global_light` o
    every effect of a layer (each keeps its own `enabled`); `scale` resizes them all (Scale
    Effects), e.g. after resizing a layer's content.
 5. **Look after each change**: `render_preview` (with `layerId` for one layer alone).
+
+## Best practices
+
+- **Effects: subtle first.** A drop shadow reads as natural with a small `distance` (2..10 px),
+  a `size` a little larger than the distance, `opacity` 0.3..0.6 and the default multiply; a
+  hard, dark, far shadow looks pasted on. Glows want `screen` and a light colour; strokes on
+  text 1..4 px. Bevels: `depth` 1..2 and `size` a fraction of the shape's thickness.
+- **Outline-only looks** (an outlined title, a glass button): set the layer's `fillOpacity` to
+  0 with `set_layer_properties` and keep its effects; fill opacity hides the layer's own pixels,
+  layer `opacity` fades the effects too.
+- **Prefer an effect over painted pixels** for shadows, glows, outlines and colour fills of a
+  shape: it follows later edits and stays adjustable.

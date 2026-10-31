@@ -45,6 +45,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Convert the image to CMYK for print', expect: ['image-editor__set_color_mode', 'image-editor__convert_to_profile'] },
 	{ task: 'Combine all visible layers into one', expect: ['image-editor__merge_visible', 'image-editor__flatten_image'] },
 	{ task: 'Show me the tonal distribution of the photo', expect: ['image-editor__get_histogram'] },
+	{ task: 'Is the white wall in the top left still neutral after the colour fix?', expect: ['image-editor__measure_region'] },
 	// Paint editor
 	{ task: 'Switch to watercolour paper with heavy grain', expect: ['paint-editor__set_paper'] },
 	{ task: 'Choose a soft charcoal brush', expect: ['paint-editor__set_brush', 'paint-editor__list_brushes'] },

@@ -126,8 +126,8 @@ const isEmpty = (v: unknown): boolean => v === null || v === undefined || v === 
  * arrays element by element with the same length, other values exactly. Operators:
  * `$min` / `$max` (numbers), `$type`, `$match` (a regular expression, or `[pattern, flags]`), `$in`, `$not`,
  * `$every` / `$some` (array elements), `$length`, `$unique`, `$distinct` (the distinct
- * values), `$sum`, `$column: [index, matcher]` (one column of a 2D array) and `$nonEmpty`
- * (the array without empty cells or rows).
+ * values), `$sum`, `$column: [index, matcher]` (one column of a 2D array), `$nonEmpty`
+ * (the array without empty cells or rows) and `$expr` (a JavaScript expression over `v`).
  */
 function matches(actual: unknown, expected: unknown): boolean {
 	if (expected === null || typeof expected !== 'object') return Object.is(actual, expected);
@@ -166,6 +166,10 @@ function matches(actual: unknown, expected: unknown): boolean {
 				const [index, m] = want as [number, unknown];
 				return !!list && matches(list.map((row) => (Array.isArray(row) ? row[index] : undefined)), m);
 			}
+			case '$expr':
+				// A JavaScript expression over the value `v`, for relations matchers cannot state
+				// (`v.width === v.height`). Keep it short and prefer the operators above.
+				return !!new Function('v', `return (${want as string});`)(actual);
 			case '$nonEmpty':
 				return !!list && matches(list.filter((a) => !isEmpty(a)), want);
 			default:
@@ -202,6 +206,7 @@ describe('matches', () => {
 		expect(matches([[1, 'a'], [2, 'b'], [null, '']], { $nonEmpty: { $length: 2, $column: [0, { $sum: 3 }] } })).toBe(true);
 		expect(matches(['x', 'X'], { $distinct: { $length: 2 } })).toBe(true);
 		expect(matches(['a', 'a'], { $unique: true })).toBe(false);
+		expect(matches({ width: 4, height: 4 }, { $expr: 'v.width === v.height' })).toBe(true);
 		expect(() => matches(1, { $near: 1 })).toThrow(/Unknown eval operator/);
 	});
 });

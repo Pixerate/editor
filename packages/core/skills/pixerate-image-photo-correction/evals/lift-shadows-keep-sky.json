@@ -1,0 +1,20 @@
+{
+	"prompt": "The foreground of this landscape is far too dark, but the sky is already bright. Brighten the foreground without blowing out the sky.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 80,
+		"background": [40, 45, 40],
+		"shapes": [{ "shape": "rect", "x": 0, "y": 0, "width": 120, "height": 30, "color": [225, 232, 245] }]
+	},
+	"checks": [
+		{ "why": "the foreground is lifted into the midtones", "tool": "measure_region", "args": { "x": 0, "y": 40, "width": 120, "height": 40 }, "expect": { "stats": { "luminance": { "mean": { "$min": 70, "$max": 160 } } } } },
+		{ "why": "the sky keeps its detail: nothing clips to white", "tool": "measure_region", "args": { "x": 0, "y": 0, "width": 120, "height": 30 }, "expect": { "clipping": { "highlightsPercent": { "red": { "$max": 0.5 }, "green": { "$max": 0.5 }, "blue": { "$max": 0.5 } } } } },
+		{ "why": "the sky stays bright", "tool": "measure_region", "args": { "x": 0, "y": 0, "width": 120, "height": 30 }, "expect": { "stats": { "luminance": { "mean": { "$min": 200 } } } } }
+	],
+	"solution": [
+		{ "tool": "measure_region" },
+		{ "tool": "add_adjustment_layer", "args": { "kind": "levels", "name": "Lift shadows", "params": { "master": { "gamma": 1.8 } } } },
+		{ "tool": "measure_region", "args": { "x": 0, "y": 0, "width": 120, "height": 30 } }
+	]
+}

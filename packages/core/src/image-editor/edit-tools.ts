@@ -3,7 +3,7 @@ import type { ImageEditorController } from './controller';
 import type { BlendMode } from './blend';
 import { BLEND_MODES, isBlendMode } from './blend';
 import { getRotatedSize, normalizeAngle } from './geometry';
-import type { ImageHistogram } from './histogram';
+import { computeHistogram, type ImageHistogram } from './histogram';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -54,7 +54,7 @@ function histogramSummary(h: ImageHistogram, bins: number | undefined) {
 
 /**
  * Agent tools for the image editor's layers, geometry and history: `get_image_info`,
- * `get_histogram`, `update_adjustment_layer`, `remove_adjustment_layer`,
+ * `get_histogram`, `measure_region`, `update_adjustment_layer`, `remove_adjustment_layer`,
  * `move_adjustment_layer`, `set_crop`, `reset_crop`, `set_rotation`, `flip_image`,
  * `set_bit_depth`, `undo_image` and `redo_image`. Each write is one undo step and returns what changed.
  */
@@ -130,9 +130,45 @@ export function createImageEditTools(controller: ImageEditorController): AgentTo
     annotations: { title: 'Read the histogram', ...READ },
     handler: ({ bins }) => {
       const h = controller.getHistogram();
-      if (!h) throw new Error('No histogram yet: it comes from the rendered preview. Call render_preview, then try again.');
+      if (!h) throw new Error('No histogram yet: it comes from the rendered preview. Call render_preview, then try again, or measure_region, which needs no render.');
       return histogramSummary(h, bins);
     }
+  };
+
+  const measureRegion: AgentTool = {
+    name: 'measure_region',
+    title: 'Measure part of the image',
+    description:
+      'Measures the composited image (every layer and adjustment, before crop, rotation and output opacity) in a rectangle, without rendering: the histogram summary of get_histogram (per channel and luminance mean, 1st / 99th percentiles 0-255, clipping percentages) plus the mean colour as hex and a cast (red minus blue, green minus the red-blue average, in levels; near 0 is neutral). ' +
+      'Use it to check a correction in numbers: a known-neutral area (a white wall, a grey card) should have a cast within about ±4; skin, sky or a product colour should land where you aim. Works where render_preview cannot. Annotation layers are left out.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'integer', minimum: 0, description: 'Left edge in natural image pixels (default: the crop, else the whole image).' },
+        y: { type: 'integer', minimum: 0, description: 'Top edge in natural image pixels.' },
+        width: { type: 'integer', minimum: 1, description: 'Width in pixels.' },
+        height: { type: 'integer', minimum: 1, description: 'Height in pixels.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Measure part of the image', ...READ },
+    handler: ({ x, y, width, height }) => {
+      const given = [x, y, width, height].filter((v) => v !== undefined).length;
+      if (given !== 0 && given !== 4) throw new Error('Give x, y, width and height together, or none to measure the crop (or the whole image).');
+      const { width: W, height: H } = controller.getState().imageDimensions;
+      const rect = given ? { x: x as number, y: y as number, width: width as number, height: height as number } : controller.getState().crop ?? { x: 0, y: 0, width: W, height: H };
+      if (rect.x + rect.width > W || rect.y + rect.height > H) throw new Error(`The rectangle runs past the image (${W} × ${H} px); keep x + width ≤ ${W} and y + height ≤ ${H}.`);
+      const h = computeHistogram(controller.compositePixels(rect));
+      const summary = histogramSummary(h, undefined);
+      const mean = (bins: ArrayLike<number>) => {
+        let sum = 0;
+        for (let i = 0; i < bins.length; i++) sum += i * bins[i];
+        return h.samples ? sum / h.samples : 0;
+      };
+      const [r, g, b] = [mean(h.red), mean(h.green), mean(h.blue)];
+      const hex = '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+      return { rect, ...summary, meanColor: h.samples ? hex : null, cast: { redBlue: round(r - b, 1), greenMagenta: round(g - (r + b) / 2, 1) } };
+    },
   };
 
   const updateLayer: AgentTool = {
@@ -304,5 +340,5 @@ export function createImageEditTools(controller: ImageEditorController): AgentTo
     }
   };
 
-  return [getImageInfo, getHistogram, updateLayer, removeLayer, moveLayer, setCrop, resetCrop, setRotation, flipImage, setBitDepth, undo, redo];
+  return [getImageInfo, getHistogram, measureRegion, updateLayer, removeLayer, moveLayer, setCrop, resetCrop, setRotation, flipImage, setBitDepth, undo, redo];
 }

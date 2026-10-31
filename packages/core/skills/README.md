@@ -40,6 +40,9 @@ request like "clean up this export" finds it.
 | Skill | Editor | Covers |
 | --- | --- | --- |
 | [`pixerate-image-selection-masking`](pixerate-image-selection-masking/SKILL.md) | Image (`pixerate-image-editor`) | Cutouts, background and sky replacement, local adjustments through masks; choosing a selection method, checking and refining edges, and outputting an editable mask. |
+| [`pixerate-image-photo-correction`](pixerate-image-photo-correction/SKILL.md) | Image (`pixerate-image-editor`) | Global correction in order: straighten and crop, exposure and white balance, points and contrast, colour, local, look; each checked for clipping and neutral greys. |
+| [`pixerate-image-portrait-retouch`](pixerate-image-portrait-retouch/SKILL.md) | Image (`pixerate-image-editor`) | Blemishes, stray hairs and flaws healed on their own layer, dodge and burn, eyes and teeth, kept natural. |
+| [`pixerate-image-product-photo`](pixerate-image-product-photo/SKILL.md) | Image (`pixerate-image-editor`) | Product cutouts on pure white or a brand colour, a grounding shadow, accurate colour, centred marketplace crops. |
 | [`pixerate-spreadsheet-clean-import`](pixerate-spreadsheet-clean-import/SKILL.md) | Spreadsheet (`pixerate-spreadsheet`) | Imported or pasted data made tidy: structure, headers, types (currency, comma decimals, day-first dates, leading zeros, missing values), text, duplicates and validation. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
