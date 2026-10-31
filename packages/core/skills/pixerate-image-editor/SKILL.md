@@ -104,17 +104,8 @@ Keep outlines as paths (`make_work_path`, `add_path`) and edit their anchors: se
 
 ### Painting
 
-1. **Paint on its own layer** (`add_pixel_layer`), not on the Background (active on a new image, so
-   strokes without `layerId` land there) unless asked: a layer can be faded, masked or deleted.
-2. **Retouch through masks**, not the eraser (see `pixerate-image-selection-masking`).
-3. **One stroke is one call and one undo step.** Send the path's points in order (a few points
-   per brush diameter is enough; dabs are spaced by `brush.spacing`). Use `opacity` for the
-   overall strength and `flow` for gradual build-up within the stroke.
-4. **Limit paint with a selection**, or lock transparency (`set_layer_properties`
-   `locks.transparency`) to paint only where the layer already has pixels.
-5. **Mixing paint, the Mixer Brush and gradient paint**: `mix_colors` mixes named paints like
-   pigment; `paint_stroke` `tool: "mixer"` picks up and smears the layer's colours; gradient paint
-   changes colour along a stroke. Read [references/painting.md](references/painting.md) first.
+Paint on its own layer (`add_pixel_layer`), one stroke per call and one undo step, limited by a
+selection or locked transparency. Read [references/painting.md](references/painting.md) first.
 
 ### Colour management
 
@@ -207,6 +198,11 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `get_selection` | Read the active selection: `empty`, `bounds` (natural pixels), `area` in pixels, `percent` of the image and a description. Check it after every select or modify step and before masking: a wand that covered 90% of the image is the wrong selection. |
 | `inspect_mask_edge` | Measure an edge without looking: the selection (default) or a layer's `layer-mask` / `vector-mask` (`layerId`). Returns `haloScore`, `edgeAlignment`, `jaggedness`, `softFraction`, `holes`, `islands`, `worst` regions for `capture_view` and `issues` with fixes. Inspect, fix, inspect again (see `pixerate-image-selection-masking`). |
 | `compare_selections` | What changed between two selections: `a` (default the one before the last undo step) and `b` (default current), each `selection`, `history` (`steps`), `channel` or a layer's `layer-mask` / `vector-mask`. Returns `added` / `removed` (area, largest pieces with bounds), `iou` and `identical`; `show` tints the change on the canvas. Check every modify or refine step. |
+| `get_selection_recipe` | Read-only. Live selections: the steps that made the selection (marquees, polygons, magic wand, Color Range, modify, invert, refine) with indexes; `live: false` when frozen (made by a command steps cannot describe, e.g. `quick_select`). |
+| `edit_selection_step` | Change a recipe step (`index`, `changes`: e.g. `options.tolerance`, `rect`, `radius`, `mode`; a new `op` replaces it) and replay. One undo step. Returns the selection and recipe. |
+| `insert_selection_step` | Insert a step at `index` (length appends), e.g. a subtract rect before a refine, and replay. One undo step. |
+| `remove_selection_step` | Remove a recipe step and replay (not the only one: deselect instead). One undo step. |
+| `freeze_selection` | Keep the selection as it is and drop its recipe. One undo step. |
 | `list_channels` | Read the alpha channels (saved selections): id, name, bounds, percent, overlay and visibility, and whether Quick Mask mode is on. |
 | `select_subject` | Select › Subject. With a host segmentation model, `target` describes what to select ("the dog", "the sky") and the model's outlines are selected (`maxSegments` 1 for one). Without one, the subject that stands out most is found classically; `target` can't choose it (`method: "saliency"`, `note`). Combined by `mode`. Returns the selection, `found` (label, bounds) and `method`; nothing found leaves the selection unchanged. |
 | `list_layers` | Read the layer stack bottom to top as a tree: id, type (`pixel`, `adjustment`, `group`, `shape`, `annotation`, `smart`; smart objects add their `contents`, `smartFilters` and `filterMask`; shapes a `shape` summary of component ops and kinds and paint types, and `annotation` when migrated from one), name, document `bounds` of pixel layers, visibility, opacity, `fillOpacity`, blend, `clipped`, locks, a `mask` summary, an `effects` summary (master switch, scale, effect ids and kinds), pixel-layer `filters` (the Background's `develop` filter is the base adjustments), adjustment `kind` and `params`, group `children`, and which layer is `active`. Call it to understand a document with more than the Background before changing it; adjustment layer ids work with every adjustment-layer tool. |

@@ -3191,3 +3191,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: After an anchor was inserted on a vector mask's subpath, a soft (feather or matte) edge moved to the neighbouring segment.
 - **Root Cause**: `VectorMask.edges` names segments by `{ component, subpath, segment }` index. Inserting or deleting an anchor renumbers the segments after it. The path tools edit components without knowing about edges, and nothing in an anchor identifies its segment.
 - **Solution / Workaround**: Edges that no longer address a segment are dropped (`validVectorMaskEdges`) whenever the path is replaced or edited. Ones that still address a segment keep their index, so check `get_vector_mask` `edges` after adding or removing anchors and set them again. A lasting fix would give segments ids that travel with their anchors.
+
+### [core/image-editor] A Selection Command Only Keeps the Recipe If It Records a Step
+
+- **Issue / Symptom**: A new selection command (or an existing one changed to call `setSelection` differently) left the selection frozen. Its recipe vanished even though the command could be replayed.
+- **Root Cause**: `setSelection` keeps or extends the recipe only when the caller passed a step through `withRecipeStep`. Without one it drops the recipe, which is the safe default for commands a recipe cannot describe. A command that calls `setSelection` directly therefore freezes the selection.
+- **Solution / Workaround**: Wrap the `setSelection` (or `shapeCommand`) call in `withRecipeStep(step, …)`, with a step `replaySelectionRecipe` can reproduce from JSON alone. Add the op to `readRecipeStep` and `replaySelectionRecipe` first. Commands that depend on something a step can't hold (a brush gesture, a model, a loaded mask) should keep dropping the recipe.

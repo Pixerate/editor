@@ -10,6 +10,7 @@ export * from './RefineEdgePanel';
 export * from './MaskEdgeCheck';
 export * from './SelectionChangeCheck';
 export * from './SeparateSubjectPanel';
+export * from './SelectionRecipePanel';
 export * from './SelectAndMaskWorkspace';
 export * from './ContentAwareFillWorkspace';
 export * from './ChannelsPanel';

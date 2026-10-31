@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SelectionRecipePanel from './SelectionRecipePanel.svelte';
   import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import ImageRange from './controls/ImageRange.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
@@ -590,4 +591,5 @@
     <p role="status" class="text-muted-foreground">{colorStatus}</p>
   {/if}
   <p data-testid="selection-status" class="text-muted-foreground">{describeSelection(sel)}</p>
+  <SelectionRecipePanel {controller} selection={sel} />
 </div>

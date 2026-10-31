@@ -40,9 +40,9 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    **Check:** `get_selection` → `empty: false` and a plausible `percent` (for a person in a
    portrait, typically 15–50 %). A wand or range above about 80 % has flooded: undo, then lower
    `tolerance` / `fuzziness`.
-2. **Build it in steps** with `mode`: start with `replace`, `add` what was missed, `subtract`
-   what leaked, and `intersect` to limit it to a region (for example `select_rect` around the
-   subject).
+2. **Build it in steps** with `mode`: `replace`, then `add` what was missed, `subtract` what
+   leaked, `intersect` to limit it. The steps are kept (`get_selection_recipe`): fix one with
+   `edit_selection_step` (a wand's tolerance, a box) rather than starting over.
    **Check:** `bounds` hug the subject. A bounds as large as the image means a leak. Smart tools
    return `uncertainRegions` (edge with no image edge under it): look there, refine with `regions`.
 3. **Measure the edge, then look.** `inspect_mask_edge` scores it: `haloScore` ≥ 0.35 is old

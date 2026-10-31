@@ -20,3 +20,4 @@ export * from './worker';
 export * from './inspect';
 export * from './uncertainty';
 export * from './diff';
+export * from './recipe';

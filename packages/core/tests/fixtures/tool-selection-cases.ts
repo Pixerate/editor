@@ -31,6 +31,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	// Image editor
 	{ task: 'Make the photo brighter and increase the contrast', expect: ['image-editor__set_adjustments', 'image-editor__add_adjustment_layer'] },
 	{ task: 'Crop the image to a square', expect: ['image-editor__set_crop'] },
+	{ task: 'Raise the magic wand tolerance of the selection I made earlier without starting over', expect: ['image-editor__edit_selection_step', 'image-editor__get_selection_recipe'] },
 	{ task: 'Keep the vector mask sharp on the shoulders but soft along the hair', expect: ['image-editor__set_vector_mask_edge'] },
 	{ task: 'Remove the green fringe from the edge of the cut-out subject', expect: ['image-editor__set_edge_despill', 'image-editor__set_edge_decontamination'] },
 	{ task: 'Check whether the cutout mask has a halo or jagged edges', expect: ['image-editor__inspect_mask_edge'] },

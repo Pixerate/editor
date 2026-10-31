@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { ColorRangePreset, ImageEditorController, SelectionDisplay, SelectionMask, SelectionModifyOp, SelectionToolOptions } from '@pixerate/editor/image-editor';
+import { SelectionRecipePanel } from './SelectionRecipePanel';
 import {
   COLOR_RANGE_PRESETS,
   COLOR_RANGE_PRESET_LABELS,
@@ -623,6 +624,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       <p data-testid="selection-status" className="text-muted-foreground">
         {describeSelection(sel)}
       </p>
+      <SelectionRecipePanel controller={controller} selection={sel} />
     </div>
   );
 };

@@ -21,6 +21,7 @@ import {
   DocumentOpener,
 } from './types';
 import { inspectMaskEdge as inspectEdge, type InspectMaskEdgeOptions, type MaskEdgeReport } from './selection/inspect';
+import { describeRecipe, isShapeStep, readRecipeStep, replaySelectionRecipe, samplingKey, stepNeedsPixels, type RecipeCombine, type RecipeSampling, type SelectionRecipeStep } from './selection/recipe';
 import { compareSelectionMasks, type CompareSelectionsOptions, type SelectionDiff } from './selection/diff';
 import { selectionUncertainty as findUncertainty, type SelectionUncertainty, type SelectionUncertaintyOptions } from './selection/uncertainty';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
@@ -1416,6 +1417,7 @@ interface HistoryEntry {
   globalLight?: GlobalLight;
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
+  selectionRecipe?: SelectionRecipeStep[];
   channels?: AlphaChannel[];
   paths?: DocumentPath[];
   source: SourceSnapshot;
@@ -1525,6 +1527,42 @@ const DEVELOP_KEYS = ['brightness', 'contrast', 'saturation', 'exposure', 'tempe
  * ImageEditorController manages the complete lifecycle, canvas rendering pipeline,
  * tool interaction states, undo/redo history, serialization, and image export.
  */
+/** The combine fields of a shape command, for its recipe step. */
+function combineFields(o: SelectionCommandOptions): RecipeCombine {
+  return { ...(o.mode && o.mode !== 'replace' ? { mode: o.mode } : {}), ...(o.feather && o.feather > 0 ? { feather: o.feather } : {}), ...(o.invert ? { invert: true } : {}) };
+}
+
+function shapeStepFields(o: SelectionCommandOptions & ShapeSelectionOptions): RecipeCombine & { antiAlias?: boolean } {
+  return { ...(o.antiAlias === false ? { antiAlias: false } : {}), ...combineFields(o) };
+}
+
+function samplingFields(o: SampleOptions): RecipeSampling {
+  return { ...(o.sample && o.sample !== 'composite' ? { sample: o.sample } : {}), ...(o.sampleMerged ? { sampleMerged: true } : {}) };
+}
+
+/** A pixel command's own options (tolerance, fuzziness, …) as JSON, without the combine and sampling ones. */
+function stepOptions(o: object): Record<string, unknown> {
+  const { mode: _m, feather: _f, invert: _i, sample: _s, sampleMerged: _sm, pixels: _p, ...rest } = o as Record<string, unknown>;
+  return JSON.parse(JSON.stringify(rest));
+}
+
+/** The recipe after a recorded step: a replacing shape starts one; others extend it; a frozen selection stays frozen. */
+function recipeAfter(prev: SelectionRecipeStep[] | null, prevSel: SelectionMask | null, step: SelectionRecipeStep): SelectionRecipeStep[] | null {
+  const replaces = step.op === 'all' || (isShapeStep(step) && ((step as RecipeCombine).mode ?? 'replace') === 'replace');
+  if (replaces || !prevSel?.bounds) return [step];
+  return prev ? [...prev, step] : null;
+}
+
+/** A stored recipe, or null when it is missing or damaged (the selection is then frozen). */
+function readStoredRecipe(raw: unknown): SelectionRecipeStep[] | null {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  try {
+    return raw.map((s, i) => readRecipeStep(s, `selectionRecipe[${i}]`));
+  } catch {
+    return null;
+  }
+}
+
 export class ImageEditorController {
   private state: ImageEditorState;
   private renderer: ImageEditorRenderer;
@@ -1619,6 +1657,7 @@ export class ImageEditorController {
     if (options.initialState?.selection) {
       try {
         this.state.selection = normalizeSelection(deserializeSelection(options.initialState.selection));
+        if (this.state.selection) this.state.selectionRecipe = readStoredRecipe(options.initialState.selectionRecipe);
       } catch {
         // A damaged selection is dropped; the rest of the state still loads.
       }
@@ -2176,6 +2215,7 @@ export class ImageEditorController {
       transform: { ...s.transform },
       outputOpacity: s.outputOpacity,
       selection: s.selection ?? null,
+      ...(s.selectionRecipe ? { selectionRecipe: s.selectionRecipe } : {}),
       ...(s.channels?.length ? { channels: s.channels } : {}),
       ...(s.paths?.length ? { paths: s.paths } : {}),
       source: {
@@ -2214,6 +2254,7 @@ export class ImageEditorController {
     if (entry.colorMode) s.colorMode = entry.colorMode;
     else delete s.colorMode;
     s.selection = entry.selection;
+    s.selectionRecipe = entry.selectionRecipe ?? null;
     if (entry.channels?.length) s.channels = entry.channels;
     else delete s.channels;
     if (entry.paths?.length) s.paths = entry.paths;
@@ -5755,6 +5796,9 @@ export class ImageEditorController {
    * Returns false when nothing changed.
    */
   public setSelection(mask: SelectionMask | null, mode: SelectionMode = 'replace'): boolean {
+    // The recipe step of the command calling (see `withRecipeStep`); without one the recipe is dropped.
+    const step = this.pendingStep;
+    this.pendingStep = null;
     const { width, height } = this.naturalSize;
     let next: SelectionMask | null = null;
     if (mask) {
@@ -5768,8 +5812,100 @@ export class ImageEditorController {
     this.recordHistory();
     if (!next && prev?.bounds) this.lastSelection = prev;
     this.state.selection = next;
+    this.state.selectionRecipe = step && next ? recipeAfter(this.state.selectionRecipe ?? null, prev, step) : null;
     this.notify();
     return true;
+  }
+
+  /** The recipe step of the selection command now running, taken by `setSelection`. */
+  private pendingStep: SelectionRecipeStep | null = null;
+
+  /** Runs a selection command whose change `step` describes, so the selection's recipe records it. */
+  private withRecipeStep<T>(step: SelectionRecipeStep, fn: () => T): T {
+    this.pendingStep = step;
+    try {
+      return fn();
+    } finally {
+      this.pendingStep = null;
+    }
+  }
+
+  /** The selection's recipe as agents and panels read it (empty and not live when frozen or empty). */
+  public getSelectionRecipe(): { live: boolean; steps: Array<{ index: number } & SelectionRecipeStep> } {
+    const steps = this.state.selection?.bounds ? (this.state.selectionRecipe ?? null) : null;
+    return { live: Boolean(steps), steps: describeRecipe(steps ?? []) };
+  }
+
+  private requireRecipe(action: string): SelectionRecipeStep[] {
+    const steps = this.state.selection?.bounds ? this.state.selectionRecipe : null;
+    if (!steps) {
+      throw new LayerOperationError(
+        `The selection has no recipe to ${action}: it is frozen, or it was made or changed by a command recipes do not describe (quick, object, subject, sky and focus selections, Quick Mask painting, loaded masks and channels). Select again with marquees, polygons, the magic wand, Color Range, modify, invert or refine to start one.`
+      );
+    }
+    return steps;
+  }
+
+  /**
+   * Replaces the selection's recipe with `steps` (checked first) and the selection with what they
+   * make, from nothing. One undo step; nothing changes on an error. Returns the recipe.
+   */
+  public async setSelectionRecipe(steps: readonly unknown[]): Promise<ReturnType<ImageEditorController['getSelectionRecipe']>> {
+    if (!Array.isArray(steps) || !steps.length) throw new LayerOperationError('A recipe needs at least one step; use deselect to select nothing.');
+    const parsed = steps.map((s, i) => readRecipeStep(s, `steps[${i}]`));
+    const { width, height } = this.naturalSize;
+    const images = new Map<string, PixelBuffer>();
+    for (const step of parsed) {
+      if (!stepNeedsPixels(step)) continue;
+      const key = samplingKey(step);
+      if (!images.has(key)) images.set(key, await this.requirePixels(step as SampleOptions));
+    }
+    const result = replaySelectionRecipe(parsed, width, height, (step) => images.get(samplingKey(step))!);
+    this.recordHistory();
+    if (!result && this.state.selection?.bounds) this.lastSelection = this.state.selection;
+    this.state.selection = result;
+    this.state.selectionRecipe = result ? parsed : null;
+    this.notify();
+    return this.getSelectionRecipe();
+  }
+
+  /** Changes step `index` of the selection's recipe (fields given replace its own; `op` replaces it whole) and replays. One undo step. */
+  public editSelectionStep(index: number, changes: Record<string, unknown>): Promise<ReturnType<ImageEditorController['getSelectionRecipe']>> {
+    const steps = this.requireRecipe('edit');
+    const i = this.recipeIndex(steps, index, false);
+    const next = steps.map((s) => s as unknown);
+    next[i] = changes.op !== undefined && changes.op !== steps[i].op ? changes : { ...steps[i], ...changes };
+    return this.setSelectionRecipe(next);
+  }
+
+  /** Inserts a step at `index` (0..length; length appends) and replays. One undo step. */
+  public insertSelectionStep(index: number, step: unknown): Promise<ReturnType<ImageEditorController['getSelectionRecipe']>> {
+    const steps = this.requireRecipe('insert into');
+    const i = this.recipeIndex(steps, index, true);
+    return this.setSelectionRecipe([...steps.slice(0, i), step, ...steps.slice(i)]);
+  }
+
+  /** Removes step `index` and replays (the last step cannot go: deselect instead). One undo step. */
+  public removeSelectionStep(index: number): Promise<ReturnType<ImageEditorController['getSelectionRecipe']>> {
+    const steps = this.requireRecipe('remove from');
+    const i = this.recipeIndex(steps, index, false);
+    if (steps.length === 1) throw new LayerOperationError('That is the recipe\'s only step; deselect to select nothing.');
+    return this.setSelectionRecipe(steps.filter((_, k) => k !== i));
+  }
+
+  /** Drops the selection's recipe, keeping the selection as it is (a plain bitmap). One undo step. */
+  public freezeSelection(): boolean {
+    if (!this.state.selectionRecipe) return false;
+    this.recordHistory();
+    this.state.selectionRecipe = null;
+    this.notify();
+    return true;
+  }
+
+  private recipeIndex(steps: readonly SelectionRecipeStep[], index: number, insert: boolean): number {
+    const max = insert ? steps.length : steps.length - 1;
+    if (!Number.isInteger(index) || index < 0 || index > max) throw new LayerOperationError(`index must be 0..${max} (the recipe has ${steps.length} step${steps.length === 1 ? '' : 's'}; see get_selection_recipe), got ${String(index)}.`);
+    return index;
   }
 
   /**
@@ -5787,7 +5923,7 @@ export class ImageEditorController {
   /** Select › All. */
   public selectAll(): boolean {
     const { width, height } = this.naturalSize;
-    return this.setSelection(fullSelection(width, height));
+    return this.withRecipeStep({ op: 'all' }, () => this.setSelection(fullSelection(width, height)));
   }
 
   /** Select › Deselect. */
@@ -5875,7 +6011,7 @@ export class ImageEditorController {
   public invertSelection(): boolean {
     const { width, height } = this.naturalSize;
     const current = this.state.selection ?? createSelectionMask(width, height);
-    return this.setSelection(invertSelectionMask(current));
+    return this.withRecipeStep({ op: 'invert' }, () => this.setSelection(invertSelectionMask(current)));
   }
 
   private shapeCommand(mask: SelectionMask, options: SelectionCommandOptions): boolean {
@@ -5887,19 +6023,20 @@ export class ImageEditorController {
   /** Rectangular marquee in natural image pixels. */
   public selectRect(rect: CropBox, options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
     const { width, height } = this.naturalSize;
-    return this.shapeCommand(rectSelection(width, height, rect, options), options);
+    return this.withRecipeStep({ op: 'rect', rect: { ...rect }, ...shapeStepFields(options) }, () => this.shapeCommand(rectSelection(width, height, rect, options), options));
   }
 
   /** Elliptical marquee inscribed in `rect`. */
   public selectEllipse(rect: CropBox, options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
     const { width, height } = this.naturalSize;
-    return this.shapeCommand(ellipseSelection(width, height, rect, options), options);
+    return this.withRecipeStep({ op: 'ellipse', rect: { ...rect }, ...shapeStepFields(options) }, () => this.shapeCommand(ellipseSelection(width, height, rect, options), options));
   }
 
   /** Lasso / polygonal lasso. */
   public selectPolygon(points: ImagePoint[], options: SelectionCommandOptions & ShapeSelectionOptions = {}): boolean {
     const { width, height } = this.naturalSize;
-    return this.shapeCommand(polygonSelection(width, height, points, options), options);
+    const step: SelectionRecipeStep = { op: 'polygon', points: points.map((p) => ({ x: p.x, y: p.y })), ...shapeStepFields(options) };
+    return this.withRecipeStep(step, () => this.shapeCommand(polygonSelection(width, height, points, options), options));
   }
 
   /**
@@ -6144,7 +6281,8 @@ export class ImageEditorController {
     options: MagicWandOptions & SelectionCommandOptions & SampleOptions = {}
   ): Promise<SelectionMask | null> {
     const pixels = await this.requirePixels(options);
-    this.shapeCommand(magicWand(pixels, point, options), options);
+    const step: SelectionRecipeStep = { op: 'magic-wand', point: { x: point.x, y: point.y }, options: stepOptions(options), ...combineFields(options), ...samplingFields(options) };
+    this.withRecipeStep(step, () => this.shapeCommand(magicWand(pixels, point, options), options));
     return this.getSelection();
   }
 
@@ -6154,7 +6292,8 @@ export class ImageEditorController {
     options: ColorRangeOptions & SelectionCommandOptions & SampleOptions = {}
   ): Promise<SelectionMask | null> {
     const pixels = await this.requirePixels(options);
-    this.shapeCommand(colorRange(pixels, samples, options), options);
+    const step: SelectionRecipeStep = { op: 'color-range', samples: JSON.parse(JSON.stringify(samples)), options: stepOptions(options), ...combineFields(options), ...samplingFields(options) };
+    this.withRecipeStep(step, () => this.shapeCommand(colorRange(pixels, samples, options), options));
     return this.getSelection();
   }
 
@@ -6167,7 +6306,8 @@ export class ImageEditorController {
     options: { falloff?: number } & SelectionCommandOptions & SampleOptions = {}
   ): Promise<SelectionMask | null> {
     const pixels = await this.requirePixels(options);
-    this.shapeCommand(colorRangePreset(pixels, preset, options), options);
+    const step: SelectionRecipeStep = { op: 'color-range-preset', preset, ...(options.falloff !== undefined ? { falloff: options.falloff } : {}), ...combineFields(options), ...samplingFields(options) };
+    this.withRecipeStep(step, () => this.shapeCommand(colorRangePreset(pixels, preset, options), options));
     return this.getSelection();
   }
 
@@ -6175,7 +6315,7 @@ export class ImageEditorController {
   public modifySelection(op: SelectionModifyOp, radius: number): boolean {
     const sel = this.state.selection;
     if (!sel?.bounds) return false;
-    return this.setSelection(modifySelectionMask(sel, op, radius));
+    return this.withRecipeStep({ op: 'modify', modify: op, radius }, () => this.setSelection(modifySelectionMask(sel, op, radius)));
   }
 
   /**
@@ -6186,7 +6326,7 @@ export class ImageEditorController {
     const sel = this.state.selection;
     if (!sel?.bounds) return false;
     const pixels = (params.radius ?? 0) > 0 ? await this.requirePixels(options) : null;
-    return this.setSelection(refineSelectionMask(pixels, sel, params));
+    return this.withRecipeStep({ op: 'refine', params: { ...params }, ...samplingFields(options) }, () => this.setSelection(refineSelectionMask(pixels, sel, params)));
   }
 
   /**
@@ -6273,7 +6413,10 @@ export class ImageEditorController {
       return { output, layerId, refineMode, ...(documentId ? { documentId } : {}) };
     }
     return this.asOneStep(() => {
-      this.setSelection(refined);
+      // A plain colour refine of the selection is a recipe step; edits, regions and the model are not.
+      const plain = output === 'selection' && !edits.length && !regions && refineMode === 'color';
+      if (plain) this.withRecipeStep({ op: 'refine', params: { ...params }, ...samplingFields(options) }, () => this.setSelection(refined));
+      else this.setSelection(refined);
       if (output === 'selection') return { output, refineMode };
       if (output === 'layer-mask') {
         this.addLayerMask(layerId!, 'selection');
@@ -8480,6 +8623,7 @@ export class ImageEditorController {
     try {
       out = this.serializeState();
       if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
+      if (this.state.selection?.bounds && this.state.selectionRecipe) out.selectionRecipe = JSON.parse(JSON.stringify(this.state.selectionRecipe));
       if (this.state.channels?.length) out.channels = serializeChannels(this.state.channels);
       if (this.state.paths?.length) out.paths = serializePaths(this.state.paths);
     } finally {
@@ -8523,6 +8667,7 @@ export class ImageEditorController {
       }
     }
     this.state.selection = selection;
+    this.state.selectionRecipe = selection ? readStoredRecipe(data.selectionRecipe) : null;
     this.dropMismatchedSelection();
     const problems: string[] = [];
     const channels = deserializeChannels(data.channels, this.naturalSize, problems);

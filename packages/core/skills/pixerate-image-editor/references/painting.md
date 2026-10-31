@@ -1,4 +1,20 @@
-# Painting: mixing paint, the Mixer Brush and gradient paint
+# Painting: strokes, mixing paint, the Mixer Brush and gradient paint
+
+## Strokes
+
+1. **Paint on its own layer** (`add_pixel_layer`), not on the Background (active on a new image, so
+   strokes without `layerId` land there) unless asked: a layer can be faded, masked or deleted.
+2. **Retouch through masks**, not the eraser (see `pixerate-image-selection-masking`).
+3. **One stroke is one call and one undo step.** Send the path's points in order (a few points
+   per brush diameter is enough; dabs are spaced by `brush.spacing`). Use `opacity` for the
+   overall strength and `flow` for gradual build-up within the stroke.
+4. **Limit paint with a selection**, or lock transparency (`set_layer_properties`
+   `locks.transparency`) to paint only where the layer already has pixels.
+5. **Mixing paint, the Mixer Brush and gradient paint**: `mix_colors` mixes named paints like
+   pigment; `paint_stroke` `tool: "mixer"` picks up and smears the layer's colours; gradient paint
+   changes colour along a stroke. See below.
+
+## Mixing paint, the Mixer Brush and gradient paint
 
 Read this before `mix_colors`, a `paint_stroke` with `tool: "mixer"`, or gradient paint
 (`set_paint` / `paint_stroke` `paint`).

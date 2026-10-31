@@ -203,6 +203,90 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       }),
   };
 
+  // Live selections: the steps that made the selection, editable afterwards.
+  const stepProperties: Record<string, JsonSchema> = {
+    op: { type: 'string', enum: ['rect', 'ellipse', 'polygon', 'magic-wand', 'color-range', 'color-range-preset', 'all', 'invert', 'modify', 'refine'], description: 'The step: a marquee (rect / ellipse with rect), polygon (points), magic-wand (point, options), color-range (samples, options), color-range-preset (preset, falloff), all, invert, modify (modify, radius) or refine (params).' },
+    rect: { ...rectSchemaStrict, description: 'rect and ellipse: the box in natural image pixels.' },
+    points: { type: 'array', minItems: 3, items: pointSchema, description: 'polygon: the outline, natural image pixels.' },
+    point: { ...pointSchema, description: 'magic-wand: where to click.' },
+    samples: { type: 'array', minItems: 1, items: {}, description: 'color-range: colour samples, as select_color_range takes them.' },
+    options: { type: 'object', description: 'magic-wand and color-range: their own options (tolerance, contiguous, fuzziness, …) as those tools take them.' },
+    preset: { type: 'string', description: 'color-range-preset: the preset (reds … magentas, highlights, midtones, shadows, skinTones).' },
+    falloff: { type: 'number', minimum: 0, maximum: 255, description: 'color-range-preset (tones): falloff in levels (default 20).' },
+    modify: { type: 'string', enum: [...SELECTION_MODIFY_OPS], description: 'modify: expand, contract, feather, border or smooth (grow and shrink are older names).' },
+    radius: { type: 'number', minimum: 0, maximum: 500, description: 'modify: radius in pixels.' },
+    params: { type: 'object', description: 'refine: radius, smartRadius, smooth, feather, contrast, shiftEdge as refine_selection takes them.' },
+    mode: modeSchema,
+    feather: featherSchema,
+    invert: { type: 'boolean', description: 'Shape steps: invert the new shape before combining (default false).' },
+    antiAlias: antiAliasSchema,
+    sample: sampleSchema,
+    sampleMerged: sampleMergedSchema,
+  };
+  const RECIPE_RETURNS = 'Returns the selection summary and the recipe { live, steps (each with its index) }.';
+  const withRecipe = async (p: Promise<unknown>) => {
+    await p;
+    return { ...summary(controller), recipe: controller.getSelectionRecipe() };
+  };
+
+  const getRecipeTool: AgentTool = {
+    name: 'get_selection_recipe',
+    title: 'Read the selection recipe',
+    description: `Live selections: the steps that made the current selection (marquees, polygons, magic wand, Color Range, modify, invert, refine), so one can be changed afterwards with edit_selection_step, insert_selection_step or remove_selection_step instead of selecting again. live false means it is frozen (made or changed by a command a recipe cannot describe, e.g. quick_select, select_subject, Quick Mask painting). ${RECIPE_RETURNS}`,
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'Read the selection recipe', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: () => ({ ...summary(controller), recipe: controller.getSelectionRecipe() }),
+  };
+
+  const editStepTool: AgentTool = {
+    name: 'edit_selection_step',
+    title: 'Edit a selection recipe step',
+    description: `Changes one step of the selection's recipe (index from get_selection_recipe) and replays the recipe: the fields given replace the step's own (e.g. tolerance in options, the rect, the modify radius, mode); giving a different op replaces the step whole. One undo step; nothing changes on an error. ${RECIPE_RETURNS}`,
+    inputSchema: {
+      type: 'object',
+      properties: { index: { type: 'integer', minimum: 0, description: 'The step to change (see get_selection_recipe).' }, changes: { type: 'object', properties: stepProperties, additionalProperties: false, description: 'The step fields to set.' } },
+      required: ['index', 'changes'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Edit a selection recipe step'),
+    handler: ({ index, changes }) => withRecipe(controller.editSelectionStep(index as number, changes as Record<string, unknown>)),
+  };
+
+  const insertStepTool: AgentTool = {
+    name: 'insert_selection_step',
+    title: 'Insert a selection recipe step',
+    description: `Inserts a step into the selection's recipe at index (its length appends) and replays it, e.g. a subtract rectangle before a refine, or a modify smooth after a magic wand. One undo step; nothing changes on an error. ${RECIPE_RETURNS}`,
+    inputSchema: {
+      type: 'object',
+      properties: { index: { type: 'integer', minimum: 0, description: 'Where to insert (0..number of steps).' }, step: { type: 'object', properties: stepProperties, required: ['op'], additionalProperties: false, description: 'The step to insert.' } },
+      required: ['index', 'step'],
+      additionalProperties: false,
+    },
+    annotations: writeAnnotations('Insert a selection recipe step'),
+    handler: ({ index, step }) => withRecipe(controller.insertSelectionStep(index as number, step)),
+  };
+
+  const removeStepTool: AgentTool = {
+    name: 'remove_selection_step',
+    title: 'Remove a selection recipe step',
+    description: `Removes one step of the selection's recipe and replays the rest (the only step cannot go: deselect instead). One undo step. ${RECIPE_RETURNS}`,
+    inputSchema: { type: 'object', properties: { index: { type: 'integer', minimum: 0, description: 'The step to remove (see get_selection_recipe).' } }, required: ['index'], additionalProperties: false },
+    annotations: writeAnnotations('Remove a selection recipe step'),
+    handler: ({ index }) => withRecipe(controller.removeSelectionStep(index as number)),
+  };
+
+  const freezeTool: AgentTool = {
+    name: 'freeze_selection',
+    title: 'Freeze the selection',
+    description: `Drops the selection's recipe and keeps the selection exactly as it is (a plain bitmap), so later edits start from it. One undo step; a frozen or empty selection is unchanged. ${RECIPE_RETURNS}`,
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'Freeze the selection', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: () => {
+      controller.freezeSelection();
+      return { ...summary(controller), recipe: controller.getSelectionRecipe() };
+    },
+  };
+
   const selectRegion: AgentTool = {
     name: 'select_region',
     title: 'Select a region',
@@ -1369,6 +1453,11 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     getSelection,
     inspectEdge,
     compareTool,
+    getRecipeTool,
+    editStepTool,
+    insertStepTool,
+    removeStepTool,
+    freezeTool,
     selectAll,
     deselect,
     invert,
