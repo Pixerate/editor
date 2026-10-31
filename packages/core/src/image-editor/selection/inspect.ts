@@ -94,28 +94,8 @@ export function inspectMaskEdge(mask: SelectionMask, image: PixelBuffer & { x: n
     if (img[i + 3] < 128) return null;
     return [img[i], img[i + 1], img[i + 2]];
   };
-  const premul = (x: number, y: number, c: number) => {
-    const ix = Math.min(image.width - 1, Math.max(0, x - image.x));
-    const iy = Math.min(image.height - 1, Math.max(0, y - image.y));
-    const i = (iy * image.width + ix) * 4;
-    return (img[i + c] * img[i + 3]) / 255;
-  };
-  const gradCache = new Map<number, number>();
   /** The image's Sobel magnitude at a pixel, the largest over R, G and B (0–1 of a full step). */
-  const gradient = (x: number, y: number): number => {
-    const k = y * W + x;
-    const hit = gradCache.get(k);
-    if (hit !== undefined) return hit;
-    let best = 0;
-    for (let c = 0; c < 3; c++) {
-      const p = (dx: number, dy: number) => premul(x + dx, y + dy, c);
-      const gx = p(1, -1) + 2 * p(1, 0) + p(1, 1) - p(-1, -1) - 2 * p(-1, 0) - p(-1, 1);
-      const gy = p(-1, 1) + 2 * p(0, 1) + p(1, 1) - p(-1, -1) - 2 * p(0, -1) - p(1, -1);
-      best = Math.max(best, Math.hypot(gx, gy) / 1020);
-    }
-    gradCache.set(k, best);
-    return best;
-  };
+  const gradient = createGradientSampler(image, W);
 
   // The worst-region grid: blocks a twelfth of the image's longer side (24–256 px).
   const B = Math.min(256, Math.max(24, Math.round(Math.max(W, H) / 12)));
@@ -309,6 +289,36 @@ export function inspectMaskEdge(mask: SelectionMask, image: PixelBuffer & { x: n
     islands,
     worst,
     issues,
+  };
+}
+
+/**
+ * A cached sampler of the image's edge strength at document pixels: the Sobel magnitude of
+ * alpha-weighted R, G and B, the largest of the three, as a fraction of a full 0–255 step.
+ * Reads clamp at the image's edges. `W` is the canvas width (for the cache key).
+ */
+export function createGradientSampler(image: PixelBuffer & { x: number; y: number }, W: number): (x: number, y: number) => number {
+  const img = image.data;
+  const premul = (x: number, y: number, c: number) => {
+    const ix = Math.min(image.width - 1, Math.max(0, x - image.x));
+    const iy = Math.min(image.height - 1, Math.max(0, y - image.y));
+    const i = (iy * image.width + ix) * 4;
+    return (img[i + c] * img[i + 3]) / 255;
+  };
+  const cache = new Map<number, number>();
+  return (x, y) => {
+    const k = y * W + x;
+    const hit = cache.get(k);
+    if (hit !== undefined) return hit;
+    let best = 0;
+    for (let c = 0; c < 3; c++) {
+      const p = (dx: number, dy: number) => premul(x + dx, y + dy, c);
+      const gx = p(1, -1) + 2 * p(1, 0) + p(1, 1) - p(-1, -1) - 2 * p(-1, 0) - p(-1, 1);
+      const gy = p(-1, 1) + 2 * p(0, 1) + p(1, 1) - p(-1, -1) - 2 * p(0, -1) - p(1, -1);
+      best = Math.max(best, Math.hypot(gx, gy) / 1020);
+    }
+    cache.set(k, best);
+    return best;
   };
 }
 

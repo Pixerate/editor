@@ -43,7 +43,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 2. **Build it in steps** with `mode`: start with `replace`, `add` what was missed, `subtract`
    what leaked, and `intersect` to limit it to a region (for example `select_rect` around the
    subject).
-   **Check:** `bounds` hug the subject. A bounds as large as the image means a leak.
+   **Check:** `bounds` hug the subject. A bounds as large as the image means a leak. Smart tools
+   return `uncertainRegions` (edge with no image edge under it): look there, refine with `regions`.
 3. **Measure the edge, then look.** `inspect_mask_edge` scores it: `haloScore` ≥ 0.35 is old
    background inside the edge, `edgeAlignment` < 0.5 is off the image's edges, `jaggedness` ≥ 15
    zigzags; it counts `holes` and `islands`, `issues` names fixes, `worst` gives `capture_view` rects.
@@ -210,13 +211,12 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 
 - `get_selection`: empty, bounds, area and percent after every step
 - `select_all`, `deselect`, `invert_selection`: whole-image selections
-- `select_rect`, `select_ellipse`: marquees
+- `select_rect`, `select_ellipse`, `select_line`: marquees, and a single row or column
 - `select_polygon`: the lasso, along a contour; with `snapToEdges`, the Magnetic Lasso
 - `quick_select`: brush strokes that grow out to the region's edges
 - `select_object`: the object in a box or under a point
 - `select_focus_area`: what is in focus
 - `select_sky`: the sky
-- `select_line`: a single row or column
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere
 - `reselect`: undo a deselect

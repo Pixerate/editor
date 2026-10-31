@@ -65,6 +65,16 @@ function rectOf(args: Record<string, unknown>) {
   return rect;
 }
 
+/**
+ * The smart selection tools' trimap report: up to 20 regions where the new selection's edge has no
+ * image edge under it (least confident first), how many there are, and the edge's overall
+ * confidence. Look at those regions with capture_view and refine only them.
+ */
+function uncertainty(controller: ImageEditorController) {
+  const u = controller.selectionUncertainty();
+  return { uncertainRegions: u.regions, uncertainCount: u.count, edgeConfidence: u.confidence };
+}
+
 function summary(controller: ImageEditorController) {
   const sel = controller.getSelection();
   const { width, height } = controller.getState().imageDimensions;
@@ -314,6 +324,13 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
           },
         },
         refineMode: { type: 'string', enum: ['color', 'object'], description: 'color (default): refine from the image colours; object: from a host segmentation model\'s outline of the object (needs a model).' },
+        regions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 50,
+          items: rectSchemaStrict,
+          description: 'Refine only inside these rectangles (natural image pixels), e.g. the uncertainRegions bounds a smart selection returned; the rest of the selection stays as it is. Default: everywhere.',
+        },
       },
       additionalProperties: false,
     },
@@ -347,6 +364,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
           decontaminate: num(params.decontaminate, 0),
           edits,
           refineMode: params.refineMode === 'object' ? 'object' : 'color',
+          ...(params.regions !== undefined ? { regions: params.regions as { x: number; y: number; width: number; height: number }[] } : {}),
         }
       );
       return { ...summary(controller), ...result };
@@ -515,7 +533,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'quick_select',
     title: 'Quick Selection',
     description:
-      'Quick Selection: paints brush strokes (paths in natural image pixels) that each grow into the region they are painted on, out to its edges (a graph cut on colour and edges), combined with the selection by mode. With replace (default) the first stroke replaces the selection and later ones add, as the brush does; use mode subtract to take an area back out. Best for a subject or area that differs from its surroundings: paint inside it, away from the edge, then check with get_selection and capture_view and add or subtract strokes where it leaked or fell short. All strokes are one undoable step. Returns the selection.',
+      'Quick Selection: paints brush strokes (paths in natural image pixels) that each grow into the region they are painted on, out to its edges (a graph cut on colour and edges), combined with the selection by mode. With replace (default) the first stroke replaces the selection and later ones add, as the brush does; use mode subtract to take an area back out. Best for a subject or area that differs from its surroundings: paint inside it, away from the edge, then check with get_selection and capture_view and add or subtract strokes where it leaked or fell short. All strokes are one undoable step. Returns the selection. Also returns uncertainRegions (bounds, area, confidence 0-1; up to 20, least confident first), uncertainCount and edgeConfidence: where the edge has no image edge under it. Look at those with capture_view and fix only them (refine_selection with regions).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -548,7 +566,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         enhanceEdge: args.enhanceEdge as boolean | undefined,
         signal: context?.signal,
       });
-      return summary(controller);
+      return { ...summary(controller), ...uncertainty(controller) };
     },
   };
 
@@ -556,7 +574,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_object',
     title: 'Object Selection',
     description:
-      'Object Selection: selects the object inside rect (a box drawn loosely around it, natural image pixels; what lies outside the box is treated as background) or the object under point. With a host segmentation model it asks the model (falling back if nothing it returns fits); otherwise it finds the object from the colours of object and background and the edges between them (GrabCut). Combined with the selection by mode. A box is more reliable than a point: make it a little larger than the object on every side. Check with get_selection and capture_view, then fix with quick_select strokes or select_object with mode add / subtract. One undoable step. Returns the selection and method ("model" or "grabcut").',
+      'Object Selection: selects the object inside rect (a box drawn loosely around it, natural image pixels; what lies outside the box is treated as background) or the object under point. With a host segmentation model it asks the model (falling back if nothing it returns fits); otherwise it finds the object from the colours of object and background and the edges between them (GrabCut). Combined with the selection by mode. A box is more reliable than a point: make it a little larger than the object on every side. Check with get_selection and capture_view, then fix with quick_select strokes or select_object with mode add / subtract. One undoable step. Returns the selection and method ("model" or "grabcut"). Also returns uncertainRegions (bounds, area, confidence 0-1; up to 20, least confident first), uncertainCount and edgeConfidence: where the edge has no image edge under it. Look at those with capture_view and fix only them (refine_selection with regions).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -591,7 +609,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       const { method } = rect
         ? await controller.selectObject({ rect: { x: num(rect.x, NaN), y: num(rect.y, NaN), width: num(rect.width, NaN), height: num(rect.height, NaN) } }, options)
         : await controller.selectObject({ point: { x: num(point!.x, NaN), y: num(point!.y, NaN) } }, options);
-      return { ...summary(controller), method };
+      return { ...summary(controller), method, ...uncertainty(controller) };
     },
   };
 
@@ -629,7 +647,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'select_sky',
     title: 'Select the sky',
     description:
-      'Select › Sky: selects the sky, combined with the selection by mode. With a host segmentation model it asks the model; otherwise it finds it classically (blue, or bright and grey when overcast, smooth, reaching down from the top of the image, including patches seen through branches or gaps) with the edge fitted to the skyline. Use it to replace or recolour a sky or to adjust the land without it (invert_selection). Raise threshold to take in haze or a sunset glow, lower it if bright buildings come in. One undoable step. Returns the selection, method ("model" or "classical"; threshold and softness apply to classical), and a note when no sky was found (the selection is then unchanged).',
+      'Select › Sky: selects the sky, combined with the selection by mode. With a host segmentation model it asks the model; otherwise it finds it classically (blue, or bright and grey when overcast, smooth, reaching down from the top of the image, including patches seen through branches or gaps) with the edge fitted to the skyline. Use it to replace or recolour a sky or to adjust the land without it (invert_selection). Raise threshold to take in haze or a sunset glow, lower it if bright buildings come in. One undoable step. Returns the selection, method ("model" or "classical"; threshold and softness apply to classical), and a note when no sky was found (the selection is then unchanged). Also returns uncertainRegions (bounds, area, confidence 0-1; up to 20, least confident first), uncertainCount and edgeConfidence: where the edge has no image edge under it. Look at those with capture_view and fix only them (refine_selection with regions).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -651,7 +669,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
         useModel: args.useModel as boolean | undefined,
         signal: context?.signal,
       });
-      return { ...summary(controller), method, ...(note ? { note } : {}) };
+      return { ...summary(controller), method, ...(note ? { note } : {}), ...uncertainty(controller) };
     },
   };
 
@@ -1321,7 +1339,7 @@ export function createImageSubjectSelectionTool(controller: ImageEditorControlle
     name: 'select_subject',
     title: 'Select a subject',
     description:
-      'Select › Subject: selects the main subject of the flattened image, combined with the selection by mode. With a segmentation model set by the host, target (a description such as "the dog" or "the house") chooses which objects; describe one object precisely to get only that one. Without a model, the subject that stands out most from the background is found classically (superpixel saliency and GrabCut): target cannot choose it, and method "saliency" and a note say so. Then check it with capture_view and fix it with quick_select or select_object. One undoable step. Returns the selection, the objects found (label, bounds), method ("model" or "saliency") and any note; none found leaves the selection unchanged.',
+      'Select › Subject: selects the main subject of the flattened image, combined with the selection by mode. With a segmentation model set by the host, target (a description such as "the dog" or "the house") chooses which objects; describe one object precisely to get only that one. Without a model, the subject that stands out most from the background is found classically (superpixel saliency and GrabCut): target cannot choose it, and method "saliency" and a note say so. Then check it with capture_view and fix it with quick_select or select_object. One undoable step. Returns the selection, the objects found (label, bounds), method ("model" or "saliency") and any note; none found leaves the selection unchanged. Also returns uncertainRegions (bounds, area, confidence 0-1; up to 20, least confident first), uncertainCount and edgeConfidence: where the edge has no image edge under it. Look at those with capture_view and fix only them (refine_selection with regions).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1352,7 +1370,7 @@ export function createImageSubjectSelectionTool(controller: ImageEditorControlle
         // Under playback the cursor traces what the model found, as a lasso, before it is selected.
         beforeApply: perform ? (outlines) => perform(planOutlineTrace(outlines)) : undefined,
       });
-      return { ...summary(controller), found: segments, method, ...(note ? { note } : {}) };
+      return { ...summary(controller), found: segments, method, ...(note ? { note } : {}), ...uncertainty(controller) };
     },
   };
 }

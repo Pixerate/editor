@@ -52,6 +52,7 @@
   let output = $state<RefineOutput>('selection');
   let decontaminate = $state(0);
   let objectAware = $state(false);
+  let onlyUncertain = $state(false);
   const canObject = $derived.by(() => {
     void tick;
     return Boolean(controller.segmentationProvider);
@@ -67,9 +68,13 @@
     busy = true;
     error = null;
     try {
+      // Only where the edge has no image edge under it (the selection's uncertain regions).
+      const regions = onlyUncertain ? controller.selectionUncertainty().regions.map((r) => r.bounds) : undefined;
+      if (regions && !regions.length) throw new Error("No uncertain areas: the selection's edge already follows edges in the image. Untick Only uncertain areas to refine everywhere.");
       await controller.refineSelectionTo({ ...params }, output, {
         decontaminate: toLayer ? decontaminate : 0,
         refineMode: canObject && objectAware ? 'object' : 'color',
+        ...(regions ? { regions } : {}),
       });
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -114,6 +119,10 @@
       onchange={(e) => (params = { ...params, smartRadius: (e.currentTarget as HTMLInputElement).checked })}
     />
     Smart Radius
+  </label>
+  <label class="flex items-center gap-2 text-foreground" title="Refine only where the edge has no image edge under it">
+    <input type="checkbox" aria-label="Only uncertain areas" checked={onlyUncertain} onchange={(e) => (onlyUncertain = (e.currentTarget as HTMLInputElement).checked)} />
+    Only uncertain areas
   </label>
   {#if canObject}
     <label class="flex items-center gap-2 text-foreground">

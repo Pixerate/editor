@@ -39,6 +39,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
   const [output, setOutput] = useState<RefineOutput>('selection');
   const [decontaminate, setDecontaminate] = useState(0);
   const [objectAware, setObjectAware] = useState(false);
+  const [onlyUncertain, setOnlyUncertain] = useState(false);
   const canObject = Boolean(controller.segmentationProvider);
   const toLayer = output !== 'selection' && output !== 'layer-mask';
   const sel = selection === undefined ? controller.getSelection() : selection;
@@ -49,9 +50,13 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
     setBusy(true);
     setError(null);
     try {
+      // Only where the edge has no image edge under it (the selection's uncertain regions).
+      const regions = onlyUncertain ? controller.selectionUncertainty().regions.map((r) => r.bounds) : undefined;
+      if (regions && !regions.length) throw new Error("No uncertain areas: the selection's edge already follows edges in the image. Untick Only uncertain areas to refine everywhere.");
       await controller.refineSelectionTo(params, output, {
         decontaminate: toLayer ? decontaminate : 0,
         refineMode: canObject && objectAware ? 'object' : 'color',
+        ...(regions ? { regions } : {}),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -87,6 +92,10 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
       <label className="flex items-center gap-2 text-foreground">
         <input type="checkbox" checked={params.smartRadius} onChange={(e) => setParams({ ...params, smartRadius: e.target.checked })} />
         Smart Radius
+      </label>
+      <label className="flex items-center gap-2 text-foreground" title="Refine only where the edge has no image edge under it">
+        <input type="checkbox" aria-label="Only uncertain areas" checked={onlyUncertain} onChange={(e) => setOnlyUncertain(e.target.checked)} />
+        Only uncertain areas
       </label>
       {canObject && (
         <label className="flex items-center gap-2 text-foreground">
