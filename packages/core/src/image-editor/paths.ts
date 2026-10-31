@@ -96,3 +96,9 @@ export function readPaths(stored: unknown, problems: string[] = []): DocumentPat
   }
   return out;
 }
+
+/**
+ * What the path tools edit: a document path, a shape layer's components or a layer's vector mask
+ * (see `ImageEditorController.pathEditTarget`).
+ */
+export type PathEditTarget = { kind: 'path'; id: string } | { kind: 'shape'; layerId: string } | { kind: 'vector-mask'; layerId: string };

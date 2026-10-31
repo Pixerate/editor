@@ -19,6 +19,7 @@
     FreeTransformTool,
     DEFAULT_SHAPE_TOOL_OPTIONS,
     DEFAULT_TYPE_TOOL_OPTIONS,
+    imageToolLabel,
     type SelectionToolOptions,
     type ShapeToolOptions,
     type TextEditSession,
@@ -702,16 +703,16 @@
 
       {#if activeTab === 'annotate'}
         <div class="flex flex-col gap-3 text-xs">
-          <span class={imageSectionTitleClass}>Shape & Type Layers</span>
+          <span class={imageSectionTitleClass}>Shape & Type Layers, Paths</span>
           <div class="grid grid-cols-2 gap-1.5">
-            {#each ['shape', 'type'] as const as t (t)}
+            {#each ['shape', 'type', 'path-pen', 'path-select', 'direct-select'] as const as t (t)}
               <button
                 type="button"
                 aria-pressed={editor.state.activeTool === t}
                 onclick={() => editor.setTool(t)}
                 class="py-1.5 px-2 rounded-lg font-medium border transition-colors {editor.state.activeTool === t
                   ? 'bg-primary border-primary text-primary-foreground'
-                  : 'bg-muted border-border text-foreground hover:bg-accent'}">{t === 'shape' ? 'Shape' : 'Type'}</button>
+                  : 'bg-muted border-border text-foreground hover:bg-accent'}">{imageToolLabel(t)}</button>
             {/each}
           </div>
           {#if editor.state.activeTool === 'shape'}
@@ -742,7 +743,7 @@
                   ? 'bg-primary border-primary text-primary-foreground'
                   : 'bg-muted border-border text-foreground hover:bg-accent'}"
               >
-                {t}
+                {t === 'pen' ? 'freehand' : t}
               </button>
             {/each}
           </div>

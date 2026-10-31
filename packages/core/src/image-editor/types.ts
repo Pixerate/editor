@@ -363,7 +363,11 @@ export type ImageEditorTool =
   /** Live shape layers (see `ShapeDrawGesture`). */
   | 'shape'
   /** Live type layers, edited on the canvas (see `TypeToolGesture`). */
-  | 'type';
+  | 'type'
+  /** The path tools (see `PathEditGesture`): Path Selection, Direct Selection and the Pen for paths. */
+  | 'path-select'
+  | 'direct-select'
+  | 'path-pen';
 
 export type ImageEditorFit = 'contain' | 'margin';
 

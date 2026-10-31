@@ -18,6 +18,7 @@ import {
   FreeTransformTool,
   DEFAULT_SHAPE_TOOL_OPTIONS,
   DEFAULT_TYPE_TOOL_OPTIONS,
+  imageToolLabel,
   type SelectionToolOptions,
   type ShapeToolOptions,
   type TypeToolOptions,
@@ -711,9 +712,9 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           {/* TAB 3: ANNOTATIONS */}
           {activeTab === 'annotate' && (
             <div className="flex flex-col gap-3 text-xs">
-              <span className={imageSectionTitleClass}>Shape & Type Layers</span>
+              <span className={imageSectionTitleClass}>Shape & Type Layers, Paths</span>
               <div className="grid grid-cols-2 gap-1.5">
-                {(['shape', 'type'] as ImageEditorTool[]).map((t) => (
+                {(['shape', 'type', 'path-pen', 'path-select', 'direct-select'] as ImageEditorTool[]).map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -723,7 +724,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                       state.activeTool === t ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
-                    {t === 'shape' ? 'Shape' : 'Type'}
+                    {imageToolLabel(t)}
                   </button>
                 ))}
               </div>
@@ -760,7 +761,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                         : 'bg-muted border-border text-foreground hover:bg-accent'
                     }`}
                   >
-                    {t}
+                    {t === 'pen' ? 'freehand' : t}
                   </button>
                 ))}
               </div>

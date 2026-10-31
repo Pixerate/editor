@@ -1,3 +1,4 @@
+import type { PathEditOverlay } from './path-edit';
 import type {
   Annotation,
   CropBox,
@@ -109,6 +110,8 @@ export interface RenderOptions {
     /** Warp mode: the mesh's grid lines as cubics, its anchors, and handles with their anchors. */
     warp?: { curves: ImagePoint[][]; anchors: ImagePoint[]; handles: Array<{ point: ImagePoint; anchor: ImagePoint }> };
   } | null;
+  /** The path tools' target outline, anchors, handles, marquee and Pen preview in natural pixels (`PathEditGesture.overlay()`). */
+  pathEdit?: PathEditOverlay | null;
 }
 
 /**
@@ -609,6 +612,67 @@ export class ImageEditorRenderer {
         ctx.lineWidth = 1.5 * u;
         ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
         ctx.stroke();
+      } catch {
+        // Best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // The path tools: the target's outline, its anchors (selected ones filled), the selected
+    // anchors' handles, a selection marquee and the Pen's next segment, a fixed size on screen.
+    if (options.pathEdit) {
+      const e = options.pathEdit;
+      ctx.save();
+      try {
+        const scr = (p: ImagePoint) => projectImagePoint(p, projection);
+        const trace = (c: ImagePoint[]) => {
+          const [a, b, d, f] = c.map(scr);
+          ctx.moveTo(a.x, a.y);
+          if (f) ctx.bezierCurveTo(b.x, b.y, d.x, d.y, f.x, f.y);
+          else ctx.lineTo(b.x, b.y);
+        };
+        ctx.beginPath();
+        e.curves.forEach(trace);
+        ctx.lineWidth = 1.5 * u;
+        ctx.strokeStyle = OVERLAY_HANDLE_EDGE;
+        ctx.stroke();
+        if (e.preview) {
+          ctx.beginPath();
+          trace(e.preview);
+          ctx.setLineDash([4 * u, 3 * u]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.beginPath();
+        for (const h of e.handles) {
+          const a = scr(h.anchor);
+          const q = scr(h.point);
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(q.x, q.y);
+        }
+        ctx.lineWidth = 1 * u;
+        ctx.stroke();
+        for (const h of e.handles) {
+          const q = scr(h.point);
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, 3 * u, 0, Math.PI * 2);
+          ctx.fillStyle = OVERLAY_HANDLE_EDGE;
+          ctx.fill();
+        }
+        const size = 6 * u;
+        ctx.lineWidth = 1 * u;
+        for (const a of e.anchors) {
+          const q = scr(a.point);
+          ctx.fillStyle = a.selected ? OVERLAY_HANDLE_EDGE : '#ffffff';
+          ctx.fillRect(q.x - size / 2, q.y - size / 2, size, size);
+          ctx.strokeRect(q.x - size / 2, q.y - size / 2, size, size);
+        }
+        if (e.marquee) {
+          const a = scr({ x: e.marquee.x, y: e.marquee.y });
+          const b = scr({ x: e.marquee.x + e.marquee.width, y: e.marquee.y + e.marquee.height });
+          ctx.setLineDash([4 * u, 3 * u]);
+          ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        }
       } catch {
         // Best effort (headless / mocked contexts).
       }

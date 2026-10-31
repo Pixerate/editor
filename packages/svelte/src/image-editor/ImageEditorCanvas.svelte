@@ -27,6 +27,8 @@
     handleQuickMaskKey,
     handleMaskViewKey,
     ShapeDrawGesture,
+    PathEditGesture,
+    isPathEditTool,
     TypeToolGesture,
     DEFAULT_SHAPE_TOOL_OPTIONS,
     DEFAULT_TYPE_TOOL_OPTIONS,
@@ -279,6 +281,8 @@
 
   // Shape and type tools; type is edited on the canvas through a hidden textarea.
   const shapeGesture = $derived(new ShapeDrawGesture(editor.controller, () => shapeOptions));
+  // Path tools (Path Selection, Direct Selection, Pen): edit the active path, shape or vector mask.
+  const pathGesture = $derived(new PathEditGesture(editor.controller));
   const typeTool = $derived(new TypeToolGesture(editor.controller, () => typeOptions));
   let typeInputEl = $state<HTMLTextAreaElement | null>(null);
   $effect(() => {
@@ -521,7 +525,10 @@
     const viewport = measureCanvasViewport(containerEl);
     view = { width: viewport.width, height: viewport.height };
     // The transform overlay's rotate handle sits a fixed distance out on screen.
-    transformTool.setView(getViewportProjection(editor.controller.getState(), view.width, view.height, mode === 'crop').scale);
+    const viewScale = getViewportProjection(editor.controller.getState(), view.width, view.height, mode === 'crop').scale;
+    transformTool.setView(viewScale);
+    pathGesture.setView(viewScale);
+    const activeTool = editor.controller.getState().activeTool;
 
     await editor.controller.render(canvasEl, {
       viewportWidth: viewport.width,
@@ -542,6 +549,7 @@
           : null,
       freeTransform: transformTool.overlay() ?? layerFrame(),
       textEdit: typeTool.session?.alive ? typeTool.session.overlay() : null,
+      pathEdit: mode === 'annotate' && isPathEditTool(activeTool) ? pathGesture.overlay(activeTool) : null,
     });
   }
 
@@ -617,6 +625,24 @@
       if (gesture.key(e.key)) {
         e.preventDefault();
         selectionDraft = gesture.draftPath;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  $effect(() => {
+    if (mode !== 'annotate' || typeof window === 'undefined') return;
+    const gesture = pathGesture;
+    // The path tools: Delete removes the selected anchors, Enter / Escape end the Pen's subpath.
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (!isPathEditTool(editor.controller.getState().activeTool)) return;
+      if (gesture.key(e.key)) {
+        e.preventDefault();
+        report('path', gesture.error);
+        void renderCanvas();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -725,6 +751,13 @@
           startCrop: { x: startImgPt.x, y: startImgPt.y, width: 0, height: 0 },
         };
       }
+      return;
+    }
+
+    if (mode === 'annotate' && isPathEditTool(editor.state.activeTool)) {
+      pathGesture.down(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), editor.state.activeTool, { shift: e.shiftKey, alt: e.altKey });
+      report('path', pathGesture.error);
+      void renderCanvas();
       return;
     }
 
@@ -854,6 +887,16 @@
       return;
     }
 
+    if (mode === 'annotate' && isPathEditTool(editor.state.activeTool)) {
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
+      if (pathGesture.active) {
+        pathGesture.move(imgPt, { shift: e.shiftKey, alt: e.altKey });
+        if (pathGesture.error) report('path', pathGesture.error);
+      } else pathGesture.hover(imgPt);
+      void renderCanvas();
+      return;
+    }
+
     if (mode === 'annotate' && editor.state.activeTool === 'shape') {
       if (shapeGesture.active) {
         shapeGesture.move(canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false), { shift: e.shiftKey, alt: e.altKey });
@@ -975,6 +1018,11 @@
       return;
     }
 
+    if (mode === 'annotate' && isPathEditTool(editor.state.activeTool)) {
+      pathGesture.up();
+      void renderCanvas();
+      return;
+    }
     if (mode === 'annotate' && editor.state.activeTool === 'shape') {
       shapeGesture.up();
       return;
@@ -1080,7 +1128,7 @@
       }}
       data-testid="image-editor-canvas"
       style="width: 100%; height: 100%;{panning ? ` cursor: ${isPanning ? 'grabbing' : 'grab'};` : transformActive || mode === 'transform' ? ` cursor: ${transformCursor};` : ''}"
-      class="absolute inset-0 w-full h-full block {transformActive || mode === 'transform' ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && editor.state.activeTool === 'shape' ? 'cursor-crosshair' : ''}"
+      class="absolute inset-0 w-full h-full block {transformActive || mode === 'transform' ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && editor.state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && (editor.state.activeTool === 'shape' || editor.state.activeTool === 'path-pen') ? 'cursor-crosshair' : mode === 'annotate' && isPathEditTool(editor.state.activeTool) ? 'cursor-default' : ''}"
     ></canvas>
     {#if typeSession}
       <textarea

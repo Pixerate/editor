@@ -14,7 +14,7 @@ import {
 const ALL_TOOLS: ImageEditorTool[] = [
   'select', 'crop', 'pen', 'rect', 'circle', 'arrow', 'line', 'text', 'watermark', 'move', 'brush',
   'eraser', 'mixer', 'clone', 'heal', 'spot-heal', 'smudge', 'dodge', 'burn', 'sponge', 'blur',
-  'sharpen', 'history', 'shape', 'type',
+  'sharpen', 'history', 'shape', 'type', 'path-select', 'direct-select', 'path-pen',
 ];
 
 describe('image tool groups', () => {
