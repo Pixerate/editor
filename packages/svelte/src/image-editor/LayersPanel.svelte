@@ -24,6 +24,7 @@
   import { untrack } from 'svelte';
   import LayerEffectsPanel from './LayerEffectsPanel.svelte';
   import EdgeColorPanel from './EdgeColorPanel.svelte';
+  import VectorMaskEdgesPanel from './VectorMaskEdgesPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -288,6 +289,9 @@
     {#key snapshot.active.id}
       <EdgeColorPanel {controller} layer={snapshot.active} class="border-t border-border pt-1.5" />
     {/key}
+  {/if}
+  {#if snapshot.active?.vectorMask}
+    <VectorMaskEdgesPanel {controller} layer={snapshot.active} class="border-t border-border pt-1.5" />
   {/if}
 
   {#if effects && snapshot.active && snapshot.active.type !== 'adjustment'}

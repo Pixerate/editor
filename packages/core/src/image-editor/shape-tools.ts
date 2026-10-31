@@ -605,6 +605,39 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
       return { vectorMask: controller.getVectorMask(id) };
     },
   };
+  const setVectorMaskEdge: AgentTool = {
+    name: 'set_vector_mask_edge',
+    title: 'Set a vector mask segment\'s edge',
+    description:
+      "Hybrid mask: gives one segment of a layer's vector mask its own edge, so one mask holds sharp edges and hair or fur. hard (default) is the path's sharp edge; feather blurs across it by radius px; matte solves a corridor from inner px inside the path to outer px outside it from the layer's colours (the colour-guided filter), so strands keep their detail. Modes blend where they meet. Address the segment with component, subpath and segment (the segment from anchor segment to the next; see get_vector_mask segmentCount and components). Check the result with inspect_mask_edge target vector-mask. One undo step. Returns the vector mask with its edges.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: LAYER,
+        component: { type: 'integer', minimum: 0, description: 'Component index of the path (0 for a single shape).' },
+        subpath: { type: 'integer', minimum: 0, description: 'Subpath index in the component (0 for a single outline).' },
+        segment: { type: 'integer', minimum: 0, description: 'Segment index in the subpath: from anchor segment to the next (the last closes back to anchor 0).' },
+        mode: { type: 'string', enum: ['hard', 'feather', 'matte'], description: 'hard (sharp, the default), feather (a soft falloff) or matte (a solved corridor for hair and fur).' },
+        radius: { type: 'number', minimum: 0.5, maximum: 250, description: 'feather only: Gaussian falloff in px across the curve (default 4).' },
+        inner: { type: 'number', minimum: 0.5, maximum: 200, description: 'matte only: how far inside the path the unsure corridor reaches, in px (default 4).' },
+        outer: { type: 'number', minimum: 0.5, maximum: 200, description: 'matte only: how far outside the path the unsure corridor reaches, in px (default 8; cover the longest strands).' },
+      },
+      required: ['layerId', 'component', 'subpath', 'segment', 'mode'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Set a vector mask segment\'s edge', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, component, subpath, segment, mode, radius, inner, outer }) => {
+      const id = layerArg(layerId);
+      const vectorMask = controller.setVectorMaskEdge(
+        id,
+        { component: component as number, subpath: subpath as number, segment: segment as number },
+        mode as 'hard' | 'feather' | 'matte',
+        { radius: radius as number | undefined, inner: inner as number | undefined, outer: outer as number | undefined }
+      );
+      return { vectorMask };
+    },
+  };
+
 
   const rasterizeVectorMask: AgentTool = {
     name: 'rasterize_vector_mask',
@@ -766,6 +799,7 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     addVectorMask,
     setVectorMaskPath,
     setVectorMaskProps,
+    setVectorMaskEdge,
     rasterizeVectorMask,
     removeVectorMask,
     selectionToPath,

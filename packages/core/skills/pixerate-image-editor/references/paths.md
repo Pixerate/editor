@@ -10,3 +10,9 @@ panel). The Work Path is the scratch path; saved paths stay until deleted.
    handles → `set_path_geometry` (one undo step); shapes `set_shape_component`, vector masks
    `set_vector_mask_path`.
 4. **Read first**: `list_paths` for ids, names and bounds; `get_path` for the `components` to edit.
+5. **Hybrid vector masks**: a vector mask's segments can each have their own edge.
+   `set_vector_mask_edge` makes a segment `feather` (a soft falloff of `radius` px) or `matte` (a
+   corridor `inner` px inside to `outer` px outside, solved from the layer's colours, for hair and
+   fur); the rest stay `hard`. In the editor, Alt+Shift-click a vector mask segment with Direct
+   Selection to cycle hard → feather → matte. Edges are addressed by segment index, so after adding
+   or deleting anchors on that subpath, check `get_vector_mask` `edges` and set them again.

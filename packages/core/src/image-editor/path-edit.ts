@@ -36,6 +36,8 @@ export interface PathAnchorRef {
 export interface PathEditOverlay {
   /** The target's segments: 2 points for a line, 4 for a cubic. */
   curves: ImagePoint[][];
+  /** A hybrid vector mask's edge mode per curve (same order); missing: all hard. */
+  curveModes?: Array<'hard' | 'feather' | 'matte'>;
   /** Anchors shown; selected ones are drawn filled. */
   anchors: Array<{ point: ImagePoint; selected: boolean }>;
   /** Direction handles of the selected anchors, with the anchor each belongs to. */
@@ -251,6 +253,7 @@ export class PathEditGesture {
       return;
     }
     const seg = this.segmentAt(cs, p);
+    if (seg && mods.alt && mods.shift && this.target?.kind === 'vector-mask') return this.cycleEdge(this.target.layerId, seg.ref);
     if (seg) {
       if (!mods.shift) this.selected.clear();
       this.drag = { kind: 'segment', ...seg, base: cloneComponents(cs), moved: false };
@@ -258,6 +261,18 @@ export class PathEditGesture {
     }
     this.drag = { kind: 'marquee', start: pt(p), end: pt(p), keep: mods.shift ? new Set(this.selected) : new Set() };
     if (!mods.shift) this.selected.clear();
+  }
+
+  /** Alt+Shift-click on a vector mask's segment: hard → feather → matte → hard (one undo step). */
+  private cycleEdge(layerId: string, r: PathAnchorRef): void {
+    const at = { component: r.component, subpath: r.subpath, segment: r.anchor };
+    const now = this.controller.getVectorMask(layerId)?.edges.find((e) => e.component === at.component && e.subpath === at.subpath && e.segment === at.segment)?.mode ?? 'hard';
+    const next = now === 'hard' ? 'feather' : now === 'feather' ? 'matte' : 'hard';
+    try {
+      this.controller.setVectorMaskEdge(layerId, at, next);
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+    }
   }
 
   /** Alt-click: a corner anchor becomes smooth, a smooth one a corner (one undo step). */
@@ -467,12 +482,18 @@ export class PathEditGesture {
     const cs = this.components();
     if (!cs) return null;
     const curves: ImagePoint[][] = [];
+    const curveModes: Array<'hard' | 'feather' | 'matte'> = [];
+    const edges = this.target?.kind === 'vector-mask' ? (this.controller.getVectorMask(this.target.layerId)?.edges ?? []) : [];
+    const modeOf = (ci: number, si: number, k: number) => edges.find((e) => e.component === ci && e.subpath === si && e.segment === k)?.mode ?? 'hard';
     const anchors: PathEditOverlay['anchors'] = [];
     const handles: PathEditOverlay['handles'] = [];
     const selectedComponents = new Set(this.selection.map((r) => r.component));
     cs.forEach((c, ci) =>
       c.subpaths.forEach((sp, si) => {
-        for (let i = 0; i < subpathSegmentCount(sp); i++) curves.push(subpathSegment(sp, i).map(([x, y]) => ({ x, y })));
+        for (let i = 0; i < subpathSegmentCount(sp); i++) {
+          curves.push(subpathSegment(sp, i).map(([x, y]) => ({ x, y })));
+          curveModes.push(modeOf(ci, si, i));
+        }
         sp.anchors.forEach((a, ai) => {
           const selected = this.selected.has(key({ component: ci, subpath: si, anchor: ai }));
           if (tool === 'path-select' && !selectedComponents.has(ci)) return;
@@ -490,7 +511,7 @@ export class PathEditGesture {
       if (last) preview = last.out ? [pt(last), pt(last.out), this.pointer, this.pointer] : [pt(last), this.pointer];
     }
     const marquee = this.drag?.kind === 'marquee' ? rect(this.drag.start, this.drag.end) : null;
-    return { curves, anchors, handles, marquee, preview };
+    return { curves, ...(edges.length ? { curveModes } : {}), anchors, handles, marquee, preview };
   }
 }
 

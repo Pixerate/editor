@@ -3185,3 +3185,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: On a selection with diagonal or curved edges, the marching ants did not move along the edge. The whole outline flashed between black and white. Straight horizontal and vertical edges marched correctly.
 - **Root Cause**: The outline was stroked as one `moveTo` / `lineTo` subpath per pixel-boundary segment. Canvas restarts the dash pattern at the start of every subpath. On a staircase each segment is one image pixel long, shorter than a dash at most zooms, so every segment was wholly dash or wholly gap, and all of them changed together as the offset moved.
 - **Solution / Workaround**: Join the segments into polylines (`selectionOutlinePaths`) and stroke each as a single subpath, so the dash runs continuously along the edge. This applies to any dashed outline built from short segments.
+
+### [core/image-editor] Hybrid Mask Edges Are Addressed by Segment Index
+
+- **Issue / Symptom**: After an anchor was inserted on a vector mask's subpath, a soft (feather or matte) edge moved to the neighbouring segment.
+- **Root Cause**: `VectorMask.edges` names segments by `{ component, subpath, segment }` index. Inserting or deleting an anchor renumbers the segments after it. The path tools edit components without knowing about edges, and nothing in an anchor identifies its segment.
+- **Solution / Workaround**: Edges that no longer address a segment are dropped (`validVectorMaskEdges`) whenever the path is replaced or edited. Ones that still address a segment keep their index, so check `get_vector_mask` `edges` after adding or removing anchors and set them again. A lasting fix would give segments ids that travel with their anchors.

@@ -8,6 +8,7 @@
  */
 
 import type { LayerEdgeColor } from '../../raster/layers';
+import { validVectorMaskEdges } from './hybrid-mask';
 import type { SerializedDocumentPath } from '../paths';
 import { normalizeAdjustmentLayer } from '../adjustment-layers';
 import { isBlendMode, normalizeBlendMode } from '../blend';
@@ -39,6 +40,7 @@ import {
   type RasterMask,
   type ShapeComponent,
   type VectorMask,
+  type VectorMaskEdge,
   type ShapeLayer,
   type ShapePaint,
   type ShapeStroke,
@@ -102,6 +104,8 @@ export interface SerializedVectorMask {
   linked?: false;
   density?: number;
   feather?: number;
+  /** Hybrid mask: soft edge modes per segment. */
+  edges?: unknown[];
 }
 
 /** A layer's effects: the effect list as JSON plus the PSD block they came from (base64). */
@@ -433,6 +437,7 @@ function serializeVectorMask(vm: VectorMask): SerializedVectorMask {
   if (vm.linked === false) out.linked = false;
   if (vm.density !== undefined && vm.density !== 1) out.density = vm.density;
   if (vm.feather) out.feather = vm.feather;
+  if (vm.edges?.length) out.edges = vm.edges.map((e) => ({ ...e }));
   return out;
 }
 
@@ -459,6 +464,20 @@ function readVectorMask(r: SerializedVectorMask): VectorMask {
   if (r.linked === false) vm.linked = false;
   if (typeof r.density === 'number' && r.density !== 1) vm.density = num(r.density, 0, 1, 1);
   if (typeof r.feather === 'number' && r.feather > 0) vm.feather = num(r.feather, 0, 1000, 0);
+  // Hybrid edges: well-formed soft ones on segments the path has (others are dropped).
+  if (Array.isArray(r.edges)) {
+    const edges: VectorMaskEdge[] = [];
+    for (const raw of r.edges) {
+      const e = raw as Record<string, unknown>;
+      const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : -1);
+      const at = { component: int(e?.component), subpath: int(e?.subpath), segment: int(e?.segment) };
+      if (at.component < 0 || at.subpath < 0 || at.segment < 0) continue;
+      if (e.mode === 'feather') edges.push({ ...at, mode: 'feather', radius: num(e.radius, 0.5, 250, 4) });
+      else if (e.mode === 'matte') edges.push({ ...at, mode: 'matte', inner: num(e.inner, 0.5, 200, 4), outer: num(e.outer, 0.5, 200, 8) });
+    }
+    const valid = validVectorMaskEdges(edges, vm.components);
+    if (valid.length) vm.edges = valid;
+  }
   return vm;
 }
 
