@@ -49,6 +49,21 @@ export interface RasterMask<Source = unknown> {
   source?: Source;
 }
 
+/**
+ * Colour corrections at a layer's soft edge, applied when compositing (nothing is baked). Amounts
+ * are 0..1; missing or 0 is off.
+ */
+export interface LayerEdgeColor {
+  /** Replaces edge colour with the subject's own, unmixed from the old background (the pixels the layer's mask hides). */
+  decontaminate?: number;
+  /** Limits how much of the old background's hue the edge carries (a heuristic; bounced light is not removed). */
+  despill?: number;
+  /** Pulls edge colour toward what is behind the layer now, more where the edge is more transparent. */
+  ambient?: number;
+  /** sRGB 0..255 for `ambient`; missing: the composite behind the layer, sampled live. */
+  ambientColor?: [number, number, number];
+}
+
 export interface RasterLayerBase {
   id: string;
   name: string;
@@ -62,6 +77,8 @@ export interface RasterLayerBase {
   locks?: LayerLocks;
   /** Live layer effects (drop shadow, stroke, …), rendered between the content and its blend. */
   effects?: LayerEffects;
+  /** Colour corrections at the layer's soft edge (see `LayerEdgeColor`). */
+  edge?: LayerEdgeColor;
 }
 
 export interface RasterPixelLayer extends RasterLayerBase {

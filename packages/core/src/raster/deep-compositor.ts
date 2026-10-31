@@ -19,7 +19,7 @@
  */
 
 import { blendRgb, mixPigmentRgb, type BlendMode } from './blend';
-import type { CompositorLayer, CompositorProfile, RasterCompositor, RasterSources } from './compositor';
+import { applyEdgeAmbient, type CompositorLayer, type CompositorProfile, type RasterCompositor, type RasterSources } from './compositor';
 import { hasActiveEffects } from './effects/model';
 import { compositeLayerEffects } from './effects/render';
 import { readDeepRegion, srgbDecode, srgbEncode, to32From8 } from './deep';
@@ -128,6 +128,13 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
     }
     const content = this.content(layer, r);
     if (!content) return empty;
+    const ambient = layer.edge?.ambient ?? 0;
+    if (ambient > 0) {
+      // In the working space: a fixed colour is sRGB bytes (decoded at 32 bits).
+      const c = layer.edge?.ambientColor;
+      const color = c ? (c.map((v) => (this.linear ? srgbDecode(v / 255) : v / 255)) as [number, number, number]) : null;
+      if (color || !empty) applyEdgeAmbient(content, acc, coverage, ambient, color, 1);
+    }
     const alone = this.renderedAlone(layer);
     // A layer rendered alone already carries its mask, fill and effects.
     const fill = !alone && this.isPixel(layer) ? (layer.fillOpacity ?? 1) : 1;
@@ -254,7 +261,9 @@ export class DeepCompositor<L extends CompositorLayer, S extends RasterSources> 
   private content(layer: L, r: RasterRect): Float32Array | null {
     if (this.renderedAlone(layer)) {
       // Alone: normal blend at full opacity over transparency (mask, fill and effects applied).
-      const solo = { ...layer, blend: isGroup(layer) && layer.blend === 'pass-through' ? 'pass-through' : 'normal', opacity: 1, clipped: false } as L;
+      // Without the live edge cast: it needs what is behind the layer, applied in float (runStep).
+      const edge = layer.edge?.ambient ? { ...layer.edge, ambient: 0 } : layer.edge;
+      const solo = { ...layer, blend: isGroup(layer) && layer.blend === 'pass-through' ? 'pass-through' : 'normal', opacity: 1, clipped: false, edge } as L;
       const bytes = this.base.composite([solo], r, this.sources);
       return this.from8(bytes);
     }

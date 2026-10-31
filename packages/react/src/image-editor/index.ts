@@ -15,6 +15,7 @@ export * from './PathsPanel';
 export * from './LayersPanel';
 export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';
+export * from './EdgeColorPanel';
 export * from './BrushOptionsBar';
 export * from './FreeTransformOptionsBar';
 export * from './ShapeOptionsBar';

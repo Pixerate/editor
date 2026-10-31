@@ -30,6 +30,8 @@ import type { SelectionProgress } from './selection/segment/work';
 import type { FocusAreaOptions } from './selection/segment/focus';
 import type { SkyOptions } from './selection/segment/sky';
 import { effectiveLayerMask, followLayerMove, vectorMaskBounds } from './layers/vector-mask';
+import { applyEdgeUnmix, hasEdgeUnmix, hasSoftBand, maskCoverageOverCanvas } from './layers/edge-color';
+import type { LayerEdgeColor } from '../raster/layers';
 import { ImageEditorRenderer, RenderOptions } from './renderer';
 import { clampCropToImage, hitTestAnnotation, isQuarterTurnSwapped } from './geometry';
 import { LATEST_PROCESS_VERSION, LEGACY_PROCESS_VERSION, normalizeProcessVersion } from './color';
@@ -635,6 +637,16 @@ export interface CloneSource {
 /** A vector mask's path: several `components`, or one `shape` / `subpaths` (with `op`). */
 /** What `inspectMaskEdge` reads: the selection, a layer's painted mask or its vector mask. */
 export type MaskEdgeTarget = 'selection' | 'layer-mask' | 'vector-mask';
+
+/** A layer's edge colour as `getEdgeColor` describes it (percentages). */
+export interface EdgeColorInfo {
+  layerId: string;
+  decontaminate: number;
+  despill: number;
+  ambient: number;
+  /** `auto` (what is behind the layer, live) or `#rrggbb`. */
+  ambientSource: string;
+}
 
 export interface VectorMaskPathInput extends ShapeGeometryInput {
   components?: ShapeGeometryInput[];
@@ -2841,6 +2853,90 @@ export class ImageEditorController {
     if (next === this.state.layers) return { parentId: loc.parent?.id ?? null, index: loc.index };
     this.commitLayers(next);
     return { parentId: loc.parent?.id ?? null, index: loc.index };
+  }
+
+  /** A layer's edge colour as percentages (see `setEdgeColor`). */
+  public getEdgeColor(id: string): EdgeColorInfo {
+    const layer = this.requireEdgeLayer(id);
+    const e = layer.edge ?? {};
+    const pct = (v: number | undefined) => Math.round((v ?? 0) * 1000) / 10;
+    const hex = (c: readonly number[]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+    return { layerId: layer.id, decontaminate: pct(e.decontaminate), despill: pct(e.despill), ambient: pct(e.ambient), ambientSource: e.ambientColor ? hex(e.ambientColor) : 'auto' };
+  }
+
+  private requireEdgeLayer(id: string): ImageLayer {
+    const layer = this.getLayer(id);
+    if (!layer) throw new LayerOperationError(`There is no layer "${id}" (see list_layers).`);
+    if (layer.type === 'group' || layer.type === 'adjustment' || layer.type === 'annotation')
+      throw new LayerOperationError(`Edge colour works on pixel, shape, type and smart object layers; "${layer.name || id}" is a ${layer.type} layer.`);
+    return layer;
+  }
+
+  /** Whether the layer's mask (painted and vector, with feather) has a soft band. */
+  private maskHasSoftBand(layer: ImageLayer): boolean {
+    const { width, height } = this.naturalSize;
+    const mask = effectiveLayerMask(layer, width, height);
+    if (!mask || mask.enabled === false || mask.source) return false;
+    const ox = layer.type === 'pixel' ? layer.offset.x : 0;
+    const oy = layer.type === 'pixel' ? layer.offset.y : 0;
+    return hasSoftBand(maskCoverageOverCanvas(mask, ox, oy, width, height));
+  }
+
+  /**
+   * Edge colour on a layer's soft edge, applied when compositing (nothing is baked); amounts in
+   * percent, 0 turns one off. `decontaminate` unmixes the old background (the pixels the mask
+   * hides) from the edge and `despill` limits its hue there: both need a pixel layer whose mask
+   * (painted or vector) has a soft band. `ambient` pulls the edge toward what is behind the layer
+   * (`ambientColor` null: sampled live) or a fixed `#rrggbb`; it needs a soft mask or soft
+   * pixels at the edge. Validates everything before changing anything; one undo step (none with
+   * `commitToHistory` false, for the later moves of a slider drag). Returns the effective settings.
+   */
+  public setEdgeColor(id: string, change: { decontaminate?: number; despill?: number; ambient?: number; ambientColor?: string | null }, commitToHistory = true): EdgeColorInfo {
+    const layer = this.requireEdgeLayer(id);
+    const name = layer.name || id;
+    const next: LayerEdgeColor = { ...(layer.edge ?? {}) };
+    for (const k of ['decontaminate', 'despill', 'ambient'] as const) {
+      const v = change[k];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100) throw new LayerOperationError(`${k} must be a percentage from 0 to 100, got ${String(v)}.`);
+      if (v > 0) next[k] = v / 100;
+      else delete next[k];
+    }
+    if (change.ambientColor !== undefined) {
+      if (change.ambientColor === null || change.ambientColor === 'auto') delete next.ambientColor;
+      else {
+        const m = /^#([0-9a-f]{6})$/i.exec(String(change.ambientColor));
+        if (!m) throw new LayerOperationError(`ambient colour must be "auto" or #rrggbb, got "${String(change.ambientColor)}".`);
+        const n = parseInt(m[1], 16);
+        next.ambientColor = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      }
+    }
+    const unmix = (next.decontaminate ?? 0) > 0 || (next.despill ?? 0) > 0;
+    const turningOn = (k: 'decontaminate' | 'despill' | 'ambient') => (change[k] ?? 0) > 0;
+    if (unmix && (turningOn('decontaminate') || turningOn('despill'))) {
+      if (layer.type !== 'pixel') throw new LayerOperationError(`Decontamination and despill need a pixel layer with a soft-edged mask; "${name}" is a ${layer.type} layer (rasterize it, or use ambient).`);
+      if (!this.maskHasSoftBand(layer))
+        throw new LayerOperationError(`"${name}" has no mask with a soft edge: decontamination and despill work in the partly hidden band of a layer mask. Add one with add_layer_mask from a refined selection (refine_selection), or feather the mask (set_layer_mask_properties feather).`);
+    }
+    if (turningOn('ambient') && !this.maskHasSoftBand(layer) && layer.type === 'pixel') {
+      const px = this.getLayerPixels(layer.id);
+      let soft = false;
+      if (px) for (let i = 3; i < px.data.length && !soft; i += 4) soft = px.data[i] > 5 && px.data[i] < 250;
+      if (!soft) throw new LayerOperationError(`"${name}" has no soft edge (no soft-edged mask and no partly transparent pixels) for the edge cast to work on.`);
+    }
+    // A fixed cast colour is kept while the cast is off, so turning it back on finds it.
+    const edge = next.decontaminate || next.despill || next.ambient || next.ambientColor ? next : undefined;
+    this.commitLayers(
+      mapLayer(this.state.layers, layer.id, (l) => {
+        const out = { ...l } as ImageLayer;
+        if (edge) out.edge = edge;
+        else delete out.edge;
+        return out;
+      }),
+      undefined,
+      commitToHistory
+    );
+    return this.getEdgeColor(layer.id);
   }
 
   /**
@@ -7894,7 +7990,10 @@ export class ImageEditorController {
     };
 
     const prepare = async (layer: ImageLayer): Promise<ImageLayer | null> => {
+      if (layer.edge?.ambient) add('The live edge cast (set_edge_ambient) has no PSD equivalent and was left out', layer.name);
       const p = await prepareLayer(layer);
+      // Edge colour is baked (decontamination, despill) or has no PSD form (the live cast).
+      if (p?.edge) delete (p as { edge?: unknown }).edge;
       // `exportPsd` writes it as Normal; the merged image keeps the paint mix.
       if (p?.blend === 'pigment') add('The Pigment blend mode has no PSD equivalent and was written as Normal', layer.name);
       return p;
@@ -7973,6 +8072,14 @@ export class ImageEditorController {
       }
       if (layer.filters?.some((f) => !f.enabled)) add('Disabled layer filters were left out', layer.name);
       delete out.filters;
+      const unmixMask = hasEdgeUnmix(layer.edge) ? effectiveLayerMask(layer, width, height) : undefined;
+      if (unmixMask && !unmixMask.source && unmixMask.enabled !== false) {
+        add('Edge decontamination and despill were baked into the pixels', layer.name);
+        const { x: ox, y: oy } = layer.offset;
+        const data = readRegion(out.surface, { x: -ox, y: -oy, width, height });
+        applyEdgeUnmix(data, maskCoverageOverCanvas(unmixMask, ox, oy, width, height), width, height, layer.edge!);
+        out = { ...out, surface: surfaceFromPixels({ width, height, data }, 4, -ox, -oy) };
+      }
       const mask = bakeMask(layer);
       if (mask) out.mask = mask;
       else delete out.mask;

@@ -121,12 +121,11 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 
 ## Recipes
 
-- **Cut out a subject onto a new background:** select (table), then `refine_selection` with
-  `output: "new-layer-with-mask"` (revisable) and, for hair or fur, `decontaminate` 50–100 so
-  the old background's colour leaves the soft edge. Add the new background with
-  `add_pixel_layer` and move it under the cutout (`move_layer`). `render_preview` and look for a
-  halo; if there is one, raise `decontaminate`, or load the mask as a selection, `contract`
-  1 px, and output again.
+- **Cut out a subject onto a new background:** select (table), `refine_selection` with `output:
+  "new-layer-with-mask"`, put the new background under it (`add_pixel_layer`, `move_layer`). Fix
+  the fringe live on the masked layer: `set_edge_decontamination` 80–100, `set_edge_despill` 50–100
+  for a coloured backdrop, `set_edge_ambient` 20–50 to take on the new scene's colour. Re-run
+  `inspect_mask_edge`; if `haloScore` stays high, `contract` the mask 1 px.
 - **Replace the sky:** `select_sky` (or `magic_wand` / `select_color_range` `preset: "blues"`
   if it finds none), `add` missed patches, `refine_selection` radius 8–16 along the horizon and trees, then
   `add_layer_mask` on the new sky layer. Match it with a clipped curves layer (`clipped: true`).
@@ -185,8 +184,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   background, and drop `snapToEdges` where the edge is too faint.
 - **Over-feathering hard objects:** a 10 px feather on a product looks like a glow. Keep hard
   edges at 0–2 px and refine soft ones instead.
-- **Halo:** the old background shows as a light or dark fringe. `decontaminate` on a
-  new-layer output for soft edges; for hard ones `contract` 1–2 px or
+- **Halo:** the old background shows as a light or dark fringe. `set_edge_decontamination` on the
+  masked layer (live) for soft edges; for hard ones `contract` 1–2 px or
   `shiftEdge` negative before masking.
 - **Baking too early:** `apply_layer_mask`, `merge_down` and `layer_via_copy` with `cut: true`
   are hard to revise. Keep masks until the user is happy.
@@ -241,6 +240,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only
 - `inspect_mask_edge`: measured halo, alignment, jaggedness, softness, holes and islands of an edge
+- `set_edge_decontamination`, `set_edge_despill`, `set_edge_ambient`, `get_edge_color`: live edge colour on a masked cutout
 - `capture_view`, `render_preview`: look at the edge at pixel level; check the result
 - `apply_selection_as_mask`: a masked adjustment layer in one step
 - `add_layer_mask`, `set_layer_mask_properties`, `apply_layer_mask`, `remove_layer_mask`: layer masks

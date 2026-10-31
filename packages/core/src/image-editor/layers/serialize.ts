@@ -1,4 +1,3 @@
-import type { SerializedDocumentPath } from '../paths';
 /**
  * Schema version 3 of the image editor document: the layer tree, with pixel layers and painted
  * masks stored as PNG assets (cropped to their content and placed by position), plus the
@@ -8,6 +7,8 @@ import type { SerializedDocumentPath } from '../paths';
  * saving an unchanged layer again costs nothing.
  */
 
+import type { LayerEdgeColor } from '../../raster/layers';
+import type { SerializedDocumentPath } from '../paths';
 import { normalizeAdjustmentLayer } from '../adjustment-layers';
 import { isBlendMode, normalizeBlendMode } from '../blend';
 import { normalizeProcessVersion } from '../color';
@@ -88,6 +89,8 @@ interface SerializedLayerBase {
   vectorMask?: SerializedVectorMask;
   locks?: LayerLocks;
   effects?: SerializedLayerEffects;
+  /** Edge colour amounts 0..1 and the cast colour (see `LayerEdgeColor`). */
+  edge?: LayerEdgeColor;
 }
 
 /** A stored vector mask: its components as JSON (document pixels) and its properties. */
@@ -381,7 +384,22 @@ function baseFields(layer: ImageLayer, ctx: SerializeContext): SerializedLayerBa
   if (layer.vectorMask) out.vectorMask = serializeVectorMask(layer.vectorMask);
   if (layer.locks && Object.values(layer.locks).some(Boolean)) out.locks = { ...layer.locks };
   if (layer.effects) out.effects = serializeEffects(layer.effects);
+  if (layer.edge) out.edge = { ...layer.edge, ...(layer.edge.ambientColor ? { ambientColor: [...layer.edge.ambientColor] as [number, number, number] } : {}) };
   return out;
+}
+
+/** Stored edge colour, with amounts clamped to 0..1 (none when nothing is on). */
+export function readEdgeColor(raw: unknown): LayerEdgeColor | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: LayerEdgeColor = {};
+  for (const k of ['decontaminate', 'despill', 'ambient'] as const) {
+    const v = r[k];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.min(1, v);
+  }
+  const c = r.ambientColor;
+  if (Array.isArray(c) && c.length === 3 && c.every((v) => typeof v === 'number' && Number.isFinite(v))) out.ambientColor = c.map((v) => Math.min(255, Math.max(0, Math.round(v)))) as [number, number, number];
+  return out.decontaminate || out.despill || out.ambient || out.ambientColor ? out : undefined;
 }
 
 export function serializeEffects(effects: LayerEffects): SerializedLayerEffects {
@@ -938,6 +956,8 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
     blend: normalizeBlendMode(r.blend),
   };
   if (r.clipped === true) base.clipped = true;
+  const edge = readEdgeColor(r.edge);
+  if (edge) base.edge = edge;
   const mask = readMask(r.mask, ctx, `Layer "${base.name || id}"`);
   if (mask) base.mask = mask;
   if (r.vectorMask && typeof r.vectorMask === 'object' && r.type !== 'shape') {

@@ -209,3 +209,32 @@ describe('React LayersPanel PSD buttons', () => {
     expect(button('Export PSD')).toBeUndefined();
   });
 });
+
+describe('React EdgeColorPanel', () => {
+  it('sets edge colour on the active layer with one undo step per drag, and shows why it cannot', async () => {
+    const c = controller();
+    const id = c.addPixelLayer({ name: 'Cutout', color: '#ff0000' });
+    c.selectRect({ x: 4, y: 2, width: 10, height: 6 }, { feather: 2 });
+    c.addLayerMask(id, 'selection');
+    c.deselect();
+    await act(async () => root.render(<LayersPanel controller={c} />));
+    const slider = container.querySelector('input[aria-label="Edge decontaminate"]') as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    await act(async () => {
+      slider.dispatchEvent(new win.PointerEvent('pointerdown', { bubbles: true }));
+      setValue(slider, '40');
+      setValue(slider, '80');
+    });
+    expect(c.getEdgeColor(id).decontaminate).toBe(80);
+    await act(async () => c.undo());
+    expect(c.getEdgeColor(id).decontaminate).toBe(0);
+    await act(async () => (container.querySelector('input[aria-label="Fixed cast colour"]') as HTMLInputElement).click());
+    expect(c.getEdgeColor(id).ambientSource).toBe('#808080');
+
+    const hard = c.addPixelLayer({ name: 'Hard', color: '#00ff00' });
+    await act(async () => c.setActiveLayer(hard));
+    await act(async () => setValue(container.querySelector('input[aria-label="Edge despill"]') as HTMLInputElement, '50'));
+    expect(container.querySelector('[data-testid="edge-color-panel"] [role="alert"]')!.textContent).toMatch(/no mask with a soft edge/);
+    expect(c.getLayer(hard)!.edge).toBeUndefined();
+  });
+});

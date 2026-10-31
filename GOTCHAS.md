@@ -3167,3 +3167,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dragging one handle of a smooth anchor on a path, shape or vector mask bent it into a corner: the opposite handle stayed put.
 - **Root Cause**: `normalizeSubpaths` (behind every path, shape and vector mask setter) keeps only `x`, `y`, `in`, `out` and `corner`, so the vector editor's `type: 'smooth' | 'symmetric'` is gone by the next drag, and `moveAnchorHandle` treats an untyped anchor as a corner.
 - **Solution / Workaround**: Before moving a handle, give the anchor `type: a.type ?? inferAnchorType(a)` (handles in line count as smooth), then drop `type` from the result. `PathEditGesture` does this; Alt-drag still breaks the handles on purpose.
+
+### [core/raster] A Tile From the Compositor's Cache Must Be Copied Before It Is Changed
+
+- **Issue / Symptom**: An effect applied to a layer's content tile in the blend step (the live edge cast) can leak into later renders, or into other layers that share the tile.
+- **Root Cause**: `contentTile` returns the surface's own tile data when the tile is aligned and unfiltered, and filtered tiles come from `contentCache`. Both are shared buffers, not copies.
+- **Solution / Workaround**: Copy the tile (`new Uint8ClampedArray(content)`) before changing it, as `runStep` does for `edge.ambient`. Anything that depends only on the layer's own pixels and mask belongs in its pixel filters instead (`PixelFilterSpec`, cached per surface), as decontamination and despill do. The deep compositor draws those layers alone at 8 bits, so strip the live cast from the solo layer and apply it in float.
