@@ -23,6 +23,7 @@ import {
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import type { ObjectTarget } from './selection/segment/grabcut';
+import { WORK_PATH_NAME, newPathId, pathBounds, readPaths, serializePaths, type DocumentPath } from './paths';
 import { SelectionWorkerClient, runSelectionJob, serializeMask, type SelectionJob, type SelectionJobResult, type SelectionWorkerFactory } from './selection/worker';
 import type { SelectionProgress } from './selection/segment/work';
 import type { FocusAreaOptions } from './selection/segment/focus';
@@ -1336,6 +1337,7 @@ interface HistoryEntry {
   patterns?: EffectPattern[];
   selection: SelectionMask | null;
   channels?: AlphaChannel[];
+  paths?: DocumentPath[];
   source: SourceSnapshot;
   bitDepth?: BitDepth;
   colorProfile?: DocumentColorProfile;
@@ -2089,6 +2091,7 @@ export class ImageEditorController {
       outputOpacity: s.outputOpacity,
       selection: s.selection ?? null,
       ...(s.channels?.length ? { channels: s.channels } : {}),
+      ...(s.paths?.length ? { paths: s.paths } : {}),
       source: {
         sourceUrl: s.sourceUrl,
         element: this.imageElement,
@@ -2127,6 +2130,9 @@ export class ImageEditorController {
     s.selection = entry.selection;
     if (entry.channels?.length) s.channels = entry.channels;
     else delete s.channels;
+    if (entry.paths?.length) s.paths = entry.paths;
+    else delete s.paths;
+    if (s.activePathId && !s.paths?.some((p) => p.id === s.activePathId)) s.activePathId = null;
     if (this.imageElement !== entry.source.element && !this.samplePixelsOverride) this.samplePixels = null;
     this.imageElement = entry.source.element;
     s.sourceUrl = entry.source.sourceUrl;
@@ -3037,6 +3043,156 @@ export class ImageEditorController {
     const { width, height } = this.naturalSize;
     const mask = pathToSelectionMask(components, width, height, { ...options, fillRule: path.fillRule ?? options.fillRule });
     return this.setSelection(mask, options.mode ?? 'replace');
+  }
+
+  // --- Document paths (the Paths panel) ---
+
+  /** The document's paths: saved paths and the Work Path, in panel order. */
+  public getPaths(): readonly DocumentPath[] {
+    return this.state.paths ?? [];
+  }
+
+  public getPath(id: string): DocumentPath | null {
+    return this.state.paths?.find((p) => p.id === id) ?? null;
+  }
+
+  private requirePath(id: string): DocumentPath {
+    const path = this.getPath(id);
+    if (!path) {
+      const ids = this.getPaths().map((p) => `${p.id} (${p.name})`);
+      throw new LayerOperationError(`There is no path "${id}"; the paths are ${ids.join(', ') || 'none (make a work path from a selection, or add one)'}.`);
+    }
+    return path;
+  }
+
+  /** Selects a path in the Paths panel (or none). View state: no undo step. */
+  public setActivePath(id: string | null): void {
+    if (id !== null) this.requirePath(id);
+    if ((this.state.activePathId ?? null) === id) return;
+    this.state.activePathId = id;
+    this.notify();
+  }
+
+  private commitPaths(next: DocumentPath[], active?: string | null): void {
+    this.recordHistory();
+    if (next.length) this.state.paths = next;
+    else delete this.state.paths;
+    if (active !== undefined) this.state.activePathId = active;
+    else if (this.state.activePathId && !next.some((p) => p.id === this.state.activePathId)) this.state.activePathId = null;
+    this.notify();
+  }
+
+  /**
+   * Paths › Make Work Path: the selection's outline, traced, becomes the Work Path (replacing the
+   * last one, unless it was saved). One undo step. Returns the path.
+   */
+  public makeWorkPath(options: SelectionToPathOptions = {}): DocumentPath {
+    const subpaths = this.traceSelection(options);
+    const paths = this.getPaths();
+    const old = paths.find((p) => p.work);
+    const work: DocumentPath = { id: old?.id ?? newPathId(), name: WORK_PATH_NAME, components: [{ op: 'combine', subpaths }], fillRule: 'evenodd', work: true };
+    this.commitPaths(old ? paths.map((p) => (p === old ? work : p)) : [...paths, work], work.id);
+    return work;
+  }
+
+  /** A new saved path from geometry (`shape`, `subpaths` or `components`). One undo step. */
+  public addPath(input: VectorMaskPathInput & { name?: string }): DocumentPath {
+    const paths = this.getPaths();
+    const path: DocumentPath = { id: newPathId(), name: input.name?.trim() || `Path ${paths.filter((p) => !p.work).length + 1}`, components: this.vectorMaskComponents(input) };
+    if (input.fillRule === 'evenodd') path.fillRule = 'evenodd';
+    this.commitPaths([...paths.filter((p) => !p.work), path, ...paths.filter((p) => p.work)], path.id);
+    return path;
+  }
+
+  /** Replaces a path's geometry (its name is kept). One undo step. */
+  public setPathGeometry(id: string, input: VectorMaskPathInput): DocumentPath {
+    const old = this.requirePath(id);
+    const path: DocumentPath = { ...old, components: this.vectorMaskComponents(input) };
+    if (input.fillRule === 'evenodd') path.fillRule = 'evenodd';
+    else if (input.fillRule === 'nonzero') delete path.fillRule;
+    this.commitPaths(this.getPaths().map((p) => (p.id === id ? path : p)));
+    return path;
+  }
+
+  /** Renames a path; renaming the Work Path saves it (Photoshop's Save Path). One undo step. */
+  public renamePath(id: string, name: string): DocumentPath {
+    const old = this.requirePath(id);
+    const trimmed = name.trim();
+    if (!trimmed) throw new LayerOperationError('A path needs a name.');
+    const path: DocumentPath = { ...old, name: trimmed };
+    delete path.work;
+    this.commitPaths(this.getPaths().map((p) => (p.id === id ? path : p)));
+    return path;
+  }
+
+  /** Duplicates a path as a saved path. One undo step. */
+  public duplicatePath(id: string, name?: string): DocumentPath {
+    const old = this.requirePath(id);
+    const copy: DocumentPath = { ...old, id: newPathId(), name: name?.trim() || `${old.name} copy`, components: JSON.parse(JSON.stringify(old.components)) };
+    delete copy.work;
+    const paths = this.getPaths();
+    this.commitPaths([...paths.filter((p) => !p.work), copy, ...paths.filter((p) => p.work)], copy.id);
+    return copy;
+  }
+
+  /** Deletes a path. One undo step. */
+  public deletePath(id: string): void {
+    this.requirePath(id);
+    this.commitPaths(this.getPaths().filter((p) => p.id !== id));
+  }
+
+  /** The area a path fills over the image, as a selection mask. */
+  private pathArea(path: DocumentPath, options: PathToSelectionOptions = {}): SelectionMask {
+    const { width, height } = this.naturalSize;
+    return pathToSelectionMask(path.components, width, height, { ...options, fillRule: path.fillRule ?? options.fillRule });
+  }
+
+  /** Paths › Make Selection: loads a path as the selection, combined by `mode`. One undo step. */
+  public loadPathAsSelection(id: string, options: PathToSelectionOptions & { mode?: SelectionMode } = {}): boolean {
+    if (options.feather !== undefined && !(options.feather >= 0 && options.feather <= 1000)) throw new LayerOperationError('feather must be from 0 to 1000 px.');
+    return this.setSelection(this.pathArea(this.requirePath(id), options), options.mode ?? 'replace');
+  }
+
+  /**
+   * Paths › Fill Path: fills the path's area on a pixel layer (default the active one) with a
+   * colour (default the foreground). The selection is not changed. One undo step.
+   */
+  public fillPath(id: string, options: Omit<FillOptions, 'useSelection'> = {}): PaintStrokeResult {
+    const area = this.pathArea(this.requirePath(id));
+    if (!area.bounds) throw new LayerOperationError('The path encloses no area to fill.');
+    return this.withSelection(area, () => this.fillPixels({ ...options, useSelection: true }));
+  }
+
+  /**
+   * Paths › Stroke Path: strokes along the path's outline on a pixel layer (default the active
+   * one), `width` px wide and centred on it. The selection is not changed. One undo step.
+   */
+  public strokePath(id: string, options: Omit<StrokeSelectionOptions, 'location'>): PaintStrokeResult {
+    const area = this.pathArea(this.requirePath(id), { antiAlias: true });
+    if (!area.bounds) throw new LayerOperationError('The path encloses no area; stroke a closed path.');
+    return this.withSelection(area, () => this.strokeSelection({ ...options, location: 'center' }));
+  }
+
+  /** Paths › Add Vector Mask: masks a layer (default the active one) with a document path. One undo step. */
+  public addVectorMaskFromPath(pathId: string, layerId?: string): VectorMask {
+    const path = this.requirePath(pathId);
+    const id = layerId ?? this.state.activeLayerId;
+    if (!id) throw new LayerOperationError('No layer given and none is active; pass layerId (see list_layers).');
+    return this.addVectorMask(id, 'path', { components: path.components.map((c) => ({ op: c.op, subpaths: c.subpaths })), ...(path.fillRule ? { fillRule: path.fillRule } : {}) });
+  }
+
+  /** Runs `fn` with `mask` as the selection, then puts the selection back, all as one undo step. */
+  private withSelection<T>(mask: SelectionMask, fn: () => T): T {
+    return this.asOneStep(() => {
+      const before = this.state.selection ?? null;
+      this.state.selection = mask;
+      try {
+        return fn();
+      } finally {
+        this.state.selection = before;
+        this.notify();
+      }
+    });
   }
 
   /** Replaces a vector mask's path (its properties are kept). One undo step. Returns the vector mask. */
@@ -7389,6 +7545,10 @@ export class ImageEditorController {
     }));
     if (psdChannels.length) s.channels = psdChannels;
     else delete s.channels;
+    const psdPaths: DocumentPath[] = (result.paths ?? []).map((p) => ({ id: newPathId(), name: p.name, components: p.components, ...(p.work ? { work: true } : {}) }));
+    if (psdPaths.length) s.paths = psdPaths;
+    else delete s.paths;
+    s.activePathId = null;
     s.selectedAnnotationId = null;
     s.activeLayerId = defaultActiveLayerId(s.layers);
     s.activeTarget = 'pixels';
@@ -7599,7 +7759,7 @@ export class ImageEditorController {
       opacity: c.opacity,
       indicates: c.indicates,
     }));
-    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, alphaChannels, ...color });
+    const result = exportPsd({ width, height, layers: prepared, merged, mergedDeep, resolution: this.psdResolution, patterns: this.state.patterns, globalLight: this.state.globalLight, depth, alphaChannels, paths: this.getPaths(), ...color });
     warnings.push(...result.warnings);
     return { bytes: result.bytes, warnings, psb: result.psb, width, height };
   }
@@ -7695,6 +7855,7 @@ export class ImageEditorController {
       out = this.serializeState();
       if (this.state.selection?.bounds) out.selection = serializeSelection(this.state.selection);
       if (this.state.channels?.length) out.channels = serializeChannels(this.state.channels);
+      if (this.state.paths?.length) out.paths = serializePaths(this.state.paths);
     } finally {
       if (root) {
         this.state = current;
@@ -7741,6 +7902,10 @@ export class ImageEditorController {
     const channels = deserializeChannels(data.channels, this.naturalSize, problems);
     if (channels.length) this.state.channels = channels;
     else delete this.state.channels;
+    const paths = readPaths(data.paths, problems);
+    if (paths.length) this.state.paths = paths;
+    else delete this.state.paths;
+    this.state.activePathId = null;
     if (problems.length) this.lastLoadProblems = [...this.lastLoadProblems, ...problems];
     this.notify();
   }

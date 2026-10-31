@@ -9,6 +9,7 @@ export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './SelectAndMaskWorkspace';
 export * from './ChannelsPanel';
+export * from './PathsPanel';
 export * from './LayersPanel';
 export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';

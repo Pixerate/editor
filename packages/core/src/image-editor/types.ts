@@ -1,3 +1,4 @@
+import type { DocumentPath, SerializedDocumentPath } from './paths';
 import type { SelectionWorkerFactory } from './selection/worker';
 import type { GlobalLight } from '../raster/effects/model';
 import type { EffectPattern } from '../raster/effects/patterns';
@@ -413,6 +414,10 @@ export interface ImageEditorState {
   quickMaskEditing?: boolean;
   /** Alpha channels: saved selections kept with the document, recorded in undo history. */
   channels?: AlphaChannel[];
+  /** Document paths (the Paths panel): the Work Path and saved paths. Recorded in undo history and saved. */
+  paths?: DocumentPath[];
+  /** The path selected in the Paths panel (view state). */
+  activePathId?: string | null;
   /**
    * The layer stack, bottom to top. Opening an image gives one pixel layer, "Background", whose
    * pixels are the source image. Layers are immutable: compare them by identity.
@@ -480,6 +485,8 @@ export interface LegacySerializedImageEditorState {
   selection?: SerializedSelection;
   /** Alpha channels (saved selections), run-length encoded. */
   channels?: SerializedAlphaChannel[];
+  /** Document paths (the Paths panel). */
+  paths?: SerializedDocumentPath[];
 }
 
 /**

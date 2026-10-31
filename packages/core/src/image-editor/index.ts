@@ -97,3 +97,4 @@ export * from './provider-effect-tools';
 export * from './playback';
 export * from './tool-groups';
 export * from './editorDocument';
+export * from './paths';

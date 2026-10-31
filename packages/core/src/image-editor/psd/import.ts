@@ -8,8 +8,8 @@
  * with a warning naming the layers.
  */
 
-import { VMSK_DISABLED, VMSK_NOT_LINKED, componentsFromVectorBlock } from './paths';
-import type { VectorMask } from '../layers/model';
+import { RESOURCE_PATH_FIRST, RESOURCE_PATH_LAST, RESOURCE_WORK_PATH, componentsFromPathResource, VMSK_DISABLED, VMSK_NOT_LINKED, componentsFromVectorBlock } from './paths';
+import type { ShapeComponent, VectorMask } from '../layers/model';
 import { readAlphaChannels, type PsdAlphaChannel } from './channels';
 import type { BlendMode } from '../blend';
 import { emptySurface, surfaceFromPixels, translateSurface } from '../../raster/surface';
@@ -156,6 +156,8 @@ export interface PsdImportResult {
   bitDepth: 8 | 16 | 32;
   /** The file's alpha channels (saved selections), as 8-bit planes. */
   alphaChannels?: PsdAlphaChannel[];
+  /** The file's document paths (image resources 2000–2997 and the Work Path, 1025), in file order. */
+  paths?: { name: string; components: ShapeComponent[]; work?: boolean }[];
 }
 
 export interface PsdImportOptions {
@@ -868,6 +870,17 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       warn.extra.push(`The alpha channels could not be read (${e instanceof Error ? e.message : String(e)}).`);
     }
   }
+  // Document paths: saved paths (2000–2997, named by the resource), then the Work Path (1025).
+  const paths: { name: string; components: ShapeComponent[]; work?: boolean }[] = [];
+  for (const r of file.resources) {
+    const saved = r.id >= RESOURCE_PATH_FIRST && r.id <= RESOURCE_PATH_LAST;
+    if (!saved && r.id !== RESOURCE_WORK_PATH) continue;
+    const read = componentsFromPathResource(r.data, header.width, header.height);
+    if (!read?.components.length) continue;
+    if (read.inverted) warn.extra.push(`The path "${r.name || 'Work Path'}" starts by subtracting, which Pixerate's paths do not keep; it came in without that.`);
+    paths.push(saved ? { name: r.name || `Path ${paths.length + 1}`, components: read.components } : { name: 'Work Path', components: read.components, work: true });
+  }
+  paths.sort((a, b) => Number(Boolean(a.work)) - Number(Boolean(b.work)));
   const i32 = (b: Uint8Array | undefined) => (b && b.length >= 4 ? new DataView(b.buffer, b.byteOffset, 4).getInt32(0) : undefined);
   const angle = i32(resource(file, 1037));
   const altitude = i32(resource(file, 1049));
@@ -884,6 +897,7 @@ export function psdToLayers(file: PsdFile, options: PsdImportOptions = {}): PsdI
       : {}),
     info: { psb: header.psb, depth: header.depth, colorMode: mode, channels: header.channels },
     ...(alphaChannels.length ? { alphaChannels } : {}),
+    ...(paths.length ? { paths } : {}),
     ...(cmykProfile ? { sourceMode: { mode: 'cmyk' as const, profile: cmykProfile } } : header.colorMode === MODE_LAB ? { sourceMode: { mode: 'lab' as const } } : {}),
     ...(resource(file, 1039) ? { iccProfile: resource(file, 1039)!.slice() } : {}),
     bitDepth: (header.depth === 16 || header.depth === 32) && header.colorMode !== MODE_INDEXED && header.colorMode !== MODE_BITMAP ? header.depth : 8,

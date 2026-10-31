@@ -1,3 +1,4 @@
+import type { SerializedDocumentPath } from '../paths';
 /**
  * Schema version 3 of the image editor document: the layer tree, with pixel layers and painted
  * masks stored as PNG assets (cropped to their content and placed by position), plus the
@@ -252,6 +253,8 @@ export interface SerializedLayeredImageEditorState {
   selection?: SerializedSelection;
   /** Alpha channels (saved selections), run-length encoded. */
   channels?: SerializedAlphaChannel[];
+  /** Document paths (the Paths panel). */
+  paths?: SerializedDocumentPath[];
   /** Global light for layer effects (missing = 120°, 30°). */
   globalLight?: GlobalLight;
   /** The document's patterns for pattern effects, each an RGBA PNG data URL. */
@@ -415,10 +418,10 @@ function serializeVectorMask(vm: VectorMask): SerializedVectorMask {
   return out;
 }
 
-/** Restores a stored vector mask; throws on damaged components. */
-function readVectorMask(r: SerializedVectorMask): VectorMask {
-  if (!Array.isArray(r.components)) throw new Error('its components are missing');
-  const components: ShapeComponent[] = r.components.map((raw, i) => {
+/** Restores stored shape components (a vector mask's or a document path's); throws on damaged ones. */
+export function readShapeComponents(stored: unknown): ShapeComponent[] {
+  if (!Array.isArray(stored)) throw new Error('its components are missing');
+  return stored.map((raw, i) => {
     const c = raw as Record<string, unknown>;
     const op = requireOperation(c?.op, `components[${i}].op`);
     if (c?.live) {
@@ -427,7 +430,11 @@ function readVectorMask(r: SerializedVectorMask): VectorMask {
     }
     return { op, subpaths: Array.isArray(c?.subpaths) && !c.subpaths.length ? [] : normalizeSubpaths(c?.subpaths, `components[${i}].subpaths`) };
   });
-  const vm: VectorMask = { components };
+}
+
+/** Restores a stored vector mask; throws on damaged components. */
+function readVectorMask(r: SerializedVectorMask): VectorMask {
+  const vm: VectorMask = { components: readShapeComponents(r.components) };
   if (r.fillRule === 'evenodd') vm.fillRule = 'evenodd';
   if (r.inverted === true) vm.inverted = true;
   if (r.enabled === false) vm.enabled = false;
