@@ -605,16 +605,20 @@ export interface LayerPanelsOptions {
  *
  * `properties` ("Layer Properties") is first for every layer and includes the layer's Layer Style
  * (drop shadow, stroke, glow…: `layerEffectsPanel`) for layers that can take one, with or without a
- * provider. There is no separate `effects` (Layer Effects) or `smart-filters` panel. `selection`
- * is last for every layer, and with no active layer follows `canvas-size`.
+ * provider. There is no separate `effects` (Layer Effects) or `smart-filters` panel. `mask`
+ * ("Mask & Edges": a vector mask's per-segment edges and the layer's edge colour) shows for a layer
+ * with a painted or vector mask. The document's panels end the list for every layer, and with no
+ * active layer follow `canvas-size`: `selection` (the selection tools and Refine Edge), `channels`
+ * and `paths`. A host that lays out its own sidebar from these gets every panel the editor's own
+ * `ImageEditor` shows.
  */
 export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOptions = {}): LayerPanelDescriptor[] {
-  if (!layer) {
-    return [
-      { id: 'canvas-size', title: 'Composition Size' },
-      { id: 'selection', title: 'Selection' },
-    ];
-  }
+  const documentPanels: LayerPanelDescriptor[] = [
+    { id: 'selection', title: 'Selection' },
+    { id: 'channels', title: 'Channels' },
+    { id: 'paths', title: 'Paths' },
+  ];
+  if (!layer) return [{ id: 'canvas-size', title: 'Composition Size' }, ...documentPanels];
 
   const panels: LayerPanelDescriptor[] = [{ id: 'properties', title: 'Layer Properties' }];
   const effects = () => {
@@ -636,13 +640,13 @@ export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOption
     effects();
   }
 
-  if (layer.mask) {
-    panels.push({ id: 'mask', title: 'Mask Options' });
+  if (layer.mask || layer.vectorMask) {
+    panels.push({ id: 'mask', title: 'Mask & Edges' });
   }
 
-  // The selection belongs to the document, not the layer: it stays available with a layer active
-  // (Layer via Copy, masks and painting all work through it).
-  panels.push({ id: 'selection', title: 'Selection' });
+  // The selection, channels and paths belong to the document, not the layer: they stay available
+  // with a layer active (Layer via Copy, masks and painting all work through them).
+  panels.push(...documentPanels);
 
   return panels;
 }

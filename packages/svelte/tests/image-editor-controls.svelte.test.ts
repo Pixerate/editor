@@ -114,4 +114,32 @@ describe('LayerPanel', () => {
     expect(controller.getLayer(id)?.opacity).toBe(0.25);
     expect(target.textContent).toContain('Renamed');
   });
+
+  it('renders every panel layerPanels lists, so a host sidebar gets Refine Edge, Channels, Paths and Mask & Edges', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const { layerPanels } = await import('@pixerate/editor/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    const id = controller.addPixelLayer({ name: 'Cutout' });
+    controller.setActiveLayer(id);
+    controller.addVectorMask(id, 'reveal-all');
+    const ids = layerPanels(controller.getLayer(id)).map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(['mask', 'selection', 'channels', 'paths']));
+    const expected: Record<string, string> = {
+      selection: '[data-testid="refine-edge-panel"]',
+      channels: '[data-testid="channels-panel"]',
+      paths: '[data-testid="paths-panel"]',
+      mask: '[data-testid="edge-color-panel"]',
+    };
+    for (const panelId of ids) {
+      component = mount(LayerPanel, { target, props: { controller, panelId } });
+      flushSync();
+      expect(target.textContent, panelId).not.toContain(`Panel ${panelId}`);
+      if (expected[panelId]) expect(target.querySelector(expected[panelId]), panelId).not.toBeNull();
+      if (panelId === 'mask') expect(target.querySelector('[data-testid="vector-mask-edges"]')).not.toBeNull();
+      unmount(component);
+      component = null;
+      target.innerHTML = '';
+    }
+  });
 });

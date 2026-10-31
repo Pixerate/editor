@@ -309,12 +309,16 @@ export class ToolRegistryView implements ToolSource {
 			return style.skills.length ? { domain, skills: style.skills.length, layers: [...new Set(style.skills.map((s) => s.layer))] } : undefined;
 		};
 
+		/** The workflow skills built on a toolset's reference skill. */
+		const workflowsOf = (set: ToolsetInfo) =>
+			set.skill ? skills.filter((s) => s.kind === 'workflow' && s.reference === set.skill).map((s) => s.name) : [];
+
 		const tools: AgentTool[] = [
 			{
 				name: 'list_toolsets',
 				title: 'List toolsets',
 				description:
-					'Lists the groups of editor tools available here (one per open editor or feature): name, title, what it covers, its agent skill, how many tools it has and whether they are in your tool list (`enabled`: all, some or none). Start here, then call search_tools or enable_tools.',
+					'Lists the groups of editor tools available here (one per open editor or feature): name, title, what it covers, its agent skill, its workflow skills (`workflows`: skills for whole jobs done with its tools, such as a cutout or a photo correction), how many tools it has and whether they are in your tool list (`enabled`: all, some or none). Start here, then call search_tools or enable_tools.',
 				annotations: READ_ONLY,
 				inputSchema: { type: 'object', properties: {}, additionalProperties: false },
 				handler: async () => {
@@ -326,6 +330,7 @@ export class ToolRegistryView implements ToolSource {
 							...(set.title ? { title: set.title } : {}),
 							...(set.description ? { description: set.description } : {}),
 							...(set.skill ? { skill: set.skill } : {}),
+							...(workflowsOf(set).length ? { workflows: workflowsOf(set) } : {}),
 							tools: set.tools.length,
 							enabled: enabledState(set),
 							...(styles[i] ? { style: styles[i] } : {})
@@ -399,7 +404,7 @@ export class ToolRegistryView implements ToolSource {
 				name: 'get_skill',
 				title: 'Get skill',
 				description:
-					"Reads an agent skill: the guide to a toolset's tools (when to use each, the working method, pitfalls). Read the skill a toolset names in list_toolsets before working with it. Returns markdown; pass `file` for one of its reference files.",
+					"Reads an agent skill: the guide to a toolset's tools (when to use each, the working method, pitfalls). Read the skill a toolset names in list_toolsets before working with it. When the task is one of the jobs in its `workflows` (or in the skill's own Workflow skills section), read that workflow skill too: it has the steps in order and the checks between them. Returns markdown; pass `file` for one of its reference files.",
 				annotations: READ_ONLY,
 				inputSchema: {
 					type: 'object',

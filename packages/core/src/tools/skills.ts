@@ -14,18 +14,37 @@ export interface SkillInfo {
 	description: string;
 	/** Other files of the skill relative to its directory, e.g. `references/commands.md`. */
 	references: string[];
+	/**
+	 * `workflow` for a skill that covers one job from start to finish on a reference skill's tools
+	 * (frontmatter `metadata.kind: workflow`); otherwise `reference`.
+	 */
+	kind: 'reference' | 'workflow';
+	/** A workflow skill's reference skill (frontmatter `metadata.reference`), whose tools it uses. */
+	reference?: string;
 }
 
-/** Reads `name` and `description` from a SKILL.md's YAML frontmatter. */
-export function parseSkillFrontmatter(markdown: string): { name?: string; description?: string; body: string } {
+/**
+ * Reads `name`, `description` and the one-level `metadata` map (`metadata.kind`,
+ * `metadata.reference`, …) from a SKILL.md's YAML frontmatter.
+ */
+export function parseSkillFrontmatter(markdown: string): { name?: string; description?: string; metadata: Record<string, string>; body: string } {
 	const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(markdown);
-	if (!match) return { body: markdown };
+	if (!match) return { metadata: {}, body: markdown };
 	const fields: Record<string, string> = {};
+	const metadata: Record<string, string> = {};
+	const unquote = (value: string) => value.trim().replace(/^(['"])([\s\S]*)\1$/, '$2');
+	let inMetadata = false;
 	for (const line of match[1].split(/\r?\n/)) {
 		const kv = /^([A-Za-z_-]+):\s*(.*)$/.exec(line);
-		if (kv) fields[kv[1]] = kv[2].trim().replace(/^(['"])([\s\S]*)\1$/, '$2');
+		if (kv) {
+			fields[kv[1]] = unquote(kv[2]);
+			inMetadata = kv[1] === 'metadata' && kv[2].trim() === '';
+			continue;
+		}
+		const nested = inMetadata ? /^\s+([A-Za-z_-]+):\s*(.*)$/.exec(line) : null;
+		if (nested) metadata[nested[1]] = unquote(nested[2]);
 	}
-	return { name: fields.name, description: fields.description, body: markdown.slice(match[0].length) };
+	return { name: fields.name, description: fields.description, metadata, body: markdown.slice(match[0].length) };
 }
 
 const normalize = (path: string) => path.replace(/\\/g, '/').replace(/^\.?\//, '');
@@ -37,8 +56,15 @@ export function listSkills(files: SkillFiles): SkillInfo[] {
 	for (const path of paths) {
 		const [dir, ...rest] = path.split('/');
 		if (rest.join('/') !== 'SKILL.md') continue;
-		const { description } = parseSkillFrontmatter(files[path] ?? files[`./${path}`] ?? '');
-		skills.set(dir, { name: dir, description: description ?? '', references: [] });
+		const { description, metadata } = parseSkillFrontmatter(files[path] ?? files[`./${path}`] ?? '');
+		const workflow = metadata.kind === 'workflow';
+		skills.set(dir, {
+			name: dir,
+			description: description ?? '',
+			references: [],
+			kind: workflow ? 'workflow' : 'reference',
+			...(workflow && metadata.reference ? { reference: metadata.reference } : {}),
+		});
 	}
 	for (const path of paths) {
 		const [dir, ...rest] = path.split('/');

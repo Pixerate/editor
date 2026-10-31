@@ -3209,3 +3209,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Cleaning a day-first export left wrong dates with no error: `02/04/2026` (2 April) was stored as `2026-02-04`, while `31/03/2026` stayed text. `1,250` from a comma-decimal export became 1250, and `007` became 7.
 - **Root Cause**: `setCellValue`, `set_range` and imports run each string through `parseCellInput`, which reads input as a person in the US types it (month-first dates, comma thousands). Only `raw` keeps what came in.
 - **Solution / Workaround**: Read `raw` as well as `values` when cleaning or testing imported data. Rewrite a day-first column's dates from `raw` as ISO text, and write codes that must keep their zeros with a leading `'`. Test fixtures that type data the same way get the same parsing.
+
+### [svelte/image-editor] Host Sidebars Built From `layerPanels` Missed the Masking Panels
+
+- **Area**: `layerPanels` (core `layers/panel.ts`), Svelte `LayerPanel`
+- **Symptom**: An app that lays out its own sidebar from `layerPanels` + `LayerPanel` (Pixerate's Image Studio) had no Refine Edge, Check Edge, Show Last Change, Separate Subject, Channels, Paths, Edge Colour or vector mask edge controls, and a layer with a mask showed a "Panel mask" placeholder. Only the editor's own `ImageEditor` and `LayersPanel` mounted them.
+- **Root Cause**: New panels were mounted directly in `ImageEditor.svelte` / `LayersPanel.svelte`; `layerPanels` and `LayerPanel` were not updated, and `layerPanels` already returned a `mask` id that `LayerPanel` had no case for.
+- **Solution**: Every panel a feature adds must be reachable through `layerPanels` and rendered by `LayerPanel` (`selection` includes Refine Edge; `channels`, `paths` and `mask` are their own ids). `image-editor-controls.svelte.test.ts` mounts every id `layerPanels` returns and fails on a placeholder.
