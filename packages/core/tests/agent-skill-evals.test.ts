@@ -16,6 +16,7 @@ import { ToolRegistry, baseToolName, createSpreadsheetToolProvider } from '../sr
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
+import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 import { SpreadsheetController } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -31,7 +32,7 @@ interface Check extends ToolCall {
 }
 interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetFixture | ImageFixture | VectorFixture;
+	fixture: SpreadsheetFixture | ImageFixture | VectorFixture | PaintFixture;
 	checks: Check[];
 	solution: ToolCall[];
 }
@@ -56,6 +57,14 @@ interface VectorFixture {
 	height: number;
 	/** Commands that build the starting artwork, run in order (`"$0.id"` refers to an earlier result). */
 	setup?: Array<{ id: string; params?: Record<string, unknown> }>;
+}
+
+interface PaintFixture {
+	editor: 'paint';
+	width: number;
+	height: number;
+	/** Tool calls that prepare the canvas (paper, layers, strokes), run in order. */
+	setup?: ToolCall[];
 }
 
 function spreadsheet(f: SpreadsheetFixture): ToolRegistry {
@@ -110,7 +119,14 @@ async function vector(f: VectorFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector } as const;
+async function paint(f: PaintFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createPaintEditorToolProvider(new PaintEditorController({ width: f.width, height: f.height })));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

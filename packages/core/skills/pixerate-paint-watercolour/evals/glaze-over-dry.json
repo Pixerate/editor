@@ -1,0 +1,24 @@
+{
+	"prompt": "The blue wash on this sheet is dry. Glaze a second wash of the same blue over the left half to deepen it, without lifting or muddying the first one.",
+	"fixture": {
+		"editor": "paint",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "tool": "set_brush", "args": { "id": "watercolor-wash" } },
+			{ "tool": "set_color", "args": { "color": "#6fa8dc" } },
+			{ "tool": "paint_stroke", "args": { "points": [{ "x": 0, "y": 10 }, { "x": 64, "y": 10 }, { "x": 64, "y": 32 }, { "x": 0, "y": 32 }, { "x": 0, "y": 54 }, { "x": 64, "y": 54 }] } },
+			{ "tool": "dry_paint" }
+		]
+	},
+	"checks": [
+		{ "why": "a second watercolour wash", "tool": "list_strokes", "expect": { "total": 2, "strokes": { "$every": { "brushId": { "$in": ["watercolor-round", "watercolor-wash", "gradient-wash", "watercolor-detail"] } } } } },
+		{ "why": "the left half is deeper (darker) than the paper-side right", "tool": "pick_color", "args": { "x": 10, "y": 32 }, "expect": { "color": { "$expr": "(([r, g, b]) => 0.3 * r + 0.59 * g + 0.11 * b < 170 && b > r + 15)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } },
+		{ "why": "the glaze is dry, so it stays put", "tool": "get_wet_paint", "expect": { "wet": false } }
+	],
+	"solution": [
+		{ "tool": "get_wet_paint" },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 2, "y": 12 }, { "x": 26, "y": 12 }, { "x": 26, "y": 32 }, { "x": 2, "y": 32 }, { "x": 2, "y": 52 }, { "x": 26, "y": 52 }] } },
+		{ "tool": "dry_paint" }
+	]
+}

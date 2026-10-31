@@ -1,0 +1,19 @@
+{
+	"prompt": "Paint a flat light-blue sky wash across the top third of the sheet in watercolour, and let it dry before anything else goes on.",
+	"fixture": { "editor": "paint", "width": 64, "height": 64, "setup": [{ "tool": "set_paper", "args": { "preset": "cartridge" } }] },
+	"checks": [
+		{ "why": "on watercolour paper", "tool": "get_canvas_info", "expect": { "paper": { "preset": { "$in": ["cold-pressed", "hot-pressed", "rough-watercolor"] } } } },
+		{ "why": "painted with a watercolour brush", "tool": "list_strokes", "expect": { "strokes": { "$length": { "$min": 1 }, "$every": { "brushId": { "$in": ["watercolor-round", "watercolor-wash", "gradient-wash", "watercolor-detail"] } } } } },
+		{ "why": "the sky is blue", "tool": "pick_color", "args": { "x": 32, "y": 6 }, "expect": { "color": { "$expr": "(([r, g, b]) => b > r + 15)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } },
+		{ "why": "the wash is dry", "tool": "get_wet_paint", "expect": { "wet": false } }
+	],
+	"solution": [
+		{ "tool": "set_paper", "args": { "preset": "cold-pressed" } },
+		{ "tool": "set_brush", "args": { "id": "watercolor-wash" } },
+		{ "tool": "set_color", "args": { "color": "#6fa8dc" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 0, "y": 6 }, { "x": 64, "y": 6 }, { "x": 64, "y": 14 }, { "x": 0, "y": 14 }] } },
+		{ "tool": "advance_wet_paint", "args": { "seconds": 30 } },
+		{ "tool": "dry_paint" },
+		{ "tool": "get_wet_paint" }
+	]
+}

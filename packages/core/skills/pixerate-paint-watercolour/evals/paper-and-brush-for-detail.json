@@ -1,0 +1,16 @@
+{
+	"prompt": "I want a detailed botanical study in watercolour with crisp, fine lines. Set up the paper for that and paint the thin stem with a small detail brush, a green line from (32, 60) up to (32, 20).",
+	"fixture": { "editor": "paint", "width": 64, "height": 64 },
+	"checks": [
+		{ "why": "smooth hot-pressed paper for fine detail", "tool": "get_canvas_info", "expect": { "paper": { "preset": "hot-pressed" } } },
+		{ "why": "a fine watercolour detail brush", "tool": "list_strokes", "expect": { "strokes": { "$some": { "brushId": "watercolor-detail" } } } },
+		{ "why": "a green stem", "tool": "pick_color", "args": { "x": 32, "y": 40 }, "expect": { "color": { "$expr": "(([r, g, b]) => g > r + 10 && g > b)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } }
+	],
+	"solution": [
+		{ "tool": "set_paper", "args": { "preset": "hot-pressed" } },
+		{ "tool": "set_brush", "args": { "id": "watercolor-detail" } },
+		{ "tool": "set_color", "args": { "color": "#3f7d3a" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 32, "y": 60 }, { "x": 32, "y": 40 }, { "x": 32, "y": 20 }] } },
+		{ "tool": "dry_paint" }
+	]
+}

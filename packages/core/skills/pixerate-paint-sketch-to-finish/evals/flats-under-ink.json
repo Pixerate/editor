@@ -1,0 +1,27 @@
+{
+	"prompt": "Colour the inside of the inked box with a flat warm yellow, on its own layer under the line art so the lines stay on top.",
+	"fixture": {
+		"editor": "paint",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "tool": "set_paper", "args": { "preset": "smooth" } },
+			{ "tool": "update_layer", "args": { "layerId": { "$read": "list_layers", "path": "layers.0.id" }, "name": "Ink" } },
+			{ "tool": "set_brush", "args": { "id": "ink-pen" } },
+			{ "tool": "set_color", "args": { "color": "#111111" } },
+			{ "tool": "paint_stroke", "args": { "points": [{ "x": 12, "y": 12 }, { "x": 52, "y": 12 }, { "x": 52, "y": 52 }, { "x": 12, "y": 52 }, { "x": 12, "y": 12 }] } }
+		]
+	},
+	"checks": [
+		{ "why": "a colour layer below the Ink layer (list_layers is top first)", "tool": "list_layers", "expect": { "layers": { "$expr": "(() => { const i = v.findIndex((l) => l.name === 'Ink'); return i >= 0 && v.slice(i + 1).some((l) => l.type === 'pixel' && l.bounds); })()" } } },
+		{ "why": "the inside is yellow", "tool": "pick_color", "args": { "x": 32, "y": 32 }, "expect": { "color": { "$expr": "(([r, g, b]) => r > 200 && g > 160 && b < r - 60)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } },
+		{ "why": "the line is still dark on top", "tool": "pick_color", "args": { "x": 32, "y": 12 }, "expect": { "color": { "$expr": "(([r, g, b]) => r + g + b < 300)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } }
+	],
+	"solution": [
+		{ "tool": "add_layer", "args": { "name": "Flats" } },
+		{ "tool": "move_layer", "args": { "layerId": { "$read": "list_layers", "path": "layers.0.id" }, "index": 0 } },
+		{ "tool": "set_brush", "args": { "id": "marker" } },
+		{ "tool": "set_color", "args": { "color": "#f2c14e" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 14, "y": 16 }, { "x": 50, "y": 16 }, { "x": 50, "y": 24 }, { "x": 14, "y": 24 }, { "x": 14, "y": 32 }, { "x": 50, "y": 32 }, { "x": 50, "y": 40 }, { "x": 14, "y": 40 }, { "x": 14, "y": 48 }, { "x": 50, "y": 48 }] } }
+	]
+}
