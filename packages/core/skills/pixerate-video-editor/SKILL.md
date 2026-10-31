@@ -26,6 +26,14 @@ them from `get_video_project`; never invent them.
 
 For errors, namespaced tool names and undo conventions, see `pixerate-agent-tools`.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-talking-head-edit`: dialogue cleanup by transcript: fillers, pauses, stutters.
+- `pixerate-bgm-alignment`: cutting to the beat, ducking music under speech, loudness.
+
 ## Working method
 
 1. **Read.** `get_video_project` for settings, assets, tracks, clips (with end and source

@@ -1,0 +1,24 @@
+{
+	"prompt": "Hide the blue background so only the red ball shows. Don't delete any pixels; I may want the background back later.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 80,
+		"background": [40, 90, 200],
+		"shapes": [
+			{ "shape": "ellipse", "x": 40, "y": 20, "width": 40, "height": 40, "color": [210, 40, 40] },
+			{ "shape": "rect", "x": 100, "y": 6, "width": 12, "height": 8, "color": [210, 40, 40] }
+		]
+	},
+	"checks": [
+		{ "why": "the top layer has a layer mask that reveals only the ball", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "pixel", "mask": { "kind": "raster", "enabled": true, "defaultValue": 0, "paintedBounds": { "x": { "$min": 38, "$max": 41 }, "y": { "$min": 18, "$max": 21 }, "width": { "$min": 39, "$max": 44 }, "height": { "$min": 39, "$max": 44 } } } } } } },
+		{ "why": "the mask edge is clean", "tool": "inspect_mask_edge", "args": { "target": "layer-mask", "layerId": { "$read": "list_layers", "path": "layers.-1.id" } }, "expect": { "issues": [], "haloScore": { "$max": 0.35 } } }
+	],
+	"solution": [
+		{ "tool": "list_layers" },
+		{ "tool": "magic_wand", "args": { "x": 60, "y": 40, "tolerance": 20, "contiguous": true } },
+		{ "tool": "inspect_mask_edge" },
+		{ "tool": "add_layer_mask", "args": { "layerId": "background", "from": "selection" } },
+		{ "tool": "inspect_mask_edge", "args": { "target": "layer-mask", "layerId": "background" } }
+	]
+}

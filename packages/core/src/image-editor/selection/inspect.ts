@@ -35,7 +35,7 @@ export interface MaskEdgeReport {
   edgeAlignment: number;
   /** Turning of the outline beyond what closing it needs, in radians per 100 px of outline (0: smooth). */
   jaggedness: number;
-  /** 0–1: the share of edge pixels that are partly covered (0 < α < 1). */
+  /** 0–1: the share of edge pixels in a transition wider than anti-aliasing (partly covered, no fully selected and unselected pixel within 2 px). */
   softFraction: number;
   /** Unselected areas enclosed by the selection, largest first (at most 10 listed). */
   holes: { count: number; totalArea: number; largest: MaskRegion[] };
@@ -115,6 +115,24 @@ export function inspectMaskEdge(mask: SelectionMask, image: PixelBuffer & { x: n
     blk.y1 = Math.max(blk.y1, y);
   };
 
+  // Anti-aliasing ramps from unselected to selected within 2 px, so a partial pixel with both
+  // a fully selected and an unselected pixel that close is a hard edge; any other is soft.
+  const antiAliased = (x: number, y: number) => {
+    let full = false;
+    let none = false;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = a[ny * W + nx];
+        if (n === 255) full = true;
+        else if (n === 0) none = true;
+      }
+    }
+    return full && none;
+  };
+
   // Edge pixels, halo, alignment and softness, in the bounds plus one pixel.
   const x0 = Math.max(0, b.x - 1);
   const y0 = Math.max(0, b.y - 1);
@@ -145,7 +163,7 @@ export function inspectMaskEdge(mask: SelectionMask, image: PixelBuffer & { x: n
       const partial = v > 0 && v < 255;
       if ((hi && lo) || partial) {
         band++;
-        if (partial) soft++;
+        if (partial && !antiAliased(x, y)) soft++;
       }
       if (v < 128) continue;
       const inCanvasLow = (nx: number, ny: number) => nx >= 0 && ny >= 0 && nx < W && ny < H && a[ny * W + nx] < 128;

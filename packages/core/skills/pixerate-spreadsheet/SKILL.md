@@ -15,6 +15,13 @@ leading `'` forces text.
 
 Errors, namespacing and `run_commands` batching are in the `pixerate-agent-tools` skill.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-spreadsheet-clean-import`: tidying imported or pasted data: structure, headers, types, dates, duplicates.
+
 ## Working method
 
 1. **Read.** `get_range` on the area you will touch (and its header row). The result gives

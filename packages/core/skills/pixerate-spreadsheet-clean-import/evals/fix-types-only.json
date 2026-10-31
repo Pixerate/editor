@@ -1,0 +1,24 @@
+{
+	"prompt": "The ZIP column lost its leading zeros on import and Amount has some text in it. Fix those two columns so ZIPs are five-digit codes and amounts are numbers (leave missing amounts empty). Don't change anything else.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			["ZIP", "Amount", "Date", "Note"],
+			["2134", "300 USD", "2026-03-04", "rush"],
+			["90210", "1 200", "2026-03-05", ""],
+			["601", "(45)", "2026-03-05", "refund"],
+			["10001", "n/a", "2026-03-06", "check with sales"]
+		]
+	},
+	"checks": [
+		{ "why": "ZIPs are five-digit text, leading zeros restored", "tool": "get_range", "args": { "range": "A2:A5" }, "expect": { "values": [["02134"], ["90210"], ["00601"], ["10001"]] } },
+		{ "why": "amounts are numbers; a missing amount is empty, not 0", "tool": "get_range", "args": { "range": "B2:B5" }, "expect": { "values": [[300], [1200], [-45], [""]] } },
+		{ "why": "the other columns and the headers are untouched", "tool": "get_range", "args": { "range": "A1:D5" }, "expect": { "raw": [["ZIP", "Amount", "Date", "Note"], { "$length": 4 }, { "$length": 4 }, { "$length": 4 }, { "$length": 4 }] } },
+		{ "why": "dates and notes keep what was typed", "tool": "get_range", "args": { "range": "C2:D5" }, "expect": { "raw": [["2026-03-04", "rush"], ["2026-03-05", ""], ["2026-03-05", "refund"], ["2026-03-06", "check with sales"]] } },
+		{ "why": "the sheet keeps its size", "tool": "get_range", "args": { "range": "A1" }, "expect": { "sheet": { "rows": 5, "columns": 4 } } }
+	],
+	"solution": [
+		{ "tool": "get_range", "args": { "range": "A1:D5" } },
+		{ "tool": "set_range", "args": { "start": "A2", "values": [["'02134", 300], ["'90210", 1200], ["'00601", -45], ["'10001", null]] } }
+	]
+}

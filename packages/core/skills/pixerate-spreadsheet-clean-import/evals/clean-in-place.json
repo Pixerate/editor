@@ -1,0 +1,43 @@
+{
+	"prompt": "This sheet is a raw CSV export of orders from our European shop. Clean it up in place so it can be analysed: tidy headers, one type per column, and no blank, duplicate or total rows.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			["  Order ID", "date", "Customer name ", "Amount", "region"],
+			["1001", "2026-03-04", "acme corp", "$1,200.00", "north"],
+			["1002", "31/03/2026", "Globex ", "950", "South"],
+			["", "", "", "", ""],
+			["1003", "4-Mar-2026", "Initech", "USD 300", "NORTH"],
+			["1002", "31/03/2026", "Globex ", "950", "South"],
+			["1004", "02/04/2026", "Umbrella", "1.250,50", "  south"],
+			["", "", "Total", "=SUM(D2:D7)", ""]
+		]
+	},
+	"checks": [
+		{ "why": "headers are trimmed and unique", "tool": "get_range", "args": { "range": "A1:E1" }, "expect": { "values": [{ "$every": { "$match": "^\\S(.*\\S)?$" }, "$unique": true }] } },
+		{ "why": "one header row and the four distinct orders, with no blank, duplicate or total rows", "tool": "get_range", "args": { "range": "A1:H40" }, "expect": { "values": { "$nonEmpty": { "$length": 5 } } } },
+		{ "why": "order ids are unique", "tool": "get_range", "args": { "range": "A2:A40" }, "expect": { "values": { "$nonEmpty": { "$column": [0, { "$unique": true }] } } } },
+		{ "why": "amounts are numbers, European decimals and currency text included", "tool": "get_range", "args": { "range": "D2:D40" }, "expect": { "values": { "$nonEmpty": { "$column": [0, { "$sum": 3700.5 }] } } } },
+		{ "why": "dates are real dates read day-first, as the export writes them (02/04 is 2 April)", "tool": "get_range", "args": { "range": "B2:B40" }, "expect": { "values": { "$nonEmpty": { "$column": [0, { "$every": { "$match": "^\\d{4}-\\d{2}-\\d{2}$" }, "$some": "2026-04-02", "$not": { "$some": "2026-02-04" } }] } } } },
+		{ "why": "customer names are trimmed", "tool": "get_range", "args": { "range": "C2:C40" }, "expect": { "values": { "$nonEmpty": { "$column": [0, { "$every": { "$match": "^\\S(.*\\S)?$" } }] } } } },
+		{ "why": "regions are spelled one way", "tool": "get_range", "args": { "range": "E2:E40" }, "expect": { "values": { "$nonEmpty": { "$column": [0, { "$distinct": { "$length": 2 } }] } } } },
+		{ "why": "no formula errors", "tool": "get_range", "args": { "range": "A1:H40" }, "expect": { "errors": [] } }
+	],
+	"solution": [
+		{ "tool": "get_range", "args": { "range": "A1:Z50" } },
+		{
+			"tool": "set_range",
+			"args": {
+				"start": "A1",
+				"values": [
+					["Order ID", "Date", "Customer", "Amount", "Region"],
+					[1001, "2026-03-04", "Acme Corp", 1200, "North"],
+					[1002, "2026-03-31", "Globex", 950, "South"],
+					[1003, "2026-03-04", "Initech", 300, "North"],
+					[1004, "2026-04-02", "Umbrella", 1250.5, "South"]
+				]
+			}
+		},
+		{ "tool": "delete_rows", "args": { "start": 6, "count": 3 } }
+	]
+}

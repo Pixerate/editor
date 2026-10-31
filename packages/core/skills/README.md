@@ -5,6 +5,11 @@ Each editor domain in `@pixerate/editor` ships an [Agent Skill](https://agentski
 expert in the domain would follow. They are published with the package, so an app or agent
 that uses the tools can load the matching skill.
 
+## Reference skills
+
+One per editor domain. A reference skill owns its domain's tool and command tables, its mental
+model and its general practice.
+
 | Skill | Covers |
 | --- | --- |
 | [`pixerate-agent-tools`](pixerate-agent-tools/SKILL.md) | What every editor has in common: the MCP bridge, toolsets and tool naming, finding tools with `list_toolsets` / `search_tools` / `enable_tools` / `get_skill`, `list_commands` / `run_command` / `run_commands`, errors, undo. Load it with any domain skill. |
@@ -15,18 +20,29 @@ that uses the tools can load the matching skill.
 | [`pixerate-chart`](pixerate-chart/SKILL.md) | Chart specs, data, series, presets, trendlines, Office and Mermaid charts. |
 | [`pixerate-diagram`](pixerate-diagram/SKILL.md) | Mermaid diagrams: nodes, edges, groups, layout. |
 | [`pixerate-image-editor`](pixerate-image-editor/SKILL.md) | Adjustments, adjustment layers, selections and masks. |
-| [`pixerate-image-selection-masking`](pixerate-image-selection-masking/SKILL.md) | Workflow: cutouts, background and sky replacement, local adjustments through masks; choosing a selection method, checking and refining edges, and outputting an editable mask. Built on `pixerate-image-editor`'s tools. |
 | [`pixerate-paint-editor`](pixerate-paint-editor/SKILL.md) | Natural-media painting: paper and grain, dry-media brushes, the brush library, strokes as data, pigment mixing. |
 | [`pixerate-animation-editor`](pixerate-animation-editor/SKILL.md) | Vector animation: shots, commands, timing, Flair and Lottie. |
 | [`pixerate-video-editor`](pixerate-video-editor/SKILL.md) | Non-linear video editing: tracks, clips, transitions, export. |
-| [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. |
-| [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. |
 | [`pixerate-generation`](pixerate-generation/SKILL.md) | Planning, estimating and running paid media generation. |
 | [`pixerate-parameters`](pixerate-parameters/SKILL.md) | Effect parameters, presets and keyframes. |
 | [`pixerate-tokens`](pixerate-tokens/SKILL.md) | Design tokens: collections, modes, variables and aliases, through the whole-set document tools. |
 | [`pixerate-effect-authoring`](pixerate-effect-authoring/SKILL.md) | Authoring shaders and procedural effects: inspecting parameters and source code, setting values and presets, keyframing animation tracks, playback timing, and previewing. |
 | [`pixerate-color`](pixerate-color/SKILL.md) | Colour inspection, WCAG accessibility and contrast optimization, CVD simulation, palette audits, harmonies, and OKLab/OKLCH blends. |
 | [`pixerate-typography`](pixerate-typography/SKILL.md) | Fonts and fallback stacks, font loading, modular type scales and hierarchies, fluid sizes, readability and type-aware contrast audits, text segmentation, the font picker. |
+
+## Workflow skills
+
+A workflow skill covers one job from start to finish: what to confirm first, the steps in
+order with a check after each, a decision table, recipes and the job's pitfalls. It is built on
+its reference skill's tools (load both), and its description is written about the job, so a
+request like "clean up this export" finds it.
+
+| Skill | Editor | Covers |
+| --- | --- | --- |
+| [`pixerate-image-selection-masking`](pixerate-image-selection-masking/SKILL.md) | Image (`pixerate-image-editor`) | Cutouts, background and sky replacement, local adjustments through masks; choosing a selection method, checking and refining edges, and outputting an editable mask. |
+| [`pixerate-spreadsheet-clean-import`](pixerate-spreadsheet-clean-import/SKILL.md) | Spreadsheet (`pixerate-spreadsheet`) | Imported or pasted data made tidy: structure, headers, types (currency, comma decimals, day-first dates, leading zeros, missing values), text, duplicates and validation. |
+| [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
+| [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
 ## Using them
 
@@ -75,12 +91,27 @@ same change.
   `create*ToolProvider` / `create*Commands` factory is not mapped to a skill. A new domain
   gets a new skill directory, an entry in `expectedBySkill()` and `FACTORIES`, and a row in
   the table above.
-- **Workflow skills.** A skill that covers one job end to end on another skill's tools (for
-  example `pixerate-image-selection-masking` on `pixerate-image-editor`) has no tool table.
-  Its frontmatter adds `metadata` with `kind: workflow` and `reference: <skill>`, it lists the
-  tools it uses as bullets under `## Tools used`, and it is mapped in `WORKFLOWS` in the test
-  (and to `[]` in `expectedBySkill()`). The test checks that every tool it uses exists in the
-  reference skill.
+- **Workflow skills.** A skill that covers one job end to end on another skill's tools has no
+  tool table (unless the job has its own provider, as the two video ones do). Start from
+  [`WORKFLOW_TEMPLATE.md`](WORKFLOW_TEMPLATE.md). Its frontmatter adds `metadata` with
+  `kind: workflow` and `reference: <skill>`; it lists the tools it uses as bullets under
+  `## Tools used`; and it is mapped in `WORKFLOWS` in the test (and to `[]` in
+  `expectedBySkill()`). The test checks that every tool it uses exists in the reference skill,
+  that every backticked tool or command name in its prose is real, that the reference skill
+  names it under `## Workflow skills`, that it stays under 250 body lines (aim for 200) and that
+  it ships evals. Add its row to the workflow table above.
+- **Evals.** Each workflow skill ships at least three scenarios in `evals/*.json`, run by
+  `packages/core/tests/agent-skill-evals.test.ts`. An eval has a `prompt` (the task, in the
+  user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }` or
+  `{ "editor": "image", "width", "height", "background", "shapes" }`), `checks` (a read-only
+  tool, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
+  tool calls an expert would make). The test proves each eval: some check fails on the fixture,
+  and all pass after the solution. A model harness runs the same file with the model in place
+  of the solution. In `expect`, objects match key by key and arrays element by element, with
+  operators for ranges and lists (`$min`, `$max`, `$match`, `$every`, `$some`, `$length`,
+  `$unique`, `$distinct`, `$sum`, `$column`, `$nonEmpty`, `$not`, `$in`, `$type`); a check's
+  argument can read a value the job created with `{ "$read": "list_layers", "path":
+  "layers.-1.id" }`. Checks test the outcome the user asked for, not one way of getting it.
 - **Workflows and practice.** The test cannot check advice. When a feature changes the best
   way to do something (a new batch tool, a new check, a better default), update the working
   method and best practices too.

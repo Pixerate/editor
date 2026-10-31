@@ -1,0 +1,25 @@
+{
+	"prompt": "Remove duplicate customers from this list. Two rows are the same customer when the email matches, ignoring case and spaces; keep each customer's most recently updated row.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			["Email", "Name", "Plan", "Updated"],
+			["ann@x.com", "Ann Lee", "Free", "2026-01-10"],
+			["bob@y.com", "Bob Ray", "Pro", "2026-02-01"],
+			["Ann@X.com ", "Ann Lee", "Pro", "2026-05-01"],
+			["cat@z.com", "Cat Sun", "Free", "2026-03-15"],
+			["bob@y.com", "Bob Ray", "Pro", "2026-02-01"]
+		]
+	},
+	"checks": [
+		{ "why": "one row per customer under the header", "tool": "get_range", "args": { "range": "A1:F40" }, "expect": { "values": { "$nonEmpty": { "$length": 4 } } } },
+		{ "why": "Ann's latest row (Pro, updated 1 May) is the one kept", "tool": "get_range", "args": { "range": "A2:D40" }, "expect": { "values": { "$some": [{ "$match": ["^\\s*ann@x\\.com\\s*$", "i"] }, "Ann Lee", "Pro", "2026-05-01"] } } },
+		{ "why": "Bob and Cat are still there", "tool": "get_range", "args": { "range": "A2:A40" }, "expect": { "values": { "$some": ["bob@y.com"], "$nonEmpty": { "$some": ["cat@z.com"] } } } },
+		{ "why": "the header row is unchanged", "tool": "get_range", "args": { "range": "A1:D1" }, "expect": { "values": [["Email", "Name", "Plan", "Updated"]] } }
+	],
+	"solution": [
+		{ "tool": "get_range", "args": { "range": "A1:D20" } },
+		{ "tool": "set_range", "args": { "start": "A2", "values": [["ann@x.com", "Ann Lee", "Pro", "2026-05-01"], ["bob@y.com", "Bob Ray", "Pro", "2026-02-01"], ["cat@z.com", "Cat Sun", "Free", "2026-03-15"]] } },
+		{ "tool": "delete_rows", "args": { "start": 5, "count": 2 } }
+	]
+}
