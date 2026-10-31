@@ -176,6 +176,7 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-bgm-alignment': toolNames(createVideoMusicToolProvider(new VideoEditorController(), { id: 'video-music' })),
 		// Workflow skills own no provider (see WORKFLOWS); they have no tool table.
 		'pixerate-image-selection-masking': [],
+		'pixerate-spreadsheet-clean-import': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -270,11 +271,16 @@ const FACTORIES: Record<string, string> = {
  * Workflow skills: one job end to end, built on a reference skill's tools. Each declares
  * `metadata.kind: workflow` and `metadata.reference`, and lists the tools it uses under
  * `## Tools used` as bullets starting with backticked names, which must all exist in the
- * reference skill.
+ * reference skill. Its evals (`evals/*.json`) run in `agent-skill-evals.test.ts`.
  */
 const WORKFLOWS: Record<string, string> = {
-	'pixerate-image-selection-masking': 'pixerate-image-editor'
+	'pixerate-image-selection-masking': 'pixerate-image-editor',
+	'pixerate-spreadsheet-clean-import': 'pixerate-spreadsheet'
 };
+
+/** Workflow skills aim for this many body lines, and fail above `WORKFLOW_MAX_LINES`. */
+const WORKFLOW_TARGET_LINES = 200;
+const WORKFLOW_MAX_LINES = 250;
 
 function walk(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -340,12 +346,43 @@ describe('agent skills', () => {
 			const { body } = readSkill(name);
 			const section = /^## Tools used\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(body);
 			expect(section, 'a ## Tools used section').not.toBeNull();
-			const used = [...section![1].matchAll(/^- (.*?):/gm)].flatMap((m) => [...m[1]!.matchAll(/`([a-z0-9_]+)`/g)].map((n) => n[1]!));
+			const used = [...section![1].matchAll(/^- (.*?):/gm)].flatMap((m) => [...m[1]!.matchAll(/`([a-z][A-Za-z0-9_.]*)`/g)].map((n) => n[1]!));
 			expect(used.length).toBeGreaterThan(0);
 			const known = new Set(expected[reference]);
 			expect(used.filter((n) => !known.has(n)), `tools not in ${reference}`).toEqual([]);
-			expect(body.split('\n').length, 'workflow skills stay short').toBeLessThanOrEqual(250);
 		});
+
+		it('names only real tools and commands in its prose', () => {
+			const { body } = readSkill(name);
+			const known = new Set(Object.values(expected).flat());
+			// Dotted names are commands only in a command namespace (`spreadsheet.unhideAll`, not `sheet.rows`).
+			const namespaces = new Set([...known].filter((n) => n.includes('.')).map((n) => n.split('.')[0]));
+			const named = [...body.matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+|[a-z]+\.[a-z][A-Za-z]+)`/g)].map((m) => m[1]!).filter((n) => !n.includes('.') || namespaces.has(n.split('.')[0]!));
+			expect([...new Set(named.filter((n) => !known.has(n)))], 'backticked names that are no tool or command').toEqual([]);
+		});
+
+		it('stays short and is listed by its reference skill', () => {
+			const { body } = readSkill(name);
+			const lines = body.split('\n').length;
+			if (lines > WORKFLOW_TARGET_LINES) console.warn(`${name}: ${lines} body lines; workflow skills aim for ${WORKFLOW_TARGET_LINES}.`);
+			expect(lines, 'workflow skill body lines').toBeLessThanOrEqual(WORKFLOW_MAX_LINES);
+			expect(readSkill(reference).body, `${reference} names ${name} under ## Workflow skills`).toMatch(new RegExp(`^## Workflow skills\\n(?:(?!^## )[\\s\\S])*?\`${name}\``, 'm'));
+		});
+
+		it('ships evals', () => {
+			const dir = join(SKILLS_DIR, name, 'evals');
+			const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')) : [];
+			expect(files.length, `${name}/evals/*.json`).toBeGreaterThanOrEqual(3);
+		});
+	});
+
+	it('lists every skill in skills/README.md', () => {
+		const readme = readFileSync(join(SKILLS_DIR, 'README.md'), 'utf8');
+		const reference = /^## Reference skills\n([\s\S]*?)^## /m.exec(readme)?.[1] ?? '';
+		const workflow = /^## Workflow skills\n([\s\S]*?)^## /m.exec(readme)?.[1] ?? '';
+		const row = (n: string) => `| [\`${n}\`](${n}/SKILL.md) |`;
+		const missing = dirs.filter((n) => !(WORKFLOWS[n] ? workflow : reference + workflow).includes(row(n)));
+		expect(missing, 'add a row to the right table in skills/README.md').toEqual([]);
 	});
 
 	describe.each(Object.keys(expected))('%s', (name) => {
@@ -361,6 +398,11 @@ describe('agent skills', () => {
 			expect(description).not.toMatch(/[<>]/);
 			// Progressive disclosure: keep SKILL.md short, move detail to references/.
 			expect(skill.body.split('\n').length, 'SKILL.md body lines').toBeLessThanOrEqual(500);
+		});
+
+		it('names only skills that exist', () => {
+			const named = [...readSkill(name).body.matchAll(/`(pixerate-[a-z0-9-]+)`/g)].map((m) => m[1]!);
+			expect([...new Set(named.filter((n) => !dirs.includes(n)))]).toEqual([]);
 		});
 
 		it('documents exactly the tools and commands its providers expose', () => {

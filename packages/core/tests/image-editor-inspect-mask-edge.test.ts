@@ -43,6 +43,16 @@ function setup() {
 const disc = (grow = 0) => ({ x: CX - R - grow, y: CY - R - grow, width: 2 * (R + grow), height: 2 * (R + grow) });
 
 describe('inspect_mask_edge', () => {
+  it('reports a feathered edge as soft and an anti-aliased one as hard', async () => {
+    const { call } = setup();
+    await call('magic_wand', { x: CX, y: CY, tolerance: 20 });
+    expect((await call('inspect_mask_edge')).softFraction).toBe(0);
+    await call('modify_selection', { op: 'feather', radius: 6 });
+    const r = await call('inspect_mask_edge');
+    expect(r.softFraction).toBeGreaterThanOrEqual(MASK_EDGE_THRESHOLDS.soft);
+    expect(r.issues.some((i: string) => i.startsWith('Very soft'))).toBe(true);
+  });
+
   it('passes a selection that follows the subject', async () => {
     const { call } = setup();
     await call('select_ellipse', disc());
@@ -51,8 +61,8 @@ describe('inspect_mask_edge', () => {
     expect(r.haloScore).toBeLessThan(MASK_EDGE_THRESHOLDS.halo);
     expect(r.edgeAlignment).toBeGreaterThan(0.9);
     expect(r.jaggedness).toBeLessThan(MASK_EDGE_THRESHOLDS.jaggedness);
-    expect(r.softFraction).toBeGreaterThan(0);
-    expect(r.softFraction).toBeLessThan(MASK_EDGE_THRESHOLDS.soft);
+    // Anti-aliasing is not softness.
+    expect(r.softFraction).toBe(0);
     expect(r.holes.count).toBe(0);
     expect(r.islands.count).toBe(0);
     expect(r.issues).toEqual([]);

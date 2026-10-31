@@ -3197,3 +3197,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A new selection command (or an existing one changed to call `setSelection` differently) left the selection frozen. Its recipe vanished even though the command could be replayed.
 - **Root Cause**: `setSelection` keeps or extends the recipe only when the caller passed a step through `withRecipeStep`. Without one it drops the recipe, which is the safe default for commands a recipe cannot describe. A command that calls `setSelection` directly therefore freezes the selection.
 - **Solution / Workaround**: Wrap the `setSelection` (or `shapeCommand`) call in `withRecipeStep(step, …)`, with a step `replaySelectionRecipe` can reproduce from JSON alone. Add the op to `readRecipeStep` and `replaySelectionRecipe` first. Commands that depend on something a step can't hold (a brush gesture, a model, a loaded mask) should keep dropping the recipe.
+
+### [core/image-editor] Anti-Aliased Edges Counted as Soft in `inspect_mask_edge`
+
+- **Issue / Symptom**: `inspect_mask_edge` reported "Very soft" (`softFraction` 1) for a clean Magic Wand or ellipse selection of a hard-edged object, so its `issues` were never empty for curved subjects.
+- **Root Cause**: Every partly selected pixel in the edge band counted as soft. Anti-aliasing makes every pixel on a curved or diagonal edge partly selected, and the wand's anti-aliasing ramps over two pixels.
+- **Solution / Workaround**: A partly selected pixel counts as soft only when it has no fully selected and no unselected pixel within 2 px, so the measure picks up feathered and matted transitions and not anti-aliasing. When writing a mask metric, test it on an anti-aliased hard edge as well as on a soft one.
+
+### [core/spreadsheet] Imported Text Is Parsed as en-US Typing, Silently
+
+- **Issue / Symptom**: Cleaning a day-first export left wrong dates with no error: `02/04/2026` (2 April) was stored as `2026-02-04`, while `31/03/2026` stayed text. `1,250` from a comma-decimal export became 1250, and `007` became 7.
+- **Root Cause**: `setCellValue`, `set_range` and imports run each string through `parseCellInput`, which reads input as a person in the US types it (month-first dates, comma thousands). Only `raw` keeps what came in.
+- **Solution / Workaround**: Read `raw` as well as `values` when cleaning or testing imported data. Rewrite a day-first column's dates from `raw` as ISO text, and write codes that must keep their zeros with a leading `'`. Test fixtures that type data the same way get the same parsing.

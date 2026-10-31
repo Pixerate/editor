@@ -33,6 +33,13 @@ Also an optional selection and crop/rotate/flip. See `pixerate-agent-tools` for 
 - **Coordinates** for selections are natural pixels of the source image (before crop, rotate
   or flip). Read `get_selection` bounds or the image size, never screen pixels.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-image-selection-masking`: cutouts, background and sky replacement, local adjustments through masks.
+
 ## Working method
 
 1. **Read.** `get_adjustments` for the current values, process version and layers;
