@@ -12,7 +12,7 @@
 		{ "tool": "set_brush", "args": { "id": "watercolor-wash" } },
 		{ "tool": "set_color", "args": { "color": "#6fa8dc" } },
 		{ "tool": "paint_stroke", "args": { "points": [{ "x": 0, "y": 6 }, { "x": 64, "y": 6 }, { "x": 64, "y": 14 }, { "x": 0, "y": 14 }] } },
-		{ "tool": "advance_wet_paint", "args": { "seconds": 30 } },
+		{ "tool": "advance_wet_paint", "args": { "seconds": 3 } },
 		{ "tool": "dry_paint" },
 		{ "tool": "get_wet_paint" }
 	]

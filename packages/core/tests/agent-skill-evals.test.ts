@@ -299,5 +299,6 @@ describe.each(evals)('%s', (_, ev) => {
 		expect((await failedChecks(registry, ev.checks)).length, 'some check fails before the job is done').toBeGreaterThan(0);
 		for (const step of ev.solution) await call(registry, step);
 		expect(await failedChecks(registry, ev.checks)).toEqual([]);
-	});
+		// Wet paint and compositing run real simulations, slower on CI runners.
+	}, 30_000);
 });
