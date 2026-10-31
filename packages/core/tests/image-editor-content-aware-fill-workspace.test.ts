@@ -123,3 +123,62 @@ describe('Content-Aware Fill workspace session', () => {
     await expect(s.commit()).rejects.toThrow(/sampling area is empty/);
   });
 });
+
+describe('Content-Aware Fill: duplicate layer output and sampling anywhere', () => {
+  it('fills a copy of the layer with output duplicate-layer, as one undo step', async () => {
+    const { c, call } = setup();
+    await call('select_rect', { x: 50, y: 30, width: 16, height: 16 });
+    const out = await call('content_aware_fill', { output: 'duplicate-layer', excludeRects: [{ x: 70, y: 0, width: 50, height: 80 }] });
+    expect(out.output).toBe('duplicate-layer');
+    expect(out.layerId).not.toBe('background');
+    expect(c.getLayers()).toHaveLength(2);
+    // The copy has the fill; the original is untouched.
+    expect(greenIn(c, [out.layerId])).toBe(0);
+    const original = c.compositePixels({ x: 50, y: 30, width: 16, height: 16 }, { layerIds: ['background'] }).data;
+    expect(original[0]).toBeGreaterThan(30);
+    c.undo();
+    expect(c.getLayers()).toHaveLength(1);
+  });
+
+  it('shows a small image whole, so the sampling area can be painted anywhere', async () => {
+    const { c } = setup();
+    c.selectRect({ x: 50, y: 30, width: 16, height: 16 });
+    const s = new ContentAwareFillSession(c);
+    await s.open();
+    expect(s.window).toEqual({ x: 0, y: 0, width: W, height: H });
+    expect(s.showsWholeImage).toBe(true);
+    expect(s.expandView()).toBe(false);
+    s.update({ brushMode: 'add', brushSize: 6, livePreview: false });
+    // Far corner, outside the Auto band.
+    expect(s.samplesAt(2, 2)).toBe(false);
+    s.begin({ x: 2, y: 2 });
+    s.end();
+    expect(s.samplesAt(2, 2)).toBe(true);
+  });
+
+  it('widens the view on a large image, keeping what was painted', async () => {
+    const BW = 2100;
+    const BH = 2000;
+    const fake = { width: BW, height: BH, naturalWidth: BW, naturalHeight: BH, src: 'data:fake' } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setSamplePixels({ width: BW, height: BH, data: new Uint8ClampedArray(BW * BH * 4).fill(150) });
+    c.selectRect({ x: 1000, y: 1000, width: 20, height: 20 });
+    const s = new ContentAwareFillSession(c);
+    s.update({ livePreview: false });
+    await s.open();
+    expect(s.showsWholeImage).toBe(false);
+    const first = s.window!;
+    expect(first.width).toBeLessThan(BW);
+    s.update({ brushMode: 'add', brushSize: 10 });
+    s.begin({ x: first.x + 5, y: first.y + 5 });
+    s.end();
+    expect(s.expandView()).toBe(true);
+    const second = s.window!;
+    expect(second.width).toBeGreaterThan(first.width);
+    // The stroke is still there; the new room is unpainted in Custom mode.
+    expect(s.samplesAt(first.x + 5, first.y + 5)).toBe(true);
+    expect(s.samplesAt(second.x + 1, second.y + 1)).toBe(false);
+    while (s.expandView());
+    expect(s.showsWholeImage).toBe(true);
+  });
+});

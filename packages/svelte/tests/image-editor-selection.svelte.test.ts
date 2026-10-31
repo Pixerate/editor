@@ -580,6 +580,9 @@ describe('Svelte Content-Aware Fill workspace', () => {
     flushSync();
     const dialog = target.querySelector('[data-testid="content-aware-fill-workspace"]')!;
     expect(dialog).not.toBeNull();
+    // The small image shows whole (no Expand View); the outputs include Duplicate Layer.
+    expect(button('Expand View')).toBeUndefined();
+    expect(Array.from(dialog.querySelectorAll('select[aria-label="Fill output"] option')).map((o) => (o as HTMLOptionElement).value)).toContain('duplicate-layer');
     click(button('Subtract'));
     setValue(dialog.querySelector('input[aria-label="Sampling brush size"]')!, '6');
     const source = dialog.querySelector('[data-testid="content-aware-fill-source"]') as HTMLElement;
