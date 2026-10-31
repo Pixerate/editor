@@ -17,6 +17,7 @@ import { ImageEditorController, createImageEditorToolProvider } from '../src/ima
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
+import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
 import { SpreadsheetController } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -32,7 +33,7 @@ interface Check extends ToolCall {
 }
 interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetFixture | ImageFixture | VectorFixture | PaintFixture;
+	fixture: SpreadsheetFixture | ImageFixture | VectorFixture | PaintFixture | VideoFixture;
 	checks: Check[];
 	solution: ToolCall[];
 }
@@ -64,6 +65,12 @@ interface PaintFixture {
 	width: number;
 	height: number;
 	/** Tool calls that prepare the canvas (paper, layers, strokes), run in order. */
+	setup?: ToolCall[];
+}
+
+interface VideoFixture {
+	editor: 'video';
+	/** Tool calls that build the starting project (settings, assets, clips, markers), run in order. */
 	setup?: ToolCall[];
 }
 
@@ -126,7 +133,14 @@ async function paint(f: PaintFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint } as const;
+async function video(f: VideoFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createVideoEditorToolProvider(new VideoEditorController()));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

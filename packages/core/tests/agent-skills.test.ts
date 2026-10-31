@@ -186,6 +186,9 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-paint-watercolour': [],
 		'pixerate-paint-oil-impasto': [],
 		'pixerate-paint-sketch-to-finish': [],
+		'pixerate-video-social-cut': [],
+		'pixerate-video-colour-grade': [],
+		'pixerate-video-montage': [],
 		'pixerate-generation': [
 			...toolNames(createGenerationToolProvider({ models: [], generate: () => ({}), estimate: () => ({}) } as any)),
 			...toolNames(createGenerationHistoryToolProvider({ store: createGenerationRecordStore({ storage: createMemoryStorage() }) }))
@@ -293,7 +296,10 @@ const WORKFLOWS: Record<string, string> = {
 	'pixerate-vector-illustration': 'pixerate-vector',
 	'pixerate-paint-watercolour': 'pixerate-paint-editor',
 	'pixerate-paint-oil-impasto': 'pixerate-paint-editor',
-	'pixerate-paint-sketch-to-finish': 'pixerate-paint-editor'
+	'pixerate-paint-sketch-to-finish': 'pixerate-paint-editor',
+	'pixerate-video-social-cut': 'pixerate-video-editor',
+	'pixerate-video-colour-grade': 'pixerate-video-editor',
+	'pixerate-video-montage': 'pixerate-video-editor'
 };
 
 /** Workflow skills aim for this many body lines, and fail above `WORKFLOW_MAX_LINES`. */

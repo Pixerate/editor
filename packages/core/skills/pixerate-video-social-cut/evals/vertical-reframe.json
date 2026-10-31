@@ -1,0 +1,15 @@
+{
+	"prompt": "Make this a vertical video for Reels and TikTok: 1080 by 1920, with the picture filling the whole frame (no black bars).",
+	"fixture": { "editor": "video", "setup": [{ "tool": "add_video_asset", "args": { "id": "interview", "kind": "video", "src": "interview.mp4", "duration": 40000, "width": 1920, "height": 1080 } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "interview", "id": "c1", "start": 0, "duration": 40000 } } }] },
+	"checks": [
+		{ "why": "a 9:16 frame at 1080 × 1920", "tool": "get_video_project", "expect": { "width": 1080, "height": 1920 } },
+		{ "why": "the picture covers the frame", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "id": "c1", "$expr": "v.fit === 'cover' || (v.transform && v.transform.scale >= 3.15)" } } } } } },
+		{ "why": "no errors", "tool": "check_video_project", "expect": { "errors": 0 } }
+	],
+	"solution": [
+		{ "tool": "set_video_settings", "args": { "width": 1080, "height": 1920 } },
+		{ "tool": "update_video_clip", "args": { "clip": "c1", "set": { "fit": "cover" } } },
+		{ "tool": "check_video_project" }
+	]
+}

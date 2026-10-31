@@ -1,0 +1,14 @@
+{
+	"prompt": "Add a title saying 'New drop Friday' over the first three seconds, in the upper part of the frame, on top of the video.",
+	"fixture": { "editor": "video", "setup": [{ "tool": "add_video_asset", "args": { "id": "interview", "kind": "video", "src": "interview.mp4", "duration": 40000, "width": 1920, "height": 1080 } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "interview", "id": "c1", "start": 0, "duration": 40000 } } }] },
+	"checks": [
+		{ "why": "a text clip with the words, from 0 for about 3 s", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "type": "text", "text": { "$match": ["new drop friday", "i"] }, "start": 0, "duration": { "$min": 2500, "$max": 4000 } } } } } } },
+		{ "why": "in the upper part of the frame", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "type": "text", "transform": { "y": { "$max": -100 } } } } } } } },
+		{ "why": "on a video track above the footage (tracks are listed top first)", "tool": "get_video_project", "expect": { "tracks": { "$expr": "(() => { const t = v.findIndex((tr) => tr.clips.some((c) => c.type === 'text')); const m = v.findIndex((tr) => tr.clips.some((c) => c.id === 'c1')); return t >= 0 && t < m; })()" } } }
+	],
+	"solution": [
+		{ "tool": "add_video_track", "args": { "kind": "video", "id": "v2", "at": 0 } },
+		{ "tool": "add_video_clip", "args": { "track": "v2", "clip": { "type": "text", "text": "New drop Friday", "start": 0, "duration": 3000, "transform": { "y": -600 } } } }
+	]
+}

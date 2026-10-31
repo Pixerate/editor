@@ -1,0 +1,19 @@
+{
+	"prompt": "Cut this interview down to a 15-second clip for social that opens on the moment marked 'Hook' and runs on from there. No gaps.",
+	"fixture": { "editor": "video", "setup": [{ "tool": "add_video_asset", "args": { "id": "interview", "kind": "video", "src": "interview.mp4", "duration": 40000, "width": 1920, "height": 1080 } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "interview", "id": "c1", "start": 0, "duration": 40000 } } }, { "tool": "add_video_marker", "args": { "time": 22000, "label": "Hook" } }] },
+	"checks": [
+		{ "why": "about 15 seconds long", "tool": "get_video_project", "expect": { "duration": { "$min": 12000, "$max": 15500 } } },
+		{ "why": "the first frame is the hook", "tool": "get_video_project", "expect": { "tracks": { "$some": { "id": "v1", "clips": { "$some": { "start": 0, "in": { "$min": 21500, "$max": 22500 } } } } } } },
+		{ "why": "no gaps", "tool": "find_video_gaps", "expect": { "gaps": { "$length": 0 } } }
+	],
+	"solution": [
+		{ "tool": "get_video_project" },
+		{ "tool": "edit_video", "args": { "ops": [
+			{ "op": "trim_clip", "clip": "c1", "edge": "start", "to": 22000 },
+			{ "op": "trim_clip", "clip": "c1", "edge": "end", "to": 37000 },
+			{ "op": "move_clip", "clip": "c1", "start": 0 }
+		] } },
+		{ "tool": "find_video_gaps" }
+	]
+}

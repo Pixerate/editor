@@ -1,0 +1,210 @@
+{
+	"prompt": "Lay the music under the whole montage, fade the music out over the last two seconds, and end the picture with a fade to black.",
+	"fixture": {
+		"editor": "video",
+		"setup": [
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s1",
+					"kind": "video",
+					"src": "select-1.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s2",
+					"kind": "video",
+					"src": "select-2.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s3",
+					"kind": "video",
+					"src": "select-3.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s4",
+					"kind": "video",
+					"src": "select-4.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s5",
+					"kind": "video",
+					"src": "select-5.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s1",
+						"id": "c1",
+						"in": 2000,
+						"start": 0,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s2",
+						"id": "c2",
+						"in": 2000,
+						"start": 1000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s3",
+						"id": "c3",
+						"in": 2000,
+						"start": 2000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s4",
+						"id": "c4",
+						"in": 2000,
+						"start": 3000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s5",
+						"id": "c5",
+						"in": 2000,
+						"start": 4000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "music",
+					"kind": "audio",
+					"src": "music.mp3",
+					"duration": 60000
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "music under the whole montage, ending with it",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"kind": "audio",
+						"clips": {
+							"$some": {
+								"asset": "music",
+								"start": 0,
+								"duration": 5000
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the music fades out over about two seconds",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"kind": "audio",
+						"clips": {
+							"$some": {
+								"asset": "music",
+								"fadeOut": {
+									"$min": 1500,
+									"$max": 2500
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the last shot fades to black",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"id": "v1",
+						"clips": {
+							"$expr": "v[v.length - 1].fadeOut >= 300"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "add_video_clip",
+			"args": {
+				"track": "a1",
+				"clip": {
+					"type": "media",
+					"asset": "music",
+					"start": 0,
+					"duration": 5000,
+					"fadeOut": 2000
+				}
+			}
+		},
+		{
+			"tool": "update_video_clip",
+			"args": {
+				"clip": "c5",
+				"set": {
+					"fadeOut": 500
+				}
+			}
+		}
+	]
+}

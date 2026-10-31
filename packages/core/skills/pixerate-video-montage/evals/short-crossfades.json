@@ -1,0 +1,190 @@
+{
+	"prompt": "Join the shots of this montage with short crossfades of about 400 ms, and make sure every transition has enough media for it.",
+	"fixture": {
+		"editor": "video",
+		"setup": [
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s1",
+					"kind": "video",
+					"src": "select-1.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s2",
+					"kind": "video",
+					"src": "select-2.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s3",
+					"kind": "video",
+					"src": "select-3.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s4",
+					"kind": "video",
+					"src": "select-4.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s5",
+					"kind": "video",
+					"src": "select-5.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s1",
+						"id": "c1",
+						"in": 2000,
+						"start": 0,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s2",
+						"id": "c2",
+						"in": 2000,
+						"start": 1000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s3",
+						"id": "c3",
+						"in": 2000,
+						"start": 2000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s4",
+						"id": "c4",
+						"in": 2000,
+						"start": 3000,
+						"duration": 1000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "s5",
+						"id": "c5",
+						"in": 2000,
+						"start": 4000,
+						"duration": 1000
+					}
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a short crossfade into every shot after the first",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"id": "v1",
+						"clips": {
+							"$expr": "v.slice(1).every((c) => c.transition && c.transition.type === 'crossfade' && c.transition.duration >= 300 && c.transition.duration <= 600)"
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "no errors (every transition has handles)",
+			"tool": "check_video_project",
+			"expect": {
+				"errors": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "edit_video",
+			"args": {
+				"ops": [
+					{
+						"op": "set_transition",
+						"clip": "c2",
+						"transition": {
+							"type": "crossfade",
+							"duration": 400
+						}
+					},
+					{
+						"op": "set_transition",
+						"clip": "c3",
+						"transition": {
+							"type": "crossfade",
+							"duration": 400
+						}
+					},
+					{
+						"op": "set_transition",
+						"clip": "c4",
+						"transition": {
+							"type": "crossfade",
+							"duration": 400
+						}
+					},
+					{
+						"op": "set_transition",
+						"clip": "c5",
+						"transition": {
+							"type": "crossfade",
+							"duration": 400
+						}
+					}
+				]
+			}
+		},
+		{
+			"tool": "check_video_project"
+		}
+	]
+}
