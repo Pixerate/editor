@@ -38,6 +38,52 @@ export function selectionOutline(mask: SelectionMask, threshold = 128): Float32A
   return Float32Array.from(segs);
 }
 
+/**
+ * The selection's outline (`selectionOutline`) joined into polylines, `[x0, y0, x1, y1, …]` each,
+ * closed loops ending where they start. Marching ants are stroked from these, so the dash runs on
+ * along a staircase edge instead of restarting at every one-pixel step (which made diagonal edges
+ * flash rather than march). A loop may break where two pixels touch only at a corner.
+ */
+export function selectionOutlinePaths(mask: SelectionMask, threshold = 128): Float32Array[] {
+  const segs = selectionOutline(mask, threshold);
+  const n = segs.length / 4;
+  if (!n) return [];
+  const stride = mask.width + 1;
+  const key = (x: number, y: number) => y * stride + x;
+  const at = new Map<number, number[]>();
+  for (let s = 0; s < n; s++) {
+    for (const k of [key(segs[s * 4], segs[s * 4 + 1]), key(segs[s * 4 + 2], segs[s * 4 + 3])]) {
+      const list = at.get(k);
+      if (list) list.push(s);
+      else at.set(k, [s]);
+    }
+  }
+  const used = new Uint8Array(n);
+  const paths: Float32Array[] = [];
+  for (let s0 = 0; s0 < n; s0++) {
+    if (used[s0]) continue;
+    used[s0] = 1;
+    const pts: number[] = [segs[s0 * 4], segs[s0 * 4 + 1], segs[s0 * 4 + 2], segs[s0 * 4 + 3]];
+    // Walk on from the end, then back from the start, so an open run is joined whole.
+    for (const forward of [true, false]) {
+      for (;;) {
+        const x = forward ? pts[pts.length - 2] : pts[0];
+        const y = forward ? pts[pts.length - 1] : pts[1];
+        const next = at.get(key(x, y))?.find((t) => !used[t]);
+        if (next === undefined) break;
+        used[next] = 1;
+        const a = [segs[next * 4], segs[next * 4 + 1]];
+        const b = [segs[next * 4 + 2], segs[next * 4 + 3]];
+        const far = a[0] === x && a[1] === y ? b : a;
+        if (forward) pts.push(far[0], far[1]);
+        else pts.unshift(far[0], far[1]);
+      }
+    }
+    paths.push(Float32Array.from(pts));
+  }
+  return paths;
+}
+
 export interface QuickMaskStyle {
   /** Overlay colour, `[r, g, b]` 0..255 (default Photoshop's rubylith red). */
   color?: readonly [number, number, number];

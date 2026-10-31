@@ -1631,6 +1631,12 @@ export class ImageEditorController {
     this.state.imageDimensions = source.dimensions;
     if (!this.samplePixelsOverride) this.samplePixels = null;
     if (prev.width !== source.dimensions.width || prev.height !== source.dimensions.height) {
+      // A crop of the whole image (the crop tool's starting box, made before the image's size was
+      // known) stays the whole image; a real crop is kept as it is.
+      const c = this.state.crop;
+      if (c && c.x === 0 && c.y === 0 && c.width === prev.width && c.height === prev.height) {
+        this.state.crop = { x: 0, y: 0, width: source.dimensions.width, height: source.dimensions.height };
+      }
       // Masks lifted from v1 / v2 documents follow the image, as they did when they were resampled at render.
       this.state.layers = resizeLegacyMasks(this.state.layers, prev, source.dimensions);
     }

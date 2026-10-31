@@ -277,8 +277,12 @@ describe('selection overlay rendering', () => {
     c.selectRect({ x: 2, y: 3, width: 4, height: 2 }, { antiAlias: false });
     const renderer = new ImageEditorRenderer();
     await renderer.renderToCanvas(target, source, c.getState(), { viewportWidth: 200, viewportHeight: 100 });
+    // One subpath per outline (so the dash runs on around it), through all four corners.
     const moves = calls.filter((k) => k.name === 'moveTo').map((k) => k.args);
-    expect(moves).toEqual(expect.arrayContaining([[2, 3], [2, 5], [2, 3], [6, 3]]));
+    const lines = calls.filter((k) => k.name === 'lineTo').map((k) => k.args);
+    expect(moves).toHaveLength(1);
+    expect([...moves, ...lines]).toEqual(expect.arrayContaining([[2, 3], [6, 3], [6, 5], [2, 5]]));
+    expect(lines.at(-1)).toEqual(moves[0]);
     expect(calls.filter((k) => k.name === 'stroke').length).toBe(2);
     calls.length = 0;
     await renderer.renderToCanvas(target, source, c.getState(), { viewportWidth: 200, viewportHeight: 100, selectionDisplay: 'none' });

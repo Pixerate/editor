@@ -3173,3 +3173,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An effect applied to a layer's content tile in the blend step (the live edge cast) can leak into later renders, or into other layers that share the tile.
 - **Root Cause**: `contentTile` returns the surface's own tile data when the tile is aligned and unfiltered, and filtered tiles come from `contentCache`. Both are shared buffers, not copies.
 - **Solution / Workaround**: Copy the tile (`new Uint8ClampedArray(content)`) before changing it, as `runStep` does for `edge.ambient`. Anything that depends only on the layer's own pixels and mask belongs in its pixel filters instead (`PixelFilterSpec`, cached per surface), as decontamination and despill do. The deep compositor draws those layers alone at 8 bits, so strip the live cast from the solo layer and apply it in float.
+
+### [core/image-editor] Marching Ants Flash Instead of Marching on Diagonal Edges
+
+- **Issue / Symptom**: On a selection with diagonal or curved edges, the marching ants did not move along the edge. The whole outline flashed between black and white. Straight horizontal and vertical edges marched correctly.
+- **Root Cause**: The outline was stroked as one `moveTo` / `lineTo` subpath per pixel-boundary segment. Canvas restarts the dash pattern at the start of every subpath. On a staircase each segment is one image pixel long, shorter than a dash at most zooms, so every segment was wholly dash or wholly gap, and all of them changed together as the offset moved.
+- **Solution / Workaround**: Join the segments into polylines (`selectionOutlinePaths`) and stroke each as a single subpath, so the dash runs continuously along the edge. This applies to any dashed outline built from short segments.
