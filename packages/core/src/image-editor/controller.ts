@@ -817,12 +817,18 @@ export interface StrokeSelectionOptions extends Omit<FillOptions, 'useSelection'
   location?: 'inside' | 'center' | 'outside';
 }
 
+/** Where Content-Aware Fill puts its result. */
+export type ContentAwareFillOutput = 'current' | 'new-layer' | 'duplicate-layer';
+
 /** Edit › Content-Aware Fill (see `contentAwareFill`). */
 export interface ContentAwareFillOptions {
   /** The pixel layer to sample and fill (default the active layer). */
   layerId?: string;
-  /** `current` (default) paints into the layer; `new-layer` puts the fill on a new layer above it. */
-  output?: 'current' | 'new-layer';
+  /**
+   * `current` (default) paints into the layer; `new-layer` puts the fill on a new layer above it;
+   * `duplicate-layer` paints it into a copy of the layer, above it.
+   */
+  output?: ContentAwareFillOutput;
   /** How far around the selection to sample, in pixels (default its larger side, at least 32). */
   sampleRadius?: number;
   /** Random seed: the same seed gives the same fill (default 0). */
@@ -4779,7 +4785,7 @@ export class ImageEditorController {
    * least 32), or from the given sampling area. Deterministic for a `seed`. One undo step.
    * 8-bit documents only for now. Runs here; see `contentAwareFillAsync` for the worker.
    */
-  public contentAwareFill(options: ContentAwareFillOptions = {}): { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } {
+  public contentAwareFill(options: ContentAwareFillOptions = {}): { layerId: string; bounds: CropBox; output: ContentAwareFillOutput } {
     const plan = this.prepareContentAwareFill(options);
     const filled = contentAwareFillPixels(plan.window.width, plan.window.height, 4, plan.before, plan.hole, { seed: options.seed ?? 0, exclude: plan.exclude });
     return this.applyContentAwareFill(plan, Uint8ClampedArray.from(filled), options.output ?? 'current');
@@ -4791,7 +4797,7 @@ export class ImageEditorController {
    */
   public async contentAwareFillAsync(
     options: ContentAwareFillOptions & { signal?: AbortSignal; onProgress?: SelectionProgress } = {}
-  ): Promise<{ layerId: string; bounds: CropBox; output: 'current' | 'new-layer' }> {
+  ): Promise<{ layerId: string; bounds: CropBox; output: ContentAwareFillOutput }> {
     const plan = this.prepareContentAwareFill(options);
     const filled = await this.synthesiseFill(plan, options.seed ?? 0, options);
     return this.applyContentAwareFill(plan, filled, options.output ?? 'current');
@@ -4828,7 +4834,9 @@ export class ImageEditorController {
     if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select what to remove, then fill it.');
     if (this.bitDepth !== 8) throw new LayerOperationError('Content-Aware Fill works on 8-bit documents for now; set_bit_depth 8 first, or use spot_heal.');
     const output = options.output ?? 'current';
-    if (output !== 'current' && output !== 'new-layer') throw new LayerOperationError(`Unknown output "${String(output)}"; use current or new-layer.`);
+    if (output !== 'current' && output !== 'new-layer' && output !== 'duplicate-layer') {
+      throw new LayerOperationError(`Unknown output "${String(output)}"; use current, new-layer or duplicate-layer.`);
+    }
     const target = this.paintTarget(options.layerId, 'pixels', 'fill');
     const { width, height } = this.naturalSize;
     const b = sel.bounds;
@@ -4882,7 +4890,7 @@ export class ImageEditorController {
   }
 
   /** The window's pixels with `filled` blended in by the coverage (`current`), or the fill alone, its alpha by the coverage (`new-layer`). */
-  private blendFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: 'current' | 'new-layer'): Uint8ClampedArray {
+  private blendFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: ContentAwareFillOutput): Uint8ClampedArray {
     const { before, coverage } = plan;
     const out = new Uint8ClampedArray(before.length);
     for (let i = 0; i < coverage.length; i++) {
@@ -4896,7 +4904,7 @@ export class ImageEditorController {
   }
 
   /** Puts a computed fill into the document as one undo step. */
-  private applyContentAwareFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: 'current' | 'new-layer'): { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } {
+  private applyContentAwareFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: ContentAwareFillOutput): { layerId: string; bounds: CropBox; output: ContentAwareFillOutput } {
     const target = this.paintTarget(plan.layerId, 'pixels', 'fill');
     const { window: win, bounds: b } = plan;
     const out = this.blendFill(plan, filled, output);
@@ -4909,6 +4917,14 @@ export class ImageEditorController {
     }
     const layerRect = { x: win.x - target.offset.x, y: win.y - target.offset.y, width: win.width, height: win.height };
     const surface = writeRegion(target.surface, layerRect, out);
+    if (output === 'duplicate-layer') {
+      // A copy of the layer, above it, with the fill painted in: one undo step.
+      return this.asOneStep(() => {
+        const copy = this.duplicateLayer(target.id);
+        this.commitLayers(mapLayer(this.state.layers, copy, (l) => this.withSurface(l, 'pixels', surface)));
+        return { layerId: copy, bounds: { ...b }, output };
+      });
+    }
     this.commitLayers(mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, 'pixels', surface)));
     return { layerId: target.id, bounds: { ...b }, output };
   }

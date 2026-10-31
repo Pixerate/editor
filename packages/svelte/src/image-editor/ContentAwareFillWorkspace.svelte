@@ -16,7 +16,7 @@
   interface Props {
     controller: ImageEditorController;
     /** Called with the result after OK, or `null` after Cancel. */
-    onclose: (result: { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } | null) => void;
+    onclose: (result: { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' | 'duplicate-layer' } | null) => void;
     class?: string;
   }
 
@@ -52,6 +52,10 @@
   const computing = $derived.by(() => {
     void tick;
     return session.computing;
+  });
+  const wholeImage = $derived.by(() => {
+    void tick;
+    return session.showsWholeImage;
   });
   const sessionError = $derived.by(() => {
     void tick;
@@ -164,6 +168,9 @@
         </div>
       {/if}
       <span class="font-mono text-muted-foreground">{Math.round(zoom * 100)}%</span>
+      {#if !wholeImage}
+        <button type="button" class={button} title="Show (and sample from) more of the image around the selection" onclick={() => session.expandView()}>Expand View</button>
+      {/if}
       {#if computing}
         <span role="status" class="text-muted-foreground">Updating preview…</span>
       {/if}
@@ -250,8 +257,9 @@
         options={[
           { value: 'new-layer', label: 'New Layer' },
           { value: 'current', label: 'Current Layer' },
+          { value: 'duplicate-layer', label: 'Duplicate Layer' },
         ]}
-        onchange={(v) => set({ output: v as 'current' | 'new-layer' })}
+        onchange={(v) => set({ output: v as 'current' | 'new-layer' | 'duplicate-layer' })}
       />
     </label>
     {#if error ?? sessionError}

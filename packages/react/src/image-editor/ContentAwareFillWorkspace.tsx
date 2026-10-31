@@ -7,7 +7,7 @@ import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 export interface ContentAwareFillWorkspaceProps {
   controller: ImageEditorController;
   /** Called with the result after OK, or `null` after Cancel. */
-  onClose: (result: { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } | null) => void;
+  onClose: (result: { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' | 'duplicate-layer' } | null) => void;
   className?: string;
 }
 
@@ -152,6 +152,11 @@ export const ContentAwareFillWorkspace: React.FC<ContentAwareFillWorkspaceProps>
             </>
           )}
           <span className="font-mono text-muted-foreground">{Math.round(zoom * 100)}%</span>
+          {!session.showsWholeImage && (
+            <button type="button" className={button} title="Show (and sample from) more of the image around the selection" onClick={() => session.expandView()}>
+              Expand View
+            </button>
+          )}
           {session.computing && (
             <span role="status" className="text-muted-foreground">
               Updating preview…
@@ -235,8 +240,9 @@ export const ContentAwareFillWorkspace: React.FC<ContentAwareFillWorkspaceProps>
             options={[
               { value: 'new-layer', label: 'New Layer' },
               { value: 'current', label: 'Current Layer' },
+              { value: 'duplicate-layer', label: 'Duplicate Layer' },
             ]}
-            onChange={(v) => set({ output: v as 'current' | 'new-layer' })}
+            onChange={(v) => set({ output: v as 'current' | 'new-layer' | 'duplicate-layer' })}
           />
         </label>
         {(error ?? session.error) && (
