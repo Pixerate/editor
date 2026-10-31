@@ -438,7 +438,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'extend_canvas',
     title: 'Extend the canvas',
     description:
-      'Grows the canvas by adding pixels on any side, keeping everything painted. Adding on the left or top moves the whole picture (layers, paper grain, guides, stencils, recorded strokes) right or down by that much in document pixels, so coordinates you read before change by (+left, +top). Wet paint dries first. One undo step. Returns the canvas, rect (the new canvas in the previous coordinates: x -left, y -top) and origin.',
+      'Grows the canvas by adding pixels on any side, keeping everything painted. Adding on the left or top moves the whole picture (layers, paper grain, guides, stencils, recorded strokes) right or down by that much in document pixels, so coordinates you read before change by (+left, +top). Wet paint stays wet and moves with it when left and top are multiples of 256; otherwise it dries first. One undo step. Returns the canvas, rect (the new canvas in the previous coordinates: x -left, y -top) and origin.',
     inputSchema: {
       type: 'object',
       properties: { left: EXTEND_SIDE('left'), top: EXTEND_SIDE('top'), right: EXTEND_SIDE('right'), bottom: EXTEND_SIDE('bottom') },

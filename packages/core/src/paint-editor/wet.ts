@@ -28,10 +28,10 @@ import { pigmentOf, PIGMENT_UNIT } from '../paint/wet/film';
 import { DEFAULT_FLOW, flowField, normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { WetMedium } from '../paint/wet/medium';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
-import { DEFAULT_WET_PARAMS, FLAT, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
+import { DEFAULT_WET_PARAMS, FLAT, WET_TILE, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { createWetGpuEngine, findWebGpu, type WetGpuEngine, type WetGpuProvider, type WetGpuSupport } from '../paint/wet/gpu';
-import { WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
-import { TILE, TiledSurface, type RasterRect } from '../raster/surface';
+import { moveWetSnapshot, WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
+import { TILE, TiledSurface, translateSurface, type RasterRect } from '../raster/surface';
 import type { PaintBrush, WetMediumKind } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, type PaperSettings } from './paper';
@@ -489,14 +489,52 @@ export class PaintWetLayers {
       if (this.world.laneIds().length) throw new Error('The wet world is the wrong size; dry the paint before resizing the canvas.');
       this.dropWorld();
     }
-    if (!this.world) {
-      this.world = new WetWorld(width, height, wetPaperInput(this.host.paper()), { kernel: this.options.kernel, threads: this.options.threads });
-      this.world.setTilt(this.tilt);
-      this.world.gpuMinTiles = this.gpuMinTiles;
-      if (this.gpu) this.world.attachGpu(this.gpu);
-      else this.startGpu();
-    }
+    if (!this.world) this.world = this.makeWorld(width, height, this.host.paper());
     return this.world;
+  }
+
+  private makeWorld(width: number, height: number, paper: PaperSettings): WetWorld {
+    const world = new WetWorld(width, height, wetPaperInput(paper), { kernel: this.options.kernel, threads: this.options.threads });
+    world.setTilt(this.tilt);
+    world.gpuMinTiles = this.gpuMinTiles;
+    if (this.gpu) world.attachGpu(this.gpu);
+    else this.startGpu();
+    return world;
+  }
+
+  /**
+   * Whether `extend` can keep the wet paint when the canvas grows by `left` / `top` on those
+   * sides: the shift has to be whole wet tiles (256 px), and no wet stroke may be live.
+   */
+  canExtend(left: number, top: number): boolean {
+    return left % WET_TILE === 0 && top % WET_TILE === 0 && !this.driver;
+  }
+
+  /**
+   * Keeps the wet paint while the canvas grows to `width`×`height` by `left` / `top` on those
+   * sides (`canExtend` must hold): the world is made again at the new size with every wet layer
+   * moved by (left, top), still wet, its base and flow map with it; `paper` is the new
+   * document's paper (its grain moved with the paint). Wet settings' flow centres move too. The
+   * caller shows the layers again (`syncDisplays`) once the document is the new size.
+   */
+  extend(width: number, height: number, left: number, top: number, paper: PaperSettings): void {
+    if (!this.canExtend(left, top)) throw new Error('Wet paint only moves by whole 256 px tiles, between strokes.');
+    for (const [id, s] of this.settings) if (s.flow.center) this.settings.set(id, { ...s, flow: { ...s.flow, center: { x: s.flow.center.x + left, y: s.flow.center.y + top } } });
+    const old = this.world;
+    const snap = old?.laneIds().length ? old.snapshot() : null;
+    this.dropWorld();
+    this.lastTick = null;
+    this.stepsOwed = 0;
+    if (!old || !snap) return;
+    const moved = moveWetSnapshot(snap, old, { width, height }, left, top, (l) => {
+      const flow = this.settings.get(l.id)?.flow;
+      return {
+        base: translateSurface(l.base, left, top),
+        flow: l.flow && flow && flow.kind !== 'none' ? flowField(flow, width, height) : l.flow,
+      };
+    });
+    this.world = this.makeWorld(width, height, paper);
+    this.world.restore(moved);
   }
 
   /** Whether any layer (or `layerId`) has wet paint. */

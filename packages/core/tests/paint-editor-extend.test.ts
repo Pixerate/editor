@@ -106,6 +106,58 @@ describe('extendCanvas', () => {
     expect(c.getState().wet.wet).toBe(true);
   });
 
+  describe('by whole wet tiles, while paint is wet', () => {
+    const wetEditor = () => new PaintEditorController({ width: 512, height: 512, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0 } });
+    const across = (y: number) => wave(y, 30, 140, 380);
+    const down = Array.from({ length: 30 }, (_, i) => ({ x: 256 + Math.sin(i / 4) * 10, y: 140 + (240 * i) / 29, pressure: 0.7 }));
+
+    it('keeps the paint wet, in place, and it flows on exactly as if the canvas had not grown', async () => {
+      const a = wetEditor();
+      const b = wetEditor();
+      for (const c of [a, b]) {
+        c.paintStroke({ points: across(256), brushId: 'watercolor-round', color: '#1d4ed8' });
+        await c.advanceWet({ steps: 20 });
+      }
+      const before = b.compositePixels();
+      b.extendCanvas({ left: 256, top: 512, right: 40, bottom: 7 });
+      expect(b.getState().wet.wet).toBe(true);
+      expect(same(crop(b.compositePixels(), 256, 512, 512, 512), before.data)).toBe(true);
+
+      // A second stroke mixes into the first, and the paint moves on as it would have.
+      a.paintStroke({ points: down, brushId: 'watercolor-round', color: '#b91c1c' });
+      b.paintStroke({ points: down.map((p) => ({ ...p, x: p.x + 256, y: p.y + 512 })), brushId: 'watercolor-round', color: '#b91c1c' });
+      for (const c of [a, b]) await c.advanceWet({ steps: 60 });
+      expect(same(crop(b.compositePixels(), 256, 512, 512, 512), a.compositePixels().data)).toBe(true);
+    });
+
+    it('is one undo step: undo brings back the old size with the paint still wet, redo the larger one', async () => {
+      const c = wetEditor();
+      c.paintStroke({ points: across(256), brushId: 'watercolor-round', color: '#1d4ed8' });
+      await c.advanceWet({ steps: 10 });
+      const small = c.compositePixels();
+      c.extendCanvas({ left: 256 });
+      const large = c.compositePixels();
+      c.undo();
+      expect(c.document.canvas).toMatchObject({ width: 512, height: 512 });
+      expect(c.getState().wet.wet).toBe(true);
+      expect(same(c.compositePixels().data, small.data)).toBe(true);
+      c.redo();
+      expect(c.document.canvas).toMatchObject({ width: 768, height: 512 });
+      expect(c.getState().wet.wet).toBe(true);
+      expect(same(c.compositePixels().data, large.data)).toBe(true);
+    });
+
+    it('moves a wet layer that had an offset into canvas space', async () => {
+      const c = wetEditor();
+      c.paintStroke({ points: across(256), brushId: 'watercolor-round', color: '#1d4ed8' });
+      c.extendCanvas({ top: 256 });
+      const layer = c.listLayers().find((l) => l.id === c.document.activeLayerId);
+      expect(layer).toBeDefined();
+      const doc = c.document.layers.find((l) => l.id === layer!.id) as PaintPixelLayer;
+      expect(doc.offset).toEqual({ x: 0, y: 0 });
+    });
+  });
+
   it('keeps sticker layers editable in place', () => {
     const c = editor();
     c.paintStroke({ points: wave(60), brushId: 'sticker-stars', seed: 3 });
