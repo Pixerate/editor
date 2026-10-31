@@ -32,7 +32,7 @@ import { readDeepRegion, surfaceDepth } from './deep';
 import { DEFAULT_GLOBAL_LIGHT, effectReach, effectsFingerprint, effectsMargin, hasActiveEffects, MAX_EFFECT_REACH, type GlobalLight, type LayerEffects } from './effects/model';
 import { builtinPattern, PatternTile, type EffectPattern } from './effects/patterns';
 import { activeEffectItems, buildEffectMaps, compositeLayerEffects, effectsAreLocal, patchEffectMaps, type EffectCompositeInput, type EffectContext, type EffectMaps } from './effects/render';
-import type { RasterMask, RasterNode } from './layers';
+import type { RasterMask, RasterNode, LayerEdgeColor } from './layers';
 import {
   TILE,
   emptySurface,
@@ -77,8 +77,47 @@ export interface CompositorLayer extends RasterNode {
   fillOpacity?: number;
   /** Layer effects. */
   effects?: LayerEffects;
+  /** Edge colour; the engine applies `ambient` (the profile's pixel filters handle the rest). */
+  edge?: LayerEdgeColor;
   /** Groups. */
   children?: readonly CompositorLayer[];
+}
+
+/**
+ * Live edge cast (`LayerEdgeColor.ambient`): pulls straight RGBA `content` toward `below` (the
+ * composite behind it, same size) or a fixed colour, by `amount × (1 − α)` where α is the content's
+ * alpha times `coverage` (its mask). Opaque and invisible pixels are unchanged. `max` is 255 for
+ * bytes or 1 for float samples; `color` is in the same units.
+ */
+export function applyEdgeAmbient(
+  content: Uint8ClampedArray | Float32Array,
+  below: ArrayLike<number>,
+  coverage: ArrayLike<number> | null,
+  amount: number,
+  color: readonly [number, number, number] | null,
+  max: number
+): void {
+  const k = Math.min(1, Math.max(0, amount));
+  if (!(k > 0)) return;
+  const n = content.length / 4;
+  for (let i = 0; i < n; i++) {
+    const a = (content[i * 4 + 3] / max) * (coverage ? coverage[i] : 1);
+    if (a <= 0 || a >= 1) continue;
+    let r: number;
+    let g: number;
+    let b: number;
+    if (color) [r, g, b] = color;
+    else {
+      if (!(below[i * 4 + 3] > 0)) continue;
+      r = below[i * 4];
+      g = below[i * 4 + 1];
+      b = below[i * 4 + 2];
+    }
+    const t = k * (1 - a);
+    content[i * 4] += t * (r - content[i * 4]);
+    content[i * 4 + 1] += t * (g - content[i * 4 + 1]);
+    content[i * 4 + 2] += t * (b - content[i * 4 + 2]);
+  }
 }
 
 /** A pixel layer's filters as the engine runs them. */
@@ -562,6 +601,7 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     const base: unknown[] = [layer.type, layer.id, layer.visible, layer.opacity, layer.blend, Boolean(layer.clipped), mask];
     if (this.isPixel(layer)) base.push(layer.offset?.x ?? 0, layer.offset?.y ?? 0, layer.fillOpacity ?? 1);
     if (this.hasEffects(layer)) base.push(effectsFingerprint(layer.effects));
+    if (layer.edge) base.push(layer.edge);
     const extra = this.profile.layerKey?.(layer);
     if (extra !== undefined) base.push(extra);
     key = JSON.stringify(base);
@@ -1184,8 +1224,15 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
       const mode = (layer.blend === 'pass-through' ? 'normal' : layer.blend) as BlendMode;
       return this.blendOnto(acc, buf, empty, mode, layer.opacity, coverage);
     }
-    const content = this.contentTile(step.layer, r);
+    let content = this.contentTile(step.layer, r);
     if (!content) return empty;
+    // The live edge cast needs something behind the layer, or a fixed colour.
+    const ambient = layer.edge?.ambient ?? 0;
+    if (ambient > 0 && (!empty || layer.edge?.ambientColor)) {
+      // Tiles can be shared (cached) buffers: cast a copy.
+      content = new Uint8ClampedArray(content);
+      applyEdgeAmbient(content, acc, coverage, ambient, layer.edge?.ambientColor ?? null, 255);
+    }
     const fill = this.isPixel(step.layer) ? (step.layer.fillOpacity ?? 1) : 1;
     const blend = this.contentBlend(step.layer);
     if (!clipped.length) return this.blendOnto(acc, content, empty, blend, layer.opacity * fill, coverage);

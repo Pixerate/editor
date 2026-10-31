@@ -7,6 +7,7 @@
  */
 
 import { resolveVectorMasks } from './vector-mask';
+import { applyEdgeUnmix, hasEdgeUnmix, maskCoverageOverCanvas } from './edge-color';
 import { applyAdjustmentLayers, applyAdjustmentLayersFloat } from '../adjustment-layers';
 import { DeepCompositor } from '../../raster/deep-compositor';
 import type { RasterRect } from '../../raster/surface';
@@ -137,6 +138,37 @@ function filterReach(filters: readonly LayerFilter[]): number {
 
 const filterSpecCache = new WeakMap<object, PixelFilterSpec | null>();
 
+const maskIds = new WeakMap<object, number>();
+let nextMaskId = 1;
+const edgeSpecCache = new WeakMap<object, PixelFilterSpec>();
+
+/**
+ * A pixel layer's filters plus edge decontamination and despill (`layer.edge`), run over the
+ * canvas with the layer's mask (memoised per layer object; the key follows the mask's pixels).
+ */
+function edgeFilterSpec(layer: PixelLayer): PixelFilterSpec | null {
+  const edge = layer.edge;
+  const mask = layer.mask;
+  if (!hasEdgeUnmix(edge) || !mask || mask.enabled === false || mask.source) return pixelFilterSpec(layer);
+  const hit = edgeSpecCache.get(layer);
+  if (hit) return hit;
+  let id = maskIds.get(mask.surface);
+  if (id === undefined) maskIds.set(mask.surface, (id = nextMaskId++));
+  const filters = pixelFilterSpec(layer);
+  const ox = layer.offset.x;
+  const oy = layer.offset.y;
+  const spec: PixelFilterSpec = {
+    key: `edge:${JSON.stringify([edge!.decontaminate ?? 0, edge!.despill ?? 0, id, ox, oy, mask.feather ?? 0])}|${filters?.key ?? ''}`,
+    spatial: true,
+    apply: (data, width, height) => {
+      filters?.apply(data, width, height);
+      applyEdgeUnmix(data, maskCoverageOverCanvas(mask, ox, oy, width, height), width, height, edge!);
+    },
+  };
+  edgeSpecCache.set(layer, spec);
+  return spec;
+}
+
 /** A pixel layer's active filters for the engine (memoised per filter list). */
 function pixelFilterSpec(layer: PixelLayer): PixelFilterSpec | null {
   const list = layer.filters;
@@ -167,7 +199,7 @@ const PHOTO_PROFILE: CompositorProfile<ImageLayer, CompositorSources> = {
   contentBlend: (l) => (l.type === 'annotation' && l.blend === 'normal' && l.annotation.blend ? l.annotation.blend : (l.blend as BlendMode)),
   layerKey: (l) =>
     l.type === 'pixel' ? [l.filters ?? null, l.source ?? null] : l.type === 'adjustment' ? [l.kind, l.params] : l.type === 'annotation' ? l.annotation : undefined,
-  pixelFilters: (l) => (l.type === 'pixel' ? pixelFilterSpec(l) : null),
+  pixelFilters: (l) => (l.type === 'pixel' ? edgeFilterSpec(l) : null),
   /**
    * A smart object draws its rendered pixels (contents → placement → smart filters) like a pixel
    * layer, and a shape layer the pixels rendered from its paths.
@@ -218,7 +250,8 @@ export function compositeDeep(layers: readonly ImageLayer[], rect: RasterRect, s
   const deep = new DeepCompositor(new LayerCompositor(), PHOTO_PROFILE, {
     applyFilterRunDeep: (run, acc, _r, masks) => applyAdjustmentLayersFloat(acc, (run as AdjustmentLayerNode[]).map(adjustmentNodeAsLayer), masks),
     pixelFiltersDeep: (l) => {
-      if (l.type !== 'pixel') return null;
+      // Edge decontamination and despill run at 8 bits (the layer is drawn alone and converted).
+      if (l.type !== 'pixel' || hasEdgeUnmix(l.edge)) return null;
       const filters = (l.filters ?? []).filter(isActiveFilter);
       if (!filters.length) return null;
       return { reach: filterReach(filters), apply: (data, width, height, linear) => runLayerFiltersFloat(data, width, height, filters, linear) };

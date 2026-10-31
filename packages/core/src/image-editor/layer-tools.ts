@@ -507,6 +507,54 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     },
   };
 
+  const AMOUNT = (what: string) => ({ type: 'number', minimum: 0, maximum: 100, description: `${what}, in percent 0-100; 0 turns it off.` }) as const;
+  const EDGE_RETURNS = 'Returns the layer\'s effective edge colour: { layerId, decontaminate, despill, ambient (percent), ambientSource }.';
+
+  const getEdge: AgentTool = {
+    name: 'get_edge_color',
+    title: 'Read edge colour',
+    description: `A layer's edge colour settings, applied when compositing: decontaminate, despill and ambient (percent) and ambientSource (auto or #rrggbb). ${EDGE_RETURNS}`,
+    inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
+    annotations: { title: 'Read edge colour', ...READ },
+    handler: ({ layerId }) => controller.getEdgeColor(String(layerId)),
+  };
+
+  const setDecontaminate: AgentTool = {
+    name: 'set_edge_decontamination',
+    title: 'Decontaminate edge colour',
+    description: `Removes the old background's colour from a cutout's soft edge at composite time (nothing is baked; change or turn it off any time): each partly hidden edge pixel is unmixed from the background next to it (the pixels the layer's mask hides). Needs a pixel layer whose mask (painted or vector) has a soft band, e.g. add_layer_mask from a refined selection. Check with inspect_mask_edge (haloScore) and capture_view. One undo step. ${EDGE_RETURNS}`,
+    inputSchema: { type: 'object', properties: { layerId: LAYER_ID, amount: AMOUNT('How much to replace edge colour with the subject\'s own (80-100 typical)') }, required: ['layerId', 'amount'], additionalProperties: false },
+    annotations: { title: 'Decontaminate edge colour', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, amount }) => controller.setEdgeColor(String(layerId), { decontaminate: amount as number }),
+  };
+
+  const setDespill: AgentTool = {
+    name: 'set_edge_despill',
+    title: 'Despill edge colour',
+    description: `Limits how much of the old background's hue a cutout's soft edge carries (a green-screen or coloured-wall fringe), at composite time: the edge colour's component toward the background's hue is taken out, luminance kept, most at the outer edge. A heuristic: it does not remove light that bounced onto the subject itself. Needs a pixel layer whose mask has a soft band. Pixels fully inside the mask never change. One undo step. ${EDGE_RETURNS}`,
+    inputSchema: { type: 'object', properties: { layerId: LAYER_ID, amount: AMOUNT('How much of the background hue to take out (50-100 typical)') }, required: ['layerId', 'amount'], additionalProperties: false },
+    annotations: { title: 'Despill edge colour', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, amount }) => controller.setEdgeColor(String(layerId), { despill: amount as number }),
+  };
+
+  const setAmbient: AgentTool = {
+    name: 'set_edge_ambient',
+    title: 'Cast the scene onto an edge',
+    description: `Tints a cutout's soft edge with what is behind it now, live at composite time, so a subject moved onto a new background picks up its colour at the edge (more where the edge is more transparent). source auto samples the layers below as they change; #rrggbb uses a fixed colour. Works on soft-edged masks or partly transparent pixels (pixel, shape, type and smart object layers). One undo step. ${EDGE_RETURNS}`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: LAYER_ID,
+        amount: AMOUNT('How far edge colour moves toward the background (20-50 typical)'),
+        source: { type: 'string', pattern: '^(auto|#[0-9a-fA-F]{6})$', description: 'auto (default): what is behind the layer, sampled live; or a fixed #rrggbb.' },
+      },
+      required: ['layerId', 'amount'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Cast the scene onto an edge', ...WRITE_IDEMPOTENT },
+    handler: ({ layerId, amount, source }) => controller.setEdgeColor(String(layerId), { ambient: amount as number, ambientColor: (source as string | undefined) ?? 'auto' }),
+  };
+
   const maskProps: AgentTool = {
     name: 'set_layer_mask_properties',
     title: 'Set layer mask properties',
@@ -660,6 +708,10 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     removeMask,
     maskView,
     maskProps,
+    getEdge,
+    setDecontaminate,
+    setDespill,
+    setAmbient,
     viaCopy,
     rasterize,
     addFilter,

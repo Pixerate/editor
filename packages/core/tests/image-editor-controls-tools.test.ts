@@ -123,7 +123,7 @@ describe('image editor agent tools', () => {
       'set_crop', 'reset_crop', 'set_rotation', 'flip_image', 'set_bit_depth', 'undo_image', 'redo_image',
       'list_layers', 'set_active_layer', 'add_pixel_layer', 'duplicate_layer', 'remove_layer', 'move_layer', 'set_layer_properties',
       'group_layers', 'add_group', 'ungroup_layer', 'merge_down', 'merge_visible', 'flatten_image', 'offset_layer', 'add_layer_mask',
-      'apply_layer_mask', 'remove_layer_mask', 'set_mask_view', 'set_layer_mask_properties', 'layer_via_copy', 'rasterize_layer', 'add_layer_filter',
+      'apply_layer_mask', 'remove_layer_mask', 'set_mask_view', 'set_layer_mask_properties', 'get_edge_color', 'set_edge_decontamination', 'set_edge_despill', 'set_edge_ambient', 'layer_via_copy', 'rasterize_layer', 'add_layer_filter',
       'update_layer_filter', 'remove_layer_filter',
       'get_transform_frame', 'transform_layer', 'warp_layer', 'transform_selection', 'flip_layer', 'rotate_layer_90',
       'get_smart_object', 'convert_to_smart_object', 'rasterize_smart_object', 'set_smart_object_transform', 'replace_smart_object_contents',
@@ -146,7 +146,7 @@ describe('image editor agent tools', () => {
       }
     }
     const readOnly = tools.filter((t) => t.annotations!.readOnlyHint).map((t) => baseToolName(t.name));
-    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
+    expect(readOnly).toEqual(['get_adjustments', 'list_controls', 'render_preview', 'capture_view', 'get_selection', 'inspect_mask_edge', 'list_channels', 'export_mask_image', 'get_image_info', 'get_histogram', 'list_layers', 'get_edge_color', 'get_transform_frame', 'get_smart_object', 'export_smart_object_contents', 'get_shape_layer', 'get_vector_mask', 'selection_to_path', 'list_paths', 'get_path', 'list_fonts', 'get_text_layer', 'list_layer_effects', 'get_mixer_brush', 'get_paint', 'get_color_profile', 'convert_colors', 'get_retouch_options', 'mix_colors', 'inspect_psd', 'export_psd']);
   });
 
   it('get_adjustments and list_controls describe the state', async () => {

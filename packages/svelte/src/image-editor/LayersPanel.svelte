@@ -23,6 +23,7 @@
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import LayerEffectsPanel from './LayerEffectsPanel.svelte';
+  import EdgeColorPanel from './EdgeColorPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -281,6 +282,12 @@
         {/each}
       </div>
     </div>
+  {/if}
+
+  {#if snapshot.active && (snapshot.active.type === 'pixel' || snapshot.active.type === 'shape' || snapshot.active.type === 'type' || snapshot.active.type === 'smart')}
+    {#key snapshot.active.id}
+      <EdgeColorPanel {controller} layer={snapshot.active} class="border-t border-border pt-1.5" />
+    {/key}
   {/if}
 
   {#if effects && snapshot.active && snapshot.active.type !== 'adjustment'}

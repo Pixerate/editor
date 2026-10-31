@@ -98,13 +98,11 @@ drawing or editing either.
 
 Live per-layer effects (shadows, glows, bevel, overlays, strokes): see `references/layer-effects.md`.
 
-### Paths
+### Paths and cutout edges
 
-1. **Keep outlines as paths**: `make_work_path` turns the selection into the Work Path (the next
-   one replaces it; `rename_path` saves it), `add_path` adds one from geometry.
-2. **Use them**: `path_to_selection` / `add_vector_mask` with `pathId`, `fill_path`, `stroke_path`.
-3. **Edit anchors** as the Pen and Direct Selection tools do: `get_path` → change anchors and handles
-   → `set_path_geometry` (one undo step); shapes `set_shape_component`, vector masks `set_vector_mask_path`.
+Keep outlines as paths (`make_work_path`, `add_path`) and edit their anchors: see
+[references/paths.md](references/paths.md). Fix a cutout's fringe live with `set_edge_decontamination`,
+`set_edge_despill` and `set_edge_ambient` (see `pixerate-image-selection-masking`).
 
 ### Painting
 
@@ -293,6 +291,10 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `set_layer_mask_properties` | Change any layer mask's `density`, `feather`, `enabled` or `linked` (false: the mask stays put when the layer moves or transforms) without touching its pixels. |
 | `apply_layer_mask` | Bake a pixel layer's mask into its alpha and remove it. Destructive. |
 | `set_mask_view` | Show a layer's mask to check it (`view` `gray` alone, `overlay` red tint over what it hides, `off`; `layerId`, default active). View state only; look with `capture_view` `includeOverlays: true`, then `off`. Returns `{view, layerId}`. |
+| `get_edge_color` | A layer's edge colour: `decontaminate`, `despill`, `ambient` (percent) and `ambientSource` (`auto` or `#rrggbb`). |
+| `set_edge_decontamination` | Unmix the old background from a cutout's soft mask edge at composite time (`amount` %; 0 off; nothing baked). Needs a pixel layer whose mask has a soft band. Check with `inspect_mask_edge` `haloScore`. Returns the settings. |
+| `set_edge_despill` | Take the old background's hue out of a soft edge (`amount` %), luminance kept; never changes fully covered pixels. A heuristic: bounced light stays. Same mask needs. Returns the settings. |
+| `set_edge_ambient` | Tint a soft edge with what is behind the layer, live (`source` `auto`) or a fixed `#rrggbb` (`amount` %). For a subject moved onto a new background. Returns the settings. |
 | `remove_layer_mask` | Delete a mask without applying it; disable it instead to keep it. |
 | `layer_via_copy` | Copy the selected pixels of a pixel layer (default the active one) to a new layer above it; `cut: true` removes them from the source. Needs a selection. Returns the new layer. |
 | `rasterize_layer` | Turn a shape layer into a pixel layer showing the same pixels (same id, mask, effects, opacity, blend; the paths are gone), an annotation layer into pixels (browser only), a smart object into a pixel layer (as `rasterize_smart_object`), or bake a pixel layer's develop / blur filters into its pixels. Do it before painting over a shape or annotation, or when the user wants the filters fixed. Destructive. |

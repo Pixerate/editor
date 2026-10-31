@@ -214,3 +214,33 @@ describe('Svelte LayersPanel PSD buttons', () => {
     expect(button('Export PSD')).toBeUndefined();
   });
 });
+
+describe('Svelte EdgeColorPanel', () => {
+  it('sets edge colour on the active layer with one undo step per drag, and shows why it cannot', async () => {
+    const c = controller();
+    const id = c.addPixelLayer({ name: 'Cutout', color: '#ff0000' });
+    c.selectRect({ x: 4, y: 2, width: 10, height: 6 }, { feather: 2 });
+    c.addLayerMask(id, 'selection');
+    c.deselect();
+    component = mount(LayersPanel, { target, props: { controller: c } });
+    flushSync();
+    const slider = target.querySelector('input[aria-label="Edge decontaminate"]') as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    setValue(slider, '40');
+    setValue(slider, '80');
+    expect(c.getEdgeColor(id).decontaminate).toBe(80);
+    c.undo();
+    flushSync();
+    expect(c.getEdgeColor(id).decontaminate).toBe(0);
+    click(target.querySelector('input[aria-label="Fixed cast colour"]'));
+    expect(c.getEdgeColor(id).ambientSource).toBe('#808080');
+
+    const hard = c.addPixelLayer({ name: 'Hard', color: '#00ff00' });
+    c.setActiveLayer(hard);
+    await settle();
+    setValue(target.querySelector('input[aria-label="Edge despill"]') as HTMLInputElement, '50');
+    expect(target.querySelector('[data-testid="edge-color-panel"] [role="alert"]')!.textContent).toMatch(/no mask with a soft edge/);
+    expect(c.getLayer(hard)!.edge).toBeUndefined();
+  });
+});

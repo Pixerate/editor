@@ -288,7 +288,7 @@ export function inspectMaskEdge(mask: SelectionMask, image: PixelBuffer & { x: n
 
   const issues: string[] = [];
   if (haloScore >= T.halo)
-    issues.push(`Halo (haloScore ${r3(haloScore)} ≥ ${T.halo}): background colour is left inside the edge. Contract the edge (modify_selection contract 1–2 px, or refine_selection shiftEdge -20 to -40), or decontaminate on a new-layer output.`);
+    issues.push(`Halo (haloScore ${r3(haloScore)} ≥ ${T.halo}): background colour is left inside the edge. Contract the edge (modify_selection contract 1–2 px, or refine_selection shiftEdge -20 to -40), or on a masked cutout set_edge_decontamination 80–100.`);
   if (edgeLength >= 16 && edgeAlignment < T.alignment)
     issues.push(`Off the image's edges (edgeAlignment ${r3(edgeAlignment)} < ${T.alignment}): much of the edge does not follow edges in the image. Rebuild it with select_subject, select_object or quick_select, or refine_selection with a larger radius.`);
   if (jaggedness >= T.jaggedness) issues.push(`Jagged (jaggedness ${r3(jaggedness)} ≥ ${T.jaggedness}): the outline zigzags. Smooth it (refine_selection smooth 20–40, or modify_selection smooth).`);
