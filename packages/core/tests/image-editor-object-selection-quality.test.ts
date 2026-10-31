@@ -26,6 +26,9 @@ const FLOORS: Record<string, number> = {
   'thin pole, box': 0.82,
   'dumbbell, box': 0.97,
   'dumbbell, click': 0.97,
+  'stone in river, box': 0.95,
+  // Without the small-disk fallback the click took the river (IoU 0.005).
+  'stone in river, click': 0.95,
 };
 
 describe('object selection quality without a model', () => {
