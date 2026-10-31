@@ -407,6 +407,11 @@ export interface ImageEditorState {
    * growing as the brush moves). View state: not an edit, not in history, not saved.
    */
   selectionPreview?: SelectionMask | null;
+  /**
+   * `compare_selections`' overlay: the added area tinted green, the removed red. Shown while the
+   * selection is still `selection` (any change hides it). View state: not in history, not saved.
+   */
+  selectionDiff?: { added: SelectionMask; removed: SelectionMask; selection: SelectionMask | null } | null;
   /** Quick Mask view: tint the unselected area instead of drawing marching ants (view state). */
   quickMask?: boolean;
   /** How the canvas shows the selection (view state; `quickMask` mirrors `'quickMask'`). */

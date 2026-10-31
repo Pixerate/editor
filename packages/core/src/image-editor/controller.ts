@@ -21,6 +21,7 @@ import {
   DocumentOpener,
 } from './types';
 import { inspectMaskEdge as inspectEdge, type InspectMaskEdgeOptions, type MaskEdgeReport } from './selection/inspect';
+import { compareSelectionMasks, type CompareSelectionsOptions, type SelectionDiff } from './selection/diff';
 import { selectionUncertainty as findUncertainty, type SelectionUncertainty, type SelectionUncertaintyOptions } from './selection/uncertainty';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
@@ -638,6 +639,14 @@ export interface CloneSource {
 /** A vector mask's path: several `components`, or one `shape` / `subpaths` (with `op`). */
 /** What `inspectMaskEdge` reads: the selection, a layer's painted mask or its vector mask. */
 export type MaskEdgeTarget = 'selection' | 'layer-mask' | 'vector-mask';
+
+/** A selection `compareSelections` reads (see `selectionFrom`). */
+export type SelectionSource =
+  | { kind: 'selection' }
+  | { kind: 'history'; steps?: number }
+  | { kind: 'channel'; channelId: string }
+  | { kind: 'layer-mask'; layerId: string }
+  | { kind: 'vector-mask'; layerId: string };
 
 /** A layer's edge colour as `getEdgeColor` describes it (percentages). */
 export interface EdgeColorInfo {
@@ -6650,6 +6659,72 @@ export class ImageEditorController {
     const y = Math.max(0, b.y - m);
     const region = { x, y, width: Math.min(width, b.x + b.width + m) - x, height: Math.min(height, b.y + b.height + m) - y };
     return findUncertainty(sel, { ...this.compositePixels(region), x, y }, options);
+  }
+
+  /**
+   * A selection to compare (`compareSelections`): the current one, the one `steps` undo steps
+   * ago, a saved channel, or a layer's painted or vector mask. `null` is nothing selected.
+   */
+  public selectionFrom(source: SelectionSource): SelectionMask | null {
+    const { width, height } = this.naturalSize;
+    switch (source?.kind) {
+      case 'selection':
+        return this.getSelection();
+      case 'history': {
+        const steps = source.steps ?? 1;
+        const depth = this.undoStack.length;
+        if (!Number.isInteger(steps) || steps < 1) throw new LayerOperationError(`steps must be a whole number of undo steps back, at least 1; got ${String(source.steps)}.`);
+        if (steps > depth) throw new LayerOperationError(`There ${depth === 1 ? 'is 1 undo step' : `are ${depth} undo steps`}; steps must be 1..${depth || 1}${depth ? '' : ' once something has been done'}.`);
+        return this.undoStack[depth - steps].selection ?? null;
+      }
+      case 'channel':
+        return this.requireChannel(source.channelId).mask;
+      case 'layer-mask': {
+        const layer = this.getLayer(source.layerId);
+        if (!layer) throw new LayerOperationError(`There is no layer "${source.layerId}" (see list_layers).`);
+        const mask = this.layerMaskCoverage(layer.id);
+        if (!mask) throw new LayerOperationError(`Layer "${layer.name || layer.id}" has no painted mask; add one with add_layer_mask, or compare its vector-mask.`);
+        return mask;
+      }
+      case 'vector-mask': {
+        const layer = this.getLayer(source.layerId);
+        if (!layer) throw new LayerOperationError(`There is no layer "${source.layerId}" (see list_layers).`);
+        const { vm } = this.requireVectorMask(layer.id);
+        const mask = pathToSelectionMask(vm.components, width, height, { fillRule: vm.fillRule });
+        return vm.inverted ? invertSelectionMask(mask) : mask;
+      }
+      default:
+        throw new LayerOperationError(`Unknown selection source ${JSON.stringify(source)}. Use selection, history, channel, layer-mask or vector-mask.`);
+    }
+  }
+
+  /**
+   * What changed from selection `a` (default: before the last undo step) to `b` (default: the
+   * current selection): added and removed area with their largest pieces, IoU and the coverage
+   * change. With `show` (default true) the canvas tints added area green and removed red until the
+   * selection next changes (view state, no undo step). Read-only otherwise.
+   */
+  public compareSelections(
+    a: SelectionSource = { kind: 'history', steps: 1 },
+    b: SelectionSource = { kind: 'selection' },
+    options: CompareSelectionsOptions & { show?: boolean } = {}
+  ): SelectionDiff {
+    const { width, height } = this.naturalSize;
+    const ma = this.selectionFrom(a);
+    const mb = this.selectionFrom(b);
+    const { addedMask, removedMask, ...diff } = compareSelectionMasks(ma, mb, width, height, options);
+    if (options.show !== false) {
+      this.state.selectionDiff = diff.identical ? null : { added: addedMask, removed: removedMask, selection: this.state.selection ?? null };
+      this.notify();
+    }
+    return diff;
+  }
+
+  /** Hides the `compareSelections` overlay. */
+  public clearSelectionDiff(): void {
+    if (!this.state.selectionDiff) return;
+    this.state.selectionDiff = null;
+    this.notify();
   }
 
   /** A layer's painted mask over the canvas as a selection mask; null without one (or for a depth mask). */

@@ -9,6 +9,7 @@ import {
 } from '@pixerate/editor/image-editor';
 import { imageRangeClass, imageSectionTitleClass } from './styles';
 import { MaskEdgeCheck } from './MaskEdgeCheck';
+import { SelectionChangeCheck } from './SelectionChangeCheck';
 
 export interface RefineEdgePanelProps {
   controller: ImageEditorController;
@@ -149,6 +150,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
         </p>
       )}
       <MaskEdgeCheck controller={controller} selection={sel} />
+      <SelectionChangeCheck controller={controller} selection={sel} />
 
       <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
       <div className="flex gap-1 items-center">

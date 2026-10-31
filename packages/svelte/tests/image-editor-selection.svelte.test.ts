@@ -342,6 +342,23 @@ describe('Svelte RefineEdgePanel uncertain areas', () => {
   });
 });
 
+describe('Svelte SelectionChangeCheck', () => {
+  it('summarises the last change to the selection and tints it on the canvas', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 0, y: 0, width: 10, height: 10 }, { antiAlias: false });
+    controller.selectRect({ x: 10, y: 0, width: 4, height: 10 }, { antiAlias: false, mode: 'add' });
+    component = mount(RefineEdgePanel, { target, props: { controller } });
+    flushSync();
+    click(button('Show Last Change'));
+    expect(target.querySelector('[data-testid="selection-change-summary"]')!.textContent).toMatch(/\+40 px\s*−0 px, overlap 71%/);
+    expect(controller.getState().selectionDiff?.added.bounds).toEqual({ x: 10, y: 0, width: 4, height: 10 });
+    controller.deselect();
+    flushSync();
+    expect(target.querySelector('[data-testid="selection-change-summary"]')).toBeNull();
+  });
+});
+
 describe('Svelte RefineEdgePanel', () => {
   it('refines with the slider values and manages layer masks', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

@@ -1,6 +1,6 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
-import type { ImageEditorController, RefineOutput } from './controller';
+import type { ImageEditorController, RefineOutput, SelectionSource } from './controller';
 import type { AdjustmentKind } from './types';
 import { ADJUSTMENT_KINDS, isAdjustmentKind } from './adjustment-layers';
 import { describeSelection } from './selection/tool-options';
@@ -138,6 +138,69 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       if (t === 'selection' && layerId !== undefined) throw new Error('layerId is only for target layer-mask or vector-mask; leave it out to inspect the selection.');
       return controller.inspectMaskEdge(t, { layerId: layerId as string | undefined, minArea: minArea as number | undefined });
     },
+  };
+
+  const sourceSchema = (which: string, dflt: string): JsonSchema => ({
+    type: 'object',
+    properties: {
+      source: { type: 'string', enum: ['selection', 'history', 'channel', 'layer-mask', 'vector-mask'], description: 'selection: the current one; history: as it was steps undo steps ago; channel: a saved selection (channelId, see list_channels); layer-mask / vector-mask: a layer\'s mask (layerId).' },
+      steps: { type: 'integer', minimum: 1, description: 'history only: how many undo steps back (default 1, before the last edit).' },
+      channelId: { type: 'string', description: 'channel only: the channel id from list_channels.' },
+      layerId: { type: 'string', description: 'layer-mask and vector-mask only: the layer id from list_layers.' },
+    },
+    required: ['source'],
+    additionalProperties: false,
+    description: `${which} (default ${dflt}).`,
+  });
+  const toSource = (v: unknown, fallback: SelectionSource): SelectionSource => {
+    if (v === undefined) return fallback;
+    const o = v as { source: string; steps?: number; channelId?: string; layerId?: string };
+    const extra = (keys: string[]) => {
+      const bad = Object.keys(o).filter((k) => k !== 'source' && !keys.includes(k));
+      if (bad.length) throw new Error(`${bad.join(', ')} ${bad.length === 1 ? 'does' : 'do'} not apply to source ${o.source}.`);
+    };
+    switch (o.source) {
+      case 'selection':
+        extra([]);
+        return { kind: 'selection' };
+      case 'history':
+        extra(['steps']);
+        return { kind: 'history', steps: o.steps ?? 1 };
+      case 'channel':
+        extra(['channelId']);
+        if (!o.channelId) throw new Error('source channel needs channelId (see list_channels).');
+        return { kind: 'channel', channelId: o.channelId };
+      case 'layer-mask':
+      case 'vector-mask':
+        extra(['layerId']);
+        if (!o.layerId) throw new Error(`source ${o.source} needs layerId (see list_layers).`);
+        return { kind: o.source, layerId: o.layerId };
+      default:
+        throw new Error(`Unknown source "${String(o.source)}". Use selection, history, channel, layer-mask or vector-mask.`);
+    }
+  };
+
+  const compareTool: AgentTool = {
+    name: 'compare_selections',
+    title: 'Compare two selections',
+    description:
+      'Shows what changed between two selections, to check that a modify, refine or select step did what you meant. a (default: the selection before the last undo step) and b (default: the current selection) can each be the current selection, a history step, a saved channel or a layer\'s mask. Returns a and b (area, bounds), added and removed (area in pixels, count and the 10 largest pieces with bounds, ready for capture_view), iou 0-1, coverageChange (pixels of coverage changed, counting edges that only softened) and identical. With show (default true) the canvas tints added area green and removed red until the selection next changes (view only, no undo step).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: sourceSchema('The selection before', 'history, 1 step back'),
+        b: sourceSchema('The selection after', 'the current selection'),
+        minArea: { type: 'number', minimum: 1, maximum: 1000000, description: 'Pieces smaller than this many pixels are counted but not listed (default 4).' },
+        show: { type: 'boolean', description: 'Tint the change on the canvas (default true).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Compare two selections', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: ({ a, b, minArea, show }) =>
+      controller.compareSelections(toSource(a, { kind: 'history', steps: 1 }), toSource(b, { kind: 'selection' }), {
+        ...(minArea !== undefined ? { minArea: minArea as number } : {}),
+        show: show !== false,
+      }),
   };
 
   const selectRegion: AgentTool = {
@@ -1279,6 +1342,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
   return [
     getSelection,
     inspectEdge,
+    compareTool,
     selectAll,
     deselect,
     invert,

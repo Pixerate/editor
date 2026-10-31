@@ -23,6 +23,7 @@ import { computeHistogram, type ImageHistogram } from './histogram';
 import { normalizeProcessVersion } from './color';
 import { buildLayerMaskPlanes, layerMaskSelection } from './selection/layer-mask';
 import { selectionOutline, quickMaskPixels, type QuickMaskStyle } from './selection/overlay';
+import { selectionDiffPixels } from './selection/diff';
 import { createSelectionMask, selectionToPixels } from './selection/mask';
 import type { SelectionMask } from './selection/mask';
 import { LayerCompositor, type CompositorSources } from './layers/compositor';
@@ -454,6 +455,22 @@ export class ImageEditorRenderer {
         else if (shownSel?.bounds && display === 'quickMask') this.drawQuickMask(ctx, shownSel);
         else if (shownSel?.bounds && display === 'ants') this.drawAnts(ctx, shownSel, projection.scale / u, options.antsOffset ?? 0);
         if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale / u);
+      } catch {
+        // Overlays are best effort (headless / mocked contexts).
+      }
+      ctx.restore();
+    }
+
+    // compare_selections: added area green, removed red, while the selection is unchanged.
+    const diff = state.selectionDiff;
+    if (diff && diff.selection === (state.selection ?? null)) {
+      ctx.save();
+      try {
+        applyImageProjectionToContext(ctx, projection);
+        ctx.beginPath();
+        ctx.rect(region.x, region.y, region.width, region.height);
+        ctx.clip();
+        this.drawSelectionDiff(ctx, diff);
       } catch {
         // Overlays are best effort (headless / mocked contexts).
       }
@@ -976,6 +993,7 @@ export class ImageEditorRenderer {
   }
 
   private quickMaskCache = new WeakMap<SelectionMask, HTMLCanvasElement>();
+  private diffCache = new WeakMap<object, HTMLCanvasElement>();
   private outlineCache = new WeakMap<SelectionMask, Float32Array>();
 
   private emptyMaskCache: SelectionMask | null = null;
@@ -1036,6 +1054,20 @@ export class ImageEditorRenderer {
   }
 
   /** Rubylith over the unselected area, drawn in natural image space. */
+  private drawSelectionDiff(ctx: CanvasRenderingContext2D, diff: { added: SelectionMask; removed: SelectionMask }): void {
+    let canvas = this.diffCache.get(diff);
+    if (!canvas) {
+      canvas = this.createCanvas(diff.added.width, diff.added.height);
+      const mctx = canvas.getContext('2d');
+      if (!mctx || typeof mctx.createImageData !== 'function') return;
+      const img = mctx.createImageData(diff.added.width, diff.added.height);
+      img.data.set(selectionDiffPixels(diff.added, diff.removed));
+      mctx.putImageData(img, 0, 0);
+      this.diffCache.set(diff, canvas);
+    }
+    ctx.drawImage(canvas, 0, 0, diff.added.width, diff.added.height);
+  }
+
   private drawQuickMask(ctx: CanvasRenderingContext2D, selection: SelectionMask): void {
     let canvas = this.quickMaskCache.get(selection);
     if (!canvas) {
