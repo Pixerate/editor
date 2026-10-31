@@ -452,12 +452,15 @@ function writeBlocks(w: PsdWriter, blocks: PsdTaggedBlock[], psb: boolean, align
 function writeMask(w: PsdWriter, m: PsdLayerMask): void {
   writeRect(w, m.rect);
   w.u8(m.defaultColor);
-  const pf = (m.userDensity !== undefined ? 1 : 0) | (m.userFeather !== undefined ? 2 : 0);
+  const pf =
+    (m.userDensity !== undefined ? 1 : 0) | (m.userFeather !== undefined ? 2 : 0) | (m.vectorDensity !== undefined ? 4 : 0) | (m.vectorFeather !== undefined ? 8 : 0);
   w.u8(pf ? m.flags | MASK_FLAG_PARAMETERS : m.flags & ~MASK_FLAG_PARAMETERS);
   if (pf) {
     w.u8(pf);
     if (m.userDensity !== undefined) w.u8(m.userDensity);
     if (m.userFeather !== undefined) w.f64(m.userFeather);
+    if (m.vectorDensity !== undefined) w.u8(m.vectorDensity);
+    if (m.vectorFeather !== undefined) w.f64(m.vectorFeather);
   }
   // Pad to the 20-byte minimum the spec asks for.
   const len = 18 + (pf ? 1 + maskParameterBytes(pf) : 0);
