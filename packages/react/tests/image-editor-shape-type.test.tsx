@@ -182,3 +182,47 @@ describe('React shape and type tools on the canvas', () => {
     expect(c.getLayers().at(-1)!.name).toBe('Hey');
   });
 });
+
+describe('React path tools on the canvas', () => {
+  it('draws a Work Path with the Pen and drags its anchor with Direct Selection', async () => {
+    let c!: ImageEditorController;
+    function Host() {
+      const editor = useImageEditor({});
+      c = editor.controller;
+      return <ImageEditor editor={editor} />;
+    }
+    await act(async () => root.render(<Host />));
+    const { width, height } = c.getState().imageDimensions;
+    c.setSamplePixels({ width, height, data: new Uint8ClampedArray(width * height * 4).fill(255) });
+    await act(async () => button('Annotations').click());
+    await act(async () => button('Pen').click());
+    expect(c.getState().activeTool).toBe('path-pen');
+    const canvas = container.querySelector('[data-testid="image-editor-canvas"]') as HTMLCanvasElement;
+    await act(async () => {
+      for (const [x, y] of [[40, 40], [120, 40], [120, 100]]) {
+        canvas.dispatchEvent(mouse('mousedown', x, y));
+        canvas.dispatchEvent(mouse('mouseup', x, y));
+      }
+      window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    const path = c.getPaths()[0];
+    expect(path).toMatchObject({ name: 'Work Path', work: true });
+    const sp = path.components[0].subpaths[0];
+    expect(sp).toMatchObject({ closed: false });
+    expect(sp.anchors).toHaveLength(3);
+
+    await act(async () => button('Direct Selection').click());
+    expect(c.getState().activeTool).toBe('direct-select');
+    const before = c.getPath(path.id)!.components[0].subpaths[0].anchors[1];
+    await act(async () => {
+      canvas.dispatchEvent(mouse('mousedown', 120, 40));
+      canvas.dispatchEvent(mouse('mousemove', 130, 50));
+      canvas.dispatchEvent(mouse('mouseup', 130, 50));
+    });
+    const after = c.getPath(path.id)!.components[0].subpaths[0].anchors[1];
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.y).toBeGreaterThan(before.y);
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Delete', bubbles: true })));
+    expect(c.getPath(path.id)!.components[0].subpaths[0].anchors).toHaveLength(2);
+  });
+});

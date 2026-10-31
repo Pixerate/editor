@@ -3161,3 +3161,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Opening the Svelte Content-Aware Fill workspace failed with `effect_update_depth_exceeded`. The Select and Mask workspace, written the same way, worked.
 - **Root Cause**: The `$effect` subscribed `() => tick++` and called `session.open()`. `ContentAwareFillSession.open` emits before its first `await`, so `tick++`, which reads `tick`, ran inside the effect. The effect then depended on `tick` and reran every time it emitted. `SelectAndMaskSession.open` awaits the pixels before emitting, so it never hit this.
 - **Solution / Workaround**: Run the subscribe-and-open inside `untrack(() => ...)` in the effect. Do this for any effect that starts something that may notify synchronously.
+
+### [core/image-editor] Stored Path Anchors Have No Smooth/Corner Type
+
+- **Issue / Symptom**: Dragging one handle of a smooth anchor on a path, shape or vector mask bent it into a corner: the opposite handle stayed put.
+- **Root Cause**: `normalizeSubpaths` (behind every path, shape and vector mask setter) keeps only `x`, `y`, `in`, `out` and `corner`, so the vector editor's `type: 'smooth' | 'symmetric'` is gone by the next drag, and `moveAnchorHandle` treats an untyped anchor as a corner.
+- **Solution / Workaround**: Before moving a handle, give the anchor `type: a.type ?? inferAnchorType(a)` (handles in line count as smooth), then drop `type` from the result. `PathEditGesture` does this; Alt-drag still breaks the handles on purpose.

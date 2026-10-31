@@ -23,7 +23,7 @@ import {
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import type { ObjectTarget } from './selection/segment/grabcut';
-import { WORK_PATH_NAME, newPathId, pathBounds, readPaths, serializePaths, type DocumentPath } from './paths';
+import { WORK_PATH_NAME, newPathId, pathBounds, readPaths, serializePaths, type DocumentPath, type PathEditTarget } from './paths';
 import { SelectionWorkerClient, runSelectionJob, serializeMask, type SelectionJob, type SelectionJobResult, type SelectionWorkerFactory } from './selection/worker';
 import type { SelectionProgress } from './selection/segment/work';
 import type { FocusAreaOptions } from './selection/segment/focus';
@@ -3099,8 +3099,8 @@ export class ImageEditorController {
     this.notify();
   }
 
-  private commitPaths(next: DocumentPath[], active?: string | null): void {
-    this.recordHistory();
+  private commitPaths(next: DocumentPath[], active?: string | null, commitToHistory = true): void {
+    if (commitToHistory) this.recordHistory();
     if (next.length) this.state.paths = next;
     else delete this.state.paths;
     if (active !== undefined) this.state.activePathId = active;
@@ -3138,6 +3138,68 @@ export class ImageEditorController {
     else if (input.fillRule === 'nonzero') delete path.fillRule;
     this.commitPaths(this.getPaths().map((p) => (p.id === id ? path : p)));
     return path;
+  }
+
+  /**
+   * What the path tools (Path Selection, Direct Selection, Pen) edit: the active path in the Paths
+   * panel, else the active layer when it is a shape, else the active layer's vector mask; null
+   * when there is none of these (the Pen then starts a new Work Path).
+   */
+  public pathEditTarget(): PathEditTarget | null {
+    const id = this.state.activePathId;
+    if (id && this.getPath(id)) return { kind: 'path', id };
+    const layer = this.getActiveLayer();
+    if (!layer) return null;
+    if (layer.type === 'shape') return { kind: 'shape', layerId: layer.id };
+    if (layer.vectorMask) return { kind: 'vector-mask', layerId: layer.id };
+    return null;
+  }
+
+  /** The components a path tool target holds (document pixels). Throws for a target that is gone. */
+  public getPathEditComponents(target: PathEditTarget): ShapeComponent[] {
+    if (target.kind === 'path') return this.requirePath(target.id).components;
+    if (target.kind === 'shape') return requireShapeLayer(this.state.layers, target.layerId).components;
+    return this.requireVectorMask(target.layerId).vm.components;
+  }
+
+  /**
+   * Replaces a path tool target's components: one undo step, or none with `commitToHistory` false
+   * (the later moves of a drag whose first move recorded one). A component that still has its
+   * `live` shape is kept as given (drop `live` from one whose anchors changed); a shape layer keeps
+   * at least one component.
+   */
+  public setPathEditComponents(target: PathEditTarget, components: readonly ShapeComponent[], commitToHistory = true): void {
+    this.getPathEditComponents(target);
+    const next = components.map((c, i) =>
+      c.live ? { ...c } : this.componentFrom({ op: c.op, subpaths: c.subpaths.filter((sp) => sp.anchors.length) }, `components[${i}].`)
+    );
+    if (target.kind === 'path') {
+      this.commitPaths(this.getPaths().map((p) => (p.id === target.id ? { ...p, components: next } : p)), undefined, commitToHistory);
+    } else if (target.kind === 'shape') {
+      if (!next.length) throw new LayerOperationError('A shape needs at least one component; delete the layer instead (delete_layer).');
+      const { layers } = updateShapeLayer(this.state.layers, target.layerId, () => ({ components: next }), this.shapeEnv(), 'edit its path');
+      this.commitLayers(layers, undefined, commitToHistory);
+    } else {
+      const { vm } = this.requireVectorMask(target.layerId);
+      this.commitLayers(mapLayer(this.state.layers, target.layerId, (l) => ({ ...l, vectorMask: { ...vm, components: next } }) as ImageLayer), undefined, commitToHistory);
+    }
+  }
+
+  /**
+   * The Pen with no path to add to: a new Work Path from `components` (replacing the last one,
+   * unless it was saved), made the active path. One undo step. Returns the path.
+   */
+  public startWorkPath(components: readonly ShapeComponent[]): DocumentPath {
+    const paths = this.getPaths();
+    const old = paths.find((p) => p.work);
+    const work: DocumentPath = {
+      id: old?.id ?? newPathId(),
+      name: WORK_PATH_NAME,
+      components: components.map((c, i) => this.componentFrom({ op: c.op, subpaths: c.subpaths }, `components[${i}].`)),
+      work: true,
+    };
+    this.commitPaths(old ? paths.map((p) => (p === old ? work : p)) : [...paths, work], work.id);
+    return work;
   }
 
   /** Renames a path; renaming the Work Path saves it (Photoshop's Save Path). One undo step. */

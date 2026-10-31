@@ -29,7 +29,9 @@ export const IMAGE_TOOL_GROUPS: readonly ImageToolGroup[] = [
   { id: 'focus', label: 'Blur & Sharpen', tools: ['blur', 'sharpen', 'smudge'] },
   { id: 'tone', label: 'Dodge & Burn', tools: ['dodge', 'burn', 'sponge'] },
   { id: 'shape', label: 'Shape', tools: ['shape'] },
+  { id: 'pen', label: 'Pen', tools: ['path-pen'] },
   { id: 'type', label: 'Type', tools: ['type'] },
+  { id: 'path-select', label: 'Path Selection', tools: ['path-select', 'direct-select'] },
   { id: 'annotate', label: 'Annotate', tools: ['pen', 'line', 'arrow', 'rect', 'circle'] },
 ];
 
@@ -43,7 +45,10 @@ const OTHER_TOOL_LABELS: Partial<Record<ImageEditorTool, string>> = {
   crop: 'Crop',
   shape: 'Shape',
   type: 'Type',
-  pen: 'Pen',
+  'path-pen': 'Pen',
+  'path-select': 'Path Selection',
+  'direct-select': 'Direct Selection',
+  pen: 'Freehand',
   line: 'Line',
   arrow: 'Arrow',
   rect: 'Rectangle',
@@ -63,6 +68,9 @@ export const IMAGE_TOOL_SHORTCUTS: Partial<Record<ImageEditorTool, string>> = {
   crop: 'C',
   shape: 'U',
   type: 'T',
+  'path-pen': 'P',
+  'path-select': 'A',
+  'direct-select': 'Shift+A',
 };
 
 /** The tool a shortcut picks (the first tool listed for a shared key), or null. */
@@ -78,8 +86,8 @@ export function imageToolForShortcut(key: string, shift = false): ImageEditorToo
 export type ImageToolCanvasMode = 'transform' | 'crop' | 'select' | 'paint' | 'annotate';
 
 /**
- * The canvas mode a tool works in. Move picks and transforms layers; shapes, type and the
- * annotations draw in `annotate`.
+ * The canvas mode a tool works in. Move picks and transforms layers; shapes, type, the path tools
+ * and the annotations draw in `annotate`.
  */
 export function imageToolCanvasMode(tool: ImageEditorTool): ImageToolCanvasMode {
   if (tool === 'move') return 'transform';

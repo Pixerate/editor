@@ -20,7 +20,8 @@ const btn = (on = false) =>
  * thumbnails. Click selects a path, double-click renames it (renaming the Work Path saves it).
  * Load as Selection (Shift adds, Alt subtracts), Make Work Path from the selection, Fill and
  * Stroke on the active layer with a colour and width, Add Vector Mask to the active layer,
- * Duplicate and Delete. Every change is one undo step on the controller.
+ * Duplicate and Delete. Clicking empty space deselects the path. Every change is one undo step on
+ * the controller.
  */
 export const PathsPanel: React.FC<PathsPanelProps> = ({ controller, thumbnailSize = 32, className = '' }) => {
   const [, setTick] = useState(0);
@@ -43,10 +44,11 @@ export const PathsPanel: React.FC<PathsPanelProps> = ({ controller, thumbnailSiz
     }
   };
   return (
-    <div data-testid="paths-panel" className={`flex flex-col gap-2 text-xs ${className}`}>
+    // Clicking the panel's empty space deselects the path (the path tools then edit the active layer).
+    <div data-testid="paths-panel" className={`flex flex-col gap-2 text-xs ${className}`} onClick={(e) => e.target === e.currentTarget && attempt(() => controller.setActivePath(null))}>
       <span className={imageSectionTitleClass}>Paths</span>
       {paths.length === 0 && <p className="text-muted-foreground">No paths. Make a work path from a selection.</p>}
-      <ul role="list" className="flex flex-col gap-0.5">
+      <ul role="list" className="flex flex-col gap-0.5 min-h-4" onClick={(e) => e.target === e.currentTarget && attempt(() => controller.setActivePath(null))}>
         {paths.map((p) => (
           <li
             key={p.id}

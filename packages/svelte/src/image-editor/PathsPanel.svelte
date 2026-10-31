@@ -9,7 +9,8 @@
    * thumbnails. Click selects a path, double-click renames it (renaming the Work Path saves it).
    * Load as Selection (Shift adds, Alt subtracts), Make Work Path from the selection, Fill and
    * Stroke on the active layer with a colour and width, Add Vector Mask to the active layer,
-   * Duplicate and Delete. Every change is one undo step on the controller.
+   * Duplicate and Delete. Clicking empty space deselects the path. Every change is one undo step on
+   * the controller.
    */
   interface Props {
     controller: ImageEditorController;
@@ -62,12 +63,15 @@
     }`;
 </script>
 
-<div data-testid="paths-panel" class="flex flex-col gap-2 text-xs {className}">
+<!-- Clicking the panel's empty space deselects the path (the path tools then edit the active layer). -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div data-testid="paths-panel" class="flex flex-col gap-2 text-xs {className}" onclick={(e) => e.target === e.currentTarget && attempt(() => controller.setActivePath(null))}>
   <span class={imageSectionTitleClass}>Paths</span>
   {#if paths.length === 0}
     <p class="text-muted-foreground">No paths. Make a work path from a selection.</p>
   {/if}
-  <ul role="list" class="flex flex-col gap-0.5">
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+  <ul role="list" class="flex flex-col gap-0.5 min-h-4" onclick={(e) => e.target === e.currentTarget && attempt(() => controller.setActivePath(null))}>
     {#each paths as p (p.id)}
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
       <li

@@ -25,6 +25,8 @@ import {
   handleMaskViewKey,
   ShapeDrawGesture,
   TypeToolGesture,
+  PathEditGesture,
+  isPathEditTool,
   DEFAULT_SHAPE_TOOL_OPTIONS,
   DEFAULT_TYPE_TOOL_OPTIONS,
   type SelectionToolOptions,
@@ -42,7 +44,7 @@ import type { UseImageEditorReturn } from './useImageEditor';
 /** What pointer gestures on the canvas do (and whether the crop overlay shows). */
 export type ImageEditorCanvasMode = 'crop' | 'select' | 'paint' | 'annotate' | 'none';
 /** Which gesture an `onError` report comes from. */
-export type ImageEditorCanvasErrorSource = 'paint' | 'select' | 'shape' | 'type';
+export type ImageEditorCanvasErrorSource = 'paint' | 'select' | 'shape' | 'type' | 'path';
 
 export interface ImageEditorCanvasProps {
   /** The editor to draw and edit (`useImageEditor`). */
@@ -264,6 +266,13 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     typeToolRef.current = new TypeToolGesture(controller, () => typeOptionsRef.current);
     shapeTypeControllerRef.current = controller;
   }
+  // Path tools (Path Selection, Direct Selection, Pen): edit the active path, shape or vector mask.
+  const pathGestureRef = useRef<PathEditGesture | null>(null);
+  const pathControllerRef = useRef(controller);
+  if (!pathGestureRef.current || pathControllerRef.current !== controller) {
+    pathGestureRef.current = new PathEditGesture(controller);
+    pathControllerRef.current = controller;
+  }
   const typeInputRef = useRef<HTMLTextAreaElement>(null);
   const [typeSession, setTypeSessionState] = useState(typeToolRef.current.session);
   const setTypeSession = (session: TextEditSession | null) => {
@@ -301,7 +310,10 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       const viewport = measureCanvasViewport(container);
       viewRef.current = { width: viewport.width, height: viewport.height };
       // The transform overlay's rotate handle sits a fixed distance out on screen.
-      transformTool.setView(getViewportProjection(controller.getState(), viewport.width, viewport.height, mode === 'crop').scale);
+      const viewScale = getViewportProjection(controller.getState(), viewport.width, viewport.height, mode === 'crop').scale;
+      transformTool.setView(viewScale);
+      pathGestureRef.current?.setView(viewScale);
+      const activeTool = controller.getState().activeTool;
 
       await controller.render(canvas, {
         viewportWidth: viewport.width,
@@ -322,6 +334,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
             : null,
         freeTransform: transformTool.overlay(),
         textEdit: typeToolRef.current?.session?.alive ? typeToolRef.current.session.overlay() : null,
+        pathEdit: mode === 'annotate' && isPathEditTool(activeTool) ? pathGestureRef.current?.overlay(activeTool) : null,
       });
     },
     [controller, mode, fit, transformTool]
@@ -574,6 +587,23 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   });
 
   useEffect(() => {
+    if (mode !== 'annotate' || typeof window === 'undefined') return;
+    // The path tools: Delete removes the selected anchors, Enter / Escape end the Pen's subpath.
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (!isPathEditTool(controller.getState().activeTool)) return;
+      if (pathGestureRef.current?.key(e.key)) {
+        e.preventDefault();
+        report('path', pathGestureRef.current.error);
+        void renderCanvas();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  useEffect(() => {
     if (mode !== 'paint' || typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent) => {
       if (handlePaintShortcut(controller, e)) e.preventDefault();
@@ -625,6 +655,14 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
           startCrop: { x: startImgPt.x, y: startImgPt.y, width: 0, height: 0 },
         };
       }
+      return;
+    }
+
+    if (mode === 'annotate' && isPathEditTool(state.activeTool)) {
+      const g = pathGestureRef.current!;
+      g.down(canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false), state.activeTool, { shift: e.shiftKey, alt: e.altKey });
+      report('path', g.error);
+      void renderCanvas();
       return;
     }
 
@@ -735,6 +773,17 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
         const handle = hitTestCrop(canvasPt, state, viewRef.current.width, viewRef.current.height, 14, activeCrop);
         canvas.style.cursor = getCropCursor(handle, state.transform);
       }
+      return;
+    }
+
+    if (mode === 'annotate' && isPathEditTool(state.activeTool)) {
+      const g = pathGestureRef.current!;
+      const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
+      if (g.active) {
+        g.move(imgPt, { shift: e.shiftKey, alt: e.altKey });
+        if (g.error) report('path', g.error);
+      } else g.hover(imgPt);
+      void renderCanvas();
       return;
     }
 
@@ -864,6 +913,11 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
       return;
     }
 
+    if (mode === 'annotate' && isPathEditTool(state.activeTool)) {
+      pathGestureRef.current!.up();
+      void renderCanvas();
+      return;
+    }
     if (mode === 'annotate' && state.activeTool === 'shape') {
       shapeGestureRef.current!.up();
       return;
@@ -957,7 +1011,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
           onPointerCancel={() => paintGestureRef.current?.cancel()}
           data-testid="image-editor-canvas"
           style={transformTool.active ? { width: '100%', height: '100%', cursor: transformCursor } : { width: '100%', height: '100%' }}
-          className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && state.activeTool === 'shape' ? 'cursor-crosshair' : ''}`}
+          className={`absolute inset-0 w-full h-full block ${transformTool.active ? 'touch-none' : mode === 'paint' ? 'touch-none cursor-crosshair' : mode === 'annotate' && state.activeTool === 'type' ? 'cursor-text' : mode === 'annotate' && (state.activeTool === 'shape' || state.activeTool === 'path-pen') ? 'cursor-crosshair' : mode === 'annotate' && isPathEditTool(state.activeTool) ? 'cursor-default' : ''}`}
         />
         {typeSession && (
           <textarea
