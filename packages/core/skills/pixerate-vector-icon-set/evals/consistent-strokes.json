@@ -1,0 +1,22 @@
+{
+	"prompt": "These three icons are from one set but their stroke widths don't match (1, 2 and 3 units). Make them all 2 units with round caps and joins, without moving or resizing them.",
+	"fixture": {
+		"editor": "vector",
+		"width": 72,
+		"height": 24,
+		"setup": [
+			{ "id": "vector.addPath", "params": { "d": "M4 12L20 12", "name": "Minus", "fill": null, "stroke": "#000", "strokeWidth": 1 } },
+			{ "id": "vector.addPath", "params": { "d": "M28 6L44 18M44 6L28 18", "name": "Close", "fill": null, "stroke": "#000", "strokeWidth": 2 } },
+			{ "id": "vector.addPath", "params": { "d": "M52 12L58 18L68 6", "name": "Check", "fill": null, "stroke": "#000", "strokeWidth": 3 } }
+		]
+	},
+	"checks": [
+		{ "why": "every icon at 2 units", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$length": 3, "$every": { "strokeWidth": 2 } } } } },
+		{ "why": "the icons have not moved or changed size", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": [{ "name": "Minus", "bounds": { "x": 4, "y": 12, "width": 16, "height": 0 } }, { "name": "Close", "bounds": { "x": 28, "y": 6, "width": 16, "height": 12 } }, { "name": "Check", "bounds": { "x": 52, "y": 6, "width": 16, "height": 12 } }] } } },
+		{ "why": "round caps on the minus too", "tool": "run_command", "args": { "id": "vector.getAppearance", "params": { "id": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.0.id" } } }, "expect": { "result": { "strokes": { "$every": { "strokeLinecap": "round", "strokeLinejoin": "round" } } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.list" } },
+		{ "tool": "run_command", "args": { "id": "vector.setStyle", "params": { "ids": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.*.id" }, "strokeWidth": 2, "strokeLinecap": "round", "strokeLinejoin": "round" } } }
+	]
+}

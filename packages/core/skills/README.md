@@ -44,6 +44,9 @@ request like "clean up this export" finds it.
 | [`pixerate-image-portrait-retouch`](pixerate-image-portrait-retouch/SKILL.md) | Image (`pixerate-image-editor`) | Blemishes, stray hairs and flaws healed on their own layer, dodge and burn, eyes and teeth, kept natural. |
 | [`pixerate-image-product-photo`](pixerate-image-product-photo/SKILL.md) | Image (`pixerate-image-editor`) | Product cutouts on pure white or a brand colour, a grounding shadow, accurate colour, centred marketplace crops. |
 | [`pixerate-spreadsheet-clean-import`](pixerate-spreadsheet-clean-import/SKILL.md) | Spreadsheet (`pixerate-spreadsheet`) | Imported or pasted data made tidy: structure, headers, types (currency, comma decimals, day-first dates, leading zeros, missing values), text, duplicates and validation. |
+| [`pixerate-vector-icon-set`](pixerate-vector-icon-set/SKILL.md) | Vector (`pixerate-vector`) | Icons on one grid with padding, one stroke, cap, join and radius, crisp coordinates, clean paths, symbols and SVG export. |
+| [`pixerate-vector-logo`](pixerate-vector-logo/SKILL.md) | Vector (`pixerate-vector`) | Marks from primitives with live booleans, optical corrections, an aligned lockup, colour variants as symbols, outlined delivery files. |
+| [`pixerate-vector-illustration`](pixerate-vector-illustration/SKILL.md) | Vector (`pixerate-vector`) | Block in back to front, gradients and stacked fills for form, masks, blends, subtle shadows with one light, export. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -105,9 +108,10 @@ same change.
   it ships evals. Add its row to the workflow table above.
 - **Evals.** Each workflow skill ships at least three scenarios in `evals/*.json`, run by
   `packages/core/tests/agent-skill-evals.test.ts`. An eval has a `prompt` (the task, in the
-  user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }` or
-  `{ "editor": "image", "width", "height", "background", "shapes" }`), `checks` (a read-only
-  tool, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
+  user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }`,
+  `{ "editor": "image", "width", "height", "background", "shapes" }` or `{ "editor":
+  "vector", "width", "height", "setup" }` with commands that draw the starting art), `checks` (a read-only
+  tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place
   of the solution. In `expect`, objects match key by key and arrays element by element, with

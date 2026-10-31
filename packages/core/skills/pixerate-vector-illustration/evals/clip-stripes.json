@@ -1,0 +1,21 @@
+{
+	"prompt": "Show the stripes only inside the round window, and keep the stripes movable inside it.",
+	"fixture": {
+		"editor": "vector",
+		"width": 100,
+		"height": 100,
+		"setup": [
+			{ "id": "vector.addShape", "params": { "kind": "rect", "x": 10, "y": 10, "width": 16, "height": 80, "name": "Stripe", "fill": "#457b9d", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "rect", "x": 42, "y": 10, "width": 16, "height": 80, "name": "Stripe", "fill": "#457b9d", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "rect", "x": 74, "y": 10, "width": 16, "height": 80, "name": "Stripe", "fill": "#457b9d", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "ellipse", "x": 20, "y": 20, "width": 60, "height": 60, "name": "Window", "fill": "#ffffff", "stroke": null } }
+		]
+	},
+	"checks": [
+		{ "why": "a clipping mask using the window, with all three stripes inside", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$some": { "mask": { "type": "clip", "enabled": true, "contents": { "$length": 3 } } } } } } },
+		{ "why": "the stripes are still separate, editable paths", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$expr": "v.filter((n) => n.name === 'Stripe' && n.type === 'path').length === 3" } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.makeClippingMask", "params": { "ids": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.*.id" } } } }
+	]
+}

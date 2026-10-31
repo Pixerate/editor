@@ -1,0 +1,192 @@
+{
+	"prompt": "The three stars are copies of the same rating icon. Make them one reusable symbol, so that editing it once updates all three, and keep them where they are.",
+	"fixture": {
+		"editor": "vector",
+		"width": 72,
+		"height": 24,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "star",
+					"x": 2,
+					"y": 2,
+					"width": 20,
+					"height": 20,
+					"name": "Star",
+					"fill": "#f5b301",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "star",
+					"x": 26,
+					"y": 2,
+					"width": 20,
+					"height": 20,
+					"name": "Star",
+					"fill": "#f5b301",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "star",
+					"x": 50,
+					"y": 2,
+					"width": 20,
+					"height": 20,
+					"name": "Star",
+					"fill": "#f5b301",
+					"stroke": null
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "one symbol",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.listSymbols"
+			},
+			"expect": {
+				"result": {
+					"symbols": {
+						"$length": 1
+					}
+				}
+			}
+		},
+		{
+			"why": "three instances of it and no loose copies",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$length": 3,
+						"$every": {
+							"type": "instance"
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "in their original places",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$expr": "[2, 26, 50].every((x) => v.some((n) => Math.abs(n.bounds.x + n.bounds.width / 2 - (x + 10)) <= 0.5))"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.makeSymbol",
+				"params": {
+					"ids": [
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.0.id"
+						}
+					],
+					"name": "Rating star"
+				}
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.delete",
+				"params": {
+					"ids": [
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.1.id"
+						},
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.2.id"
+						}
+					]
+				}
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.placeSymbol",
+				"params": {
+					"symbolId": {
+						"$read": "run_command",
+						"args": {
+							"id": "vector.listSymbols"
+						},
+						"path": "result.symbols.0.id"
+					},
+					"x": 36,
+					"y": {
+						"$read": "run_command",
+						"args": {
+							"id": "vector.list"
+						},
+						"path": "result.nodes.0.transform.5"
+					}
+				}
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.placeSymbol",
+				"params": {
+					"symbolId": {
+						"$read": "run_command",
+						"args": {
+							"id": "vector.listSymbols"
+						},
+						"path": "result.symbols.0.id"
+					},
+					"x": 60,
+					"y": {
+						"$read": "run_command",
+						"args": {
+							"id": "vector.list"
+						},
+						"path": "result.nodes.0.transform.5"
+					}
+				}
+			}
+		}
+	]
+}

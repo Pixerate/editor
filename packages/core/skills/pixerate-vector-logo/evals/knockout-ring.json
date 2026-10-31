@@ -1,0 +1,21 @@
+{
+	"prompt": "Cut the small circle out of the big one so the mark becomes a ring you can see through. This is for the final export file, so make it a single plain path.",
+	"fixture": {
+		"editor": "vector",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "id": "vector.addShape", "params": { "kind": "ellipse", "x": 4, "y": 4, "width": 56, "height": 56, "name": "Outer", "fill": "#e63946", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "ellipse", "x": 20, "y": 20, "width": 24, "height": 24, "name": "Inner", "fill": "#ffffff", "stroke": null } }
+		]
+	},
+	"checks": [
+		{ "why": "one plain path, no groups", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$length": 1, "$every": { "type": "path" } } } } },
+		{ "why": "a ring: the outer outline and the hole (two subpaths)", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$every": { "bounds": { "x": 4, "y": 4, "width": 56, "height": 56 }, "d": { "$expr": "(v.match(/M/g) || []).length === 2" } } } } } },
+		{ "why": "the hole is see-through: no white is painted", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$every": { "fill": "#e63946" } } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.list" } },
+		{ "tool": "run_command", "args": { "id": "vector.boolean", "params": { "operation": "subtract", "ids": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.*.id" } } } }
+	]
+}

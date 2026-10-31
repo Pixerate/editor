@@ -282,7 +282,7 @@ describe('shipped skills', () => {
 		const files = loadSkillFiles();
 		const skills = listSkills(files);
 		expect(skills.map((s) => s.name)).toContain('pixerate-agent-tools');
-		expect(skills.find((s) => s.name === 'pixerate-vector')?.references).toEqual(['references/commands.md', 'references/pitfalls.md']);
+		expect(skills.find((s) => s.name === 'pixerate-vector')?.references).toEqual(['references/best-practices.md', 'references/commands.md', 'references/pitfalls.md']);
 		for (const skill of skills) {
 			expect(skill.description.length, skill.name).toBeGreaterThan(20);
 			expect(parseSkillFrontmatter(files[`${skill.name}/SKILL.md`]).name).toBe(skill.name);

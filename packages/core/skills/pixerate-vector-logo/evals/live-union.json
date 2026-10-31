@@ -1,0 +1,19 @@
+{
+	"prompt": "Merge the circle and the square into one silhouette for the logo mark, but keep both shapes editable so I can still nudge them.",
+	"fixture": {
+		"editor": "vector",
+		"width": 64,
+		"height": 64,
+		"setup": [
+			{ "id": "vector.addShape", "params": { "kind": "ellipse", "x": 8, "y": 8, "width": 32, "height": 32, "name": "Circle", "fill": "#1d3557", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "rect", "x": 24, "y": 24, "width": 32, "height": 32, "name": "Square", "fill": "#1d3557", "stroke": null } }
+		]
+	},
+	"checks": [
+		{ "why": "one top-level object: a live union of the two", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$expr": "v.filter((n) => n.depth === 0).length === 1", "$some": { "depth": 0, "liveBoolean": "union", "children": 2 } } } } },
+		{ "why": "covering both shapes", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$some": { "depth": 0, "bounds": { "x": 8, "y": 8, "width": 48, "height": 48 } } } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.boolean", "params": { "operation": "union", "live": true, "ids": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.*.id" } } } }
+	]
+}
