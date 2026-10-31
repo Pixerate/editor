@@ -383,7 +383,13 @@ export function contentAwareFill(
   ch: number,
   img: ArrayLike<number>,
   hole: ArrayLike<boolean | number>,
-  options: { iterations?: number; seed?: number; exclude?: ArrayLike<boolean | number> | null } = {}
+  options: {
+    iterations?: number;
+    seed?: number;
+    exclude?: ArrayLike<boolean | number> | null;
+    /** Called after each refinement round with the fraction done (0..1, weighted by level size). */
+    onProgress?: (fraction: number) => void;
+  } = {}
 ): Float32Array {
   const iters = options.iterations ?? 4;
   const base: Level = {
@@ -402,6 +408,9 @@ export function contentAwareFill(
     levels.push(downsample(top, ch));
   }
   const random = rng(options.seed ?? w * 73856093 + h * 19349663);
+  // Progress by work: each round costs about its level's area (the finest level dominates).
+  const totalWork = levels.reduce((n, l) => n + l.w * l.h, 0) * iters || 1;
+  let doneWork = 0;
   let prevFill: Float32Array | null = null;
   let prevNnf: Int32Array | null = null;
   let prevW = 0;
@@ -539,6 +548,8 @@ export function contentAwareFill(
         }
       }
       for (let q = 0; q < W * H; q++) if (holeL[q] && wsum[q] > 0) for (let c = 0; c < ch; c++) cur[q * ch + c] = acc[q * ch + c] / wsum[q];
+      doneWork += W * H;
+      options.onProgress?.(Math.min(1, doneWork / totalWork));
     }
     prevFill = cur;
     prevNnf = nnf;

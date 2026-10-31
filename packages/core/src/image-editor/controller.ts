@@ -640,6 +640,21 @@ export interface CloneSource {
 /** What `inspectMaskEdge` reads: the selection, a layer's painted mask or its vector mask. */
 export type MaskEdgeTarget = 'selection' | 'layer-mask' | 'vector-mask';
 
+/** What `separateSubject` made. */
+export interface SeparateSubjectResult {
+  /** The subject: a copy of the layer masked by the selection, on top. */
+  foregroundLayerId: string;
+  /** The background plate: a copy with the subject's area filled. */
+  plateLayerId: string;
+  /** The layer it came from (now hidden). */
+  sourceLayerId: string;
+  /** An alpha channel of the filled area, to select and fill again where the fill is wrong. */
+  fillChannelId: string;
+  filledBounds: CropBox;
+  dilate: number;
+  fill: 'content-aware' | 'none';
+}
+
 /** A selection `compareSelections` reads (see `selectionFrom`). */
 export type SelectionSource =
   | { kind: 'selection' }
@@ -4979,6 +4994,54 @@ export class ImageEditorController {
     const plan = this.prepareContentAwareFill(options);
     const filled = await this.synthesiseFill(plan, options.seed ?? 0, options);
     return this.applyContentAwareFill(plan, filled, options.output ?? 'current');
+  }
+
+  /**
+   * Separate Subject: splits the selected subject from its background in one undo step. The
+   * subject goes to a copy of the layer masked by the selection (on top, made active); a second
+   * copy becomes the background plate with the subject's area, grown by `dilate` px (default 8),
+   * Content-Aware Filled (`fill: 'none'` leaves it transparent); an alpha channel marks the filled
+   * area so a bad patch can be selected and filled again; the source layer is hidden. The fill is
+   * computed first, so `signal` cancels it with nothing changed. 8-bit pixel layers only. Returns
+   * the new layers, the channel and the filled bounds.
+   */
+  public async separateSubject(
+    options: { layerId?: string; dilate?: number; fill?: 'content-aware' | 'none'; seed?: number; signal?: AbortSignal; onProgress?: SelectionProgress } = {}
+  ): Promise<SeparateSubjectResult> {
+    const subject = this.state.selection;
+    if (!subject?.bounds) throw new LayerOperationError('Nothing is selected: select the subject first (select_subject, select_object or quick_select), then separate it.');
+    const fill = options.fill ?? 'content-aware';
+    if (fill !== 'content-aware' && fill !== 'none') throw new LayerOperationError(`fill must be content-aware or none, got "${String(fill)}".`);
+    const dilate = options.dilate ?? 8;
+    if (!(typeof dilate === 'number' && Number.isFinite(dilate) && dilate >= 0 && dilate <= 200)) throw new LayerOperationError(`dilate must be 0 to 200 px, got ${String(options.dilate)}.`);
+    const source = this.paintTarget(options.layerId, 'pixels', 'separate the subject from');
+    const name = source.layer.name || 'Layer';
+    // The hole: the subject grown by `dilate`, so no fringe of it is left in the plate.
+    const hole = dilate > 0 ? modifySelectionMask(subject, 'expand', dilate) : subject;
+    let plan: ContentAwareFillPlan;
+    this.state.selection = hole;
+    try {
+      plan = this.prepareContentAwareFill({ layerId: source.id, seed: options.seed });
+    } finally {
+      this.state.selection = subject;
+    }
+    const filled = fill === 'content-aware' ? await this.synthesiseFill(plan, options.seed ?? 0, options) : new Uint8ClampedArray(plan.before.length);
+    options.signal?.throwIfAborted();
+    const plateRect = { x: plan.window.x - source.offset.x, y: plan.window.y - source.offset.y, width: plan.window.width, height: plan.window.height };
+    const plateSurface = writeRegion(source.surface, plateRect, this.blendFill(plan, filled, 'current'));
+    return this.asOneStep(() => {
+      const plateLayerId = this.duplicateLayer(source.id, `${name} plate`);
+      this.commitLayers(mapLayer(this.state.layers, plateLayerId, (l) => this.withSurface(l, 'pixels', plateSurface)));
+      const foregroundLayerId = this.duplicateLayer(source.id, `${name} subject`);
+      this.moveLayer(foregroundLayerId, { aboveId: plateLayerId });
+      this.addLayerMask(foregroundLayerId, 'selection');
+      this.setSelection(hole);
+      const channel = this.saveSelection({ name: `${name} fill area` });
+      this.setSelection(subject);
+      this.setLayerProperties(source.id, { visible: false });
+      this.setActiveLayer(foregroundLayerId);
+      return { foregroundLayerId, plateLayerId, sourceLayerId: source.id, fillChannelId: channel.id, filledBounds: { ...hole.bounds! }, dilate, fill };
+    });
   }
 
   /**

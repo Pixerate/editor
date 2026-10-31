@@ -93,7 +93,11 @@ export function runSelectionJob(job: SelectionJob, pixels: PixelBuffer, onProgre
       };
     case 'fill': {
       onProgress?.(0, 'Filling');
-      const filled = contentAwareFill(pixels.width, pixels.height, 4, pixels.data, job.hole, { seed: job.seed, exclude: job.exclude });
+      const filled = contentAwareFill(pixels.width, pixels.height, 4, pixels.data, job.hole, {
+        seed: job.seed,
+        exclude: job.exclude,
+        onProgress: (f) => onProgress?.(f * 0.99, 'Filling'),
+      });
       onProgress?.(1, 'Done');
       return { mask: createSelectionMask(1, 1), pixels: Uint8ClampedArray.from(filled) };
     }

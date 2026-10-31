@@ -81,9 +81,7 @@ put every change into one `transform_layer` call (each call resamples). Read
 ### Smart objects
 
 Convert a pixel layer with `convert_to_smart_object` before repeated or uncertain transforms and
-filters: from then on everything re-renders from the contents and nothing degrades. Read
-[references/smart-objects.md](references/smart-objects.md) for the steps (reading, transforming,
-smart filters, linked contents, rasterizing).
+filters, so nothing degrades. Read [references/smart-objects.md](references/smart-objects.md) first.
 
 ### Shapes and text
 
@@ -390,6 +388,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `stroke_selection` | Edit › Stroke: a band `width` px (≤ 250) `outside` (default), `inside` or `center` on the selection edge, with `color`, `opacity`, `blend`, on a layer's pixels or mask (`channel`). One undo step. Returns the changed `bounds`. |
 | `crop_to_selection` | Set the crop box to the selection's bounds (non-destructive; `reset_crop` undoes it). Returns the `crop`. |
 | `content_aware_fill` | Remove what is selected by synthesising texture from around it on a pixel layer; `output` `new-layer` (keeps the fill separate, recommended), `current` or `duplicate-layer` (a filled copy); `sampleRadius`, `seed` (another seed, another fill); the sampling area with `sampleRects`, `samplingChannelId` and `excludeRects` (never copy from these). Select with a 2–4 px margin. 8-bit only. Returns `layerId` and `bounds`. |
+| `separate_subject` | Split the selected subject from its background in one undo step: a masked subject layer on top, a background plate with the hole (grown by `dilate`, default 8 px) Content-Aware Filled (`fill` `none` leaves it transparent, `seed` repeats a fill), an alpha channel of the filled area, the source hidden. 8-bit pixel layers; cancellable. Returns `foregroundLayerId`, `plateLayerId`, `fillChannelId`, `filledBounds`. |
 | `copy_pixels` | Copy the selected pixels of a layer (or with `merged` the visible image) to the editor clipboard, cropped to the selection with its soft edge. No undo step. Returns `width`, `height`, `x`, `y`. |
 | `cut_pixels` | Copy, then clear the selected pixels (one undo step). Returns the size and position. |
 | `paste_pixels` | Paste the clipboard as a new layer: `mode` `new-layer` (centred on the selection or canvas), `in-place`, `into` (masked by the selection) or `outside` (masked by its inverse). One undo step. Returns `layerId`, `bounds`, `masked`. |

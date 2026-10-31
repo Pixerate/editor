@@ -10,6 +10,7 @@ import {
 import { imageRangeClass, imageSectionTitleClass } from './styles';
 import { MaskEdgeCheck } from './MaskEdgeCheck';
 import { SelectionChangeCheck } from './SelectionChangeCheck';
+import { SeparateSubjectPanel } from './SeparateSubjectPanel';
 
 export interface RefineEdgePanelProps {
   controller: ImageEditorController;
@@ -151,6 +152,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
       )}
       <MaskEdgeCheck controller={controller} selection={sel} />
       <SelectionChangeCheck controller={controller} selection={sel} />
+      <SeparateSubjectPanel controller={controller} selection={sel} className="mt-2" />
 
       <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
       <div className="flex gap-1 items-center">
