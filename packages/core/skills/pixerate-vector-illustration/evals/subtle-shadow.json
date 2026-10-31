@@ -1,0 +1,16 @@
+{
+	"prompt": "Add a subtle drop shadow under the card, with the light coming from above.",
+	"fixture": {
+		"editor": "vector",
+		"width": 200,
+		"height": 140,
+		"setup": [{ "id": "vector.addShape", "params": { "kind": "rect", "x": 40, "y": 30, "width": 120, "height": 80, "cornerRadius": 8, "name": "Card", "fill": "#ffffff", "stroke": null } }]
+	},
+	"checks": [
+		{ "why": "a soft, faint shadow falling straight down", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$some": { "name": "Card", "filters": { "$some": { "type": "dropShadow", "params": { "opacity": { "$min": 0.08, "$max": 0.35 }, "offsetX": { "$min": -1, "$max": 1 }, "offsetY": { "$min": 2, "$max": 10 }, "blur": { "$min": 3 } } } } } } } } },
+		{ "why": "drawn as an effect: still one card, no extra shadow shape", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$length": 1 } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.addFilter", "params": { "ids": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.*.id" }, "type": "dropShadow", "params": { "color": "#000000", "opacity": 0.2, "offsetX": 0, "offsetY": 4, "blur": 8 } } } }
+	]
+}

@@ -14,6 +14,8 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ToolRegistry, baseToolName, createSpreadsheetToolProvider } from '../src/agent';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
+import { CommandRegistry, createCommandToolProvider } from '../src/commands';
+import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { SpreadsheetController } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -29,7 +31,7 @@ interface Check extends ToolCall {
 }
 interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetFixture | ImageFixture;
+	fixture: SpreadsheetFixture | ImageFixture | VectorFixture;
 	checks: Check[];
 	solution: ToolCall[];
 }
@@ -46,6 +48,14 @@ interface ImageFixture {
 	background: [number, number, number];
 	/** Shapes painted over it in order, with RGB colours. */
 	shapes: Array<{ shape: 'rect' | 'ellipse'; x: number; y: number; width: number; height: number; color: [number, number, number] }>;
+}
+
+interface VectorFixture {
+	editor: 'vector';
+	width: number;
+	height: number;
+	/** Commands that build the starting artwork, run in order (`"$0.id"` refers to an earlier result). */
+	setup?: Array<{ id: string; params?: Record<string, unknown> }>;
 }
 
 function spreadsheet(f: SpreadsheetFixture): ToolRegistry {
@@ -86,7 +96,31 @@ function image(f: ImageFixture): ToolRegistry {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image } as const;
+async function vector(f: VectorFixture): Promise<ToolRegistry> {
+	const c = new VectorEditorController({ document: { width: f.width, height: f.height, nodes: [] } });
+	const commands = new CommandRegistry();
+	for (const spec of createVectorCommands(c)) commands.register(spec);
+	const registry = new ToolRegistry();
+	registry.register(createCommandToolProvider(commands));
+	if (f.setup?.length) {
+		const res = await registry.callTool('run_commands', { steps: f.setup });
+		if (res.isError) throw new Error(`fixture setup: ${(res.content?.[0] as { text?: string })?.text}`);
+	}
+	c.clearSelection();
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector } as const;
+const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
+
+/** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */
+async function readOnlyCheck(registry: ToolRegistry, check: Check): Promise<boolean> {
+	const tool = registry.listTools().tools.find((t) => baseToolName(t.name) === check.tool);
+	if (tool?.annotations?.readOnlyHint) return true;
+	if (check.tool !== 'run_command') return false;
+	const listed = (await registry.callTool('list_commands', {})).structuredContent as { commands: Array<{ id: string; readOnly?: boolean }> };
+	return !!listed.commands.find((c) => c.id === check.args?.id)?.readOnly;
+}
 
 async function call(registry: ToolRegistry, { tool, args = {} }: ToolCall): Promise<unknown> {
 	const res = await registry.callTool(tool, await resolveArgs(registry, args));
@@ -95,28 +129,33 @@ async function call(registry: ToolRegistry, { tool, args = {} }: ToolCall): Prom
 }
 
 /**
- * Check arguments may read a value from the document instead of naming it, since ids are made
- * by whoever did the job: `{ "$read": "list_layers", "path": "layers.-1.id" }` (a negative
- * index counts from the end).
+ * Arguments may read a value from the document instead of naming it, since ids are made by
+ * whoever did the job: `{ "$read": "list_layers", "path": "layers.-1.id" }`, with `args` for
+ * the read (`{ "$read": "run_command", "args": { "id": "vector.list" }, "path":
+ * "result.nodes.*.id" }`). A negative index counts from the end; `*` maps over an array.
  */
-async function resolveArgs(registry: ToolRegistry, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-	const out: Record<string, unknown> = {};
-	for (const [k, v] of Object.entries(args)) {
-		if (v && typeof v === 'object' && '$read' in v) {
-			const { $read, path } = v as { $read: string; path: string };
-			out[k] = at(await call(registry, { tool: $read }), path);
-		} else out[k] = v;
+async function resolveArgs(registry: ToolRegistry, value: Record<string, unknown>): Promise<Record<string, unknown>> {
+	return (await resolve(registry, value)) as Record<string, unknown>;
+}
+
+async function resolve(registry: ToolRegistry, v: unknown): Promise<unknown> {
+	if (Array.isArray(v)) return Promise.all(v.map((x) => resolve(registry, x)));
+	if (!v || typeof v !== 'object') return v;
+	if ('$read' in v) {
+		const { $read, args, path } = v as { $read: string; args?: Record<string, unknown>; path: string };
+		return at(await call(registry, { tool: $read, args }), path);
 	}
+	const out: Record<string, unknown> = {};
+	for (const [k, x] of Object.entries(v)) out[k] = await resolve(registry, x);
 	return out;
 }
 
 function at(value: unknown, path: string): unknown {
-	let cur = value as any;
-	for (const key of path.split('.')) {
-		if (cur == null) return undefined;
-		cur = Array.isArray(cur) && /^-\d+$/.test(key) ? cur[cur.length + Number(key)] : cur[key];
-	}
-	return cur;
+	const [key, ...rest] = path.split('.');
+	if (value == null || key === undefined) return value;
+	if (key === '*') return Array.isArray(value) ? (rest.length ? value.map((x) => at(x, rest.join('.'))) : value) : undefined;
+	const next = Array.isArray(value) && /^-\d+$/.test(key) ? value[value.length + Number(key)] : (value as any)[key];
+	return rest.length ? at(next, rest.join('.')) : next;
 }
 
 const isEmpty = (v: unknown): boolean => v === null || v === undefined || v === '' || (Array.isArray(v) && v.every(isEmpty));
@@ -212,20 +251,21 @@ describe('matches', () => {
 });
 
 describe.each(evals)('%s', (_, ev) => {
-	it('is well formed', () => {
+	it('is well formed', async () => {
 		expect(ev.prompt.length).toBeGreaterThan(20);
 		expect(Object.keys(FIXTURES)).toContain(ev.fixture.editor);
 		expect(ev.checks.length).toBeGreaterThan(0);
 		for (const c of ev.checks) expect(c.why, 'every check says what it is for').toBeTruthy();
-		const registry = FIXTURES[ev.fixture.editor](ev.fixture as never);
+		const registry = await build(ev.fixture);
 		const tools = new Set(registry.listTools().tools.map((t) => baseToolName(t.name)));
-		const read = new Set(registry.listTools().tools.filter((t) => t.annotations?.readOnlyHint).map((t) => baseToolName(t.name)));
 		expect(ev.solution.map((s) => s.tool).filter((t) => !tools.has(t)), 'solution tools exist').toEqual([]);
-		expect(ev.checks.map((c) => c.tool).filter((t) => !read.has(t)), 'checks use read-only tools').toEqual([]);
+		const writes: string[] = [];
+		for (const c of ev.checks) if (!(await readOnlyCheck(registry, c))) writes.push(`${c.tool} ${JSON.stringify(c.args ?? {})}`);
+		expect(writes, 'checks use read-only tools and commands').toEqual([]);
 	});
 
 	it('fails on the fixture and passes after the solution', async () => {
-		const registry = FIXTURES[ev.fixture.editor](ev.fixture as never);
+		const registry = await build(ev.fixture);
 		expect((await failedChecks(registry, ev.checks)).length, 'some check fails before the job is done').toBeGreaterThan(0);
 		for (const step of ev.solution) await call(registry, step);
 		expect(await failedChecks(registry, ev.checks)).toEqual([]);

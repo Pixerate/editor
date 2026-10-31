@@ -1,0 +1,20 @@
+{
+	"prompt": "Centre the logo mark and the wordmark bar under it horizontally on the artboard, keeping the gap between them.",
+	"fixture": {
+		"editor": "vector",
+		"width": 120,
+		"height": 80,
+		"setup": [
+			{ "id": "vector.addShape", "params": { "kind": "ellipse", "x": 14, "y": 8, "width": 32, "height": 32, "name": "Mark", "fill": "#1d3557", "stroke": null } },
+			{ "id": "vector.addShape", "params": { "kind": "rect", "x": 30, "y": 52, "width": 64, "height": 12, "name": "Wordmark", "fill": "#1d3557", "stroke": null } }
+		]
+	},
+	"checks": [
+		{ "why": "both centred on the artboard", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$length": 2, "$every": { "bounds": { "$expr": "Math.abs(v.x + v.width / 2 - 60) <= 0.5" } } } } } },
+		{ "why": "the vertical layout and gap are unchanged", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": [{ "name": "Mark", "bounds": { "y": 8, "height": 32 } }, { "name": "Wordmark", "bounds": { "y": 52, "height": 12 } }] } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.transform", "params": { "ids": [{ "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.0.id" }], "dx": 30 } } },
+		{ "tool": "run_command", "args": { "id": "vector.transform", "params": { "ids": [{ "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.1.id" }], "dx": -2 } } }
+	]
+}

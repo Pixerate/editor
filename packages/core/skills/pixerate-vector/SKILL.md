@@ -54,6 +54,15 @@ carry a live effect stack. Every command is a `vector.*` command run with `run_c
 Parameter details (gradient fields, effect parameters, width profiles, envelopes) are in
 [references/commands.md](references/commands.md).
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the commands below.
+
+- `pixerate-vector-icon-set`: icons on one grid, one stroke and style, crisp, as symbols and SVG.
+- `pixerate-vector-logo`: marks from booleans, a lockup, colour variants, outlined delivery files.
+- `pixerate-vector-illustration`: block in, gradients and stacked fills, masks, blends, shadows.
+
 ## Working method
 
 1. **Read.** `vector.list` gives the artboard size, every node depth first (id, type, name,
@@ -74,30 +83,16 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
 
 ## Best practices
 
-- **Diagrams with connectors.** Lay the boxes out first, then `vector.connect` them (in one
-  `run_commands` batch) rather than drawing lines: connectors stay attached when boxes move, and
-  `route: "elbow"` with a small `radius` reads well in flowcharts. Leave sides `auto` unless a
-  connector must leave a particular side.
-
 - **Frames for anything that resizes.** Build screens, cards, buttons and banners inside a frame
   (`vector.addFrame` or `vector.frameSelection`), set each child's constraints with
   `vector.setResizing` (backgrounds and dividers `leftRight`, icons pinned to their corner, titles
   `center`), then resize with `vector.setFrame` to produce other sizes from one design. Export each
   artboard with `vector.exportFrameSvg`.
-
-- **Constraints for precise, editable geometry.** For technical drawings, diagrams, floor plans or
-  any shape that must keep exact relations, draw it roughly, run `vector.autoConstrain`, then add
-  the dimensions that matter (`vector.addConstraint` distance / angle / radius) and name them so
-  related sizes follow one another (`vector.setConstraintValue` with expressions like `w / 2`).
-  Check `vector.listConstraints` `dof`: aim for `fully` on parts that must not drift; `over`
-  means some constraints repeat others. Prefer few, meaningful constraints over many.
-
 - **Symbols for repeats.** When the same art appears several times (icons in a set, trees in a
   scene, bullets, a logo mark), make it once and place instances (`vector.makeSymbol`, then
   `vector.placeSymbol` with `x` / `y` or a `transform`), so one edit in isolation changes them all.
   Give each a clear name. Use `vector.setInstanceOptions` `fill` / `stroke` for colour variants and
   `hidden` to drop a part, rather than detaching; detach only when one copy must diverge for good.
-
 - **Text.** Use point text for labels and headlines, area text (`width`, `height`) for anything
   that should wrap, text on a path for badges and seals. Check `overflow` in the summary every
   text write returns: hidden lines or characters mean the box or path is too small. Keep one or
@@ -106,56 +101,11 @@ Parameter details (gradient fields, effect parameters, width profiles, envelopes
   than splitting text into separate nodes, so it still edits as one paragraph. Create Outlines
   only for final artwork or logos that must not depend on fonts; keep a copy as text if it may
   change.
-  For Japanese, Chinese or Korean set in columns (signage, book spines, posters), use vertical
-  text (`textOrientation: "vertical"` or `vector.setTextOrientation`): CJK stands upright, Latin
-  turns sideways; set a short Latin range `upright: true` to stack it letter by letter. In an
-  area, columns that do not fit past the left edge are `overflow`. Vertical text cannot follow a
-  path.
-
-- **Clean paths.** Use the fewest anchors that describe the shape: anchors at extrema (top,
-  bottom, left, right of a curve) and at true corners, handles horizontal or vertical at extrema,
-  each handle about a third of its segment. Run `vector.removeRedundantPoints` after
-  booleans, knife and pencil work; `vector.smooth` for lumpy curves; `vector.deleteAnchors`
-  keeps the outline by refitting neighbours.
-- **Live corners over drawn arcs.** Give rectangles, polygons and stars a `cornerRadius`
-  (`vector.addShape`) or set it with `vector.setCorners`; the anchors stay sharp and editable and
-  radii shrink to fit short sides. Keep one radius scale across a design. For app icons and UI
-  cards use `smoothing` (about 0.6) on `vector.setCorners` for continuous, squircle corners.
+- **Paths, strokes, booleans, gradients, stacks, masks, shadows, connectors, constraints and
+  vertical text:** read [references/best-practices.md](references/best-practices.md) first.
 - **Non-destructive first.** Live booleans (`vector.boolean` with `live: true`), path effects
   and envelopes keep the operands editable. A destructive boolean or Pathfinder replaces its
   inputs; do that last, and only when asked for flat output.
-- **Boolean vs Pathfinder vs Shape Builder.** `vector.boolean` for a single result shape (union
-  for silhouettes, subtract for cut-outs, intersect, exclude). `vector.pathfinder` when you need
-  every region separately (divide), hidden parts removed (trim, merge) or a crop. Shape Builder
-  when you want to merge or delete particular regions picked by point.
-- **Strokes.** Use `strokeAlign: "inside"` for icons and UI shapes so the outer size stays exact,
-  `outside` for outlines around artwork; open paths always stroke centred. Use round caps and
-  joins for friendly line icons, miter for geometric ones. Keep one stroke width across an icon
-  set (for example 1.5 or 2 units on a 24-unit grid).
-- **Icon grid.** Use a square artboard (24, 32 or 48 units), keep a padding margin, place
-  coordinates on whole or half units so strokes render crisp, and align optical centres.
-- **Gradients.** Two to four stops are usually enough. Use `interpolation: "oklab"` for
-  perceptually even blends without the grey or muddy midpoint sRGB gives between saturated hues;
-  `midpoint` to shift the half-way point instead of adding stops. Prefer linear or radial for
-  portability; conic and diamond export as SVG patterns.
-- **Appearance stacks over duplicate shapes.** For a gradient over a texture, a tinted overlay,
-  an outline around an outline or a stroke inside and another outside, stack layers on one path
-  (`vector.addFill`, `vector.addStroke`) instead of copying the shape: the copies would drift
-  apart when edited. Give each stroke its own `strokeAlign` (outside under, inside or center on
-  top) and widths that step down towards the top. Use per-layer `opacity` and `blendMode`
-  (multiply to darken, screen to lighten, overlay for texture) rather than node opacity when only
-  one paint should fade.
-- **Masks over cut-outs.** To show artwork inside a shape (a photo-like fill in a circle, a
-  pattern inside text-like outlines, a scene seen through a window), use
-  `vector.makeClippingMask` rather than a destructive intersect: the contents stay editable and
-  movable inside the frame. Draw the mask last (on top) and make the mask from it; edit the mask
-  later by its `maskId`. Use `vector.makeOpacityMask` with a white-to-black gradient for fades
-  and reflections (luminance: white shows). A clip's own paint is never drawn, so its fill
-  colour does not matter. Effects and shadows on the mask group follow the masked silhouette.
-- **Shadows and glows.** Keep drop shadows subtle: black at 0.15 to 0.3 opacity, `offsetY` 2 to 8,
-  `blur` about twice the offset. Use one light direction for every shadow in a design. Filters
-  export as SVG filters, which some tools (and older renderers) draw slightly differently or not
-  at all; a design that must look identical everywhere should avoid them or rasterize.
 - **Grouping and naming.** Group the parts of one object (`vector.group` with a `name`), name
   paths that matter (`name` on add), and keep the tree shallow.
 - **SVG hygiene.** Export with `precision` 2 or 3 (default 3); higher only for tiny artboards.

@@ -1,0 +1,15 @@
+{
+	"prompt": "Draw a 'plus' line icon on this 24-unit icon grid: 2-unit strokes with round caps, no fill, centred, keeping a 2-unit padding around it.",
+	"fixture": { "editor": "vector", "width": 24, "height": 24 },
+	"checks": [
+		{ "why": "a stroked, unfilled path at the set's stroke width", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$some": { "type": "path", "fill": null, "strokeWidth": 2 } } } } },
+		{ "why": "every stroke stays inside the 2-unit padding", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$length": { "$min": 1 }, "$every": { "$expr": "!v.bounds || (v.bounds.x - (v.strokeWidth || 0) / 2 >= 1.99 && v.bounds.y - (v.strokeWidth || 0) / 2 >= 1.99 && v.bounds.x + v.bounds.width + (v.strokeWidth || 0) / 2 <= 22.01 && v.bounds.y + v.bounds.height + (v.strokeWidth || 0) / 2 <= 22.01)" } } } } },
+		{ "why": "centred on the grid", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$some": { "type": "path", "bounds": { "$expr": "Math.abs(v.x + v.width / 2 - 12) <= 0.5 && Math.abs(v.y + v.height / 2 - 12) <= 0.5 && Math.abs(v.width - v.height) <= 0.5" } } } } } },
+		{ "why": "anchors on whole or half units, so strokes render crisp", "tool": "run_command", "args": { "id": "vector.list" }, "expect": { "result": { "nodes": { "$every": { "$expr": "!v.d || (v.d.match(/-?\\d*\\.?\\d+/g) || []).every((n) => Math.abs(n * 2 - Math.round(n * 2)) < 1e-6)" } } } } },
+		{ "why": "round caps", "tool": "run_command", "args": { "id": "vector.getAppearance", "params": { "id": { "$read": "run_command", "args": { "id": "vector.list" }, "path": "result.nodes.0.id" } } }, "expect": { "result": { "strokes": { "$some": { "strokeLinecap": "round" } } } } }
+	],
+	"solution": [
+		{ "tool": "run_command", "args": { "id": "vector.addPath", "params": { "d": "M12 5L12 19M5 12L19 12", "name": "Plus", "fill": null, "stroke": "#000000", "strokeWidth": 2, "strokeLinecap": "round", "strokeLinejoin": "round" } } },
+		{ "tool": "run_command", "args": { "id": "vector.list" } }
+	]
+}
