@@ -437,8 +437,10 @@ export class ImageEditorRenderer {
     }
     // In Quick Mask mode an empty selection shows as all tinted (nothing selected yet).
     const { width: iw, height: ih } = state.imageDimensions;
-    const quickMaskSel = display === 'quickMask' && state.quickMaskEditing && !state.selection?.bounds ? this.emptyMask(Math.round(iw), Math.round(ih)) : null;
-    if ((state.selection?.bounds && display !== 'none') || quickMaskSel || options.draftSelectionPath?.length) {
+    // A gesture's preview (Quick Selection growing as the brush moves) stands in for the selection.
+    const shownSel = state.selectionPreview !== undefined ? state.selectionPreview : state.selection;
+    const quickMaskSel = display === 'quickMask' && state.quickMaskEditing && !shownSel?.bounds ? this.emptyMask(Math.round(iw), Math.round(ih)) : null;
+    if ((shownSel?.bounds && display !== 'none') || quickMaskSel || options.draftSelectionPath?.length) {
       ctx.save();
       try {
         applyImageProjectionToContext(ctx, projection);
@@ -446,8 +448,8 @@ export class ImageEditorRenderer {
         ctx.rect(region.x, region.y, region.width, region.height);
         ctx.clip();
         if (quickMaskSel) this.drawQuickMask(ctx, quickMaskSel);
-        else if (state.selection?.bounds && display === 'quickMask') this.drawQuickMask(ctx, state.selection);
-        else if (state.selection?.bounds && display === 'ants') this.drawAnts(ctx, state.selection, projection.scale / u, options.antsOffset ?? 0);
+        else if (shownSel?.bounds && display === 'quickMask') this.drawQuickMask(ctx, shownSel);
+        else if (shownSel?.bounds && display === 'ants') this.drawAnts(ctx, shownSel, projection.scale / u, options.antsOffset ?? 0);
         if (options.draftSelectionPath?.length) this.drawDraftPath(ctx, options.draftSelectionPath, projection.scale / u);
       } catch {
         // Overlays are best effort (headless / mocked contexts).

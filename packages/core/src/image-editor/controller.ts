@@ -827,6 +827,32 @@ export interface ContentAwareFillOptions {
   sampleRadius?: number;
   /** Random seed: the same seed gives the same fill (default 0). */
   seed?: number;
+  /**
+   * Where the fill may copy from (natural pixels), instead of the automatic ring around the
+   * selection: a mask (the Content-Aware Fill workspace's painted area), an alpha channel, or
+   * rectangles. `excludeRects` are never copied from, whichever way the area is given.
+   */
+  samplingArea?: SelectionMask | null;
+  samplingChannelId?: string;
+  sampleRects?: CropBox[];
+  excludeRects?: CropBox[];
+}
+
+/** What a Content-Aware Fill works on: the selection's window of a pixel layer (see `prepareContentAwareFill`). */
+export interface ContentAwareFillPlan {
+  layerId: string;
+  /** The window it fills and samples in (document pixels). */
+  window: CropBox;
+  /** The selection's bounds. */
+  bounds: CropBox;
+  /** The layer's pixels in the window, RGBA. */
+  before: Uint8ClampedArray;
+  /** 1 where the selection covers (the hole), per window pixel. */
+  hole: Uint8Array;
+  /** The selection's coverage 0..255 per window pixel. */
+  coverage: Uint8Array;
+  /** 1 where the fill may not copy from, per window pixel (null: everywhere outside the hole). */
+  exclude: Uint8Array | null;
 }
 
 /** Pixels on the editor's clipboard: RGBA, and where they were copied from (document pixels). */
@@ -4750,9 +4776,54 @@ export class ImageEditorController {
    * (PatchMatch, as the Spot Healing Brush's content-aware mode), blended by the selection's
    * coverage. `output` `current` paints into the layer; `new-layer` puts the fill on a new layer
    * above it. Samples within `sampleRadius` px of the selection (default its larger side, at
-   * least 32). Deterministic for a `seed`. One undo step. 8-bit documents only for now.
+   * least 32), or from the given sampling area. Deterministic for a `seed`. One undo step.
+   * 8-bit documents only for now. Runs here; see `contentAwareFillAsync` for the worker.
    */
   public contentAwareFill(options: ContentAwareFillOptions = {}): { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } {
+    const plan = this.prepareContentAwareFill(options);
+    const filled = contentAwareFillPixels(plan.window.width, plan.window.height, 4, plan.before, plan.hole, { seed: options.seed ?? 0, exclude: plan.exclude });
+    return this.applyContentAwareFill(plan, Uint8ClampedArray.from(filled), options.output ?? 'current');
+  }
+
+  /**
+   * `contentAwareFill` with the synthesis in the selection worker when there is one, with
+   * `signal` and `onProgress`. The layer is checked again before the result lands.
+   */
+  public async contentAwareFillAsync(
+    options: ContentAwareFillOptions & { signal?: AbortSignal; onProgress?: SelectionProgress } = {}
+  ): Promise<{ layerId: string; bounds: CropBox; output: 'current' | 'new-layer' }> {
+    const plan = this.prepareContentAwareFill(options);
+    const filled = await this.synthesiseFill(plan, options.seed ?? 0, options);
+    return this.applyContentAwareFill(plan, filled, options.output ?? 'current');
+  }
+
+  /**
+   * The fill without changing anything: the window, its pixels before and after (RGBA, the fill
+   * blended by the selection's coverage) and the sampling area used, for a preview.
+   */
+  public async previewContentAwareFill(
+    options: ContentAwareFillOptions & { signal?: AbortSignal; onProgress?: SelectionProgress } = {}
+  ): Promise<{ plan: ContentAwareFillPlan; after: Uint8ClampedArray }> {
+    const plan = this.prepareContentAwareFill(options);
+    const filled = await this.synthesiseFill(plan, options.seed ?? 0, options);
+    return { plan, after: this.blendFill(plan, filled, 'current') };
+  }
+
+  private async synthesiseFill(plan: ContentAwareFillPlan, seed: number, options: { signal?: AbortSignal; onProgress?: SelectionProgress }): Promise<Uint8ClampedArray> {
+    const { width, height } = plan.window;
+    const { pixels } = await this.runSelectionJob(
+      { op: 'fill', hole: plan.hole, exclude: plan.exclude, seed },
+      { width, height, data: plan.before },
+      options
+    );
+    return pixels!;
+  }
+
+  /**
+   * Checks and gathers what a Content-Aware Fill needs: the selection, the 8-bit pixel layer, the
+   * window around the selection (and the sampling area), and which pixels it may copy from.
+   */
+  public prepareContentAwareFill(options: ContentAwareFillOptions = {}): ContentAwareFillPlan {
     const sel = this.state.selection;
     if (!sel?.bounds) throw new LayerOperationError('Nothing is selected; select what to remove, then fill it.');
     if (this.bitDepth !== 8) throw new LayerOperationError('Content-Aware Fill works on 8-bit documents for now; set_bit_depth 8 first, or use spot_heal.');
@@ -4761,33 +4832,74 @@ export class ImageEditorController {
     const target = this.paintTarget(options.layerId, 'pixels', 'fill');
     const { width, height } = this.naturalSize;
     const b = sel.bounds;
-    const margin = Math.max(32, Math.round(options.sampleRadius ?? Math.max(b.width, b.height)));
-    const x0 = Math.max(0, b.x - margin);
-    const y0 = Math.max(0, b.y - margin);
-    const win = { x: x0, y: y0, width: Math.min(width, b.x + b.width + margin) - x0, height: Math.min(height, b.y + b.height + margin) - y0 };
-    if (win.width * win.height > 16_000_000) throw new LayerOperationError('The area to fill and sample is too large (over 16 MP); fill a smaller selection or lower sampleRadius.');
-    const layerRect = { x: win.x - target.offset.x, y: win.y - target.offset.y, width: win.width, height: win.height };
-    const before = readRegion(target.surface, layerRect);
-    const img = new Float32Array(before.length);
-    for (let i = 0; i < before.length; i++) img[i] = before[i];
-    const coverage = new Float32Array(win.width * win.height);
-    const hole = new Uint8Array(win.width * win.height);
+    // The sampling area, when one is given in any form.
+    let area: SelectionMask | null = options.samplingArea ?? null;
+    if (!area && options.samplingChannelId) area = this.requireChannel(options.samplingChannelId).mask;
+    if (!area && options.sampleRects?.length) {
+      for (const r of options.sampleRects) area = combineSelections(area, rectSelection(width, height, r, { antiAlias: false }), 'add');
+    }
+    if (area && !area.bounds) throw new LayerOperationError('The sampling area is empty; paint or give an area to sample from.');
+    let win: CropBox;
+    if (area?.bounds) {
+      // The selection plus a patch's margin, and the sampling area.
+      const a = area.bounds;
+      const x0 = Math.max(0, Math.min(b.x - 8, a.x));
+      const y0 = Math.max(0, Math.min(b.y - 8, a.y));
+      win = { x: x0, y: y0, width: Math.min(width, Math.max(b.x + b.width + 8, a.x + a.width)) - x0, height: Math.min(height, Math.max(b.y + b.height + 8, a.y + a.height)) - y0 };
+    } else {
+      const margin = Math.max(32, Math.round(options.sampleRadius ?? Math.max(b.width, b.height)));
+      const x0 = Math.max(0, b.x - margin);
+      const y0 = Math.max(0, b.y - margin);
+      win = { x: x0, y: y0, width: Math.min(width, b.x + b.width + margin) - x0, height: Math.min(height, b.y + b.height + margin) - y0 };
+    }
+    if (win.width * win.height > 16_000_000) throw new LayerOperationError('The area to fill and sample is too large (over 16 MP); fill a smaller selection or sample from a smaller area.');
+    const before = readRegion(target.surface, { x: win.x - target.offset.x, y: win.y - target.offset.y, width: win.width, height: win.height });
+    const n = win.width * win.height;
+    const coverage = new Uint8Array(n);
+    const hole = new Uint8Array(n);
+    const selData = sel.data;
     for (let y = 0; y < win.height; y++) {
       for (let x = 0; x < win.width; x++) {
-        const c = sel.data[(win.y + y) * sel.width + win.x + x] / 255;
+        const c = selData[(win.y + y) * sel.width + win.x + x];
         coverage[y * win.width + x] = c;
         hole[y * win.width + x] = c > 0 ? 1 : 0;
       }
     }
-    const filled = contentAwareFillPixels(win.width, win.height, 4, img, hole, { seed: options.seed ?? 0 });
+    let exclude: Uint8Array | null = null;
+    if (area || options.excludeRects?.length) {
+      exclude = new Uint8Array(n);
+      if (area) {
+        const ad = area.data;
+        for (let y = 0; y < win.height; y++) for (let x = 0; x < win.width; x++) if (ad[(win.y + y) * width + win.x + x] < 128) exclude[y * win.width + x] = 1;
+      }
+      for (const r of options.excludeRects ?? []) {
+        for (let y = Math.max(0, Math.floor(r.y) - win.y); y < Math.min(win.height, Math.ceil(r.y + r.height) - win.y); y++) {
+          for (let x = Math.max(0, Math.floor(r.x) - win.x); x < Math.min(win.width, Math.ceil(r.x + r.width) - win.x); x++) exclude[y * win.width + x] = 1;
+        }
+      }
+    }
+    return { layerId: target.id, window: win, bounds: { ...b }, before, hole, coverage, exclude };
+  }
+
+  /** The window's pixels with `filled` blended in by the coverage (`current`), or the fill alone, its alpha by the coverage (`new-layer`). */
+  private blendFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: 'current' | 'new-layer'): Uint8ClampedArray {
+    const { before, coverage } = plan;
     const out = new Uint8ClampedArray(before.length);
     for (let i = 0; i < coverage.length; i++) {
-      const k = coverage[i];
+      const k = coverage[i] / 255;
       for (let c = 0; c < 4; c++) {
         const p = i * 4 + c;
         out[p] = output === 'new-layer' ? (c === 3 ? Math.round(filled[p] * k) : filled[p]) : before[p] + (filled[p] - before[p]) * k;
       }
     }
+    return out;
+  }
+
+  /** Puts a computed fill into the document as one undo step. */
+  private applyContentAwareFill(plan: ContentAwareFillPlan, filled: ArrayLike<number>, output: 'current' | 'new-layer'): { layerId: string; bounds: CropBox; output: 'current' | 'new-layer' } {
+    const target = this.paintTarget(plan.layerId, 'pixels', 'fill');
+    const { window: win, bounds: b } = plan;
+    const out = this.blendFill(plan, filled, output);
     if (output === 'new-layer') {
       const crop = { x: b.x - win.x, y: b.y - win.y, width: b.width, height: b.height };
       const data = new Uint8ClampedArray(b.width * b.height * 4);
@@ -4795,6 +4907,7 @@ export class ImageEditorController {
       const id = this.addPixelLayer({ name: 'Content-Aware Fill', pixels: { width: b.width, height: b.height, data }, x: b.x, y: b.y, aboveId: target.id });
       return { layerId: id, bounds: { ...b }, output };
     }
+    const layerRect = { x: win.x - target.offset.x, y: win.y - target.offset.y, width: win.width, height: win.height };
     const surface = writeRegion(target.surface, layerRect, out);
     this.commitLayers(mapLayer(this.state.layers, target.id, (l) => this.withSurface(l, 'pixels', surface)));
     return { layerId: target.id, bounds: { ...b }, output };
@@ -5327,6 +5440,18 @@ export class ImageEditorController {
     this.state.selection = next;
     this.notify();
     return true;
+  }
+
+  /**
+   * Shows `mask` in place of the selection while a gesture runs (Quick Selection as the brush
+   * moves; `null` shows nothing selected), or with `undefined` stops. View state only: no undo
+   * step, not saved.
+   */
+  public setSelectionPreview(mask: SelectionMask | null | undefined): void {
+    if (this.state.selectionPreview === mask) return;
+    if (mask === undefined) delete this.state.selectionPreview;
+    else this.state.selectionPreview = mask;
+    this.notify();
   }
 
   /** Select › All. */

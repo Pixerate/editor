@@ -121,12 +121,16 @@ describe('vector masks', () => {
     const back = d.getLayers().find((l) => l.name === 'Red')!;
     expect(back.vectorMask).toMatchObject({ linked: false, feather: 2, components: [{ live: { kind: 'ellipse', x: 5 } }] });
 
+    await call('set_vector_mask_properties', { layerId: red, density: 0.6 });
     const { bytes, warnings } = await c.toPsd();
-    expect(warnings.join(' ')).toMatch(/density and feather are not written/);
+    expect(warnings.join(' ')).not.toMatch(/density and feather/);
     const e = setup().c;
     e.loadPsd(bytes);
     const fromPsd = e.getLayers().find((l) => l.name === 'Red')!;
-    expect(fromPsd.vectorMask?.linked).toBe(false);
+    expect(fromPsd.vectorMask).toMatchObject({ linked: false, feather: 2 });
+    expect(fromPsd.vectorMask!.density).toBeCloseTo(0.6, 2);
+    // Only a vector mask: the mask record carries its parameters, and no raster mask appears.
+    expect(fromPsd.mask).toBeUndefined();
     const box = e.getVectorMask(fromPsd.id)!.bounds!;
     expect(box.x).toBeCloseTo(5, 0);
     expect(box.width).toBeCloseTo(20, 0);
@@ -136,5 +140,26 @@ describe('vector masks', () => {
     for (const name of ['add_vector_mask', 'set_vector_mask_path', 'set_vector_mask_properties', 'rasterize_vector_mask', 'remove_vector_mask']) {
       expect(imagePlaybackPanel(name), name).not.toBeNull();
     }
+  });
+});
+
+describe('vector mask parameters in PSD files', () => {
+  it('sit beside a raster mask\'s own density and feather', async () => {
+    const fake = { width: 40, height: 20, naturalWidth: 40, naturalHeight: 20, src: 'data:fake' } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake });
+    c.setSamplePixels({ width: 40, height: 20, data: new Uint8ClampedArray(40 * 20 * 4).fill(200) });
+    const red = c.addPixelLayer({ name: 'Red', color: '#ff0000' });
+    c.selectRect({ x: 0, y: 0, width: 20, height: 20 });
+    c.addLayerMask(red, 'selection', { density: 0.5, feather: 3 });
+    c.addVectorMask(red, 'path', { shape: { kind: 'rect', x: 10, y: 0, width: 10, height: 20 } });
+    c.setVectorMaskProps(red, { density: 0.8, feather: 5 });
+    const e = new ImageEditorController({ image: fake });
+    e.loadPsd((await c.toPsd()).bytes);
+    const back = e.getLayers().find((l) => l.name === 'Red')!;
+    expect(back.mask!.density).toBeCloseTo(0.5, 2);
+    expect(back.mask!.feather).toBe(3);
+    expect(back.vectorMask!.density).toBeCloseTo(0.8, 2);
+    expect(back.vectorMask!.feather).toBe(5);
+    expect(e.getVectorMask(back.id)!.bounds!.x).toBeCloseTo(10, 0);
   });
 });

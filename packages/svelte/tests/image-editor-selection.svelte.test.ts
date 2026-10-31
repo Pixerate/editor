@@ -590,3 +590,51 @@ describe('Svelte PathsPanel', () => {
     expect(controller.getPaths()).toHaveLength(0);
   });
 });
+
+describe('Svelte Content-Aware Fill workspace', () => {
+  const pointer = (el: Element, type: string, x: number, y: number) =>
+    el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+
+  it('opens on a selection, paints the sampling area, fills with OK, and cancels with Escape', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 8, y: 3, width: 4, height: 4 });
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    click(button('Content-Aware Fill…'));
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    flushSync();
+    const dialog = target.querySelector('[data-testid="content-aware-fill-workspace"]')!;
+    expect(dialog).not.toBeNull();
+    click(button('Subtract'));
+    setValue(dialog.querySelector('input[aria-label="Sampling brush size"]')!, '6');
+    const source = dialog.querySelector('[data-testid="content-aware-fill-source"]') as HTMLElement;
+    source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 20, height: 10, right: 20, bottom: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    pointer(source, 'pointerdown', 17, 0);
+    pointer(source, 'pointermove', 17, 10);
+    pointer(source, 'pointerup', 17, 10);
+    flushSync();
+    expect((Array.from(dialog.querySelectorAll('[aria-label="Sampling area"] button')).find((b) => b.textContent === 'Custom') as HTMLElement).getAttribute('aria-pressed')).toBe('true');
+    const layers = controller.getLayers().length;
+    click(button('OK'));
+    await settle();
+    await new Promise((r) => setTimeout(r, 20));
+    flushSync();
+    expect(target.querySelector('[data-testid="content-aware-fill-workspace"]')).toBeNull();
+    expect(controller.getLayers()).toHaveLength(layers + 1);
+    click(button('Content-Aware Fill…'));
+    await settle();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushSync();
+    expect(target.querySelector('[data-testid="content-aware-fill-workspace"]')).toBeNull();
+    expect(controller.getLayers()).toHaveLength(layers + 1);
+  });
+});

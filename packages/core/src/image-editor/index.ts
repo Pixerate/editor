@@ -98,3 +98,4 @@ export * from './playback';
 export * from './tool-groups';
 export * from './editorDocument';
 export * from './paths';
+export * from './content-aware-fill-session';

@@ -3,6 +3,8 @@ import type { ImageEditorController } from '../controller';
 import { ellipsePoints, normalizeRect } from './shapes';
 import { selectionModeFromModifiers, type SelectionToolOptions } from './tool-options';
 import { EdgeMap, liveWire, magneticAnchorSpacing, simplifyPixelPath, snapToEdge } from './magnetic';
+import { combineSelections, type PixelBuffer, type SelectionMask, type SelectionMode } from './mask';
+import { serializeMask } from './worker';
 
 interface MagneticDraft {
   /** The fixed outline so far (pixel centres), from the first anchor to the last. */
@@ -50,8 +52,9 @@ export function snapTo45(from: ImagePoint, point: ImagePoint): ImagePoint {
  *   last anchor to the pointer (snapped to the strongest edge within the width) and places
  *   anchors as it goes (frequency); a click adds one, and closing and the keys are as the
  *   polygonal lasso's. The first click reads the pixels (async).
- * - Quick Selection: drag (or click) a brush stroke; on `end` it grows into the region painted on,
- *   out to its edges (async: await {@link settled}). With the New mode and a selection already
+ * - Quick Selection: drag (or click) a brush stroke; the selection grows into the region painted
+ *   on as the brush moves (shown with `setSelectionPreview`), and on `end` the stroke is applied
+ *   as one undo step (async: await {@link settled}). With the New mode and a selection already
  *   there, strokes add, as in Photoshop; Alt subtracts.
  * - Object Selection: drag a box around an object, or click on it; on `end` the object is
  *   selected (async: await {@link settled}).
@@ -75,6 +78,9 @@ export class SelectionGesture {
   /** The last error (e.g. pixels unavailable for the wand), for the UI to show. */
   public error: string | null = null;
   private pending: Promise<void> = Promise.resolve();
+  /** Quick Selection while dragging: the selection before the stroke, how the stroke combines, the pixels. */
+  private quick: { base: SelectionMask | null; mode: SelectionMode; pixels: Promise<PixelBuffer | null>; running: boolean; dirty: boolean } | null = null;
+  private livePreviews = Promise.resolve();
 
   constructor(
     readonly controller: ImageEditorController,
@@ -90,6 +96,49 @@ export class SelectionGesture {
     return this.pending;
   }
 
+  /** Resolves once no live Quick Selection preview is being computed. */
+  get previewed(): Promise<void> {
+    return this.livePreviews;
+  }
+
+  /** Grows the Quick Selection preview to the stroke so far: one at a time, the newest points following. */
+  private growPreview(): void {
+    const q = this.quick;
+    if (!q) return;
+    if (q.running) {
+      q.dirty = true;
+      return;
+    }
+    q.running = true;
+    this.livePreviews = (async () => {
+      do {
+        q.dirty = false;
+        const stroke = this.points.slice();
+        const options = this.getOptions();
+        try {
+          const pixels = await q.pixels;
+          if (!pixels || this.quick !== q) break;
+          const { mask } = await this.controller.runSelectionJob(
+            {
+              op: 'quick',
+              stroke,
+              size: options.quickSize ?? 30,
+              grow: q.mode === 'add',
+              enhanceEdge: options.quickEnhance ?? false,
+              selection: q.mode === 'add' && q.base?.bounds ? serializeMask(q.base) : null,
+            },
+            pixels
+          );
+          // The stroke may have ended meanwhile: then the applied stroke is what shows.
+          if (this.quick === q) this.controller.setSelectionPreview(combineSelections(q.base, mask, q.mode));
+        } catch {
+          break;
+        }
+      } while (q.dirty && this.quick === q);
+      q.running = false;
+    })();
+  }
+
   /** The anchors of a Magnetic Lasso being drawn (empty otherwise). */
   get magneticAnchors(): ImagePoint[] {
     const m = this.magnetic;
@@ -102,7 +151,9 @@ export class SelectionGesture {
     if (this.polygon) return this.current ? [...this.polygon, this.current] : this.polygon.slice();
     if (!this.start || !this.current) return null;
     const { tool } = this.getOptions();
-    if (tool === 'lasso' || tool === 'quick') return this.points.length > 1 ? this.points.slice() : null;
+    // Quick Selection shows its live result (`setSelectionPreview`) rather than the brush path.
+    if (tool === 'quick') return null;
+    if (tool === 'lasso') return this.points.length > 1 ? this.points.slice() : null;
     const rect = normalizeRect({
       x: this.start.x,
       y: this.start.y,
@@ -217,6 +268,19 @@ export class SelectionGesture {
     this.start = point;
     this.current = point;
     this.points = [point];
+    if (options.tool === 'quick') {
+      // With New and a selection already there, the brush adds (Photoshop switches it to Add).
+      const picked = selectionModeFromModifiers(modifiers, options.mode);
+      const base = this.controller.getSelection();
+      this.quick = {
+        base,
+        mode: picked === 'replace' && base ? 'add' : picked,
+        pixels: this.controller.getSamplePixels({ sample: options.quickSampleAll === false ? 'active-layer' : 'composite' }).catch(() => null),
+        running: false,
+        dirty: false,
+      };
+      this.growPreview();
+    }
   }
 
   /** Pointer move; returns true when the draft changed (re-render). */
@@ -245,6 +309,7 @@ export class SelectionGesture {
       const last = this.points[this.points.length - 1];
       if (Math.hypot(point.x - last.x, point.y - last.y) < 0.5) return false;
       this.points.push(point);
+      if (drawn === 'quick') this.growPreview();
     }
     return true;
   }
@@ -284,8 +349,9 @@ export class SelectionGesture {
       this.start = null;
       this.current = null;
       this.points = [];
-      // With New and a selection already there, the brush adds (Photoshop switches it to Add).
-      const strokeMode = mode === 'replace' && this.controller.getSelection() ? 'add' : mode;
+      // The mode chosen when the stroke began (with New and a selection, Add).
+      const strokeMode = this.quick?.mode ?? (mode === 'replace' && this.controller.getSelection() ? 'add' : mode);
+      this.quick = null;
       this.pending = this.controller
         .quickSelect([stroke], {
           size: options.quickSize ?? 30,
@@ -298,7 +364,9 @@ export class SelectionGesture {
           (err) => {
             this.error = err instanceof Error ? err.message : String(err);
           }
-        );
+        )
+        // The applied stroke replaces the live preview.
+        .finally(() => this.controller.setSelectionPreview(undefined));
       return false;
     }
     const path = this.draftPath;
@@ -436,6 +504,10 @@ export class SelectionGesture {
 
   /** Abandons a drag (or a polygonal lasso) without changing the selection. */
   cancel(): void {
+    if (this.quick) {
+      this.quick = null;
+      this.controller.setSelectionPreview(undefined);
+    }
     this.start = null;
     this.current = null;
     this.points = [];

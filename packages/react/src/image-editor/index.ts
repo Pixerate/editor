@@ -8,6 +8,7 @@ export * from './AdjustmentLayersPanel';
 export * from './SelectionOptionsBar';
 export * from './RefineEdgePanel';
 export * from './SelectAndMaskWorkspace';
+export * from './ContentAwareFillWorkspace';
 export * from './ChannelsPanel';
 export * from './PathsPanel';
 export * from './LayersPanel';

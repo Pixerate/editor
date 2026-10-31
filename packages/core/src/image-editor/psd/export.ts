@@ -304,6 +304,9 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   };
   const psb = width > PSD_MAX_DIMENSION || height > PSD_MAX_DIMENSION;
   const records: PsdLayerRecord[] = [];
+  // Vector mask density and feather, by the record's block list (each record keeps the list
+  // `common` made); they go in the layer's mask record, which is made for them if it has none.
+  const vectorParams = new WeakMap<PsdTaggedBlock[], { density?: number; feather?: number }>();
   let nextId = 0;
   const notes = new Map<string, string[]>();
   const note = (msg: string, name: string) => notes.set(msg, [...(notes.get(msg) ?? []), name]);
@@ -343,7 +346,10 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
     if (vm) {
       const flags = (vm.linked === false ? VMSK_NOT_LINKED : 0) | (vm.enabled === false ? VMSK_DISABLED : 0);
       blocks.push({ key: 'vmsk', data: vectorBlockForComponents(vm.components, vm.inverted === true, width, height, flags) });
-      if ((vm.density ?? 1) !== 1 || (vm.feather ?? 0) > 0) note('Vector mask density and feather are not written; the paths are', layer.name);
+      const params: { density?: number; feather?: number } = {};
+      if ((vm.density ?? 1) < 1) params.density = Math.round(Math.max(0, vm.density ?? 1) * 255);
+      if ((vm.feather ?? 0) > 0) params.feather = vm.feather;
+      if (params.density !== undefined || params.feather !== undefined) vectorParams.set(blocks, params);
       if (vm.fillRule === 'evenodd') note('Vector masks are written with the nonzero fill rule (Photoshop has no even-odd paths)', layer.name);
     }
     return {
@@ -599,6 +605,13 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   }
   if (filterItems.length) globalBlocks.push({ key: 'FEid', data: writeFilterEffects(filterItems) });
 
+  for (const rec of records) {
+    const params = vectorParams.get(rec.blocks);
+    if (!params) continue;
+    rec.mask ??= { rect: EMPTY_RECT, defaultColor: 255, flags: 0 };
+    if (params.density !== undefined) rec.mask.vectorDensity = params.density;
+    if (params.feather !== undefined) rec.mask.vectorFeather = params.feather;
+  }
   const bytes = writePsd(
     {
       header: { psb, channels: planes.length, width, height, depth, colorMode: mode === 'cmyk' ? 4 : mode === 'lab' ? 9 : 3 },

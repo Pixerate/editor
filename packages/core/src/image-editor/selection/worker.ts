@@ -20,6 +20,7 @@ import { quickSelectStroke } from './segment/quick';
 import { findSky, type SkyOptions } from './segment/sky';
 import { findSubject } from './segment/subject';
 import type { SelectionProgress } from './segment/work';
+import { contentAwareFill } from '../../paint/heal';
 
 /** A selection as plain data: its size, bounds and the bytes inside the bounds. */
 export interface SerializedMask {
@@ -49,7 +50,9 @@ export type SelectionJob =
   | { op: 'focus'; options?: Omit<FocusAreaOptions, 'onProgress'> }
   | { op: 'sky'; options?: Omit<SkyOptions, 'onProgress'> }
   | { op: 'quick'; stroke: ImagePoint[]; size?: number; grow?: boolean; enhanceEdge?: boolean; selection?: SerializedMask | null }
-  | { op: 'refine-preview'; base: SerializedMask | null; edits: RefineEdit[]; params: RefineEdgeParams };
+  | { op: 'refine-preview'; base: SerializedMask | null; edits: RefineEdit[]; params: RefineEdgeParams }
+  /** Content-Aware Fill's synthesis on a window (the pixels): `hole` to fill, `exclude` not to copy from. */
+  | { op: 'fill'; hole: Uint8Array; exclude: Uint8Array | null; seed: number };
 
 /** What a job found: a selection of the whole image, and the job's notes. */
 export interface SelectionJobResult {
@@ -58,6 +61,8 @@ export interface SelectionJobResult {
   reason?: string;
   /** Focus Area: the noise level it measured. */
   noiseLevel?: number;
+  /** Content-Aware Fill: the window's pixels with the hole filled (RGBA). */
+  pixels?: Uint8ClampedArray;
 }
 
 /** Runs `job` on `pixels` here and now. */
@@ -86,6 +91,12 @@ export function runSelectionJob(job: SelectionJob, pixels: PixelBuffer, onProgre
           selection: job.selection ? deserializeMask(job.selection) : null,
         }),
       };
+    case 'fill': {
+      onProgress?.(0, 'Filling');
+      const filled = contentAwareFill(pixels.width, pixels.height, 4, pixels.data, job.hole, { seed: job.seed, exclude: job.exclude });
+      onProgress?.(1, 'Done');
+      return { mask: createSelectionMask(1, 1), pixels: Uint8ClampedArray.from(filled) };
+    }
     case 'refine-preview': {
       onProgress?.(0, 'Refining');
       const base = job.base ? deserializeMask(job.base) : null;
@@ -103,7 +114,7 @@ export type SelectionWorkerRequest = { type: 'pixels'; key: number; pixels: Pixe
 /** Messages from the worker to the page. */
 export type SelectionWorkerResponse =
   | { type: 'progress'; id: number; fraction: number; stage: string }
-  | { type: 'done'; id: number; mask: SerializedMask; reason?: string; noiseLevel?: number }
+  | { type: 'done'; id: number; mask: SerializedMask; reason?: string; noiseLevel?: number; pixels?: Uint8ClampedArray }
   | { type: 'error'; id: number; message: string };
 
 /**
@@ -136,7 +147,9 @@ export function startSelectionWorker(scope: SelectionWorkerLike): void {
       if (!pixels) throw new Error('The selection worker has no image for this job; send the pixels first.');
       const result = runSelectionJob(msg.job, pixels, (fraction, stage) => scope.postMessage({ type: 'progress', id: msg.id, fraction, stage } satisfies SelectionWorkerResponse));
       const mask = serializeMask(result.mask);
-      scope.postMessage({ type: 'done', id: msg.id, mask, reason: result.reason, noiseLevel: result.noiseLevel } satisfies SelectionWorkerResponse, [mask.bytes.buffer]);
+      const transfer: Transferable[] = [mask.bytes.buffer];
+      if (result.pixels) transfer.push(result.pixels.buffer);
+      scope.postMessage({ type: 'done', id: msg.id, mask, reason: result.reason, noiseLevel: result.noiseLevel, pixels: result.pixels } satisfies SelectionWorkerResponse, transfer);
     } catch (err) {
       scope.postMessage({ type: 'error', id: msg.id, message: err instanceof Error ? err.message : String(err) } satisfies SelectionWorkerResponse);
     }
@@ -207,7 +220,7 @@ export class SelectionWorkerClient {
       else {
         this.pending.delete(msg.id);
         if (msg.type === 'error') p.reject(new Error(msg.message));
-        else p.resolve({ mask: deserializeMask(msg.mask), reason: msg.reason, noiseLevel: msg.noiseLevel });
+        else p.resolve({ mask: deserializeMask(msg.mask), reason: msg.reason, noiseLevel: msg.noiseLevel, pixels: msg.pixels });
       }
     };
     worker.onerror = (event: { message?: string } | undefined) => this.terminate(new Error(event?.message || 'The selection worker failed.'));

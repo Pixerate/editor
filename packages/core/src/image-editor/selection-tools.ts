@@ -39,6 +39,13 @@ const rectProperties: Record<string, JsonSchema> = {
   width: { type: 'number', exclusiveMinimum: 0, description: 'Width in natural image pixels.' },
   height: { type: 'number', exclusiveMinimum: 0, description: 'Height in natural image pixels.' },
 };
+const rectSchemaStrict: JsonSchema = {
+  type: 'object',
+  properties: rectProperties,
+  required: ['x', 'y', 'width', 'height'],
+  additionalProperties: false,
+  description: 'A rectangle in natural image pixels.',
+};
 
 function shapeOptions(args: Record<string, unknown>) {
   return { mode: parseSelectionMode(args.mode), feather: num(args.feather, 0), antiAlias: args.antiAlias !== false };
@@ -971,25 +978,33 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     name: 'content_aware_fill',
     title: 'Content-Aware Fill',
     description:
-      'Edit › Content-Aware Fill: removes what is selected by filling it with texture and edges synthesised from around it (on a pixel layer, default the active one). Select the object with a small margin (expand 2–4 px) first. output current paints into the layer; new-layer puts the fill on its own layer above it, so it can be masked or removed (recommended). sampleRadius limits where it samples from. Deterministic for a seed. 8-bit documents. One undo step. Returns the layer id and filled bounds.',
+      'Edit › Content-Aware Fill: removes what is selected by filling it with texture and edges synthesised from around it (on a pixel layer, default the active one). Select the object with a small margin (expand 2–4 px) first. output current paints into the layer; new-layer puts the fill on its own layer above it, so it can be masked or removed (recommended). sampleRadius limits where it samples from; sampleRects (only these areas), samplingChannelId (a saved alpha channel) and excludeRects (never these, e.g. another object that would be copied in) set the sampling area as the Content-Aware Fill workspace does. Deterministic for a seed. 8-bit documents. One undo step. Returns the layer id and filled bounds.',
     inputSchema: {
       type: 'object',
       properties: {
         output: { type: 'string', enum: ['new-layer', 'current'], description: 'new-layer or current (default current).' },
         sampleRadius: { type: 'number', minimum: 32, maximum: 4000, description: 'Sample within this many pixels of the selection (default its larger side).' },
         seed: { type: 'integer', minimum: 0, description: 'Random seed; another seed gives another fill to choose from (default 0).' },
+        sampleRects: { type: 'array', minItems: 1, items: rectSchemaStrict, description: 'Sample only from these rectangles (natural image pixels), instead of the ring around the selection.' },
+        excludeRects: { type: 'array', minItems: 1, items: rectSchemaStrict, description: 'Never sample from these rectangles (natural image pixels).' },
+        samplingChannelId: { type: 'string', description: 'Sample only where this alpha channel is selected (see list_channels).' },
         layerId: layerIdSchema,
       },
       additionalProperties: false,
     },
     annotations: writeAnnotations('Content-Aware Fill'),
-    handler: (args) => {
+    handler: async (args, context) => {
       if (!controller.getSelection()) throw new Error('Nothing is selected; select what to remove first.');
-      return controller.contentAwareFill({
+      const rects = (v: unknown) => (Array.isArray(v) ? v.map((r: any) => ({ x: num(r?.x, NaN), y: num(r?.y, NaN), width: num(r?.width, NaN), height: num(r?.height, NaN) })) : undefined);
+      return controller.contentAwareFillAsync({
         output: args.output as 'current' | 'new-layer' | undefined,
         sampleRadius: args.sampleRadius as number | undefined,
         seed: args.seed as number | undefined,
         layerId: requireLayerId(args.layerId),
+        sampleRects: rects(args.sampleRects),
+        excludeRects: rects(args.excludeRects),
+        samplingChannelId: typeof args.samplingChannelId === 'string' ? args.samplingChannelId : undefined,
+        signal: context?.signal,
       });
     },
   };
