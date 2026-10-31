@@ -11,6 +11,7 @@ import {
 import { imageRangeClass } from './styles';
 import { ImageCheckbox, ImageRange, ImageSelect } from './controls/controls.js';
 import { SelectAndMaskWorkspace } from './SelectAndMaskWorkspace';
+import { ContentAwareFillWorkspace } from './ContentAwareFillWorkspace';
 
 export interface SelectionOptionsBarProps {
   controller: ImageEditorController;
@@ -139,6 +140,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
     }
   };
   const [workspace, setWorkspace] = useState(false);
+  const [fillWorkspace, setFillWorkspace] = useState(false);
   const [skying, setSkying] = useState(false);
   const [skyStatus, setSkyStatus] = useState<string | null>(null);
   const selectSky = async () => {
@@ -585,6 +587,10 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         <button type="button" className={btn(false)} disabled={!sel} onClick={() => edit(() => controller.contentAwareFill({ output: 'new-layer' }))}>
           Content-Aware Fill
         </button>
+        <button type="button" className={btn(false)} disabled={!sel} onClick={() => setFillWorkspace(true)}>
+          Content-Aware Fill…
+        </button>
+        {fillWorkspace && <ContentAwareFillWorkspace controller={controller} onClose={() => setFillWorkspace(false)} />}
       </div>
       <div role="group" aria-label="Clipboard" className="flex flex-wrap gap-1">
         <button type="button" className={btn(false)} onClick={() => edit(() => controller.copyPixels())}>

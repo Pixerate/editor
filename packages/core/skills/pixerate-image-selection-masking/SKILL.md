@@ -151,7 +151,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   `set_layer_properties`; no selection is needed.
 - **Remove an object:** select it with a 2–4 px margin (`modify_selection` `expand`), then
   `content_aware_fill` `output: "new-layer"`; try another `seed` if the fill repeats texture,
-  and mask out what is wrong.
+  and mask out what is wrong. If it copies in something it shouldn't (a person, a sign), pass
+  `excludeRects` over that, or `sampleRects` over the background it should continue.
 - **Outline a cutout:** `select_layer_transparency` on it, then `stroke_selection`
   `location: "outside"` on a new layer below it.
 - **Crop to a subject:** select it, then `crop_to_selection` (non-destructive).

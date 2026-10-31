@@ -507,3 +507,46 @@ describe('React Select and Mask workspace', () => {
     expect(controller.getSelection()).toBeNull();
   });
 });
+
+describe('React Content-Aware Fill workspace', () => {
+  const pointer = (el: Element, type: string, x: number, y: number) =>
+    el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+
+  it('opens on a selection, paints the sampling area, fills with OK, and cancels with Escape', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    controller.selectRect({ x: 8, y: 3, width: 4, height: 4 });
+    await act(async () => root.render(<Bar controller={controller} />));
+    await act(async () => {
+      button('Content-Aware Fill…').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    const dialog = container.querySelector('[data-testid="content-aware-fill-workspace"]')!;
+    expect(dialog).not.toBeNull();
+    // Paint the right half out of the sampling area (the source view is the whole 20 × 10 image here).
+    await act(async () => button('Subtract').click());
+    await act(async () => setValue(dialog.querySelector('input[aria-label="Sampling brush size"]')!, '6'));
+    const source = dialog.querySelector('[data-testid="content-aware-fill-source"]') as HTMLElement;
+    source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 20, height: 10, right: 20, bottom: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await act(async () => {
+      pointer(source, 'pointerdown', 17, 0);
+      pointer(source, 'pointermove', 17, 10);
+      pointer(source, 'pointerup', 17, 10);
+    });
+    expect((Array.from(dialog.querySelectorAll('[aria-label="Sampling area"] button')).find((b) => b.textContent === 'Custom') as HTMLElement).getAttribute('aria-pressed')).toBe('true');
+    const layers = controller.getLayers().length;
+    await act(async () => {
+      button('OK').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(container.querySelector('[data-testid="content-aware-fill-workspace"]')).toBeNull();
+    expect(controller.getLayers()).toHaveLength(layers + 1);
+    await act(async () => {
+      button('Content-Aware Fill…').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => window.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(container.querySelector('[data-testid="content-aware-fill-workspace"]')).toBeNull();
+    expect(controller.getLayers()).toHaveLength(layers + 1);
+  });
+});

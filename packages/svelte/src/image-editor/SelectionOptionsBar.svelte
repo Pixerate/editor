@@ -3,6 +3,7 @@
   import ImageRange from './controls/ImageRange.svelte';
   import ImageSelect from './controls/ImageSelect.svelte';
   import SelectAndMaskWorkspace from './SelectAndMaskWorkspace.svelte';
+  import ContentAwareFillWorkspace from './ContentAwareFillWorkspace.svelte';
   import type {
     ColorRangePreset,
     ImageEditorController,
@@ -125,6 +126,7 @@
   let segmenting = $state(false);
   let subjectStatus = $state<string | null>(null);
   let workspace = $state(false);
+  let fillWorkspace = $state(false);
   let skying = $state(false);
   let skyStatus = $state<string | null>(null);
   async function selectSky() {
@@ -570,6 +572,10 @@
     <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.strokeSelection({ width: strokeWidth, location: strokeLocation }))}>Stroke</button>
     <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.cropToSelection())}>Crop to Selection</button>
     <button type="button" class={btn(false)} disabled={!sel} onclick={() => edit(() => controller.contentAwareFill({ output: 'new-layer' }))}>Content-Aware Fill</button>
+    <button type="button" class={btn(false)} disabled={!sel} onclick={() => (fillWorkspace = true)}>Content-Aware Fill…</button>
+    {#if fillWorkspace}
+      <ContentAwareFillWorkspace {controller} onclose={() => (fillWorkspace = false)} />
+    {/if}
   </div>
   <div role="group" aria-label="Clipboard" class="flex flex-wrap gap-1">
     <button type="button" class={btn(false)} onclick={() => edit(() => controller.copyPixels())}>Copy</button>

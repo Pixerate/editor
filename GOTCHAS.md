@@ -3155,3 +3155,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The algorithms the selection worker needs import many modules, so the `Function.prototype.toString` Blob trick used for the wet-paint worker can't build it. Also, `check:packages` imports every subpath in Node, where a worker entry that set `self.onmessage` would fail.
 - **Root Cause**: A worker made from one function's source contains only that function. Node has no `self`.
 - **Solution / Workaround**: `@pixerate/editor/image-editor/selection-worker` is a normal package entry that the host bundles as a worker, for example `import SelectionWorker from '…/selection-worker?worker'` in Vite. It starts only when `self` exists, `window` doesn't, and `self.postMessage` is a function, so importing it anywhere else does nothing. `SelectionWorkerLike` types its event handlers loosely so a DOM `Worker` fits without a cast.
+
+### [svelte] A Session That Emits Synchronously When Opened Loops an `$effect`
+
+- **Issue / Symptom**: Opening the Svelte Content-Aware Fill workspace failed with `effect_update_depth_exceeded`. The Select and Mask workspace, written the same way, worked.
+- **Root Cause**: The `$effect` subscribed `() => tick++` and called `session.open()`. `ContentAwareFillSession.open` emits before its first `await`, so `tick++`, which reads `tick`, ran inside the effect. The effect then depended on `tick` and reran every time it emitted. `SelectAndMaskSession.open` awaits the pixels before emitting, so it never hit this.
+- **Solution / Workaround**: Run the subscribe-and-open inside `untrack(() => ...)` in the effect. Do this for any effect that starts something that may notify synchronously.
