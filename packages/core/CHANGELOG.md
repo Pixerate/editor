@@ -1,5 +1,25 @@
 # @pixerate/editor
 
+## 0.211.0
+
+### Minor Changes
+
+- a977596: Document paths and a Paths panel for the image editor. Paths are vector outlines kept with the document but on no layer: the Work Path, which Make Work Path traces from the selection and replaces each time until it's saved, and saved paths.
+
+  - **What you can do with one:** load it as a selection (Shift adds, Alt subtracts), fill or stroke it on a pixel layer without touching the selection, turn it into a vector mask, rename it (renaming saves the Work Path), duplicate or delete it.
+  - **Saved with the document:** paths are in undo history, `toJSON` and PSD files, as image resources 2000–2997 for saved paths and 1025 for the Work Path.
+  - **UI:** `<PathsPanel>` in React and Svelte shows outline thumbnails, under Channels.
+  - **Agent tools:** `list_paths`, `get_path`, `make_work_path`, `add_path`, `set_path_geometry`, `rename_path`, `duplicate_path`, `delete_path`, `fill_path` and `stroke_path`. `path_to_selection` and `add_vector_mask` take a `pathId`.
+  - **Controller:** `getPaths`, `getPath`, `setActivePath`, `makeWorkPath`, `addPath`, `setPathGeometry`, `renamePath`, `duplicatePath`, `deletePath`, `loadPathAsSelection`, `fillPath`, `strokePath` and `addVectorMaskFromPath`.
+  - **Other new exports:** `DocumentPath`, `pathSvgData`, `pathBounds`, `readPaths`, `serializePaths` and `readShapeComponents`.
+
+- 35d0860: Quick Selection grows while you drag. As the brush moves, the stroke so far is computed (in the selection worker when there is one; one at a time, catching up with the newest points) and shown in place of the selection. That uses the new `controller.setSelectionPreview` and the renderer's `state.selectionPreview`, which are view state only, with no undo step and nothing saved. Releasing applies the stroke as one undo step, as before; cancelling drops the preview. The gesture's `draftPath` for Quick Selection is now `null` (the live result replaces the brush path), and `previewed` resolves once a preview has caught up.
+
+### Patch Changes
+
+- 5945227: PSD export now writes a vector mask's density and feather into the layer's mask record, as Photoshop does, so they survive a round trip. A layer with only a vector mask gets a mask record that carries just those parameters, and no raster mask appears when it's read back. Before this, they were left out with a warning.
+- 5a0abd9: Select and Mask's On Layers view now shows the visible layers below the active layer where nothing is selected, as Photoshop does, instead of a checkerboard. It falls back to the checkerboard where those layers are transparent, or when there are none.
+
 ## 0.210.0
 
 ### Minor Changes

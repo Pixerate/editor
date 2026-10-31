@@ -982,7 +982,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     inputSchema: {
       type: 'object',
       properties: {
-        output: { type: 'string', enum: ['new-layer', 'current'], description: 'new-layer or current (default current).' },
+        output: { type: 'string', enum: ['new-layer', 'current', 'duplicate-layer'], description: 'new-layer (the fill alone on a layer above), current (into the layer) or duplicate-layer (into a copy of the layer, above it); default current.' },
         sampleRadius: { type: 'number', minimum: 32, maximum: 4000, description: 'Sample within this many pixels of the selection (default its larger side).' },
         seed: { type: 'integer', minimum: 0, description: 'Random seed; another seed gives another fill to choose from (default 0).' },
         sampleRects: { type: 'array', minItems: 1, items: rectSchemaStrict, description: 'Sample only from these rectangles (natural image pixels), instead of the ring around the selection.' },
@@ -997,7 +997,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       if (!controller.getSelection()) throw new Error('Nothing is selected; select what to remove first.');
       const rects = (v: unknown) => (Array.isArray(v) ? v.map((r: any) => ({ x: num(r?.x, NaN), y: num(r?.y, NaN), width: num(r?.width, NaN), height: num(r?.height, NaN) })) : undefined);
       return controller.contentAwareFillAsync({
-        output: args.output as 'current' | 'new-layer' | undefined,
+        output: args.output as 'current' | 'new-layer' | 'duplicate-layer' | undefined,
         sampleRadius: args.sampleRadius as number | undefined,
         seed: args.seed as number | undefined,
         layerId: requireLayerId(args.layerId),

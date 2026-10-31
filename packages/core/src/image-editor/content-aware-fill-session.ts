@@ -6,7 +6,7 @@
  * `content_aware_fill` tool makes, with a sampling area).
  */
 
-import type { ContentAwareFillPlan, ImageEditorController } from './controller';
+import type { ContentAwareFillOutput, ContentAwareFillPlan, ImageEditorController } from './controller';
 import type { CropBox, ImagePoint } from './types';
 import { selectionFromRegion, type SelectionMask } from './selection/mask';
 import { distanceTransform } from './selection/modify';
@@ -39,7 +39,7 @@ export interface ContentAwareFillSettings {
   brushMode: 'add' | 'subtract';
   /** The fill's random seed; another gives another fill to choose from. */
   seed: number;
-  output: 'current' | 'new-layer';
+  output: ContentAwareFillOutput;
   /** Update the preview as the area changes (otherwise with Preview). */
   livePreview: boolean;
 }
@@ -95,16 +95,22 @@ export class ContentAwareFillSession {
     for (const l of this.listeners) l();
   }
 
+  /** Images up to this many pixels show (and can be sampled) whole in the workspace. */
+  static readonly WHOLE_IMAGE_PIXELS = 4_000_000;
+  /** Room around the selection the window holds, in px each way. */
+  private margin = 0;
+
   /**
-   * Reads the layer around the selection and makes the first preview. The window holds the
-   * selection and room around it to sample from (its larger side, at least 64 px, each way).
+   * Reads the layer and makes the first preview. The window is the whole image up to
+   * {@link WHOLE_IMAGE_PIXELS}; on a larger one it holds the selection and room around it (twice
+   * its larger side, at least 256 px, each way), and {@link expandView} widens it.
    */
   async open(): Promise<boolean> {
     try {
-      const sel = this.controller.getSelection();
-      const b = sel?.bounds;
-      const margin = b ? Math.max(64, Math.max(b.width, b.height)) : 64;
-      this.plan = this.controller.prepareContentAwareFill({ sampleRadius: margin });
+      const { width, height } = this.controller.getState().imageDimensions;
+      const b = this.controller.getSelection()?.bounds;
+      this.margin = width * height <= ContentAwareFillSession.WHOLE_IMAGE_PIXELS ? Math.max(width, height) : Math.max(256, 2 * Math.max(b?.width ?? 0, b?.height ?? 0));
+      this.plan = this.controller.prepareContentAwareFill({ sampleRadius: this.margin });
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
       this.emit();
@@ -116,6 +122,45 @@ export class ContentAwareFillSession {
     this.applySampling('auto');
     this.emit();
     await this.refresh();
+    return true;
+  }
+
+  /** Whether the window shows the whole image (else {@link expandView} can widen it). */
+  get showsWholeImage(): boolean {
+    const { width, height } = this.controller.getState().imageDimensions;
+    const w = this.win;
+    return !w || (w.x === 0 && w.y === 0 && w.width >= width && w.height >= height);
+  }
+
+  /**
+   * Doubles the room around the selection (up to the whole image), keeping what was painted; a
+   * preset fills the new room as it would. Returns false when the whole image already shows.
+   */
+  expandView(): boolean {
+    if (!this.win || this.showsWholeImage) return false;
+    const { width, height } = this.controller.getState().imageDimensions;
+    const old = { win: this.win, area: this.area! };
+    this.margin = Math.min(Math.max(width, height), this.margin * 2);
+    const plan = this.controller.prepareContentAwareFill({ layerId: this.plan!.layerId, sampleRadius: this.margin });
+    this.plan = plan;
+    this.win = plan.window;
+    this.before = plan.before;
+    this.hole = plan.hole;
+    const mode = this.settingsValue.sampling;
+    this.area = null;
+    this.applySampling(mode === 'custom' ? 'auto' : mode);
+    if (mode === 'custom') {
+      // The painted area where it was; the new room starts unpainted.
+      const area = new Uint8Array(plan.window.width * plan.window.height);
+      for (let y = 0; y < old.win.height; y++) {
+        const src = y * old.win.width;
+        const dst = (old.win.y - plan.window.y + y) * plan.window.width + (old.win.x - plan.window.x);
+        area.set(old.area.subarray(src, src + old.win.width), dst);
+      }
+      this.area = area;
+    }
+    this.emit();
+    if (this.settingsValue.livePreview) void this.refresh();
     return true;
   }
 
@@ -321,7 +366,7 @@ export class ContentAwareFillSession {
   }
 
   /** OK: fills with this sampling area, seed and output as one undo step. */
-  async commit(options: { signal?: AbortSignal } = {}): Promise<{ layerId: string; bounds: CropBox; output: 'current' | 'new-layer' }> {
+  async commit(options: { signal?: AbortSignal } = {}): Promise<{ layerId: string; bounds: CropBox; output: ContentAwareFillOutput }> {
     const area = this.samplingMask();
     if (!this.plan || !area?.bounds) throw new Error(this.error ?? 'The sampling area is empty; paint where the fill may copy from.');
     return this.controller.contentAwareFillAsync({ layerId: this.plan.layerId, samplingArea: area, seed: this.settingsValue.seed, output: this.settingsValue.output, signal: options.signal });
