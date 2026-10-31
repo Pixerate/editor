@@ -8,6 +8,7 @@ import {
   layerMaskFromSelection,
 } from '@pixerate/editor/image-editor';
 import { imageRangeClass, imageSectionTitleClass } from './styles';
+import { MaskEdgeCheck } from './MaskEdgeCheck';
 
 export interface RefineEdgePanelProps {
   controller: ImageEditorController;
@@ -24,7 +25,8 @@ const button =
   'px-2 py-1 rounded-md border border-border bg-background text-[11px] text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40';
 
 /**
- * Refine Edge (snap the selection, e.g. a coarse AI mask, to the image's edges) and layer masks:
+ * Refine Edge (snap the selection, e.g. a coarse AI mask, to the image's edges), Check Edge (its
+ * measured quality, see `MaskEdgeCheck`) and layer masks:
  * use the selection as an adjustment layer's mask, edit mask density and feather, load a mask
  * back as a selection.
  */
@@ -137,6 +139,7 @@ export const RefineEdgePanel: React.FC<RefineEdgePanelProps> = ({ controller, se
           {error}
         </p>
       )}
+      <MaskEdgeCheck controller={controller} selection={sel} />
 
       <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] mt-2">Layer Mask</span>
       <div className="flex gap-1 items-center">

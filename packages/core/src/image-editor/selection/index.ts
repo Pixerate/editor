@@ -17,3 +17,4 @@ export * from './segment';
 export * from './refine-edits';
 export * from './select-and-mask';
 export * from './worker';
+export * from './inspect';

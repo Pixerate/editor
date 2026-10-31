@@ -20,6 +20,7 @@ import {
   SerializedImageEditorState,
   DocumentOpener,
 } from './types';
+import { inspectMaskEdge as inspectEdge, type InspectMaskEdgeOptions, type MaskEdgeReport } from './selection/inspect';
 import { pathToSelection as pathToSelectionMask, selectionToSubpaths, subpathsToSvgPath, type PathToSelectionOptions, type SelectionToPathOptions } from './selection/path';
 import { snapPolygonToEdges, type MagneticEdgeOptions } from './selection/magnetic';
 import type { ObjectTarget } from './selection/segment/grabcut';
@@ -632,6 +633,9 @@ export interface CloneSource {
  * closed }]` or SVG path data), and how it combines with the components below it.
  */
 /** A vector mask's path: several `components`, or one `shape` / `subpaths` (with `op`). */
+/** What `inspectMaskEdge` reads: the selection, a layer's painted mask or its vector mask. */
+export type MaskEdgeTarget = 'selection' | 'layer-mask' | 'vector-mask';
+
 export interface VectorMaskPathInput extends ShapeGeometryInput {
   components?: ShapeGeometryInput[];
   fillRule?: ShapeFillRule;
@@ -6460,6 +6464,45 @@ export class ImageEditorController {
     const sel = this.layerMaskCoverage(layerId);
     if (!sel) return false;
     return this.setSelection(invert ? invertSelectionMask(sel) : sel, mode);
+  }
+
+  /**
+   * A measured report on a mask's edge (`inspect_mask_edge`): the selection (default), a layer's
+   * painted mask or its vector mask (its path, without density or feather). Halo and alignment are
+   * measured against the layer's own pixels for a pixel layer's masks, else the composite.
+   * Read-only. Throws for an empty selection or a layer without that mask.
+   */
+  public inspectMaskEdge(target: MaskEdgeTarget = 'selection', options: InspectMaskEdgeOptions & { layerId?: string } = {}): MaskEdgeReport & { target: MaskEdgeTarget; layerId?: string } {
+    const { width, height } = this.naturalSize;
+    let mask: SelectionMask | null;
+    let layer: ImageLayer | undefined;
+    if (target === 'selection') {
+      mask = this.getSelection();
+      if (!mask?.bounds) throw new LayerOperationError('Nothing is selected: make a selection first, or inspect a layer-mask or vector-mask with layerId.');
+    } else if (target === 'layer-mask' || target === 'vector-mask') {
+      if (!options.layerId) throw new LayerOperationError(`A ${target} needs layerId (see list_layers).`);
+      layer = this.getLayer(options.layerId);
+      if (!layer) throw new LayerOperationError(`There is no layer "${options.layerId}" (see list_layers).`);
+      if (target === 'layer-mask') {
+        mask = this.layerMaskCoverage(layer.id);
+        if (!mask) throw new LayerOperationError(`Layer "${layer.name || layer.id}" has no painted mask; add one with add_layer_mask, or inspect its vector-mask.`);
+      } else {
+        const { vm } = this.requireVectorMask(layer.id);
+        mask = pathToSelectionMask(vm.components, width, height, { fillRule: vm.fillRule });
+        if (vm.inverted) mask = invertSelectionMask(mask);
+      }
+      if (!mask.bounds) throw new LayerOperationError(`The ${target} of "${layer.name || layer.id}" hides everything: there is no edge to inspect.`);
+    } else {
+      throw new LayerOperationError(`Unknown target "${String(target)}". Use selection, layer-mask or vector-mask.`);
+    }
+    const b = mask.bounds!;
+    const x = Math.max(0, b.x - 8);
+    const y = Math.max(0, b.y - 8);
+    const region = { x, y, width: Math.min(width, b.x + b.width + 8) - x, height: Math.min(height, b.y + b.height + 8) - y };
+    const own = layer?.type === 'pixel' ? this.getLayerPixels(layer.id) : null;
+    const image = own ?? { ...this.compositePixels(region), x: region.x, y: region.y };
+    const report = inspectEdge(mask, image, options);
+    return { target, ...(layer ? { layerId: layer.id } : {}), ...report };
   }
 
   /** A layer's painted mask over the canvas as a selection mask; null without one (or for a depth mask). */

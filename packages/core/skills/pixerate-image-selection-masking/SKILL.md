@@ -44,10 +44,10 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    what leaked, and `intersect` to limit it to a region (for example `select_rect` around the
    subject).
    **Check:** `bounds` hug the subject. A bounds as large as the image means a leak.
-3. **Look at the edge.** Use `capture_view` with `region: "selection"` and `includeOverlays: true`,
-   or `set_selection_display` `quickMask`, to see soft edges as a tint.
-   **Check:** no holes in the subject, no islands in the background, and edges on the subject's
-   outline.
+3. **Measure the edge, then look.** `inspect_mask_edge` scores it: `haloScore` ≥ 0.35 is old
+   background inside the edge, `edgeAlignment` < 0.5 is off the image's edges, `jaggedness` ≥ 15
+   zigzags; it counts `holes` and `islands`, `issues` names fixes, `worst` gives `capture_view` rects.
+   **Check:** `issues` is empty, or each one is intended (a deliberately soft edge or a second piece).
 4. **Clean it up.**
    - `modify_selection` `smooth` (2–4 px) removes wand speckle.
    - `grow_selection` (tolerance 10–30) picks up the shades a wand click missed;
@@ -89,7 +89,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
    writes the selection, a channel or a layer mask as a greyscale PNG; a matte that comes
    back goes into a channel with `load_channel_from_image` (or straight to the selection with
    `load_selection_from_image`).
-7. **Verify.** `render_preview` at 1024 px or more, and `capture_view` on the edge at 2–8×.
+7. **Verify.** `inspect_mask_edge` again (`target: "layer-mask"` and `layerId` for a mask),
+   `render_preview` at 1024 px or more, and `capture_view` on `worst` regions at 2–8×.
    **Check:** no fringe of the old background colour, no stair-steps, no visible line where an
    adjustment ends. To judge a layer mask itself, `set_mask_view` `gray` (or `overlay`) and
    `capture_view` with `includeOverlays: true`; holes and stray grey show plainly there. Set it
@@ -220,8 +221,7 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `select_layer_transparency`: a layer's own pixels
 - `grow_selection`, `select_similar`: add similar colour, connected or anywhere
 - `reselect`: undo a deselect
-- `save_selection`, `load_selection_from_channel`, `list_channels`: keep selections as alpha channels
-- `set_channel_properties`, `duplicate_channel`, `delete_channel`: manage channels
+- `save_selection`, `load_selection_from_channel`, `list_channels`, `set_channel_properties`, `duplicate_channel`, `delete_channel`: keep and manage selections as alpha channels
 - `export_mask_image`: a selection, channel or layer mask as a greyscale PNG
 - `load_channel_from_image`: a mask image into a new channel
 - `set_quick_mask`: paint the selection
@@ -240,8 +240,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `modify_selection`: expand, contract, feather, border, smooth
 - `refine_selection`: snap the edge to the image
 - `transform_selection`: move or scale the outline only
-- `capture_view`: inspect the edge at pixel level
-- `render_preview`: check the result
+- `inspect_mask_edge`: measured halo, alignment, jaggedness, softness, holes and islands of an edge
+- `capture_view`, `render_preview`: look at the edge at pixel level; check the result
 - `apply_selection_as_mask`: a masked adjustment layer in one step
 - `add_layer_mask`, `set_layer_mask_properties`, `apply_layer_mask`, `remove_layer_mask`: layer masks
 - `set_smart_filter_mask`: limit smart filters

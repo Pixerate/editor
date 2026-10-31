@@ -108,6 +108,28 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     handler: () => summary(controller),
   };
 
+  const inspectEdge: AgentTool = {
+    name: 'inspect_mask_edge',
+    title: 'Inspect a mask edge',
+    description:
+      "Measures the edge of the selection (default), a layer's painted mask (layer-mask) or its vector mask (vector-mask), so you can check it without looking. Returns haloScore 0-1 (background colour left just inside the edge; worse above 0.35), edgeAlignment 0-1 (share of the edge on strong image edges; worse below 0.5), jaggedness (outline turning in radians per 100 px beyond what closing it needs; smooth outlines score under 3, worse above 15), softFraction 0-1 (share of edge pixels partly selected), holes and islands (count, total area, the 10 largest with bounds), worst (up to 5 regions with a reason, ready for capture_view rect) and issues (findings with a suggested fix; empty when clean). Measures a pixel layer's masks against its own pixels, otherwise the composite. Read-only: inspect, fix the issues, inspect again.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', enum: ['selection', 'layer-mask', 'vector-mask'], description: 'What to inspect (default selection). layer-mask and vector-mask need layerId.' },
+        layerId: { type: 'string', description: 'The layer whose mask to inspect (see list_layers); only with layer-mask or vector-mask.' },
+        minArea: { type: 'number', minimum: 1, maximum: 1000000, description: 'Holes and islands smaller than this many pixels are left out (default 16).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Inspect a mask edge', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: ({ target, layerId, minArea }) => {
+      const t = (target ?? 'selection') as 'selection' | 'layer-mask' | 'vector-mask';
+      if (t === 'selection' && layerId !== undefined) throw new Error('layerId is only for target layer-mask or vector-mask; leave it out to inspect the selection.');
+      return controller.inspectMaskEdge(t, { layerId: layerId as string | undefined, minArea: minArea as number | undefined });
+    },
+  };
+
   const selectRegion: AgentTool = {
     name: 'select_region',
     title: 'Select a region',
@@ -1238,6 +1260,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
 
   return [
     getSelection,
+    inspectEdge,
     selectAll,
     deselect,
     invert,
