@@ -26,3 +26,12 @@ How to work with smart objects in the image editor (see the main skill for the t
    in a new image for every linked instance; `export_smart_object_contents` returns the file.
 6. **Finish**: `rasterize_smart_object` only when the user wants plain pixels to paint on; the
    placement and filters are then gone.
+
+## Best practices
+
+- **Smart objects for anything you may scale again.** Convert first, then transform as often as
+  needed; set exact sizes with `set_smart_object_transform` `scaleX` / `scaleY` (percent of the
+  contents) rather than chaining relative scales. Prefer smart filters over layer filters when
+  the user may want to mask, blend or reorder them later.
+- **Linked or not**: duplicate a smart object `linked: true` for repeated elements that must stay
+  identical (a logo placed twice); use `linked: false` when the copies will be edited apart.

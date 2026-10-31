@@ -1,0 +1,23 @@
+{
+	"prompt": "Put this product on a pure white background for the shop, without changing the product's colour. Keep it editable.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 90,
+		"background": [200, 198, 195],
+		"shapes": [{ "shape": "rect", "x": 40, "y": 25, "width": 40, "height": 40, "color": [30, 90, 160] }]
+	},
+	"checks": [
+		{ "why": "the background is pure, neutral white", "tool": "measure_region", "args": { "x": 0, "y": 0, "width": 30, "height": 20 }, "expect": { "stats": { "luminance": { "p1": { "$min": 250 } } }, "cast": { "redBlue": { "$min": -2, "$max": 2 } } } },
+		{ "why": "the area under the product is white too", "tool": "measure_region", "args": { "x": 0, "y": 72, "width": 120, "height": 18 }, "expect": { "stats": { "luminance": { "p1": { "$min": 250 } } } } },
+		{ "why": "the product keeps its colour", "tool": "measure_region", "args": { "x": 45, "y": 30, "width": 30, "height": 30 }, "expect": { "stats": { "red": { "mean": { "$min": 26, "$max": 34 } }, "green": { "mean": { "$min": 86, "$max": 94 } }, "blue": { "mean": { "$min": 156, "$max": 164 } } } } },
+		{ "why": "the backdrop is hidden by a mask, not deleted", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "pixel", "mask": { "kind": "raster" } } } } }
+	],
+	"solution": [
+		{ "tool": "magic_wand", "args": { "x": 60, "y": 45, "tolerance": 20, "contiguous": true } },
+		{ "tool": "inspect_mask_edge" },
+		{ "tool": "add_layer_mask", "args": { "layerId": "background", "from": "selection" } },
+		{ "tool": "add_pixel_layer", "args": { "name": "White", "color": "#ffffff", "belowId": "background" } },
+		{ "tool": "measure_region", "args": { "x": 0, "y": 0, "width": 30, "height": 20 } }
+	]
+}

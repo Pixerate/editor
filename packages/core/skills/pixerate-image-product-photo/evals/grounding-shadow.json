@@ -1,0 +1,19 @@
+{
+	"prompt": "The product looks like it's floating. Put it on its own layer and add a soft shadow under it that I can still adjust.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 90,
+		"background": [200, 198, 195],
+		"shapes": [{ "shape": "rect", "x": 40, "y": 25, "width": 40, "height": 40, "color": [30, 90, 160] }]
+	},
+	"checks": [
+		{ "why": "the product is on its own layer, cut to its shape", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "pixel", "bounds": { "x": { "$min": 39, "$max": 41 }, "y": { "$min": 24, "$max": 26 }, "width": { "$min": 39, "$max": 42 }, "height": { "$min": 39, "$max": 42 } } } } } },
+		{ "why": "a live drop shadow on that layer", "tool": "list_layers", "expect": { "layers": { "$some": { "effects": { "$expr": "v && JSON.stringify(v).includes('drop-shadow')" } } } } }
+	],
+	"solution": [
+		{ "tool": "magic_wand", "args": { "x": 60, "y": 45, "tolerance": 20, "contiguous": true } },
+		{ "tool": "layer_via_copy", "args": {} },
+		{ "tool": "add_layer_effect", "args": { "layerId": { "$read": "list_layers", "path": "activeLayerId" }, "kind": "drop-shadow", "settings": { "distance": 6, "size": 10, "opacity": 0.4, "angle": 90 } } }
+	]
+}

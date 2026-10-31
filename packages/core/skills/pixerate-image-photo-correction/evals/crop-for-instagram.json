@@ -1,0 +1,19 @@
+{
+	"prompt": "Crop this photo to a 4:5 portrait for Instagram, as large as possible, keeping the whole person (the tall figure at x 50-70, y 15-70) in frame.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 80,
+		"background": [110, 140, 90],
+		"shapes": [{ "shape": "rect", "x": 50, "y": 15, "width": 20, "height": 55, "color": [180, 120, 100] }]
+	},
+	"checks": [
+		{ "why": "a 4:5 portrait crop", "tool": "get_image_info", "expect": { "crop": { "$expr": "v && Math.abs(v.width / v.height - 0.8) <= 0.02" } } },
+		{ "why": "as large as the frame allows (full height)", "tool": "get_image_info", "expect": { "crop": { "height": { "$min": 78 } } } },
+		{ "why": "the whole person is inside", "tool": "get_image_info", "expect": { "crop": { "$expr": "v && v.x <= 50 && v.x + v.width >= 70 && v.y <= 15 && v.y + v.height >= 70" } } }
+	],
+	"solution": [
+		{ "tool": "get_image_info" },
+		{ "tool": "set_crop", "args": { "x": 28, "y": 0, "width": 64, "height": 80 } }
+	]
+}

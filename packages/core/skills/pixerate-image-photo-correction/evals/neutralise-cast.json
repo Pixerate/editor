@@ -1,0 +1,25 @@
+{
+	"prompt": "This photo has a cold blue cast. The grey card in the lower left (x 10-30, y 50-70) should be neutral grey. Fix the colour without clipping anything, and keep it adjustable.",
+	"fixture": {
+		"editor": "image",
+		"width": 120,
+		"height": 80,
+		"background": [50, 60, 85],
+		"shapes": [
+			{ "shape": "rect", "x": 0, "y": 0, "width": 120, "height": 20, "color": [120, 135, 170] },
+			{ "shape": "rect", "x": 10, "y": 50, "width": 20, "height": 20, "color": [70, 80, 105] }
+		]
+	},
+	"checks": [
+		{ "why": "the grey card is neutral (cast within ±4 levels)", "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 }, "expect": { "cast": { "redBlue": { "$min": -4, "$max": 4 }, "greenMagenta": { "$min": -4, "$max": 4 } } } },
+		{ "why": "the card is a mid grey, not crushed or blown", "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 }, "expect": { "stats": { "luminance": { "mean": { "$min": 90, "$max": 170 } } } } },
+		{ "why": "no channel clips anywhere", "tool": "measure_region", "expect": { "clipping": { "highlightsPercent": { "red": { "$max": 0.5 }, "green": { "$max": 0.5 }, "blue": { "$max": 0.5 } }, "shadowsPercent": { "red": { "$max": 0.5 }, "green": { "$max": 0.5 }, "blue": { "$max": 0.5 } } } } },
+		{ "why": "the correction is a layer, not baked into the photo", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "adjustment" } } } }
+	],
+	"solution": [
+		{ "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 } },
+		{ "tool": "add_adjustment_layer", "args": { "kind": "levels", "name": "Neutralise cast", "params": { "red": { "inWhite": 140 }, "green": { "inWhite": 159 }, "blue": { "inWhite": 209 } } } },
+		{ "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 } },
+		{ "tool": "measure_region" }
+	]
+}
