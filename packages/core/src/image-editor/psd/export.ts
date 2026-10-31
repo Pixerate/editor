@@ -8,11 +8,11 @@
  * baked, and no layer reading the document source (see `ImageEditorController.toPsd`).
  */
 
-import { VMSK_DISABLED, VMSK_NOT_LINKED, vectorBlockForComponents } from './paths';
+import { RESOURCE_PATH_FIRST, RESOURCE_PATH_LAST, RESOURCE_WORK_PATH, VMSK_DISABLED, VMSK_NOT_LINKED, pathResourceForComponents, vectorBlockForComponents } from './paths';
 import { adjustmentKindLabel } from '../adjustment-layers';
 import { contentBounds, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
 import { encodePng } from '../../raster/png';
-import { isActiveFilter, type ImageLayer, type PixelLayer, type RasterMask, type SmartContents, type SmartObjectLayer } from '../layers/model';
+import { isActiveFilter, type ImageLayer, type PixelLayer, type RasterMask, type ShapeComponent, type SmartContents, type SmartObjectLayer } from '../layers/model';
 import { LayerCompositor } from '../layers/compositor';
 import { contentsSurface, placementGeometry } from '../layers/smart';
 import {
@@ -73,6 +73,8 @@ export interface PsdExportInput {
   merged: ArrayLike<number>;
   /** Alpha channels, written as extra merged planes with their names and display info. */
   alphaChannels?: readonly PsdAlphaChannel[];
+  /** Document paths: saved paths as image resources 2000 on, the Work Path as 1025. */
+  paths?: readonly { name: string; components: readonly ShapeComponent[]; work?: boolean; fillRule?: 'nonzero' | 'evenodd' }[];
   /** Pixels per inch (default 72). */
   resolution?: number;
   /** The document's patterns; those the effects use are embedded (built-in ones too). */
@@ -561,6 +563,15 @@ export function exportPsd(input: PsdExportInput): PsdExportResult {
   ];
   if (input.iccProfile?.length) resources.push({ id: 1039, name: '', data: input.iccProfile });
   resources.push(...alphaChannelResources(input.alphaChannels ?? []));
+  let savedPathId = RESOURCE_PATH_FIRST;
+  for (const p of input.paths ?? []) {
+    if (!p.work && savedPathId > RESOURCE_PATH_LAST) {
+      note('Only 998 saved paths fit in a PSD file; the rest are not written', p.name);
+      continue;
+    }
+    if (p.fillRule === 'evenodd') note('Paths are written with the nonzero fill rule (Photoshop has no even-odd paths)', p.name);
+    resources.push({ id: p.work ? RESOURCE_WORK_PATH : savedPathId++, name: p.work ? '' : p.name, data: pathResourceForComponents(p.components, width, height) });
+  }
   if (input.globalLight) {
     const i32 = (v: number) => {
       const w = new PsdWriter();

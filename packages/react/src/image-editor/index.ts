@@ -10,6 +10,7 @@ export * from './RefineEdgePanel';
 export * from './SelectAndMaskWorkspace';
 export * from './ContentAwareFillWorkspace';
 export * from './ChannelsPanel';
+export * from './PathsPanel';
 export * from './LayersPanel';
 export * from './ColorProfilePanel';
 export * from './LayerEffectsPanel';

@@ -6,7 +6,7 @@ import {
   type SelectionToolOptions,
   DEFAULT_CANVAS_VIEWPORT,
 } from '@pixerate/editor/image-editor';
-import { ChannelsPanel, ImageEditor, RefineEdgePanel, SelectionOptionsBar, createReactiveImageEditor } from '../src/image-editor';
+import { ChannelsPanel, ImageEditor, PathsPanel, RefineEdgePanel, SelectionOptionsBar, createReactiveImageEditor } from '../src/image-editor';
 
 let target: HTMLDivElement;
 let component: Record<string, any> | null = null;
@@ -554,6 +554,40 @@ describe('Svelte Select and Mask workspace', () => {
     flushSync();
     expect(target.querySelector('[data-testid="select-and-mask-workspace"]')).toBeNull();
     expect(controller.getSelection()).toBeNull();
+  });
+});
+
+describe('Svelte PathsPanel', () => {
+  it('makes a work path, saves it, loads it as a selection, fills it and deletes it', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    controller.setSamplePixels(pixels(20, 10, halves));
+    component = mount(PathsPanel, { target, props: { controller } });
+    flushSync();
+    expect(target.textContent).toContain('No paths');
+    expect(button('Make Work Path').disabled).toBe(true);
+    controller.selectRect({ x: 2, y: 2, width: 6, height: 5 });
+    flushSync();
+    click(button('Make Work Path'));
+    const row = () => target.querySelector('[data-testid="path-row"]') as HTMLElement;
+    expect(row().textContent!.trim()).toBe('Work Path');
+    expect(row().getAttribute('aria-current')).toBe('true');
+    click(button('Save Path'));
+    const input = target.querySelector('input[aria-label="Path name"]') as HTMLInputElement;
+    input.value = 'Box';
+    input.dispatchEvent(new FocusEvent('blur'));
+    flushSync();
+    expect(controller.getPaths()[0]).toMatchObject({ name: 'Box' });
+    expect(controller.getPaths()[0].work).toBeUndefined();
+    controller.deselect();
+    flushSync();
+    click(button('Load as Selection'));
+    expect(controller.getSelection()!.bounds).toEqual({ x: 2, y: 2, width: 6, height: 5 });
+    controller.deselect();
+    flushSync();
+    click(button('Fill Path'));
+    expect(controller.getSelection()).toBeNull();
+    click(button('Delete'));
+    expect(controller.getPaths()).toHaveLength(0);
   });
 });
 

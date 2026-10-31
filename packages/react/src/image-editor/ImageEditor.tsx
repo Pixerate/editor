@@ -37,6 +37,7 @@ import { ColorProfilePanel } from './ColorProfilePanel';
 import { SelectionOptionsBar } from './SelectionOptionsBar';
 import { RefineEdgePanel } from './RefineEdgePanel';
 import { ChannelsPanel } from './ChannelsPanel';
+import { PathsPanel } from './PathsPanel';
 import { FreeTransformOptionsBar } from './FreeTransformOptionsBar';
 import { ShapeOptionsBar } from './ShapeOptionsBar';
 import { TypeOptionsBar } from './TypeOptionsBar';
@@ -1013,6 +1014,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
               </div>
               <RefineEdgePanel controller={controller} selection={state.selection ?? null} layers={state.adjustments.layers} />
               <ChannelsPanel controller={controller} />
+              <PathsPanel controller={controller} />
             </div>
           )}
 

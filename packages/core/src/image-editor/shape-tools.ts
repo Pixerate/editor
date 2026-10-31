@@ -1,4 +1,5 @@
 import type { AgentTool } from '../tools/registry.js';
+import { pathAnchorCount, pathBounds, pathSvgData } from './paths';
 import type { ImageEditorController, ShapeGeometryInput, ShapeLayerInit, VectorMaskPathInput } from './controller';
 import type { SelectionToPathOptions } from './selection/path';
 import { selectionArea } from './selection/mask';
@@ -459,6 +460,20 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     fillRule: { type: 'string', enum: ['nonzero', 'evenodd'], description: 'Winding rule within a component (default nonzero).' },
   } as const;
   const LAYER = { type: 'string', minLength: 1, description: 'The layer (see list_layers). Not a shape layer: its path already is its vector mask.' } as const;
+  const PATH_ID = { type: 'string', minLength: 1, description: 'A document path id from list_paths.' } as const;
+  /** A document path as geometry input, for the tools that take a path. */
+  const fromPathId = (args: Record<string, unknown>): VectorMaskPathInput | null => {
+    if (args.pathId === undefined) return null;
+    const own = Object.keys(PATH_PROPS).filter((k) => args[k] !== undefined);
+    if (own.length) throw new Error(`Give pathId or ${own.join(' / ')}, not both.`);
+    const path = controller.getPath(String(args.pathId));
+    if (!path) throw new Error(`No path "${String(args.pathId)}". Call list_paths for ids.`);
+    return { components: path.components.map((c) => ({ op: c.op, subpaths: c.subpaths })), ...(path.fillRule ? { fillRule: path.fillRule } : {}) };
+  };
+  const pathSummary = (id: string) => {
+    const p = controller.getPath(id)!;
+    return { id: p.id, name: p.name, work: Boolean(p.work), fillRule: p.fillRule ?? 'nonzero', anchors: pathAnchorCount(p), bounds: pathBounds(p) };
+  };
   const TRACE_PROPS = {
     tolerance: { type: 'number', minimum: 0.1, maximum: 10, description: 'How far (px) the path may stray from the selection edge (default 0.5; lower is tighter, more anchors).' },
     cornerRoundness: { type: 'number', minimum: 0, maximum: 1, description: '0: straight sides and sharp corners; 1: as smooth as the outline allows (default 0.5).' },
@@ -494,6 +509,7 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
       type: 'object',
       $defs: DEFS,
       properties: {
+        pathId: { ...PATH_ID, description: 'A document path from list_paths, instead of shape / subpaths / components.' },
         ...PATH_PROPS,
         feather: { type: 'number', minimum: 0, maximum: 1000, description: 'Feather radius in px (default 0).' },
         antiAlias: { type: 'boolean', description: 'Soft edges (default true); false makes every pixel fully in or out.' },
@@ -504,7 +520,7 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     annotations: { title: 'Make a selection from a path', ...WRITE },
     handler: (args) => {
       const mode = args.mode as 'replace' | 'add' | 'subtract' | 'intersect' | undefined;
-      controller.pathToSelection(pathSpec(args), { feather: args.feather as number | undefined, antiAlias: args.antiAlias as boolean | undefined, mode });
+      controller.pathToSelection(fromPathId(args) ?? pathSpec(args), { feather: args.feather as number | undefined, antiAlias: args.antiAlias as boolean | undefined, mode });
       const sel = controller.getSelection();
       return { empty: !sel, bounds: sel?.bounds ?? null, area: Math.round(sel ? selectionArea(sel) : 0) };
     },
@@ -530,7 +546,8 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
       $defs: DEFS,
       properties: {
         layerId: LAYER,
-        from: { type: 'string', enum: ['path', 'selection', 'reveal-all', 'hide-all'], description: 'path (default when a shape, subpaths or components are given), selection (trace the current selection), reveal-all or hide-all (an empty path).' },
+        from: { type: 'string', enum: ['path', 'selection', 'reveal-all', 'hide-all'], description: 'path (default when a shape, subpaths, components or pathId are given), selection (trace the current selection), reveal-all or hide-all (an empty path).' },
+        pathId: { ...PATH_ID, description: 'A document path from list_paths to use as the mask (Paths › Add Vector Mask), instead of shape / subpaths / components.' },
         ...PATH_PROPS,
         ...TRACE_PROPS,
       },
@@ -540,7 +557,7 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     annotations: { title: 'Add a vector mask', ...WRITE },
     handler: (args) => {
       const id = layerArg(args.layerId);
-      const spec = pathSpec(args);
+      const spec = fromPathId(args) ?? pathSpec(args);
       const hasPath = spec.components?.length || spec.shape !== undefined || spec.subpaths !== undefined;
       const from = (args.from as 'path' | 'selection' | 'reveal-all' | 'hide-all' | undefined) ?? (hasPath ? 'path' : 'reveal-all');
       if (from !== 'selection' && TRACE_KEYS.some((k) => args[k] !== undefined)) throw new Error('tolerance, cornerRoundness and minArea apply only to from selection.');
@@ -616,5 +633,152 @@ export function createImageShapeTools(controller: ImageEditorController): AgentT
     },
   };
 
-  return [get, add, update, setComponent, addComponent, removeComponent, merge, getVectorMask, addVectorMask, setVectorMaskPath, setVectorMaskProps, rasterizeVectorMask, removeVectorMask, selectionToPath, pathToSelection];
+
+  const listPaths: AgentTool = {
+    name: 'list_paths',
+    title: 'List document paths',
+    description:
+      "Paths panel: the document's saved paths and its Work Path (paths kept with the document, on no layer), each with id, name, work (true for the Work Path, which the next make_work_path replaces), fill rule, anchor count and bounds, and which is active. Use the ids with path_to_selection, add_vector_mask, fill_path, stroke_path and the other path tools.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { title: 'List document paths', ...READ },
+    handler: () => ({ paths: controller.getPaths().map((p) => pathSummary(p.id)), activePathId: controller.getState().activePathId ?? null }),
+  };
+
+  const getPath: AgentTool = {
+    name: 'get_path',
+    title: 'Read a document path',
+    description: "Reads a document path: its summary, svg (compact SVG path data) and components (op, subpaths of anchors with handles, in document pixels), ready to edit and pass back to set_path_geometry.",
+    inputSchema: { type: 'object', properties: { pathId: PATH_ID }, required: ['pathId'], additionalProperties: false },
+    annotations: { title: 'Read a document path', ...READ },
+    handler: ({ pathId }) => {
+      const p = controller.getPath(String(pathId));
+      if (!p) throw new Error(`No path "${String(pathId)}". Call list_paths for ids.`);
+      return { path: { ...pathSummary(p.id), svg: pathSvgData(p), components: p.components } };
+    },
+  };
+
+  const makeWorkPath: AgentTool = {
+    name: 'make_work_path',
+    title: 'Make a work path from the selection',
+    description:
+      "Paths › Make Work Path: traces the selection's outline (within tolerance px) into the Work Path, replacing the last Work Path unless it was saved (rename_path saves it). Use it to keep a selection as an editable, resolution-independent outline. One undo step. Returns the path.",
+    inputSchema: { type: 'object', properties: { ...TRACE_PROPS }, additionalProperties: false },
+    annotations: { title: 'Make a work path from the selection', ...WRITE },
+    handler: (args) => ({ path: pathSummary(controller.makeWorkPath(traceOptions(args)).id) }),
+  };
+
+  const addPath: AgentTool = {
+    name: 'add_path',
+    title: 'Add a document path',
+    description: "Adds a saved document path from a live shape, free subpaths or SVG path data, or components (document pixels), as add_shape_layer takes them. One undo step. Returns the path.",
+    inputSchema: {
+      type: 'object',
+      $defs: DEFS,
+      properties: { name: { type: 'string', description: 'The path name (default "Path n").' }, ...PATH_PROPS },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Add a document path', ...WRITE },
+    handler: (args) => {
+      const spec = pathSpec(args);
+      if (!spec.components?.length && spec.shape === undefined && spec.subpaths === undefined) throw new Error('Give the path as shape, subpaths or components.');
+      return { path: pathSummary(controller.addPath({ ...spec, name: args.name as string | undefined }).id) };
+    },
+  };
+
+  const setPathGeometry: AgentTool = {
+    name: 'set_path_geometry',
+    title: 'Replace a document path',
+    description: "Replaces a document path's geometry (shape, subpaths or components, document pixels); its name is kept. Read it with get_path first to change part of it. One undo step. Returns the path.",
+    inputSchema: { type: 'object', $defs: DEFS, properties: { pathId: PATH_ID, ...PATH_PROPS }, required: ['pathId'], additionalProperties: false },
+    annotations: { title: 'Replace a document path', ...WRITE_IDEMPOTENT },
+    handler: (args) => ({ path: pathSummary(controller.setPathGeometry(String(args.pathId), pathSpec(args)).id) }),
+  };
+
+  const renamePath: AgentTool = {
+    name: 'rename_path',
+    title: 'Rename or save a path',
+    description: 'Renames a document path. Renaming the Work Path saves it (Paths › Save Path), so make_work_path no longer replaces it. One undo step. Returns the path.',
+    inputSchema: { type: 'object', properties: { pathId: PATH_ID, name: { type: 'string', minLength: 1, description: 'The new name.' } }, required: ['pathId', 'name'], additionalProperties: false },
+    annotations: { title: 'Rename or save a path', ...WRITE_IDEMPOTENT },
+    handler: ({ pathId, name }) => ({ path: pathSummary(controller.renamePath(String(pathId), String(name)).id) }),
+  };
+
+  const duplicatePath: AgentTool = {
+    name: 'duplicate_path',
+    title: 'Duplicate a path',
+    description: 'Duplicates a document path as a saved path (default name "<name> copy"). One undo step. Returns the new path.',
+    inputSchema: { type: 'object', properties: { pathId: PATH_ID, name: { type: 'string', description: 'The copy\'s name.' } }, required: ['pathId'], additionalProperties: false },
+    annotations: { title: 'Duplicate a path', ...WRITE },
+    handler: ({ pathId, name }) => ({ path: pathSummary(controller.duplicatePath(String(pathId), name as string | undefined).id) }),
+  };
+
+  const deletePath: AgentTool = {
+    name: 'delete_path',
+    title: 'Delete a path',
+    description: 'Deletes a document path (undo_image brings it back). Returns the remaining paths.',
+    inputSchema: { type: 'object', properties: { pathId: PATH_ID }, required: ['pathId'], additionalProperties: false },
+    annotations: { title: 'Delete a path', ...DESTRUCTIVE },
+    handler: ({ pathId }) => {
+      controller.deletePath(String(pathId));
+      return { paths: controller.getPaths().map((p) => pathSummary(p.id)) };
+    },
+  };
+
+  const PAINT_PROPS = {
+    layerId: { type: 'string', description: 'The pixel layer to paint on (default the active layer).' },
+    color: { type: 'string', description: 'A CSS colour such as #ff0000 (default the foreground colour).' },
+    opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
+  } as const;
+
+  const fillPath: AgentTool = {
+    name: 'fill_path',
+    title: 'Fill a path',
+    description: "Paths › Fill Path: fills the area a document path encloses on a pixel layer with a colour. The selection is not changed. One undo step. Returns what was painted.",
+    inputSchema: { type: 'object', properties: { pathId: PATH_ID, ...PAINT_PROPS }, required: ['pathId'], additionalProperties: false },
+    annotations: { title: 'Fill a path', ...WRITE },
+    handler: (args) => controller.fillPath(String(args.pathId), { layerId: args.layerId as string | undefined, color: args.color as string | undefined, opacity: args.opacity as number | undefined }),
+  };
+
+  const strokePath: AgentTool = {
+    name: 'stroke_path',
+    title: 'Stroke a path',
+    description: "Paths › Stroke Path: strokes along a document path's outline on a pixel layer, width px wide and centred on it. The selection is not changed. One undo step. Returns what was painted.",
+    inputSchema: {
+      type: 'object',
+      properties: { pathId: PATH_ID, width: { type: 'number', exclusiveMinimum: 0, maximum: 250, description: 'Stroke width in px.' }, ...PAINT_PROPS },
+      required: ['pathId', 'width'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Stroke a path', ...WRITE },
+    handler: (args) =>
+      controller.strokePath(String(args.pathId), { width: args.width as number, layerId: args.layerId as string | undefined, color: args.color as string | undefined, opacity: args.opacity as number | undefined }),
+  };
+
+  return [
+    get,
+    add,
+    update,
+    setComponent,
+    addComponent,
+    removeComponent,
+    merge,
+    getVectorMask,
+    addVectorMask,
+    setVectorMaskPath,
+    setVectorMaskProps,
+    rasterizeVectorMask,
+    removeVectorMask,
+    selectionToPath,
+    pathToSelection,
+    listPaths,
+    getPath,
+    makeWorkPath,
+    addPath,
+    setPathGeometry,
+    renamePath,
+    duplicatePath,
+    deletePath,
+    fillPath,
+    strokePath,
+  ];
 }
