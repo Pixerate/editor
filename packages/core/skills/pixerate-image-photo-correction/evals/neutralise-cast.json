@@ -12,9 +12,9 @@
 	},
 	"checks": [
 		{ "why": "the grey card is neutral (cast within ±4 levels)", "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 }, "expect": { "cast": { "redBlue": { "$min": -4, "$max": 4 }, "greenMagenta": { "$min": -4, "$max": 4 } } } },
-		{ "why": "the card is a mid grey, not crushed or blown", "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 }, "expect": { "stats": { "luminance": { "mean": { "$min": 90, "$max": 170 } } } } },
+		{ "why": "the card stays a mid grey, not crushed or blown (the task asks for neither brighter nor darker)", "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 }, "expect": { "stats": { "luminance": { "mean": { "$min": 60, "$max": 200 } } } } },
 		{ "why": "no channel clips anywhere", "tool": "measure_region", "expect": { "clipping": { "highlightsPercent": { "red": { "$max": 0.5 }, "green": { "$max": 0.5 }, "blue": { "$max": 0.5 } }, "shadowsPercent": { "red": { "$max": 0.5 }, "green": { "$max": 0.5 }, "blue": { "$max": 0.5 } } } } },
-		{ "why": "the correction is a layer, not baked into the photo", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "adjustment" } } } }
+		{ "why": "the correction stays adjustable: an adjustment layer or the base white balance (the develop filter), not baked into the photo", "tool": "list_layers", "expect": { "$expr": "v.layers.some((l) => l.type === 'adjustment' || (l.filters || []).some((f) => f.kind === 'develop' && (f.temperature || f.tint)))" } }
 	],
 	"solution": [
 		{ "tool": "measure_region", "args": { "x": 12, "y": 52, "width": 16, "height": 16 } },

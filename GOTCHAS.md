@@ -3216,3 +3216,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Symptom**: An app that lays out its own sidebar from `layerPanels` + `LayerPanel` (Pixerate's Image Studio) had no Refine Edge, Check Edge, Show Last Change, Separate Subject, Channels, Paths, Edge Colour or vector mask edge controls, and a layer with a mask showed a "Panel mask" placeholder. Only the editor's own `ImageEditor` and `LayersPanel` mounted them.
 - **Root Cause**: New panels were mounted directly in `ImageEditor.svelte` / `LayersPanel.svelte`; `layerPanels` and `LayerPanel` were not updated, and `layerPanels` already returned a `mask` id that `LayerPanel` had no case for.
 - **Solution**: Every panel a feature adds must be reachable through `layerPanels` and rendered by `LayerPanel` (`selection` includes Refine Edge; `channels`, `paths` and `mask` are their own ids). `image-editor-controls.svelte.test.ts` mounts every id `layerPanels` returns and fails on a placeholder.
+
+### [core/skills] A Workflow Eval That Accepts Only Its Own Solution
+
+- **Area**: `skills/*/evals/*.json`
+- **Symptom**: An agent that followed the workflow skill still failed the eval. In `neutralise-cast` Pixie fixed white balance with the base sliders, which the skill allows; in `grounding-shadow` she cut the product out with `separate_subject` (a masked layer).
+- **Root Cause**: The checks were written from the eval's own `solution`: "an adjustment layer exists", "a pixel layer has the product's bounds", and a card brightness only that solution's levels produced.
+- **Solution**: Write each check from the skill's quality bar and the user's words, and accept every route the skill offers (`$in` for alternatives, `$expr` across layers). `agent-skill-evals-alternatives.test.ts` proves the other routes pass; add a case when an eval's check names one specific way.
