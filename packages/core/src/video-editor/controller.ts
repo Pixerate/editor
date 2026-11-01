@@ -15,12 +15,13 @@ import type { VideoPreviewScale } from './proxy.js';
 import type { VideoFrameCache } from './frame-cache.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
-import type { VideoClip, VideoClipEffect, VideoEffectValues, VideoPlacementMode, VideoProject } from './types.js';
-import { EffectsSlot } from '../effects/helpers.js';
+import type { VideoCameraFraming, VideoClip, VideoClipCamera, VideoClipEffect, VideoEffectValues, VideoPlacementMode, VideoProject } from './types.js';
+import { cameraMoveField, EffectsSlot, resolveCameraMoveSpec } from '../effects/helpers.js';
+import { bakeVideoClipCamera, videoCameraBase, type VideoCameraBake } from './camera.js';
 import { isEffectError } from '../effects/errors.js';
-import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
+import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
 import { checkVideoEffectPlace, checkVideoEffectValues, VideoEffectsEngine, type VideoEffectPlace } from './effects.js';
-import { isVideoKeyframes, type VideoAnimatable, type VideoKey } from './keyframes.js';
+import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeysOf, type VideoAnimatable, type VideoKey } from './keyframes.js';
 import { planVideoEdits, type VideoEditPlan, type VideoEditPlanInput } from './plan.js';
 
 export interface VideoEditorOptions {
@@ -56,6 +57,11 @@ export interface VideoEditorOptions {
 }
 
 /** What `applyClipEffect` and the other effect edits return: the edit result plus what they made or changed. */
+/** What setting or clearing a clip's camera move did: its camera now, the keys baked per property, any cuts and when each move plays (clip ms). */
+export type VideoCameraMoveResult =
+	| { ok: true; clip: string; camera: VideoClipCamera | null; keys: Record<'x' | 'y' | 'scale' | 'rotation', number>; cuts: number[]; windows: VideoCameraBake['windows']; notes: string[] }
+	| { ok: false; error: string };
+
 export type VideoEffectEditResult = (VideoEditResult & { ok: true; clip: string; effect?: VideoClipEffect }) | { ok: false; error: string };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -592,6 +598,93 @@ export class VideoEditorController {
 			stack.splice(index, 0, next);
 			return { edit: { op: 'update_clip', clip, set: { effects: stack } }, label: `Change effect ${was.name ?? was.effect}`, clip, effect: () => next };
 		}, options.merge);
+	}
+
+	/** The provider's camera moves for a role (`transition` into a clip, `hold` while it plays), or all of them. Empty without camera support. */
+	async cameraMoves(role?: CameraMoveRole): Promise<EffectSummary[]> {
+		const provider = this.effects.provider;
+		if (!provider?.capabilities.supportsCamera || !provider.cameraView) return [];
+		return (await provider.list({ kind: 'camera' })).filter((e) => e.kind === 'camera' && e.camera && (!role || e.camera.role === role));
+	}
+
+	private cameraClip(id: string): VideoClip {
+		const at = findVideoClip(this.project, id);
+		if (!at) {
+			const ids = this.project.tracks.flatMap((t) => t.clips.map((c) => c.id));
+			throw new Error(`There is no clip "${id}"; the clips are ${ids.map((c) => `"${c}"`).join(', ') || 'none'} (get_video_project lists them).`);
+		}
+		if (at.track.kind === 'audio') throw new Error(`Clip "${id}" is on audio track "${at.track.id}" and has no picture for a camera to move over.`);
+		if (at.clip.type === 'adjustment') throw new Error(`Clip "${id}" is an adjustment clip, which has no picture of its own for a camera to move over.`);
+		return at.clip;
+	}
+
+	private async cameraEdit(clipId: string, camera: VideoClipCamera | null, label: string, merge?: string): Promise<VideoCameraMoveResult> {
+		const clip = this.cameraClip(clipId);
+		const base = videoCameraBase(clip);
+		if (!camera) {
+			// Nothing left to play: the transform goes back to what it was.
+			const restored = Object.keys(base).length ? { transform: base } : {};
+			const r = this.apply({ op: 'update_clip', clip: clipId, set: restored, remove: ['camera', ...(Object.keys(base).length ? [] : ['transform'])] }, label, { merge });
+			if (!r.ok) return r;
+			return { ok: true, clip: clipId, camera: null, keys: { x: 0, y: 0, scale: 0, rotation: 0 }, cuts: [], windows: {}, notes: [] };
+		}
+		const bake = await bakeVideoClipCamera(clip, camera, this.project, this.effects.require());
+		const r = this.apply({ op: 'update_clip', clip: clipId, set: { camera, transform: bake.transform } }, label, { merge });
+		if (!r.ok) return r;
+		const keys = Object.fromEntries(VIDEO_TRANSFORM_PROPERTIES.map((p) => [p, videoKeysOf(bake.transform[p]).length])) as Record<'x' | 'y' | 'scale' | 'rotation', number>;
+		return { ok: true, clip: clipId, camera, keys, cuts: bake.cuts, windows: bake.windows, notes: bake.notes };
+	}
+
+	/**
+	 * Sets the camera move a clip plays into (`transition`: from `from` to `framing` from the
+	 * clip's start) or while it holds (`hold`: across the rest of the clip at `framing`), and bakes
+	 * the clip's moves into its x, y, scale and rotation keys at the project's frame rate, keeping a
+	 * cut's two keys. The move is checked first (role, preset, values; a preset's values and a move
+	 * in's length are written out). A clip whose transform is keyed by hand is refused. One undo step.
+	 */
+	async setClipCameraMove(clip: string, role: CameraMoveRole, spec: CameraMoveSpec, options: { from?: VideoCameraFraming | null; framing?: VideoCameraFraming | null; merge?: string } = {}): Promise<VideoCameraMoveResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		try {
+			const current = this.cameraClip(clip);
+			const { spec: parts, description } = await resolveCameraMoveSpec(this.effects.require(), spec, role);
+			const move = role === 'transition' && parts.ms === undefined ? { ...parts, ms: description.camera!.durationMs } : parts;
+			const simple = move.ms === undefined && move.preset === undefined && move.values === undefined;
+			const camera: VideoClipCamera = { ...(current.camera ?? { base: videoCameraBase(current) }), [cameraMoveField(role)]: simple ? move.move : move };
+			for (const key of ['from', 'framing'] as const) {
+				if (options[key] === null) delete camera[key];
+				else if (options[key] !== undefined) camera[key] = options[key]!;
+			}
+			if (camera.from && !camera.in) throw new Error('"from" is where a move in starts; set a transition move too, or leave "from" out.');
+			return await this.cameraEdit(clip, camera, `${role === 'hold' ? 'Hold move' : 'Camera move'} ${description.name}`, options.merge);
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refused((error as Error).message);
+			throw error;
+		}
+	}
+
+	/**
+	 * Removes a clip's camera move for a role and bakes what is left (which needs the provider);
+	 * with no move left the transform goes back to what it was before the moves. One undo step.
+	 */
+	async clearClipCameraMove(clip: string, role: CameraMoveRole): Promise<VideoCameraMoveResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		try {
+			const current = this.cameraClip(clip);
+			const field = cameraMoveField(role);
+			const other = field === 'in' ? 'during' : 'in';
+			if (current.camera?.[field] === undefined)
+				throw new Error(`Clip "${clip}" has no camera "${field}" move to clear${current.camera?.[other] !== undefined ? `; it has a "${other}" move (role ${role === 'hold' ? 'transition' : 'hold'})` : ''}.`);
+			const camera: VideoClipCamera = { ...current.camera };
+			delete camera[field];
+			if (field === 'in') delete camera.from;
+			const left = camera.in !== undefined || camera.during !== undefined;
+			return await this.cameraEdit(clip, left ? camera : null, role === 'hold' ? 'Clear hold move' : 'Clear camera move');
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refused((error as Error).message);
+			throw error;
+		}
 	}
 
 	/** Removes an effect from a clip's stack (works without a provider, so placeholders can be cleared). One undo step. */

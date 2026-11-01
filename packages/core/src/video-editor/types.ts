@@ -7,7 +7,7 @@
  */
 
 import type { VideoAnimatable, VideoKeyframes } from './keyframes.js';
-import type { EffectValue } from '../effects/types.js';
+import type { CameraMoveSpec, EffectValue } from '../effects/types.js';
 
 export type VideoAssetKind = 'video' | 'audio' | 'image';
 
@@ -251,6 +251,39 @@ interface VideoClipBase {
 	effects?: VideoClipEffect[];
 	/** A shape that cuts the picture out (see `VideoClipMask`). */
 	mask?: VideoClipMask;
+	/** Provider camera moves baked into the transform's keyframes (see `VideoClipCamera`). */
+	camera?: VideoClipCamera;
+}
+
+/**
+ * Where a camera looks at a clip's picture: `zoom` × the picture as placed (default 1), centred
+ * on the point `x`, `y` pixels from the frame's centre (default 0, 0).
+ */
+export interface VideoCameraFraming {
+	zoom?: number;
+	x?: number;
+	y?: number;
+}
+
+/**
+ * Camera moves from the effects provider played on a clip, the clip being the shot: `in` (a
+ * `transition` move, such as a glide or whip pan) moves from `from` to `framing` over its `ms`
+ * from the clip's start, and `during` (a `hold` move, such as a Ken Burns drift) plays across the
+ * rest of the clip at `framing`. They are baked into the clip's x, y, scale and rotation keys
+ * (one per frame, two at a cut), so previews, renders and exports play them without the provider;
+ * `base` keeps the transform from before, put back when the moves are cleared. Set them with
+ * `VideoEditorController.setClipCameraMove`, which bakes them; edit the keys directly and the
+ * moves no longer describe them.
+ */
+export interface VideoClipCamera {
+	in?: CameraMoveSpec;
+	during?: CameraMoveSpec;
+	/** Where `in` starts (default the whole picture). */
+	from?: VideoCameraFraming;
+	/** Where `in` arrives and `during` plays (default the whole picture). */
+	framing?: VideoCameraFraming;
+	/** The clip's transform before the moves were baked. */
+	base: { x?: number; y?: number; scale?: number; rotation?: number };
 }
 
 /**
