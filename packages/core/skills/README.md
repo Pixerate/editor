@@ -55,6 +55,8 @@ request like "clean up this export" finds it.
 | [`pixerate-video-montage`](pixerate-video-montage/SKILL.md) | Video (`pixerate-video-editor`) | Selects on the beat, varied pacing, short transitions with handles, music under everything and a clean ending. |
 | [`pixerate-chart-choose-and-build`](pixerate-chart-choose-and-build/SKILL.md) | Chart (`pixerate-chart`) | From the question to the type, clean ordered data, honest axes, units and colour-blind-safe colours. |
 | [`pixerate-chart-annotate`](pixerate-chart-annotate/SKILL.md) | Chart (`pixerate-chart`) | A takeaway title, highlights, labelled targets and ranges, callouts and a source note, kept few. |
+| [`pixerate-spreadsheet-analysis`](pixerate-spreadsheet-analysis/SKILL.md) | Spreadsheet (`pixerate-spreadsheet`) | Summary tables with SUMIFS, COUNTIFS and AVERAGEIFS, growth, shares and rankings as live formulas that reconcile with the data. |
+| [`pixerate-spreadsheet-financial-model`](pixerate-spreadsheet-financial-model/SKILL.md) | Spreadsheet (`pixerate-spreadsheet`) | Inputs apart from calculations, one formula pattern per row, no hard-coded numbers, scenarios and audits. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 

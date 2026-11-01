@@ -201,7 +201,12 @@ export function matchesEvalExpectation(actual: unknown, expected: unknown): bool
 			case '$expr':
 				// A JavaScript expression over the value `v`, for relations matchers cannot state
 				// (`v.width === v.height`). Keep it short and prefer the operators above.
-				return !!new Function('v', `return (${want as string});`)(actual);
+				// An expression that throws (reading into a value that is not there yet) does not match.
+				try {
+					return !!new Function('v', `return (${want as string});`)(actual);
+				} catch {
+					return false;
+				}
 			case '$nonEmpty':
 				return !!list && matches(list.filter((a) => !isEmpty(a)), want);
 			default:

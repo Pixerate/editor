@@ -1,0 +1,118 @@
+{
+	"prompt": "Build a five-year revenue projection: starting revenue 100,000 in year 1, growing 8 % a year. Put the inputs at the top (labels in column A, values in column B: starting revenue in B1, growth in B2) and the projection in rows 4-5 (years 1-5 in B4:F4, revenue in B5:F5), so I can change the growth rate in one place.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			[
+				""
+			]
+		]
+	},
+	"checks": [
+		{
+			"why": "the inputs are in their own cells",
+			"tool": "get_range",
+			"args": {
+				"range": "B1:B2"
+			},
+			"expect": {
+				"values": [
+					[
+						100000
+					],
+					[
+						0.08
+					]
+				]
+			}
+		},
+		{
+			"why": "the projection compounds at the input rate",
+			"tool": "get_range",
+			"args": {
+				"range": "B5:F5"
+			},
+			"expect": {
+				"values": {
+					"$expr": "[100000, 108000, 116640, 125971.2, 136048.896].every((x, i) => Math.abs(v[0][i] - x) < 0.01)"
+				}
+			}
+		},
+		{
+			"why": "later years are formulas that use the growth input (B2), not a typed rate",
+			"tool": "get_range",
+			"args": {
+				"range": "C5:F5"
+			},
+			"expect": {
+				"raw": [
+					{
+						"$every": {
+							"$match": "^=.*\\$?B\\$?2"
+						}
+					}
+				]
+			}
+		},
+		{
+			"why": "no formula errors",
+			"tool": "get_range",
+			"args": {
+				"range": "A1:F5"
+			},
+			"expect": {
+				"errors": []
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_range",
+			"args": {
+				"start": "A1",
+				"values": [
+					[
+						"Starting revenue",
+						100000,
+						null,
+						null,
+						null,
+						null
+					],
+					[
+						"Growth",
+						0.08,
+						null,
+						null,
+						null,
+						null
+					],
+					[
+						null,
+						null,
+						null,
+						null,
+						null,
+						null
+					],
+					[
+						"Year",
+						1,
+						2,
+						3,
+						4,
+						5
+					],
+					[
+						"Revenue",
+						"=$B$1",
+						"=B5*(1+$B$2)",
+						"=C5*(1+$B$2)",
+						"=D5*(1+$B$2)",
+						"=E5*(1+$B$2)"
+					]
+				]
+			}
+		}
+	]
+}
