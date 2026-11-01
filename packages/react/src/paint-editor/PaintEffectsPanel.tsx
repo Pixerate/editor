@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPaintEffectsToolProvider, PAPER_EFFECT_BLENDS, type PaintEditorController, type PaintEffectsToolProviderOptions, type PaperEffectBlend } from '@pixerate/editor/paint-editor';
 import type { EffectProvider } from '@pixerate/editor/effects';
 import type { ToolRegistry } from '@pixerate/editor/tools';
@@ -53,19 +53,21 @@ function Controls({ provider, effect, name, values, apply }: { provider: EffectP
   );
 }
 
-type Browse = null | 'paper' | 'layer' | 'fill' | 'light';
+type Browse = null | 'paper' | 'layer' | 'fill' | 'light' | 'paint';
 
 const BROWSERS: Record<Exclude<Browse, null>, { uses: ('generator' | 'overlay' | 'title' | 'filter')[]; title: string }> = {
   paper: { uses: ['generator'], title: 'Effect paper' },
   layer: { uses: ['generator', 'overlay', 'title'], title: 'Effect layer' },
   fill: { uses: ['generator', 'overlay', 'title'], title: 'Fill the layer' },
   light: { uses: ['filter'], title: 'Light on the paint' },
+  paint: { uses: ['generator', 'overlay', 'title'], title: 'Paint with an effect' },
 };
 
 /**
  * Provider effects in the paint editor: effect paper (a generator over the sheet, multiplied so
- * the grain shows), effect layers, effect fills and light baked onto the active layer's dried
- * paint; plus the controls of the effect paper and of an active effect layer. Each change is one
+ * the grain shows), effect layers, effect fills, light baked onto the active layer's dried paint
+ * and effect paint (brushes take their colours from the effect); plus the controls of the effect
+ * paper, of an active effect layer and of the effect paint. Each change is one
  * undo step (a slider drag is one). Without a provider it says why nothing can be added.
  */
 export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller, className }) => {
@@ -78,6 +80,8 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
   const activeId = state.document.activeLayerId;
   const layerEffect = activeId ? controller.getEffectLayer(activeId) : undefined;
   const active = activeId ? controller.getLayer(activeId) : undefined;
+  const effectPaint = state.effectPaint;
+  const thumbnail = useMemo(() => (effectPaint && !state.effectPaintRendering ? controller.effectPaintThumbnail(48) : null), [controller, effectPaint, state.effectPaintRendering]);
   const run = (work: () => Promise<unknown>) =>
     attempt(() => {
       setBusy(true);
@@ -90,6 +94,7 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
     else if (kind === 'layer') run(() => controller.addEffectLayer(id));
     else if (kind === 'fill') run(() => controller.fillLayerWithEffect(id));
     else if (kind === 'light' && activeId) run(() => controller.applyLightEffect(activeId, id));
+    else if (kind === 'paint') run(() => controller.setEffectPaint({ effect: id }));
   };
   const toggle = (b: Exclude<Browse, null>) => setBrowse(browse === b ? null : b);
   const pixel = active?.type === 'pixel';
@@ -108,6 +113,9 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
         </button>
         <button type="button" className={button} disabled={!provider || !pixel} aria-pressed={browse === 'light'} onClick={() => toggle('light')} title="Bake a light, glow or grade into the active layer's dried paint">
           Light…
+        </button>
+        <button type="button" className={button} disabled={!provider} aria-pressed={browse === 'paint'} onClick={() => toggle('paint')} title="Paint with an effect: brushes take each pixel's colour from it">
+          Paint…
         </button>
       </div>
       {!provider && <p className="text-[11px] text-slate-400">No effects provider is registered. Effects in the painting are kept.</p>}
@@ -155,6 +163,21 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
             </select>
           </label>
           <Controls provider={provider} effect={paper.effect} name={paper.name} values={paper.values} apply={(values, commit) => run(() => controller.updatePaperEffect({ values: values as never }, commit))} />
+        </div>
+      )}
+      {effectPaint && (
+        <div className="flex flex-col gap-1 rounded border border-slate-700 p-1" data-effect-part="paint">
+          <div className="flex items-center gap-1">
+            {thumbnail ? <img src={thumbnail} alt="" className="h-5 w-8 rounded object-cover ring-1 ring-slate-700" data-testid="effect-paint-thumbnail" /> : null}
+            <span className="flex-1 truncate">
+              Paint: {effectPaint.effect}
+              {state.effectPaintRendering ? ' (rendering…)' : ''}
+            </span>
+            <button type="button" className={button} aria-label="Stop painting with the effect" onClick={() => attempt(() => controller.setColor(state.color))}>
+              ✕
+            </button>
+          </div>
+          <Controls provider={provider} effect={effectPaint.effect} values={effectPaint.values} apply={(values) => run(() => controller.setEffectPaint({ effect: effectPaint.effect, values: { ...effectPaint.values, ...values } as never, time: effectPaint.time }))} />
         </div>
       )}
       {layerEffect && activeId && (

@@ -22,6 +22,7 @@ import { CoverageMap, dabRect, rasterizeDab, TIP_GRADIENT_STEPS, type Dab } from
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
+import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
@@ -33,6 +34,8 @@ export interface ProceduralStrokeOptions {
   copies?: readonly StrokeCopy[];
   /** Gradient paint (resolved): each mark takes the colour of the pen dab that made it. */
   paint?: PaintGradientSource | null;
+  /** Effect paint: each pixel of a mark takes its colour (and alpha) from these canvas-sized pixels. */
+  effect?: EffectPaintPixels | null;
 }
 
 /** What a coverage-building stroke engine provides to the stroke session. */
@@ -55,6 +58,7 @@ abstract class MarkStroke implements CoverageStroke {
   protected readonly walkers: PenDabWalker[];
   protected readonly depth: number;
   private buf = new Float32Array(0);
+  private field = new Float32Array(0);
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
   protected readonly seed: number;
@@ -144,9 +148,16 @@ abstract class MarkStroke implements CoverageStroke {
       for (let yy = 0, k = 0; yy < rect.height; yy++)
         for (let xx = 0; xx < rect.width; xx++, k++) if (vals[k] > 0) vals[k] *= grainCatch(grain.at(rect.x + xx + 0.5, rect.y + yy + 0.5), this.depth, pressure);
     }
-    const color = this.markColor(x, y);
-    if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;
-    this.coverage.accumulate(rect, vals, dab.opacity, color ? color.rgb : null);
+    if (this.options.effect) {
+      if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
+      const field = this.field.subarray(0, n * 3);
+      sampleEffectField(this.options.effect, rect, vals, field);
+      this.coverage.accumulate(rect, vals, dab.opacity, null, field);
+    } else {
+      const color = this.markColor(x, y);
+      if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;
+      this.coverage.accumulate(rect, vals, dab.opacity, color ? color.rgb : null);
+    }
     rects.push(rect);
     this.dabCount++;
   }

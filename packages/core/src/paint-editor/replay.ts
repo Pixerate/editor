@@ -112,6 +112,8 @@ export async function replayPainting(
   const maxStrokes = options.strokes ?? source.strokes.length;
   const chunk = Math.max(1, options.wetChunk ?? 0) || Infinity;
   let strokes = 0;
+  // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be).
+  await target.prepareEffectPaints(source.strokes.slice(0, maxStrokes).flatMap((st) => (st.paint?.type === 'effect' ? [st.paint] : [])));
   const advanceTo = async (clock: number) => {
     const now = target.getState().wet.clock;
     let left = clock - now;

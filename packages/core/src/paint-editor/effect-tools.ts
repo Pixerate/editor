@@ -1,8 +1,8 @@
 /**
  * Agent tools for provider effects in the paint editor: the shared effect tools, where
  * `apply_effect` runs a filter (light, glow, grade) on a layer's dried paint and bakes it in, and
- * the target `paper` is the effect paper; plus `set_paper_effect`, `add_effect_layer` and
- * `fill_layer_with_effect`.
+ * the target `paper` is the effect paper and the target `paint` the effect paint; plus
+ * `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` and `set_effect_paint`.
  */
 
 import { withPaintPlayback } from './playback';
@@ -29,6 +29,8 @@ export interface PaintEffectsToolProviderOptions {
 
 /** The target id of the effect paper. */
 export const PAPER_TARGET = 'paper';
+/** The target id of the effect paint (what brushes paint with). */
+export const PAINT_TARGET = 'paint';
 
 const ref = (s: PaintEffectSource) => ({ effect: s.effect, ...(s.name ? { name: s.name } : {}), ...(s.provider ? { provider: s.provider } : {}) });
 
@@ -42,6 +44,10 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     const p = controller.getPaperEffect();
     return p ? [{ id: PAPER_TARGET, ...ref(p), role: 'effect paper', enabled: true, opacity: p.opacity, blend: p.blend, values: p.values, ...(p.time ? { time: p.time } : {}) } as AppliedEffectInfo] : [];
   };
+  const paintInfo = (): AppliedEffectInfo[] => {
+    const p = controller.getEffectPaint();
+    return p ? [{ id: PAINT_TARGET, effect: p.effect, provider: p.provider, role: controller.getState().effectPaintRendering ? 'effect paint (rendering)' : 'effect paint', enabled: true, values: p.values, ...(p.time ? { time: p.time } : {}) } as AppliedEffectInfo] : [];
+  };
   const layerInfo = (layerId: string): AppliedEffectInfo[] => {
     const s = controller.getEffectLayer(layerId);
     return s ? [{ id: 'effect', ...ref(s), role: 'effect layer', enabled: true, values: s.values, ...(s.time ? { time: s.time } : {}) } as AppliedEffectInfo] : [];
@@ -54,14 +60,14 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     }
     return l;
   };
-  const effectsOf = (target: string) => (target === PAPER_TARGET ? paperInfo() : layerInfo(target));
+  const effectsOf = (target: string) => (target === PAPER_TARGET ? paperInfo() : target === PAINT_TARGET ? paintInfo() : layerInfo(target));
   const instanceCheck = (target: string, instance: string) => {
-    const want = target === PAPER_TARGET ? PAPER_TARGET : 'effect';
-    if (target !== PAPER_TARGET) requireLayer(target);
+    const want = target === PAPER_TARGET || target === PAINT_TARGET ? target : 'effect';
+    if (target !== PAPER_TARGET && target !== PAINT_TARGET) requireLayer(target);
     if (instance !== want || !effectsOf(target).length) {
       const have = effectsOf(target).map((e) => `"${e.id}"`);
       throw new Error(
-        `${target === PAPER_TARGET ? 'The paper' : `Layer "${target}"`} has no provider effect "${instance}"; its effects are ${have.join(', ') || 'none'} (list_applied_effects). Light baked into paint is part of the pixels: undo takes it back.`
+        `${target === PAPER_TARGET ? 'The paper' : target === PAINT_TARGET ? 'The paint' : `Layer "${target}"`} has no provider effect "${instance}"; its effects are ${have.join(', ') || 'none'} (list_applied_effects). Light baked into paint is part of the pixels: undo takes it back.`
       );
     }
   };
@@ -77,7 +83,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     title: 'Paint effects',
     description: 'Provider effects on paint layers and on the effect paper.',
     skill: 'pixerate-paint-editor',
-    target: { noun: 'layer', id: `A pixel layer id from list_layers ("${PAPER_TARGET}" is the effect paper, for list, update and remove).` },
+    target: { noun: 'layer', id: `A pixel layer id from list_layers ("${PAPER_TARGET}" is the effect paper and "${PAINT_TARGET}" the effect paint, for list, update and remove).` },
     applyUses: ['filter'],
     applyDetails:
       "Light on dried paint: the filter (search_effects with use filter, e.g. a light, glow or grade) runs on the layer's paint at the canvas size and is baked into its pixels; transparent areas stay transparent, and thick paint keeps its relief (an effect with a height input gets it). opacity is the strength (default 1). Wet paint is refused: dry it first (dry_paint). It is one undo step and is not listed afterwards (it is part of the pixels). Generators go on the paper (set_paper_effect), on their own layer (add_effect_layer) or into a layer (fill_layer_with_effect).",
@@ -85,17 +91,20 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     readOnlyReason,
     list: (target): EffectTargetEffects[] => {
       if (target === PAPER_TARGET) return [{ target: PAPER_TARGET, name: 'Paper', effects: paperInfo() }];
+      if (target === PAINT_TARGET) return [{ target: PAINT_TARGET, name: 'Paint', effects: paintInfo() }];
       if (target) {
         const l = requireLayer(target);
         return [{ target, name: l.name, effects: layerInfo(target) }];
       }
       const out: EffectTargetEffects[] = [];
+      if (paintInfo().length) out.push({ target: PAINT_TARGET, name: 'Paint', effects: paintInfo() });
       if (paperInfo().length) out.push({ target: PAPER_TARGET, name: 'Paper', effects: paperInfo() });
       for (const e of controller.listEffectLayers()) out.push({ target: e.layerId, name: e.name, effects: layerInfo(e.layerId) });
       return out;
     },
     apply: async (target, effect, args): Promise<EffectChangeResult> => {
       if (target === PAPER_TARGET) throw new Error('The paper takes generator effects through set_paper_effect; apply_effect runs a filter on a layer\'s paint.');
+      if (target === PAINT_TARGET) throw new Error('Brushes paint with an effect through set_effect_paint; apply_effect runs a filter on a layer\'s paint.');
       noStackArgs(args);
       requireLayer(target);
       const r = await controller.applyLightEffect(target, effect, { values: values(args.values), amount: args.opacity });
@@ -105,6 +114,13 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     update: async (target, instance, changes): Promise<EffectChangeResult> => {
       instanceCheck(target, instance);
       noStackArgs(changes);
+      if (target === PAINT_TARGET) {
+        if (changes.opacity !== undefined) throw new Error('opacity does not apply to the effect paint: change the brush opacity (set_brush tip.opacity).');
+        const p = controller.getEffectPaint()!;
+        await controller.setEffectPaint({ effect: p.effect, values: { ...p.values, ...((changes.values ?? {}) as Record<string, EffectValue | null>) }, time: p.time });
+        const effects = paintInfo();
+        return { target, effect: effects[0], effects };
+      }
       if (target === PAPER_TARGET) {
         await controller.updatePaperEffect({ values: changes.values as Record<string, EffectValue | null> | undefined, opacity: changes.opacity });
         const effects = paperInfo();
@@ -118,6 +134,10 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
     remove: async (target, instance): Promise<EffectChangeResult> => {
       instanceCheck(target, instance);
       const was = effectsOf(target)[0];
+      if (target === PAINT_TARGET) {
+        controller.setColor(controller.getState().color);
+        return { target, effect: was, effects: [] };
+      }
       if (target === PAPER_TARGET) await controller.setPaperEffect(null);
       else controller.rasterizeEffectLayer(target);
       return { target, effect: was, effects: [], ...(target === PAPER_TARGET ? {} : { keptPixels: true }) };
@@ -152,6 +172,27 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
         handler: async (args) => {
           if (args.effect !== null) ctx.requireProvider();
           return { paperEffect: await controller.setPaperEffect(args.effect, { values: values(args.values), opacity: args.opacity, blend: args.blend as PaperEffectBlend | undefined, time: args.time }) };
+        },
+      },
+      {
+        name: 'set_effect_paint',
+        title: 'Paint with an effect',
+        description:
+          "Makes brushes paint with a provider generator, overlay or title effect (search_effects with use generator, overlay or title): it is rendered once at the canvas size, and each stroke then takes every pixel's colour from it, fixed to the canvas, as if painting a hidden picture into view (the effect's transparency paints nothing). Dab, particle and bristle brushes take the colour per pixel; mixer brushes and dab brushes that pick up paint take it per dab, at its centre. Wet, impasto and sticker brushes refuse it (paint the shape and use fill_layer_with_effect with lockTransparency instead); erasers, blenders and smudges ignore it. It replaces the paint colour or gradient until set_color or set_paint; a brush with its own gradient paints that instead. Strokes record it and replay exactly. Editor state, not an undo step. Returns the effect paint: { effect, provider, values (every control), time } (list_applied_effects target \"paint\" shows it; update_effect / remove_effect with target and effect \"paint\" change or clear it).",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            effect: ctx.effectIdSchema(['generator', 'overlay', 'title']),
+            values: ctx.valuesSchema("Control values over the effect's defaults"),
+            time: { type: 'number', minimum: 0, description: 'Which moment of an animated effect to paint with, in ms (default 0).' },
+          },
+          required: ['effect'],
+          additionalProperties: false,
+        },
+        annotations: { title: 'Paint with an effect', ...ctx.annotations.writeIdempotent },
+        handler: async (args) => {
+          ctx.requireProvider();
+          return { effectPaint: await controller.setEffectPaint({ effect: args.effect, values: values(args.values), time: args.time }) };
         },
       },
       {

@@ -8,6 +8,7 @@
  * - **Effect fills**: a generator, overlay or title effect composited onto a layer's pixels.
  * - **Light on dried paint**: a filter effect (light, glow, grade) run on a layer's paint and baked
  *   in. Wet paint is dried first, in the same undo step; thick paint keeps its relief.
+ * - **Effect paint**: a generator, overlay or title effect brushes paint with (see `effect-paint.ts`).
  *
  * Effects render asynchronously, so each change renders first and commits after (one undo step).
  */
@@ -27,6 +28,8 @@ export const PAINT_EFFECT_PLACES = {
   fill: ['generator', 'overlay', 'title'],
   /** Light (or any filter) on a layer's dried paint. */
   light: ['filter'],
+  /** Effect paint: brushes take each pixel's colour from it. */
+  paint: ['generator', 'overlay', 'title'],
 } as const satisfies Record<string, readonly EffectUse[]>;
 
 export type PaintEffectPlace = keyof typeof PAINT_EFFECT_PLACES;
@@ -36,6 +39,7 @@ const PLACE_WORDS: Record<PaintEffectPlace, string> = {
   layer: 'an effect layer takes generator, overlay or title effects',
   fill: 'an effect fill takes generator, overlay or title effects',
   light: 'light on dried paint takes filter effects',
+  paint: 'effect paint takes generator, overlay or title effects',
 };
 
 /** Refuses an effect that cannot go in `place`, saying what to use instead. */
@@ -43,7 +47,8 @@ export function checkPaintEffectPlace(d: EffectDescription, place: PaintEffectPl
   const allowed: readonly EffectUse[] = PAINT_EFFECT_PLACES[place];
   if (d.kind !== 'motion' && d.kind !== 'vector' && d.uses.some((u) => allowed.includes(u))) return;
   let instead = '';
-  if (d.uses.includes('filter') && place !== 'light') instead = '; run it on a layer\'s dried paint with apply_effect instead';
+  if (d.uses.includes('filter') && place === 'paint') instead = '; paint with a generator, overlay or title effect, or run the filter on the painted layer with apply_effect';
+  else if (d.uses.includes('filter') && place !== 'light') instead = '; run it on a layer\'s dried paint with apply_effect instead';
   else if (place === 'light' && d.uses.some((u) => (PAINT_EFFECT_PLACES.layer as readonly string[]).includes(u))) instead = '; add it as an effect layer (add_effect_layer) or fill a layer with it (fill_layer_with_effect) instead';
   else if (place === 'paper' && d.uses.some((u) => u === 'overlay' || u === 'title')) instead = '; add it as an effect layer with add_effect_layer instead';
   throw new EffectUnsupportedError(`"${d.id}" (${d.name}) is a ${d.uses.join(' / ') || d.kind} effect, and ${PLACE_WORDS[place]}${instead}.`, d.id);

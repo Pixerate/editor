@@ -24,6 +24,7 @@ import { mixPigment8 } from '../raster/blend';
 import type { RasterRect } from '../raster/surface';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import type { MultiColorSettings, PaintBrush } from './brushes';
+import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
@@ -43,6 +44,8 @@ export interface PaintDabStrokeOptions {
   copies?: readonly StrokeCopy[];
   /** Gradient paint (resolved: no `paint` / `secondary` stops): each dab's colour comes from it. */
   paint?: PaintGradientSource | null;
+  /** Effect paint: each dab's colour (and flow, by alpha) is the effect's at the dab's centre. */
+  effect?: EffectPaintPixels | null;
 }
 
 /** Entries in a multi-colour gradient table. */
@@ -240,7 +243,11 @@ export class PaintDabStroke {
     ex.pickUp(this.medium.sample(rect, tip));
     // 2. The dab's paint: one colour, gradient paint's colour for this dab, or a colour per pixel across the tip.
     let flow = 1;
-    if (this.sampler && !this.gradient) {
+    if (this.options.effect) {
+      const rgb: [number, number, number] = [0, 0, 0];
+      flow = sampleEffectAt(this.options.effect, d.x, d.y, rgb);
+      ex.setReservoirColor(rgb[0], rgb[1], rgb[2]);
+    } else if (this.sampler && !this.gradient) {
       const g = this.sampler.dab(d, this.sample);
       ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
       flow = g.alpha;

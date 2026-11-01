@@ -52,6 +52,12 @@
     return untrack(() => ({ width: MIXING_PAD_WIDTH, height: MIXING_PAD_HEIGHT, data: controller.mixingPad.pixels() }));
   });
   const R = $derived(wheelSize / 2);
+  /** Effect paint shows as a thumbnail of the effect in the paint well. */
+  const effectWell = $derived.by(() => {
+    const fx = snap.effectPaint;
+    const rendering = snap.effectPaintRendering;
+    return fx && !rendering ? untrack(() => controller.effectPaintThumbnail(64)) : null;
+  });
   const setHsv = (s: number, v: number) => controller.setColor(rgbToHexColor(...hsvToRgb(hsv.h, s, v)));
   const padPoint = (e: PointerEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -106,9 +112,10 @@
   <div class="flex items-center gap-2" data-testid="paint-source">
     <span
       class="h-5 flex-1 rounded ring-1 ring-slate-700"
-      aria-label={snap.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
+      aria-label={snap.effectPaint ? `Effect paint: ${snap.effectPaint.effect}` : snap.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
       data-testid="paint-well"
-      style:background={paintSourceCss(snap.paint, { paint: color, secondary: snap.secondaryColor })}
+      data-effect-paint={snap.effectPaint ? snap.effectPaint.effect : undefined}
+      style:background={effectWell ? `center / cover no-repeat url("${effectWell}")` : paintSourceCss(snap.paint, { paint: color, secondary: snap.secondaryColor })}
     ></span>
     <button
       type="button"

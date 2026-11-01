@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import { createFakeEffectProvider } from '@pixerate/editor/effects';
 import { PaintEditorController, type PaintPixelLayer } from '@pixerate/editor/paint-editor';
 import { readPixel } from '@pixerate/editor/raster';
-import { PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
+import { ColorPanel, PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
@@ -92,5 +92,39 @@ describe('Svelte paint effects', () => {
     c.setEffectsProvider(createFakeEffectProvider());
     flushSync();
     expect(tabs()).toContain('Effects');
+  });
+
+  it('paints with an effect: the Paint placement, its controls, and the thumbnail in the paint well', async () => {
+    const c = new PaintEditorController({ width: 16, height: 8 });
+    c.setEffectsProvider(createFakeEffectProvider());
+    show(PaintEffectsPanel, { controller: c });
+    const colors = document.createElement('div');
+    document.body.appendChild(colors);
+    const colorPanel = mount(ColorPanel, { target: colors, props: { controller: c } });
+    flushSync();
+    try {
+      await click(button('Paint…'));
+      await pickEffect('fake.gradient');
+      await settle();
+      expect(c.getEffectPaint()).toMatchObject({ type: 'effect', effect: 'fake.gradient' });
+      const part = target.querySelector('[data-effect-part="paint"]')!;
+      expect(part.textContent).toContain('fake.gradient');
+      expect(part.querySelector<HTMLImageElement>('[data-testid="effect-paint-thumbnail"]')!.src).toMatch(/^data:image\/png/);
+      const well = colors.querySelector<HTMLElement>('[data-testid="paint-well"]')!;
+      expect(well.getAttribute('data-effect-paint')).toBe('fake.gradient');
+      expect(well.getAttribute('aria-label')).toBe('Effect paint: fake.gradient');
+      expect(well.style.background).toContain('data:image/png');
+
+      c.paintStroke({ brushId: 'ink-pen', points: [{ x: 2, y: 4 }, { x: 14, y: 4 }] });
+      expect(c.getStrokes().at(-1)!.paint).toMatchObject({ type: 'effect' });
+
+      await click(target.querySelector('[aria-label="Stop painting with the effect"]'));
+      expect(c.getEffectPaint()).toBeNull();
+      expect(target.querySelector('[data-effect-part="paint"]')).toBeNull();
+      expect(colors.querySelector('[data-testid="paint-well"]')!.getAttribute('data-effect-paint')).toBeNull();
+    } finally {
+      unmount(colorPanel);
+      colors.remove();
+    }
   });
 });

@@ -54,6 +54,8 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
   const harmony = useMemo(() => controller.harmony(kind, { color, wheel }), [controller, kind, color, wheel]);
   const [r, g, b] = parseHexColor(color);
   const hsv = rgbToHsv(r, g, b);
+  // Effect paint shows as a thumbnail of the effect in the paint well.
+  const effectWell = useMemo(() => (state.effectPaint && !state.effectPaintRendering ? controller.effectPaintThumbnail(64) : null), [controller, state.effectPaint, state.effectPaintRendering]);
   const pad = useMemo(() => ({ width: MIXING_PAD_WIDTH, height: MIXING_PAD_HEIGHT, data: controller.mixingPad.pixels() }), [controller, state.mixingPadVersion]);
   const R = wheelSize / 2;
   const mid = R * 0.82;
@@ -111,9 +113,10 @@ export const ColorPanel: React.FC<ColorPanelProps> = ({ controller, wheelSize = 
       <div className="flex items-center gap-2" data-testid="paint-source">
         <span
           className="h-5 flex-1 rounded ring-1 ring-slate-700"
-          aria-label={state.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
+          aria-label={state.effectPaint ? `Effect paint: ${state.effectPaint.effect}` : state.paint.type === 'gradient' ? 'Gradient paint' : 'Paint colour'}
           data-testid="paint-well"
-          style={{ background: paintSourceCss(state.paint, { paint: color, secondary: state.secondaryColor }) }}
+          data-effect-paint={state.effectPaint ? state.effectPaint.effect : undefined}
+          style={{ background: effectWell ? `center / cover no-repeat url("${effectWell}")` : paintSourceCss(state.paint, { paint: color, secondary: state.secondaryColor }) }}
         />
         <button
           type="button"

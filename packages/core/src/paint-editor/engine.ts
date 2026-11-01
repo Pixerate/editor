@@ -18,6 +18,7 @@
 import { CoverageMap, dabRect, rasterizeDab, type BrushSettings, type Dab, type StrokePoint } from '../paint/brush';
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
+import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
 import { randSigned } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
 
@@ -338,6 +339,8 @@ export interface DryStrokeOptions {
   seed?: number;
   /** Copies of the stroke (symmetry); default one identity copy. */
   copies?: readonly StrokeCopy[];
+  /** Effect paint: each pixel takes its colour (and alpha) from these canvas-sized pixels. */
+  effect?: EffectPaintPixels | null;
 }
 
 /**
@@ -352,6 +355,7 @@ export class DryStroke {
   private readonly copies: readonly StrokeCopy[];
   private readonly depth: number;
   private buf = new Float32Array(0);
+  private field = new Float32Array(0);
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
 
@@ -402,7 +406,13 @@ export class DryStroke {
           }
         }
       }
-      this.coverage.accumulate(rect, vals, d.opacity);
+      let field: Float32Array | null = null;
+      if (this.options.effect) {
+        if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
+        field = this.field.subarray(0, n * 3);
+        sampleEffectField(this.options.effect, rect, vals, field);
+      }
+      this.coverage.accumulate(rect, vals, d.opacity, null, field);
       rects.push(rect);
       this.dabCount++;
     }
