@@ -223,6 +223,35 @@ describe('searchTools', () => {
 		expect(searchTools(tools, sets, 'clips')[0].toolset).toBe('video');
 		expect(searchTools(tools, sets, 'the of and')).toEqual([]);
 	});
+
+	it('keeps its index across searches, even over fresh listings', () => {
+		const registry = setup();
+		const first = searchTools(registry.listTools().tools, registry.toolsets(), 'trendline');
+		// Every text it tokenizes is lower-cased once; afterwards only the query should be.
+		const lower = vi.spyOn(String.prototype, 'toLowerCase');
+		try {
+			const again = searchTools(registry.listTools().tools, registry.toolsets(), 'trendline');
+			expect(again).toEqual(first);
+			expect(lower.mock.calls.length).toBeLessThanOrEqual(2);
+		} finally {
+			lower.mockRestore();
+		}
+	});
+
+	it('picks up a re-registered tool and a changed toolset description', () => {
+		const registry = setup();
+		const search = (query: string) => searchTools(registry.listTools().tools, registry.toolsets(), query).map((r) => r.name);
+		expect(search('kaleidoscope')).toEqual([]);
+		registry.unregister('video');
+		registry.register({
+			...video(),
+			description: 'Tracks, clips and storyboards.',
+			tools: [tool('add_video_clip', 'Adds a kaleidoscope clip to a track.', false)]
+		});
+		expect(search('kaleidoscope')).toEqual(['video__add_video_clip']);
+		expect(search('storyboard')).toEqual(['video__add_video_clip']);
+		expect(search('silences')).toEqual([]);
+	});
 });
 
 describe('MCP server skills and instructions', () => {
