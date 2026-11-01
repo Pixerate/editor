@@ -113,6 +113,21 @@ describe('LayerPanel', () => {
     expect(input.value).toBe(String(spec.max));
   });
 
+  it('leaves out Brush Options’ paint tool row for a host with its own toolbar', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    controller.setActiveLayer(controller.addPixelLayer({ name: 'Paint' }));
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint', brushTools: false } });
+    flushSync();
+    expect(target.querySelector('[data-testid="brush-options"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="Paint tools"]')).toBeNull();
+    unmount(component);
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint' } });
+    flushSync();
+    expect(target.querySelector('[aria-label="Paint tools"]')).not.toBeNull();
+  });
+
   it('uses the selection options its host gives it', async () => {
     const { LayerPanel } = await import('../src/image-editor');
     const { DEFAULT_SELECTION_TOOL_OPTIONS } = await import('@pixerate/editor/image-editor');

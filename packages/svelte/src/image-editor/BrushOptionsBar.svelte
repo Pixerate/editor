@@ -27,10 +27,12 @@
 
   interface Props {
     controller: ImageEditorController;
+    /** The row of paint tool buttons (default true); hide it when the host has its own toolbar. */
+    showTools?: boolean;
     class?: string;
   }
 
-  let { controller, class: className = '' }: Props = $props();
+  let { controller, showTools = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -58,16 +60,18 @@
 </script>
 
 <div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="brush-options">
-  <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
-    {#each PAINT_TOOLS as t (t.id)}
-      <button
-        type="button"
-        aria-pressed={view.tool === t.id}
-        title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
-        class={imageChipClass(view.tool === t.id)}
-        onclick={() => controller.setTool(t.id)}>{t.label}</button>
-    {/each}
-  </div>
+  {#if showTools}
+    <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
+      {#each PAINT_TOOLS as t (t.id)}
+        <button
+          type="button"
+          aria-pressed={view.tool === t.id}
+          title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
+          class={imageChipClass(view.tool === t.id)}
+          onclick={() => controller.setTool(t.id)}>{t.label}</button>
+      {/each}
+    </div>
+  {/if}
 
   <div class="flex items-center gap-2" role="group" aria-label="Colours">
     <label class="flex items-center gap-1">

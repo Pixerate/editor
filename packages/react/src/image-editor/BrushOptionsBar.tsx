@@ -24,6 +24,8 @@ import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/c
 
 export interface BrushOptionsBarProps {
   controller: ImageEditorController;
+  /** The row of paint tool buttons (default true); hide it when the host has its own toolbar. */
+  showTools?: boolean;
   className?: string;
 }
 
@@ -40,7 +42,7 @@ export interface BrushOptionsBarProps {
  * toggles that tool uses.
  * Shortcuts are handled by `handlePaintShortcut` in the editor.
  */
-export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, className }) => {
+export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, showTools = true, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
@@ -58,20 +60,22 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, cl
 
   return (
     <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="brush-options">
-      <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
-        {PAINT_TOOLS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            aria-pressed={state.activeTool === t.id}
-            title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
-            className={imageChipClass(state.activeTool === t.id)}
-            onClick={() => controller.setTool(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {showTools && (
+        <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Paint tools">
+          {PAINT_TOOLS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={state.activeTool === t.id}
+              title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
+              className={imageChipClass(state.activeTool === t.id)}
+              onClick={() => controller.setTool(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex items-center gap-2" role="group" aria-label="Colours">
         <label className="flex items-center gap-1">

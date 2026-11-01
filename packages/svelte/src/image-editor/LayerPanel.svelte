@@ -41,6 +41,8 @@
     shapeOptions?: ShapeToolOptions;
     /** The Typography panel's options; bind them with the canvas's `typeOptions`. */
     typeOptions?: TypeToolOptions;
+    /** Brush Options' row of paint tool buttons (default true); hide it when the host has its own toolbar. */
+    brushTools?: boolean;
     class?: string;
   }
 
@@ -50,6 +52,7 @@
     selectionOptions = $bindable({ ...DEFAULT_SELECTION_TOOL_OPTIONS }),
     shapeOptions = $bindable({ ...DEFAULT_SHAPE_TOOL_OPTIONS }),
     typeOptions = $bindable({ ...DEFAULT_TYPE_TOOL_OPTIONS }),
+    brushTools = true,
     class: className = '',
   }: Props = $props();
 
@@ -119,7 +122,7 @@
   {:else if panelId === 'paint'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Brush & Paint</div>
-      <BrushOptionsBar {controller} />
+      <BrushOptionsBar {controller} showTools={brushTools} />
     </div>
   {:else if panelId === 'effects'}
     <!-- Kept for hosts that still ask for it by id: layerPanels() folds it into 'properties'. -->

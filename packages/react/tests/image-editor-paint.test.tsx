@@ -59,6 +59,13 @@ describe('React paint tools', () => {
     expect(c.getState().paint.paint.type).toBe('color');
   });
 
+  it('BrushOptionsBar leaves out its paint tool row for a host with its own toolbar', async () => {
+    const c = controller();
+    await act(async () => root.render(<BrushOptionsBar controller={c} showTools={false} />));
+    expect(container.querySelector('[data-testid="brush-options"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Paint tools"]')).toBeNull();
+  });
+
   it('BrushOptionsBar sets tools, brush settings, colours and fills', async () => {
     const c = controller();
     await act(async () => root.render(<BrushOptionsBar controller={c} />));
