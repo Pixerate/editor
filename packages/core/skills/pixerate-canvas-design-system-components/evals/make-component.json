@@ -1,0 +1,103 @@
+{
+	"prompt": "Turn the card into a reusable component and place two instances of it below the original, side by side.",
+	"fixture": {
+		"editor": "canvas",
+		"nodes": [
+			{
+				"id": "card",
+				"type": "group",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 200,
+				"height": 100,
+				"data": {
+					"label": "Card"
+				}
+			},
+			{
+				"id": "bg",
+				"type": "shape",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 200,
+				"height": 100,
+				"data": {
+					"label": "Bg",
+					"shape": {
+						"kind": "rect",
+						"fill": "#eeeeee"
+					}
+				},
+				"parentId": "card"
+			},
+			{
+				"id": "title",
+				"type": "text",
+				"parentId": "card",
+				"position": {
+					"x": 10,
+					"y": 10
+				},
+				"data": {
+					"label": "Hello",
+					"name": "Title"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "one component, made from the card",
+			"tool": "list_components",
+			"expect": {
+				"components": {
+					"$length": 1,
+					"$some": {
+						"id": "card"
+					}
+				}
+			}
+		},
+		{
+			"why": "two instances below the card",
+			"tool": "get_canvas_document",
+			"expect": {
+				"document": {
+					"nodes": {
+						"$expr": "v.filter((n) => n.data && n.data.instance && n.position.y >= 100).length === 2"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "create_component",
+			"args": {
+				"ids": [
+					"card"
+				]
+			}
+		},
+		{
+			"tool": "create_instance",
+			"args": {
+				"componentId": "card",
+				"x": 0,
+				"y": 150
+			}
+		},
+		{
+			"tool": "create_instance",
+			"args": {
+				"componentId": "card",
+				"x": 240,
+				"y": 150
+			}
+		}
+	]
+}

@@ -1,0 +1,110 @@
+{
+	"prompt": "The badge is hidden behind the card: bring it to the front, and lock the background so it can't be moved by accident.",
+	"fixture": {
+		"editor": "canvas",
+		"nodes": [
+			{
+				"id": "backdrop",
+				"type": "shape",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 400,
+				"height": 300,
+				"data": {
+					"label": "Background",
+					"shape": {
+						"kind": "rect",
+						"fill": "#f1faee"
+					}
+				}
+			},
+			{
+				"id": "badge",
+				"type": "shape",
+				"position": {
+					"x": 280,
+					"y": 20
+				},
+				"width": 40,
+				"height": 40,
+				"data": {
+					"label": "Badge",
+					"shape": {
+						"kind": "rect",
+						"fill": "#e63946"
+					}
+				}
+			},
+			{
+				"id": "card",
+				"type": "shape",
+				"position": {
+					"x": 40,
+					"y": 20
+				},
+				"width": 300,
+				"height": 200,
+				"data": {
+					"label": "Card",
+					"shape": {
+						"kind": "rect",
+						"fill": "#ffffff"
+					}
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the badge is drawn last (on top)",
+			"tool": "get_canvas_document",
+			"expect": {
+				"document": {
+					"nodes": {
+						"$expr": "(() => { const z = (n) => (typeof n.zIndex === 'number' ? n.zIndex : 0); const order = v.map((n, i) => ({ id: n.id, z: z(n), i })).sort((a, b) => a.z - b.z || a.i - b.i); return order[order.length - 1].id === 'badge'; })()"
+					}
+				}
+			}
+		},
+		{
+			"why": "the background is locked",
+			"tool": "get_canvas_document",
+			"expect": {
+				"document": {
+					"nodes": {
+						"$some": {
+							"id": "backdrop",
+							"$expr": "v.draggable === false || (v.data && v.data.locked === true) || v.locked === true"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "canvas.bringToFront",
+				"params": {
+					"ids": [
+						"badge"
+					]
+				}
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "canvas.lock",
+				"params": {
+					"ids": [
+						"backdrop"
+					]
+				}
+			}
+		}
+	]
+}

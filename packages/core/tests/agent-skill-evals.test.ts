@@ -33,7 +33,8 @@ import {
 	type RichTextEvalFixture as RichTextFixture,
 	type AnimationEvalFixture as AnimationFixture,
 	type GenerationEvalFixture as GenerationFixture,
-	type EffectEvalFixture as EffectFixture
+	type EffectEvalFixture as EffectFixture,
+	type CanvasEvalFixture as CanvasFixture
 } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
@@ -54,6 +55,11 @@ import {
 import { createMemoryStorage } from '../src/persistence';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { createColorToolProvider } from '../src/color';
+import { createCanvasArrangeController, createCanvasComponentsController, createCanvasEditorDocument, type CanvasNode } from '../src/canvas';
+import { createArrangeCommands, createComponentCommands } from '../src/commands';
+import { createCanvasComponentToolProvider } from '../src/agent';
+import { createDocumentToolProvider } from '../src/persistence';
+import { HistoryManager } from '../src/history';
 import { SpreadsheetController, createRichTextPreset } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -179,7 +185,25 @@ async function effect(f: EffectFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect } as const;
+/** A headless canvas: the components and arrange controllers over a node list, with its document tools. */
+async function canvas(f: CanvasFixture): Promise<ToolRegistry> {
+	let nodes = f.nodes as unknown as CanvasNode[];
+	let edges: never[] = [];
+	const history = new HistoryManager();
+	const access = { getNodes: () => nodes, setNodes: (n: CanvasNode[]) => (nodes = n), history };
+	const components = createCanvasComponentsController(access);
+	const commands = new CommandRegistry();
+	for (const spec of createArrangeCommands(createCanvasArrangeController(access), { scope: null })) commands.register(spec);
+	for (const spec of createComponentCommands(components, { scope: null })) commands.register(spec);
+	const registry = new ToolRegistry();
+	registry.register(createCanvasComponentToolProvider(components));
+	registry.register(createCommandToolProvider(commands));
+	registry.register(createDocumentToolProvider(createCanvasEditorDocument({ ...access, getEdges: () => edges, setEdges: (e) => (edges = e as never[]) })));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect, canvas } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

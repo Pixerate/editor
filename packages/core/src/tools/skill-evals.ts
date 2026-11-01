@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture | CanvasEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -107,6 +107,14 @@ export interface EffectEvalFixture {
 	/** The fake effect provider's effect to author (e.g. `fake.invert`). */
 	effectId: string;
 	/** Tool calls that prepare the session, run in order. */
+	setup?: SkillEvalToolCall[];
+}
+
+export interface CanvasEvalFixture {
+	editor: 'canvas';
+	/** The starting nodes (React Flow style: `id`, `type`, `position`, `width`, `height`, `data`, `parentId`). */
+	nodes: Array<Record<string, unknown>>;
+	/** Tool calls that prepare the canvas (components, instances), run in order. */
 	setup?: SkillEvalToolCall[];
 }
 

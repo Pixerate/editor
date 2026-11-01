@@ -1,0 +1,172 @@
+{
+	"prompt": "Add a Disabled style to the button component set, as a third variant of its Style property.",
+	"fixture": {
+		"editor": "canvas",
+		"nodes": [
+			{
+				"id": "primary",
+				"type": "group",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Button / Primary"
+				}
+			},
+			{
+				"id": "pbg",
+				"type": "shape",
+				"parentId": "primary",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Bg",
+					"shape": {
+						"kind": "rect",
+						"fill": "#1d3557"
+					}
+				}
+			},
+			{
+				"id": "secondary",
+				"type": "group",
+				"position": {
+					"x": 0,
+					"y": 60
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Button / Secondary"
+				}
+			},
+			{
+				"id": "sbg",
+				"type": "shape",
+				"parentId": "secondary",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Bg",
+					"shape": {
+						"kind": "rect",
+						"fill": "#ffffff"
+					}
+				}
+			}
+		],
+		"setup": [
+			{
+				"tool": "create_component",
+				"args": {
+					"ids": [
+						"primary"
+					]
+				}
+			},
+			{
+				"tool": "create_component",
+				"args": {
+					"ids": [
+						"secondary"
+					]
+				}
+			},
+			{
+				"tool": "combine_as_variants",
+				"args": {
+					"ids": [
+						"primary",
+						"secondary"
+					]
+				}
+			},
+			{
+				"tool": "rename_variant_property",
+				"args": {
+					"name": "Property 1",
+					"newName": "Style",
+					"setId": {
+						"$read": "list_components",
+						"path": "sets.0.id"
+					}
+				}
+			},
+			{
+				"tool": "rename_variant_value",
+				"args": {
+					"property": "Style",
+					"value": "Default",
+					"newValue": "Primary",
+					"setId": {
+						"$read": "list_components",
+						"path": "sets.0.id"
+					}
+				}
+			},
+			{
+				"tool": "rename_variant_value",
+				"args": {
+					"property": "Style",
+					"value": "Variant2",
+					"newValue": "Secondary",
+					"setId": {
+						"$read": "list_components",
+						"path": "sets.0.id"
+					}
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "three variants: Primary, Secondary and Disabled",
+			"tool": "list_components",
+			"expect": {
+				"sets": [
+					{
+						"variants": {
+							"$length": 3
+						},
+						"options": [
+							{
+								"name": "Style",
+								"values": {
+									"$expr": "[...v].sort().join() === 'Disabled,Primary,Secondary'"
+								}
+							}
+						]
+					}
+				]
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_components"
+		},
+		{
+			"tool": "add_variant",
+			"args": {
+				"setId": {
+					"$read": "list_components",
+					"path": "sets.0.id"
+				},
+				"variant": {
+					"Style": "Disabled"
+				}
+			}
+		}
+	]
+}
