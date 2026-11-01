@@ -288,5 +288,35 @@ describe('shipped skills', () => {
 			expect(parseSkillFrontmatter(files[`${skill.name}/SKILL.md`]).name).toBe(skill.name);
 		}
 		expect(Object.keys(files)).not.toContain('README.md');
+		// Every workflow skill names a reference skill that ships too.
+		const workflows = skills.filter((s) => s.kind === 'workflow');
+		expect(workflows.map((s) => s.name)).toContain('pixerate-image-selection-masking');
+		for (const skill of workflows) expect(skills.find((s) => s.name === skill.reference)?.kind, skill.name).toBe('reference');
+	});
+});
+
+describe('workflow skills in discovery', () => {
+	const files = {
+		...SKILLS,
+		'pixerate-chart-monthly-report/SKILL.md':
+			'---\nname: pixerate-chart-monthly-report\ndescription: A monthly report chart, start to finish.\nmetadata:\n  kind: workflow\n  reference: pixerate-chart\n---\n\n# Monthly report\n'
+	};
+
+	it('reads the kind and reference from the frontmatter metadata', () => {
+		expect(parseSkillFrontmatter(files['pixerate-chart-monthly-report/SKILL.md']).metadata).toEqual({ kind: 'workflow', reference: 'pixerate-chart' });
+		expect(listSkills(files).map(({ name, kind, reference }) => ({ name, kind, reference }))).toEqual([
+			{ name: 'pixerate-chart', kind: 'reference', reference: undefined },
+			{ name: 'pixerate-chart-monthly-report', kind: 'workflow', reference: 'pixerate-chart' },
+			{ name: 'pixerate-video-editor', kind: 'reference', reference: undefined }
+		]);
+	});
+
+	it("lists a toolset's workflow skills next to its reference skill", async () => {
+		const view = setup().view({ discovery: { skills: files } });
+		const listed = data(await view.callTool('list_toolsets')) as { toolsets: { name: string; workflows?: string[] }[] };
+		expect(listed.toolsets.find((t) => t.name === 'chart')?.workflows).toEqual(['pixerate-chart-monthly-report']);
+		expect(listed.toolsets.find((t) => t.name === 'video')).not.toHaveProperty('workflows');
+		const skill = await view.callTool('get_skill', { name: 'pixerate-chart-monthly-report' });
+		expect(skill.isError).toBeFalsy();
 	});
 });

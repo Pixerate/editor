@@ -121,7 +121,9 @@ same change.
   tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place
-  of the solution. In `expect`, objects match key by key and arrays element by element, with
+  of the solution, using `@pixerate/editor/tools`: `listSkillEvals` reads the eval files,
+  `imageEvalFixturePixels` paints an image fixture, and `failedEvalChecks` runs the checks
+  through the harness's own tool calls (`matchesEvalExpectation` is the matcher on its own). In `expect`, objects match key by key and arrays element by element, with
   operators for ranges and lists (`$min`, `$max`, `$match`, `$every`, `$some`, `$length`,
   `$unique`, `$distinct`, `$sum`, `$column`, `$nonEmpty`, `$not`, `$in`, `$type`); a check's
   argument can read a value the job created with `{ "$read": "list_layers", "path":

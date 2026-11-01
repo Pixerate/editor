@@ -42,7 +42,9 @@ editor's, or (in discovery mode) only `list_toolsets`, `search_tools`, `enable_t
    toolset when you will use many of its tools). The tools then appear in your list. Use
    `disable_tools` to drop a toolset you are done with.
 4. **Read the skill before working in a toolset.** `get_skill` with the skill `list_toolsets`
-   names (or the MCP prompt / `skill://` resource of the same name).
+   names (or the MCP prompt / `skill://` resource of the same name). When the task is a whole
+   job one of the toolset's `workflows` covers (a cutout, a photo correction, an icon set), read
+   that workflow skill too: it has the steps in order and the check after each.
 5. **Read the house style when there is one.** A toolset with a `style` field in
    `list_toolsets` (or an `enable_tools` result with a `style` line) has house-style skills:
    call `get_style` with that domain before you make or change work there.
@@ -149,11 +151,11 @@ Never repeat an identical failing call. Never work around a read-only refusal; t
 | Tool | Use it to |
 | --- | --- |
 | `list_editors` | See which editors are open in the browser and connected to the MCP bridge (id, name, kind, tool count, last activity). Call it first when tools come through the bridge; pass an id or part of a name as `editor` to any tool to pick one when several are open, otherwise the most recently active editor with that tool answers. If none is connected, ask the user to open the app and connect it. |
-| `list_toolsets` | See the toolsets open now: name, title, what each covers, its skill, how many tools it has and whether they are in your tool list (`enabled`: all, some, none). Call it first in a discovery view, then `search_tools` or `enable_tools`. |
+| `list_toolsets` | See the toolsets open now: name, title, what each covers, its skill, its workflow skills (`workflows`), how many tools it has and whether they are in your tool list (`enabled`: all, some, none). Call it first in a discovery view, then `search_tools` or `enable_tools`. |
 | `search_tools` | Find the tool for a task: pass `query` in plain words (and `toolset` to search one editor, `limit` for more than 10). Returns the best matches first with name, toolset, title, one-sentence summary, whether it only reads and whether it is listed. Follow with `enable_tools`. |
 | `enable_tools` | Add tools to your tool list by full name (`tools`, from `search_tools`) and/or whole `toolsets` (from `list_toolsets`). Returns the names added and how many are listed. Prefer single tools to large toolsets. Unknown names fail and change nothing. Allowed tools can also be called by name without enabling them. |
 | `disable_tools` | Drop tools or whole toolsets you are done with from your tool list, to keep it short. Returns the names removed. |
-| `get_skill` | Read a toolset's skill (markdown) before working with it; pass `file` for one of its reference files (listed at the top). The note at the top says how names are prefixed here. |
+| `get_skill` | Read a toolset's skill (markdown) before working with it, and the workflow skill for the job when one fits; pass `file` for one of its reference files (listed at the top). The note at the top says how names are prefixed here. |
 | `list_styles` | See the house-style skills here, general layer first: name, description, layer, the domains each applies to, which have a profile, whether each is on, and issues that leave all or part of one out. Pass `domain` to see one domain's. Follow with `get_style`. |
 | `get_style` | Read the house style for a `domain` before you make or change work there: each skill's preferences as a `<style_skill>` block naming its layer, the merged profile (tokens resolved), `sources` (which layer set each field) and `issues`. Then check your work with the domain's `check_<domain>_style`. |
 | `get_style_file` | Read one file of a house-style skill (`name`, `file`), such as a `references/*.md` its preferences point to, or its raw profile (`chart.json`) before tokens are resolved. An unknown file fails with the list of its files. |

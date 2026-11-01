@@ -16,6 +16,11 @@
   import AdjustmentLayersPanel from './AdjustmentLayersPanel.svelte';
   import SelectionOptionsBar from './SelectionOptionsBar.svelte';
   import ImageProviderEffectsPanel from './ImageProviderEffectsPanel.svelte';
+  import RefineEdgePanel from './RefineEdgePanel.svelte';
+  import ChannelsPanel from './ChannelsPanel.svelte';
+  import PathsPanel from './PathsPanel.svelte';
+  import EdgeColorPanel from './EdgeColorPanel.svelte';
+  import VectorMaskEdgesPanel from './VectorMaskEdgesPanel.svelte';
 
   interface Props {
     controller: ImageEditorController;
@@ -39,6 +44,8 @@
   let shapeOptions = $state({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
   let typeOptions = $state({ ...DEFAULT_TYPE_TOOL_OPTIONS });
   let selectionOptions = $state({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
+  /** Layers whose soft edge takes Edge Colour (decontaminate, despill, cast). */
+  const EDGE_COLOR_TYPES = new Set(['pixel', 'shape', 'type', 'smart']);
 </script>
 
 <div class="layer-panel-container {className}" data-image-panel={panelId} data-testid="layer-panel-{panelId}">
@@ -105,6 +112,27 @@
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Selection</div>
       <SelectionOptionsBar {controller} options={selectionOptions} onOptionsChange={(o) => (selectionOptions = o)} />
+      <RefineEdgePanel {controller} />
+    </div>
+  {:else if panelId === 'channels'}
+    <ChannelsPanel {controller} />
+  {:else if panelId === 'paths'}
+    <PathsPanel {controller} />
+  {:else if panelId === 'mask'}
+    <div class="flex flex-col gap-3 text-xs">
+      <div class="font-medium text-sm text-foreground">Mask & Edges</div>
+      {#if activeLayer}
+        {#key activeLayer.id}
+          {#if activeLayer.vectorMask}
+            <VectorMaskEdgesPanel {controller} layer={activeLayer} />
+          {/if}
+          {#if EDGE_COLOR_TYPES.has(activeLayer.type)}
+            <EdgeColorPanel {controller} layer={activeLayer} />
+          {/if}
+        {/key}
+      {:else}
+        <div class="text-muted-foreground">No active layer selected.</div>
+      {/if}
     </div>
   {:else}
     <div class="text-xs text-muted-foreground">Panel {panelId}</div>

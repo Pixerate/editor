@@ -53,6 +53,8 @@ describe('image tool groups', () => {
     expect(imageToolPanel('crop')).toBe('canvas-size');
     expect(imageToolPanel('type')).toBe('type');
     expect(imageToolPanel('arrow')).toBeNull();
+    expect(imageToolPanel('path-pen')).toBe('paths');
+    expect(imageToolPanel('direct-select')).toBe('paths');
   });
 
   it('picks the first tool for a panel', () => {
