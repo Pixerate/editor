@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.165.10
+
+### Patch Changes
+
+- ec0641f: Effects providers can offer camera moves: a new `camera` effect kind (and `camera` use) that moves a scene's camera instead of drawing pixels. A camera effect's summary has `camera: { role: 'transition' | 'hold', durationMs, cut? }`. Providers set `capabilities.supportsCamera` and implement `cameraView(id, { from, to, u, ms, stage }, values?)`, a synchronous, pure function returning a `CameraView` (`{ zoom, scrollX, scrollY, tilt?, turn?, roll?, perspective?, blur?, blurAngle? }`), and may implement `sampleCameraMove` to return keyframes. `checkEffectProvider` checks camera moves and lets their `createRenderer` refuse; `sampleEffectCameraMove`, `sampleCameraViews`, `isCameraView` and `effectOffered` are new helpers, and `createFakeEffectProvider({ camera: true })` adds three camera moves. `search_effects` filters by `kind: 'camera'` and reports each move's role, length and cut. The React and Svelte effect browsers leave camera moves out unless asked for the `camera` use, and their thumbnails label them "Camera".
+- Updated dependencies [ec0641f]
+  - @pixerate/editor@0.224.0
+
 ## 0.165.9
 
 ### Patch Changes
