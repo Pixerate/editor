@@ -1,0 +1,62 @@
+{
+	"prompt": "Label the data flows with their protocols: HTTPS from the browser to the API, gRPC from the API to the worker, and SQL from both services to the database.",
+	"fixture": {
+		"editor": "diagram",
+		"setup": [
+			{
+				"tool": "load_diagram_mermaid",
+				"args": {
+					"source": "flowchart LR\n  browser[Browser] --> api[API]\n  api --> worker[Worker]\n  api --> db[(Database)]\n  worker --> db"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "each flow labelled with its protocol",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const l = (s, t) => (v.edges.find((e) => e.source === s && e.target === t) || {}).label || ''; return /https/i.test(l('browser', 'api')) && /grpc/i.test(l('api', 'worker')) && /sql/i.test(l('api', 'db')) && /sql/i.test(l('worker', 'db')); })()"
+			}
+		},
+		{
+			"why": "no flows added or removed",
+			"tool": "get_diagram",
+			"expect": {
+				"edges": {
+					"$length": 4
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": "L_browser_api_0",
+				"label": "HTTPS"
+			}
+		},
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": "L_api_worker_1",
+				"label": "gRPC"
+			}
+		},
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": "L_api_db_2",
+				"label": "SQL"
+			}
+		},
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": "L_worker_db_3",
+				"label": "SQL"
+			}
+		}
+	]
+}

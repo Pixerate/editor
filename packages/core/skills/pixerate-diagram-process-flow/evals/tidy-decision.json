@@ -1,0 +1,76 @@
+{
+	"prompt": "The decision in this flowchart is hard to read: the condition and the outcomes are crammed into the node. Tidy it up.",
+	"fixture": {
+		"editor": "diagram",
+		"setup": [
+			{
+				"tool": "load_diagram_mermaid",
+				"args": {
+					"source": "flowchart LR\n  check{Has the payment been received? If yes ship, otherwise remind} --> ship[Ship order]\n  check --> remind[Send reminder]"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a short question in the decision (at most six words)",
+			"tool": "get_diagram",
+			"expect": {
+				"nodes": {
+					"$some": {
+						"id": "check",
+						"shape": "diam",
+						"label": {
+							"$expr": "v.trim().split(/\\s+/).length <= 6 && /\\?$/.test(v.trim())"
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the outcomes are on the edges",
+			"tool": "get_diagram",
+			"expect": {
+				"edges": {
+					"$every": {
+						"label": {
+							"$match": [
+								"^(yes|no|paid|unpaid|received|not received)$",
+								"i"
+							]
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "rename_diagram_node",
+			"args": {
+				"id": "check",
+				"label": "Payment received?"
+			}
+		},
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": {
+					"$read": "get_diagram",
+					"path": "edges.0.id"
+				},
+				"label": "yes"
+			}
+		},
+		{
+			"tool": "set_diagram_edge_label",
+			"args": {
+				"id": {
+					"$read": "get_diagram",
+					"path": "edges.1.id"
+				},
+				"label": "no"
+			}
+		}
+	]
+}

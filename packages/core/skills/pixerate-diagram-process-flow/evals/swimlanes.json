@@ -1,0 +1,74 @@
+{
+	"prompt": "Put this process into swimlanes: the customer places and pays for the order, the shop validates and ships it.",
+	"fixture": {
+		"editor": "diagram",
+		"setup": [
+			{
+				"tool": "load_diagram_mermaid",
+				"args": {
+					"source": "flowchart LR\n  place[Place order] --> pay[Pay]\n  pay --> validate[Validate order]\n  validate --> ship[Ship order]"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "two lanes, Customer and Shop",
+			"tool": "get_diagram",
+			"expect": {
+				"groups": {
+					"$length": 2,
+					"$some": {
+						"label": {
+							"$match": [
+								"customer",
+								"i"
+							]
+						}
+					},
+					"$expr": "v.some((g) => /shop/i.test(g.label))"
+				}
+			}
+		},
+		{
+			"why": "each step in its lane",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const lane = (re) => v.groups.find((g) => re.test(g.label)).id; const c = lane(/customer/i), s = lane(/shop/i); const p = (id) => v.nodes.find((n) => n.id === id).parentId; return p('place') === c && p('pay') === c && p('validate') === s && p('ship') === s; })()"
+			}
+		},
+		{
+			"why": "the flow is unchanged",
+			"tool": "get_diagram",
+			"expect": {
+				"edges": {
+					"$length": 3
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "group_diagram_nodes",
+			"args": {
+				"nodeIds": [
+					"place",
+					"pay"
+				],
+				"label": "Customer",
+				"id": "customer"
+			}
+		},
+		{
+			"tool": "group_diagram_nodes",
+			"args": {
+				"nodeIds": [
+					"validate",
+					"ship"
+				],
+				"label": "Shop",
+				"id": "shop"
+			}
+		}
+	]
+}

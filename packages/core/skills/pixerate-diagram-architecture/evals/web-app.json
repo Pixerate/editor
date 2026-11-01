@@ -1,0 +1,56 @@
+{
+	"prompt": "Draw the architecture of our web app: browsers talk to a load balancer, which spreads traffic over two app servers (group them as the app tier), and both servers use one database.",
+	"fixture": {
+		"editor": "diagram"
+	},
+	"checks": [
+		{
+			"why": "the database drawn as a database (cylinder)",
+			"tool": "get_diagram",
+			"expect": {
+				"nodes": {
+					"$some": {
+						"shape": {
+							"$in": [
+								"cyl",
+								"h-cyl",
+								"lin-cyl"
+							]
+						},
+						"label": {
+							"$match": [
+								"data|db",
+								"i"
+							]
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the two app servers grouped in an app tier",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const g = v.groups.find((x) => /app/i.test(x.label)); return !!g && v.nodes.filter((n) => n.parentId === g.id).length === 2; })()"
+			}
+		},
+		{
+			"why": "the load balancer reaches both servers, and both reach the database",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const lb = v.nodes.find((n) => /balanc/i.test(n.label)); const db = v.nodes.find((n) => ['cyl', 'h-cyl', 'lin-cyl'].includes(n.shape)); const g = v.groups.find((x) => /app/i.test(x.label)); const servers = v.nodes.filter((n) => n.parentId === g.id); return servers.every((s) => v.edges.some((e) => e.source === lb.id && e.target === s.id) && v.edges.some((e) => e.source === s.id && e.target === db.id)); })()"
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "load_diagram_mermaid",
+			"args": {
+				"source": "flowchart LR\n  browser[Browser] -->|HTTPS| lb[Load balancer]\n  subgraph app [App tier]\n    app1[App server 1]\n    app2[App server 2]\n  end\n  lb --> app1\n  lb --> app2\n  app1 -->|SQL| db[(Database)]\n  app2 -->|SQL| db"
+			}
+		},
+		{
+			"tool": "get_diagram"
+		}
+	]
+}
