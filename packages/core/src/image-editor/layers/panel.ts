@@ -422,7 +422,10 @@ export function extractNormalizedLayerItems(
   const imgH = state.imageDimensions?.height || 1;
 
   return ctrlLayers.map((l) => {
-    const bounds = controller.getLayerBounds(l.id) || {
+    // A masked layer shows its pixels through the mask: its stored pixels can be a whole copy of
+    // the photo (Separate Subject's subject is the Background, masked).
+    const masked = l.type === 'pixel' && (l.mask || l.vectorMask) ? controller.getMaskedLayerImage(l.id) : null;
+    const bounds = masked?.bounds || controller.getLayerBounds(l.id) || {
       x: 0,
       y: 0,
       width: imgW,
@@ -431,6 +434,7 @@ export function extractNormalizedLayerItems(
     const sLayer = sLayerMap.get(l.id);
     const assetKey = sLayer?.asset;
     const layerDataUrl =
+      masked?.url ||
       (assetKey && assets[assetKey]) ||
       assets[l.id] ||
       (sLayer?.source === 'document' ? fallbackImageUrl : '');

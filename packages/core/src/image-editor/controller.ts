@@ -2679,6 +2679,52 @@ export class ImageEditorController {
     return enc ? enc.url : null;
   }
 
+  private maskedImageCache = new WeakMap<object, { surface: object; image: { url: string; bounds: CropBox } | null }>();
+
+  /**
+   * A pixel layer's own pixels with its raster and vector masks applied, cropped to what shows: a
+   * PNG data URL and its document bounds, or `null` for an unknown or non-pixel layer, or when
+   * nothing shows. Opacity, blending, filters and effects are left out, as in `getLayerDataURL`.
+   * Use it for a masked layer, whose stored pixels (a whole copy, for Separate Subject's subject)
+   * are not what it shows.
+   */
+  public getMaskedLayerImage(id: string): { url: string; bounds: CropBox } | null {
+    const layer = this.getLayer(id);
+    if (!layer || layer.type !== 'pixel') return null;
+    const surface = this.surfaceOf(layer);
+    const cached = this.maskedImageCache.get(layer);
+    if (cached && cached.surface === surface) return cached.image;
+    const b = this.getLayerBounds(id);
+    let image: { url: string; bounds: CropBox } | null = null;
+    if (b) {
+      const content: PixelLayer = { ...layer, visible: true, opacity: 1, blend: 'normal' };
+      delete content.clipped;
+      delete content.fillOpacity;
+      delete content.effects;
+      delete content.filters;
+      const data = this.compositor.composite([content], b, this.compositorSources());
+      let x0 = b.width, y0 = b.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < b.height; y++) {
+        for (let x = 0; x < b.width; x++) {
+          if (!data[(y * b.width + x) * 4 + 3]) continue;
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+      if (x1 >= 0) {
+        const w = x1 - x0 + 1;
+        const h = y1 - y0 + 1;
+        const out = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) out.set(data.subarray(((y0 + y) * b.width + x0) * 4, ((y0 + y) * b.width + x0 + w) * 4), y * w * 4);
+        image = { url: pngDataUrl(w, h, out, 4), bounds: { x: b.x + x0, y: b.y + y0, width: w, height: h } };
+      }
+    }
+    this.maskedImageCache.set(layer, { surface, image });
+    return image;
+  }
+
   /**
    * Composites the layer stack in document space without a canvas (annotation layers need one
    * and are left out): `rect` (default: the canvas) as RGBA, straight alpha. Crop, rotation and
