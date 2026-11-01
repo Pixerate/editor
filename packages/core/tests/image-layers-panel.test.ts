@@ -89,6 +89,8 @@ describe('layers panel view model', () => {
     expect(layerPanels(null)).toEqual([
       { id: 'canvas-size', title: 'Composition Size' },
       { id: 'selection', title: 'Selection' },
+      { id: 'channels', title: 'Channels' },
+      { id: 'paths', title: 'Paths' },
     ]);
 
     const pxId = c.addPixelLayer({ name: 'Pixel' });
@@ -101,9 +103,14 @@ describe('layers panel view model', () => {
     const adjId = c.addAdjustmentLayer('curves');
     const adjPanels = layerPanels(c.getLayer(adjId));
     expect(adjPanels.map((p) => p.id)).toContain('adjustment');
-    // The selection is the document's: its panel stays with any layer active.
-    expect(pxPanels.at(-1)?.id).toBe('selection');
-    expect(adjPanels.at(-1)?.id).toBe('selection');
+    // The selection, channels and paths are the document's: their panels stay with any layer active.
+    expect(pxPanels.slice(-3).map((p) => p.id)).toEqual(['selection', 'channels', 'paths']);
+    expect(adjPanels.slice(-3).map((p) => p.id)).toEqual(['selection', 'channels', 'paths']);
+    // Mask & Edges shows once the layer has a painted or a vector mask.
+    expect(pxPanels.map((p) => p.id)).not.toContain('mask');
+    c.addLayerMask(pxId, 'reveal-all');
+    expect(layerPanels(c.getLayer(pxId)).map((p) => p.id)).toContain('mask');
+    expect(layerPanels({ id: 'v', type: 'shape', vectorMask: {} } as ImageLayer).map((p) => p.id)).toContain('mask');
 
     expect(CANVAS_SIZE_PRESETS.length).toBeGreaterThan(0);
   });
@@ -122,13 +129,14 @@ describe('layers panel view model', () => {
 
     // Effect layers are added from the layers panel; with a layer, one Effects panel (effect layer
     // controls and filters) follows Layer Properties, which holds the layer's Layer Style.
-    expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', 'selection']);
+    const doc = ['selection', 'channels', 'paths'];
+    expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', ...doc]);
     const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
-    expect(ids).toEqual(['properties', 'provider-effects', 'paint', 'selection']);
-    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', 'selection']);
+    expect(ids).toEqual(['properties', 'provider-effects', 'paint', ...doc]);
+    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', ...doc]);
     const smart = c.convertToSmartObject([id]);
-    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects', 'selection']);
-    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', 'selection']);
+    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects', ...doc]);
+    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', ...doc]);
     for (const type of ['pixel', 'type', 'shape', 'smart', 'group'] as const) {
       const panels = layerPanels({ id: 'x', type } as ImageLayer, { effects: true }).map((p) => p.id);
       expect(panels, type).not.toContain('effects');

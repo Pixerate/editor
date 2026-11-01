@@ -102,6 +102,7 @@ export function imageToolPanel(tool: ImageEditorTool): string | null {
   if (tool === 'move') return null;
   if (isPaintTool(tool)) return 'paint';
   if (tool === 'select') return 'selection';
+  if (tool === 'path-pen' || tool === 'path-select' || tool === 'direct-select') return 'paths';
   if (tool === 'crop') return 'canvas-size';
   if (tool === 'shape' || tool === 'type') return tool;
   return null;
