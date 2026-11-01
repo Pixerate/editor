@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -63,6 +63,12 @@ export interface PaintEvalFixture {
 export interface VideoEvalFixture {
 	editor: 'video';
 	/** Tool calls that build the starting project (settings, assets, clips, markers), run in order. */
+	setup?: SkillEvalToolCall[];
+}
+
+export interface ChartEvalFixture {
+	editor: 'chart';
+	/** Tool calls that build the starting chart (`set_chart_data`, `update_chart`), run in order. */
 	setup?: SkillEvalToolCall[];
 }
 

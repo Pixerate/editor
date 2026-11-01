@@ -1,0 +1,113 @@
+{
+	"prompt": "Some of our readers are colour-blind and can't tell the two years apart in this chart. Fix the colours without changing the data.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"North",
+						"South",
+						"East",
+						"West"
+					],
+					"series": [
+						{
+							"name": "2025",
+							"values": [
+								12,
+								15,
+								9,
+								11
+							],
+							"color": "#d62728"
+						},
+						{
+							"name": "2026",
+							"values": [
+								14,
+								13,
+								12,
+								15
+							],
+							"color": "#2ca02c"
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "bar",
+					"title": "Sales by region"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the colours pass the colour-blind check",
+			"tool": "check_chart_colors",
+			"expect": {
+				"ok": true
+			}
+		},
+		{
+			"why": "the data is unchanged",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"categories": [
+						"North",
+						"South",
+						"East",
+						"West"
+					],
+					"series": [
+						{
+							"name": "2025",
+							"values": [
+								12,
+								15,
+								9,
+								11
+							]
+						},
+						{
+							"name": "2026",
+							"values": [
+								14,
+								13,
+								12,
+								15
+							]
+						}
+					]
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "check_chart_colors"
+		},
+		{
+			"tool": "update_chart_series",
+			"args": {
+				"series": "2025",
+				"color": "#4269d0"
+			}
+		},
+		{
+			"tool": "update_chart_series",
+			"args": {
+				"series": "2026",
+				"color": "#efb118"
+			}
+		},
+		{
+			"tool": "check_chart_colors"
+		}
+	]
+}

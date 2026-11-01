@@ -1,0 +1,81 @@
+{
+	"prompt": "This bar chart makes the differences between teams look huge, but they're small. Make it honest.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"Team A",
+						"Team B",
+						"Team C",
+						"Team D"
+					],
+					"series": [
+						{
+							"name": "Satisfaction (%)",
+							"values": [
+								92,
+								95,
+								94,
+								97
+							]
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "bar",
+					"title": "Satisfaction by team",
+					"yAxis": {
+						"min": 90,
+						"max": 98
+					}
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "bars start at zero (or the chart is no longer bars)",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"$expr": "v.type !== 'bar' || v.yAxis.min === null || v.yAxis.min === 0"
+				}
+			}
+		},
+		{
+			"why": "the data is unchanged",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"series": [
+						{
+							"values": [
+								92,
+								95,
+								94,
+								97
+							]
+						}
+					]
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "update_chart",
+			"args": {
+				"yAxis": {
+					"min": 0,
+					"max": 100
+				}
+			}
+		}
+	]
+}

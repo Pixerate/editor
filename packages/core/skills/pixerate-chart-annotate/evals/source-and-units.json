@@ -1,0 +1,76 @@
+{
+	"prompt": "Before this chart goes in the board report, add the source (internal CRM, 2026) and make the units clear.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"Q1",
+						"Q2",
+						"Q3",
+						"Q4"
+					],
+					"series": [
+						{
+							"name": "Revenue",
+							"values": [
+								82000,
+								91000,
+								118000,
+								96000
+							]
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "bar",
+					"title": "Quarterly revenue"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a source note",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"note": {
+						"$match": [
+							"crm",
+							"i"
+						]
+					}
+				}
+			}
+		},
+		{
+			"why": "the units are stated (axis title, format or subtitle)",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"$expr": "/usd|\\$|dollar/i.test(v.yAxis.title + ' ' + v.subtitle) || v.yAxis.format.style === 'currency'"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "update_chart",
+			"args": {
+				"note": "Source: internal CRM, 2026",
+				"yAxis": {
+					"format": {
+						"style": "currency",
+						"currency": "USD"
+					}
+				}
+			}
+		}
+	]
+}

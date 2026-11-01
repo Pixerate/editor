@@ -1,0 +1,78 @@
+{
+	"prompt": "Make this chart tell the reader that Q3 was our record quarter.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"Q1",
+						"Q2",
+						"Q3",
+						"Q4"
+					],
+					"series": [
+						{
+							"name": "Revenue",
+							"values": [
+								82000,
+								91000,
+								118000,
+								96000
+							]
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "bar",
+					"title": "Quarterly revenue"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "Q3 stands out",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"$expr": "v.highlight.includes('Q3') || v.series.some((s) => (s.callouts || [])[2]) || v.series.some((s) => s.pointColors && s.pointColors[2] && s.pointColors.filter(Boolean).length === 1)"
+				}
+			}
+		},
+		{
+			"why": "the title states the takeaway",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"title": {
+						"$match": [
+							"q3|third quarter",
+							"i"
+						]
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "highlight_chart",
+			"args": {
+				"names": [
+					"Q3"
+				]
+			}
+		},
+		{
+			"tool": "update_chart",
+			"args": {
+				"title": "Q3 was our record quarter"
+			}
+		}
+	]
+}

@@ -44,6 +44,14 @@ Charts inside a rich-text document are not edited with these tools: use `insert_
 `list_document_charts` and `update_chart_in_document` from the `pixerate-rich-text` skill
 (a chart block goes in the prose, never inside a table row).
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-chart-choose-and-build`: the type from the question, clean data, honest axes, units, colours.
+- `pixerate-chart-annotate`: a takeaway title, highlights, targets, ranges, callouts and the source.
+
 ## Working method
 
 0. **House style.** When the host has one (`list_toolsets` shows a `style` field on the chart
