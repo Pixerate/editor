@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.228.0
+
+### Minor Changes
+
+- cbffa48: Add hand-drawn annotation gestures to `createDrawCommands`: `canvas.circle`, `canvas.underline`, `canvas.arrow`, `canvas.bracket`, `canvas.strike`, `canvas.cross` and `canvas.check`. Each takes boxes, points or `{ nodeId }` targets, generates a seeded hand-drawn path (`circleGesture`, `arrowGesture`, … in `@pixerate/editor/canvas`) and draws it through `drawStroke` as one stroke node and one undo step, with a playback plan that traces it. The draw controller gains `nodeBounds(id)` (exposed by `useCanvasDraw` and `createCanvasDraw`) so gestures can resolve node ids. `createCommandToolProvider` gains `tools` / `toolName` options that list chosen commands as tools of their own, with their params as the input schema.
+
 ## 0.227.1
 
 ### Patch Changes
