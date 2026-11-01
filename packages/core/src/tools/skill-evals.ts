@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -87,6 +87,24 @@ export interface RichTextEvalFixture {
 export interface AnimationEvalFixture {
 	editor: 'animation';
 	/** Tool calls that build the starting scene (`set_animation_artwork_svg`, `insert_shots`), run in order. */
+	setup?: SkillEvalToolCall[];
+}
+
+export interface GenerationEvalFixture {
+	editor: 'generation';
+	/** The host's model catalogue (`ModelCapabilities` records). */
+	models: Array<Record<string, unknown>>;
+	/** Price in USD per output, by `quality` (`default` for requests without one); adds `estimate_generation`. */
+	prices?: Record<string, number>;
+	/** Earlier generations in the history: a model id and the request it ran. */
+	history?: Array<{ id: string; model: string; request: Record<string, unknown> }>;
+}
+
+export interface EffectEvalFixture {
+	editor: 'effect';
+	/** The fake effect provider's effect to author (e.g. `fake.invert`). */
+	effectId: string;
+	/** Tool calls that prepare the session, run in order. */
 	setup?: SkillEvalToolCall[];
 }
 

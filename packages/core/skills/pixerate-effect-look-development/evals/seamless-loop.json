@@ -1,0 +1,66 @@
+{
+	"prompt": "Make this a seamless 3-second loop that pulses: the amount goes from 0 up to 1 and back to 0 by the end.",
+	"fixture": {
+		"editor": "effect",
+		"effectId": "fake.invert"
+	},
+	"checks": [
+		{
+			"why": "3 seconds, looping",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"duration": 3000,
+				"loop": true
+			}
+		},
+		{
+			"why": "keyframes at the start, the peak and the end",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"control": "amount",
+						"keyframes": {
+							"$min": 3
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "effect_authoring_set_timing",
+			"args": {
+				"duration": 3000,
+				"loop": true
+			}
+		},
+		{
+			"tool": "effect_authoring_set_keyframe",
+			"args": {
+				"control": "amount",
+				"time": 0,
+				"value": 0
+			}
+		},
+		{
+			"tool": "effect_authoring_set_keyframe",
+			"args": {
+				"control": "amount",
+				"time": 1500,
+				"value": 1,
+				"easing": "ease-in-out"
+			}
+		},
+		{
+			"tool": "effect_authoring_set_keyframe",
+			"args": {
+				"control": "amount",
+				"time": 3000,
+				"value": 0,
+				"easing": "ease-in-out"
+			}
+		}
+	]
+}

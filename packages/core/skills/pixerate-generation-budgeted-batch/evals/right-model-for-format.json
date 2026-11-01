@@ -1,0 +1,124 @@
+{
+	"prompt": "Generate one 16:9 banner image of a lighthouse at dusk for the website header.",
+	"fixture": {
+		"editor": "generation",
+		"models": [
+			{
+				"id": "square-1",
+				"name": "Square One",
+				"media": "image",
+				"aspectRatios": {
+					"options": [
+						"1:1"
+					],
+					"default": "1:1"
+				},
+				"quality": {
+					"options": [
+						"low",
+						"high"
+					],
+					"default": "high"
+				},
+				"count": {
+					"min": 1,
+					"max": 4
+				}
+			},
+			{
+				"id": "wide-2",
+				"name": "Wide Two",
+				"media": "image",
+				"aspectRatios": {
+					"options": [
+						"1:1",
+						"16:9",
+						"9:16"
+					],
+					"default": "1:1"
+				},
+				"quality": {
+					"options": [
+						"low",
+						"high"
+					],
+					"default": "high"
+				},
+				"count": {
+					"min": 1,
+					"max": 4
+				},
+				"seed": {
+					"min": 0,
+					"max": 99999
+				}
+			}
+		],
+		"prices": {
+			"low": 0.05,
+			"high": 0.25
+		}
+	},
+	"checks": [
+		{
+			"why": "exactly one generation",
+			"tool": "list_generations",
+			"expect": {
+				"total": 1
+			}
+		},
+		{
+			"why": "on a model that supports 16:9, at 16:9",
+			"tool": "get_generation",
+			"args": {
+				"id": {
+					"$read": "list_generations",
+					"path": "records.0.id"
+				}
+			},
+			"expect": {
+				"$expr": "JSON.stringify(v).includes('\"aspectRatio\":\"16:9\"') && JSON.stringify(v).includes('wide-2')"
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_models"
+		},
+		{
+			"tool": "plan_generation",
+			"args": {
+				"model": "wide-2",
+				"request": {
+					"prompt": "A lighthouse at dusk, wide banner composition, warm sky",
+					"aspectRatio": "16:9",
+					"count": 1
+				}
+			}
+		},
+		{
+			"tool": "estimate_generation",
+			"args": {
+				"model": "wide-2",
+				"request": {
+					"prompt": "A lighthouse at dusk, wide banner composition, warm sky",
+					"aspectRatio": "16:9",
+					"count": 1
+				}
+			}
+		},
+		{
+			"tool": "generate",
+			"args": {
+				"model": "wide-2",
+				"request": {
+					"prompt": "A lighthouse at dusk, wide banner composition, warm sky",
+					"aspectRatio": "16:9",
+					"count": 1
+				},
+				"strategy": "error",
+				"idempotencyKey": "banner-lighthouse-1"
+			}
+		}
+	]
+}

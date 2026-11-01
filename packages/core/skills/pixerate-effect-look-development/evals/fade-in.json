@@ -1,0 +1,55 @@
+{
+	"prompt": "Animate the effect fading in: no effect at the start, full strength by 1.5 seconds, in a 2-second effect.",
+	"fixture": {
+		"editor": "effect",
+		"effectId": "fake.invert"
+	},
+	"checks": [
+		{
+			"why": "a 2-second effect",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"duration": 2000
+			}
+		},
+		{
+			"why": "the amount is keyframed (at least a start and an end)",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"control": "amount",
+						"keyframes": {
+							"$min": 2
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "effect_authoring_set_timing",
+			"args": {
+				"duration": 2000
+			}
+		},
+		{
+			"tool": "effect_authoring_set_keyframe",
+			"args": {
+				"control": "amount",
+				"time": 0,
+				"value": 0
+			}
+		},
+		{
+			"tool": "effect_authoring_set_keyframe",
+			"args": {
+				"control": "amount",
+				"time": 1500,
+				"value": 1,
+				"easing": "ease-out"
+			}
+		}
+	]
+}

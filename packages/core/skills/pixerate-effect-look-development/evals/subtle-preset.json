@@ -1,0 +1,49 @@
+{
+	"prompt": "Make a subtle version of this invert look, at about a quarter strength, and save it as a preset called 'Subtle'.",
+	"fixture": {
+		"editor": "effect",
+		"effectId": "fake.invert"
+	},
+	"checks": [
+		{
+			"why": "about a quarter strength",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"values": {
+					"amount": {
+						"$min": 0.15,
+						"$max": 0.35
+					}
+				}
+			}
+		},
+		{
+			"why": "saved as a preset named Subtle",
+			"tool": "effect_authoring_describe",
+			"expect": {
+				"presets": {
+					"$some": "Subtle"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "effect_authoring_describe"
+		},
+		{
+			"tool": "effect_authoring_set_values",
+			"args": {
+				"values": {
+					"amount": 0.25
+				}
+			}
+		},
+		{
+			"tool": "effect_authoring_save_preset",
+			"args": {
+				"name": "Subtle"
+			}
+		}
+	]
+}
