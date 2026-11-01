@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import { imageRangeClass, imageSectionTitleClass } from './styles.js';
   import MaskEdgeCheck from './MaskEdgeCheck.svelte';
   import SelectionChangeCheck from './SelectionChangeCheck.svelte';
@@ -115,20 +116,16 @@
     </label>
   {/each}
   <label class="flex items-center gap-2 text-foreground">
-    <input
-      type="checkbox"
-      checked={params.smartRadius}
-      onchange={(e) => (params = { ...params, smartRadius: (e.currentTarget as HTMLInputElement).checked })}
-    />
+    <ImageCheckbox label="Smart Radius" checked={params.smartRadius} onchange={(on) => (params = { ...params, smartRadius: on })} />
     Smart Radius
   </label>
   <label class="flex items-center gap-2 text-foreground" title="Refine only where the edge has no image edge under it">
-    <input type="checkbox" aria-label="Only uncertain areas" checked={onlyUncertain} onchange={(e) => (onlyUncertain = (e.currentTarget as HTMLInputElement).checked)} />
+    <ImageCheckbox label="Only uncertain areas" checked={onlyUncertain} onchange={(on) => (onlyUncertain = on)} />
     Only uncertain areas
   </label>
   {#if canObject}
     <label class="flex items-center gap-2 text-foreground">
-      <input type="checkbox" aria-label="Object aware" checked={objectAware} onchange={(e) => (objectAware = (e.currentTarget as HTMLInputElement).checked)} />
+      <ImageCheckbox label="Object aware" checked={objectAware} onchange={(on) => (objectAware = on)} />
       Object aware (segmentation model)
     </label>
   {/if}

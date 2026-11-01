@@ -132,7 +132,7 @@ describe('image editor agent tools', () => {
       'get_shape_layer', 'add_shape_layer', 'update_shape', 'set_shape_component', 'add_shape_component', 'remove_shape_component', 'merge_shape_components', 'get_vector_mask', 'add_vector_mask', 'set_vector_mask_path', 'set_vector_mask_properties', 'set_vector_mask_edge', 'rasterize_vector_mask', 'remove_vector_mask', 'selection_to_path', 'path_to_selection', 'list_paths', 'get_path', 'make_work_path', 'add_path', 'set_path_geometry', 'rename_path', 'duplicate_path', 'delete_path', 'fill_path', 'stroke_path',
       'list_fonts', 'get_text_layer', 'add_text_layer', 'set_text', 'set_text_style', 'set_paragraph_style', 'set_text_frame', 'set_text_orientation', 'convert_text_to_shape', 'select_text_shape',
       'list_layer_effects', 'add_layer_effect', 'update_layer_effect', 'remove_layer_effect', 'set_layer_effects_enabled', 'set_global_light',
-      'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush', 'set_paint', 'get_paint',
+      'paint_stroke', 'fill_pixels', 'clear_pixels', 'get_mixer_brush', 'load_mixer_brush', 'clean_mixer_brush', 'set_paint', 'get_paint', 'sample_color',
       'get_color_profile', 'assign_profile', 'convert_to_profile', 'set_proof_setup', 'convert_colors', 'set_color_mode',
       'clone_stamp', 'heal_brush', 'spot_heal', 'smudge', 'dodge', 'burn', 'sponge', 'blur_stroke', 'sharpen_stroke', 'history_brush', 'get_retouch_options', 'set_retouch_options', 'set_clone_source',
       'set_clone_transform',

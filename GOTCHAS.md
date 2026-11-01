@@ -3279,3 +3279,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A shot's camera move (`camera.in` / `during`) needs the provider's `cameraView`, but `compileMotionScene`, `checkMotionScene`, Lottie and the Flair import are pure and provider-free; a scene saved with `{ "in": "camera-whip-pan" }` timed its move as 1000 ms without a provider and as the move's 450 ms with one. And a whip pan sampled at the export's fps was tweened across its cut, because the jump between two samples can be smaller than half a framing.
 - **Root Cause**: `durationMs` lives in the provider's catalog, and the camera box track is all the compiled timeline knows. The cut of a move is somewhere between two samples.
 - **Solution / Workaround**: `setShotCameraMove` writes a transition's `ms` (the move's `durationMs` when none is given) and a preset's values onto the shot, so timing and values never need the provider; only the view does. The box track stays the degraded path, and `motionCameraViewAt` overrides it inside a move's window (and after a hold move until the next framing). `toFlairSvgMotion` finds a cut by halving towards the larger change (`viewJump`): a smooth move shrinks to nothing, a jump keeps its size, and the cut is written as a change of no length.
+### [svelte/image-editor] Selection and Shape Panel Options Never Reached a Host's Canvas
+
+- **Area**: Svelte `LayerPanel`, `ImageEditorCanvas` (`selectionOptions`, `shapeOptions`, `typeOptions`)
+- **Symptom**: In a host sidebar built from `layerPanels` + `LayerPanel` (Pixerate's Image Studio), picking Lasso in the Selection panel or Ellipse in Shape Options changed nothing on the canvas: it kept selecting with the Magic Wand and drawing rectangles.
+- **Root Cause**: `LayerPanel` kept its own `$state` copies of the options. The canvas takes them as props from the host, which never saw the panel's copies.
+- **Solution**: `LayerPanel` takes bindable `selectionOptions`, `shapeOptions` and `typeOptions`. A host binds the same state to the panel and the canvas. Unbound, the panel still keeps its own (the editor's own `ImageEditor` is unaffected).
+
+### [monorepo] Vitest "Cannot find native binding" When Run Through an Intel `timeout`
+
+- **Area**: Local test runs on Apple Silicon (rolldown native binding)
+- **Symptom**: `vitest` fails at startup with "Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'", though `@rolldown/binding-darwin-arm64` is installed and loads from plain `node`.
+- **Root Cause**: The command was wrapped in Homebrew's `/usr/local/bin/timeout`, an x86_64 binary. A universal `node` started from it runs under Rosetta as `x64`, so rolldown looks for `binding-darwin-x64`.
+- **Solution**: Run vitest without the Intel wrapper, or prefix it with `arch -arm64`. Check with `node -p process.arch` under the same wrapper.

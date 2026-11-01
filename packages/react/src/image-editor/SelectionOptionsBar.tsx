@@ -24,6 +24,8 @@ export interface SelectionOptionsBarProps {
   quickMask?: boolean;
   /** How the canvas shows the selection (`state.selectionDisplay`); wins over `quickMask`. */
   selectionDisplay?: SelectionDisplay;
+  /** The tool picker row (default true); hide it when the host's toolbar offers the same choice. */
+  showTools?: boolean;
   className?: string;
 }
 
@@ -63,6 +65,7 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   selection,
   quickMask,
   selectionDisplay,
+  showTools = true,
   className = '',
 }) => {
   const [radius, setRadius] = useState(2);
@@ -182,13 +185,15 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
   };
   return (
     <div data-testid="selection-options-bar" className={`flex flex-col gap-3 text-xs ${className}`}>
-      <div role="group" aria-label="Selection tool" className="flex flex-wrap gap-1">
-        {SELECTION_TOOLS.map((t) => (
-          <button key={t.id} type="button" aria-pressed={options.tool === t.id} className={btn(options.tool === t.id)} onClick={() => set({ tool: t.id })}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {showTools && (
+        <div role="group" aria-label="Selection tool" className="flex flex-wrap gap-1">
+          {SELECTION_TOOLS.map((t) => (
+            <button key={t.id} type="button" aria-pressed={options.tool === t.id} className={btn(options.tool === t.id)} onClick={() => set({ tool: t.id })}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div role="group" aria-label="Selection mode" className="flex flex-wrap gap-1">
         {SELECTION_MODES.map((m) => (
           <button key={m} type="button" aria-pressed={options.mode === m} className={btn(options.mode === m)} onClick={() => set({ mode: m })}>

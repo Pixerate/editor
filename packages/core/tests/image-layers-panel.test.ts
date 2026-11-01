@@ -132,11 +132,11 @@ describe('layers panel view model', () => {
     const doc = ['selection', 'channels', 'paths'];
     expect(layerPanels(null, { effects: true }).map((p) => p.id)).toEqual(['canvas-size', ...doc]);
     const ids = layerPanels(c.getLayer(id) as PixelLayer, { effects: true }).map((p) => p.id);
-    expect(ids).toEqual(['properties', 'provider-effects', 'paint', ...doc]);
-    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'paint', ...doc]);
+    expect(ids).toEqual(['properties', 'provider-effects', 'color', 'paint', ...doc]);
+    expect(layerPanels(c.getLayer(id) as PixelLayer).map((p) => p.id)).toEqual(['properties', 'color', 'paint', ...doc]);
     const smart = c.convertToSmartObject([id]);
-    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects', ...doc]);
-    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', ...doc]);
+    expect(layerPanels(c.getLayer(smart)!, { effects: true }).map((p) => p.id)).toEqual(['properties', 'provider-effects', 'color', ...doc]);
+    expect(layerPanels(c.getLayer(smart)!).map((p) => p.id)).toEqual(['properties', 'color', ...doc]);
     for (const type of ['pixel', 'type', 'shape', 'smart', 'group'] as const) {
       const panels = layerPanels({ id: 'x', type } as ImageLayer, { effects: true }).map((p) => p.id);
       expect(panels, type).not.toContain('effects');

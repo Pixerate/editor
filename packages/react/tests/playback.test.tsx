@@ -32,6 +32,18 @@ describe('PresenceLayer', () => {
 		expect([ring.style.left, ring.style.width]).toEqual(['6px', '28px']);
 		unmount();
 	});
+
+	it('draws a host cursor in place of the default arrow and tag, keeping the focus ring', () => {
+		const presence = new PresenceStore();
+		const { host, unmount } = mount(<PresenceLayer presence={presence} renderCursor={(a) => <span data-host-cursor>{a.name}</span>} />);
+		act(() => presence.set({ id: 'a', name: 'Pixie', color: '#c026d3', x: 5, y: 5, message: 'Painting', focus: { x: 0, y: 0, width: 10, height: 10 } }));
+		const actor = host.querySelector('[data-actor="a"]')!;
+		expect(actor.querySelector('[data-host-cursor]')!.textContent).toBe('Pixie');
+		expect(actor.querySelector('svg')).toBeNull();
+		expect(host.querySelector('[data-actor-message="a"]')).toBeNull();
+		expect(host.querySelector('[data-actor-focus="a"]')).not.toBeNull();
+		unmount();
+	});
 });
 
 describe('usePlaybackSurface', () => {
