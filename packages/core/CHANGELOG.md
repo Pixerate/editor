@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.223.8
+
+### Patch Changes
+
+- 47de004: Two new cross-domain workflow skills, each with evals: `pixerate-accessibility-audit` (text and non-text contrast, colour-blind-safe meaning, both modes, the smallest fixes and a report) and `pixerate-brand-application` (brand roles mapped to exact palette values, near-misses snapped, readable text on brand colours, derivatives and house-style checks). Vector eval fixtures can add the colour tools (`colorTools: true`).
+
 ## 0.223.7
 
 ### Patch Changes
