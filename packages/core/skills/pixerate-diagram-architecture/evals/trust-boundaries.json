@@ -1,0 +1,64 @@
+{
+	"prompt": "Mark the trust boundaries: the browser is outside, on the public internet; everything else is in our private network.",
+	"fixture": {
+		"editor": "diagram",
+		"setup": [
+			{
+				"tool": "load_diagram_mermaid",
+				"args": {
+					"source": "flowchart LR\n  browser[Browser] --> lb[Load balancer]\n  lb --> api[API]\n  api --> db[(Database)]"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a public and a private boundary",
+			"tool": "get_diagram",
+			"expect": {
+				"groups": {
+					"$some": {
+						"label": {
+							"$match": [
+								"public|internet",
+								"i"
+							]
+						}
+					},
+					"$expr": "v.some((g) => /private|internal/i.test(g.label))"
+				}
+			}
+		},
+		{
+			"why": "the browser outside, the rest inside the private network",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const priv = v.groups.find((g) => /private|internal/i.test(g.label)).id; const p = (id) => v.nodes.find((n) => n.id === id).parentId; return p('browser') !== priv && ['lb', 'api', 'db'].every((id) => p(id) === priv); })()"
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "group_diagram_nodes",
+			"args": {
+				"nodeIds": [
+					"browser"
+				],
+				"label": "Public internet",
+				"id": "public"
+			}
+		},
+		{
+			"tool": "group_diagram_nodes",
+			"args": {
+				"nodeIds": [
+					"lb",
+					"api",
+					"db"
+				],
+				"label": "Private network",
+				"id": "private"
+			}
+		}
+	]
+}

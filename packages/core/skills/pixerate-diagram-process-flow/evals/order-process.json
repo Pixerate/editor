@@ -1,0 +1,73 @@
+{
+	"prompt": "Draw our order process as a flowchart: it starts when an order arrives, we validate it, then check whether it's paid. If it is, we ship it and the process ends; if not, we send a reminder and check payment again.",
+	"fixture": {
+		"editor": "diagram"
+	},
+	"checks": [
+		{
+			"why": "a flowchart with one direction",
+			"tool": "get_diagram",
+			"expect": {
+				"family": "flowchart",
+				"direction": {
+					"$in": [
+						"LR",
+						"TB",
+						"TD"
+					]
+				}
+			}
+		},
+		{
+			"why": "the payment check is a decision (diamond)",
+			"tool": "get_diagram",
+			"expect": {
+				"nodes": {
+					"$some": {
+						"shape": "diam",
+						"label": {
+							"$match": [
+								"paid|payment",
+								"i"
+							]
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the decision's two exits are labelled",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const d = v.nodes.find((n) => n.shape === 'diam'); const out = v.edges.filter((e) => e.source === d.id); return out.length === 2 && out.every((e) => e.label); })()"
+			}
+		},
+		{
+			"why": "the reminder loops back to the decision",
+			"tool": "get_diagram",
+			"expect": {
+				"$expr": "(() => { const d = v.nodes.find((n) => n.shape === 'diam'); const r = v.nodes.find((n) => /remind/i.test(n.label)); return !!r && v.edges.some((e) => e.source === r.id && e.target === d.id); })()"
+			}
+		},
+		{
+			"why": "start and end are terminals (stadium or rounded)",
+			"tool": "get_diagram",
+			"expect": {
+				"nodes": {
+					"$expr": "v.filter((n) => ['stadium', 'rounded', 'circle', 'dbl-circ'].includes(n.shape)).length >= 2"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "load_diagram_mermaid",
+			"args": {
+				"source": "flowchart LR\n  start([Start]) --> validate[Validate order]\n  validate --> paid{Paid?}\n  paid -->|yes| ship[Ship order]\n  paid -->|no| remind[Send reminder]\n  remind --> paid\n  ship --> done([End])"
+			}
+		},
+		{
+			"tool": "get_diagram"
+		}
+	]
+}

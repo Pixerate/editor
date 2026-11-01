@@ -24,6 +24,14 @@ Read `pixerate-agent-tools` first for tool naming, errors and batching. Data cha
 line, pie with styling, trendlines) belong in the chart editor (`pixerate-chart`); Mermaid
 `xychart-beta`, `pie` and `radar-beta` text can move between the two.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-diagram-process-flow`: processes, decisions with labelled exits, loops and swimlanes.
+- `pixerate-diagram-architecture`: systems, tiers and trust boundaries, flows labelled with protocols.
+
 ## Working method
 
 1. **Read.** `get_diagram` (with `includeSource: true` when you need the text). Note the
