@@ -40,7 +40,11 @@ export const demoDocumentStore = createEditorDocumentStore({ storage: demoDocume
  */
 export const demoCommandRegistry = new CommandRegistry();
 
-demoToolRegistry.register(createCommandToolProvider(demoCommandRegistry, { id: "commands", namespace: "commands" }));
+// The canvas's annotation gestures are also tools of their own (`commands__canvas_circle`, …), so
+// an agent can mark up the canvas without listing commands first.
+const DEMO_GESTURE_TOOLS = ["canvas.circle", "canvas.underline", "canvas.arrow", "canvas.bracket", "canvas.strike", "canvas.cross", "canvas.check"];
+
+demoToolRegistry.register(createCommandToolProvider(demoCommandRegistry, { id: "commands", namespace: "commands", tools: DEMO_GESTURE_TOOLS }));
 
 /**
  * The agent skills shipped in `@pixerate/editor/skills`, keyed `pixerate-chart/SKILL.md`, for

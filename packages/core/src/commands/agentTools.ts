@@ -17,6 +17,17 @@ export interface CommandToolProviderOptions<TContext = any> {
 	scope?: string | readonly string[];
 	/** Commands agents may not see or run (e.g. ones that open dialogs). */
 	exclude?: (id: string) => boolean;
+	/**
+	 * Commands also listed as tools of their own, beside `run_command` (ids, or a filter): the
+	 * params schema is the tool's input schema, and the label, description, read-only flag and
+	 * playback plan carry over. Agents then see them without calling `list_commands` first.
+	 */
+	tools?: readonly string[] | ((id: string) => boolean);
+	/**
+	 * Name of a command's own tool (default: the id with every character other than letters,
+	 * digits, `_` and `-` replaced by `_`, so `canvas.circle` is `canvas_circle`).
+	 */
+	toolName?: (id: string) => string;
 }
 
 const toJson = (value: unknown): unknown => {
@@ -51,6 +62,9 @@ function errorResult(result: Extract<CommandResult, { ok: false }>): McpToolResu
  *   is its own undo step and steps before a failure stay applied; `atomic: true` (on a
  *   registry with `history`) runs them as one undo step named `label` and takes everything
  *   back when one fails.
+ *
+ * With `tools`, chosen commands are also tools of their own (`canvas.circle` →
+ * `canvas_circle`, or `toolName`), taking the command's params as arguments.
  *
  * The id enum in `run_command`'s schema follows the registered commands, so the
  * `ToolRegistry` announces `listChanged` when commands are added or removed.
@@ -304,13 +318,30 @@ export function createCommandToolProvider<TContext = any>(
 		}
 	};
 
+	const picked = (id: string) => (typeof options.tools === 'function' ? options.tools(id) : !!options.tools?.includes(id));
+	const toolNameOf = (id: string) => options.toolName?.(id) ?? id.replace(/[^A-Za-z0-9_-]/g, '_');
+
+	/** One command as a tool of its own: its params are the arguments. */
+	const commandTool = (entry: ReturnType<typeof visible>[number]): AgentTool => ({
+		name: toolNameOf(entry.id),
+		title: entry.label,
+		description: `${entry.description ?? entry.label}${entry.readOnly ? '' : ` (Runs the "${entry.id}" command; refused with the reason when it cannot run now.)`}`,
+		inputSchema: (entry.params as AgentTool['inputSchema'] | undefined) ?? { type: 'object', properties: {}, additionalProperties: false },
+		annotations: { title: entry.label, readOnlyHint: entry.readOnly, destructiveHint: !entry.readOnly, idempotentHint: entry.readOnly, openWorldHint: false },
+		plan: (args) => planOne(entry.id, args),
+		handler: async (args) => {
+			const result = await runOne(entry.id, args);
+			return result.ok ? toJson(result.result) : errorResult(result);
+		}
+	});
+
 	return {
 		id: options.id ?? 'commands',
 		namespace: options.namespace,
 		title: 'Commands',
 		description: 'The app\'s commands (menu and keyboard actions) with their params schemas: list them, run one, or run several as one undo step.',
 		skill: 'pixerate-agent-tools',
-		tools: () => [listCommands, runCommandTool(), runCommands],
+		tools: () => [listCommands, runCommandTool(), runCommands, ...(options.tools ? visible().filter((e) => picked(e.id)).map(commandTool) : [])],
 		subscribe: (notify) => registry.subscribe(notify)
 	};
 }
