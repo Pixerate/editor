@@ -2,9 +2,11 @@
  * Agent tools for provider effects in the video editor: the shared effect tools
  * (`search_effects`, `describe_effect`, `list_applied_effects`, `apply_effect`, `update_effect`,
  * `remove_effect`) on clips, plus `add_video_effect_clip`, `set_video_effect_transition` and
- * `set_video_effect_keyframes`.
+ * `set_video_effect_keyframes`, and the camera move tools (`list_video_camera_moves`,
+ * `set_clip_camera_move`, `clear_clip_camera_move`).
  */
 
+import { videoCameraMoveTools } from './camera-tools.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult, type EffectTargetEffects } from '../effects/tools.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { withVideoPlayback } from './playback.js';
@@ -125,6 +127,7 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 		},
 		subscribe: (notify) => controller.subscribe(() => notify()),
 		extraTools: (ctx): AgentTool[] => [
+			...videoCameraMoveTools(controller, ctx),
 			{
 				name: 'add_video_effect_clip',
 				title: 'Add an effect clip',

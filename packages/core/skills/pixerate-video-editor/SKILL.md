@@ -83,6 +83,12 @@ the pitfalls, and uses the tools below.
     or `add_video_effect_clip` (generators and titles). Tune with `update_effect` and
     `set_video_effect_keyframes`; check with `get_video_frame` (layers list `effects`) and
     `list_applied_effects`.
+12. **Camera moves** (a provider with camera moves, such as Flair): a clip is the shot.
+    `list_video_camera_moves` with a `role`, then `set_clip_camera_move`: `transition` moves
+    from `from` to `framing` from the clip's start (a glide, whip pan, punch zoom); `hold`
+    plays across the rest of the clip at `framing` (a Ken Burns drift on a still). The moves are
+    baked into the clip's x, y, scale and rotation keys at the project's fps, two keys at a cut,
+    so the preview and exports play them without the provider. Check with `get_video_frame`.
 
 ## Best practices
 
@@ -284,7 +290,7 @@ and every write tool is refused with the reason.
 
 | Tool | Use it to |
 | --- | --- |
-| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Camera moves (`kind` camera) are listed but not applied to clips (`appliesHere` false). Call `describe_effect` next. |
+| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Camera moves (`kind` camera) are listed but go on clips with `set_clip_camera_move`, not `apply_effect`. Call `describe_effect` next. |
 | `describe_effect` | Read one effect's `controls` (a strict JSON Schema: names, types, ranges, units), `defaults`, `presets` and `inputs`, and whether it `appliesHere` (as a clip effect). Use the names and ranges for values. |
 | `list_applied_effects` | See the effects in the project per clip, in order: clip effects (`fx1`...), an effect clip's own effect (`generator`) and an effect transition (`transition`), with their saved values and `available` (false when the provider lacks it: drawn as a placeholder). |
 | `apply_effect` | Add a filter or overlay effect to a clip's stack (`target` clip id, `effect`, `values`, `index`, `enabled`, `opacity`). Effects run in order on the clip's picture before its grade and placement. Returns the effect's new id and the clip's effects. |
@@ -293,6 +299,9 @@ and every write tool is refused with the reason.
 | `add_video_effect_clip` | Put a generator, title or overlay effect on a video `track` as a clip filling the frame (`start`, `duration` default the effect's own length, `values`, `mode`). Transparent effects show the tracks beneath. Returns the clip id. |
 | `set_video_effect_transition` | Use a transition effect from the effects provider into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. For a cross dissolve, dip, wipe, push, slide or iris use the built-in `set_video_transition` instead. |
 | `set_video_effect_keyframes` | Animate one number `control` of a clip effect (or an effect clip's `generator`) with `keys` in clip ms, or `null` to stop animating it. |
+| `list_video_camera_moves` | List the provider's camera moves for a `role` (`transition` into a clip, `hold` across it) with `durationMs` and `cut`. Returns `available: false` without camera moves. Call before `set_clip_camera_move`. |
+| `set_clip_camera_move` | Play a camera move on a clip's picture (`clip`, `role`, `move`, `ms` for a transition, `preset`, `values`, `from` and `framing` as `{ zoom, x, y }`): baked into its transform keys, one per frame, two at a cut. Returns the camera, key counts, `cuts`, `windows` and `notes` (tilt, turn and blur cannot be baked). Refuses a clip keyed by hand. |
+| `clear_clip_camera_move` | Remove a clip's move for a `role` and re-bake the other; with none left the transform goes back to what it was. |
 
 ### Save and open
 
@@ -307,6 +316,12 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A video
 | `open_saved_video_document` | Replace the video project with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
 
 ## Pitfalls
+
+- **Camera moves are baked keys.** After trimming or splitting a clip, `check_video_project`
+  reports `camera-stale`: set the move again to re-bake it. Editing the clip's x, y, scale or
+  rotation keys by hand leaves the moves no longer describing them; clear the moves first.
+- **A cut is two keys at one time** (the value just before, then the value after). Keys may
+  share a time only in pairs; a speed ramp never takes one.
 
 - **An adjustment clip changes only tracks below it** (scope `underneath`). Put it on a new top
   track (`add_video_track` with `at: 0`), or use scope `all`. Adjustment clips have no sound and

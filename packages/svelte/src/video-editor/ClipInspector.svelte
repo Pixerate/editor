@@ -46,6 +46,7 @@
     type VideoWipeDirection
   } from '@pixerate/editor/video-editor';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
+  import ClipCameraMoves from './ClipCameraMoves.svelte';
 
   interface Props {
     controller: VideoEditorController;
@@ -238,7 +239,8 @@
   The selected clip: its name, timing and fades; opacity, volume and transform, each with a keyframe
   toggle at the playhead (◆ adds a key holding the value there or removes the one there; typing a
   value on a keyed property sets the key at the playhead); speed and mute for media; text,
-  colours and size for titles; the colour of a colour clip; and the transition into it. Every
+  colours and size for titles; the colour of a colour clip; the transition into it; and its camera
+  moves (ClipCameraMoves). Every
   committed change is one undo step.
 -->
 <div class="flex flex-col gap-1.5 text-xs {className}" data-clip-inspector="" data-clip={clip?.id}>
@@ -444,6 +446,7 @@
       {/if}
     </div>
   {/if}
+  {#if clip}<ClipCameraMoves {controller} clip={clip.id} />{/if}
   {#if message}
     <p class="text-red-500" role="alert" data-edit-error="">{message}</p>
   {/if}

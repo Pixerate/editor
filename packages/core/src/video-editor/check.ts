@@ -29,6 +29,7 @@ export const VIDEO_ISSUE_CODES = [
 	'animations-too-long',
 	'animation-keyed',
 	'keyframes-outside-clip',
+	'camera-stale',
 	'unknown-duration',
 	'unused-asset',
 	'unused-sequence',
@@ -118,6 +119,18 @@ export function checkVideoProject(project: VideoProject): VideoIssue[] {
 				const keyed = videoClipAnimationProperties(a).filter((p) => videoKeysOf(p === 'opacity' ? clip.opacity : clip.transform?.[p]).length);
 				if (keyed.length)
 					issues.push({ code: 'animation-keyed', severity: 'note', ...at, message: `Clip "${clip.id}"'s ${a.effect} ${which === 'animateIn' ? 'entrance' : 'exit'} leaves ${keyed.join(', ')} alone, because the clip keys ${keyed.length > 1 ? 'them' : 'it'} itself; remove those keyframes or the animation.` });
+			}
+			if (clip.camera) {
+				// Baked keys run to the clip's end; a trim or split since leaves them short or long.
+				const last = Math.max(0, ...VIDEO_TRANSFORM_PROPERTIES.flatMap((p) => videoKeysOf(clip.transform?.[p]).map((k) => k.t)));
+				const frame = 1000 / (project.fps || 30);
+				if (last > 0 && Math.abs(last - clip.duration) > frame + VIDEO_TIME_EPSILON)
+					issues.push({
+						code: 'camera-stale',
+						severity: 'warning',
+						...at,
+						message: `Clip "${clip.id}"'s camera moves were baked for ${Math.round(last)} ms but the clip is ${Math.round(clip.duration)} ms, so ${last < clip.duration ? 'the camera stops early' : 'the end of the move is cut off'}; set the move again (set_clip_camera_move) to re-bake it.`
+					});
 			}
 			for (const { property, keys } of videoClipKeyframes(clip)) {
 				const outside = keys.filter((k) => k.t < -VIDEO_TIME_EPSILON || k.t > clip.duration + VIDEO_TIME_EPSILON);

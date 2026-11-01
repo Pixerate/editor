@@ -24,6 +24,7 @@ import {
 	MOTION_DRAW_MS_PER_UNIT,
 	MOTION_DRAW_RANGE,
 	MOTION_CLIP_TARGET,
+	motionCameraFramed,
 	type MotionBeatGrid,
 	type MotionCamera,
 	type MotionCommand,
@@ -38,6 +39,7 @@ import {
 	type MotionScene,
 	type MotionShot
 } from './types.js';
+import { cameraMoveParts } from '../effects/helpers.js';
 
 /**
  * Compiling a scene: shots and commands become timed segments, one per (node, property)
@@ -129,6 +131,10 @@ export interface MotionShotTiming {
 	cue?: number;
 	/** How late the shot starts after its cue (ms), when the shot before ran past it. */
 	missedBy?: number;
+	/** The provider camera move it gets in with (`camera.in`), and when it plays (`start` to `commandsStart`). */
+	cameraIn?: string;
+	/** The provider camera move it plays while it holds (`camera.during`), from `commandsEnd` to `end`. */
+	cameraDuring?: string;
 }
 
 export interface MotionCommandTiming {
@@ -628,7 +634,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 	// Pass 1: timing.
 	const shots: MotionShotTiming[] = [];
 	const commands: MotionCommandTiming[] = [];
-	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect; ease: AnimationEasing; geometric: boolean }[] = [];
+	const cameraMoves: { shot: string; start: number; end: number; to: MotionRect | null; ease: AnimationEasing; geometric: boolean }[] = [];
 	let t = 0;
 	scene.shots.forEach((shot, index) => {
 		// A cue holds the shot before until it comes (or, for the first shot, waits from 0).
@@ -642,12 +648,19 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		let cursor = start;
 		// A shot's speed scales all of its time: camera move, delays, durations, staggers and hold.
 		const f = motionShotTimeScale(shot);
+		const moveIn = shot.camera ? cameraMoveParts(shot.camera.in) : undefined;
+		const moveDuring = shot.camera ? cameraMoveParts(shot.camera.during) : undefined;
+		let playsIn = false;
 		if (shot.camera) {
-			const rect = resolveMotionCamera(shot.camera, scene);
-			if (rect && rect.width > 0 && rect.height > 0) {
-				const ms = index === 0 ? 0 : (shot.camera.ms ?? MOTION_CAMERA_MS) * f;
+			// A camera with no framing keeps the one it has (it names only a move).
+			const framed = motionCameraFramed(shot.camera);
+			const rect = framed ? resolveMotionCamera(shot.camera, scene) : null;
+			if ((rect && rect.width > 0 && rect.height > 0) || (!framed && moveIn)) {
+				// The first shot cuts to its framing: there is no framing before it to move from.
+				const ms = index === 0 ? 0 : (moveIn?.ms ?? shot.camera.ms ?? MOTION_CAMERA_MS) * f;
 				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT, geometric: shot.camera.geometric === true });
 				cursor = start + ms;
+				playsIn = !!moveIn && index > 0;
 			}
 		}
 		const commandsStart = cursor;
@@ -667,7 +680,19 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			runEnd = Math.max(runEnd, end);
 		});
 		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD) * f;
-		shots.push({ id: shot.id, index, ...(shot.label ? { label: shot.label } : {}), start, commandsStart, commandsEnd: runEnd, end, ...(cue !== undefined ? { cue } : {}), ...(missedBy !== undefined ? { missedBy } : {}) });
+		shots.push({
+			id: shot.id,
+			index,
+			...(shot.label ? { label: shot.label } : {}),
+			start,
+			commandsStart,
+			commandsEnd: runEnd,
+			end,
+			...(cue !== undefined ? { cue } : {}),
+			...(missedBy !== undefined ? { missedBy } : {}),
+			...(playsIn ? { cameraIn: moveIn!.move } : {}),
+			...(moveDuring ? { cameraDuring: moveDuring.move } : {})
+		});
 		t = end;
 	});
 
@@ -693,7 +718,11 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		jobs.push({
 			start: move.start,
 			order: order++,
-			run: () => push({ node: '', property: 'camera', start: move.start, end: move.end, from: valueAt('', 'camera', move.start), to: [move.to.x, move.to.y, move.to.width, move.to.height], ease: move.ease, shot: move.shot, command: -1, ...(move.geometric ? { geometric: true } : {}) })
+			run: () => {
+				const from = valueAt('', 'camera', move.start);
+				const to = move.to ? [move.to.x, move.to.y, move.to.width, move.to.height] : from;
+				push({ node: '', property: 'camera', start: move.start, end: move.end, from, to, ease: move.ease, shot: move.shot, command: -1, ...(move.geometric ? { geometric: true } : {}) });
+			}
 		});
 	}
 	for (const timing of commands) {

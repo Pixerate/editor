@@ -42,7 +42,11 @@ export const MOTION_ISSUE_CODES = {
 	'scene-too-short': { severity: 'warning', wording: 'The scene ends before its target length.' },
 	'unknown-control-color': { severity: 'warning', wording: 'A control stands for a colour the scene never uses.' },
 	'empty-shot': { severity: 'note', wording: 'A shot neither moves the camera nor runs a command.' },
-	'camera-aspect': { severity: 'note', wording: 'A camera rectangle has a different shape from the artwork, so it is letterboxed.' }
+	'camera-aspect': { severity: 'note', wording: 'A camera rectangle has a different shape from the artwork, so it is letterboxed.' },
+	'camera-move-first-shot': { severity: 'note', wording: 'The first shot cuts to its framing, so the move its camera gets in with does not play.' },
+	'camera-move-not-played': { severity: 'note', wording: 'A shot names a camera move, but there is no effects provider with camera moves to play it, so the camera eases instead.' },
+	'camera-move-unknown': { severity: 'error', wording: 'A shot names a camera move the effects provider does not have, or one of the wrong role.' },
+	'camera-move-values': { severity: 'error', wording: 'A camera move\'s preset or values do not fit its controls.' }
 } as const satisfies Record<string, { severity: MotionIssueSeverity; wording: string }>;
 
 export type MotionIssueCode = keyof typeof MOTION_ISSUE_CODES;

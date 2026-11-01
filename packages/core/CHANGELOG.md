@@ -1,5 +1,17 @@
 # @pixerate/editor
 
+## 0.231.0
+
+### Minor Changes
+
+- 1375fd2: Video editor: camera moves from the effects provider. A clip is the shot: a `transition` move (a glide, whip pan, punch zoom) moves from `from` to `framing` from the clip's start, and a `hold` move (a Ken Burns drift) plays across the rest of it. `VideoEditorController.setClipCameraMove` / `clearClipCameraMove` bake the clip's moves with `sampleEffectCameraMove` at the project's frame rate into its x, y, scale and rotation keys over its transform (kept in `camera.base`, put back when the moves are cleared), so previews and exports play them without the provider. Keyframes may now hold two keys at one time, a jump, so a move's cut never tweens; speed ramps still take one key per time. New: `VideoClipCamera`, `bakeVideoClipCamera`, `videoTransformOfView`, the `camera-stale` check, the agent tools `list_video_camera_moves`, `set_clip_camera_move` and `clear_clip_camera_move`, and `<ClipCameraMoves>` (in `<ClipInspector>`) for React and Svelte.
+
+## 0.230.0
+
+### Minor Changes
+
+- 406d0be: Animation editor: camera moves from the effects provider. A shot's camera can name a move it gets in with (`camera.in`, a `transition` move such as a glide or whip pan) and a move it makes while it holds (`camera.during`, a `hold` move such as a Ken Burns drift), as Flair's scenes do, each with a preset, values and (for a move in) a length. With a provider that has camera moves (`capabilities.supportsCamera`), the stage plays them per frame through `cameraView`, with tilt and turn on the stage element and roll and motion blur in the frame's SVG; a hold move's last view carries into the next move. Without one they are kept and the camera eases between framings. New: `motionCameraViewAt`, `motionCameraWindows`, `checkMotionCameraMoves`, `AnimationEditorController.setShotCameraMove` / `clearShotCameraMove` / `cameraMoves`, the agent tools `list_camera_moves`, `set_shot_camera_move` and `clear_shot_camera_move`, and `<ShotCameraMoves>` (in `<ShotInspector>`) for React and Svelte. The Flair export tags each camera change a move makes with `<move>@<shot>`, and with `options.effects` samples the move exactly, keeping a cut a jump. Effects helpers: `resolveCameraMoveSpec`, `cameraMovesFor`, `cameraViewOfBox`, `cameraBoxOfView` and the `CameraMoveSpec` type.
+
 ## 0.229.0
 
 ### Minor Changes

@@ -20,7 +20,7 @@ export interface VideoKey {
 }
 
 export interface VideoKeyframes {
-	/** In time order, at least one. */
+	/** In time order, at least one. Two keys at one time make a jump: the value just before, then the value from there on. */
 	keys: VideoKey[];
 }
 
@@ -190,11 +190,26 @@ const withEase = (key: VideoKey, ease: VideoEase | undefined): VideoKey => {
 	return ease === undefined || ease === 'linear' ? rest : { ...rest, ease };
 };
 
-/** The keys sorted by time, refusing two at the same time. */
-export function sortVideoKeys(keys: readonly VideoKey[]): VideoKey[] {
+/**
+ * The keys sorted by time. Two keys may share a time (a jump, as at a camera move's cut: the
+ * value just before, then the value from there on) unless `jumps` is false; three never can.
+ */
+export function sortVideoKeys(keys: readonly VideoKey[], options: { jumps?: boolean } = {}): VideoKey[] {
+	// A stable sort keeps a jump's two keys in the order given.
 	const sorted = [...keys].sort((a, b) => a.t - b.t);
-	for (let i = 1; i < sorted.length; i++) if (Math.abs(sorted[i].t - sorted[i - 1].t) < 1e-6) throw new Error(`Two keys are at ${sorted[i].t} ms; give each key its own time.`);
+	const problem = videoKeyTimesProblem(sorted, options.jumps !== false);
+	if (problem) throw new Error(problem);
 	return sorted;
+}
+
+/** What is wrong with sorted keys' times (more than two at a time, or two when `jumps` is false), or null. */
+export function videoKeyTimesProblem(keys: readonly VideoKey[], jumps = true): string | null {
+	for (let i = 1; i < keys.length; i++) {
+		if (Math.abs(keys[i].t - keys[i - 1].t) >= 1e-6) continue;
+		if (!jumps) return `Two keys are at ${keys[i].t} ms; give each key its own time.`;
+		if (i >= 2 && Math.abs(keys[i].t - keys[i - 2].t) < 1e-6) return `Three keys are at ${keys[i].t} ms; a time takes one key, or two for a jump (the value just before, then the value after).`;
+	}
+	return null;
 }
 
 /**
@@ -268,7 +283,8 @@ export function videoKeyframeFfmpegExpr(prop: VideoAnimatable | undefined, time:
 	for (let i = points.length - 2; i >= 0; i--) {
 		const [t0, v0] = points[i];
 		const [t1, v1] = points[i + 1];
-		const seg = holds.has(i) || v0 === v1 ? fmt(v0) : `${fmt(v0)}${signed((v1 - v0) / (t1 - t0))}*(${time}${signed(-t0)})`;
+		// A jump (two keys at one time) is never inside its own zero-length segment.
+		const seg = holds.has(i) || v0 === v1 || t1 <= t0 ? fmt(v0) : `${fmt(v0)}${signed((v1 - v0) / (t1 - t0))}*(${time}${signed(-t0)})`;
 		expr = `if(lt(${time},${fmt(t1)}),${seg},${expr})`;
 	}
 	return `if(lt(${time},${fmt(points[0][0])}),${fmt(points[0][1])},${expr})`;

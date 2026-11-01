@@ -12,10 +12,11 @@ import { motionFrameAt, motionFrameToSvg, type MotionFrame, type MotionFrameOpti
 import { toFlairEffectDocument, toFlairSvgMotion, toFlairVectorEffect, type FlairEffectOptions, type FlairExportOptions } from './flair.js';
 import type { MotionIssue } from './issues.js';
 import { parseMotionScene } from './parse.js';
-import type { MotionEffectSource, MotionScene } from './types.js';
-import { EffectsSlot, resolveEffectValues } from '../effects/helpers.js';
+import { motionCameraFramed, type MotionCamera, type MotionEffectSource, type MotionScene } from './types.js';
+import { cameraMoveField, EffectsSlot, resolveCameraMoveSpec, resolveEffectValues } from '../effects/helpers.js';
+import { effectsPlayCamera, motionCameraMoves } from './camera.js';
 import { EffectUnsupportedError, isEffectError } from '../effects/errors.js';
-import type { EffectDescription, EffectProvider, EffectValue } from '../effects/types.js';
+import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
 import { motionClientToDocument, motionNodePose, motionTakeProblems, motionTakeShot, type MotionNodePose, type MotionTake, type MotionTakeOptions, type MotionTakeResult, type MotionTakeSample } from './record.js';
 import { motionArtworkSvg, motionCommandsFromEffect, motionPartsFromVectorEffect, motionSceneEffects, nextMotionEffectInstance, withoutMotionEffect, type AppliedMotionEffect } from './effects.js';
 
@@ -39,6 +40,9 @@ export interface AnimationEditorOptions {
 
 /** What the effect edits return. */
 export type MotionEffectResult = { ok: true; effect: AppliedMotionEffect; notes: string[] } | { ok: false; error: string };
+
+/** What setting or clearing a shot's camera move did: the shot's camera now, and (when set) when the move plays (ms). */
+export type MotionCameraMoveResult = { ok: true; shot: string; camera: MotionCamera | null; window?: { start: number; end: number }; notes: string[] } | { ok: false; error: string };
 
 /** What is selected on the timeline: a shot, and optionally one of its commands. */
 export interface AnimationEditorSelection {
@@ -456,6 +460,69 @@ export class AnimationEditorController {
 		return r.ok ? { ok: true, effect: was, notes: [] } : r;
 	}
 
+	/**
+	 * The provider's camera moves for a role (`transition` for a shot's `camera.in`, `hold` for its
+	 * `camera.during`), or all of them. Empty without a provider that has camera moves.
+	 */
+	cameraMoves(role?: CameraMoveRole): Promise<EffectSummary[]> {
+		return motionCameraMoves(this.effects.provider, role);
+	}
+
+	/**
+	 * Sets the camera move a shot gets in with (`transition`, its `camera.in`) or plays while it
+	 * holds (`hold`, its `camera.during`). The move is checked against the provider first (its
+	 * role, preset and values; a preset's values are written out), then set in one undo step.
+	 * A shot with no camera gets one that keeps the framing. Returns the shot's camera and when the
+	 * move plays. `merge` folds a slider drag's changes into one undo step.
+	 */
+	async setShotCameraMove(shot: string, role: CameraMoveRole, spec: CameraMoveSpec, options: { merge?: string } = {}): Promise<MotionCameraMoveResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		const found = this.scene.shots.find((s) => s.id === shot);
+		if (!found) return this.refuse(`There is no shot "${shot}"; the shots are ${this.scene.shots.map((s) => `"${s.id}"`).join(', ') || 'none yet'}.`) as { ok: false; error: string };
+		let resolved: Awaited<ReturnType<typeof resolveCameraMoveSpec>>;
+		try {
+			resolved = await resolveCameraMoveSpec(this.effects.require(), spec, role);
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refuse((error as Error).message) as { ok: false; error: string };
+			throw error;
+		}
+		const field = cameraMoveField(role);
+		const current = this.scene.shots.find((s) => s.id === shot);
+		if (!current) return this.refuse(`Shot "${shot}" was removed while the move was checked.`) as { ok: false; error: string };
+		// A transition's length is written out, so the scene is timed the same without the provider.
+		const parts = role === 'transition' && resolved.spec.ms === undefined ? { ...resolved.spec, ms: resolved.description.camera!.durationMs } : resolved.spec;
+		const simple = parts.ms === undefined && parts.preset === undefined && parts.values === undefined;
+		const camera = { ...(current.camera ?? {}), [field]: simple ? parts.move : parts } as MotionCamera;
+		const r = this.apply({ op: 'update_shot', shot, set: { camera } }, `${role === 'hold' ? 'Hold move' : 'Camera move'} ${resolved.description.name}`, { merge: options.merge });
+		if (!r.ok) return r;
+		return this.cameraMoveResult(shot, role, resolved.description.id);
+	}
+
+	/** Removes a shot's camera move for a role, keeping its framing (a camera left with nothing is removed). One undo step. Works without a provider. */
+	clearShotCameraMove(shot: string, role: CameraMoveRole): MotionCameraMoveResult {
+		const found = this.scene.shots.find((s) => s.id === shot);
+		if (!found) return this.refuse(`There is no shot "${shot}"; the shots are ${this.scene.shots.map((s) => `"${s.id}"`).join(', ') || 'none yet'}.`) as { ok: false; error: string };
+		const field = cameraMoveField(role);
+		if (found.camera?.[field] === undefined) return this.refuse(`Shot "${shot}" has no camera "${field}" move to clear${found.camera?.[field === 'in' ? 'during' : 'in'] !== undefined ? `; it has a "${field === 'in' ? 'during' : 'in'}" move (role ${role === 'hold' ? 'transition' : 'hold'})` : ''}.`) as { ok: false; error: string };
+		const rest = { ...found.camera } as MotionCamera;
+		delete rest[field];
+		const keep = motionCameraFramed(rest) || rest.in !== undefined || rest.during !== undefined;
+		const r = this.apply(keep ? { op: 'update_shot', shot, set: { camera: rest as MotionCamera } } : { op: 'update_shot', shot, remove: ['camera'] }, role === 'hold' ? 'Clear hold move' : 'Clear camera move');
+		if (!r.ok) return r;
+		return this.cameraMoveResult(shot, role);
+	}
+
+	private cameraMoveResult(shot: string, role: CameraMoveRole, move?: string): MotionCameraMoveResult {
+		const timing = compileMotionScene(this.scene).shots.find((s) => s.id === shot)!;
+		const camera = this.scene.shots.find((s) => s.id === shot)?.camera ?? null;
+		const window = role === 'transition' ? { start: timing.start, end: timing.commandsStart } : { start: timing.commandsEnd, end: timing.end };
+		const notes: string[] = [];
+		if (move && role === 'transition' && timing.index === 0) notes.push('This is the first shot, which cuts to its framing, so its "in" move does not play; it plays from the second shot on.');
+		if (move && !effectsPlayCamera(this.effects.provider)) notes.push('The provider cannot play camera moves, so the camera eases instead.');
+		return { ok: true, shot, camera, ...(move ? { window } : {}), notes };
+	}
+
 	/** Opens a scene (JSON or object). `clearHistory` drops the undo stack (opening a file); otherwise it is one undo step. */
 	load(scene: MotionScene | string, options: { clearHistory?: boolean } = {}): MotionEditResult {
 		if (options.clearHistory) this.cancelRecording();
@@ -546,12 +613,12 @@ export class AnimationEditorController {
 
 	/** The scene at `time` (default: the playhead). */
 	frame(time = this.player.currentTime, options: MotionFrameOptions = {}): MotionFrame {
-		return motionFrameAt(this.viewScene(), time, options);
+		return motionFrameAt(this.viewScene(), time, { effects: this.effects.provider, ...options });
 	}
 
 	/** The scene at `time` (default: the playhead) as SVG. */
 	toSvg(time = this.player.currentTime, options: MotionSvgOptions & MotionOverlayOptions = {}): string {
-		return motionStageSvg(this.viewScene(), time, options);
+		return motionStageSvg(this.viewScene(), time, { effects: this.effects.provider, ...options });
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -709,16 +776,16 @@ export class AnimationEditorController {
 
 	/** The scene as a Flair `SvgMotion`. */
 	toFlairMotion(options: FlairExportOptions = {}) {
-		return toFlairSvgMotion(this.scene, options);
+		return toFlairSvgMotion(this.scene, { effects: this.effects.provider, ...options });
 	}
 
 	/** The scene as a Flair catalog vector effect. */
 	toFlairEffect(options: FlairEffectOptions = {}) {
-		return toFlairVectorEffect(this.scene, options);
+		return toFlairVectorEffect(this.scene, { effects: this.effects.provider, ...options });
 	}
 
 	/** The scene as a Flair `EffectDocument`. */
 	toFlairDocument(options: FlairExportOptions = {}) {
-		return toFlairEffectDocument(this.scene, options);
+		return toFlairEffectDocument(this.scene, { effects: this.effects.provider, ...options });
 	}
 }

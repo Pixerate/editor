@@ -9,6 +9,9 @@ import type { VectorNode, VectorPathNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, segmentValue, trackValue, type MotionProperty, type MotionSegment, motionDrivenNodes, motionDriverSources, motionPropertyValue } from './compile.js';
 import { motionClipAttrs, motionFollowRoute, motionFrameAt, motionNodeClips, motionNodeOffset } from './evaluate.js';
 import type { MotionDrivenProperty, MotionScene, MotionTrigger } from './types.js';
+import { cameraMoveParts } from '../effects/helpers.js';
+import type { EffectProvider } from '../effects/types.js';
+import { motionCameraWindows } from './camera.js';
 
 /**
  * Export to Flair (`@pixerate/flair`): a scene becomes an `SvgMotion` (one SVG plus a list of
@@ -161,6 +164,13 @@ export interface FlairExportOptions {
 	 * stepped time (`strobe`). `curves` and `behaviors` override it.
 	 */
 	flair?: string;
+	/**
+	 * An effects provider to play the shots' camera moves (`MotionCamera.in` / `during`): the camera
+	 * is then sampled from its views at `fps`, keeping a move's cut as a change of no length. Without
+	 * one a move is written as the eased framing. Either way each camera change a move makes is
+	 * tagged `<move id>@<shot id>`.
+	 */
+	effects?: EffectProvider | null;
 }
 
 /** The Flair version exports target by default. */
@@ -405,7 +415,30 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 	}
 
 	const camera = track('', 'camera');
-	if (camera.length) channels.push({ id: '', kind: 'view', segments: [...camera], exact: () => true, overshoot: true, value: (t) => (trackValue(camera, t) as number[]).map(round) });
+	// Provider camera moves: sampled from the provider's views (with an `effects` provider that plays them), each change tagged with its move.
+	const windows = motionCameraWindows(scene, options.effects);
+	const moveSegments = windows.map((w) => ({ node: '', property: 'camera', start: w.start, end: w.end, from: [], to: [], ease: 'linear', shot: w.shot, command: -1 }) as unknown as MotionSegment);
+	const sampledMove = new WeakSet<MotionSegment>(moveSegments);
+	// After a hold move the camera stays where it left off until the next framing: that view is set when the move ends.
+	const cameraValue = windows.length
+		? (t: number) => {
+				const box = motionFrameAt(scene, t, { draw: false, offsets: false, effects: options.effects }).camera;
+				return [box.x, box.y, box.width, box.height].map(round);
+			}
+		: (t: number) => (trackValue(camera, t) as number[]).map(round);
+	if (camera.length || windows.length) channels.push({ id: '', kind: 'view', segments: [...camera, ...moveSegments].sort((a, b) => a.start - b.start), exact: (seg) => !sampledMove.has(seg), overshoot: true, value: cameraValue });
+	const cameraTag = (t: number): string | undefined => {
+		const w = windows.find((x) => t >= x.start - 1e-6 && t < x.end - 1e-6 && x.move);
+		if (w) return `${w.move}@${w.shot}`;
+		const seg = camera.find((x) => t >= x.start - 1e-6 && t < Math.max(x.end, x.start + 1e-3));
+		const shot = seg ? scene.shots.find((x) => x.id === seg.shot) : undefined;
+		const move = cameraMoveParts(shot?.camera?.in)?.move;
+		return move && shot ? `${move}@${shot.id}` : undefined;
+	};
+	const unplayed = scene.shots.filter((x) => x.camera && (x.camera.in !== undefined || x.camera.during !== undefined) && !windows.some((w) => w.shot === x.id));
+	if (unplayed.length)
+		notes.push(`The camera moves of ${unplayed.map((x) => `"${x.id}"`).join(', ')} are written as eased framings, tagged with the move's id${options.effects ? ' (the effects provider cannot play them)' : '; pass an effects provider with camera moves (options.effects) to sample them exactly'}.`);
+	if (windows.length) notes.push('Camera moves are written as framings (the view box): their tilt, turn, roll and motion blur are not carried over to Flair.');
 
 	const animate: FlairSvgAnimation[] = [];
 	let sampled = 0;
@@ -420,6 +453,10 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 			...(segment?.behavior ? { behavior: segment.behavior } : {}),
 			...(segment?.steps ? { strobe: segment.steps } : {})
 		};
+		if (channel.kind === 'view') {
+			const tag = cameraTag(delay);
+			if (tag) (base as FlairSvgAnimation).tag = tag;
+		}
 		if (channel.kind === 'view') animate.push({ ...base, view: to as unknown as [number, number, number, number] });
 		else if (channel.kind === 'draw') animate.push({ ...base, draw: [from as number, to as number] });
 		else if (channel.kind === 'attrs') {
@@ -463,6 +500,17 @@ export function toFlairSvgMotion(scene: MotionScene, options: FlairExportOptions
 				const t0 = a + ((b - a) * (k - 1)) / n;
 				const t1 = a + ((b - a) * k) / n;
 				const next = channel.value(t1);
+				const jump = channel.kind === 'view' && active.some((x) => sampledMove.has(x)) ? viewJump(channel.value, t0, t1) : undefined;
+				if (jump) {
+					// A camera move that cuts: straight to the view just before it, a change of no length, then on from the view after it.
+					const [before, after] = [channel.value(jump - 1e-3), channel.value(jump)];
+					emit(channel, t0, jump - t0, prev, before, 'linear');
+					emit(channel, jump, 0, before, after, 'linear');
+					if (!same(after, next)) emit(channel, jump, t1 - jump, after, next, 'linear');
+					sampled += 2;
+					prev = next;
+					continue;
+				}
 				if (!same(prev, next)) {
 					emit(channel, t0, t1 - t0, prev, next, 'linear');
 					sampled++;
@@ -586,4 +634,24 @@ export function toFlairEffectDocument(scene: MotionScene, options: FlairExportOp
 		loop: !out.trigger && (scene.loop ?? 'none') !== 'none',
 		presets: scene.presets ?? []
 	};
+}
+
+/**
+ * Where a sampled camera view jumps between `t0` and `t1` (a move's cut), or undefined when it
+ * moves smoothly. Halving towards the larger change, a smooth move shrinks to nothing; a jump
+ * keeps its size.
+ */
+function viewJump(value: (t: number) => unknown, t0: number, t1: number): number | undefined {
+	const box = (t: number) => value(t) as number[];
+	const apart = (a: number[], b: number[]) => Math.hypot(a[0] + a[2] / 2 - b[0] - b[2] / 2, a[1] + a[3] / 2 - b[1] - b[3] / 2, a[2] - b[2]);
+	let lo = t0;
+	let hi = t1;
+	for (let i = 0; i < 40 && hi - lo > 1e-4; i++) {
+		const mid = (lo + hi) / 2;
+		if (apart(box(lo), box(mid)) >= apart(box(mid), box(hi))) hi = mid;
+		else lo = mid;
+	}
+	const a = box(lo);
+	const b = box(hi);
+	return apart(a, b) > Math.min(a[2], b[2]) / 20 ? hi : undefined;
 }

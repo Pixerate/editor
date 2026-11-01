@@ -201,7 +201,7 @@ export function motionStageSvg(scene: MotionScene, time: number, options: Motion
 				return `<g data-onion="${g.offset < 0 ? 'before' : 'after'}" opacity="${g.opacity}">${inner}</g>`;
 			})
 		: [];
-	const camera = motionFrameAt(scene, time).camera;
+	const camera = motionFrameAt(scene, time, { effects: svgOptions.effects }).camera;
 	const ids = motionPaths === true ? motionMovingIds(scene) : motionPaths ? [...motionPaths] : [];
 	const paths = ids.length ? motionPathsSvg(ids.map((id) => motionPath(scene, id)), camera, motionPathColor) : '';
 	// Ghosts go under everything but the background, paths over everything.

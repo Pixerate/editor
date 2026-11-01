@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { highlightMotionSvg, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
+import { highlightMotionSvg, motionCameraTransform, motionCameraViewAt, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
 import { useAnimationEditorState } from './useAnimationEditor';
 
 export interface AnimationStageProps {
@@ -43,12 +43,17 @@ export function AnimationStage({ controller, values, onionSkin, motionPaths, onP
         controller.toSvg(time, { pretty: false, idPrefix: 'ae-', values, onionSkin, motionPaths }).replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1width="100%" height="100%"'),
         highlight ?? [],
       ),
-    [controller, scene, time, samples, values, onionSkin, motionPaths, key],
+    [controller, scene, time, samples, values, onionSkin, motionPaths, key, state.effectsProvider],
   );
+  // A camera move's tilt and turn are 3D, so the stage element turns (its roll and blur are in the SVG).
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const view = useMemo(() => motionCameraViewAt(controller.viewScene(), time, state.effectsProvider), [controller, scene, time, samples, state.effectsProvider]);
+  const transform = motionCameraTransform(view, stageRef.current?.clientWidth || scene.artwork.width);
   return (
     <div
+      ref={stageRef}
       className={`relative overflow-hidden ${recording ? 'cursor-grab touch-none' : onPick ? 'cursor-crosshair' : ''} ${className}`}
-      style={{ aspectRatio: `${scene.artwork.width} / ${scene.artwork.height}` }}
+      style={{ aspectRatio: `${scene.artwork.width} / ${scene.artwork.height}`, ...(transform ? { transform } : {}) }}
       data-animation-stage=""
       data-recording={recording ? '' : undefined}
       role="img"

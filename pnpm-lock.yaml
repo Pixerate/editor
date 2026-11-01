@@ -61,8 +61,8 @@ importers:
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@pixerate/flair':
-        specifier: ^0.65.0
-        version: 0.65.0(@pixerate/editor@packages+core)(react@19.3.1)(svelte@5.57.2)
+        specifier: ^0.89.0
+        version: 0.89.0(@pixerate/editor@packages+core)(react@19.3.1)(svelte@5.57.2)
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -787,8 +787,8 @@ packages:
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
 
-  '@pixerate/flair@0.65.0':
-    resolution: {integrity: sha512-ojbP+CCiMD2wY/j6Cg9JsO6t7206p/70bXq/DFxiH37Exgbj/qmVBfLcQwCet0y76MwtQE178E1XRSzJ8nmWrg==}
+  '@pixerate/flair@0.89.0':
+    resolution: {integrity: sha512-QixxwNTNBe+wUx7a09A3IcMwmhCdSfneu3zLgejs9WzofRwDZyT2jF75Wt4XWpQatxkLEJeWdrAelcIO8jukxA==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -3371,7 +3371,7 @@ snapshots:
 
   '@oxc-project/types@0.155.0': {}
 
-  '@pixerate/flair@0.65.0(@pixerate/editor@packages+core)(react@19.3.1)(svelte@5.57.2)':
+  '@pixerate/flair@0.89.0(@pixerate/editor@packages+core)(react@19.3.1)(svelte@5.57.2)':
     dependencies:
       commander: 12.1.0
       gifenc: 1.0.3

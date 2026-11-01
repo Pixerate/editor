@@ -65,7 +65,7 @@ music track and cutting to them, see `pixerate-bgm-alignment`.
 | Time passing | Crossfade or dip between shots |
 | A section change | Dip to black or a held shot, then a new rhythm |
 | Continuity of motion | Cut on action (`roll_video_edit` onto the movement) |
-| Photos in a slideshow | Image assets, a slow push-in (`set_video_keyframes` scale 1 to 1.08) |
+| Photos in a slideshow | Image assets, a slow push-in: with a provider that has camera moves, `set_clip_camera_move` role `hold` (a Ken Burns drift) on each photo; otherwise `set_video_keyframes` scale 1 to 1.08 |
 
 ## Recipes
 
@@ -96,4 +96,5 @@ start: 0, duration: <sequence>, fadeOut: 2000 }`; `update_video_clip` on the las
 - `roll_video_edit`, `slip_video_clip`, `trim_video_clip`, `close_video_gaps`: refine the rhythm
 - `set_video_transition`: crossfades and dips
 - `update_video_clip`, `set_video_keyframes`: fades, volume and push-ins
+- `list_video_camera_moves`, `set_clip_camera_move`: provider camera moves (a drift across a photo)
 - `undo_video`: take back a step

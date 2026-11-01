@@ -33,7 +33,7 @@ try {
 } catch {
   // Storage is optional (private windows, tests).
 }
-const test = createFakeEffectProvider();
+const test = createFakeEffectProvider({ camera: true });
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 

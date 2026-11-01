@@ -103,10 +103,10 @@ describe('animation editor: provider effect tools', () => {
 	const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
 	it('lists its tools; read-only hides the writes', () => {
-		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'add_vector_effect']);
+		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'list_camera_moves', 'set_shot_camera_move', 'clear_shot_camera_move', 'add_vector_effect']);
 		const r = new ToolRegistry();
 		r.register(createAnimationEffectsToolProvider(editor(), { readOnly: true }));
-		expect(r.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
+		expect(r.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_camera_moves']);
 	});
 
 	it('applies, updates, lists and removes through the registry', async () => {
