@@ -137,7 +137,22 @@ interface Doc {
 	tool: McpToolDefinition;
 	toolset: ToolsetInfo;
 	fields: Record<keyof typeof WEIGHTS, Set<string>>;
-	all: Set<string>;
+}
+
+// Token sets by text. Listings rebuild tool definitions (and some schemas) on every call but
+// the text rarely changes, so keying by content keeps the index across searches and still
+// picks up a changed title, description or toolset. Cleared when it outgrows any catalogue.
+const tokenCache = new Map<string, Set<string>>();
+const TOKEN_CACHE_LIMIT = 20_000;
+
+function tokenSet(text: string): Set<string> {
+	let tokens = tokenCache.get(text);
+	if (!tokens) {
+		if (tokenCache.size >= TOKEN_CACHE_LIMIT) tokenCache.clear();
+		tokens = new Set(searchTokens(text));
+		tokenCache.set(text, tokens);
+	}
+	return tokens;
 }
 
 /** Argument names, descriptions and enum values, one level deep (e.g. a transition's types). */
@@ -153,17 +168,27 @@ function paramText(schema: unknown, depth = 0): string {
 	return parts.join(' ');
 }
 
-function document(tool: McpToolDefinition, toolset: ToolsetInfo): Doc {
+// Argument text by schema object: most providers hand out the same schema on every listing.
+const schemaTextCache = new WeakMap<object, string>();
+
+function schemaText(schema: McpToolDefinition['inputSchema']): string {
+	let text = schemaTextCache.get(schema);
+	if (text === undefined) {
+		text = paramText(schema);
+		schemaTextCache.set(schema, text);
+	}
+	return text;
+}
+
+function document(tool: McpToolDefinition, toolset: ToolsetInfo, toolsetTokens: Set<string>): Doc {
 	const fields = {
-		name: new Set(searchTokens(baseToolName(tool.name))),
-		title: new Set(searchTokens(tool.title ?? tool.annotations?.title ?? '')),
-		toolset: new Set(searchTokens(`${toolset.name} ${toolset.title ?? ''} ${toolset.description ?? ''}`)),
-		description: new Set(searchTokens(tool.description ?? '')),
-		params: new Set(searchTokens(paramText(tool.inputSchema)))
+		name: tokenSet(baseToolName(tool.name)),
+		title: tokenSet(tool.title ?? tool.annotations?.title ?? ''),
+		toolset: toolsetTokens,
+		description: tokenSet(tool.description ?? ''),
+		params: tokenSet(schemaText(tool.inputSchema))
 	};
-	const all = new Set<string>();
-	for (const set of Object.values(fields)) for (const t of set) all.add(t);
-	return { tool, toolset, fields, all };
+	return { tool, toolset, fields };
 }
 
 /**
@@ -204,20 +229,27 @@ export function searchTools(
 ): ToolSearchResult[] {
 	const setOf = new Map<string, ToolsetInfo>();
 	for (const set of toolsets) for (const name of set.tools) setOf.set(name, set);
-	const docs = tools.flatMap((tool) => {
+	const setTokens = new Map<ToolsetInfo, Set<string>>();
+	const all = tools.map((tool) => {
 		const set = setOf.get(tool.name) ?? { name: '', providers: [], tools: [tool.name] };
-		return !options.toolset || set.name === options.toolset ? [document(tool, set)] : [];
+		let tokens = setTokens.get(set);
+		if (!tokens) {
+			tokens = tokenSet(`${set.name} ${set.title ?? ''} ${set.description ?? ''}`);
+			setTokens.set(set, tokens);
+		}
+		return document(tool, set, tokens);
 	});
+	const docs = options.toolset ? all.filter((d) => d.toolset.name === options.toolset) : all;
 	const words = Array.from(new Set(searchTokens(query)));
 	if (words.length === 0 || docs.length === 0) return [];
 	const alternatives = new Map(words.map((w) => [w, (SYNONYMS[w] ?? []).map(stem)]));
 
 	// Document frequency over the whole catalogue, so a toolset filter doesn't distort rarity.
-	const all = options.toolset ? tools.map((t) => document(t, setOf.get(t.name) ?? { name: '', providers: [], tools: [] })) : docs;
+	const fieldNames = Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[];
 	const idf = new Map<string, number>();
 	for (const word of [...words, ...[...alternatives.values()].flat()]) {
 		if (idf.has(word)) continue;
-		const df = all.filter((d) => d.all.has(word)).length;
+		const df = all.filter((d) => fieldNames.some((field) => d.fields[field].has(word))).length;
 		idf.set(word, Math.log(1 + all.length / (1 + df)));
 	}
 
@@ -229,7 +261,7 @@ export function searchTools(
 		for (const word of words) {
 			// The best field for this word: its weight times the rarity of the term that matched.
 			let best = 0;
-			for (const field of Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]) {
+			for (const field of fieldNames) {
 				const weight = COMMON_VERBS.has(word) ? Math.min(WEIGHTS[field], WEIGHTS.description) : WEIGHTS[field];
 				const value = matchValue(doc.fields[field], word, alternatives.get(word) ?? [], idf) * weight;
 				best = Math.max(best, value);
