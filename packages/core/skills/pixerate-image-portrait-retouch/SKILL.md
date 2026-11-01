@@ -48,8 +48,9 @@ This skill is the method. `pixerate-image-editor` has the tool reference, and it
 3. **Make a retouch layer.** `add_pixel_layer` named "Retouch" above the photo; all healing goes
    on it with `sample: "current-below"`.
    **Check:** `list_layers` shows it active above the photo.
-4. **Heal small to large.** `spot_heal` for spots (one dab, `brush.size` a little larger than the
-   spot, `hardness` 0.2-0.5); a short stroke of dabs along a stray hair. `heal_brush` from a clean
+4. **Heal small to large.** `spot_heal` for spots (one dab, `hardness` 0.2-0.5, `brush.size`
+   2.5-3× the spot's width: a soft brush heals fully only in its middle, so one just over the
+   spot leaves a dark ring); a short stroke of dabs along a stray hair. `heal_brush` from a clean
    source of the same texture for larger flaws; `clone_stamp` near edges (lips, eyes, hairline)
    where healing would pull colour across.
    **Check:** `measure_region` around each flaw: its `p1` is near the clean skin's; `capture_view`
@@ -82,7 +83,9 @@ This skill is the method. `pixerate-image-editor` has the tool reference, and it
 ## Recipes
 
 **Clean-up pass.** `add_pixel_layer` "Retouch" → one `spot_heal` per spot (`points: [{x, y}]`,
-`sample: "current-below"`, `brush: { size, hardness: 0.3 }`) → `measure_region` around each.
+`sample: "current-below"`, `brush: { size: 3 × the spot, hardness: 0.3 }`) → `measure_region` on
+a box about 3× the spot around each. The spot is gone when the box's `stats.luminance.p1` is
+within about 10 levels of the skin's around it; if not, the edge is left: dab again one size up.
 
 **Stray hair.** `spot_heal` with `points` every 8-10 px along the hair and a brush 1.5-2× its
 width; check the whole length with one `measure_region` box over it.
@@ -97,8 +100,9 @@ width; check the whole length with one `measure_region` box over it.
   `current-below`.
 - **An empty layer with `sample: "current"`** has nothing to copy, so the stroke does nothing.
 - **Over-smoothing.** Blurring skin removes pores and looks fake; heal flaws instead.
-- **Big brushes.** A heal brush much larger than the flaw pulls in colour from around it; keep it
-  just over the flaw.
+- **Brush size.** Too small a soft brush leaves a faint ring of the flaw (its edge falls in the
+  brush's soft falloff); much larger than about 4× the flaw pulls in colour from around it. Aim
+  for 2.5-3× the flaw's width with a soft brush, or about 1.5× with `hardness` near 1.
 - **Healing across an edge** smears lips or lashes into skin; clone along edges instead.
 - **Removing features.** Moles, freckles and scars are part of a face; ask before removing them.
 - **Bright white eyes and teeth** look unnatural; small gamma moves, and measure.

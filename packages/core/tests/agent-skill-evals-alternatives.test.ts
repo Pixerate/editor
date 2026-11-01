@@ -44,4 +44,16 @@ describe('workflow skill evals accept the routes their skills allow', () => {
     await call('add_layer_effect', { layerId: foregroundLayerId, kind: 'drop-shadow', settings: { distance: 6, size: 10, opacity: 0.4, angle: 90 } });
     expect(await failed()).toEqual([]);
   });
+
+  it('remove-blemishes: the skill’s brush size heals the spot; one just over it leaves the edge', async () => {
+    const heal = async (size: number) => {
+      const { call, failed } = setup('pixerate-image-portrait-retouch/evals/remove-blemishes.json');
+      await call('add_pixel_layer', { name: 'Retouch' });
+      for (const p of [{ x: 30, y: 30 }, { x: 70, y: 22 }]) await call('spot_heal', { points: [p], sample: 'current-below', brush: { size, hardness: 0.3 } });
+      return failed();
+    };
+    // The spots are 3 px: pixerate-image-portrait-retouch says 2.5-3× with a soft brush.
+    expect(await heal(5)).toHaveLength(2);
+    expect(await heal(9)).toEqual([]);
+  });
 });
