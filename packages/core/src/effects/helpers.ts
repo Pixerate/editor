@@ -4,14 +4,19 @@
  */
 
 import { validateJsonSchema, type SchemaValidationError } from '../tools/schema.js';
-import { EffectControlError, NoEffectsProviderError } from './errors.js';
+import { EffectControlError, EffectUnsupportedError, NoEffectsProviderError } from './errors.js';
 import type {
+	CameraKeyframe,
+	CameraMoveSample,
+	CameraMoveSampleRequest,
+	CameraView,
 	EffectDescription,
 	EffectImageSource,
 	EffectPixels,
 	EffectProvider,
 	EffectSearchOptions,
 	EffectSummary,
+	EffectUse,
 	EffectValues
 } from './types.js';
 
@@ -39,6 +44,18 @@ export function resolveEffectValues(description: Pick<EffectDescription, 'id' | 
 // ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether an editor offering `uses` should offer `e` (in a picker or an `effect` enum). Motion
+ * and camera effects draw no picture of their own, so they are offered only where `uses` names
+ * them (`motion`, `camera`); with no `uses`, every other effect is.
+ */
+export function effectOffered(e: Pick<EffectSummary, 'kind' | 'uses'>, uses?: readonly EffectUse[]): boolean {
+	if (!uses) return e.kind !== 'motion' && e.kind !== 'camera';
+	if (e.kind === 'motion' && !uses.includes('motion')) return false;
+	if (e.kind === 'camera' && !uses.includes('camera')) return false;
+	return e.uses.some((u) => uses.includes(u));
+}
 
 /** A tag as tags are compared: trimmed, lower case, spaces and underscores as single hyphens (`"Game Boy"` → `game-boy`). */
 export function normaliseEffectTag(tag: string): string {
@@ -191,4 +208,60 @@ export class EffectsSlot {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Camera moves
+// ---------------------------------------------------------------------------
+
+/** How far before a cut the "just before" key is taken (a fraction of the move). */
+const BEFORE_CUT = 1e-6;
+
+/** True for a `CameraView` with a positive zoom and finite numbers throughout. */
+export function isCameraView(view: unknown): view is CameraView {
+	if (!view || typeof view !== 'object') return false;
+	const v = view as Record<string, unknown>;
+	if (!(typeof v.zoom === 'number' && v.zoom > 0 && Number.isFinite(v.zoom))) return false;
+	if (!Number.isFinite(v.scrollX) || !Number.isFinite(v.scrollY)) return false;
+	return ['tilt', 'turn', 'roll', 'perspective', 'blur', 'blurAngle'].every((k) => v[k] === undefined || Number.isFinite(v[k]));
+}
+
+/**
+ * Keys `view` (u 0–1 → view) at `fps` across `ms`, with the two keys of a cut at `cut` (0–1).
+ * Providers can implement `sampleCameraMove` with it; `sampleEffectCameraMove` falls back to it.
+ */
+export function sampleCameraViews(view: (u: number) => CameraView, options: { ms: number; fps: number; cut?: number }): CameraMoveSample {
+	const { ms, fps, cut } = options;
+	if (!(Number.isFinite(ms) && ms >= 0)) throw new EffectUnsupportedError(`ms must be a finite number of ms ≥ 0, got ${ms}.`);
+	if (!(Number.isFinite(fps) && fps > 0)) throw new EffectUnsupportedError(`fps must be a number > 0, got ${fps}.`);
+	if (cut !== undefined && !(cut >= 0 && cut <= 1)) throw new EffectUnsupportedError(`cut must be 0–1, got ${cut}.`);
+	// A move with no length (a cut) is its first view, then its last at the same time.
+	if (ms === 0) return { keys: [{ t: 0, view: view(0) }, { t: 0, view: view(1) }], ...(cut !== undefined ? { cut: 0 } : {}) };
+	const step = 1000 / fps;
+	const cutMs = cut === undefined ? undefined : cut * ms;
+	const keys: CameraKeyframe[] = [];
+	const frames = Math.ceil(ms / step - 1e-9);
+	for (let i = 0; i <= frames; i++) {
+		const t = Math.min(ms, i * step);
+		if (cutMs !== undefined && (keys.length ? keys[keys.length - 1].t : -1) < cutMs && t >= cutMs) {
+			keys.push({ t: cutMs, view: view(Math.max(0, cut! - BEFORE_CUT)) }, { t: cutMs, view: view(cut!) });
+			if (t === cutMs) continue;
+		}
+		keys.push({ t, view: view(t / ms) });
+	}
+	return { keys, ...(cutMs !== undefined ? { cut: cutMs } : {}) };
+}
+
+/**
+ * A camera move as keyframes: the provider's own `sampleCameraMove` when it has one, else its
+ * `cameraView` keyed per frame (with the move's `cut` from `describe`). Throws
+ * `EffectUnsupportedError` when the provider has no camera support.
+ */
+export async function sampleEffectCameraMove(provider: EffectProvider, id: string, request: CameraMoveSampleRequest): Promise<CameraMoveSample> {
+	if (!provider.capabilities.supportsCamera || !provider.cameraView) throw new EffectUnsupportedError(`${provider.name} has no camera moves (capabilities.supportsCamera is not set).`, id);
+	if (provider.sampleCameraMove) return provider.sampleCameraMove(id, request);
+	const d = await provider.describe(id);
+	if (d.kind !== 'camera' || !d.camera) throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a camera move.`, id);
+	const { from, to, ms, stage, values } = request;
+	return sampleCameraViews((u) => provider.cameraView!(id, { from, to, u, ms, stage }, values), { ms, fps: request.fps, cut: d.camera.cut });
 }

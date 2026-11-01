@@ -19,7 +19,8 @@ export const EFFECT_USE_LABELS: Readonly<Record<EffectUse, string>> = {
 	overlay: 'Overlay',
 	title: 'Title',
 	motion: 'Motion',
-	interactive: 'Interactive'
+	interactive: 'Interactive',
+	camera: 'Camera'
 };
 
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;

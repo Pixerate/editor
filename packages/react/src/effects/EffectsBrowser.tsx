@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { EFFECT_USE_LABELS, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
+import { EFFECT_USE_LABELS, effectOffered, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
 import { EffectThumbnail } from './EffectThumbnail';
 
 export interface EffectsBrowserProps {
@@ -52,7 +52,7 @@ export function EffectsBrowser({ provider, uses, kinds, onPick, thumbnails = tru
       live = false;
     };
   }, [provider, query, category, use]);
-  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses);
   const categories = useMemo(() => [...new Set(all.filter(allowed).map((e) => e.category))], [all, uses, kinds]);
   const shown = found.filter(allowed);
   if (!provider)

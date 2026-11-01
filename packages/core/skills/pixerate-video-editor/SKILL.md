@@ -284,7 +284,7 @@ and every write tool is refused with the reason.
 
 | Tool | Use it to |
 | --- | --- |
-| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Call `describe_effect` next. |
+| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Camera moves (`kind` camera) are listed but not applied to clips (`appliesHere` false). Call `describe_effect` next. |
 | `describe_effect` | Read one effect's `controls` (a strict JSON Schema: names, types, ranges, units), `defaults`, `presets` and `inputs`, and whether it `appliesHere` (as a clip effect). Use the names and ranges for values. |
 | `list_applied_effects` | See the effects in the project per clip, in order: clip effects (`fx1`...), an effect clip's own effect (`generator`) and an effect transition (`transition`), with their saved values and `available` (false when the provider lacks it: drawn as a placeholder). |
 | `apply_effect` | Add a filter or overlay effect to a clip's stack (`target` clip id, `effect`, `values`, `index`, `enabled`, `opacity`). Effects run in order on the clip's picture before its grade and placement. Returns the effect's new id and the clip's effects. |

@@ -1,6 +1,6 @@
 # Effects providers
 
-`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
+`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion, camera moves) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
 
 The real provider is [Flair](https://github.com/Pixerate/flair): `flairEffects()` from `@pixerate/flair/integrations`. The adapter lives **in Flair**, not here, so this repo never depends on Flair. The demo is the only place that uses both: `@pixerate/flair` is a devDependency of `apps/demo`, and `apps/demo/src/demoEffects.ts` loads it on demand when the user picks it from the demo's effects switch (the default is the fake "test" provider).
 
@@ -19,6 +19,8 @@ interface EffectProvider {
   describe(id): MaybePromise<EffectDescription>;          // controls, defaults, presets
   createRenderer(id, options): MaybePromise<EffectRenderer>;
   applyVectorEffect?(id, target, values?): MaybePromise<EffectVectorMotion>;
+  cameraView?(id, ctx, values?): CameraView;                // camera moves; sync and pure
+  sampleCameraMove?(id, request): MaybePromise<CameraMoveSample>;
 }
 
 interface EffectRenderer {
@@ -31,8 +33,8 @@ interface EffectRenderer {
 }
 ```
 
-- **Kinds** are `shader`, `vector` and `motion`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion` and `interactive`; each editor offers the uses that make sense in it.
-- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector` and an optional `maxSize`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
+- **Kinds** are `shader`, `vector`, `motion` and `camera`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive` and `camera`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion and camera effects only where their use is named).
+- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring` and `supportsCamera`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
 - **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed` and `no_provider` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`; `isEffectError`). Agent tools turn them into `isError` results.
 - **One render at a time per renderer.** `EffectRendererPool` (`pool.ts`) keeps a few renderers alive per effect, size and depth (default 4) and disposes the least recently used. GPU providers hold one WebGL context per renderer, and browsers drop the oldest after about sixteen (#281).
 - **Saved documents** keep the provider id, effect id and values. They load and save unchanged without a provider; filters pass pixels through and generated layers keep their last pixels.
@@ -84,6 +86,17 @@ const release = editor.useEffects(effects);
 | `createPaintEffectsToolProvider` | `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect` |
 
 The tools are described in each domain's skill (and, for the image editor, `skills/pixerate-image-editor/references/provider-effects.md`).
+
+## Camera moves
+
+A `camera` effect moves a scene's camera rather than drawing pixels: Flair's `camera-glide`, `camera-whip-pan`, `camera-punch-zoom` and `camera-cut` get the camera from one framing to the next, and `camera-ken-burns` and `camera-crash-zoom` move it while a shot holds. A provider offers them by setting `capabilities.supportsCamera` and implementing `cameraView`; a provider without them is unchanged and conforms as before.
+
+- **Summary.** A camera effect has `kind: 'camera'`, exactly the use `camera` (so pixel editors never offer it) and `camera: { role, durationMs, cut? }`. `role` is `transition` (from one framing to the next) or `hold` (within one framing while the shot holds); `durationMs` is the move's default length (0 for a cut); `cut` (0–1) is where the view jumps, 0.5 for a whip pan or punch zoom. `duration`, when given, equals `durationMs`.
+- **`cameraView(id, { from, to, u, ms, stage }, values?)`** returns a `CameraView` (`{ zoom, scrollX, scrollY, tilt?, turn?, roll?, perspective?, blur?, blurAngle? }`, the shape of Flair's `View`): where the camera looks `u` (0–1) of the way through a move of `ms` from `from` to `to` (the same framing for a hold) on a `stage` of `{ width, height }` pixels. It is synchronous and pure, so editors can call it per frame or cache it. Errors are typed: unknown ids, invalid values, and a non-camera effect or a `u` outside 0–1 (`unsupported`).
+- **`sampleCameraMove(id, { from, to, ms, stage, fps, values? })`** is optional and returns `{ keys: [{ t, view }], cut? }`: one key per frame from 0 to `ms`, and at a cut two keys at the same `t` (just before, then after), so tweening between keys never crosses the jump. `sampleEffectCameraMove(provider, id, request)` uses it, or falls back to `cameraView` per frame through `sampleCameraViews`.
+- **No pixels.** `createRenderer` for a camera effect may refuse with `EffectUnsupportedError` and a sentence saying why; thumbnails show "Camera".
+- **Checks.** `checkEffectProvider` checks the summary fields, that camera moves are listed only with `supportsCamera`, and calls `cameraView` along a probe move (a view at each step, the same view twice, refusing unknown ids, other kinds and unknown controls), and compares `sampleCameraMove` with it at both ends. `createFakeEffectProvider({ camera: true })` adds three camera moves: `fake.glide`, `fake.whip` (cuts at 0.5) and `fake.drift` (a hold).
+- **Agents.** `search_effects` filters by `kind: 'camera'` and returns each move's `camera` fields; `describe_effect` reports them with `appliesHere: false` in the editors that cannot use them yet. The animation and video editors adopt camera moves (shot cameras, baked holds, whip and punch transitions) in follow-ups, with their own tools.
 
 ## Effect authoring
 
@@ -140,6 +153,7 @@ The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a so
 1. Implement `EffectProvider`. Return summaries (with `tags`) from `list` / `search` (`searchEffectSummaries` applies every `EffectSearchOptions` filter, `tags` included), and a full `EffectDescription` (controls with ranges and units, defaults, presets) from `describe`.
 2. Throw the typed errors: an unknown id, invalid values, or something the provider can't do (a vector effect in a Worker, float output without float support).
 3. Make `render` deterministic for the same request, and free GPU or Worker resources in `dispose`.
-4. Run `checkEffectProvider` in your tests.
+4. For camera moves, set `supportsCamera`, give each `camera: { role, durationMs, cut? }` and the use `camera`, and implement `cameraView` as a pure function (see [Camera moves](#camera-moves)).
+5. Run `checkEffectProvider` in your tests.
 
 See [outstanding.md](./outstanding.md) for what is not done here.

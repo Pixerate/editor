@@ -12,7 +12,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { isEffectError } from './errors.js';
-import { countEffectTags, hasEffectTags, normaliseEffectTag } from './helpers.js';
+import { countEffectTags, effectOffered, hasEffectTags, normaliseEffectTag } from './helpers.js';
 import { EFFECT_KINDS, EFFECT_USES, type EffectDescription, type EffectProvider, type EffectSummary, type EffectUse } from './types.js';
 
 /** One effect applied to a target, as the tools report it. */
@@ -136,7 +136,8 @@ const summaryOut = (e: EffectSummary) => ({
 	...(e.tags?.length ? { tags: e.tags } : {}),
 	transparent: e.transparent,
 	loop: e.loop,
-	...(e.duration !== undefined ? { duration: e.duration } : {})
+	...(e.duration !== undefined ? { duration: e.duration } : {}),
+	...(e.camera ? { camera: e.camera } : {})
 });
 
 /** The agent tools for provider effects in one editor (see the module comment). */
@@ -189,7 +190,7 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		description: `${what}: control name → value, as listed by describe_effect (its "controls" schema: types, ranges, units and defaults). Only the given controls change; colours are "#rrggbb".${keyframes ? ' A number control may instead be keyframes { keys: [{ t: ms from the start, v, ease }] }.' : ''} Unknown controls and out-of-range values are refused with the valid ones.`
 	});
 	const effectIdSchema = (uses: readonly EffectUse[]): JsonSchema => {
-		const effects = catalogFor(host.provider())?.filter((e) => (e.kind !== 'motion' || uses.includes('motion')) && e.uses.some((u) => uses.includes(u)));
+		const effects = catalogFor(host.provider())?.filter((e) => effectOffered(e, uses));
 		const base = `An effect id from search_effects (use ${uses.map((u) => `"${u}"`).join(' or ')}).`;
 		return effects && effects.length && effects.length <= ENUM_LIMIT
 			? { type: 'string', enum: effects.map((e) => e.id), description: `${base} One of: ${effects.map((e) => `${e.id} (${e.name})`).join(', ')}.` }
@@ -207,12 +208,12 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'search_effects',
 			title: 'Search effects',
-			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one). For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms) }], total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
+			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one). For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves }], total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
 			inputSchema: object({
 				query: { type: 'string', description: 'Words to match (default: every effect).' },
-				kind: { type: 'string', enum: [...EFFECT_KINDS], description: 'shader (pixels), vector (animated SVG) or motion (animates vector art).' },
+				kind: { type: 'string', enum: [...EFFECT_KINDS], description: 'shader (pixels), vector (animated SVG), motion (animates vector art) or camera (moves a scene\'s camera; no pixels).' },
 				category: { type: 'string', minLength: 1, description: 'The provider\'s category, e.g. "gradient", "light", "transition".' },
-				use: { type: 'string', enum: [...EFFECT_USES], description: 'What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input.' },
+				use: { type: 'string', enum: [...EFFECT_USES], description: 'What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene\'s camera.' },
 				tags: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens).' },
 				limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Most effects to return (default 20).' }
 			}),
@@ -237,14 +238,14 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'describe_effect',
 			title: 'Describe an effect',
-			description: 'Returns one effect\'s controls as a strict JSON Schema (each control described, with its type, range and units), its defaults, presets (named sets of values) and inputs, plus its summary. Use the control names and ranges for apply_effect and update_effect values. With no provider registered it returns available: false and the reason.',
+			description: 'Returns one effect\'s controls as a strict JSON Schema (each control described, with its type, range and units), its defaults, presets (named sets of values) and inputs, plus its summary (for a camera move, camera: { role transition or hold, durationMs, cut 0–1 where the view jumps }). Use the control names and ranges for apply_effect and update_effect values. With no provider registered it returns available: false and the reason.',
 			inputSchema: object({ effect: { type: 'string', minLength: 1, description: 'An effect id from search_effects or list_applied_effects.' } }, ['effect']),
 			annotations: { title: 'Describe an effect', ...ANNOTATIONS.read },
 			handler: async (args) => {
 				const p = host.provider();
 				if (!p) return { available: false, reason: NO_PROVIDER };
 				const d: EffectDescription = await explain(async () => p.describe(args.effect as string));
-				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: (d.kind !== 'motion' || host.applyUses.includes('motion')) && d.uses.some((u) => host.applyUses.includes(u)) };
+				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: effectOffered(d, host.applyUses) };
 			}
 		},
 		{

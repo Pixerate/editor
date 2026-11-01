@@ -119,6 +119,19 @@ describe("effects (Svelte)", () => {
     expect(target.querySelector("[data-effects-unavailable]")?.textContent).toMatch(/No effects provider/);
   });
 
+  it("EffectsBrowser leaves camera moves out unless asked for the camera use, and labels their thumbnails", async () => {
+    const provider = createFakeEffectProvider({ camera: true });
+    render(EffectsBrowser, { provider, onpick: vi.fn(), thumbnails: false });
+    await flush();
+    const ids = () => [...target.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"));
+    expect(ids()).not.toContain("fake.glide");
+    expect(ids()).toContain("fake.tint");
+    render(EffectsBrowser, { provider, uses: ["camera"], onpick: vi.fn() });
+    await flush();
+    expect(ids()).toEqual(["fake.glide", "fake.whip", "fake.drift"]);
+    expect(target.querySelector('[data-effect-thumbnail="fake.whip"]')?.textContent?.trim()).toBe("Camera");
+  });
+
   it("EffectParameters builds controls from the JSON Schema and reports changes", async () => {
     const provider = createFakeEffectProvider();
     const onchange = vi.fn();
