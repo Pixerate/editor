@@ -12,6 +12,7 @@ import {
 	type CanvasDraw,
 	type CanvasNode
 } from '../src/canvas';
+import { CommandRegistry, createDrawCommands } from '@pixerate/editor/commands';
 
 let container: HTMLDivElement;
 let root: any;
@@ -64,6 +65,29 @@ describe('brushed freehand strokes (react)', () => {
 		});
 		expect(ref.nodes.map((n) => n.id)).toContain(drawn.id);
 		expect((await ref.draw!.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
+	});
+
+	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {
+		const card: CanvasNode = { id: 'card', position: { x: 100, y: 80 }, width: 160, height: 40, data: {} };
+		const ref: { draw: CanvasDraw | null; nodes: CanvasNode[] } = { draw: null, nodes: [] };
+		function Test() {
+			const [nodes, setNodes] = useState<CanvasNode[]>([card]);
+			ref.nodes = nodes;
+			ref.draw = useCanvasDraw({ nodes, setNodes });
+			return null;
+		}
+		await act(async () => root.render(<Test />));
+		expect(ref.draw!.nodeBounds('card')).toEqual({ x: 100, y: 80, width: 160, height: 40 });
+		expect(ref.draw!.nodeBounds('nope')).toBeUndefined();
+		const commands = new CommandRegistry();
+		commands.register(createDrawCommands(ref.draw!));
+		let result: any;
+		await act(async () => {
+			result = await commands.executeAsync('canvas.circle', { around: [{ nodeId: 'card' }] });
+		});
+		expect(result.ok).toBe(true);
+		expect(ref.nodes).toHaveLength(2);
+		expect(result.result.bounds.x).toBeLessThan(100);
 	});
 
 	it('carries gradient paint from the style to the brushed stroke, interactively and through drawStroke', async () => {

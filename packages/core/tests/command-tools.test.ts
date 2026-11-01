@@ -11,7 +11,7 @@ import {
 	createCanvasComponentToolProvider,
 	type AgentToolProvider
 } from '../src/agent';
-import { CommandRegistry, createCommandToolProvider, createHistoryCommands } from '../src/commands';
+import { CommandRegistry, createCommandToolProvider, createDrawCommands, createHistoryCommands } from '../src/commands';
 import { HistoryManager } from '../src/history';
 import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider } from '../src/image-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
@@ -266,6 +266,12 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			registry.register(createStyleToolProvider(styles));
 			registry.register(createChartStyleToolProvider(new ChartController(), styles, { namespace: 'chartstyle' }));
 			registry.register(createTokensStyleToolProvider(new TokenStore(), styles, { namespace: 'tokenstyle' }));
+		}
+		{
+			// Commands listed as tools of their own (the canvas gestures and listBrushes).
+			const drawCommands = new CommandRegistry();
+			drawCommands.register(createDrawCommands({ drawStroke: async () => ({ id: 'n', bounds: { x: 0, y: 0, width: 1, height: 1 } }), listBrushes: async () => [] }));
+			registry.register(createCommandToolProvider(drawCommands, { id: 'draw', namespace: 'draw', tools: (id) => id !== 'canvas.drawFreehand' }));
 		}
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
 		registry.register(createTypographyToolProvider({ id: 'typography', namespace: 'typography' }));

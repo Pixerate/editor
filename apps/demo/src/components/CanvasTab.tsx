@@ -373,10 +373,11 @@ const CanvasDemo: React.FC = () => {
         getSelectedIds: () => nodesRef.current.filter((n) => n.selected).map((n) => n.id),
         scenes: { next: () => scenesRef.current.next(), previous: () => scenesRef.current.previous() },
       }),
-      // canvas.drawFreehand (optionally brushed, with a pressure profile) and canvas.listBrushes.
+      // canvas.drawFreehand (optionally brushed, with a pressure profile), canvas.listBrushes and the
+      // annotation gestures (canvas.circle, canvas.arrow, …), which take { nodeId } through nodeBounds.
       ...createDrawCommands(draw, { scope: null }),
     ],
-    [history.manager, arrange, draw.drawStroke, draw.listBrushes],
+    [history.manager, arrange, draw.drawStroke, draw.listBrushes, draw.nodeBounds],
   );
   useRegisterCommands(demoCommandRegistry, commands);
   useEffect(() => demoCommandRegistry.invalidate(), [nodes, history.canUndo, history.canRedo]);

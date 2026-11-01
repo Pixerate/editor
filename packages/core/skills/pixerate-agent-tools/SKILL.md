@@ -165,6 +165,11 @@ Never repeat an identical failing call. Never work around a read-only refusal; t
 | `run_commands` | Run several commands in order as `steps`. A param string `"$0.id"` or `"$last.id"` is replaced by that path of an earlier step's result, so a step can use an id an earlier step created. Pass `atomic: true` and a `label` to make the batch one undo step that rolls back entirely on failure; without it, steps before a failure stay applied. |
 | `say` | Optional; only where the host shows your cursor. Put one short sentence (`text`, at most 200 characters) in the bubble beside your cursor so the user can follow why you are about to change something. Returns `shown` and the `surface` it appeared on (`shown: false`, `surface: null` when no cursor is on screen, which is not an error). Call it after a write on that editor, before the next one. Changes nothing. |
 
+Some hosts also list chosen commands as tools of their own (for example `commands__canvas_circle`
+for `canvas.circle`), with the command's params as the tool's arguments and its description. Call
+those directly: they run the same command, are refused with the same reasons, and save a
+`list_commands` round trip.
+
 ## Commands
 
 These history commands are registered wherever a host shares a history with its command

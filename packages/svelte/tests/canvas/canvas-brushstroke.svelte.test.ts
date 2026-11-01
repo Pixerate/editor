@@ -5,6 +5,7 @@ import { createCanvasDraw } from '../../src/canvas/createCanvasDraw.svelte.js';
 import { createCanvasBrushes } from '../../src/canvas/shapeBrushstroke.svelte.js';
 import { loadCanvasBrushstrokeRenderer } from '../../src/canvas/index.js';
 import type { CanvasNode } from '../../src/canvas/types.js';
+import { CommandRegistry, createDrawCommands } from '@pixerate/editor/commands';
 
 beforeAll(async () => {
 	await loadCanvasBrushstrokeRenderer();
@@ -27,6 +28,19 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect(nodes.map((n) => n.id)).toContain(drawn.id);
 		await expect(draw.drawStroke({ points: [[0, 0]], style: { brush: 'watercolor-round' } })).rejects.toThrow(/not a dry brush/);
 		expect((await draw.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
+	});
+
+	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {
+		let nodes: CanvasNode[] = [{ id: 'card', position: { x: 100, y: 80 }, width: 160, height: 40, data: {} }];
+		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });
+		expect(draw.nodeBounds('card')).toEqual({ x: 100, y: 80, width: 160, height: 40 });
+		expect(draw.nodeBounds('nope')).toBeUndefined();
+		const commands = new CommandRegistry();
+		commands.register(createDrawCommands(draw));
+		const result: any = await commands.executeAsync('canvas.circle', { around: [{ nodeId: 'card' }] });
+		expect(result.ok).toBe(true);
+		expect(nodes).toHaveLength(2);
+		expect(result.result.bounds.x).toBeLessThan(100);
 	});
 
 	it('carries gradient paint from the style to the brushed stroke, interactively and through drawStroke', async () => {

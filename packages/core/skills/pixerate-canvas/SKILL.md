@@ -1,6 +1,6 @@
 ---
 name: pixerate-canvas
-description: How to build and edit a Pixerate design canvas or node graph through its agent tools - drawing freehand pen, highlighter and dry-brush strokes (canvas.drawFreehand), adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, and keyframe animation with easing and CSS export. Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order or a canvas animation in a Pixerate editor.
+description: How to build and edit a Pixerate design canvas or node graph through its agent tools - drawing freehand pen, highlighter and dry-brush strokes (canvas.drawFreehand), annotating with hand-drawn circles, underlines, arrows, brackets, strikes, crosses and ticks (canvas.circle, canvas.arrow), adding, connecting, updating and laying out nodes (canvas_add_node, canvas_layout), reading state with get_editor_state and looking at it with view_editor, reusable components with variants, instances and overrides (create_component, add_variant, set_instance_properties), align, distribute, lock and layer order, shape boolean operations (unite, subtract, offset path, outline stroke), auto layout frames, and keyframe animation with easing and CSS export. Use when working on a canvas, whiteboard, flow chart, node graph, frame, design system, component library, button variants, layout, alignment, z-order or a canvas animation in a Pixerate editor.
 ---
 
 # Pixerate canvas
@@ -90,6 +90,21 @@ the pitfalls, and uses the tools below.
   pen are clean, the airbrush is a soft spray. The grain and jitter are seeded per stroke, so a
   stroke always looks the same, and neighbouring strokes share one sheet of paper. Pick the brush
   for the look, then the colour; for a sketch, use one or two brushes rather than all of them.
+- **Annotate with gestures, not points.** To mark up work the way a designer marks up a print,
+  use the gesture commands (`canvas.circle`, `canvas.underline`, `canvas.arrow`,
+  `canvas.bracket`, `canvas.strike`, `canvas.cross`, `canvas.check`) with node ids
+  (`{ "nodeId": "..." }`) or boxes, rather than working out points for `canvas.drawFreehand`. One
+  call draws one hand-drawn mark. An annotation helps when you are pointing at something on the
+  canvas while you talk about it: circle the pick, underline the line that matters, draw an
+  arrow from a swatch to where it is used, bracket a group you are describing, strike or cross
+  out a rejected option, tick an approved one. Skip it when nothing on the canvas is being
+  referred to, and keep it to a few marks per point: a page covered in marks says nothing.
+- **Gesture style.** Use one colour for one review pass (a red or a strong blue pen reads as
+  markup over most designs), the highlighter only for circles and underlines, and the same
+  `brush` (`marker` or `ink-pen`) for every mark of a pass if you want them to look hand-drawn.
+  Marks are seeded by their request, so asking again draws the same mark; pass another `seed`
+  for a different take. Put a margin note (a text node) beside a bracket or at an arrow's tail
+  when the mark needs words.
 
 ## Tool reference
 
@@ -215,7 +230,25 @@ character: seeded jitter and the paper grain they catch) and, when a width was c
 | Command | Use it to |
 | --- | --- |
 | `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
-| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` accepts as `brush` (`id`, `name`, `category`, the preset's own `size`, which a stroke uses unless you pass `width`). Call it before the first brushed stroke instead of guessing ids. |
+| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` and the gestures accept as `brush` (`id`, `name`, `category`, the preset's own `size`, which a stroke uses unless you pass `width`). Call it before the first brushed stroke instead of guessing ids. |
+
+Gestures draw one hand-drawn stroke node each (one undo step) through the same path as
+`canvas.drawFreehand`, and the agent's cursor traces them. Targets are boxes
+`{ x, y, width, height }` in canvas units, nodes `{ nodeId }` (where the host can look nodes up)
+or, where noted, points `[x, y]`. Every gesture also takes `tool`, `color`, `width`, `opacity`,
+`brush` (brushed marks get an uneven hand pressure) and `seed` (default: derived from the
+request). Each returns the node `id`, its `bounds`, the `brush` when brushed and the `seed` used;
+pass the `id` to `canvas_remove_nodes` (or undo) to take a mark away.
+
+| Command | Use it to |
+| --- | --- |
+| `canvas.circle` | Circle the pick or the subject: `around` is a list of boxes or nodes, ringed together by a loose, slightly open ellipse that never cuts into them; `padding` (default 8) widens it. |
+| `canvas.underline` | Stress a line of text or a value: a stroke just under `under`'s bottom edge (`offset`, default 4), a little longer or shorter than it; `wave: true` for a squiggle. |
+| `canvas.arrow` | Point from one thing to another (a swatch to where it is used, a note to its subject): `from` and `to` are boxes, nodes or points; boxes are reached at their nearest edge, `gap` (default 6) clear of it. `curve` −1..1 bends the shaft (0 straight). Ends that overlap are refused. |
+| `canvas.bracket` | Group items or a range of lines: a curly (default) or `shape: "square"` bracket on one `side` (`left`, `right`, `top`, `bottom`) of `around`, spanning them end to end, `padding` (default 8) away; `depth` sets how far it reaches out. Add a note beside it. |
+| `canvas.strike` | Strike a line through the middle of `over` (text or a value to drop). It only marks it; nothing is deleted. |
+| `canvas.cross` | Cross out a rejected option with an X over `over`. One stroke, so the pen runs back over part of the first diagonal. Nothing is deleted. |
+| `canvas.check` | Tick an approved option or a done item: `at` is a box or node (ticked in its middle) or a point; `size` is the tick's height (default from the box, 20 at a point). |
 
 ### Components (command form)
 
@@ -301,6 +334,12 @@ effects provider (for example Flair); without one the read tools say so and the 
   length near the stroke's to go from one end to the other once.
 - A canvas gradient in `color` does not reach the brush: a brushed stroke with a gradient
   `color` and no `paint` uses its first stop. Pass `paint` instead.
+- **Gestures need a lookup for node ids.** Where the host's draw target has no `nodeBounds`, a
+  `{ nodeId }` target is refused with that reason: pass the node's box from `get_editor_state`.
+  A point is refused where a box is needed (`around`, `under`, `over`).
+- **Gestures are marks, not edits.** A strike or a cross does not delete or change the node under
+  it, and a mark does not move with the node; take it away (`canvas_remove_nodes` with its `id`)
+  and draw it again after moving things.
 - **Shape operations drop the brush.** Unite, subtract, offset path and outline stroke turn
   brushed strokes into plain filled or stroked paths.
 - `canvas_*` tools validate ids against the current state; an "Unknown node id" error means call

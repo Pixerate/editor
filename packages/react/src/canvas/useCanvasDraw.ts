@@ -43,6 +43,8 @@ export interface CanvasDrawActions<TNode extends CanvasNode = CanvasNode> {
 	eraseAt: (point: [number, number], radius?: number) => TNode[];
 	/** Draws a whole stroke at once (agents, code); validates the brush first. One undo step. */
 	drawStroke: (input: DrawStrokeInput) => Promise<DrawStrokeResult<TNode>>;
+	/** A node's box in canvas coordinates (lets gesture commands such as `canvas.circle` take `{ nodeId }`). */
+	nodeBounds: (id: string) => { x: number; y: number; width: number; height: number } | undefined;
 	/** The dry paint presets `style.brush` accepts (loads the paint engine). */
 	listBrushes: () => Promise<CanvasBrushPreset[]>;
 }
@@ -111,6 +113,7 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 			cancelStroke: controller.cancelStroke,
 			eraseAt: controller.eraseAt,
 			drawStroke: controller.drawStroke,
+			nodeBounds: controller.nodeBounds,
 			listBrushes: controller.listBrushes
 		}),
 		[tool, style, activeStroke, controller]

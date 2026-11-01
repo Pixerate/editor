@@ -3,6 +3,21 @@ import type { CanvasArrangeAction } from '../canvas/arrangeShortcuts.js';
 import type { AlignEdge, DistributeAxis, DistributeMode, ZOrderOperation } from '../canvas/arrange.js';
 import { DEFAULT_ARRANGE_SHORTCUTS } from '../canvas/arrangeShortcuts.js';
 import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset } from '../canvas/brushTypes.js';
+import {
+	arrowGesture,
+	bracketGesture,
+	checkGesture,
+	circleGesture,
+	crossGesture,
+	gestureSeed,
+	gestureUnion,
+	strikeGesture,
+	underlineGesture,
+	type GestureEnd,
+	type GestureRect,
+	type GestureSide,
+	type GestureStroke
+} from '../canvas/gestures.js';
 import type { CommandParamsSchema, CommandSpec } from './registry.js';
 import type { PlaybackPoint, PlaybackStep } from '../tools/playback.js';
 import { ShortcutMap, type ShortcutBinding } from './shortcuts.js';
@@ -339,6 +354,8 @@ export interface DrawCommandTarget {
 	}): Promise<{ id: string; bounds: { x: number; y: number; width: number; height: number }; brush?: unknown }>;
 	/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
 	listBrushes(): Promise<CanvasBrushPreset[]>;
+	/** A node's box in canvas coordinates, so gestures can take `{ nodeId }` targets (without it they take boxes and points only). */
+	nodeBounds?(id: string): { x: number; y: number; width: number; height: number } | undefined;
 }
 
 export interface DrawCommandOptions {
@@ -479,7 +496,10 @@ export function planFreehandPlayback(points: unknown, max = 32): PlaybackStep[] 
 /**
  * Agent / palette commands for freehand drawing: `canvas.drawFreehand` (a pen or highlighter
  * stroke through given points, optionally brushed with a dry paint preset and a pressure / tilt
- * profile; one undo step) and the read-only `canvas.listBrushes` (the dry presets it accepts).
+ * profile; one undo step), the read-only `canvas.listBrushes` (the dry presets it accepts) and
+ * the annotation gestures `canvas.circle`, `canvas.underline`, `canvas.arrow`, `canvas.bracket`,
+ * `canvas.strike`, `canvas.cross` and `canvas.check` (hand-drawn marks around boxes, points or,
+ * when the target has `nodeBounds`, nodes).
  */
 export function createDrawCommands(target: DrawCommandTarget, options: DrawCommandOptions = {}): CommandSpec[] {
 	const prefix = options.prefix ?? 'canvas.';
@@ -565,7 +585,242 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			params: { type: 'object', additionalProperties: false, properties: {} },
 			readOnly: true,
 			run: async () => ({ brushes: await target.listBrushes() })
+		},
+		...createGestureCommands(target, base, prefix, options)
+	];
+}
+
+// ---------------------------------------------------------------------------
+// Canvas annotation gestures
+// ---------------------------------------------------------------------------
+
+const GESTURE_RECT_PARAM = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['x', 'y', 'width', 'height'],
+	description: 'A box in canvas units (top left x, y and its size), e.g. a node\'s bounds from get_editor_state or a stroke\'s `bounds`.',
+	properties: {
+		x: { type: 'number', description: 'Left edge, canvas units.' },
+		y: { type: 'number', description: 'Top edge, canvas units.' },
+		width: { type: 'number', minimum: 0, description: 'Width, canvas units.' },
+		height: { type: 'number', minimum: 0, description: 'Height, canvas units.' }
+	}
+} as const;
+
+const GESTURE_NODE_PARAM = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['nodeId'],
+	description: 'A node on the canvas by id; its current box is used, so you need not read its position first.',
+	properties: { nodeId: { type: 'string', minLength: 1, description: 'The node id (from get_editor_state or a result).' } }
+} as const;
+
+const GESTURE_POINT_PARAM = {
+	type: 'array',
+	minItems: 2,
+	maxItems: 2,
+	items: { type: 'number' },
+	description: 'A point as [x, y] in canvas units.'
+} as const;
+
+const gestureBox = (what: string) => ({ description: what, oneOf: [GESTURE_RECT_PARAM, GESTURE_NODE_PARAM] });
+const gestureEnd = (what: string) => ({ description: what, oneOf: [GESTURE_RECT_PARAM, GESTURE_NODE_PARAM, GESTURE_POINT_PARAM] });
+const gestureBoxes = (what: string) => ({
+	type: 'array',
+	minItems: 1,
+	maxItems: 100,
+	items: { oneOf: [GESTURE_RECT_PARAM, GESTURE_NODE_PARAM] },
+	description: `${what} Each is a box { x, y, width, height } or a node { nodeId }; the gesture spans the box around all of them.`
+});
+
+const GESTURE_STYLE_PARAMS = {
+	tool: { type: 'string', enum: ['pen', 'highlighter'], description: 'Pen (default: blue, width 3) or highlighter (yellow, width 24, opacity 0.35); sets the defaults below.' },
+	color: { type: 'string', description: 'Stroke colour, any CSS colour (default from the tool).' },
+	width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool; with a brush, the preset\'s own size).' },
+	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
+	brush: {
+		description: 'Paint the mark with a dry paint brush: a preset id such as "ink-pen", "marker", "pencil-hb" or "brush-pen" (all ids: canvas.listBrushes), or tip settings. Brushed marks get an uneven hand pressure. Omit for a plain vector stroke.',
+		oneOf: [{ type: 'string', minLength: 1 }, BRUSH_SETTINGS_PARAM]
+	},
+	seed: { type: 'integer', minimum: 0, maximum: 4294967295, description: 'Seed for the hand-drawn wobble (default: derived from the other params, so the same request draws the same mark). Change it for a different take.' }
+} as const;
+
+type GestureTarget = GestureRect | { nodeId: string } | [number, number];
+
+interface GestureStyleParams {
+	tool?: 'pen' | 'highlighter';
+	color?: string;
+	width?: number;
+	opacity?: number;
+	brush?: CanvasBrush;
+	seed?: number;
+}
+
+/**
+ * Agent / palette commands that annotate the canvas like a designer marking up a print:
+ * `canvas.circle`, `canvas.underline`, `canvas.arrow`, `canvas.bracket`, `canvas.strike`,
+ * `canvas.cross` and `canvas.check`. Each generates a hand-drawn path around boxes, points or
+ * nodes (`canvas/gestures.ts`) and draws it through `drawStroke` like `canvas.drawFreehand`:
+ * one stroke node, one undo step, and a playback plan that traces the path.
+ */
+function createGestureCommands(target: DrawCommandTarget, base: { group: string; scope?: string }, prefix: string, options: DrawCommandOptions): CommandSpec[] {
+	const box = (value: GestureTarget, name: string): GestureRect => {
+		if (Array.isArray(value)) throw new Error(`${name} must be a box { x, y, width, height } or a node { nodeId }, not a point.`);
+		if ('nodeId' in value) {
+			if (!target.nodeBounds) throw new Error(`This canvas cannot look up nodes: pass ${name} as a box { x, y, width, height } (a node's bounds from get_editor_state).`);
+			const rect = target.nodeBounds(value.nodeId);
+			if (!rect) throw new Error(`Unknown node "${value.nodeId}" in ${name}: use an id from get_editor_state.`);
+			return rect;
 		}
+		return value;
+	};
+	const end = (value: GestureTarget, name: string): GestureEnd => (Array.isArray(value) ? [value[0], value[1]] : box(value, name));
+	const boxes = (values: GestureTarget[], name: string) => gestureUnion(values.map((v, i) => box(v, `${name}[${i}]`)));
+
+	const gesture = <P extends GestureStyleParams>(spec: {
+		name: string;
+		label: string;
+		keywords: string[];
+		description: string;
+		required: string[];
+		properties: Record<string, unknown>;
+		make: (params: P, seed: number) => GestureStroke;
+	}): CommandSpec => {
+		const seedOf = (params: P) => params.seed ?? gestureSeed({ gesture: spec.name, ...params });
+		const generate = (params: P) => {
+			const seed = seedOf(params);
+			return { seed, stroke: spec.make(params, seed) };
+		};
+		return {
+			...base,
+			id: `${prefix}${spec.name}`,
+			label: spec.label,
+			keywords: ['annotate', 'mark up', 'hand-drawn', ...spec.keywords],
+			description: `${spec.description} Drawn as one hand-drawn pen or highlighter stroke node (one undo step), with a seeded wobble. Returns the new node \`id\`, its \`bounds\`, the stored \`brush\` (when brushed) and the \`seed\` used.`,
+			params: {
+				type: 'object',
+				additionalProperties: false,
+				required: spec.required,
+				properties: { ...spec.properties, ...GESTURE_STYLE_PARAMS }
+			},
+			enabled: () => options.readOnlyReason?.() || true,
+			plan: (_ctx: unknown, params: P) => {
+				try {
+					return planFreehandPlayback(generate(params).stroke.points);
+				} catch {
+					return null;
+				}
+			},
+			run: async (_ctx: unknown, params: P) => {
+				const { seed, stroke } = generate(params);
+				const result = await target.drawStroke({
+					points: stroke.points,
+					...(params.tool ? { tool: params.tool } : {}),
+					style: {
+						...(params.color !== undefined ? { color: params.color } : {}),
+						...(params.width !== undefined ? { width: params.width } : {}),
+						...(params.width !== undefined && params.brush !== undefined ? { brushSize: params.width } : {}),
+						...(params.opacity !== undefined ? { opacity: params.opacity } : {}),
+						...(params.brush !== undefined ? { brush: params.brush } : {})
+					},
+					...(params.brush !== undefined ? { pressure: stroke.pressure } : {})
+				});
+				return { ...result, seed };
+			}
+		};
+	};
+
+	return [
+		gesture<GestureStyleParams & { around: GestureTarget[]; padding?: number }>({
+			name: 'circle',
+			label: 'Circle Around',
+			keywords: ['circle', 'ring', 'loop', 'highlight', 'pick', 'ellipse'],
+			description: 'Circles boxes or nodes with a loose, slightly open ellipse that never cuts into them: the way to point out a pick or the thing you are talking about.',
+			required: ['around'],
+			properties: {
+				around: gestureBoxes('What to circle.'),
+				padding: { type: 'number', minimum: 0, maximum: 500, description: 'Space between them and the loop, canvas units (default 8).' }
+			},
+			make: (p, seed) => circleGesture(boxes(p.around, 'around'), seed, { ...(p.padding !== undefined ? { padding: p.padding } : {}) })
+		}),
+		gesture<GestureStyleParams & { under: GestureTarget; offset?: number; wave?: boolean }>({
+			name: 'underline',
+			label: 'Underline',
+			keywords: ['underline', 'emphasis', 'line under', 'squiggle'],
+			description: 'Underlines a box or node with a stroke just below its bottom edge, a little longer or shorter than it: for stressing a line of text or a value.',
+			required: ['under'],
+			properties: {
+				under: gestureBox('What to underline: a box { x, y, width, height } or a node { nodeId }.'),
+				offset: { type: 'number', minimum: 0, maximum: 200, description: 'Gap below the bottom edge, canvas units (default 4).' },
+				wave: { type: 'boolean', description: 'A wavy (squiggly) underline instead of a straight one (default false).' }
+			},
+			make: (p, seed) => underlineGesture(box(p.under, 'under'), seed, { ...(p.offset !== undefined ? { offset: p.offset } : {}), ...(p.wave ? { wave: true } : {}) })
+		}),
+		gesture<GestureStyleParams & { from: GestureTarget; to: GestureTarget; curve?: number; gap?: number }>({
+			name: 'arrow',
+			label: 'Arrow',
+			keywords: ['arrow', 'point', 'connect', 'from', 'to', 'pointer'],
+			description: 'Draws a curved arrow with a hand-drawn head from one thing to another: a box or node is reached at its nearest edge, a point exactly. For linking a swatch to where it is used, or pointing from a note to its subject.',
+			required: ['from', 'to'],
+			properties: {
+				from: gestureEnd('Where the arrow starts: a box, a node { nodeId } or a point [x, y].'),
+				to: gestureEnd('Where the arrow points: a box, a node { nodeId } or a point [x, y].'),
+				curve: { type: 'number', minimum: -1, maximum: 1, description: 'Bend of the shaft −1..1: how far its middle bulges, as a fraction of half its length; positive bends to the left of travel, 0 is straight (default: a gentle seeded bend, about 0.1).' },
+				gap: { type: 'number', minimum: 0, maximum: 200, description: 'Space between a box end and the arrow, canvas units (default 6).' }
+			},
+			make: (p, seed) =>
+				arrowGesture(end(p.from, 'from'), end(p.to, 'to'), seed, { ...(p.curve !== undefined ? { curve: p.curve } : {}), ...(p.gap !== undefined ? { gap: p.gap } : {}) })
+		}),
+		gesture<GestureStyleParams & { around: GestureTarget[]; side: GestureSide; shape?: 'curly' | 'square'; padding?: number; depth?: number }>({
+			name: 'bracket',
+			label: 'Bracket',
+			keywords: ['bracket', 'brace', 'group', 'curly', 'span'],
+			description: 'Brackets boxes or nodes on one side with a curly or square bracket spanning them end to end: for grouping a set of items or a range of lines, usually with a note beside it.',
+			required: ['around', 'side'],
+			properties: {
+				around: gestureBoxes('What to bracket.'),
+				side: { type: 'string', enum: ['left', 'right', 'top', 'bottom'], description: 'Which side the bracket goes on.' },
+				shape: { type: 'string', enum: ['curly', 'square'], description: 'Curly brace (default) or square bracket.' },
+				padding: { type: 'number', minimum: 0, maximum: 500, description: 'Gap between them and the bracket, canvas units (default 8).' },
+				depth: { type: 'number', exclusiveMinimum: 0, maximum: 500, description: 'How far the bracket reaches out, canvas units (default: from the span, 6..20).' }
+			},
+			make: (p, seed) =>
+				bracketGesture(boxes(p.around, 'around'), p.side, seed, {
+					...(p.shape ? { shape: p.shape } : {}),
+					...(p.padding !== undefined ? { padding: p.padding } : {}),
+					...(p.depth !== undefined ? { depth: p.depth } : {})
+				})
+		}),
+		gesture<GestureStyleParams & { over: GestureTarget }>({
+			name: 'strike',
+			label: 'Strike Through',
+			keywords: ['strike', 'strikethrough', 'cross out', 'line through', 'delete'],
+			description: 'Strikes a line through the middle of a box or node, a little past both ends: for text or a value to drop. It only marks it; nothing is deleted.',
+			required: ['over'],
+			properties: { over: gestureBox('What to strike through: a box { x, y, width, height } or a node { nodeId }.') },
+			make: (p, seed) => strikeGesture(box(p.over, 'over'), seed)
+		}),
+		gesture<GestureStyleParams & { over: GestureTarget }>({
+			name: 'cross',
+			label: 'Cross Out',
+			keywords: ['cross', 'x', 'reject', 'no', 'wrong', 'cross out'],
+			description: 'Crosses out a box or node with an X from corner to corner: for a rejected option. It only marks it; nothing is deleted. One stroke, so the pen runs back over part of the first diagonal before drawing the second.',
+			required: ['over'],
+			properties: { over: gestureBox('What to cross out: a box { x, y, width, height } or a node { nodeId }.') },
+			make: (p, seed) => crossGesture(box(p.over, 'over'), seed)
+		}),
+		gesture<GestureStyleParams & { at: GestureTarget; size?: number }>({
+			name: 'check',
+			label: 'Check Mark',
+			keywords: ['check', 'tick', 'approve', 'yes', 'done', 'ok'],
+			description: 'Draws a tick mark in the middle of a box or node, or centred on a point: for an approved option or a done item.',
+			required: ['at'],
+			properties: {
+				at: gestureEnd('Where the tick goes: a box, a node { nodeId } (its centre) or a point [x, y].'),
+				size: { type: 'number', exclusiveMinimum: 0, maximum: 2000, description: 'Height of the tick, canvas units (default: 60% of the box\'s smaller side, 12..48; 20 at a point).' }
+			},
+			make: (p, seed) => checkGesture(end(p.at, 'at'), seed, { ...(p.size !== undefined ? { size: p.size } : {}) })
+		})
 	];
 }
 

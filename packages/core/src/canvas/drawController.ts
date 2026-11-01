@@ -4,7 +4,7 @@
  */
 import type { ArrangeHistoryTarget } from './arrangeController.js';
 import type { CanvasNode, Point } from './types.js';
-import { isLocked } from './arrange.js';
+import { createNodeLookup, getNodeRect, isLocked } from './arrange.js';
 import {
 	createDefaultStrokeStyle,
 	findStrokesAtPoint,
@@ -255,6 +255,13 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		};
 	}
 
+	/** A node's box in canvas coordinates (following its parents), or `undefined` for an unknown id. Gesture commands use it to resolve `{ nodeId }`. */
+	function nodeBounds(id: string): { x: number; y: number; width: number; height: number } | undefined {
+		const nodes = options.getNodes();
+		const node = nodes.find((n) => n.id === id);
+		return node ? getNodeRect(node, createNodeLookup(nodes)) : undefined;
+	}
+
 	function cancelStroke() {
 		if (activeStroke) {
 			activeStroke = null;
@@ -320,6 +327,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		cancelStroke,
 		eraseAt,
 		drawStroke,
+		nodeBounds,
 		/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
 		listBrushes: listCanvasBrushes
 	};

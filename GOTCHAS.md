@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/canvas] Annotation Gestures: Seeds, One-Stroke Marks and Arrowheads
+
+- **Issue / Symptom**: (1) A gesture's playback traced a different path from the one drawn. (2) A cross drawn as one stroke showed a connecting line between its diagonals. (3) An arrow arriving at a shallow angle had a barb reaching into the box it pointed at.
+- **Root Cause**: (1) The plan and the run generate the path separately; a random default seed gave each its own wobble. (2) A stroke node holds one path, and an X has four ends, so one pen stroke cannot draw it without travelling somewhere. (3) The head follows the curved shaft's direction at the tip, which can be nearly parallel to the box's edge.
+- **Solution / Workaround**: The default seed is `gestureSeed` of the request (FNV-1a over its params), so plan and run, and repeated requests, draw the same mark; `seed` changes it. `crossGesture` retraces half of the first diagonal and half of the second (the shortest retrace), so nothing is drawn outside the X. `arrowGesture` narrows a barb until it clears the target box. Gestures go through `drawStroke` unchanged, so hosts need nothing new, except `nodeBounds` for `{ nodeId }` targets.
+
 ### [core/image-editor] Provider Shader Filters Filled a Layer's Transparent Pixels
 
 - **Issue / Symptom**: A provider filter effect (`apply_effect`, a Flair shader) applied to a cutout or a text layer painted over the whole canvas: the transparent area around the content became opaque, so the effect no longer looked like it belonged to that layer.
