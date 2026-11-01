@@ -255,13 +255,24 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'list_applied_effects',
 			title: 'List applied effects',
-			description: `Lists the effects in the document: for each ${host.target.noun} that has any (or the one given), its effects in order with id, effect id, name, role, enabled, opacity and saved values. available is false for an effect the current provider does not have (or when none is registered): it is kept and drawn as a placeholder, and can still be removed. Works without a provider.`,
+			description: `Lists the effects in the document: for each ${host.target.noun} that has any (or the one given), its effects in order with id, effect id, name, role, enabled, opacity and saved values. available is false for an effect the current provider does not have, or that was saved from another provider (reason says which and what to do), or when none is registered: it is kept and drawn as a placeholder, and can still be removed. Works without a provider.`,
 			inputSchema: object({ target: { ...TARGET, description: `${host.target.id} Leave out to list every ${host.target.noun} with effects.` } }),
 			annotations: { title: 'List applied effects', ...ANNOTATIONS.read },
 			handler: async (args) => {
 				const p = host.provider();
 				const known = new Set((p ? await explain(async () => p.list()) : []).map((e) => e.id));
-				const targets = host.list(args.target as string | undefined).map((t) => ({ ...t, effects: t.effects.map((e) => ({ ...e, available: known.has(e.effect) })) }));
+				const unavailable = (e: AppliedEffectInfo): string | null => {
+					if (!p) return null;
+					if (e.provider && e.provider !== p.id) return `It comes from the "${e.provider}" provider, but "${p.id}" (${p.name}) is registered: register "${e.provider}" again, or remove it and apply one from search_effects.`;
+					return known.has(e.effect) ? null : `${p.name} has no effect "${e.effect}": remove it and apply one from search_effects.`;
+				};
+				const targets = host.list(args.target as string | undefined).map((t) => ({
+					...t,
+					effects: t.effects.map((e) => {
+						const why = unavailable(e);
+						return { ...e, available: !!p && !why, ...(why ? { reason: why } : {}) };
+					})
+				}));
 				return { provider: p ? { id: p.id, name: p.name } : null, ...(p ? {} : { reason: NO_PROVIDER }), targets };
 			}
 		}

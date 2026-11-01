@@ -2,8 +2,9 @@ import { useSyncExternalStore } from "react";
 import { createFakeEffectProvider, type EffectProvider } from "@pixerate/editor/effects";
 
 /**
- * The demo's effects provider, shared by every tab with effects wired (Video, Image, Vector and
- * Animation; Canvas and Paint as they gain effects). The library ships no effects of its own: the
+ * The demo's effects provider, shared by every tab with effects wired (Video, Image, Vector,
+ * Animation, Canvas and Paint). Switching it changes which library new effects come from; effects
+ * saved from the other library are kept and say why they are not drawn. The library ships no effects of its own: the
  * built-in test effects are its deterministic fake provider, and Flair (`@pixerate/flair`'s
  * `flairEffects()`, a devDependency of the demo only) is loaded on demand when picked and plugs
  * in through the same `useEffects` hooks.

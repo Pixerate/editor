@@ -4,6 +4,8 @@ import { HistoryManager } from '../src/history';
 import { ToolRegistry } from '../src/tools';
 import {
 	CanvasScenesStore,
+	canvasEffectErrorReason,
+	canvasEffectStatus,
 	createCanvasEffectsController,
 	createCanvasEffectsToolProvider,
 	parseCanvasScenes,
@@ -57,6 +59,39 @@ describe('canvas effects: nodes', () => {
 		const { c, get } = setup(null);
 		await expect(c.applyNodeEffect('a', 'fake.gradient')).rejects.toThrow(/No effects provider/);
 		expect(get()).toEqual(nodes());
+	});
+});
+
+/** The fake provider under another id, as a second effects library would be. */
+const otherProvider = () => Object.assign(Object.create(createFakeEffectProvider()), { id: 'flair', name: 'Flair' }) as ReturnType<typeof createFakeEffectProvider>;
+
+describe('canvas effects: availability', () => {
+	it('says when an effect saved from one provider cannot be drawn by another', async () => {
+		const { c } = setup();
+		const e = await c.applyNodeEffect('a', 'fake.gradient');
+		expect(c.status(e)).toEqual({ ok: true });
+		expect(canvasEffectStatus(e, null)).toEqual({ ok: false, reason: expect.stringMatching(/No effects provider is registered/) });
+		const other = canvasEffectStatus(e, otherProvider());
+		expect(other).toEqual({ ok: false, reason: expect.stringMatching(/"Gradient" comes from the "fake" effects provider, but "flair" \(Flair\) is registered/) });
+		c.setEffectsProvider(otherProvider());
+		expect(c.status(e).ok).toBe(false);
+		// An effect saved without a provider id is drawn by whichever provider is registered.
+		expect(canvasEffectStatus({ effect: 'fake.gradient' }, otherProvider())).toEqual({ ok: true });
+		expect(canvasEffectErrorReason(e, new Error('boom'))).toBe('"Gradient" could not be drawn: boom');
+	});
+
+	it('list_applied_effects marks effects from another provider unavailable, with a reason', async () => {
+		const { c } = setup();
+		await c.applyNodeEffect('a', 'fake.gradient');
+		const registry = new ToolRegistry();
+		registry.register(createCanvasEffectsToolProvider(c));
+		const listed = async () => ((await registry.callTool('list_applied_effects', {})).structuredContent as any).targets[0].effects[0];
+		expect(await listed()).toMatchObject({ effect: 'fake.gradient', available: true });
+		expect((await listed()).reason).toBeUndefined();
+		c.setEffectsProvider(otherProvider());
+		expect(await listed()).toMatchObject({ available: false, reason: expect.stringMatching(/comes from the "fake" provider, but "flair" \(Flair\) is registered/) });
+		c.setEffectsProvider(null);
+		expect(await listed()).toMatchObject({ available: false });
 	});
 });
 

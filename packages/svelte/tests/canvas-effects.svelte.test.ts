@@ -49,6 +49,29 @@ describe("canvas effects (Svelte)", () => {
 		expect(canvas.closest("foreignObject")).not.toBeNull();
 	});
 
+	it("ShapeNode draws a hatched placeholder with the reason when the effect cannot be drawn", async () => {
+		const other = Object.assign(Object.create(createFakeEffectProvider()), { id: "flair", name: "Flair" });
+		const shape: ShapeDescription = { kind: "rect", fill: "#f00", effect: { effect: "fake.gradient", provider: "fake", name: "Gradient", mode: "fill", values: {} } };
+		render(CanvasEffectsProbe, { provider: other, shape });
+		await settle();
+		const missing = target.querySelector('[data-canvas-effect-missing="fake.gradient"]')!;
+		expect(missing).not.toBeNull();
+		expect(missing.getAttribute("aria-label")).toMatch(/"Gradient" comes from the "fake" effects provider, but "flair" \(Flair\) is registered/);
+		expect(target.querySelector("[data-canvas-effect]")).toBeNull();
+		render(CanvasEffectsProbe, { provider: createFakeEffectProvider(), shape: { ...shape, effect: { ...shape.effect!, effect: "fake.nope", name: "Nope" } } });
+		await settle();
+		expect(target.querySelector('[data-canvas-effect-missing="fake.nope"]')?.getAttribute("aria-label")).toMatch(/"Nope" could not be drawn/);
+	});
+
+	it("CanvasEffectsPanel says why an effect from another provider is not drawn", () => {
+		const other = Object.assign(Object.create(createFakeEffectProvider()), { id: "flair", name: "Flair" });
+		const shape: ShapeDescription = { kind: "rect", fill: "#f00", effect: { effect: "fake.gradient", provider: "fake", name: "Gradient", mode: "fill", values: {} } };
+		const nodes: CanvasNode[] = [{ id: "a", position: { x: 0, y: 0 }, data: { shape } }];
+		const c = createCanvasEffectsController({ getNodes: () => nodes, setNodes: () => {}, effects: other });
+		render(CanvasEffectsPanel, { controller: c, nodeId: "a", shape });
+		expect(target.querySelector("[data-canvas-effect-unavailable]")?.textContent).toMatch(/comes from the "fake" effects provider/);
+	});
+
 	it("CanvasEffectsPanel fills a node, sets a scene transition and removes both", async () => {
 		let nodes: CanvasNode[] = [{ id: "a", position: { x: 0, y: 0 }, data: { shape: { kind: "rect", fill: "#f00" } } }];
 		const scenes = new CanvasScenesStore({ initialScenes: [{ id: "s1", name: "One", viewport: { x: 0, y: 0, zoom: 1 } }] });

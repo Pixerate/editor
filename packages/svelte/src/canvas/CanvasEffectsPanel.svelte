@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { isShapeDescription, type CanvasEffectsController, type ShapeDescription } from '@pixerate/editor/canvas';
+	import { canvasEffectStatus, isShapeDescription, type CanvasEffectsController, type ShapeDescription } from '@pixerate/editor/canvas';
 	import type { EffectProvider } from '@pixerate/editor/effects';
 	import EffectsBrowser from '../effects/EffectsBrowser.svelte';
 	import CanvasEffectControls from './CanvasEffectControls.svelte';
@@ -27,6 +27,7 @@
 	let browse = $state<null | 'fill' | 'overlay' | 'transition'>(null);
 	let message = $state<string | null>(null);
 	const nodeEffect = $derived(isShapeDescription(shape) ? shape.effect : undefined);
+	const nodeEffectStatus = $derived(nodeEffect && provider ? canvasEffectStatus(nodeEffect, provider) : null);
 	const transition = $derived.by(() => {
 		void tick;
 		return sceneId ? controller.sceneTransition(sceneId) : undefined;
@@ -82,7 +83,9 @@
 				</label>
 				<button type="button" class={btn} aria-label="Remove effect" onclick={() => run(() => controller.removeNodeEffect(id))}>✕</button>
 			</div>
-			{#if provider}<CanvasEffectControls {controller} nodeId={id} effect={nodeEffect} />{/if}
+			{#if nodeEffectStatus && !nodeEffectStatus.ok}
+				<p class="text-[11px] text-amber-500" data-canvas-effect-unavailable="">{nodeEffectStatus.reason}</p>
+			{:else if provider}<CanvasEffectControls {controller} nodeId={id} effect={nodeEffect} />{/if}
 		</div>
 	{/if}
 	{#if sceneId && transition}

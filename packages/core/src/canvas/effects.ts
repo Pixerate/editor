@@ -33,6 +33,30 @@ export function canvasNodeEffect(node: CanvasNode): CanvasShapeEffect | undefine
 	return isShapeDescription(shape) ? (shape as ShapeDescription).effect : undefined;
 }
 
+/** Whether a saved effect can be drawn with `provider`, and if not, why. */
+export type CanvasEffectStatus = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Whether `provider` can draw `effect`: an effect keeps the id of the provider it came from, and
+ * another provider (e.g. after switching libraries) does not know its effect ids.
+ */
+export function canvasEffectStatus(effect: Pick<CanvasShapeEffect, 'effect' | 'provider' | 'name'>, provider: EffectProvider | null | undefined): CanvasEffectStatus {
+	const label = `"${effect.name ?? effect.effect}"`;
+	if (!provider) return { ok: false, reason: `No effects provider is registered, so ${label} is kept but not drawn.` };
+	if (effect.provider && effect.provider !== provider.id) {
+		return { ok: false, reason: `${label} comes from the "${effect.provider}" effects provider, but "${provider.id}" (${provider.name}) is registered. Register "${effect.provider}" again, or replace the effect with one from ${provider.name}.` };
+	}
+	return { ok: true };
+}
+
+/** Why a render of `effect` failed, for the placeholder drawn instead. */
+export function canvasEffectErrorReason(effect: Pick<CanvasShapeEffect, 'effect' | 'name'>, error: unknown): string {
+	return `"${effect.name ?? effect.effect}" could not be drawn: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+/** The CSS background of the placeholder drawn for an effect that cannot be drawn: a faint hatch. */
+export const CANVAS_EFFECT_MISSING_PATTERN = 'repeating-linear-gradient(45deg, rgba(128,128,128,0.28) 0 2px, transparent 2px 8px)';
+
 export interface CanvasEffectsControllerOptions<TNode extends CanvasNode = CanvasNode> {
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
@@ -106,6 +130,10 @@ export function createCanvasEffectsController<TNode extends CanvasNode = CanvasN
 		/** Registers `provider` and returns a function that removes it again. */
 		useEffects(provider: EffectProvider) {
 			return slot.use(provider);
+		},
+		/** Whether the registered provider can draw `effect` (see `canvasEffectStatus`). */
+		status(effect: CanvasShapeEffect): CanvasEffectStatus {
+			return canvasEffectStatus(effect, slot.provider);
 		},
 		/** The shape nodes that carry effects (or one node's). */
 		list(nodeId?: string): { nodeId: string; effect: CanvasShapeEffect }[] {
