@@ -31,7 +31,9 @@ import {
 	type ChartEvalFixture as ChartFixture,
 	type DiagramEvalFixture as DiagramFixture,
 	type RichTextEvalFixture as RichTextFixture,
-	type AnimationEvalFixture as AnimationFixture
+	type AnimationEvalFixture as AnimationFixture,
+	type GenerationEvalFixture as GenerationFixture,
+	type EffectEvalFixture as EffectFixture
 } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
@@ -41,6 +43,16 @@ import { VideoEditorController, createVideoEditorToolProvider } from '../src/vid
 import { ChartController, createChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
 import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
+import {
+	createGenerationHistoryToolProvider,
+	createGenerationRecord,
+	createGenerationRecordStore,
+	createGenerationToolProvider,
+	type GenerationRequest,
+	type ModelCapabilities
+} from '../src/generation';
+import { createMemoryStorage } from '../src/persistence';
+import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
 import { SpreadsheetController, createRichTextPreset } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -131,7 +143,41 @@ async function animation(f: AnimationFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation } as const;
+/** The generation tools over a fake host that records every generation in the history. */
+async function generation(f: GenerationFixture): Promise<ToolRegistry> {
+	const models = f.models as unknown as ModelCapabilities[];
+	const store = createGenerationRecordStore({ storage: createMemoryStorage() });
+	let clock = Date.parse('2026-01-01T00:00:00Z');
+	const record = (id: string, model: ModelCapabilities, request: GenerationRequest) =>
+		store.put(createGenerationRecord({ id, model, request, rawPrompt: String(request.prompt ?? ''), createdAt: new Date((clock += 1000)).toISOString() }));
+	for (const h of f.history ?? []) await record(h.id, models.find((m) => m.id === h.model)!, h.request as GenerationRequest);
+	const price = (request: GenerationRequest) => (Number(request.count ?? 1) || 1) * (f.prices?.[String(request.quality ?? 'default')] ?? f.prices?.default ?? 0);
+	let jobs = 0;
+	const registry = new ToolRegistry();
+	registry.register(
+		createGenerationToolProvider({
+			models,
+			generate: async (request, { model, idempotencyKey }) => {
+				await record(`gen-${++jobs}-${idempotencyKey}`, model, request);
+				return { jobId: `job-${jobs}`, costUsd: price(request) };
+			},
+			...(f.prices ? { estimate: (request: GenerationRequest) => ({ costUsd: price(request), seconds: 20 }) } : {})
+		})
+	);
+	registry.register(createGenerationHistoryToolProvider({ store, models }));
+	return registry;
+}
+
+/** The effect authoring tools over the fake effect provider. */
+async function effect(f: EffectFixture): Promise<ToolRegistry> {
+	const session = await createFakeEffectProvider().openAuthoring!({ effectId: f.effectId });
+	const registry = new ToolRegistry();
+	registry.register(createEffectAuthoringToolProvider({ session: () => session as never, capture: async () => 'data:image/png;base64,AA==' }));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

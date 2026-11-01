@@ -17,6 +17,13 @@ preview frames.
 
 For general error reporting and undo conventions, see `pixerate-agent-tools`.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-effect-look-development`: tune a look, save presets, eased keyframes, seamless loops.
+
 ## Working method
 
 1. **Inspect first.** Run `effect_authoring_describe` to inspect the effect name, kind, source

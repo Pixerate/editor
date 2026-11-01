@@ -20,6 +20,13 @@ See `pixerate-agent-tools` for errors and namespacing.
   `background_ref`, `mask`, `image_ref`, `video_ref`, `audio_ref`, plus any role a model
   declares; each model lists the roles it accepts and their min/max counts.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-generation-budgeted-batch`: the right model, plan and estimate first, drafts cheap, finals once, variations.
+
 ## Working method
 
 1. **Discover.** `list_models` (filter with `media`) and read each candidate's `requestSchema`:

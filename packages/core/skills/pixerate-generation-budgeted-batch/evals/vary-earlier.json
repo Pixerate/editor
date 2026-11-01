@@ -1,0 +1,101 @@
+{
+	"prompt": "Make that last fox image again, the same picture but wide (16:9) for a slide.",
+	"fixture": {
+		"editor": "generation",
+		"models": [
+			{
+				"id": "wide-2",
+				"name": "Wide Two",
+				"media": "image",
+				"aspectRatios": {
+					"options": [
+						"1:1",
+						"16:9",
+						"9:16"
+					],
+					"default": "1:1"
+				},
+				"quality": {
+					"options": [
+						"low",
+						"high"
+					],
+					"default": "high"
+				},
+				"count": {
+					"min": 1,
+					"max": 4
+				},
+				"seed": {
+					"min": 0,
+					"max": 99999
+				}
+			}
+		],
+		"prices": {
+			"low": 0.05,
+			"high": 0.25
+		},
+		"history": [
+			{
+				"id": "fox-1",
+				"model": "wide-2",
+				"request": {
+					"prompt": "A red fox in snow",
+					"aspectRatio": "1:1",
+					"seed": 4242,
+					"quality": "high"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "one new generation",
+			"tool": "list_generations",
+			"expect": {
+				"total": 2
+			}
+		},
+		{
+			"why": "the same prompt and seed, now 16:9",
+			"tool": "get_generation",
+			"args": {
+				"id": {
+					"$read": "list_generations",
+					"path": "records.0.id"
+				}
+			},
+			"expect": {
+				"$expr": "(() => { const s = JSON.stringify(v); return s.includes('A red fox in snow') && /\"seed\":4242/.test(s) && s.includes('\"aspectRatio\":\"16:9\"'); })()"
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "list_generations"
+		},
+		{
+			"tool": "vary_generation",
+			"args": {
+				"id": "fox-1",
+				"settings": {
+					"aspectRatio": "16:9"
+				}
+			}
+		},
+		{
+			"tool": "generate",
+			"args": {
+				"model": "wide-2",
+				"request": {
+					"prompt": "A red fox in snow",
+					"aspectRatio": "16:9",
+					"seed": 4242,
+					"quality": "high"
+				},
+				"idempotencyKey": "fox-wide-1"
+			}
+		}
+	]
+}
