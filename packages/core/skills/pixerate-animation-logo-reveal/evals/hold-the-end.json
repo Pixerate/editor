@@ -1,0 +1,76 @@
+{
+	"prompt": "The reveal ends too abruptly. Hold the finished logo on screen for about a second at the end.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 240 100\"><circle id=\"mark\" cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"6\"/><rect id=\"wordmark\" x=\"100\" y=\"40\" width=\"120\" height=\"20\" fill=\"#1d3557\"/></svg>"
+				}
+			},
+			{
+				"tool": "insert_shots",
+				"args": {
+					"shots": [
+						{
+							"id": "reveal",
+							"run": [
+								{
+									"type": "enter",
+									"targets": [
+										"mark"
+									],
+									"style": "draw"
+								},
+								{
+									"type": "enter",
+									"targets": [
+										"wordmark"
+									]
+								}
+							],
+							"hold": 0
+						}
+					]
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the last shot holds about a second after its last command",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$expr": "(() => { const s = v[v.length - 1]; const h = s.end - Math.max(...s.commands.map((c) => c.end)); return h >= 800 && h <= 1500; })()"
+				}
+			}
+		},
+		{
+			"why": "the reveal itself is unchanged",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$some": {
+						"id": "reveal",
+						"commands": {
+							"$length": 2
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "update_shot",
+			"args": {
+				"shot": "reveal",
+				"set": {
+					"hold": 1000
+				}
+			}
+		}
+	]
+}

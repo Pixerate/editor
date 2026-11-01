@@ -21,6 +21,14 @@ For errors, namespaced tool names and the generic command tools, see `pixerate-a
 The full command vocabulary (every type, option and default) is in
 [references/commands.md](references/commands.md).
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-animation-motion-graphics`: shots, staggered entrances, easing, holds, fitting a length.
+- `pixerate-animation-logo-reveal`: a short reveal from the logo's parts, on the beat, ending held.
+
 ## Working method
 
 1. **Read.** `get_animation` for elements, shots with timing, clips, drivers and issues. If

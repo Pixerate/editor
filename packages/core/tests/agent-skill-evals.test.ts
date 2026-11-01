@@ -30,7 +30,8 @@ import {
 	type VideoEvalFixture as VideoFixture,
 	type ChartEvalFixture as ChartFixture,
 	type DiagramEvalFixture as DiagramFixture,
-	type RichTextEvalFixture as RichTextFixture
+	type RichTextEvalFixture as RichTextFixture,
+	type AnimationEvalFixture as AnimationFixture
 } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
@@ -39,6 +40,7 @@ import { PaintEditorController, createPaintEditorToolProvider } from '../src/pai
 import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
 import { ChartController, createChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
+import { AnimationEditorController, createAnimationEditorToolProvider } from '../src/animation-editor';
 import { SpreadsheetController, createRichTextPreset } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -122,7 +124,14 @@ function richText(f: RichTextFixture): ToolRegistry {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText } as const;
+async function animation(f: AnimationFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createAnimationEditorToolProvider(new AnimationEditorController(), { id: 'animation' }));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

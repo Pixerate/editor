@@ -1,0 +1,106 @@
+{
+	"prompt": "The sting music is 120 BPM. Make the wordmark land on beat 4: its shot should start on that beat.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 240 100\"><circle id=\"mark\" cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"6\"/><rect id=\"wordmark\" x=\"100\" y=\"40\" width=\"120\" height=\"20\" fill=\"#1d3557\"/></svg>"
+				}
+			},
+			{
+				"tool": "insert_shots",
+				"args": {
+					"shots": [
+						{
+							"id": "mark",
+							"run": [
+								{
+									"type": "enter",
+									"targets": [
+										"mark"
+									],
+									"style": "draw"
+								}
+							],
+							"hold": 0
+						},
+						{
+							"id": "word",
+							"run": [
+								{
+									"type": "enter",
+									"targets": [
+										"wordmark"
+									]
+								}
+							],
+							"hold": 800
+						}
+					]
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a 120 BPM beat grid",
+			"tool": "get_timing_grid",
+			"expect": {
+				"grid": {
+					"bpm": 120
+				}
+			}
+		},
+		{
+			"why": "the wordmark's shot starts on beat 4",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$some": {
+						"id": "word",
+						"start": {
+							"$in": [
+								1500,
+								2000
+							]
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "no errors or warnings in the check",
+			"tool": "check_animation",
+			"expect": {
+				"errors": 0,
+				"warnings": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_animation_settings",
+			"args": {
+				"beat": {
+					"bpm": 120
+				}
+			}
+		},
+		{
+			"tool": "update_shot",
+			"args": {
+				"shot": "word",
+				"set": {
+					"at": {
+						"beat": 4
+					}
+				}
+			}
+		},
+		{
+			"tool": "check_animation"
+		}
+	]
+}
