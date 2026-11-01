@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.223.1
+
+### Patch Changes
+
+- 1326174: Two new chart workflow skills, each with evals: `pixerate-chart-choose-and-build` (the type from the question, clean ordered data, honest axes, units and colour-blind-safe colours) and `pixerate-chart-annotate` (a takeaway title, highlights, labelled targets and ranges, callouts and a source note). Skill evals can now start from a chart.
+
 ## 0.223.0
 
 ### Minor Changes
