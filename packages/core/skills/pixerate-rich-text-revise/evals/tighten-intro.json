@@ -1,0 +1,55 @@
+{
+	"prompt": "The introduction (the first paragraph) rambles. Cut it down to one clear sentence that keeps its point, and don't touch the rest.",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<p>This report, which we have put together over the last few weeks, looks at our sales. It covers every region. It is meant to help us plan next year, which is important.</p><p>North led with 120 orders.</p><p>South followed with 95.</p>"
+	},
+	"checks": [
+		{
+			"why": "the introduction is one sentence about sales and planning",
+			"tool": "get_text",
+			"args": {
+				"blocks": true
+			},
+			"expect": {
+				"blocks": {
+					"$expr": "(() => { const t = v[0].text.trim(); return (t.match(/[.!?](\\s|$)/g) || []).length === 1 && t.length < 120 && /sales/i.test(t) && /plan/i.test(t); })()"
+				}
+			}
+		},
+		{
+			"why": "the rest is unchanged",
+			"tool": "get_text",
+			"args": {
+				"blocks": true
+			},
+			"expect": {
+				"blocks": {
+					"$expr": "v.length === 3 && v[1].text === 'North led with 120 orders.' && v[2].text === 'South followed with 95.'"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_text",
+			"args": {
+				"blocks": true
+			}
+		},
+		{
+			"tool": "replace_range",
+			"args": {
+				"from": 1,
+				"to": {
+					"$read": "get_text",
+					"args": {
+						"blocks": true
+					},
+					"path": "blocks.0.to"
+				},
+				"text": "This report reviews sales in every region to help us plan next year."
+			}
+		}
+	]
+}

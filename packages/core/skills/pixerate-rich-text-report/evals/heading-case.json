@@ -1,0 +1,48 @@
+{
+	"prompt": "The section headings are inconsistent. Make them all sentence case (first word capitalised, the rest lower case unless they are names).",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<h1>Annual review</h1><h2>RESULTS AND Findings</h2><p>Revenue grew.</p><h2>Next Steps For Acme</h2><p>Plan the launch.</p>"
+	},
+	"checks": [
+		{
+			"why": "headings in sentence case, keeping the name Acme",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$expr": "/<h2[^>]*>Results and findings<\\/h2>/.test(v) && /<h2[^>]*>Next steps for Acme<\\/h2>/.test(v)"
+				}
+			}
+		},
+		{
+			"why": "the body and title are unchanged",
+			"tool": "get_text",
+			"expect": {
+				"content": {
+					"$expr": "v.startsWith('Annual review') && v.includes('Revenue grew.') && v.includes('Plan the launch.')"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "RESULTS AND Findings",
+				"replace": "Results and findings",
+				"matchCase": true
+			}
+		},
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "Next Steps For Acme",
+				"replace": "Next steps for Acme",
+				"matchCase": true
+			}
+		}
+	]
+}

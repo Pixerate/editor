@@ -10,9 +10,11 @@
  * `skills/README.md`.
  */
 import { describe, it, expect } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { Editor } from '@tiptap/core';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ToolRegistry, baseToolName, createSpreadsheetToolProvider } from '../src/agent';
+import { ToolRegistry, baseToolName, createSpreadsheetToolProvider, createRichTextToolProvider } from '../src/agent';
 import {
 	callEvalTool,
 	failedEvalChecks,
@@ -27,7 +29,8 @@ import {
 	type VectorEvalFixture as VectorFixture,
 	type VideoEvalFixture as VideoFixture,
 	type ChartEvalFixture as ChartFixture,
-	type DiagramEvalFixture as DiagramFixture
+	type DiagramEvalFixture as DiagramFixture,
+	type RichTextEvalFixture as RichTextFixture
 } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
@@ -36,9 +39,15 @@ import { PaintEditorController, createPaintEditorToolProvider } from '../src/pai
 import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
 import { ChartController, createChartToolProvider } from '../src/chart';
 import { DiagramController, createDiagramToolProvider } from '../src/diagram';
-import { SpreadsheetController } from '../src';
+import { SpreadsheetController, createRichTextPreset } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
+
+// The rich text editor needs a DOM.
+const dom = new JSDOM();
+globalThis.document = dom.window.document as any;
+globalThis.window = dom.window as any;
+(globalThis as any).Node = dom.window.Node;
 
 function spreadsheet(f: SpreadsheetFixture): ToolRegistry {
 	const columns = Math.max(...f.rows.map((r) => r.length));
@@ -106,7 +115,14 @@ async function diagram(f: DiagramFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram } as const;
+function richText(f: RichTextFixture): ToolRegistry {
+	const doc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: f.html });
+	const registry = new ToolRegistry();
+	registry.register(createRichTextToolProvider(doc, { id: 'doc' }));
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

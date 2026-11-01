@@ -1,0 +1,57 @@
+{
+	"prompt": "Fix the spelling mistakes in this document without changing anything else.",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<p>We will recieve the order tomorrow. Teh team is ready.</p><p>Please recieve the parcel and check teh contents.</p>"
+	},
+	"checks": [
+		{
+			"why": "no misspellings left",
+			"tool": "find_text",
+			"args": {
+				"query": "\\b(recieve|teh)\\b",
+				"regex": true
+			},
+			"expect": {
+				"matches": {
+					"$length": 0
+				}
+			}
+		},
+		{
+			"why": "the text is otherwise unchanged, capitals kept",
+			"tool": "get_text",
+			"expect": {
+				"content": "We will receive the order tomorrow. The team is ready.\nPlease receive the parcel and check the contents."
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "recieve",
+				"replace": "receive",
+				"wholeWord": true
+			}
+		},
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "Teh",
+				"replace": "The",
+				"matchCase": true,
+				"wholeWord": true
+			}
+		},
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "teh",
+				"replace": "the",
+				"matchCase": true,
+				"wholeWord": true
+			}
+		}
+	]
+}
