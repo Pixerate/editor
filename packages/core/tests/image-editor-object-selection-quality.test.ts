@@ -36,8 +36,11 @@ describe('object selection quality without a model', () => {
     expect(OBJECT_SELECTION_CASES.map((c) => c.label).sort()).toEqual(Object.keys(FLOORS).sort());
   });
 
+  // GrabCut on a 1200 × 800 scene. A click can grow its window to the whole image and cut several
+  // times (the stone in a river: ~1 s here, 3.6 s of the default 5 s on CI), so each case gets
+  // a longer timeout; the scenes are what the floors were measured on.
   for (const c of OBJECT_SELECTION_CASES) {
-    it(`${c.label} scores at least its floor`, () => {
+    it(`${c.label} scores at least its floor`, { timeout: 20_000 }, () => {
       const scene = c.scene();
       const mask = selectObjectIn(scene, c.target);
       const { iou } = scoreSelection(scene, (x, y) => selectionValueAt(mask, x, y));

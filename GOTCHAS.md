@@ -182,6 +182,15 @@ All contributors and AI assistants should check this file before starting work a
   - Benchmarks go in `*.bench.test.ts` files that skip unless their environment variable is set (e.g. `WET_BENCH=1`).
   - Raise a timeout only for work that is slow by design and can't be smaller (real ffmpeg runs, growth measurements), with a comment saying why.
 
+### [tests] Heavy Tests Time Out Only Under the Full Parallel `pnpm test` Run
+
+- **Issue / Symptom**: `pnpm test` (and CI, and the Release workflow) failed 2–4 different tests per run with "Test timed out in 5000ms", for example `paint-editor-extend.test.ts` ("by whole wet tiles…" at 5.6 s) and `tool-search-eval.test.ts`. The same test passes alone in about 1–2 s, so `npx vitest run <file>` never shows the problem.
+- **Root Cause**: The root `vitest.config.ts` runs every project (`packages/*`, `apps/*`) in one run, and each worker runs a test file while the others take the rest of the CPU. A CPU-bound test then takes about 2× its solo time on a laptop and 3–5× on a 4-vCPU CI runner. A test at 1 s alone is at the limit there. Which tests fail depends on which heavy files happen to overlap, so each run fails a different set.
+- **Solution / Workaround**:
+  - Measure under load, not alone: run the full `pnpm test` and look for tests over ~30 % of their timeout locally (about 1.5 s against the 5 s default). On CI, `vitest.slow-tests.ts` lists every test over 40 % in the run summary. `gh api repos/<owner>/<repo>/check-runs/<job id>/annotations` gives the same list as data, to collect across several runs.
+  - Then fix as in "Writing Tests That Pass on CI": fewer steps, smaller strokes, `it.each` per case. Where the cost is the thing under test (an eval over the whole tool catalogue, GrabCut on the scenes its floors were measured on), give that test its own timeout with a comment saying why. Don't raise the global `testTimeout`, which would hide the next slow test.
+  - Lowering vitest's worker count doesn't fix it either: the run gets longer, and the tests that are slowest alone still take the most of their timeout.
+
 ### [svelte] An `$effect` That Writes State and Then Reads It Re-runs Itself Forever
 
 - **Issue / Symptom**: The Svelte effects browser froze the page (and hung its test) when a thumbnail's render failed, for example for a vector effect the provider cannot draw as pixels. React was fine.

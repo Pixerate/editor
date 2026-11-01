@@ -98,7 +98,8 @@ function maxDiff(a: ArrayLike<number>, b: ArrayLike<number>): number {
 const affine = (m: readonly [number, number, number, number, number, number]) => homographyFromAffine(m);
 
 describe('transformSurface', () => {
-  it('matches the reference resampler for every interpolation, across tile borders', () => {
+  // One test per interpolation, so each gets its own timeout (all nine took 2.6 s on CI).
+  it.each(['nearest', 'bilinear', 'bicubic'] as const)('matches the reference resampler with %s interpolation, across tile borders', (interp) => {
     // 300 × 200 at (20, 30): the result spans several tiles, so per-tile windows are exercised.
     const px = noise(300, 200);
     const src = surfaceFromPixels(px, 4, 20, 30);
@@ -114,13 +115,11 @@ describe('transformSurface', () => {
       ])!,
     ];
     for (const h of maps) {
-      for (const interp of ['nearest', 'bilinear', 'bicubic'] as const) {
-        const out = transformSurface(src, h, { interpolation: interp });
-        const dst = transformedBounds({ x: 20, y: 30, width: 300, height: 200 }, h)!;
-        const want = reference(px, { x: 20, y: 30 }, h, interp, dst);
-        // Float32 windows against float64 sums: at most a level of rounding.
-        expect(maxDiff(readRegion(out, dst), want), interp).toBeLessThanOrEqual(1);
-      }
+      const out = transformSurface(src, h, { interpolation: interp });
+      const dst = transformedBounds({ x: 20, y: 30, width: 300, height: 200 }, h)!;
+      const want = reference(px, { x: 20, y: 30 }, h, interp, dst);
+      // Float32 windows against float64 sums: at most a level of rounding.
+      expect(maxDiff(readRegion(out, dst), want), interp).toBeLessThanOrEqual(1);
     }
   });
 

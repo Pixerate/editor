@@ -157,20 +157,19 @@ describe('Mixer Brush model', () => {
     expect(rgb.at(60, 30)).toEqual([255, 255, 0, 255]);
   });
 
-  it('replays identically, however the points are chunked', () => {
-    for (const mixing of ['rgb', 'pigment'] as const) {
-      const settings = { wet: 0.8, load: 0.4, mix: 0.6, mixing };
-      const pts = [{ x: 4, y: 10, pressure: 0.6 }, { x: 60, y: 14 }, { x: 120, y: 8, pressure: 0.3 }, { x: 196, y: 12 }];
-      const a = canvas(yellowLeft);
-      const sa = stroke(a.target, settings, loadMixer(EMPTY_MIXER_LOAD, BLUE), pts);
-      const b = canvas(yellowLeft);
-      const sb = new MixerStroke(brush, settings, loadMixer(EMPTY_MIXER_LOAD, BLUE), b.target);
-      for (const p of pts) sb.push([p]);
-      sb.finish();
-      expect(sb.dabCount).toBe(sa.dabCount);
-      expect(sb.load).toEqual(sa.load);
-      expect(b.tiles.get(tileKey(0, 0))).toEqual(a.tiles.get(tileKey(0, 0)));
-    }
+  // One test per mixing model, so each gets its own timeout (both took 2.6 s on CI).
+  it.each(['rgb', 'pigment'] as const)('replays identically with %s mixing, however the points are chunked', (mixing) => {
+    const settings = { wet: 0.8, load: 0.4, mix: 0.6, mixing };
+    const pts = [{ x: 4, y: 10, pressure: 0.6 }, { x: 60, y: 14 }, { x: 120, y: 8, pressure: 0.3 }, { x: 196, y: 12 }];
+    const a = canvas(yellowLeft);
+    const sa = stroke(a.target, settings, loadMixer(EMPTY_MIXER_LOAD, BLUE), pts);
+    const b = canvas(yellowLeft);
+    const sb = new MixerStroke(brush, settings, loadMixer(EMPTY_MIXER_LOAD, BLUE), b.target);
+    for (const p of pts) sb.push([p]);
+    sb.finish();
+    expect(sb.dabCount).toBe(sa.dabCount);
+    expect(sb.load).toEqual(sa.load);
+    expect(b.tiles.get(tileKey(0, 0))).toEqual(a.tiles.get(tileKey(0, 0)));
   });
 
   it('respects the selection and locked transparency', () => {
