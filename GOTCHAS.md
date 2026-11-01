@@ -3292,3 +3292,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Symptom**: `vitest` fails at startup with "Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'", though `@rolldown/binding-darwin-arm64` is installed and loads from plain `node`.
 - **Root Cause**: The command was wrapped in Homebrew's `/usr/local/bin/timeout`, an x86_64 binary. A universal `node` started from it runs under Rosetta as `x64`, so rolldown looks for `binding-darwin-x64`.
 - **Solution**: Run vitest without the Intel wrapper, or prefix it with `arch -arm64`. Check with `node -p process.arch` under the same wrapper.
+
+### [core/video-editor] A Camera Cut Is Two Keys at One Time
+
+- **Issue / Symptom**: Baking a whip pan (a camera move that cuts half way) into a clip's transform keys either tweened across the cut (one key a frame either side, interpolated) or was refused by `sortVideoKeys` / `parseVideoKeyframes` ("Two keys are at 200 ms"), and a zero-length segment made `videoKeyframeFfmpegExpr` divide by zero.
+- **Root Cause**: Video keyframes allowed one key per time, so a discontinuity could only be faked with a `hold` ease from the frame before, which loses the motion up to the cut.
+- **Solution / Workaround**: Two keys may share a time (a jump): the first is the value just before, the second the value from there on. `videoValueAt` already takes the last key at or before a time, so it reads the second at the jump; a stable sort keeps the pair's order; three at a time are refused; the ffmpeg expression treats a zero-length segment as a step. Speed ramps (`timeRemap`) still refuse jumps (`sortVideoKeys(keys, { jumps: false })`). Camera moves are baked keys: after a trim, `camera-stale` asks to set the move again.

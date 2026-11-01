@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ClipCameraMoves } from './ClipCameraMoves';
 import {
   findVideoClip,
   formatVideoSeconds,
@@ -184,8 +185,8 @@ function Row({ label, name, children }: { label: string; name: string; children:
  * Edits the one selected clip: its name, fades, opacity, volume and transform (each with a keyframe
  * toggle at the playhead: ◆ adds a key holding the value there or removes the one there; typing a
  * value on a keyed property sets the key at the playhead); volume, speed and mute for media;
- * text, colour, size and background for titles; colour for colour clips; and the transition into
- * it. Each change is one undo step (`update_clip` / `set_transition`), committed on blur or change.
+ * text, colour, size and background for titles; colour for colour clips; the transition into
+ * it; and its camera moves (`ClipCameraMoves`). Each change is one undo step (`update_clip` / `set_transition`), committed on blur or change.
  */
 export function ClipInspector({ controller, className = '' }: ClipInspectorProps) {
   const state = useVideoEditorState(controller);
@@ -652,6 +653,7 @@ export function ClipInspector({ controller, className = '' }: ClipInspectorProps
           </select>
         </Row>
       )}
+      <ClipCameraMoves controller={controller} clip={clip.id} />
     </div>
   );
 }

@@ -1,7 +1,8 @@
+import type { CameraMoveSpec, EffectValue } from '../effects/types.js';
 import { VIDEO_GRADE_CONTROLS } from './grade.js';
 import { checkVideoTimeRemap } from './remap.js';
 import { VIDEO_EASE_NAMES, type VideoAnimatable, type VideoEase, type VideoKey, type VideoKeyframes } from './keyframes.js';
-import { VIDEO_ADJUSTMENT_SCOPES, VIDEO_MASK_SHAPES, type VideoClipMask, VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipEffect, type VideoEffectRef, type VideoEffectValues, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
+import { VIDEO_ADJUSTMENT_SCOPES, VIDEO_MASK_SHAPES, type VideoClipMask, type VideoCameraFraming, type VideoClipCamera, VIDEO_BLEND_MODES, VIDEO_CLIP_ANIMATION_EFFECTS, VIDEO_CLIP_TYPES, VIDEO_FADE_CURVES, VIDEO_FITS, VIDEO_TRANSITION_TYPES, VIDEO_WIPE_DIRECTIONS, type VideoAsset, type VideoAssetProxy, type VideoClip, type VideoClipEffect, type VideoEffectRef, type VideoEffectValues, type VideoClipAnimation, type VideoGrade, type VideoGradeLut, type VideoMarker, type VideoProject, type VideoSequence, type VideoTrack, type VideoTranscriptWord, type VideoTransform, type VideoTransition } from './types.js';
 
 const isObject = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const fail = (path: string, what: string): never => {
@@ -44,8 +45,8 @@ function parseVideoEase(v: unknown, path: string): VideoEase | undefined {
 }
 
 /**
- * Keyframes `{ keys: [{ t, v, ease }] }`: at least one key, in strictly increasing time (clip-relative
- * ms), each value within `range`.
+ * Keyframes `{ keys: [{ t, v, ease }] }`: at least one key, in time order (clip-relative ms; two
+ * at one time make a jump), each value within `range`.
  */
 export function parseVideoKeyframes(v: unknown, path: string, { min, max }: { min?: number; max?: number } = {}): VideoKeyframes {
 	if (!isObject(v)) return fail(path, 'must be a number or keyframes { keys: [{ t, v, ease }] }');
@@ -57,7 +58,10 @@ export function parseVideoKeyframes(v: unknown, path: string, { min, max }: { mi
 		for (const key of Object.keys(k)) if (!['t', 'v', 'ease'].includes(key)) fail(`${at}.${key}`, 'is not a key field (t, v, ease)');
 		return compact({ t: num(k.t, `${at}.t`)!, v: num(k.v, `${at}.v`, { min, max })!, ease: parseVideoEase(k.ease, `${at}.ease`) });
 	});
-	for (let i = 1; i < keys.length; i++) if (!(keys[i].t > keys[i - 1].t)) fail(`${path}.keys[${i}].t`, `must be later than the key before (${keys[i - 1].t} ms); keys go in time order, one per time`);
+	for (let i = 1; i < keys.length; i++) {
+		if (keys[i].t < keys[i - 1].t) fail(`${path}.keys[${i}].t`, `must not be before the key before (${keys[i - 1].t} ms); keys go in time order`);
+		if (i >= 2 && keys[i].t === keys[i - 2].t) fail(`${path}.keys[${i}].t`, `is the third key at ${keys[i].t} ms; a time takes one key, or two for a jump (the value just before, then the value after)`);
+	}
 	return { keys };
 }
 
@@ -86,6 +90,7 @@ export function parseVideoTimeRemap(v: unknown, speed: unknown, path: string): V
 	const remap = parseVideoAnimatable(v, path, { optional: true, min: 0 });
 	if (typeof remap === 'number' || remap === undefined) return fail(path, 'must be keyframes { keys: [{ t, v, ease }] } (v: ms of source after the in point)');
 	if (speed !== undefined && speed !== 1) fail(path, 'cannot be used with a speed; a ramp sets the speed itself (remove "speed")');
+	for (let i = 1; i < remap.keys.length; i++) if (remap.keys[i].t === remap.keys[i - 1].t) fail(`${path}.keys[${i}].t`, `must be later than the key before (${remap.keys[i - 1].t} ms); a speed ramp has one key per time`);
 	try {
 		checkVideoTimeRemap(remap, path);
 	} catch (e) {
@@ -270,6 +275,47 @@ export function parseVideoAssetProxies(v: unknown, path: string): VideoAssetProx
 	return out.length ? out : undefined;
 }
 
+const CAMERA_KEYS = ['in', 'during', 'from', 'framing', 'base'];
+
+function parseCameraFraming(v: unknown, path: string): VideoCameraFraming | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object { zoom, x, y }');
+	const unknown = Object.keys(v).find((k) => !['zoom', 'x', 'y'].includes(k));
+	if (unknown) fail(`${path}.${unknown}`, 'is not a framing field (zoom, x, y)');
+	return compact({ zoom: num(v.zoom, `${path}.zoom`, { optional: true, positive: true }), x: num(v.x, `${path}.x`, { optional: true }), y: num(v.y, `${path}.y`, { optional: true }) });
+}
+
+function parseCameraMove(v: unknown, path: string, hold: boolean): CameraMoveSpec | undefined {
+	if (v === undefined) return undefined;
+	if (typeof v === 'string' && v) return v;
+	if (!isObject(v) || typeof v.move !== 'string' || !v.move) return fail(path, 'must be a camera move\'s id, or { move, ms, preset, values }');
+	const unknown = Object.keys(v).find((k) => !['move', 'ms', 'preset', 'values'].includes(k));
+	if (unknown) fail(`${path}.${unknown}`, 'is not a camera move field (move, ms, preset, values)');
+	if (hold && v.ms !== undefined) fail(`${path}.ms`, 'is not for a hold move, which plays across the rest of the clip');
+	if (v.values !== undefined && !isObject(v.values)) fail(`${path}.values`, 'must be an object of the move\'s control values');
+	return compact({ move: v.move, ms: num(v.ms, `${path}.ms`, { optional: true, min: 0 }), preset: str(v.preset, `${path}.preset`, true), values: v.values as Record<string, EffectValue> | undefined });
+}
+
+/** A clip's camera moves `{ in, during, from, framing, base }` (see `VideoClipCamera`). */
+export function parseVideoClipCamera(v: unknown, path: string): VideoClipCamera | undefined {
+	if (v === undefined) return undefined;
+	if (!isObject(v)) return fail(path, 'must be an object { in, during, from, framing, base }');
+	const unknown = Object.keys(v).find((k) => !CAMERA_KEYS.includes(k));
+	if (unknown) fail(`${path}.${unknown}`, `is not a camera field; use ${CAMERA_KEYS.join(', ')}`);
+	if (v.in === undefined && v.during === undefined) fail(path, 'names no move: give "in", "during" or both, or remove the camera');
+	if (!isObject(v.base)) fail(`${path}.base`, 'must be the clip\'s transform before the moves were baked, { x, y, scale, rotation } as numbers');
+	const base = v.base as Record<string, unknown>;
+	const extra = Object.keys(base).find((k) => !['x', 'y', 'scale', 'rotation'].includes(k));
+	if (extra) fail(`${path}.base.${extra}`, 'is not a transform field (x, y, scale, rotation)');
+	return compact({
+		in: parseCameraMove(v.in, `${path}.in`, false),
+		during: parseCameraMove(v.during, `${path}.during`, true),
+		from: parseCameraFraming(v.from, `${path}.from`),
+		framing: parseCameraFraming(v.framing, `${path}.framing`),
+		base: compact({ x: num(base.x, `${path}.base.x`, { optional: true }), y: num(base.y, `${path}.base.y`, { optional: true }), scale: num(base.scale, `${path}.base.scale`, { optional: true, min: 0 }), rotation: num(base.rotation, `${path}.base.rotation`, { optional: true }) })
+	}) as VideoClipCamera;
+}
+
 export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 	if (!isObject(v)) return fail(path, 'must be an object');
 	const type = oneOf(v.type ?? 'media', VIDEO_CLIP_TYPES, `${path}.type`, false)!;
@@ -289,7 +335,8 @@ export function parseVideoClip(v: unknown, path = 'clip'): VideoClip {
 		fadeOut: num(v.fadeOut, `${path}.fadeOut`, { optional: true, min: 0 }),
 		transition: parseVideoTransition(v.transition, `${path}.transition`),
 		effects: parseVideoClipEffects(v.effects, `${path}.effects`),
-		mask: parseVideoClipMask(v.mask, `${path}.mask`)
+		mask: parseVideoClipMask(v.mask, `${path}.mask`),
+		camera: parseVideoClipCamera(v.camera, `${path}.camera`)
 	};
 	if (type === 'media')
 		return compact({

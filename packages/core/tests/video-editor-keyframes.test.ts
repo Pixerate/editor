@@ -220,13 +220,13 @@ describe('keyframes in the project', () => {
 			return (r as { error: string }).error;
 		};
 		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'opacity', keys: [{ t: 0, v: 2 }] })).toContain('opacity.keys[0].v must be at most 1');
-		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'x', keys: [{ t: 5, v: 0 }, { t: 5, v: 1 }] })).toContain('Two keys are at 5 ms');
+		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'x', keys: [{ t: 5, v: 0 }, { t: 5, v: 1 }, { t: 5, v: 2 }] })).toContain('Three keys are at 5 ms; a time takes one key, or two for a jump');
 		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'x', keys: [{ t: 0, v: 0, ease: 'bounce' as any }] })).toContain('ease must be one of');
 		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'x', keys: [{ t: 0, v: 0, ease: [2, 0, 1, 1] }] })).toContain('x1 and x2 between 0 and 1');
 		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'blur' as any, keys: [{ t: 0, v: 0 }] })).toContain('cannot be keyframed');
 		expect(bad({ op: 'set_keyframes', clip: 'c1', property: 'x', keys: [] })).toContain('at least one key');
 		expect(() => parseVideoProject({ width: 10, height: 10, tracks: [{ id: 'v', kind: 'video', clips: [{ id: 'k', type: 'color', color: 'red', start: 0, duration: 10, opacity: { keys: [{ t: 5, v: 1 }, { t: 1, v: 0 }] } }] }] })).toThrow(
-			'tracks[0].clips[0].opacity.keys[1].t must be later than the key before'
+			'tracks[0].clips[0].opacity.keys[1].t must not be before the key before'
 		);
 	});
 });

@@ -45,11 +45,14 @@ describe('video effect tools', () => {
 			'apply_effect',
 			'update_effect',
 			'remove_effect',
+			'list_video_camera_moves',
+			'set_clip_camera_move',
+			'clear_clip_camera_move',
 			'add_video_effect_clip',
 			'set_video_effect_transition',
 			'set_video_effect_keyframes'
 		]);
-		expect(setup({ readOnly: true }).registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects']);
+		expect(setup({ readOnly: true }).registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_video_camera_moves']);
 	});
 
 	it('lists catalog ids in the effect argument once the catalog is in', async () => {

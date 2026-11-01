@@ -184,7 +184,7 @@ function retimeClipKeys(clip: VideoClip, fn: (v: VideoAnimatable) => VideoAnimat
 	}
 }
 
-const OPTIONAL_CLIP_FIELDS = ['name', 'effects', 'mask', 'scope', 'targetTrack', 'values', 'provider', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
+const OPTIONAL_CLIP_FIELDS = ['name', 'effects', 'mask', 'camera', 'scope', 'targetTrack', 'values', 'provider', 'opacity', 'transform', 'fit', 'blend', 'grade', 'animateIn', 'animateOut', 'fadeIn', 'fadeOut', 'fadeInCurve', 'fadeOutCurve', 'transition', 'in', 'speed', 'timeRemap', 'volume', 'muted', 'color', 'fontSize', 'fontFamily', 'fontWeight', 'background'];
 
 /** Times the new range and nudge ops require, checked before anything changes. */
 const TIME_FIELDS: Partial<Record<VideoEditOp, string[]>> = { slip_clip: ['delta'], roll_edit: ['delta'], slide_clip: ['delta'], lift_range: ['from', 'to'], extract_range: ['from', 'to'], split_at: ['at'] };
@@ -693,7 +693,7 @@ class Editor {
 				} else {
 					if (!Array.isArray(e.keys) || !e.keys.length) refuse('"keys" must be a list of at least one { t, v, ease } (or null to remove the ramp).');
 					const remap = parseVideoTimeRemap({ keys: e.keys }, undefined, 'keys')!;
-					remap.keys = sortVideoKeys(remap.keys);
+					remap.keys = sortVideoKeys(remap.keys, { jumps: false });
 					checkVideoTimeRemap(remap, 'keys');
 					const span = videoTimeRemapSpan(remap);
 					if (asset.duration !== undefined && (media.in ?? 0) + span.to > asset.duration + VIDEO_TIME_EPSILON)
