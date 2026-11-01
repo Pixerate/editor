@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.225.0
+
+### Minor Changes
+
+- b9cfbdd: Add `vector.rename`: renames a vector node (any layer) as the Layers panel shows it, in one undo step, so agents can name the layers they make. Listed in the `pixerate-vector` skill.
+
 ## 0.224.1
 
 ### Patch Changes
