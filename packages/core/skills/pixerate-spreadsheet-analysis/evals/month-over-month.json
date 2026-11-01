@@ -1,0 +1,128 @@
+{
+	"prompt": "Add month-over-month growth in column C (header in C1) as a fraction (0.1 for 10 %), with formulas. January has no previous month.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			[
+				"Month",
+				"Revenue"
+			],
+			[
+				"Jan",
+				100
+			],
+			[
+				"Feb",
+				110
+			],
+			[
+				"Mar",
+				99
+			],
+			[
+				"Apr",
+				121
+			],
+			[
+				"May",
+				121
+			],
+			[
+				"Jun",
+				133
+			]
+		]
+	},
+	"checks": [
+		{
+			"why": "growth for February to June",
+			"tool": "get_range",
+			"args": {
+				"range": "C3:C7"
+			},
+			"expect": {
+				"values": {
+					"$expr": "[0.1, -0.1, 0.2222, 0, 0.0992].every((g, i) => Math.abs(v[i][0] - g) < 0.001)"
+				}
+			}
+		},
+		{
+			"why": "formulas, not typed numbers",
+			"tool": "get_range",
+			"args": {
+				"range": "C3:C7"
+			},
+			"expect": {
+				"raw": {
+					"$every": {
+						"$every": {
+							"$match": "^="
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "January is left empty, not 0 or an error",
+			"tool": "get_range",
+			"args": {
+				"range": "C2"
+			},
+			"expect": {
+				"values": [
+					[
+						""
+					]
+				],
+				"errors": []
+			}
+		},
+		{
+			"why": "a header",
+			"tool": "get_range",
+			"args": {
+				"range": "C1"
+			},
+			"expect": {
+				"values": [
+					[
+						{
+							"$match": "\\S"
+						}
+					]
+				]
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_range",
+			"args": {
+				"start": "C1",
+				"values": [
+					[
+						"Growth"
+					],
+					[
+						null
+					],
+					[
+						"=B3/B2-1"
+					],
+					[
+						"=B4/B3-1"
+					],
+					[
+						"=B5/B4-1"
+					],
+					[
+						"=B6/B5-1"
+					],
+					[
+						"=B7/B6-1"
+					]
+				]
+			}
+		}
+	]
+}

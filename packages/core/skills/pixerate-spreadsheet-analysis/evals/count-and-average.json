@@ -1,0 +1,148 @@
+{
+	"prompt": "For each product, show how many orders there were and the average order amount, in a small table starting at G1 (Product, Orders, Average), with formulas.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			[
+				"Date",
+				"Region",
+				"Product",
+				"Amount"
+			],
+			[
+				"2026-01-05",
+				"North",
+				"Widget",
+				120
+			],
+			[
+				"2026-01-07",
+				"South",
+				"Gadget",
+				80
+			],
+			[
+				"2026-01-12",
+				"North",
+				"Gadget",
+				95
+			],
+			[
+				"2026-01-15",
+				"East",
+				"Widget",
+				60
+			],
+			[
+				"2026-01-20",
+				"West",
+				"Widget",
+				150
+			],
+			[
+				"2026-02-02",
+				"South",
+				"Widget",
+				110
+			],
+			[
+				"2026-02-08",
+				"East",
+				"Gadget",
+				70
+			],
+			[
+				"2026-02-11",
+				"North",
+				"Widget",
+				130
+			],
+			[
+				"2026-02-19",
+				"West",
+				"Gadget",
+				90
+			],
+			[
+				"2026-02-25",
+				"South",
+				"Gadget",
+				85
+			]
+		]
+	},
+	"checks": [
+		{
+			"why": "Widget: 5 orders averaging 114; Gadget: 5 orders averaging 84",
+			"tool": "get_range",
+			"args": {
+				"range": "G2:I10"
+			},
+			"expect": {
+				"values": {
+					"$nonEmpty": {
+						"$length": 2,
+						"$expr": "v.some((r) => r[0] === 'Widget' && r[1] === 5 && Math.abs(r[2] - 114) < 0.01) && v.some((r) => r[0] === 'Gadget' && r[1] === 5 && Math.abs(r[2] - 84) < 0.01)"
+					}
+				}
+			}
+		},
+		{
+			"why": "formulas for the counts and averages",
+			"tool": "get_range",
+			"args": {
+				"range": "H2:I3"
+			},
+			"expect": {
+				"raw": {
+					"$every": {
+						"$every": {
+							"$match": "^="
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "headers",
+			"tool": "get_range",
+			"args": {
+				"range": "G1:I1"
+			},
+			"expect": {
+				"values": [
+					{
+						"$every": {
+							"$match": "\\S"
+						}
+					}
+				]
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_range",
+			"args": {
+				"start": "G1",
+				"values": [
+					[
+						"Product",
+						"Orders",
+						"Average"
+					],
+					[
+						"Widget",
+						"=COUNTIFS($C$2:$C$11,G2)",
+						"=AVERAGEIFS($D$2:$D$11,$C$2:$C$11,G2)"
+					],
+					[
+						"Gadget",
+						"=COUNTIFS($C$2:$C$11,G3)",
+						"=AVERAGEIFS($D$2:$D$11,$C$2:$C$11,G3)"
+					]
+				]
+			}
+		}
+	]
+}

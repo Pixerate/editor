@@ -1,0 +1,136 @@
+{
+	"prompt": "Below the model, add a small scenario table from A8: the year-5 revenue at 5 %, 8 % and 12 % growth (growth rates in A9:A11, year-5 revenue next to each in B9:B11), with formulas from the starting revenue in B1.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			[
+				"Starting revenue",
+				100000,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				"Growth",
+				0.08,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				null,
+				null,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				"Year",
+				1,
+				2,
+				3,
+				4,
+				5
+			],
+			[
+				"Revenue",
+				"=$B$1",
+				"=B5*(1+$B$2)",
+				"=C5*(1+$B$2)",
+				"=D5*(1+$B$2)",
+				"=E5*(1+$B$2)"
+			]
+		]
+	},
+	"checks": [
+		{
+			"why": "the three growth rates",
+			"tool": "get_range",
+			"args": {
+				"range": "A9:A11"
+			},
+			"expect": {
+				"values": [
+					[
+						0.05
+					],
+					[
+						0.08
+					],
+					[
+						0.12
+					]
+				]
+			}
+		},
+		{
+			"why": "year-5 revenue for each scenario",
+			"tool": "get_range",
+			"args": {
+				"range": "B9:B11"
+			},
+			"expect": {
+				"values": {
+					"$expr": "[121550.625, 136048.896, 157351.936].every((x, i) => Math.abs(v[i][0] - x) < 0.01)"
+				}
+			}
+		},
+		{
+			"why": "formulas from the starting revenue",
+			"tool": "get_range",
+			"args": {
+				"range": "B9:B11"
+			},
+			"expect": {
+				"raw": {
+					"$every": {
+						"$every": {
+							"$match": "^=.*\\$?B\\$?1"
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the base model still uses B2",
+			"tool": "get_range",
+			"args": {
+				"range": "F5"
+			},
+			"expect": {
+				"values": {
+					"$expr": "Math.abs(v[0][0] - 136048.896) < 0.01"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "set_range",
+			"args": {
+				"start": "A8",
+				"values": [
+					[
+						"Growth",
+						"Year 5 revenue"
+					],
+					[
+						0.05,
+						"=$B$1*(1+A9)^4"
+					],
+					[
+						0.08,
+						"=$B$1*(1+A10)^4"
+					],
+					[
+						0.12,
+						"=$B$1*(1+A11)^4"
+					]
+				]
+			}
+		}
+	]
+}

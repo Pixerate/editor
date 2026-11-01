@@ -129,6 +129,7 @@ describe('matches', () => {
 		expect(matches(5, { $min: 1, $max: 5 })).toBe(true);
 		expect(matches([[1, 'a'], [2, 'b'], [null, '']], { $nonEmpty: { $length: 2, $column: [0, { $sum: 3 }] } })).toBe(true);
 		expect(matches(['x', 'X'], { $distinct: { $length: 2 } })).toBe(true);
+		expect(matches(undefined, { $expr: 'v[0] > 1' }), 'an expression that throws does not match').toBe(false);
 		expect(matches(['a', 'a'], { $unique: true })).toBe(false);
 		expect(matches({ width: 4, height: 4 }, { $expr: 'v.width === v.height' })).toBe(true);
 		expect(() => matches(1, { $near: 1 })).toThrow(/Unknown eval operator/);

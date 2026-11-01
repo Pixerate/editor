@@ -1,0 +1,113 @@
+{
+	"prompt": "Something in this revenue model doesn't update when I change the growth rate in B2. Find and fix it.",
+	"fixture": {
+		"editor": "spreadsheet",
+		"rows": [
+			[
+				"Starting revenue",
+				100000,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				"Growth",
+				0.08,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				null,
+				null,
+				null,
+				null,
+				null,
+				null
+			],
+			[
+				"Year",
+				1,
+				2,
+				3,
+				4,
+				5
+			],
+			[
+				"Revenue",
+				"=$B$1",
+				"=B5*(1+$B$2)",
+				"=C5*1.08",
+				"=D5*(1+$B$2)",
+				"=E5*(1+$B$2)"
+			]
+		]
+	},
+	"checks": [
+		{
+			"why": "no typed growth rate left in the projection",
+			"tool": "get_range",
+			"args": {
+				"range": "C5:F5"
+			},
+			"expect": {
+				"raw": [
+					{
+						"$every": {
+							"$match": "^=.*\\$?B\\$?2",
+							"$not": {
+								"$match": "1\\.08"
+							}
+						}
+					}
+				]
+			}
+		},
+		{
+			"why": "the values are unchanged at 8 %",
+			"tool": "get_range",
+			"args": {
+				"range": "F5"
+			},
+			"expect": {
+				"values": {
+					"$expr": "Math.abs(v[0][0] - 136048.896) < 0.01"
+				}
+			}
+		},
+		{
+			"why": "the inputs are untouched",
+			"tool": "get_range",
+			"args": {
+				"range": "B1:B2"
+			},
+			"expect": {
+				"values": [
+					[
+						100000
+					],
+					[
+						0.08
+					]
+				]
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_range",
+			"args": {
+				"range": "A1:F5"
+			}
+		},
+		{
+			"tool": "set_cell",
+			"args": {
+				"cell": "D5",
+				"value": "=C5*(1+$B$2)"
+			}
+		}
+	]
+}

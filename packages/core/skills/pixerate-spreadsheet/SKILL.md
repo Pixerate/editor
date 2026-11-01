@@ -21,6 +21,8 @@ For these jobs, load the workflow skill too: it has the method, the checks betwe
 the pitfalls, and uses the tools below.
 
 - `pixerate-spreadsheet-clean-import`: tidying imported or pasted data: structure, headers, types, dates, duplicates.
+- `pixerate-spreadsheet-analysis`: summaries, growth, shares and rankings as formulas that reconcile.
+- `pixerate-spreadsheet-financial-model`: inputs, consistent calculation rows, scenarios and audits.
 
 ## Working method
 
