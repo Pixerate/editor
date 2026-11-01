@@ -29,6 +29,8 @@ export * from './tools.js';
 export * from './instructions.js';
 export * from './form.js';
 export * from './effects.js';
+export * from './camera.js';
+export * from './camera-tools.js';
 export * from './effect-tools.js';
 export * from './playback.js';
 export * from './editorDocument.js';

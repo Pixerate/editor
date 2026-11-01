@@ -1,4 +1,4 @@
-import type { EffectValue } from '../effects/types.js';
+import type { CameraMoveSpec, EffectValue } from '../effects/types.js';
 import type { AnimationEasing } from '../animation/easing.js';
 import type { AnimationLoopMode } from '../animation/evaluate.js';
 import type { VectorDocument } from '../vector/types.js';
@@ -80,14 +80,34 @@ export interface MotionRect {
 
 /**
  * Where the camera looks: a rectangle, or the id of a node to frame (with `padding` around
- * its bounds, default 24). The camera eases there over `ms` (default 1000; the first shot cuts).
+ * its bounds, default 24), or neither to keep the framing it has (to name only a move). The
+ * camera eases there over `ms` (default 1000; the first shot cuts).
+ *
+ * With an effects provider that has camera moves (`capabilities.supportsCamera`), the camera can
+ * play a move from its catalog (as Flair's scene fields of the same names):
+ * - `in`: how it gets into this shot, a move whose role is `transition` (a glide, a whip pan, a
+ *   cut). Its `ms` (else `ms` here, else 1000) sets how long it takes.
+ * - `during`: how it moves while the shot holds, a move whose role is `hold` (a Ken Burns drift,
+ *   a crash zoom), played across the shot's hold. The next shot's move starts from where it ends.
+ * Without such a provider they are kept but not played: the camera eases as it would without them.
  */
-export type MotionCamera = (MotionRect | { frame: string; padding?: number }) & {
+export type MotionCamera = (MotionRect | { frame: string; padding?: number } | MotionCameraNoFraming) & {
 	ease?: AnimationEasing;
 	ms?: number;
 	/** Zoom at a steady rate (the size changes by the same factor each moment) instead of linearly. */
 	geometric?: boolean;
+	in?: CameraMoveSpec;
+	during?: CameraMoveSpec;
 };
+
+/** A camera that keeps the framing it has (it names only a move). */
+export interface MotionCameraNoFraming {
+	x?: undefined;
+	frame?: undefined;
+}
+
+/** True when a shot's camera gives a framing (a rectangle or a node), not only a move. */
+export const motionCameraFramed = (camera: MotionCamera): boolean => (typeof (camera as { frame?: unknown }).frame === 'string') || typeof (camera as { x?: unknown }).x === 'number';
 
 /** A steady beat: `bpm` beats a minute, the first at `offset` ms, `meter` beats a bar. */
 export interface MotionBeatGrid {

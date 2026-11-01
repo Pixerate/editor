@@ -7,6 +7,7 @@ export * from './CommandList';
 export * from './CommandInspector';
 export * from './EasePicker';
 export * from './ShotInspector';
+export * from './ShotCameraMoves';
 export * from './SceneSettings';
 export * from './AnimationEffectsPanel';
 export * from './AnimationRecordPanel';

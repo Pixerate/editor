@@ -7,7 +7,7 @@ import type { VectorNode } from '../vector/types.js';
 import { compileMotionScene, indexMotionNodes, motionRevealPadding, motionTrackKey, trackValue, type MotionTimeline } from './compile.js';
 import { motionFrameAt } from './evaluate.js';
 import { motionIssue, namedWithSuggestion, type MotionIssue } from './issues.js';
-import { MOTION_CLIP_TARGET, type MotionCommand, type MotionScene } from './types.js';
+import { MOTION_CLIP_TARGET, motionCameraFramed, type MotionCommand, type MotionScene } from './types.js';
 
 /** Changes shorter than this (ms) are too quick to follow. */
 export const MOTION_MIN_CHANGE_MS = 120;
@@ -88,12 +88,13 @@ export function checkMotionScene(scene: MotionScene): MotionIssue[] {
 
 	scene.shots.forEach((shot, shotIndex) => {
 		if (shot.camera && 'frame' in shot.camera && typeof shot.camera.frame === 'string') known(shot.camera.frame, 'unknown-frame', 'node to frame', { shot: shot.id });
-		else if (shot.camera) {
+		else if (shot.camera && motionCameraFramed(shot.camera)) {
 			const c = shot.camera as { width: number; height: number };
 			if (!(c.width > 0 && c.height > 0)) issues.push(motionIssue('invalid-camera', `The camera needs a positive width and height (got ${c.width} × ${c.height}).`, { shot: shot.id }));
 			else if (Math.abs(c.width / c.height / artAspect - 1) > 0.02)
 				issues.push(motionIssue('camera-aspect', `The camera is ${c.width} × ${c.height}, a different shape from the ${scene.artwork.width} × ${scene.artwork.height} artwork, so it shows bands at the sides; frame a node instead to match.`, { shot: shot.id }));
 		}
+		if (shotIndex === 0 && shot.camera?.in !== undefined) issues.push(motionIssue('camera-move-first-shot', 'The first shot cuts to its framing (there is none before it to move from), so its camera "in" does not play; put the move on the next shot, or use a "during" move here.', { shot: shot.id }));
 		if (!shot.run.length && !shot.camera && shotIndex > 0) issues.push(motionIssue('empty-shot', 'This shot only holds; add commands or a camera move, or remove it.', { shot: shot.id }));
 
 		shot.run.forEach((command: MotionCommand, i) => {

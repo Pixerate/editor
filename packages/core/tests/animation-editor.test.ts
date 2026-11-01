@@ -6,6 +6,7 @@ import {
 	MotionSceneFormatError,
 	applyMotionEdits,
 	checkMotionScene,
+	checkMotionCameraMoves,
 	compileMotionScene,
 	createAnimationEditorToolProvider,
 	createMotionScene,
@@ -47,6 +48,7 @@ import {
 	type MotionIssueCode,
 	type MotionScene
 } from '../src/animation-editor';
+import { createFakeEffectProvider } from '../src/effects';
 import { ManualClock, SPRING_PRESETS, cubicBezierAt, springSettleMs } from '../src/animation';
 import { ToolRegistry, validateJsonSchema } from '../src/tools';
 import { createVectorEffect, ellipseSubpath, findVectorNode, rectSubpath, starSubpath, type VectorDocument, type VectorNode, type VectorPathNode } from '../src/vector';
@@ -197,7 +199,7 @@ describe('motionFrameAt', () => {
 });
 
 describe('checkMotionScene', () => {
-	it('reports every issue code', () => {
+	it('reports every issue code', async () => {
 		const reported = new Set<MotionIssueCode>();
 		const collect = (s: MotionScene) => checkMotionScene(s).forEach((i) => reported.add(i.code));
 		collect(scene([]));
@@ -234,6 +236,13 @@ describe('checkMotionScene', () => {
 		collect(scene([{ id: 'p', run: [{ type: 'play', targets: ['box'], clip: 'nope' }] }]));
 		collect(scene([], { drivers: [{ target: 'box', property: 'x', source: { node: 'dot', property: 'x' } }, { target: 'dot', property: 'x', source: { node: 'box', property: 'x' } }] }));
 		collect(scene([{ id: 's', run: [{ type: 'enter', targets: ['box'], split: 'letter' }] }]));
+		// Camera moves: the first shot's "in", and (checked against a provider) the rest.
+		const moves = scene([
+			{ id: 'c', camera: { x: 0, y: 0, width: 400, height: 200, in: 'fake.glide' }, run: [] },
+			{ id: 'd', camera: { in: 'fake.drift', during: { move: 'fake.drift', values: { scale: 9 } } }, run: [] }
+		]);
+		collect(moves);
+		for (const provider of [createFakeEffectProvider({ camera: true }), null]) (await checkMotionCameraMoves(moves, provider)).forEach((i) => reported.add(i.code));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 
