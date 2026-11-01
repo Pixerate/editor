@@ -140,6 +140,7 @@ the pitfalls, and uses the commands below.
 | `vector.importSvg` | Add the shapes of SVG markup `svg` on top of the document, or replace the document with `replace: true`. Reads paths, basic shapes, groups, transforms, linear and radial gradients, `clip-path` / `mask` references (as mask groups) `<text>` (as point text: content, font, anchor and fill) and `<use>` (as instances of symbols made from what they refer to); skips images and foreign filters. |
 | `vector.importLottie` | Add one `frame` of a Lottie animation (object or text) as editable groups, or replace the document (`replace: true`). Modifiers become live effects. Returns `{ ids, notes }`. |
 | `vector.delete` | Delete nodes (`ids`). |
+| `vector.rename` | Rename node `id` to `name` (its name in the Layers panel). Name what you make by what it is; rename the user's layers only when asked. Returns `{ id, name }`. |
 
 ### Style
 

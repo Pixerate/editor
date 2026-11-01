@@ -2961,6 +2961,19 @@ export function createVectorCommands(controller: VectorEditorController, options
 		},
 		{
 			...base,
+			id: `${prefix}rename`,
+			label: 'Rename Layer…',
+			keywords: ['rename', 'name', 'layer', 'label'],
+			description: 'Renames node `id` (a path, group, text or any layer) to `name`, as the Layers panel shows it. One undo step. Returns { id, name }.',
+			params: { type: 'object', properties: { id: { type: 'string', description: 'The node (from vector.list).' }, name: { type: 'string', minLength: 1, description: 'Its new name.' } }, required: ['id', 'name'], additionalProperties: false },
+			undoable: true,
+			run: (_ctx: unknown, params: { id: string; name: string }) => {
+				check(controller.rename(params.id, params.name));
+				return { id: params.id, name: params.name };
+			}
+		},
+		{
+			...base,
 			id: `${prefix}boolean`,
 			label: 'Boolean Operation…',
 			keywords: ['union', 'unite', 'subtract', 'intersect', 'exclude', 'combine', 'pathfinder'],
