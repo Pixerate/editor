@@ -1140,7 +1140,7 @@ function readSmartFilters(raw: unknown, ctx: DeserializeContext, what: string): 
       if (base) filters.push({ ...base, blend, opacity });
     } else if (f.kind === 'effect') {
       const ref = readEffectRef(f);
-      if (ref) filters.push({ id: typeof f.id === 'string' ? f.id : newLayerId('flt'), kind: 'effect', enabled: f.enabled !== false, ...ref, blend, opacity });
+      if (ref) filters.push({ id: typeof f.id === 'string' ? f.id : newLayerId('flt'), kind: 'effect', enabled: f.enabled !== false, ...ref, ...(typeof f.preserveTransparency === 'boolean' ? { preserveTransparency: f.preserveTransparency } : {}), blend, opacity });
       else ctx.problems.push(`${what}: an effect smart filter without an effect id was left out`);
     }
   }

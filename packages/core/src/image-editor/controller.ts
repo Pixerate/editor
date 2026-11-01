@@ -580,7 +580,8 @@ export interface AdjustmentLayerInit<K extends AdjustmentKind = AdjustmentKind> 
    * Mask the new layer with the selection when there is one and no `mask` is given (Photoshop's
    * behaviour). Default false here, for compatibility; the agent tool and the panels pass true.
    */
-  useSelection?: boolean;
+  useSelection?: boolean;  /** Clip the new layer to the layer below it (a clipping mask), so it only adjusts that layer. Default false. */
+  clipped?: boolean;
 }
 
 /** A new pixel layer: empty, a solid colour over the canvas, or given pixels, plus its properties and position. */
@@ -1982,6 +1983,8 @@ export class ImageEditorController {
       enabled?: boolean;
       blend?: string;
       opacity?: number;
+      /** Keep the layer's transparency: the result never fills transparent pixels. Default false (the effect's alpha replaces the layer's). */
+      preserveTransparency?: boolean;
       /** Limit the filter to the selection (sets the filter mask from it, same undo step). Default false. */
       useSelection?: boolean;
     } = {}
@@ -2000,7 +2003,7 @@ export class ImageEditorController {
       id = res.layer.id;
       converted = true;
     }
-    const filter = normalizeSmartFilter({ kind: 'effect', effect: d.id, provider: this.effects.require().id, name: d.name, values, enabled: options.enabled !== false, blend: options.blend, opacity: options.opacity });
+    const filter = normalizeSmartFilter({ kind: 'effect', effect: d.id, provider: this.effects.require().id, name: d.name, values, enabled: options.enabled !== false, blend: options.blend, opacity: options.opacity, preserveTransparency: options.preserveTransparency });
     const res = addSmartFilterOp(layers, id, filter, this.canvasSize, options.index);
     const masked = this.asOneStep(() => {
       this.commitLayers(res.layers);
@@ -2011,14 +2014,15 @@ export class ImageEditorController {
 
   /**
    * Changes an effect smart filter: `values` merged over its own (`null` resets a control to the
-   * effect's default), `enabled`, `blend`, `opacity` or its place in the stack (`index`). Values
+   * effect's default), `enabled`, `blend`, `opacity`, `preserveTransparency` or its place in the
+   * stack (`index`). Values
    * are checked against the provider's controls. One undo step (none with `commitToHistory`
    * false, during a drag).
    */
   public async updateEffectFilter(
     layerId: string,
     filterId: string,
-    changes: { values?: Record<string, EffectValue | null>; enabled?: boolean; blend?: string; opacity?: number; index?: number },
+    changes: { values?: Record<string, EffectValue | null>; enabled?: boolean; blend?: string; opacity?: number; preserveTransparency?: boolean; index?: number },
     commitToHistory = true
   ): Promise<SmartFilter> {
     const layer = requireSmartObject(this.state.layers, layerId);
@@ -2036,7 +2040,7 @@ export class ImageEditorController {
       }
       update.values = { ...base, ...resolveEffectValues({ ...d, defaults: base }, given) };
     }
-    for (const k of ['enabled', 'blend', 'opacity'] as const) if (changes[k] !== undefined) update[k] = changes[k];
+    for (const k of ['enabled', 'blend', 'opacity', 'preserveTransparency'] as const) if (changes[k] !== undefined) update[k] = changes[k];
     let res = updateSmartFilterOp(this.state.layers, layerId, filterId, update, this.canvasSize);
     if (changes.index !== undefined) res = { ...res, layers: moveSmartFilterOp(res.layers, layerId, filterId, changes.index, this.canvasSize).layers };
     this.commitLayers(res.layers, undefined, commitToHistory);
@@ -2048,12 +2052,13 @@ export class ImageEditorController {
    * the document's size and bit depth (at `time` ms, default 0), placed like `addPixelLayer`. One
    * undo step. Masks, blend and opacity apply as to any layer. An effect with a background of its
    * own (`backgroundOpacity`) starts with it transparent when there are layers below it, unless
-   * `values` set it. `animate` makes it play when the document is output as an animation. Returns
-   * its id.
+   * `values` set it. `animate` makes it play when the document is output as an animation.
+   * `clipped` clips it to the layer below (a clipping mask) in the same step, so it only shows
+   * over that layer's pixels. Returns its id.
    */
   public async addEffectLayer(
     effect: string,
-    options: LayerPlacement & { values?: Record<string, EffectValue>; name?: string; time?: number; animate?: ImageEffectAnimation; opacity?: number; blend?: string; id?: string } = {}
+    options: LayerPlacement & { values?: Record<string, EffectValue>; name?: string; time?: number; animate?: ImageEffectAnimation; opacity?: number; blend?: string; id?: string; clipped?: boolean } = {}
   ): Promise<string> {
     const d = await this.describeEffect(effect, 'layer');
     const blend = parseBlend(options.blend) as BlendMode | undefined;
@@ -2063,6 +2068,7 @@ export class ImageEditorController {
     const ids = new Set(flattenLayers(this.state.layers).map((l) => l.id));
     const id = options.id && !ids.has(options.id) ? options.id : newLayerId();
     const placed = placeLayer(this.state.layers, { type: 'pixel', id, name: '', visible: true, opacity: 1, blend: 'normal', surface: emptySurface(4), offset: { x: 0, y: 0 } }, this.newLayerPlacement(options));
+    if (options.clipped) requireClipBase(placed, id);
     const values = resolveEffectValues(d, withBackgroundOpacity(d, options.values, hasLayersBelow(placed, id)));
     const { width, height } = this.naturalSize;
     const pixels = await this.effectsEngine.renderLayer(d.id, values, { width, height, depth: this.bitDepth, time });
@@ -2076,6 +2082,7 @@ export class ImageEditorController {
       surface: effectPixelsToSurface(pixels, this.bitDepth),
       offset: { x: 0, y: 0 },
       generator: { effect: d.id, provider: this.effects.require().id, name: d.name, values, ...(time ? { time } : {}), ...(animate ? { animate } : {}) },
+      ...(options.clipped ? { clipped: true } : {}),
     };
     const next = mapLayer(placed, id, () => layer);
     this.commitLayers(next, () => {
@@ -5563,6 +5570,7 @@ export class ImageEditorController {
    * above the other adjustment layers (or, without any, above the topmost non-annotation layer,
    * so annotations stay on top); `index` counts adjustment layers (0 = below the others);
    * `aboveId` / `parentId` place it anywhere in the stack. `kind` alone gives neutral parameters.
+   * `clipped` clips it to the layer below in the same step, so it only adjusts that layer.
    */
   public addAdjustmentLayer<K extends AdjustmentKind>(init: K | AdjustmentLayerInit<K>, index?: number): string {
     const spec: AdjustmentLayerInit<K> = typeof init === 'string' ? { kind: init } : init;
@@ -5578,14 +5586,17 @@ export class ImageEditorController {
     });
     while (ids.has(layer.id)) layer.id = newLayerId('adj');
     const { width, height } = this.naturalSize;
-    this.recordHistory();
     const node = adjustmentNodeFromLegacy(layer, width, height);
+    if (spec.clipped) node.clipped = true;
     const positioned = Boolean(spec.aboveId || spec.parentId);
-    this.state.layers = this.placeLayer(this.state.layers, node, {
+    const placed = this.placeLayer(this.state.layers, node, {
       aboveId: spec.aboveId,
       parentId: spec.parentId,
       adjustmentIndex: index !== undefined ? index : positioned ? undefined : Infinity,
     });
+    if (spec.clipped) requireClipBase(placed, node.id);
+    this.recordHistory();
+    this.state.layers = placed;
     this.notify();
     return layer.id;
   }
@@ -8805,6 +8816,11 @@ function serializeAdjustments(adjustments: ImageAdjustments): ImageAdjustments {
 }
 
 /** A pixel layer with its develop filter updated from base-slider values (created if missing). */
+/** Refuses to clip a new layer that would have nothing below it in its group or the stack. */
+function requireClipBase(layers: readonly ImageLayer[], id: string): void {
+  if (findLayer(layers, id)?.index === 0) throw new LayerOperationError('There is no layer below the new layer to clip it to: it would be the bottom layer of its group or the stack. Put it directly above the layer to clip to (aboveId), or leave clipped false.');
+}
+
 function withDevelop(layer: PixelLayer, partial: Partial<ImageAdjustments>): PixelLayer {
   const filters = [...(layer.filters ?? [])];
   let i = filters.findIndex((f) => f.kind === 'develop');

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEffectPixels, createFakeEffectProvider, encodeEffectFloat } from '../src/effects';
+import { createEffectPixels, createFakeEffectProvider, encodeEffectFloat, searchEffectSummaries, type EffectDescription, type EffectProvider } from '../src/effects';
 import { ToolRegistry } from '../src/tools';
 import { surfaceDepth } from '../src/raster/deep';
 import {
@@ -27,6 +27,53 @@ function solid(c: ImageEditorController, rgba: [number, number, number, number],
   const data = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < data.length; i += 4) data.set(rgba, i);
   return c.addPixelLayer({ name, pixels: { width: W, height: H, data } });
+}
+
+/**
+ * The fake provider plus `test.fill`, a filter that writes opaque `color` over every pixel, as a
+ * shader that ignores its input's alpha does.
+ */
+function withFill(base: EffectProvider = createFakeEffectProvider()): EffectProvider {
+  const fill: EffectDescription = {
+    ...base.describe('fake.invert'),
+    id: 'test.fill',
+    name: 'Fill',
+    description: 'Paints every pixel an opaque colour.',
+    controls: { type: 'object', additionalProperties: false, properties: { color: { type: 'string', format: 'color', description: 'The colour. Default #00ff00.' } } },
+    defaults: { color: '#00ff00' },
+    presets: [],
+  } as EffectDescription;
+  const summaries = [...base.list(), (({ controls: _c, defaults: _d, presets: _p, inputs: _i, ...summary }) => summary)(fill)];
+  return {
+    ...base,
+    list: (o) => searchEffectSummaries(summaries, '', o),
+    search: (q, o) => searchEffectSummaries(summaries, q, o),
+    describe: (id) => (id === 'test.fill' ? structuredClone(fill) : base.describe(id)),
+    createRenderer: (id, ro) => {
+      if (id !== 'test.fill') return base.createRenderer(id, ro);
+      return {
+        effectId: id,
+        width: ro.width,
+        height: ro.height,
+        depth: ro.depth ?? 8,
+        async render(request) {
+          const hex = String(request.values?.color ?? '#00ff00');
+          const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+          const out = createEffectPixels(ro.width, ro.height);
+          for (let i = 0; i < out.data.length; i += 4) out.data.set([...rgb, 255], i);
+          return out;
+        },
+        dispose() {},
+      };
+    },
+  } as EffectProvider;
+}
+
+/** A layer opaque `rgba` in the left half (x < W/2), transparent on the right. */
+function leftHalf(c: ImageEditorController, rgba: [number, number, number, number] = [200, 0, 0, 255]) {
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) data.set(rgba, (y * W + x) * 4);
+  return c.addPixelLayer({ name: 'Half', pixels: { width: W, height: H, data } });
 }
 
 const pixel = (c: ImageEditorController, id: string, x = 0, y = 0) => [...readRegion((c.getLayer(id) as SmartObjectLayer | PixelLayer).surface, { x, y, width: 1, height: 1 })];
@@ -123,6 +170,134 @@ describe('image provider effects: smart filters', () => {
     // The effect layer keeps its pixels without a provider.
     expect(pixel(d, layer)).toEqual(pixel(c, layer));
     expect(JSON.parse(JSON.stringify(d.toJSON())).layers).toEqual(json.layers);
+  });
+});
+
+describe('image provider effects: keeping a layer\'s transparency', () => {
+  it('a filter that paints everything fills transparent pixels unless preserveTransparency is set', async () => {
+    const c = setup(withFill() as never);
+    const id = leftHalf(c);
+    await c.applyEffectFilter(id, 'test.fill');
+    await c.effectsIdle();
+    expect(pixel(c, id, 2, 2)).toEqual([0, 255, 0, 255]);
+    expect(pixel(c, id, W - 2, 2)).toEqual([0, 255, 0, 255]);
+
+    const d = setup(withFill() as never);
+    const kept = leftHalf(d);
+    const r = await d.applyEffectFilter(kept, 'test.fill', { preserveTransparency: true });
+    expect(r.filter).toMatchObject({ kind: 'effect', preserveTransparency: true });
+    await d.effectsIdle();
+    expect(pixel(d, kept, 2, 2)).toEqual([0, 255, 0, 255]);
+    expect(pixel(d, kept, W - 2, 2)[3]).toBe(0);
+  });
+
+  it('keeps partial alpha, and composites a translucent result over the layer before the filter\'s opacity', async () => {
+    const c = setup(withFill() as never);
+    const id = leftHalf(c, [200, 0, 0, 128]);
+    await c.applyEffectFilter(id, 'test.fill', { preserveTransparency: true, opacity: 0.5 });
+    await c.effectsIdle();
+    const [r, g, , a] = pixel(c, id, 2, 2);
+    expect(a).toBe(128);
+    // Half way from red to green: the opacity mixes the kept result with the input.
+    expect(r).toBeGreaterThan(90);
+    expect(r).toBeLessThan(110);
+    expect(g).toBeGreaterThan(120);
+    expect(g).toBeLessThan(135);
+    expect(pixel(c, id, W - 2, 2)[3]).toBe(0);
+  });
+
+  it('follows later edits to the layer: the kept area moves with the contents', async () => {
+    const c = setup(withFill() as never);
+    const id = leftHalf(c);
+    await c.applyEffectFilter(id, 'test.fill', { preserveTransparency: true });
+    await c.effectsIdle();
+    expect(pixel(c, id, W / 2 + 2, 2)[3]).toBe(0);
+    const corners = (c.getLayer(id) as SmartObjectLayer).placement.corners.map((p) => ({ x: p.x + 4, y: p.y }));
+    c.setSmartObjectPlacement(id, { corners: corners as never });
+    await c.effectsIdle();
+    expect(pixel(c, id, 2, 2)[3]).toBe(0);
+    expect(pixel(c, id, W / 2 + 2, 2)).toEqual([0, 255, 0, 255]);
+    expect(pixel(c, id, W - 2, 2)[3]).toBe(0);
+  });
+
+  it('toggles with updateEffectFilter in one undo step, and round-trips through JSON', async () => {
+    const c = setup(withFill() as never);
+    const id = leftHalf(c);
+    const { filter } = await c.applyEffectFilter(id, 'test.fill');
+    await c.effectsIdle();
+    const before = steps(c);
+    const upd = await c.updateEffectFilter(id, filter.id, { preserveTransparency: true });
+    expect(upd).toMatchObject({ preserveTransparency: true });
+    expect(steps(c)).toBe(before + 1);
+    await c.effectsIdle();
+    expect(pixel(c, id, W - 2, 2)[3]).toBe(0);
+    const json = JSON.parse(JSON.stringify(c.toJSON()));
+    const d = setup(withFill() as never);
+    d.loadJSON(json);
+    expect(d.lastLoadProblems).toEqual([]);
+    expect((d.getLayer(id) as SmartObjectLayer).smartFilters?.filters[0]).toMatchObject({ kind: 'effect', effect: 'test.fill', preserveTransparency: true });
+    c.undo();
+    await c.effectsIdle();
+    expect(pixel(c, id, W - 2, 2)[3]).toBe(255);
+    await expect(c.updateEffectFilter(id, filter.id, { preserveTransparency: 'yes' as never })).rejects.toThrow(/preserveTransparency/);
+  });
+
+  it('a document without the field draws as before (the effect\'s alpha wins)', async () => {
+    const c = setup(withFill() as never);
+    const id = leftHalf(c);
+    await c.applyEffectFilter(id, 'test.fill', { preserveTransparency: true });
+    const json = JSON.parse(JSON.stringify(c.toJSON()));
+    for (const l of json.layers) for (const f of l.smartFilters?.filters ?? []) delete f.preserveTransparency;
+    const d = setup(withFill() as never);
+    d.loadJSON(json);
+    await d.effectsIdle();
+    expect((d.getLayer(id) as SmartObjectLayer).smartFilters?.filters[0]).not.toHaveProperty('preserveTransparency');
+    expect(pixel(d, id, W - 2, 2)[3]).toBe(255);
+  });
+});
+
+describe('image provider effects: clipped layers', () => {
+  it('adds an effect layer clipped to the layer below in the same undo step', async () => {
+    const c = setup();
+    const base = leftHalf(c);
+    const before = steps(c);
+    const id = await c.addEffectLayer('fake.gradient', { aboveId: base, clipped: true });
+    expect(c.getLayer(id)?.clipped).toBe(true);
+    expect(steps(c)).toBe(before + 1);
+    c.undo();
+    expect(c.getLayer(id)).toBeUndefined();
+  });
+
+  it('adds an adjustment layer clipped in the same undo step', () => {
+    const c = setup();
+    const base = leftHalf(c);
+    const before = steps(c);
+    const id = c.addAdjustmentLayer({ kind: 'levels', aboveId: base, clipped: true });
+    expect(c.getLayer(id)?.clipped).toBe(true);
+    expect(steps(c)).toBe(before + 1);
+  });
+
+  it('refuses to clip a layer with nothing below, changing nothing', async () => {
+    const c = setup();
+    const only = leftHalf(c);
+    const group = c.groupLayers([only]);
+    const before = JSON.stringify(c.toJSON().layers);
+    const n = steps(c);
+    // Below the only layer of a group: nothing inside it to clip to.
+    await expect(c.addEffectLayer('fake.gradient', { belowId: only, clipped: true })).rejects.toThrow(/no layer below the new layer/);
+    const firstChild = (c.getLayer(group) as unknown as { children: { id: string }[] }).children[0].id;
+    expect(() => c.addAdjustmentLayer({ kind: 'levels', aboveId: firstChild, clipped: true })).not.toThrow();
+    c.undo();
+    expect(JSON.stringify(c.toJSON().layers)).toBe(before);
+    expect(steps(c)).toBe(n);
+  });
+  it('refuses a clipped adjustment layer on an empty stack', () => {
+    const c = setup();
+    c.removeLayer('background');
+    const n = steps(c);
+    expect(() => c.addAdjustmentLayer({ kind: 'levels', clipped: true })).toThrow(/no layer below the new layer/);
+    expect(c.getState().layers).toEqual([]);
+    expect(steps(c)).toBe(n);
   });
 });
 
@@ -275,6 +450,59 @@ describe('image provider effect tools', () => {
     const removed = await registry.callTool('remove_effect', { target: lid, effect: 'generator' });
     expect((removed.structuredContent as any).effects).toEqual([]);
     expect(text(await registry.callTool('remove_effect', { target: id, effect: 'nope' }))).toMatch(/no provider effect "nope"/);
+  });
+
+  it('apply_effect keeps the layer\'s transparency by default, takes blend, and update_effect toggles it', async () => {
+    const { c, registry } = tools(setup(withFill() as never));
+    const id = leftHalf(c);
+    const applied = await registry.callTool('apply_effect', { target: id, effect: 'test.fill', blend: 'multiply' });
+    expect(applied.isError).toBeFalsy();
+    const s = applied.structuredContent as any;
+    expect(s.effect).toMatchObject({ role: 'smart filter', blend: 'multiply', preserveTransparency: true });
+    expect((c.getLayer(id) as SmartObjectLayer).smartFilters!.filters[0]).toMatchObject({ preserveTransparency: true, blend: 'multiply' });
+    await c.effectsIdle();
+    expect(pixel(c, id, W - 2, 2)[3]).toBe(0);
+    const upd = await registry.callTool('update_effect', { target: id, effect: s.effect.id, preserveTransparency: false, blend: 'normal' });
+    expect((upd.structuredContent as any).effect).toMatchObject({ preserveTransparency: false, blend: 'normal' });
+    await c.effectsIdle();
+    expect(pixel(c, id, W - 2, 2)).toEqual([0, 255, 0, 255]);
+    const list = (await registry.callTool('list_applied_effects', { target: id })).structuredContent as any;
+    expect(list.targets[0].effects[0]).toMatchObject({ preserveTransparency: false });
+    const off = await registry.callTool('apply_effect', { target: id, effect: 'fake.invert', preserveTransparency: false });
+    expect((off.structuredContent as any).effect).toMatchObject({ effect: 'fake.invert', preserveTransparency: false });
+  });
+
+  it('refuses bad preserveTransparency, blend and an empty update', async () => {
+    const { c, registry } = tools(setup(withFill() as never));
+    const id = leftHalf(c);
+    const bad = await registry.callTool('apply_effect', { target: id, effect: 'test.fill', preserveTransparency: 'yes' });
+    expect(bad.isError).toBe(true);
+    expect(text(bad)).toMatch(/preserveTransparency/);
+    expect((await registry.callTool('apply_effect', { target: id, effect: 'test.fill', blend: 'pigment' })).isError).toBe(true);
+    expect(c.getLayer(id)?.type).toBe('pixel');
+    const fx = ((await registry.callTool('apply_effect', { target: id, effect: 'test.fill' })).structuredContent as any).effect.id;
+    expect(text(await registry.callTool('update_effect', { target: id, effect: fx }))).toMatch(/Give at least one of values, enabled, opacity, index, preserveTransparency, blend/);
+    const lid = ((await registry.callTool('add_effect_layer', { effect: 'fake.gradient' })).structuredContent as any).layerId;
+    expect(text(await registry.callTool('update_effect', { target: lid, effect: 'generator', preserveTransparency: true }))).toMatch(/only takes values/);
+  });
+
+  it('add_effect_layer clips to the layer below with clipped, and says why it cannot', async () => {
+    const { c, registry } = tools();
+    const base = leftHalf(c);
+    const r = await registry.callTool('add_effect_layer', { effect: 'fake.gradient', aboveId: base, clipped: true });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ clipped: true });
+    expect(c.getLayer((r.structuredContent as any).layerId)?.clipped).toBe(true);
+    const plain = await registry.callTool('add_effect_layer', { effect: 'fake.gradient' });
+    expect(plain.structuredContent).toMatchObject({ clipped: false });
+    const group = c.groupLayers([base]);
+    const n = c.getState().layers.length;
+    const refused = await registry.callTool('add_effect_layer', { effect: 'fake.gradient', belowId: base, clipped: true });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toMatch(/no layer below the new layer.*aboveId/);
+    expect(c.getState().layers.length).toBe(n);
+    expect((c.getLayer(group) as unknown as { children: unknown[] }).children).toHaveLength(1);
+    expect((await registry.callTool('add_effect_layer', { effect: 'fake.gradient', clipped: 'yes' })).isError).toBe(true);
   });
 
   it('changes an effect layer\'s effect, frame and animation through set_effect_layer', async () => {

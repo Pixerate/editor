@@ -148,8 +148,8 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
   opacity.
 - **Selective sharpening or blur:** select, then `set_smart_filter_mask` `from: "selection"` on
   a smart object's filters.
-- **Clip a texture or colour to a layer:** put it directly above and set `clipped: true` with
-  `set_layer_properties`; no selection is needed.
+- **Clip a texture or colour to a layer:** `add_effect_layer` / `add_adjustment_layer` with
+  `aboveId` and `clipped: true` (one step; `set_layer_properties` for an existing layer).
 - **Remove an object:** select it with a 2–4 px margin (`modify_selection` `expand`), then
   `content_aware_fill` `output: "new-layer"`; try another `seed` if the fill repeats texture,
   and mask out what is wrong. If it copies in something it shouldn't (a person, a sign), pass
@@ -253,4 +253,4 @@ This skill is the method. `pixerate-image-editor` has the full tool reference.
 - `add_adjustment_layer`, `apply_effect`, `add_smart_filter`: masked by an active selection
 - `paint_stroke`: paint on a mask with `channel: "mask"`
 - `undo_image`: take back a step
-- `set_layer_properties`: clipping
+- `set_layer_properties`, `add_effect_layer`: clipping

@@ -72,8 +72,12 @@ export interface EffectToolHost {
 	readOnlyReason(): string | null;
 	/** Every target with effects, or one target (throws for an unknown id, naming valid ones). */
 	list(target?: string): EffectTargetEffects[];
-	apply(target: string, effect: string, args: { values?: Record<string, unknown>; index?: number; enabled?: boolean; opacity?: number }): Promise<EffectChangeResult>;
-	update(target: string, instance: string, changes: { values?: Record<string, unknown>; index?: number; enabled?: boolean; opacity?: number }): Promise<EffectChangeResult>;
+	/** Arguments `apply_effect` takes on this editor besides the shared ones (name → schema); given ones reach `apply` in `args`. */
+	applyOptions?: Record<string, JsonSchema>;
+	/** Arguments `update_effect` takes on this editor besides the shared ones; given ones reach `update` in `changes`. */
+	updateOptions?: Record<string, JsonSchema>;
+	apply(target: string, effect: string, args: { values?: Record<string, unknown>; index?: number; enabled?: boolean; opacity?: number; [option: string]: unknown }): Promise<EffectChangeResult>;
+	update(target: string, instance: string, changes: { values?: Record<string, unknown>; index?: number; enabled?: boolean; opacity?: number; [option: string]: unknown }): Promise<EffectChangeResult>;
 	remove(target: string, instance: string): Promise<EffectChangeResult>;
 	/** Editor-specific effect tools (transitions, effect clips, effect layers, keyframes). */
 	extraTools?: (context: EffectToolContext) => AgentTool[];
@@ -263,6 +267,10 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		}
 	];
 
+	/** The host's own arguments that were given. */
+	const hostOptions = (schemas: Record<string, JsonSchema> | undefined, args: Record<string, unknown>): Record<string, unknown> =>
+		Object.fromEntries(Object.keys(schemas ?? {}).filter((k) => args[k] !== undefined).map((k) => [k, args[k]]));
+
 	const writeTools = (): AgentTool[] => [
 		{
 			name: 'apply_effect',
@@ -275,14 +283,15 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 					values: valuesSchema('Control values over the effect\'s defaults', true),
 					index: INDEX,
 					enabled: ENABLED,
-					opacity: OPACITY
+					opacity: OPACITY,
+					...host.applyOptions
 				},
 				['target', 'effect']
 			),
 			annotations: { title: 'Apply an effect', ...ANNOTATIONS.write },
 			handler: async (args) => {
 				writable();
-				return explain(() => host.apply(args.target as string, args.effect as string, { values: args.values, index: args.index, enabled: args.enabled, opacity: args.opacity }));
+				return explain(() => host.apply(args.target as string, args.effect as string, { ...hostOptions(host.applyOptions, args), values: args.values, index: args.index, enabled: args.enabled, opacity: args.opacity }));
 			}
 		},
 		{
@@ -296,15 +305,18 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 					values: { ...valuesSchema('Control values to change', true), description: `${valuesSchema('Control values to change', true).description} null resets a control to its default.` },
 					enabled: ENABLED,
 					opacity: OPACITY,
-					index: { ...INDEX, description: `Move it to this place in the ${host.target.noun}'s stack (0 = applied first).` }
+					index: { ...INDEX, description: `Move it to this place in the ${host.target.noun}'s stack (0 = applied first).` },
+					...host.updateOptions
 				},
 				['target', 'effect']
 			),
 			annotations: { title: 'Change an applied effect', ...ANNOTATIONS.writeIdempotent },
 			handler: async (args) => {
 				writable();
-				if (args.values === undefined && args.enabled === undefined && args.opacity === undefined && args.index === undefined) throw new Error('Give at least one of values, enabled, opacity or index to change.');
-				return explain(() => host.update(args.target as string, args.effect as string, { values: args.values, enabled: args.enabled, opacity: args.opacity, index: args.index }));
+				const options = hostOptions(host.updateOptions, args);
+				if (args.values === undefined && args.enabled === undefined && args.opacity === undefined && args.index === undefined && !Object.keys(options).length)
+					throw new Error(`Give at least one of ${['values', 'enabled', 'opacity', 'index', ...Object.keys(host.updateOptions ?? {})].join(', ')} to change.`);
+				return explain(() => host.update(args.target as string, args.effect as string, { ...options, values: args.values, enabled: args.enabled, opacity: args.opacity, index: args.index }));
 			}
 		},
 		{

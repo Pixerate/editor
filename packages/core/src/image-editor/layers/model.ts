@@ -488,6 +488,12 @@ export interface EffectSmartFilter {
   name?: string;
   /** Control values (over the effect's defaults). */
   values: Record<string, EffectValue>;
+  /**
+   * Keep the layer's transparency: the effect's result is drawn over its input and takes the
+   * input's alpha, so it never fills transparent pixels (before the filter's blend and opacity).
+   * Missing means false: the result's alpha replaces the input's.
+   */
+  preserveTransparency?: boolean;
 }
 
 /** One smart filter: a layer filter, a provider effect or a kept PSD filter, with its own blending over the result below it. */

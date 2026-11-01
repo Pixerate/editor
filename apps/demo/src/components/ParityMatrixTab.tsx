@@ -393,7 +393,7 @@ const FEATURES: ParityRow[] = [
     core: true,
     react: true,
     svelte: true,
-    note: "Filter effects from an effects provider as smart filters (pixel layers convert in the same undo step; blend, opacity, filter mask), generator and overlay effects as effect layers at the document's bit depth; rendered in the background; kept without a provider; <ImageProviderEffectsPanel> (effect layer controls and filters); seven agent tools",
+    note: "Filter effects from an effects provider as smart filters (pixel layers convert in the same undo step; blend, opacity, filter mask; keep the layer's transparency), generator and overlay effects as effect layers at the document's bit depth, optionally clipped to the layer below; rendered in the background; kept without a provider; <ImageProviderEffectsPanel> (effect layer controls and filters); seven agent tools",
   },
   {
     feature: "Image High Bit Depth (16-bit and 32-bit float layers)",

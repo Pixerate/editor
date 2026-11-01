@@ -272,6 +272,23 @@ describe('layer agent tools', () => {
     expect(c.getLayers()).toBe(before);
   });
 
+  it('add_adjustment_layer clips to the layer below in one step with clipped, refusing when nothing is below', async () => {
+    const { c, call, fails } = setup();
+    const id = c.addPixelLayer();
+    const plain = await call('add_adjustment_layer', { kind: 'invert', aboveId: 'background' });
+    expect(plain.clipped).toBe(false);
+    const steps = (c as unknown as { undoStack: unknown[] }).undoStack.length;
+    const clipped = await call('add_adjustment_layer', { kind: 'invert', aboveId: id, clipped: true });
+    expect(clipped.clipped).toBe(true);
+    expect(c.getLayer(clipped.layer.id)?.clipped).toBe(true);
+    expect((c as unknown as { undoStack: unknown[] }).undoStack.length).toBe(steps + 1);
+    const empty = (await call('add_group', { name: 'Empty' })).group.id;
+    const before = c.getLayers();
+    await fails('add_adjustment_layer', { kind: 'invert', parentId: empty, clipped: true }, /no layer below the new layer/);
+    await fails('add_adjustment_layer', { kind: 'invert', clipped: 1 }, /clipped/);
+    expect(c.getLayers()).toBe(before);
+  });
+
   it('supports clearHistory, getCanvasSize, resizeCanvas and layerAt', () => {
     const { c } = setup();
     expect(c.getCanvasSize()).toEqual({ width: 40, height: 30 });
