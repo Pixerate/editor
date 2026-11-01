@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { describeMotionElements, freshShotId, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
+  import { describeMotionElements, freshShotId, motionCameraFramed, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
+  import ShotCameraMoves from './ShotCameraMoves.svelte';
 
   interface Props {
     controller: AnimationEditorController;
@@ -53,8 +54,10 @@
     apply(raw.trim() ? { op: 'update_shot', shot: current.id, set: { label: raw.trim() } } : { op: 'update_shot', shot: current.id, remove: ['label'] }, 'Rename shot');
   }
   function setCamera(v: string) {
-    if (!v) apply({ op: 'update_shot', shot: current.id, remove: ['camera'] }, 'Clear camera');
-    else if (v.startsWith('frame:')) apply({ op: 'update_shot', shot: current.id, set: { camera: { frame: v.slice(6), padding: 24 } } }, 'Frame camera');
+    // Its camera moves stay when the framing changes.
+    const moves = { ...(current.camera?.in !== undefined ? { in: current.camera.in } : {}), ...(current.camera?.during !== undefined ? { during: current.camera.during } : {}) };
+    if (!v) apply(Object.keys(moves).length ? { op: 'update_shot', shot: current.id, set: { camera: moves } } : { op: 'update_shot', shot: current.id, remove: ['camera'] }, 'Clear camera');
+    else if (v.startsWith('frame:')) apply({ op: 'update_shot', shot: current.id, set: { camera: { ...moves, frame: v.slice(6), padding: 24 } } }, 'Frame camera');
   }
   function setCue(v: string) {
     const cue = motionCueFromKey(v);
@@ -63,8 +66,8 @@
 </script>
 
 <!--
-  The selected shot: label, hold, speed, the node the camera frames and the cue it starts on (a
-  beat or a narration word). Also adds, moves and deletes shots. Every change is one undo step.
+  The selected shot: label, hold, speed, the node the camera frames, the cue it starts on (a
+  beat or a narration word) and its camera moves (ShotCameraMoves). Also adds, moves and deletes shots. Every change is one undo step.
 -->
 <div class="flex flex-col gap-1.5 text-xs {className}" data-shot-inspector="">
   <div class="flex items-center gap-1">
@@ -94,9 +97,9 @@
         <span class="text-[10px] text-muted-foreground">×</span>
       </div>
       <span class="text-muted-foreground">Camera</span>
-      <select class={input} aria-label="Camera frames" disabled={editor.readOnly} value={current.camera ? (frame ? `frame:${frame}` : 'rect') : ''} onchange={(e) => setCamera(e.currentTarget.value)}>
+      <select class={input} aria-label="Camera frames" disabled={editor.readOnly} value={current.camera && motionCameraFramed(current.camera) ? (frame ? `frame:${frame}` : 'rect') : ''} onchange={(e) => setCamera(e.currentTarget.value)}>
         <option value="">keep framing</option>
-        {#if current.camera && !frame}<option value="rect">a rectangle</option>{/if}
+        {#if current.camera && motionCameraFramed(current.camera) && !frame}<option value="rect">a rectangle</option>{/if}
         {#each elements as e (e.id)}
           <option value="frame:{e.id}">frame {e.name ?? e.id}</option>
         {/each}
@@ -114,6 +117,7 @@
       {/if}
     </div>
   {/if}
+  {#if current}<ShotCameraMoves {controller} shot={current.id} />{/if}
   {#if message}
     <p class="text-red-500" role="alert" data-edit-error="">{message}</p>
   {/if}

@@ -1,9 +1,11 @@
 /**
  * Agent tools for provider effects in the animation editor: the shared effect tools on artwork
  * nodes (`apply_effect` applies a motion effect, made into commands) and `add_vector_effect`
- * for vector effects that bring their own picture.
+ * for vector effects that bring their own picture, and the camera move tools (`list_camera_moves`,
+ * `set_shot_camera_move`, `clear_shot_camera_move`).
  */
 
+import { animationCameraMoveTools } from './camera-tools.js';
 import { withAnimationPlayback } from './playback.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult } from '../effects/tools.js';
 import type { EffectValue } from '../effects/types.js';
@@ -73,6 +75,7 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 		remove: async (target, instance) => done(controller.removeMotionEffect(instance), target),
 		subscribe: (notify) => controller.subscribe(() => notify()),
 		extraTools: (ctx): AgentTool[] => [
+			...animationCameraMoveTools(controller, ctx),
 			{
 				name: 'add_vector_effect',
 				title: 'Add a vector effect',

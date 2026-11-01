@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { describeMotionElements, freshShotId, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
+import { describeMotionElements, freshShotId, motionCameraFramed, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
 import { CommitInput } from './CommitInput';
+import { ShotCameraMoves } from './ShotCameraMoves';
 import { useAnimationEditorState } from './useAnimationEditor';
 
 export interface ShotInspectorProps {
@@ -15,8 +16,8 @@ const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opa
 
 
 /**
- * The selected shot: its label, hold, speed, the node the camera frames, and the cue it starts
- * on (a beat of the scene's grid or a narration word). Also adds, moves and deletes shots.
+ * The selected shot: its label, hold, speed, the node the camera frames, the cue it starts
+ * on (a beat of the scene's grid or a narration word) and its camera moves (`ShotCameraMoves`). Also adds, moves and deletes shots.
  * Every change is one undo step.
  */
 export function ShotInspector({ controller, shot, className = '' }: ShotInspectorProps) {
@@ -95,15 +96,17 @@ export function ShotInspector({ controller, shot, className = '' }: ShotInspecto
             className={input}
             aria-label="Camera frames"
             disabled={readOnly}
-            value={current.camera ? (frame ? `frame:${frame}` : 'rect') : ''}
+            value={current.camera && motionCameraFramed(current.camera) ? (frame ? `frame:${frame}` : 'rect') : ''}
             onChange={(e) => {
               const v = e.target.value;
-              if (!v) apply({ op: 'update_shot', shot: current.id, remove: ['camera'] }, 'Clear camera');
-              else if (v.startsWith('frame:')) apply({ op: 'update_shot', shot: current.id, set: { camera: { frame: v.slice(6), padding: 24 } } }, 'Frame camera');
+              // Its camera moves stay when the framing changes.
+              const moves = { ...(current.camera?.in !== undefined ? { in: current.camera.in } : {}), ...(current.camera?.during !== undefined ? { during: current.camera.during } : {}) };
+              if (!v) apply(Object.keys(moves).length ? { op: 'update_shot', shot: current.id, set: { camera: moves } } : { op: 'update_shot', shot: current.id, remove: ['camera'] }, 'Clear camera');
+              else if (v.startsWith('frame:')) apply({ op: 'update_shot', shot: current.id, set: { camera: { ...moves, frame: v.slice(6), padding: 24 } } }, 'Frame camera');
             }}
           >
             <option value="">keep framing</option>
-            {current.camera && !frame && <option value="rect">a rectangle</option>}
+            {current.camera && motionCameraFramed(current.camera) && !frame && <option value="rect">a rectangle</option>}
             {elements.map((e) => (
               <option key={e.id} value={`frame:${e.id}`}>
                 frame {e.name ?? e.id}
@@ -132,6 +135,7 @@ export function ShotInspector({ controller, shot, className = '' }: ShotInspecto
           {!cues.length && index > 0 && <p className="col-span-2 text-[10px] text-muted-foreground">Add a beat grid or narration in the scene settings to cue shots to them.</p>}
         </div>
       )}
+      {current && <ShotCameraMoves controller={controller} shot={current.id} />}
       {message && (
         <p className="text-red-500" role="alert" data-edit-error="">
           {message}

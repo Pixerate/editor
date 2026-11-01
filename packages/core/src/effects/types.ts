@@ -233,6 +233,24 @@ export interface CameraView {
 	blurAngle?: number;
 }
 
+/**
+ * A camera move as a document names it (the shape of Flair's `CameraMoveSpec`): the move's id, or
+ * the id with a preset, values and a length. Editors save it on a shot (`in` for a `transition`
+ * move, `during` for a `hold`).
+ */
+export type CameraMoveSpec =
+	| string
+	| {
+			/** The camera effect's id. */
+			move: string;
+			/** Length of a `transition` move (ms); default its `durationMs`. A `hold` plays across the shot's hold and takes none. */
+			ms?: number;
+			/** The preset its values came from, by name. */
+			preset?: string;
+			/** Control values over the move's defaults (a preset's values are written out here too). */
+			values?: Record<string, EffectValue>;
+	  };
+
 /** The stage a camera looks at, in pixels. */
 export interface CameraStage {
 	width: number;

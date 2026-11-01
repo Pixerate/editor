@@ -4,11 +4,14 @@
  */
 
 import { validateJsonSchema, type SchemaValidationError } from '../tools/schema.js';
-import { EffectControlError, EffectUnsupportedError, NoEffectsProviderError } from './errors.js';
+import { EffectControlError, EffectError, EffectUnsupportedError, NoEffectsProviderError, UnknownEffectError } from './errors.js';
 import type {
 	CameraKeyframe,
+	CameraMoveRole,
+	CameraMoveSpec,
 	CameraMoveSample,
 	CameraMoveSampleRequest,
+	CameraStage,
 	CameraView,
 	EffectDescription,
 	EffectImageSource,
@@ -17,6 +20,7 @@ import type {
 	EffectSearchOptions,
 	EffectSummary,
 	EffectUse,
+	EffectValue,
 	EffectValues
 } from './types.js';
 
@@ -264,4 +268,99 @@ export async function sampleEffectCameraMove(provider: EffectProvider, id: strin
 	if (d.kind !== 'camera' || !d.camera) throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a camera move.`, id);
 	const { from, to, ms, stage, values } = request;
 	return sampleCameraViews((u) => provider.cameraView!(id, { from, to, u, ms, stage }, values), { ms, fps: request.fps, cut: d.camera.cut });
+}
+
+/** The field a shot names a move of `role` in: `in` for a transition, `during` for a hold. */
+export const cameraMoveField = (role: CameraMoveRole): 'in' | 'during' => (role === 'transition' ? 'in' : 'during');
+
+/** The camera moves of `role` in a catalog, in its order. */
+export function cameraMovesFor<T extends Pick<EffectSummary, 'kind' | 'camera'>>(catalog: readonly T[], role: CameraMoveRole): T[] {
+	return catalog.filter((e) => e.kind === 'camera' && e.camera?.role === role);
+}
+
+/** The ids of a catalog's camera moves of `role` as a sentence's list: `"a", "b"` (or `none`). */
+export function cameraMoveIdList(catalog: readonly Pick<EffectSummary, 'id' | 'kind' | 'camera'>[], role: CameraMoveRole): string {
+	const ids = cameraMovesFor(catalog, role).map((e) => JSON.stringify(e.id));
+	return ids.length ? ids.join(', ') : 'none (the provider has no camera moves of that role)';
+}
+
+/** A camera move spec as its parts (`"id"` → `{ move: "id" }`); undefined when it is neither form. */
+export function cameraMoveParts(spec: unknown): Exclude<CameraMoveSpec, string> | undefined {
+	if (typeof spec === 'string') return spec ? { move: spec } : undefined;
+	if (spec && typeof spec === 'object' && !Array.isArray(spec) && typeof (spec as { move?: unknown }).move === 'string') return spec as Exclude<CameraMoveSpec, string>;
+	return undefined;
+}
+
+/** Longest `ms` a transition move takes (ms). */
+export const CAMERA_MOVE_MAX_MS = 60000;
+
+/**
+ * A camera move spec checked against a provider for a role, with its preset's values written out
+ * into `values`, so a document plays it without asking the provider for the preset again.
+ * Throws an error that says what to do: an unknown id or a move of the other role names the
+ * moves the role takes, an unknown preset names the presets, and bad values name the controls.
+ */
+export async function resolveCameraMoveSpec(provider: EffectProvider, spec: CameraMoveSpec, role: CameraMoveRole): Promise<{ spec: Exclude<CameraMoveSpec, string>; description: EffectDescription }> {
+	const field = cameraMoveField(role);
+	if (!provider.capabilities.supportsCamera || !provider.cameraView) throw new EffectUnsupportedError(`${provider.name} has no camera moves (capabilities.supportsCamera is not set), so camera "${field}" cannot be set.`);
+	const parts = cameraMoveParts(spec);
+	const catalog = await provider.list({ kind: 'camera' });
+	if (!parts) throw new EffectUnsupportedError(`Camera "${field}" is a camera move's id, or { move, ms?, preset?, values? }; it takes one of ${cameraMoveIdList(catalog, role)}.`);
+	let description: EffectDescription;
+	try {
+		description = await provider.describe(parts.move);
+	} catch (error) {
+		if (error instanceof UnknownEffectError || (error as { code?: string }).code === 'unknown_effect')
+			throw new EffectError('unknown_effect', `There is no camera move "${parts.move}"; camera "${field}" takes one of ${cameraMoveIdList(catalog, role)}.`, parts.move);
+		throw error;
+	}
+	if (description.kind !== 'camera' || !description.camera) throw new EffectUnsupportedError(`"${parts.move}" is a ${description.kind} effect, not a camera move; camera "${field}" takes one of ${cameraMoveIdList(catalog, role)}.`, parts.move);
+	if (description.camera.role !== role) {
+		const other = cameraMoveField(description.camera.role);
+		throw new EffectUnsupportedError(
+			`"${parts.move}" moves the camera ${description.camera.role === 'hold' ? 'while a shot holds' : 'into a shot'}, so it goes in camera "${other}", not "${field}"; camera "${field}" takes one of ${cameraMoveIdList(catalog, role)}.`,
+			parts.move
+		);
+	}
+	if (parts.ms !== undefined) {
+		if (role === 'hold') throw new EffectUnsupportedError(`A move while the shot holds plays across the shot's hold; set the hold's length instead of "ms".`, parts.move);
+		if (!(typeof parts.ms === 'number' && Number.isFinite(parts.ms) && parts.ms >= 0 && parts.ms <= CAMERA_MOVE_MAX_MS))
+			throw new EffectUnsupportedError(`Camera "in" ms is how long the move takes, 0 to ${CAMERA_MOVE_MAX_MS} (default ${description.camera.durationMs} for "${parts.move}").`, parts.move);
+	}
+	let presetValues: EffectValues = {};
+	if (parts.preset !== undefined) {
+		const preset = description.presets.find((p) => p.name === parts.preset);
+		if (!preset) throw new EffectUnsupportedError(`"${parts.move}" has no preset ${JSON.stringify(parts.preset)}; its presets are ${description.presets.length ? description.presets.map((p) => JSON.stringify(p.name)).join(', ') : 'none'}.`, parts.move);
+		presetValues = preset.values;
+	}
+	const values: Record<string, EffectValue> = { ...presetValues, ...(parts.values ?? {}) };
+	resolveEffectValues(description, values);
+	return {
+		spec: { move: description.id, ...(parts.ms !== undefined ? { ms: parts.ms } : {}), ...(parts.preset !== undefined ? { preset: parts.preset } : {}), ...(Object.keys(values).length ? { values } : {}) },
+		description
+	};
+}
+
+/** A box of the scene, in its units. */
+export interface CameraBox {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * The view that shows `box` on `stage`: the box's centre in the middle, at the zoom that fits it
+ * whole (as SVG's `xMidYMid meet`).
+ */
+export function cameraViewOfBox(box: CameraBox, stage: CameraStage): CameraView {
+	const zoom = Math.min(stage.width / box.width, stage.height / box.height);
+	return { zoom, scrollX: stage.width / (2 * zoom) - (box.x + box.width / 2), scrollY: stage.height / (2 * zoom) - (box.y + box.height / 2) };
+}
+
+/** The box of the scene a view shows on `stage` (its tilt, turn, roll and blur aside). */
+export function cameraBoxOfView(view: CameraView, stage: CameraStage): CameraBox {
+	const width = stage.width / view.zoom;
+	const height = stage.height / view.zoom;
+	return { x: -view.scrollX, y: -view.scrollY, width, height };
 }

@@ -18,7 +18,8 @@ export class MotionSceneFormatError extends Error {
 
 const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'motionBlur', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
 const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
-const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric'];
+const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric', 'in', 'during'];
+const CAMERA_MOVE_KEYS = ['move', 'ms', 'preset', 'values'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps', 'split', 'cascade', 'source'];
 const DRAW_ORDER_KEYS = ['order', 'pace', 'align', 'sortBy', 'origin'];
 const COMMAND_KEYS: Record<string, string[]> = {
@@ -271,7 +272,25 @@ export function shotShapeProblems(shot: unknown, where: string): string[] {
 			const isRect = ['x', 'y', 'width', 'height'].every((k) => isNum(c[k]));
 			if (typeof c.frame === 'string') {
 				if (c.padding !== undefined && !isNum(c.padding)) problems.push(`${name} camera: "padding" must be a number.`);
-			} else if (!isRect) problems.push(`${name} camera: give { x, y, width, height } or { frame: "<node id>" }.`);
+			} else if (!isRect && (c.in === undefined && c.during === undefined || ['x', 'y', 'width', 'height', 'padding'].some((k) => c[k] !== undefined)))
+				problems.push(`${name} camera: give { x, y, width, height } or { frame: "<node id>" }, or only a move ("in" or "during") to keep the framing.`);
+			for (const field of ['in', 'during'] as const) {
+				const m = c[field];
+				if (m === undefined) continue;
+				if (typeof m === 'string') {
+					if (!m) problems.push(`${name} camera: "${field}" must name a camera move.`);
+					continue;
+				}
+				if (!isObject(m) || typeof m.move !== 'string' || !m.move) {
+					problems.push(`${name} camera: "${field}" is a camera move's id, or { "move": id, "ms"?, "preset"?, "values"? }.`);
+					continue;
+				}
+				unknownKeys(m, CAMERA_MOVE_KEYS, `${name} camera ${field}`, problems);
+				if (m.ms !== undefined && (field === 'during' || !(isNum(m.ms) && m.ms >= 0)))
+					problems.push(field === 'during' ? `${name} camera: a move while the shot holds plays across the shot's "hold"; set the hold instead of "during.ms".` : `${name} camera: "in.ms" must be a number ≥ 0.`);
+				if (m.preset !== undefined && typeof m.preset !== 'string') problems.push(`${name} camera: "${field}.preset" is a preset's name.`);
+				if (m.values !== undefined && !isObject(m.values)) problems.push(`${name} camera: "${field}.values" is an object of the move's control values.`);
+			}
 			if (c.ease !== undefined && !isAnimationEasing(c.ease)) problems.push(`${name} camera: "ease" is not an easing.`);
 			if (c.ms !== undefined && !(isNum(c.ms) && c.ms >= 0)) problems.push(`${name} camera: "ms" must be a number ≥ 0.`);
 			if (c.geometric !== undefined && typeof c.geometric !== 'boolean') problems.push(`${name} camera: "geometric" must be true or false.`);

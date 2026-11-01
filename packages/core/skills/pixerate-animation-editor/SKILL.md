@@ -155,13 +155,16 @@ refuse.
 
 | Tool | Use it to |
 | --- | --- |
-| `search_effects` | Find effects: `kind` motion (primitives to apply to nodes) or vector (effects with their own picture), `query`, `category`. `kind` camera lists camera moves (with `camera`: role transition or hold, `durationMs`, `cut`); they move a scene's camera and cannot be applied with these tools. |
+| `search_effects` | Find effects: `kind` motion (primitives to apply to nodes) or vector (effects with their own picture), `query`, `category`. `kind` camera lists camera moves (with `camera`: role transition or hold, `durationMs`, `cut`); give them to a shot with `set_shot_camera_move`, not `apply_effect`. |
 | `describe_effect` | Read an effect's `controls` (names, ranges, units), `defaults` and `presets`, and whether it `appliesHere` (a motion effect). |
 | `list_applied_effects` | See the provider effects in the scene: their `instance` ids, the nodes they animate, their shots and values. |
 | `apply_effect` | Animate a node (`target`, a group animates as one) with a motion effect: the changes become ordinary commands, tagged with the effect, in a new shot after the last. Returns the instance id. |
 | `update_effect` | Make an applied effect again with new `values`, in the same place (`effect` is its instance id). |
 | `remove_effect` | Remove an applied effect: its commands, shots it alone filled and a vector effect's group. |
 | `add_vector_effect` | Add a vector effect's own picture as an artwork group (fitted into `box`) with its motion as new shots. Returns the instance and group ids. |
+| `list_camera_moves` | List the provider's camera moves for a `role` (`transition`: how the camera gets into a shot; `hold`: how it moves while the shot holds), with `durationMs` and `cut`. Returns `available: false` without camera moves. Call before `set_shot_camera_move`; `describe_effect` gives a move's controls and presets. |
+| `set_shot_camera_move` | Give a shot a camera move (`shot`, `role`, `move`, optional `ms` for a transition, `preset`, `values`): it is saved on the shot's camera as `in` or `during`. Returns the shot's camera and the `window` (ms) the move plays in. A wrong-role id is refused naming the moves that fit. |
+| `clear_shot_camera_move` | Remove a shot's move for a `role`, keeping its framing. Returns the shot's camera (null when nothing is left). |
 
 ### Save and open
 
@@ -175,7 +178,31 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An anim
 | `list_saved_animation_documents` | List saved animations (`key`, `name`, `savedAt`), newest first. |
 | `open_saved_animation_document` | Replace the animation with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
 
+### Camera moves
+
+With a provider that has camera moves (Flair: `camera-glide`, `camera-whip-pan`,
+`camera-punch-zoom`, `camera-cut` to get in; `camera-ken-burns`, `camera-crash-zoom` while
+holding), a shot's camera can play one as it arrives and one while it holds:
+
+1. Frame the shot as usual (`update_shot` with `camera: { frame: "<id>" }` or a rectangle). A
+   move without a framing keeps the one the camera has.
+2. `list_camera_moves` with the `role`, pick by `description`, then `set_shot_camera_move`. Use
+   a preset (`describe_effect` lists them) before hand-tuning `values`.
+3. A transition's `ms` sets how long it takes (default the move's own, written out on the
+   shot); a hold move plays across the shot's `hold`, so lengthen the hold for a slower drift.
+   The next shot's move starts from where a hold move ends.
+4. `render_animation_frame` mid-move to look, and `check_animation`: `camera-move-first-shot`
+   (the first shot cuts, so its transition does not play), `camera-move-unknown`,
+   `camera-move-values`, `camera-move-not-played` (no provider with camera moves: the camera
+   eases between framings instead).
+
+Exports to Flair tag each camera change with `<move>@<shot>`; with the provider set the camera
+is sampled from the move, and a cut stays a jump.
+
 ## Pitfalls
+
+- **One move per role per shot.** Whip pans and cuts jump half way: put them between framings
+  that differ, and do not follow a cut with a long glide into the same framing.
 
 - With agent playback on, the cursor clicks the shot a call names in the timeline and visits the stage elements its commands target. Results are unchanged.
 - **Effect commands are ordinary commands.** You can retime or edit them with `edit_animation` like

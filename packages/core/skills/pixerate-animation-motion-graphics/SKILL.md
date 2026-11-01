@@ -66,6 +66,8 @@ This skill is the method. `pixerate-animation-editor` has the full tool referenc
 | Draw a line or outline | `draw`, or `enter` `style: "draw"` |
 | Attention on one element | `pulse`, `shake`, `wiggle` (sparingly) |
 | A set length | `fit_animation` with `seconds`, `keep` for fixed shots |
+| The camera travels to the next part | `update_shot` camera `frame`, then `set_shot_camera_move` role `transition` (a glide; a whip pan for energy) |
+| A slow push while a shot holds | `set_shot_camera_move` role `hold` (a Ken Burns drift), with a longer `hold` |
 
 ## Recipes
 
@@ -95,6 +97,7 @@ This skill is the method. `pixerate-animation-editor` has the full tool referenc
 - `add_commands`, `update_command`, `delete_commands`, `move_command`: refine commands
 - `edit_animation`: several edits as one undo step
 - `fit_animation`, `set_animation_settings`, `get_timing_grid`: length, settings and cues
+- `list_camera_moves`, `set_shot_camera_move`: provider camera moves into and during a shot
 - `check_animation`, `get_motion_path`, `render_animation_frame`: check and look
 - `export_lottie`, `export_flair_motion`: deliver
 - `undo_animation`: take back a step

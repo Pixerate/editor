@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { highlightMotionSvg, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
+  import { highlightMotionSvg, motionCameraTransform, motionCameraViewAt, motionNodeAtElement, type AnimationEditorController, type MotionFrameOptions, type MotionOnionSkin, type MotionRecordGestureMode } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
 
   interface Props {
@@ -59,6 +59,9 @@
       highlight ?? []
     )
   );
+  // A camera move's tilt and turn are 3D, so the stage element turns (its roll and blur are in the SVG).
+  let stage = $state<HTMLDivElement | null>(null);
+  const transform = $derived(motionCameraTransform(motionCameraViewAt(controller.viewScene(), view.current.time, view.current.effectsProvider), stage?.clientWidth || view.current.scene.artwork.width));
   function onclick(event: MouseEvent) {
     onpick?.(motionNodeAtElement(view.current.scene, event.target as Element, event.currentTarget as Element), event);
   }
@@ -68,7 +71,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 <div
   class="relative overflow-hidden {recording ? 'cursor-grab touch-none' : onpick ? 'cursor-crosshair' : ''} {className}"
-  style="aspect-ratio:{view.current.scene.artwork.width} / {view.current.scene.artwork.height}"
+  bind:this={stage}
+  style="aspect-ratio:{view.current.scene.artwork.width} / {view.current.scene.artwork.height}{transform ? `; transform:${transform}` : ''}"
   data-animation-stage=""
   data-recording={recording ? '' : undefined}
   role="img"
