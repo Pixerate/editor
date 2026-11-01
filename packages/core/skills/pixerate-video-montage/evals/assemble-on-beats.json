@@ -1,0 +1,231 @@
+{
+	"prompt": "Assemble the five selects s1 to s5 in order on V1, one shot per beat: each cut lands on the next beat marker (they are 1 s apart, from 0). Use the middle of each select (from 2 s in). No gaps.",
+	"fixture": {
+		"editor": "video",
+		"setup": [
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s1",
+					"kind": "video",
+					"src": "select-1.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s2",
+					"kind": "video",
+					"src": "select-2.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s3",
+					"kind": "video",
+					"src": "select-3.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s4",
+					"kind": "video",
+					"src": "select-4.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "s5",
+					"kind": "video",
+					"src": "select-5.mp4",
+					"duration": 6000
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 0,
+					"label": "beat"
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 1000,
+					"label": "beat"
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 2000,
+					"label": "beat"
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 3000,
+					"label": "beat"
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 4000,
+					"label": "beat"
+				}
+			},
+			{
+				"tool": "add_video_marker",
+				"args": {
+					"time": 5000,
+					"label": "beat"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "five shots in order on V1",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"id": "v1",
+						"clips": {
+							"$length": 5,
+							"$expr": "v.every((c, i) => c.asset === 's' + (i + 1))"
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "every cut on a beat",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"id": "v1",
+						"clips": {
+							"$every": {
+								"$expr": "v.start % 1000 === 0 && v.duration === 1000"
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "from the middle of each select",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"id": "v1",
+						"clips": {
+							"$every": {
+								"in": {
+									"$min": 1500,
+									"$max": 3000
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "no gaps",
+			"tool": "find_video_gaps",
+			"expect": {
+				"gaps": {
+					"$length": 0
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_video_project"
+		},
+		{
+			"tool": "edit_video",
+			"args": {
+				"ops": [
+					{
+						"op": "add_clip",
+						"track": "v1",
+						"clip": {
+							"type": "media",
+							"asset": "s1",
+							"id": "c1",
+							"in": 2000,
+							"start": 0,
+							"duration": 1000
+						}
+					},
+					{
+						"op": "add_clip",
+						"track": "v1",
+						"clip": {
+							"type": "media",
+							"asset": "s2",
+							"id": "c2",
+							"in": 2000,
+							"start": 1000,
+							"duration": 1000
+						}
+					},
+					{
+						"op": "add_clip",
+						"track": "v1",
+						"clip": {
+							"type": "media",
+							"asset": "s3",
+							"id": "c3",
+							"in": 2000,
+							"start": 2000,
+							"duration": 1000
+						}
+					},
+					{
+						"op": "add_clip",
+						"track": "v1",
+						"clip": {
+							"type": "media",
+							"asset": "s4",
+							"id": "c4",
+							"in": 2000,
+							"start": 3000,
+							"duration": 1000
+						}
+					},
+					{
+						"op": "add_clip",
+						"track": "v1",
+						"clip": {
+							"type": "media",
+							"asset": "s5",
+							"id": "c5",
+							"in": 2000,
+							"start": 4000,
+							"duration": 1000
+						}
+					}
+				]
+			}
+		},
+		{
+			"tool": "find_video_gaps"
+		}
+	]
+}

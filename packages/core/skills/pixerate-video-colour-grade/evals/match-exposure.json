@@ -1,0 +1,14 @@
+{
+	"prompt": "Shot two (c2) was filmed one stop underexposed compared with shot one. Match it to shot one without touching shot one.",
+	"fixture": { "editor": "video", "setup": [{ "tool": "add_video_asset", "args": { "id": "a", "kind": "video", "src": "shot-a.mp4", "duration": 8000 } },
+			{ "tool": "add_video_asset", "args": { "id": "b", "kind": "video", "src": "shot-b.mp4", "duration": 8000 } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "a", "id": "c1", "start": 0, "duration": 6000 } } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "b", "id": "c2", "start": 6000, "duration": 6000 } } }] },
+	"checks": [
+		{ "why": "c2 brought up by about one stop", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "id": "c2", "grade": { "exposure": { "$min": 0.8, "$max": 1.2 } } } } } } } },
+		{ "why": "shot one is untouched", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "id": "c1", "$expr": "!v.grade || Object.values(v.grade).every((x) => x === 0)" } } } } } }
+	],
+	"solution": [
+		{ "tool": "update_video_clip", "args": { "clip": "c2", "set": { "grade": { "exposure": 1 } } } }
+	]
+}

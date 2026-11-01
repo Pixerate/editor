@@ -50,6 +50,9 @@ request like "clean up this export" finds it.
 | [`pixerate-paint-watercolour`](pixerate-paint-watercolour/SKILL.md) | Paint (`pixerate-paint-editor`) | Watercolour paper, light to dark with the paper's white kept, wet-in-wet and wet-on-dry washes, drying before glazing, steering the water. |
 | [`pixerate-paint-oil-impasto`](pixerate-paint-oil-impasto/SKILL.md) | Paint (`pixerate-paint-editor`) | A toned ground, thin block-in to thick paint, pigment mixing, impasto relief and its light. |
 | [`pixerate-paint-sketch-to-finish`](pixerate-paint-sketch-to-finish/SKILL.md) | Paint (`pixerate-paint-editor`) | Sketch, ink, flats under the lines, clipped shading and light, one named layer per pass. |
+| [`pixerate-video-social-cut`](pixerate-video-social-cut/SKILL.md) | Video (`pixerate-video-editor`) | Vertical or square reframes that fill the frame, the hook first, platform lengths, titles in the safe area. |
+| [`pixerate-video-colour-grade`](pixerate-video-colour-grade/SKILL.md) | Video (`pixerate-video-editor`) | Correct and match shots, then one look on an adjustment clip; LUTs at moderate strength with skin protected. |
+| [`pixerate-video-montage`](pixerate-video-montage/SKILL.md) | Video (`pixerate-video-editor`) | Selects on the beat, varied pacing, short transitions with handles, music under everything and a clean ending. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -113,8 +116,8 @@ same change.
   `packages/core/tests/agent-skill-evals.test.ts`. An eval has a `prompt` (the task, in the
   user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }`,
   `{ "editor": "image", "width", "height", "background", "shapes" }` or `{ "editor":
-  "vector", "width", "height", "setup" }` with commands that draw the starting art, or
-  `{ "editor": "paint", "width", "height", "setup" }` with tool calls), `checks` (a read-only
+  "vector", "width", "height", "setup" }` with commands that draw the starting art, 
+  `{ "editor": "paint", "width", "height", "setup" }` or `{ "editor": "video", "setup" }` with tool calls), `checks` (a read-only
   tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place
