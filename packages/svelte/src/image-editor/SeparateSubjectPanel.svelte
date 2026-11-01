@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import type { ImageEditorController, SelectionMask } from '@pixerate/editor/image-editor';
 
   /**
@@ -63,7 +64,7 @@
       px
     </label>
     <label class="flex items-center gap-1 text-foreground">
-      <input type="checkbox" aria-label="Fill the background" checked={fill} onchange={(e) => (fill = (e.currentTarget as HTMLInputElement).checked)} />
+      <ImageCheckbox label="Fill the background" checked={fill} onchange={(on) => (fill = on)} />
       Fill the background
     </label>
   </div>
