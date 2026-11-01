@@ -1,0 +1,106 @@
+{
+	"prompt": "Turn this into a properly structured report: the first line is the title, 'Summary', 'Results' and 'Next steps' are section headings, and the next steps should be a bulleted list.",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<p>Quarterly report</p><p>Summary</p><p>Sales grew in every region.</p><p>Results</p><p>North led with 120 orders.</p><p>Next steps</p><p>Hire two engineers</p><p>Launch in May</p>"
+	},
+	"checks": [
+		{
+			"why": "the title is the top heading",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$match": "^<h1[^>]*>Quarterly report</h1>"
+				}
+			}
+		},
+		{
+			"why": "the three sections are headings one level below",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$expr": "['Summary', 'Results', 'Next steps'].every((t) => new RegExp('<h2[^>]*>' + t + '</h2>').test(v))"
+				}
+			}
+		},
+		{
+			"why": "the next steps are a bulleted list",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$match": "<ul[^>]*><li[^>]*><p>Hire two engineers</p></li><li[^>]*><p>Launch in May</p></li></ul>"
+				}
+			}
+		},
+		{
+			"why": "the body text is kept",
+			"tool": "get_text",
+			"expect": {
+				"content": {
+					"$expr": "v.includes('Sales grew in every region.') && v.includes('North led with 120 orders.')"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_text",
+			"args": {
+				"blocks": true
+			}
+		},
+		{
+			"tool": "set_block_type",
+			"args": {
+				"from": 1,
+				"to": 17,
+				"type": "heading",
+				"level": 1
+			}
+		},
+		{
+			"tool": "set_block_type",
+			"args": {
+				"from": 19,
+				"to": 26,
+				"type": "heading",
+				"level": 2
+			}
+		},
+		{
+			"tool": "set_block_type",
+			"args": {
+				"from": 56,
+				"to": 63,
+				"type": "heading",
+				"level": 2
+			}
+		},
+		{
+			"tool": "set_block_type",
+			"args": {
+				"from": 93,
+				"to": 103,
+				"type": "heading",
+				"level": 2
+			}
+		},
+		{
+			"tool": "set_block_type",
+			"args": {
+				"from": 105,
+				"to": 134,
+				"type": "bullet_list"
+			}
+		}
+	]
+}

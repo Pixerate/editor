@@ -21,6 +21,14 @@ Errors, namespacing (`doc-1__find_text`) and `run_commands` batching are covered
 `pixerate-agent-tools` skill. Chart type, axis and colour choices are covered by
 `pixerate-chart`; the same spec fields apply to charts in a document.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-rich-text-report`: a title and heading hierarchy, lists, tables, charts and a consistency pass.
+- `pixerate-rich-text-revise`: proofreading, renaming terms with exceptions, tightening, minimal edits.
+
 ## Working method
 
 1. **Read.** `get_text` (`format: "markdown"` shows headings, lists and tables compactly;

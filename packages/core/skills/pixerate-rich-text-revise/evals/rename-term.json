@@ -1,0 +1,51 @@
+{
+	"prompt": "We've renamed the product from 'Acme Cloud' to 'Acme Platform'. Update the document, but leave the title of the 2019 press release (in quotes) as it was published.",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<p>Acme Cloud now supports teams.</p><p>Our 2019 press release, \u201cIntroducing Acme Cloud\u201d, launched the product.</p><p>Try Acme Cloud today.</p>"
+	},
+	"checks": [
+		{
+			"why": "renamed in the running text",
+			"tool": "get_text",
+			"expect": {
+				"content": {
+					"$expr": "v.startsWith('Acme Platform now supports teams.') && v.endsWith('Try Acme Platform today.')"
+				}
+			}
+		},
+		{
+			"why": "the published title is unchanged",
+			"tool": "get_text",
+			"expect": {
+				"content": {
+					"$match": "\u201cIntroducing Acme Cloud\u201d"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "find_text",
+			"args": {
+				"query": "Acme Cloud"
+			}
+		},
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "Acme Cloud",
+				"replace": "Acme Platform",
+				"occurrence": 3
+			}
+		},
+		{
+			"tool": "replace_text",
+			"args": {
+				"find": "Acme Cloud",
+				"replace": "Acme Platform",
+				"occurrence": 1
+			}
+		}
+	]
+}

@@ -1,0 +1,93 @@
+{
+	"prompt": "Under 'Sales by region:', add a table with a header row (Region, Sales) and two rows: North 120 and South 95.",
+	"fixture": {
+		"editor": "rich-text",
+		"html": "<h2>Results</h2><p>Sales by region:</p><h2>Next steps</h2>"
+	},
+	"checks": [
+		{
+			"why": "a table with a header row and the two regions",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$match": "<table[^>]*>.*<th[^>]*><p>Region</p></th><th[^>]*><p>Sales</p></th>.*<td[^>]*><p>North</p></td><td[^>]*><p>120</p></td>.*<td[^>]*><p>South</p></td><td[^>]*><p>95</p></td>.*</table>"
+				}
+			}
+		},
+		{
+			"why": "placed after 'Sales by region:' and before the next section",
+			"tool": "get_text",
+			"args": {
+				"format": "html"
+			},
+			"expect": {
+				"content": {
+					"$match": "Sales by region:</p><table.*</table><h2[^>]*>Next steps"
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_text",
+			"args": {
+				"blocks": true
+			}
+		},
+		{
+			"tool": "edit_table",
+			"args": {
+				"operation": "insertTable",
+				"at": 26,
+				"rows": 3,
+				"cols": 2,
+				"withHeaderRow": true
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "95",
+				"at": 55
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "South",
+				"at": 51
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "120",
+				"at": 45
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "North",
+				"at": 41
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "Sales",
+				"at": 35
+			}
+		},
+		{
+			"tool": "insert_text",
+			"args": {
+				"text": "Region",
+				"at": 31
+			}
+		}
+	]
+}
