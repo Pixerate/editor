@@ -3287,3 +3287,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Symptom**: `vitest` fails at startup with "Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'", though `@rolldown/binding-darwin-arm64` is installed and loads from plain `node`.
 - **Root Cause**: The command was wrapped in Homebrew's `/usr/local/bin/timeout`, an x86_64 binary. A universal `node` started from it runs under Rosetta as `x64`, so rolldown looks for `binding-darwin-x64`.
 - **Solution**: Run vitest without the Intel wrapper, or prefix it with `arch -arm64`. Check with `node -p process.arch` under the same wrapper.
+
+### [core] A Masked Layer's Stored Pixels Are Not What It Shows
+
+- **Area**: `extractNormalizedLayerItems`, `separateSubject` (image editor)
+- **Symptom**: After Separate Subject, a host's layer list (Pixerate's image node composition layers) showed the subject layer as a whole copy of the photo, though the editor showed only the subject.
+- **Root Cause**: Separate Subject's subject is a duplicate of the source layer (for a photo, the document-backed Background) with a mask from the selection. The layer items took each layer's stored pixels, or the document image for a `source: 'document'` layer, and ignored masks. Layer via Copy bakes the selected pixels, so it looked right.
+- **Solution**: Items for masked pixel layers use `controller.getMaskedLayerImage(id)`: the layer's pixels through its raster and vector masks, cropped to what shows, cached per layer object. Anything that turns layers into images outside the compositor must apply masks the same way.
