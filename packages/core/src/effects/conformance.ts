@@ -6,10 +6,24 @@
 
 import { isEffectError } from './errors.js';
 import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels } from './helpers.js';
-import { CAMERA_MOVE_ROLES, EFFECT_KINDS, EFFECT_USES, type CameraView, type EffectDescription, type EffectPixels, type EffectProvider, type EffectSummary } from './types.js';
+import { checkEffectSequence, effectSequenceSlots, isSubjectTemplateSlot, templateValueProblem } from './templates.js';
+import {
+	CAMERA_MOVE_ROLES,
+	EFFECT_KINDS,
+	EFFECT_TEMPLATE_SLOT_TYPES,
+	EFFECT_USES,
+	type CameraView,
+	type EffectDescription,
+	type EffectPixels,
+	type EffectProvider,
+	type EffectSummary,
+	type EffectTemplateSlot
+} from './types.js';
 
 export interface EffectConformanceIssue {
 	effectId?: string;
+	/** Set for an issue with a sequence template. */
+	templateId?: string;
 	message: string;
 }
 
@@ -22,6 +36,8 @@ export interface EffectConformanceOptions {
 	size?: number;
 	/** Also check authoring when supportsAuthoring is true (default true). */
 	authoring?: boolean;
+	/** Also check sequence templates when supportsTemplates is true (default true). */
+	templates?: boolean;
 }
 
 const codeOf = (e: unknown) => (isEffectError(e) ? e.code : e instanceof Error ? `untyped ${e.name}: ${e.message}` : String(e));
@@ -175,6 +191,91 @@ async function checkCamera(provider: EffectProvider, d: EffectDescription, issue
 }
 
 /** Runs the contract checks against `provider` and returns every issue found (empty when it conforms). */
+/** A value of the wrong type for a slot, to probe that `instantiateTemplate` refuses it. */
+const wrongValue = (slot: EffectTemplateSlot): unknown => (slot.type === 'number' ? 'not a number' : slot.type === 'text' ? 42 : slot.type === 'color' ? 'blue' : 42);
+
+function checkSlot(templateId: string, slot: EffectTemplateSlot, issues: EffectConformanceIssue[]) {
+	const at = (message: string) => issues.push({ templateId, message: `slot ${JSON.stringify(slot?.name)}: ${message}` });
+	if (!slot || typeof slot.name !== 'string' || !/^[A-Za-z][\w-]*$/.test(slot.name)) return at('needs a name of letters, digits, "-" and "_", starting with a letter');
+	if (!EFFECT_TEMPLATE_SLOT_TYPES.includes(slot.type)) return at(`type "${slot.type}" is not one of ${EFFECT_TEMPLATE_SLOT_TYPES.join(', ')}`);
+	if (typeof slot.label !== 'string' || !slot.label) at('needs a label');
+	if (isSubjectTemplateSlot(slot)) {
+		if (typeof (slot as { hasDefault?: unknown }).hasDefault !== 'boolean') at('a subject slot needs hasDefault (a boolean)');
+		if ('default' in slot) at('a subject slot describes hasDefault, not its default');
+		return;
+	}
+	const fallback = (slot as { default?: unknown }).default;
+	if (fallback === undefined) return at('needs a default');
+	const problem = templateValueProblem(slot, fallback);
+	if (problem) at(`its default does not fit: ${problem}`);
+	if (slot.type === 'number' && slot.min !== undefined && slot.max !== undefined && slot.min > slot.max) at('min is above max');
+}
+
+async function checkTemplates(provider: EffectProvider, list: readonly EffectSummary[], issues: EffectConformanceIssue[]) {
+	const top = (message: string) => issues.push({ message });
+	const templates = await provider.listTemplates!();
+	if (!Array.isArray(templates)) return top('listTemplates did not return a list');
+	const seen = new Set<string>();
+	for (const t of templates) if (seen.has(t.id)) top(`duplicate template id "${t.id}"`);
+	else seen.add(t.id);
+	const unknownDescribe = await rejectsWith('unknown_template', () => provider.describeTemplate!('__no_such_template__'));
+	if (unknownDescribe) top(`describeTemplate of an unknown id ${unknownDescribe}`);
+	const unknownFill = await rejectsWith('unknown_template', () => provider.instantiateTemplate!('__no_such_template__'));
+	if (unknownFill) top(`instantiateTemplate of an unknown id ${unknownFill}`);
+	for (const summary of templates) {
+		const id = summary.id;
+		const at = (message: string) => issues.push({ templateId: id, message });
+		if (!id || typeof id !== 'string') top('a template has no id');
+		if (!summary.name) at('template has no name');
+		if (!summary.description) at('template has no description');
+		if (!(Number.isInteger(summary.shots) && summary.shots >= 1)) at('shots must be a whole number ≥ 1');
+		if (summary.durationMs !== undefined && !(summary.durationMs > 0)) at('durationMs must be > 0 when present');
+		let slots: readonly EffectTemplateSlot[];
+		try {
+			const d = await provider.describeTemplate!(id);
+			if (d.id !== id) at(`describeTemplate returned id "${d.id}"`);
+			if (!Array.isArray(d.slots)) {
+				at('describeTemplate gave no slots list');
+				continue;
+			}
+			slots = d.slots;
+			const names = new Set<string>();
+			for (const slot of slots) {
+				if (names.has(slot?.name)) at(`slot "${slot.name}" is declared twice`);
+				names.add(slot?.name);
+				checkSlot(id, slot, issues);
+			}
+		} catch (e) {
+			at(`describeTemplate failed: ${codeOf(e)}`);
+			continue;
+		}
+		try {
+			const result = await provider.instantiateTemplate!(id);
+			if (!result.ok) at(`instantiateTemplate with the defaults failed: ${result.errors.join(' ')}`);
+			else {
+				for (const p of checkEffectSequence(result.sequence, list)) at(`with the defaults, ${p}`);
+				if (result.sequence?.shots?.length !== summary.shots) at(`listTemplates says ${summary.shots} shots; the sequence has ${result.sequence?.shots?.length}`);
+				if (!Array.isArray(result.openSlots) || !Array.isArray(result.notes)) at('instantiateTemplate needs openSlots and notes lists');
+				else {
+					const open = Array.isArray(result.sequence?.shots) ? effectSequenceSlots(result.sequence) : [];
+					if (open.some((s) => !result.openSlots.includes(s))) at(`openSlots ${JSON.stringify(result.openSlots)} misses slots the sequence leaves open (${open.join(', ')})`);
+				}
+			}
+		} catch (e) {
+			at(`instantiateTemplate with the defaults failed: ${codeOf(e)}`);
+		}
+		const bad = { __no_such_slot__: 'x', ...(slots[0] ? { [slots[0].name]: wrongValue(slots[0]) } : {}) };
+		try {
+			const result = await provider.instantiateTemplate!(id, bad as never);
+			if (result.ok) at('instantiateTemplate accepted an unknown slot and a value of the wrong type');
+			else if (!result.errors.length || result.errors.some((e) => typeof e !== 'string' || !e)) at('instantiateTemplate refused bad values without a sentence for each');
+			else if (slots[0] && result.errors.length < 2) at('instantiateTemplate should refuse every bad value at once (an unknown slot and a wrong type gave one error)');
+		} catch (e) {
+			at(`instantiateTemplate with bad values threw (${codeOf(e)}) instead of returning { ok: false, errors }`);
+		}
+	}
+}
+
 export async function checkEffectProvider(provider: EffectProvider, options: EffectConformanceOptions = {}): Promise<EffectConformanceIssue[]> {
 	const issues: EffectConformanceIssue[] = [];
 	const top = (message: string) => issues.push({ message });
@@ -189,6 +290,10 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (caps?.supportsCamera !== undefined && typeof caps.supportsCamera !== 'boolean') top('capabilities.supportsCamera is not a boolean');
 	if (caps?.supportsCamera && typeof provider.cameraView !== 'function') top('supportsCamera is set but cameraView is missing');
 	if (provider.sampleCameraMove && typeof provider.cameraView !== 'function') top('sampleCameraMove is present but cameraView is missing');
+	if (caps?.supportsTemplates !== undefined && typeof caps.supportsTemplates !== 'boolean') top('capabilities.supportsTemplates is not a boolean');
+	const templateMethods = ['listTemplates', 'describeTemplate', 'instantiateTemplate'] as const;
+	if (caps?.supportsTemplates) for (const m of templateMethods) if (typeof provider[m] !== 'function') top(`supportsTemplates is set but ${m} is missing`);
+	if (!caps?.supportsTemplates && templateMethods.some((m) => typeof provider[m] === 'function')) top('template methods are present but capabilities.supportsTemplates is not set');
 
 	const list = await provider.list();
 	const ids = new Set<string>();
@@ -302,6 +407,8 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 			}
 		}
 	}
+
+	if (caps?.supportsTemplates && options.templates !== false && templateMethods.every((m) => typeof provider[m] === 'function')) await checkTemplates(provider, list, issues);
 
 	return issues;
 }
