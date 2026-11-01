@@ -155,7 +155,7 @@ refuse.
 
 | Tool | Use it to |
 | --- | --- |
-| `search_effects` | Find effects: `kind` motion (primitives to apply to nodes) or vector (effects with their own picture), `query`, `category`. |
+| `search_effects` | Find effects: `kind` motion (primitives to apply to nodes) or vector (effects with their own picture), `query`, `category`. `kind` camera lists camera moves (with `camera`: role transition or hold, `durationMs`, `cut`); they move a scene's camera and cannot be applied with these tools. |
 | `describe_effect` | Read an effect's `controls` (names, ranges, units), `defaults` and `presets`, and whether it `appliesHere` (a motion effect). |
 | `list_applied_effects` | See the provider effects in the scene: their `instance` ids, the nodes they animate, their shots and values. |
 | `apply_effect` | Animate a node (`target`, a group animates as one) with a motion effect: the changes become ordinary commands, tagged with the effect, in a new shot after the last. Returns the instance id. |

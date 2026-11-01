@@ -11,8 +11,11 @@ import type { JsonSchema } from '../tools/schema.js';
 import type { FlairSvgAnimation } from '../animation-editor/flair.js';
 import type { EffectAuthoringSession, EffectAuthoringSource } from './authoring.js';
 
-/** How an effect is drawn: a pixel shader, an animated vector picture, or motion applied to someone else's vector art. */
-export type EffectKind = 'shader' | 'vector' | 'motion';
+/**
+ * How an effect is drawn: a pixel shader, an animated vector picture, motion applied to someone
+ * else's vector art, or a camera move, which moves a scene's camera and draws no pixels.
+ */
+export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera';
 
 /**
  * What an effect is for. An effect may have several uses.
@@ -24,11 +27,37 @@ export type EffectKind = 'shader' | 'vector' | 'motion';
  * - `title`: draws type or a graphic meant as a title.
  * - `motion`: animates vector art (`applyVectorEffect`).
  * - `interactive`: reacts to pointer, scroll or audio input at run time.
+ * - `camera`: moves a scene's camera (`cameraView`). Only `camera` effects have it, and they have
+ *   no other use, so editors that draw pixels never offer them.
  */
-export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive';
+export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive' | 'camera';
 
-export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion'];
-export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive'];
+export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion', 'camera'];
+export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive', 'camera'];
+
+/**
+ * What a camera move does to a shot.
+ *
+ * - `transition`: moves the camera from one framing (`from`) to the next (`to`): a glide, a whip
+ *   pan, a punch zoom, a cut.
+ * - `hold`: moves the camera within one framing while the shot holds (`from` and `to` are the
+ *   same): a Ken Burns drift, a crash zoom.
+ */
+export type CameraMoveRole = 'transition' | 'hold';
+
+export const CAMERA_MOVE_ROLES: readonly CameraMoveRole[] = ['transition', 'hold'];
+
+/** How a `camera` effect moves (`EffectSummary.camera`). */
+export interface EffectCameraMove {
+	role: CameraMoveRole;
+	/** Length of the move at its default values (ms); 0 for a cut. A hold plays across the shot's hold instead. */
+	durationMs: number;
+	/**
+	 * Where the view jumps, 0–1 through the move (0.5 for a whip pan or punch zoom that cuts
+	 * halfway). Keyframes either side of it must not be tweened across. Absent for a smooth move.
+	 */
+	cut?: number;
+}
 
 /** One entry of a provider's catalog. */
 export interface EffectSummary {
@@ -53,6 +82,8 @@ export interface EffectSummary {
 	 * background of its own to fade (an overlay is already transparent).
 	 */
 	backgroundOpacity?: string;
+	/** How a `camera` effect moves. Present exactly when `kind` is `camera`. */
+	camera?: EffectCameraMove;
 }
 
 export interface EffectSearchOptions {
@@ -176,6 +207,83 @@ export interface EffectVectorMotion {
 /** What a vector or motion effect is applied to: SVG markup, optionally with the ids of the elements to animate (default: all). */
 export type EffectVectorTarget = string | { svg: string; nodeIds?: readonly string[] };
 
+/**
+ * Where a scene's camera looks (the shape of Flair's `View`). The scene is drawn at
+ * (point + scroll) × zoom, then turned by `tilt`, `turn` and `roll` round the middle of the stage
+ * and seen in perspective, then blurred by `blur` while the camera moves. Positions are in the
+ * scene's own units, so a framing is `stage.width / zoom` wide.
+ */
+export interface CameraView {
+	/** Scale of the scene on the stage; > 0. */
+	zoom: number;
+	/** Scene offset before scaling, in scene units. */
+	scrollX: number;
+	scrollY: number;
+	/** Tips the scene back round its horizontal axis (CSS `rotateX`), degrees, −75 to 75. Default 0. */
+	tilt?: number;
+	/** Swings the scene round its vertical axis (CSS `rotateY`), degrees, −75 to 75. Default 0. */
+	turn?: number;
+	/** Rolls the scene round the line of sight (CSS `rotateZ`), degrees clockwise, −180 to 180. Default 0. */
+	roll?: number;
+	/** Distance of the lens from the scene as a multiple of the stage width; smaller is more dramatic. Default the provider's own. */
+	perspective?: number;
+	/** Motion blur in stage pixels while the camera moves; 0 or absent when still. */
+	blur?: number;
+	/** Direction the blur streaks, degrees on screen (0 horizontal, 90 vertical); absent when it blurs every way (a zoom or a turn). */
+	blurAngle?: number;
+}
+
+/** The stage a camera looks at, in pixels. */
+export interface CameraStage {
+	width: number;
+	height: number;
+}
+
+/** Where a camera move is: what `cameraView` takes. */
+export interface CameraMoveContext {
+	/** The framing the move leaves; for a hold, the framing it moves within (the same as `to`). */
+	from: CameraView;
+	/** The framing the move arrives at. */
+	to: CameraView;
+	/** How far through the move, 0–1. */
+	u: number;
+	/** Length of the whole move (ms): its `durationMs`, the editor's override, or for a hold the shot's hold. */
+	ms: number;
+	stage: CameraStage;
+}
+
+/** What `sampleCameraMove` takes: the move's framings, length and stage, and how often to key it. */
+export interface CameraMoveSampleRequest {
+	from: CameraView;
+	to: CameraView;
+	/** Length of the move (ms). */
+	ms: number;
+	stage: CameraStage;
+	/** Keys per second; > 0. */
+	fps: number;
+	/** Control values; missing controls take their defaults. */
+	values?: EffectValues;
+}
+
+/** One key of a sampled camera move. */
+export interface CameraKeyframe {
+	/** Ms from the start of the move. */
+	t: number;
+	view: CameraView;
+}
+
+/**
+ * A camera move as keyframes, so an editor can bake it without calling `cameraView` each frame.
+ * Keys are in time order from `t` 0 to `ms`, one per frame. At a cut two keys share the cut's
+ * `t`: the view just before it, then the view after; tweening between consecutive keys never
+ * crosses the jump.
+ */
+export interface CameraMoveSample {
+	keys: readonly CameraKeyframe[];
+	/** Ms of the cut, when the move has one. */
+	cut?: number;
+}
+
 /** What a provider can do, so editors can degrade cleanly. */
 export interface EffectProviderCapabilities {
 	/** Renders off the main thread. */
@@ -192,6 +300,8 @@ export interface EffectProviderCapabilities {
 	maxSize?: number;
 	/** Implements `openAuthoring`: effects can be edited, not only used. */
 	supportsAuthoring?: boolean;
+	/** Lists `camera` effects and implements `cameraView` (and maybe `sampleCameraMove`). */
+	supportsCamera?: boolean;
 }
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -213,7 +323,10 @@ export interface EffectProvider {
 	/** Effects matching every word of `query` (in name, id, category, tags or description), best first. */
 	search(query: string, options?: EffectSearchOptions): MaybePromise<readonly EffectSummary[]>;
 	describe(id: string): MaybePromise<EffectDescription>;
-	/** A pixel renderer. A `vector` effect may refuse with `EffectUnsupportedError` where it cannot lay out SVG (a Worker). */
+	/**
+	 * A pixel renderer. A `vector` effect may refuse with `EffectUnsupportedError` where it cannot
+	 * lay out SVG (a Worker); a `camera` effect draws no pixels and may refuse with one saying so.
+	 */
 	createRenderer(id: string, options: EffectRendererOptions): MaybePromise<EffectRenderer>;
 	/**
 	 * Vector and motion effects as an animated SVG. Present when `capabilities.supportsVector`. A
@@ -227,4 +340,17 @@ export interface EffectProvider {
 	 * `UnknownEffectError`; an effect the provider cannot edit throws `EffectUnsupportedError`.
 	 */
 	openAuthoring?(from: EffectAuthoringSource): MaybePromise<EffectAuthoringSession>;
+	/**
+	 * Where a camera move puts the camera `ctx.u` of the way through it, with its motion blur.
+	 * Present when `capabilities.supportsCamera`. Synchronous and pure: the same id, context and
+	 * values always give the same view, so editors may call it per frame or cache it. Unknown ids
+	 * throw `UnknownEffectError`, invalid values `EffectControlError`, and an effect that is not a
+	 * camera move (or a `u` outside 0–1) `EffectUnsupportedError`.
+	 */
+	cameraView?(id: string, ctx: CameraMoveContext, values?: EffectValues): CameraView;
+	/**
+	 * A camera move as keyframes (see `CameraMoveSample`). Optional even with `supportsCamera`;
+	 * `sampleEffectCameraMove` falls back to `cameraView` per frame. Errors as for `cameraView`.
+	 */
+	sampleCameraMove?(id: string, request: CameraMoveSampleRequest): MaybePromise<CameraMoveSample>;
 }

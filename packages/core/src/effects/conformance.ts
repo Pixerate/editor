@@ -5,8 +5,8 @@
  */
 
 import { isEffectError } from './errors.js';
-import { createEffectPixels, effectValueErrors, isEffectPixels } from './helpers.js';
-import { EFFECT_KINDS, EFFECT_USES, type EffectDescription, type EffectPixels, type EffectProvider, type EffectSummary } from './types.js';
+import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels } from './helpers.js';
+import { CAMERA_MOVE_ROLES, EFFECT_KINDS, EFFECT_USES, type CameraView, type EffectDescription, type EffectPixels, type EffectProvider, type EffectSummary } from './types.js';
 
 export interface EffectConformanceIssue {
 	effectId?: string;
@@ -48,6 +48,20 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 	if (typeof e.loop !== 'boolean') at('loop is not a boolean');
 	if (e.duration !== undefined && !(e.duration > 0)) at('duration must be a positive number of ms when present');
 	if (e.backgroundOpacity !== undefined && (typeof e.backgroundOpacity !== 'string' || !e.backgroundOpacity)) at('backgroundOpacity must name a control when present');
+	if (e.kind === 'camera') {
+		if (e.uses?.length !== 1 || e.uses[0] !== 'camera') at('a camera effect must have exactly the use "camera"');
+		const m = e.camera;
+		if (!m) at('a camera effect needs camera: { role, durationMs }');
+		else {
+			if (!CAMERA_MOVE_ROLES.includes(m.role)) at(`camera.role "${m.role}" is not one of ${CAMERA_MOVE_ROLES.join(', ')}`);
+			if (!(Number.isFinite(m.durationMs) && m.durationMs >= 0)) at('camera.durationMs must be a number of ms ≥ 0');
+			if (m.cut !== undefined && !(m.cut >= 0 && m.cut <= 1)) at('camera.cut must be 0–1 when present');
+			if (e.duration !== undefined && e.duration !== m.durationMs) at(`duration ${e.duration} differs from camera.durationMs ${m.durationMs}`);
+		}
+	} else {
+		if (e.uses?.includes('camera')) at('only camera effects may have the use "camera"');
+		if (e.camera !== undefined) at('only camera effects may have camera');
+	}
 }
 
 function checkDescription(id: string, d: EffectDescription, issues: EffectConformanceIssue[]) {
@@ -91,8 +105,9 @@ async function checkRender(provider: EffectProvider, d: EffectDescription, size:
 	try {
 		renderer = await provider.createRenderer(d.id, { width: size, height: size });
 	} catch (e) {
-		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG).
-		if (!(d.kind === 'vector' && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
+		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG); a camera move has none.
+		if (!((d.kind === 'vector' || d.kind === 'camera') && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
+		else if (!(e instanceof Error && e.message.trim())) at('createRenderer refused without saying why');
 		return;
 	}
 	try {
@@ -109,6 +124,56 @@ async function checkRender(provider: EffectProvider, d: EffectDescription, size:
 	if (after) at(`render after dispose ${after}`);
 }
 
+const sameView = (a: CameraView, b: CameraView) => JSON.stringify(a) === JSON.stringify(b);
+const near = (a: CameraView, b: CameraView) =>
+	(['zoom', 'scrollX', 'scrollY', 'tilt', 'turn', 'roll', 'perspective', 'blur', 'blurAngle'] as const).every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) <= 1e-6 * Math.max(1, Math.abs(a[k] ?? 0)));
+
+/** A probe stage and two framings: the whole stage, then its top-left quarter at 2×. */
+const STAGE = { width: 320, height: 180 };
+const WIDE: CameraView = { zoom: 1, scrollX: 0, scrollY: 0 };
+const CLOSE: CameraView = { zoom: 2, scrollX: 0, scrollY: 0 };
+
+async function checkCamera(provider: EffectProvider, d: EffectDescription, issues: EffectConformanceIssue[]) {
+	const at = (message: string) => issues.push({ effectId: d.id, message });
+	const camera = d.camera!;
+	const to = camera.role === 'hold' ? WIDE : CLOSE;
+	const ms = camera.durationMs || 1000;
+	const ctx = (u: number) => ({ from: WIDE, to, u, ms, stage: STAGE });
+	const views: CameraView[] = [];
+	for (const u of [0, 0.25, 0.5, 0.75, 1]) {
+		try {
+			const view = provider.cameraView!(d.id, ctx(u));
+			if ((view as unknown) instanceof Promise) {
+				at('cameraView must be synchronous; it returned a Promise');
+				return;
+			}
+			if (!isCameraView(view)) at(`cameraView at u ${u} is not a CameraView (zoom > 0, finite scrollX and scrollY): ${JSON.stringify(view)}`);
+			else views.push(view);
+			const again = provider.cameraView!(d.id, ctx(u));
+			if (isCameraView(view) && !sameView(view, again)) at(`cameraView is not pure: two calls at u ${u} gave different views`);
+		} catch (e) {
+			at(`cameraView at u ${u} failed: ${codeOf(e)}`);
+		}
+	}
+	const bad = await rejectsWith('invalid_values', () => provider.cameraView!(d.id, ctx(0.5), { __not_a_control__: 1 }));
+	if (bad) at(`cameraView with an unknown control ${bad}`);
+	if (provider.sampleCameraMove && views.length === 5) {
+		try {
+			const sample = await provider.sampleCameraMove(d.id, { from: WIDE, to, ms, stage: STAGE, fps: 10 });
+			const keys = sample?.keys;
+			if (!Array.isArray(keys) || keys.length < 2) at('sampleCameraMove returned fewer than two keys');
+			else {
+				if (keys.some((k, i) => !isCameraView(k.view) || !Number.isFinite(k.t) || (i > 0 && k.t < keys[i - 1].t))) at('sampleCameraMove keys must be CameraViews in time order');
+				if (keys[0].t !== 0 || keys[keys.length - 1].t !== ms) at(`sampleCameraMove keys must run from 0 to ${ms} ms, got ${keys[0].t} to ${keys[keys.length - 1].t}`);
+				else if (!near(keys[0].view, views[0]) || !near(keys[keys.length - 1].view, views[4])) at('sampleCameraMove disagrees with cameraView at the start or end of the move');
+				if (camera.cut !== undefined && sample.cut === undefined) at('sampleCameraMove gave no cut for a move that cuts');
+			}
+		} catch (e) {
+			at(`sampleCameraMove failed: ${codeOf(e)}`);
+		}
+	}
+}
+
 /** Runs the contract checks against `provider` and returns every issue found (empty when it conforms). */
 export async function checkEffectProvider(provider: EffectProvider, options: EffectConformanceOptions = {}): Promise<EffectConformanceIssue[]> {
 	const issues: EffectConformanceIssue[] = [];
@@ -121,6 +186,9 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (caps?.supportsAuthoring !== undefined && typeof caps.supportsAuthoring !== 'boolean') top('capabilities.supportsAuthoring is not a boolean');
 	if (caps?.supportsVector && typeof provider.applyVectorEffect !== 'function') top('supportsVector is set but applyVectorEffect is missing');
 	if (caps?.supportsAuthoring && typeof provider.openAuthoring !== 'function') top('supportsAuthoring is set but openAuthoring is missing');
+	if (caps?.supportsCamera !== undefined && typeof caps.supportsCamera !== 'boolean') top('capabilities.supportsCamera is not a boolean');
+	if (caps?.supportsCamera && typeof provider.cameraView !== 'function') top('supportsCamera is set but cameraView is missing');
+	if (provider.sampleCameraMove && typeof provider.cameraView !== 'function') top('sampleCameraMove is present but cameraView is missing');
 
 	const list = await provider.list();
 	const ids = new Set<string>();
@@ -129,6 +197,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		ids.add(e.id);
 		checkSummary(e, issues);
 	}
+	if (!caps?.supportsCamera && list.some((e) => e.kind === 'camera')) top('the catalog lists camera effects but capabilities.supportsCamera is not set');
 	const all = await provider.search('');
 	if (all.length !== list.length) top(`search("") returned ${all.length} effects, list() ${list.length}`);
 	const firstUse = list[0]?.uses[0];
@@ -140,6 +209,14 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (unknown) top(`describe of an unknown id ${unknown}`);
 	const unknownRenderer = await rejectsWith('unknown_effect', () => provider.createRenderer('__no_such_effect__', { width: 4, height: 4 }));
 	if (unknownRenderer) top(`createRenderer of an unknown id ${unknownRenderer}`);
+	if (caps?.supportsCamera && provider.cameraView) {
+		const probe = { from: WIDE, to: CLOSE, u: 0.5, ms: 1000, stage: STAGE };
+		const unknownCamera = await rejectsWith('unknown_effect', () => provider.cameraView!('__no_such_effect__', probe));
+		if (unknownCamera) top(`cameraView of an unknown id ${unknownCamera}`);
+		const notCamera = list.find((e) => e.kind !== 'camera');
+		const wrongKind = notCamera && (await rejectsWith('unsupported', () => provider.cameraView!(notCamera.id, probe)));
+		if (wrongKind) issues.push({ effectId: notCamera!.id, message: `cameraView of a ${notCamera!.kind} effect ${wrongKind}` });
+	}
 
 	const size = options.size ?? 8;
 	for (const id of options.ids ?? [...ids]) {
@@ -152,6 +229,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		}
 		checkDescription(id, d, issues);
 		if (options.render !== false && d.kind !== 'motion') await checkRender(provider, d, size, issues);
+		if (d.kind === 'camera' && d.camera && caps.supportsCamera && provider.cameraView) await checkCamera(provider, d, issues);
 		if ((d.kind === 'vector' || d.kind === 'motion') && caps.supportsVector && provider.applyVectorEffect) {
 			try {
 				const m = await provider.applyVectorEffect(id, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect id="r" width="10" height="10"/></svg>');
@@ -168,7 +246,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 
 	if (caps?.supportsAuthoring && options.authoring !== false && typeof provider.openAuthoring === 'function') {
 		const targetEffect = (await Promise.all((options.ids ?? [...ids]).map((id) => provider.describe(id)))).find(
-			(d) => d.kind !== 'motion' && d.kind !== 'vector'
+			(d) => d.kind !== 'motion' && d.kind !== 'vector' && d.kind !== 'camera'
 		);
 		if (targetEffect) {
 			try {

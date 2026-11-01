@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/effects] Effects That Draw No Pixels Must Be Kept Out of Pixel Pickers
+
+- **Issue / Symptom**: A new effect kind that draws no pixels (a `motion` effect, a `camera` move) shows up in editors' effect browsers, `apply_effect` enums and thumbnails, where creating a renderer for it fails ("No preview", or an `unsupported` error after the agent picked it).
+- **Root Cause**: Editors choose effects by `uses`, and each browser and tool used to repeat its own `kind !== 'motion'` check. A camera move whose use was `transition` would have matched every editor that offers transitions.
+- **Solution / Workaround**: Camera effects carry exactly the use `camera` (`checkEffectProvider` enforces it), and every picker calls `effectOffered(effect, uses)` from `@pixerate/editor/effects`, which offers motion and camera effects only where their use is named. A future kind without pixels goes into `effectOffered` and the thumbnails' label map, not into another inline check.
+
 ### [core/selection] GrabCut From a Click Selected the Whole Image; Its Seeds Decide What It Finds
 
 - **Issue / Symptom**: Without a segmentation model, `select_object` with a `point` on a castle in mist (or anything whose surroundings reach the search window's edge) selected the whole image and took 1.5 s. A click on a fruit took its shadow too. Tuning the colour/edge balance, the GMM count, the box's background band or the working size did not help: each gained on one case and lost on another.

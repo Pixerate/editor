@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { EFFECT_USE_LABELS, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
+  import { EFFECT_USE_LABELS, effectOffered, type EffectKind, type EffectProvider, type EffectSummary, type EffectUse } from '@pixerate/editor/effects';
   import EffectThumbnail from './EffectThumbnail.svelte';
 
   interface Props {
@@ -68,7 +68,7 @@
       live = false;
     };
   });
-  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && (uses ? e.kind !== 'motion' || uses.includes('motion') : e.kind !== 'motion') && (!uses || e.uses.some((u) => uses.includes(u)));
+  const allowed = (e: EffectSummary) => (!kinds || kinds.includes(e.kind)) && effectOffered(e, uses);
   const categories = $derived([...new Set(all.filter(allowed).map((e) => e.category))]);
   const shown = $derived(found.filter(allowed));
 </script>

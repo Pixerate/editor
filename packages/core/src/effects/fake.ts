@@ -9,12 +9,17 @@
  * - `crossfade` (transition)
  * - `fade-in` (motion, vector only)
  * - `badge` (a vector effect with its own picture: a disc that fades in; vector only)
+ *
+ * With `camera: true` it also has camera moves (no pixels): `glide` and `whip` (transitions; the
+ * whip cuts halfway) and `drift` (a hold that zooms in slowly).
  */
 
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
 import { createEffectAuthoringSession } from './authoring-session.js';
-import { createEffectPixels, encodeEffectFloat, isEffectPixels, resolveEffectValues, searchEffectSummaries, srgbToLinear } from './helpers.js';
+import { createEffectPixels, encodeEffectFloat, isEffectPixels, resolveEffectValues, sampleCameraViews, searchEffectSummaries, srgbToLinear } from './helpers.js';
 import type {
+	CameraMoveContext,
+	CameraView,
 	EffectDescription,
 	EffectImageSource,
 	EffectPixels,
@@ -200,6 +205,72 @@ const DESCRIPTIONS: readonly EffectDescription[] = [
 	}
 ];
 
+const CAMERA_DESCRIPTIONS: readonly EffectDescription[] = [
+	{
+		id: 'fake.glide',
+		name: 'Glide',
+		kind: 'camera',
+		category: 'camera',
+		uses: ['camera'],
+		description: 'Moves the camera smoothly from one framing to the next.',
+		tags: ['move', 'smooth'],
+		transparent: false,
+		loop: false,
+		duration: 800,
+		camera: { role: 'transition', durationMs: 800 },
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: { curve: { type: 'string', enum: ['linear', 'smooth'], description: 'Speed curve: linear, or smooth (ease in and out). Default smooth.' } }
+		},
+		defaults: { curve: 'smooth' },
+		presets: [],
+		inputs: []
+	},
+	{
+		id: 'fake.whip',
+		name: 'Whip pan',
+		kind: 'camera',
+		category: 'camera',
+		uses: ['camera'],
+		description: 'Whips the camera away from one framing, cuts halfway in a blur, and lands on the next.',
+		tags: ['move', 'fast', 'cut'],
+		transparent: false,
+		loop: false,
+		duration: 400,
+		camera: { role: 'transition', durationMs: 400, cut: 0.5 },
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: { blur: { type: 'number', minimum: 0, maximum: 100, description: 'Motion blur at the cut, in stage pixels. Default 40.' } }
+		},
+		defaults: { blur: 40 },
+		presets: [{ name: 'Clean', values: { blur: 0 } }],
+		inputs: []
+	},
+	{
+		id: 'fake.drift',
+		name: 'Drift',
+		kind: 'camera',
+		category: 'camera',
+		uses: ['camera'],
+		description: 'Zooms slowly into the middle of the framing while the shot holds.',
+		tags: ['ken burns', 'slow'],
+		transparent: false,
+		loop: false,
+		duration: 4000,
+		camera: { role: 'hold', durationMs: 4000 },
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: { scale: { type: 'number', minimum: 1, maximum: 2, description: 'Zoom at the end of the hold, as a multiple of the framing\'s zoom. Default 1.15.' } }
+		},
+		defaults: { scale: 1.15 },
+		presets: [],
+		inputs: []
+	}
+];
+
 const summaryOf = ({ controls: _c, defaults: _d, presets: _p, inputs: _i, ...summary }: EffectDescription): EffectSummary => summary;
 
 const hexToRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
@@ -289,6 +360,41 @@ function renderPixels(d: EffectDescription, v: Record<string, EffectValues[strin
 	return out;
 }
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** The view with the scene point `(cx, cy)` in the middle of the stage at `zoom`. */
+const viewAt = (cx: number, cy: number, zoom: number, ctx: CameraMoveContext): CameraView => ({ zoom, scrollX: ctx.stage.width / (2 * zoom) - cx, scrollY: ctx.stage.height / (2 * zoom) - cy });
+const centreOf = (v: CameraView, ctx: CameraMoveContext): [number, number] => [ctx.stage.width / (2 * v.zoom) - v.scrollX, ctx.stage.height / (2 * v.zoom) - v.scrollY];
+
+/** Where a fake camera move puts the camera (pure). */
+function cameraViewOf(d: EffectDescription, ctx: CameraMoveContext, v: Record<string, EffectValues[string]>): CameraView {
+	const { from, to, u } = ctx;
+	const [x0, y0] = centreOf(from, ctx);
+	const [x1, y1] = centreOf(to, ctx);
+	switch (d.id) {
+		case 'fake.glide': {
+			const k = v.curve === 'smooth' ? smooth(u) : u;
+			return viewAt(lerp(x0, x1, k), lerp(y0, y1, k), lerp(from.zoom, to.zoom, k), ctx);
+		}
+		case 'fake.whip': {
+			// Out along the line to the next framing, a board's width at most, then in from behind it.
+			const out = u < 0.5;
+			const at = out ? from : to;
+			const off = out ? Math.pow(u * 2, 3) : 1 - (1 - Math.pow(1 - (u - 0.5) * 2, 3));
+			const dist = Math.hypot(x1 - x0, y1 - y0);
+			const [dx, dy] = dist > 1e-6 ? [(x1 - x0) / dist, (y1 - y0) / dist] : [1, 0];
+			const reach = (ctx.stage.width / at.zoom) * off * (out ? 1 : -1);
+			const [cx, cy] = centreOf(at, ctx);
+			const blur = (v.blur as number) * off;
+			return { ...viewAt(cx + dx * reach, cy + dy * reach, at.zoom, ctx), ...(blur > 0 ? { blur, blurAngle: (Math.atan2(dy, dx) * 180) / Math.PI } : {}) };
+		}
+		case 'fake.drift':
+			return viewAt(x0, y0, from.zoom * lerp(1, v.scale as number, smooth(u)), ctx);
+		default:
+			throw new EffectUnsupportedError(`"${d.id}" is a ${d.kind} effect, not a camera move.`, d.id);
+	}
+}
+
 function toFloat(p: EffectPixels): EffectPixels {
 	const f = new Float32Array(p.data.length);
 	for (let i = 0; i < f.length; i += 4) {
@@ -319,9 +425,11 @@ export interface FakeEffectProviderOptions {
 	onRender?: (effectId: string, request: EffectRenderRequest) => void;
 	/** Whether authoring is supported (default true). */
 	authoring?: boolean;
+	/** Adds the camera moves and `cameraView` / `sampleCameraMove` (default false). */
+	camera?: boolean;
 }
 
-/** A deterministic CPU effects provider with six effects (see the module comment). */
+/** A deterministic CPU effects provider with seven effects, and three camera moves on request (see the module comment). */
 export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}): EffectProvider {
 	const supportsAuthoring = options.authoring ?? true;
 	const capabilities: EffectProviderCapabilities = {
@@ -331,16 +439,24 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		supportsHostImages: false,
 		supportsVector: true,
 		supportsAuthoring,
+		...(options.camera ? { supportsCamera: true } : {}),
 		maxSize: 8192,
 		...options.capabilities
 	};
-	const byId = new Map(DESCRIPTIONS.map((d) => [d.id, d]));
+	const all = options.camera ? [...DESCRIPTIONS, ...CAMERA_DESCRIPTIONS] : DESCRIPTIONS;
+	const byId = new Map(all.map((d) => [d.id, d]));
 	const get = (id: string) => {
 		const d = byId.get(id);
 		if (!d) throw new UnknownEffectError(id, 'the fake provider');
 		return d;
 	};
-	const summaries = DESCRIPTIONS.map(summaryOf);
+	const summaries = all.map(summaryOf);
+	const camera = (id: string, ctx: CameraMoveContext, values?: EffectValues): CameraView => {
+		const d = get(id);
+		if (d.kind !== 'camera') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a camera move.`, id);
+		if (!(ctx.u >= 0 && ctx.u <= 1)) throw new EffectUnsupportedError(`u must be 0–1 through the move, got ${ctx.u}.`, id);
+		return cameraViewOf(d, ctx, resolveEffectValues(d, values));
+	};
 
 	const provider: EffectProvider = {
 		id: 'fake',
@@ -352,6 +468,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		describe: (id) => structuredClone(get(id)),
 		createRenderer(id: string, ro: EffectRendererOptions): EffectRenderer {
 			const d = get(id);
+			if (d.kind === 'camera') throw new EffectUnsupportedError(`"${id}" is a camera move: it moves a scene's camera and draws no pixels. Use cameraView.`, id);
 			if (d.kind !== 'shader') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect; use applyVectorEffect.`, id);
 			const { width, height } = ro;
 			const depth = ro.depth ?? 8;
@@ -403,6 +520,16 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 				loop: false
 			};
 		},
+		...(options.camera
+			? {
+					cameraView: camera,
+					sampleCameraMove: (id, request) => {
+						const d = get(id);
+						const { from, to, ms, stage, fps, values } = request;
+						return sampleCameraViews((u) => camera(id, { from, to, u, ms, stage }, values), { ms, fps, cut: d.camera?.cut });
+					}
+			  }
+			: {}),
 		...(supportsAuthoring
 			? {
 					openAuthoring: (from) => createEffectAuthoringSession(from, { provider })

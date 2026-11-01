@@ -12,13 +12,16 @@ export interface EffectThumbnailProps {
 
 /**
  * A preview of an effect drawn by the provider's own renderer (filters on a sample picture,
- * transitions half way, generators mid-way through). Motion effects and failures show a label.
+ * transitions half way, generators mid-way through). Motion effects, camera moves and failures
+ * show a label.
  */
+const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera' };
+
 export function EffectThumbnail({ provider, effect, width = 96, height = 54, className = '' }: EffectThumbnailProps) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const [failed, setFailed] = useState(effect.kind === 'motion');
+  const [failed, setFailed] = useState(effect.kind in LABELS);
   useEffect(() => {
-    if (effect.kind === 'motion') return;
+    if (effect.kind in LABELS) return;
     let live = true;
     renderEffectThumbnail(provider, effect, { width, height }).then(
       (pixels) => {
@@ -39,7 +42,7 @@ export function EffectThumbnail({ provider, effect, width = 96, height = 54, cla
       data-effect-thumbnail={effect.id}
     >
       {failed ? (
-        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">{effect.kind === 'motion' ? 'Motion' : 'No preview'}</span>
+        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">{LABELS[effect.kind] ?? 'No preview'}</span>
       ) : (
         <canvas ref={ref} width={width} height={height} className="h-full w-full" aria-hidden="true" />
       )}
