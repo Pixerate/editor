@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+	CANVAS_EFFECT_MISSING_PATTERN,
+	canvasEffectErrorReason,
+	canvasEffectStatus,
 	createCanvasEffectsController,
 	createCanvasEffectsToolProvider,
 	isShapeDescription,
@@ -36,21 +39,24 @@ export const useCanvasEffectsProviderContext = (): EffectProvider | null => useC
 export function CanvasNodeEffectLayer({ effect, width, height, clipPath, clipTransform }: { effect: CanvasShapeEffect; width: number; height: number; clipPath?: string; clipTransform?: string }) {
 	const provider = useCanvasEffectsProviderContext();
 	const ref = useRef<HTMLCanvasElement>(null);
-	const [failed, setFailed] = useState(false);
+	const [failed, setFailed] = useState<string | null>(null);
 	const dpr = typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio || 1) : 1;
 	const pw = Math.max(1, Math.round(width * dpr));
 	const ph = Math.max(1, Math.round(height * dpr));
 	const key = JSON.stringify(effect);
+	const status = provider ? canvasEffectStatus(effect, provider) : null;
 	useEffect(() => {
 		const canvas = ref.current;
-		if (!provider || !canvas) return;
-		setFailed(false);
-		const run = runCanvasNodeEffect({ provider, effect, target: canvas, onError: () => setFailed(true) });
+		if (!provider || !canvas || !canvasEffectStatus(effect, provider).ok) return;
+		setFailed(null);
+		const run = runCanvasNodeEffect({ provider, effect, target: canvas, onError: (e) => setFailed(canvasEffectErrorReason(effect, e)) });
 		return () => run.stop();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [provider, key, pw, ph]);
 	const clipId = useMemo(() => `pixerate-effect-clip-${Math.random().toString(36).slice(2)}`, []);
-	if (!provider || failed || !(width > 0 && height > 0)) return null;
+	if (!provider || !status || !(width > 0 && height > 0)) return null;
+	const missing = !status.ok ? status.reason : failed;
+	if (missing) return <CanvasEffectMissing reason={missing} effect={effect} width={width} height={height} clipPath={clipPath} clipTransform={clipTransform} />;
 	const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: effect.opacity ?? 1 };
 	const canvas = <canvas ref={ref} width={pw} height={ph} style={{ width: '100%', height: '100%', display: 'block' }} data-canvas-effect={effect.effect} />;
 	if (effect.mode === 'overlay' || !clipPath) return <div style={style}>{canvas}</div>;
@@ -64,6 +70,24 @@ export function CanvasNodeEffectLayer({ effect, width, height, clipPath, clipTra
 			<foreignObject x={0} y={0} width={width} height={height} clipPath={`url(#${clipId})`}>
 				{canvas}
 			</foreignObject>
+		</svg>
+	);
+}
+
+/** Stands in for an effect that cannot be drawn (see `canvasEffectStatus`): a faint hatch, with the reason. */
+function CanvasEffectMissing({ reason, effect, width, height, clipPath, clipTransform }: { reason: string; effect: CanvasShapeEffect; width: number; height: number; clipPath?: string; clipTransform?: string }) {
+	const id = useMemo(() => `pixerate-effect-missing-${Math.random().toString(36).slice(2)}`, []);
+	const common = { role: 'img', 'aria-label': reason, 'data-canvas-effect-missing': effect.effect } as const;
+	if (effect.mode === 'overlay' || !clipPath) return <div {...common} title={reason} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: CANVAS_EFFECT_MISSING_PATTERN }} />;
+	return (
+		<svg {...common} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+			<title>{reason}</title>
+			<defs>
+				<pattern id={id} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+					<rect width={2} height={8} fill="rgba(128,128,128,0.28)" />
+				</pattern>
+			</defs>
+			<path d={clipPath} transform={clipTransform} fill={`url(#${id})`} />
 		</svg>
 	);
 }
@@ -131,6 +155,13 @@ function Controls({ controller, nodeId, effect }: { controller: CanvasEffectsCon
 	);
 }
 
+/** The effect's controls, or why the registered provider cannot draw it (then Fill… / Overlay… replace it). */
+function EffectControlsOrReason({ controller, nodeId, effect }: { controller: CanvasEffectsController; nodeId: string; effect: CanvasShapeEffect }) {
+	const status = controller.status(effect);
+	if (!status.ok) return <p className="text-[11px] text-amber-500" data-canvas-effect-unavailable="">{status.reason}</p>;
+	return <Controls controller={controller} nodeId={nodeId} effect={effect} />;
+}
+
 export interface CanvasEffectsPanelProps {
 	controller: CanvasEffectsController;
 	/** The node to edit (e.g. the selected shape). */
@@ -189,7 +220,7 @@ export function CanvasEffectsPanel({ controller, nodeId, shape, sceneId, classNa
 							✕
 						</button>
 					</div>
-					{provider && <Controls controller={controller} nodeId={nodeId} effect={effect} />}
+					{provider && <EffectControlsOrReason controller={controller} nodeId={nodeId} effect={effect} />}
 				</div>
 			)}
 			{sceneId && transition && (

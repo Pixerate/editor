@@ -182,6 +182,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `EffectThumbnail.svelte`'s `$effect` set `failed = item.kind === 'motion'` and then read it back (`if (failed) return`). That read made `failed` a dependency of the effect. The failed render set `failed = true`, which re-ran the effect. The effect reset `failed`, rendered again (failures are not cached) and failed again, in an endless microtask loop that starved timers.
 - **Solution / Workaround**: Keep the value in a local (`const motion = …`), read only the inputs that pick the picture, and start async work inside `untrack`. Never read back, in the same `$effect`, state that the effect or its callbacks write.
 
+### [core|react|svelte/canvas] Canvas Effects Vanished Without a Word After Switching Effects Provider
+
+- **Issue / Symptom**: In the Canvas demo, a shape filled with a built-in test effect went blank when the Effects switch moved to Flair (and back the other way). Nothing said why, so the switch looked as if it did nothing.
+- **Root Cause**: A shape's effect saves its effect id and the id of the provider it came from (`data.shape.effect.provider`), but nothing compared that provider id with the registered provider. The new provider was asked to render an id it does not have, the render failed, and `CanvasNodeEffectLayer` returned `null` on failure. The shared `list_applied_effects` only checked whether the effect id was in the catalog.
+- **Solution / Workaround**: `canvasEffectStatus(effect, provider)` (and `controller.status`) says when an effect came from another provider. The React and Svelte effect layers draw a faint hatch with the reason (`data-canvas-effect-missing`) for that and for failed renders, the panel shows the reason, and `list_applied_effects` returns `available: false` with a `reason` for effects saved from another provider. Effects are kept, never rewritten, so switching back draws them again.
+
 ### [core/effects] GPU Effect Providers Hold a WebGL Context per Renderer, and Browsers Allow About Sixteen
 
 - **Issue / Symptom**: With Flair as the provider, opening the effects browser printed "Too many active WebGL contexts. Oldest context will be lost." more than a hundred times. Most thumbnails showed "No preview", and effects already on clips failed with "The graphics context was lost." The engines record failures and don't retry them, so those clips stayed plain until the provider changed.

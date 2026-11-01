@@ -92,6 +92,8 @@ import {
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { EditorDocumentAutosave, useDemoDocumentTools } from "./EditorDocumentAutosave";
 import { useDemoEffects } from "../demoEffects";
+import { resolveEffectValues } from "@pixerate/editor/effects";
+import type { CanvasShapeEffect } from "@pixerate/editor/canvas";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { CanvasPaintLayerRecipe } from "./CanvasPaintLayerRecipe";
 import { AutoLayoutDemo } from "./AutoLayoutDemo";
@@ -194,6 +196,15 @@ const shapeNode = (
 let nextNodeId = 1;
 const getUniqueNodeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${nextNodeId++}`;
 
+/**
+ * The star that shows provider effects: filled with a generator from whichever effects library is
+ * picked (effects draw on shape nodes only, so the boxes never show one).
+ */
+const EFFECT_STAR_ID = "effect-star";
+/** The generator the star gets from each library, by provider id (else the library's first generator). */
+const EFFECT_STAR_FILLS: Record<string, string> = { fake: "fake.gradient", flair: "aurora" };
+const EFFECT_STAR_EFFECT: CanvasShapeEffect = { effect: "fake.gradient", provider: "fake", name: "Gradient", mode: "fill", values: { from: "#f97316", to: "#7c3aed", angle: 45, spin: 0 } };
+
 const INITIAL_NODES: BoxNode[] = [
   box("brief", "Brief", 40, 60, 140, 60, "#f43f5e"),
   box("research", "Research", 260, 20, 160, 80, "#8b5cf6"),
@@ -201,6 +212,7 @@ const INITIAL_NODES: BoxNode[] = [
   box("review", "Review", 500, 110, 140, 70, "#10b981"),
   box("ship", "Ship it", 720, 70, 120, 120, "#f59e0b"),
   box("notes", "Sticky note", 520, 280, 180, 60, "#64748b"),
+  shapeNode(EFFECT_STAR_ID, "Effect star", 760, 250, 140, 140, { kind: "star", points: 5, innerRadius: 0.5, fill: "#f59e0b33", stroke: "#f59e0b", strokeWidth: 2, strokeLinejoin: "round", effect: EFFECT_STAR_EFFECT }),
 ];
 
 const INITIAL_EDGES: Edge[] = [
@@ -289,7 +301,8 @@ const CanvasDemo: React.FC = () => {
 
   // The demo-wide effects provider (built-in test effects, or Flair): effect fills and overlays on
   // shapes, and transitions between scenes.
-  const { provider: effects } = useDemoEffects();
+  const { provider: effects, source: effectsSource } = useDemoEffects();
+  const canvasScripts = useMemo(() => CANVAS_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "canvas-effects" : "canvas-effects-flair")), [effectsSource]);
   const effectNodesRef = useRef(nodes);
   effectNodesRef.current = nodes;
   const scenes = useCanvasScenes({
@@ -300,6 +313,32 @@ const CanvasDemo: React.FC = () => {
   });
   const canvasEffects = useCanvasEffects<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager, scenes: scenes.store, effects });
   useCanvasEffectsTools(demoToolRegistry, canvasEffects, { id: "canvas-effects", namespace: "canvasfx" });
+  // Switching libraries re-fills the demo star with one of the new library's generators, as long as
+  // it still holds the effect the demo gave it (an effect someone applied stays, drawn as a hatch).
+  const starSeed = useRef<CanvasShapeEffect>(EFFECT_STAR_EFFECT);
+  useEffect(() => {
+    if (!effects) return;
+    let cancelled = false;
+    const star = () => effectNodesRef.current.find((n) => n.id === EFFECT_STAR_ID);
+    const effectOf = (n: BoxNode | undefined) => (n?.data as { shape?: ShapeDescription } | undefined)?.shape?.effect;
+    const was = effectOf(star());
+    if (!was || was.provider === effects.id || JSON.stringify(was) !== JSON.stringify(starSeed.current)) return;
+    void (async () => {
+      const preferred = EFFECT_STAR_FILLS[effects.id];
+      const generators = await effects.list({ use: "generator" });
+      const id = generators.find((g) => g.id === preferred)?.id ?? generators[0]?.id;
+      if (!id) return;
+      const d = await effects.describe(id);
+      if (cancelled || JSON.stringify(effectOf(star())) !== JSON.stringify(starSeed.current)) return;
+      const next: CanvasShapeEffect = { effect: d.id, provider: effects.id, name: d.name, mode: "fill", values: resolveEffectValues(d) as CanvasShapeEffect["values"] };
+      starSeed.current = next;
+      // Not an undo step: the demo's choice of library, not an edit.
+      setNodes((prev) => prev.map((n) => (n.id === EFFECT_STAR_ID ? { ...n, data: { ...n.data, shape: { ...(n.data as { shape: ShapeDescription }).shape, effect: next } } } : n)));
+    })().catch((e) => console.warn("The demo star could not take an effect from", effects.name, e));
+    return () => {
+      cancelled = true;
+    };
+  }, [effects, setNodes]);
 
   // Save / load / undo for the whole canvas (canvas__get_canvas_document, …) and autosave.
   const canvasDocument = useCanvasEditorDocument<BoxNode, Edge>({ nodes, edges, setNodes, setEdges, history: history.manager, scenes: scenes.store });
@@ -863,7 +902,7 @@ const CanvasDemo: React.FC = () => {
           />
         );
       })()}
-      <AgentScriptPanel scripts={CANVAS_SCRIPTS} hint="Plays a scripted agent turn: get_editor_state returns the ids that the arrange commands and canvas_connect take. The library acts every call out on the canvas (agent playback), with no targets in the script." />
+      <AgentScriptPanel scripts={canvasScripts} hint="Plays a scripted agent turn: get_editor_state returns the ids that the arrange commands and canvas_connect take. The library acts every call out on the canvas (agent playback), with no targets in the script." />
       {showPaintRecipe ? (
         <CanvasPaintLayerRecipe />
       ) : (

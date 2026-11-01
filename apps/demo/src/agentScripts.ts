@@ -213,6 +213,32 @@ function seriesId(result: any, name: string): string {
 
 export const CANVAS_SCRIPTS: AgentScript[] = [
   {
+    id: "canvas-effects-flair",
+    prompt: "Fill the star with a Flair gradient, then lay it over the star at 60%",
+    steps: [
+      { say: "Listing the effects on the canvas: the star carries one.", tool: "canvasfx__list_applied_effects", args: {} },
+      { say: "Searching Flair for a gradient to fill a shape with.", tool: "canvasfx__search_effects", args: { query: "gradient", use: "generator" } },
+      { say: "A grainy gradient fills the star, clipped to its outline.", tool: "canvasfx__apply_effect", args: { target: "effect-star", effect: "grainy-gradient" } },
+      { say: "Laid over the star's whole box instead of inside it.", tool: "canvasfx__set_canvas_effect_mode", args: { node: "effect-star", mode: "overlay" } },
+      { say: "At 60%, so the star shows through.", tool: "canvasfx__update_effect", args: { target: "effect-star", effect: "effect", opacity: 0.6 } },
+    ],
+  },
+  {
+    id: "canvas-effects",
+    prompt: "Fill the star with a sunset gradient, then lay it over the star at 60%",
+    steps: [
+      { say: "Listing the effects on the canvas: the star carries one.", tool: "canvasfx__list_applied_effects", args: {} },
+      { say: "Looking for generators: they fill a shape.", tool: "canvasfx__search_effects", args: { use: "generator" } },
+      {
+        say: "A sunset gradient fills the star, clipped to its outline.",
+        tool: "canvasfx__apply_effect",
+        args: { target: "effect-star", effect: "fake.gradient", values: { from: "#fde68a", to: "#db2777", angle: 90, spin: 90 } },
+      },
+      { say: "Laid over the star's whole box instead of inside it.", tool: "canvasfx__set_canvas_effect_mode", args: { node: "effect-star", mode: "overlay" } },
+      { say: "At 60%, so the star shows through.", tool: "canvasfx__update_effect", args: { target: "effect-star", effect: "effect", opacity: 0.6 } },
+    ],
+  },
+  {
     id: "canvas-align",
     prompt: "Line up the main workflow steps and add a QA step",
     steps: [

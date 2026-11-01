@@ -277,7 +277,7 @@ effects provider (for example Flair); without one the read tools say so and the 
 | --- | --- |
 | `search_effects` | Find effects: use `generator` for fills, `overlay`, `title` or `interactive` for overlays, and `transition` for scene transitions. |
 | `describe_effect` | Read an effect's controls, ranges, defaults and presets before applying it. |
-| `list_applied_effects` | List the shape nodes that carry effects, with each effect's role (fill or overlay), opacity and values. |
+| `list_applied_effects` | List the shape nodes that carry effects, with each effect's role (fill or overlay), opacity and values. `available` false with a `reason` means the registered provider cannot draw it (it was saved from another provider, or the provider lacks it): the node shows a hatch until you re-apply one from `search_effects`. |
 | `apply_effect` | Put an effect on a shape node: a generator fills the shape (clipped to its outline), anything else draws over its box. This replaces any effect already there. Returns the effect. |
 | `update_effect` | Change a node's effect (`effect` is "effect"): `values` (`null` resets a control), `opacity`, and `enabled` (false holds the first frame). |
 | `remove_effect` | Take the effect off a node. |
@@ -288,6 +288,7 @@ effects provider (for example Flair); without one the read tools say so and the 
 ## Pitfalls
 
 - **A shape node holds one effect.** `apply_effect` replaces the effect that is there. Effects draw on shape nodes only (nodes with `data.shape`).
+- **Effects belong to the provider they came from.** Each saved effect keeps its provider id. After the provider changes (another effects library), check `list_applied_effects` for `available: false` and re-apply those effects with ids from the new provider's `search_effects`; the old effect ids mean nothing to it.
 
 - **Brushes are dry only.** Wet presets (watercolour, gouache, wet oils), mixer, blender, smudge and
   eraser presets are refused: wet paint needs an area to flow in, and the others need paint under
