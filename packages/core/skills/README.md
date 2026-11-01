@@ -65,6 +65,8 @@ request like "clean up this export" finds it.
 | [`pixerate-animation-logo-reveal`](pixerate-animation-logo-reveal/SKILL.md) | Animation (`pixerate-animation-editor`) | A short reveal built from the logo's parts, landing on the beat and ending on the held, finished logo. |
 | [`pixerate-generation-budgeted-batch`](pixerate-generation-budgeted-batch/SKILL.md) | Generation (`pixerate-generation`) | The right model for the format, plan and estimate before spending, drafts cheap and finals once, safe retries, variations from the history. |
 | [`pixerate-effect-look-development`](pixerate-effect-look-development/SKILL.md) | Effects (`pixerate-effect-authoring`) | Tune a look in a few moves, save it as a preset, animate with eased keyframes, seamless loops. |
+| [`pixerate-accessibility-audit`](pixerate-accessibility-audit/SKILL.md) | Cross-domain (`pixerate-color`) | Text and non-text contrast, colour-blind-safe meaning, both modes, smallest fixes and a report, in any editor. |
+| [`pixerate-brand-application`](pixerate-brand-application/SKILL.md) | Cross-domain (`pixerate-color`) | Brand roles mapped to exact palette values, near-misses snapped, readable text on brand colours, derivatives and house-style checks. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -128,7 +130,7 @@ same change.
   `packages/core/tests/agent-skill-evals.test.ts`. An eval has a `prompt` (the task, in the
   user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }`,
   `{ "editor": "image", "width", "height", "background", "shapes" }` or `{ "editor":
-  "vector", "width", "height", "setup" }` with commands that draw the starting art, 
+  "vector", "width", "height", "setup", "colorTools" }` with commands that draw the starting art, 
   `{ "editor": "paint", "width", "height", "setup" }` `{ "editor": "video", "setup" }` or `{ "editor":
   "chart", "setup" }` `{ "editor": "diagram", "setup" }` with tool calls,
   `{ "editor": "rich-text", "html" }`, 

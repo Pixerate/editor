@@ -1,0 +1,104 @@
+{
+	"prompt": "The white text on our light-blue badge fails contrast. Fix it using a colour from our palette (#1d3557, #457b9d, #a8dadc, #f1faee, #e63946), keeping the badge light blue.",
+	"fixture": {
+		"editor": "vector",
+		"width": 120,
+		"height": 60,
+		"colorTools": true,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 10,
+					"y": 10,
+					"width": 100,
+					"height": 40,
+					"name": "Badge",
+					"fill": "#a8dadc",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 30,
+					"y": 24,
+					"width": 60,
+					"height": 12,
+					"name": "Text",
+					"fill": "#ffffff",
+					"stroke": null
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the text uses a palette colour that reads on the badge at 4.5:1 or more",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$expr": "(() => { const L = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.replace('#', '').padEnd(6, '0').slice(i - 1, i + 1), 16) / 255).map((x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }; const cr = (a, b) => { const [x, y] = [L(a), L(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }; const t = v.find((n) => n.name === 'Text').fill.toLowerCase(); return ['#1d3557', '#457b9d', '#a8dadc', '#f1faee', '#e63946'].includes(t) && cr(t, v.find((n) => n.name === 'Badge').fill) >= 4.5; })()"
+					}
+				}
+			}
+		},
+		{
+			"why": "the badge stays light blue",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$some": {
+							"name": "Badge",
+							"fill": "#a8dadc"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "check_color_contrast",
+			"args": {
+				"foreground": "#ffffff",
+				"background": "#a8dadc"
+			}
+		},
+		{
+			"tool": "check_color_contrast",
+			"args": {
+				"foreground": "#1d3557",
+				"background": "#a8dadc"
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.setStyle",
+				"params": {
+					"ids": [
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.1.id"
+						}
+					],
+					"fill": "#1d3557"
+				}
+			}
+		}
+	]
+}

@@ -7,6 +7,14 @@ description: How to inspect colours, check and optimize WCAG contrast and access
 
 The colour module provides DOM-free colour tools for inspection, WCAG accessibility validation, colour-vision deficiency simulation, palette audits, colour harmony suggestions, and perceptual blending.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-accessibility-audit`: contrast, colour-blind-safe meaning, both modes, fixes and a report.
+- `pixerate-brand-application`: brand roles, exact palette values, readable text, derivatives.
+
 ## Working method
 
 1. **Inspect and convert.** Run `inspect_color` to parse any hex, `rgb()`, `hsl()`, `oklch()`, or CSS named colour into standard formats (hex, rgb, hsl, oklch) and relative luminance, and to check if it fits within the sRGB gamut.

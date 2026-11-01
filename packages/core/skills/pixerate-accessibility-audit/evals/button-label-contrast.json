@@ -1,0 +1,97 @@
+{
+	"prompt": "Our 'Buy now' button fails accessibility review: the label is hard to read on the button. Fix the label colour so it meets WCAG AA for normal text, keeping the button's brand blue.",
+	"fixture": {
+		"editor": "vector",
+		"width": 200,
+		"height": 80,
+		"colorTools": true,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 20,
+					"y": 20,
+					"width": 160,
+					"height": 40,
+					"name": "Button",
+					"fill": "#4da3ff",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 60,
+					"y": 32,
+					"width": 80,
+					"height": 16,
+					"name": "Label",
+					"fill": "#ffffff",
+					"stroke": null
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "label on button at least 4.5:1",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$expr": "(() => { const L = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.replace('#', '').padEnd(6, '0').slice(i - 1, i + 1), 16) / 255).map((x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }; const cr = (a, b) => { const [x, y] = [L(a), L(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }; return cr(v.find((n) => n.name === 'Label').fill, v.find((n) => n.name === 'Button').fill) >= 4.5; })()"
+					}
+				}
+			}
+		},
+		{
+			"why": "the button keeps its blue",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$some": {
+							"name": "Button",
+							"fill": "#4da3ff"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "check_color_contrast",
+			"args": {
+				"foreground": "#ffffff",
+				"background": "#4da3ff"
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.setStyle",
+				"params": {
+					"ids": [
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.1.id"
+						}
+					],
+					"fill": "#0b1f33"
+				}
+			}
+		}
+	]
+}
