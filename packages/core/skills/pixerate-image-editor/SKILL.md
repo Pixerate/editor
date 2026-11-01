@@ -63,8 +63,15 @@ the pitfalls, and uses the tools below.
    (`select_subject`, or a `select_polygon`, then `refine_selection`), then `layer_via_copy`.
 3. **Shape layers non-destructively**: masks (`add_layer_mask` from the selection, or
    reveal-all / hide-all, softened with `density` / `feather`) instead of deleting pixels;
-   `clipped: true` (via `set_layer_properties`) to limit a layer or adjustment to the layer below;
-   `blend`, `opacity` and `fillOpacity` instead of baking.
+   `clipped: true` to limit a layer or adjustment to the layer below (pass it to
+   `add_adjustment_layer` / `add_effect_layer` with `aboveId` so it is clipped in the same step,
+   or set it later with `set_layer_properties`); `blend`, `opacity` and `fillOpacity` instead of
+   baking.
+   **To affect one layer only:** a filter effect from `apply_effect` keeps that layer's
+   transparency by default (`preserveTransparency`), so it changes only the layer's own pixels;
+   pass `preserveTransparency: false` only when the effect should fill the empty area too. A
+   generator or overlay goes on its own layer with `add_effect_layer` `aboveId` + `clipped: true`;
+   an adjustment with `add_adjustment_layer` `aboveId` + `clipped: true`.
 4. **Organise** with `group_layers` (pass-through by default: blend modes inside still see the
    layers below; give the group a blend mode to isolate them), `move_layer` and
    `offset_layer`.
@@ -176,7 +183,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `export_smart_object_contents` | Export Contents: the contents as a file (`name`, `mimeType`, `byteLength`, `base64`): the file they came from while unedited, else a PNG (raster) or PSD / PSB (nested document). Changes nothing. |
 | `search_effects` | Find provider effects (when the host registered an effects provider; else `available: false`): `query`, `kind`, `category`, `use` (filter for smart filters; generator, overlay, title for effect layers). See `references/provider-effects.md`. |
 | `describe_effect` | Read an effect's `controls` (strict JSON Schema with ranges and units), `defaults`, `presets` and `inputs` before applying it. |
-| `list_applied_effects` | Read the provider effects per layer: effect smart filters (`role: smart filter`, with blend and opacity) and an effect layer's own effect (`generator`), with `available` false when the provider lacks one. Works without a provider. |
+| `list_applied_effects` | Read the provider effects per layer: effect smart filters (`role: smart filter`, with blend, opacity and `preserveTransparency`) and an effect layer's own effect (`generator`), with `available` false when the provider lacks one. Works without a provider. |
 | `capture_view` | Inspect detail in natural image pixels (the space of `get_selection` and the select tools, before crop and rotation): `region` `content` (whole image, default), `selection` or `rect`; small regions are enlarged up to 8× with hard pixel edges, so a 64 px rect shows real pixels. `includeOverlays: true` shades unselected pixels and outlines the crop: use it to check a mask's edge before `apply_selection_as_mask`. Returns the `rect` and `scale`. Use `render_preview` for the final framed result. |
 
 ### Write
@@ -184,7 +191,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | Tool | Use it to |
 | --- | --- |
 | `set_adjustments` | Set base controls and existing layer parameters in one undo step: `values` is a map of control id or `layers.<layerId>.<controlId>` path to number; `label` is echoed. Values are clamped to range; returns `applied` and `clamped` (and a note when `tint` is set on a process 1 edit). Unknown ids fail and change nothing. Cannot set curves points, booleans or colours. |
-| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. With a selection the layer is masked by it (`useSelection`, default true; `false` for a global layer; `masked` in the result). Returns the layer (with its new id) and its stack index. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
+| `add_adjustment_layer` | Add a layer above the other adjustment layers and below annotations (or directly above `aboveId`, or at the top of group `parentId`): `kind` (curves, levels, hueSaturation, vibrance, colorBalance, blackWhite, photoFilter, invert, posterize, threshold), optional `params` merged with neutral defaults, `opacity` 0..1 (default 1), `blend` (default normal), `name`. With a selection the layer is masked by it (`useSelection`, default true; `false` for a global layer; `masked` in the result). `clipped: true` (with `aboveId`) clips it to the layer below in the same undo step so it adjusts only that layer; refused when nothing is below. Returns the layer (with its new id), its stack index, `masked` and `clipped`. The only tool that sets curves points, `colorize`, `preserveLuminosity`, a black and white `tint` or a photo filter `color`. |
 | `select_all` | Select › All. Returns the selection summary (`empty`, `bounds`, `area`, `percent`). |
 | `deselect` | Clear the selection so edits apply to the whole layer. Returns the empty summary. |
 | `invert_selection` | Select › Inverse (soft edges stay soft; with nothing selected, selects all). Returns the summary. |
@@ -332,10 +339,10 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `mix_colors` | Read-only. Mix 1 to 16 `colors` (`{color: #rrggbb, weight, strength?}`) like paint (Kubelka-Munk over reflectance spectra). Returns `mixed` (#rrggbb), `rgbLerp` (the plain RGB average, for comparison) and the normalised `weights`. Call it before `paint_stroke` / `fill_pixels` to pick a paint colour. |
 | `clear_pixels` | Remove the selected pixels (alpha to 0; a transparency-locked layer or a mask gets the background colour). Returns the changed bounds. |
 | `import_psd` | Open a PSD / PSB (`data` base64, a `data:` URL is fine) as the document, replacing the layers, crop and rotation (one undo step). Returns the new `layers` tree with ids, `layerIds`, size and `warnings` naming the affected layers. Call `inspect_psd` first when losses matter. |
-| `apply_effect` | Run a provider filter effect on a layer as a smart filter (`target`, `effect`, `values`, `index`, `enabled`, `opacity`); a pixel, shape or type layer becomes a smart object in the same undo step (`converted`). With a selection the filter mask is set from it (`masked`): deselect first to filter the whole layer. Returns the filter id. |
-| `update_effect` | Change an effect smart filter (`values` merged, `null` resets; `enabled`, `opacity`, `index`) or redraw an effect layer (`effect: "generator"`, values only). |
+| `apply_effect` | Run a provider filter effect on a layer as a smart filter (`target`, `effect`, `values`, `index`, `enabled`, `opacity`, `blend`); a pixel, shape or type layer becomes a smart object in the same undo step (`converted`). It keeps the layer's transparency (`preserveTransparency`, default true: the result is drawn over the layer and takes its alpha); `false` lets a shader fill transparent pixels. With a selection the filter mask is set from it (`masked`): deselect first to filter the whole layer. Returns the filter id and `preserveTransparency`. |
+| `update_effect` | Change an effect smart filter (`values` merged, `null` resets; `enabled`, `opacity`, `blend`, `preserveTransparency`, `index`) or redraw an effect layer (`effect: "generator"`, values only). Returns the filter as it is now. |
 | `remove_effect` | Remove an effect smart filter, or (`generator`) keep an effect layer's pixels as a plain layer. |
-| `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `animate`, `name`, `aboveId` / `belowId`, `opacity`, `blend`). An effect with its own background (`backgroundOpacity` in `describe_effect`) starts with it transparent when there are layers below. Returns the layer id. |
+| `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect at the document's size and bit depth (`values`, `time`, `animate`, `name`, `aboveId` / `belowId`, `opacity`, `blend`, `clipped`). `clipped: true` clips it to the layer directly below in the same undo step, so it shows only over that layer's pixels (refused when nothing is below it in its group). An effect with its own background (`backgroundOpacity` in `describe_effect`) starts with it transparent when there are layers below. Returns the layer id and `clipped`. |
 | `set_effect_layer` | Change an effect layer: swap its `effect` (its defaults plus `values`), pick the still frame (`time`, ms), or make it play in an animation (`animate: { duration }`; `null` for a still frame). The longest animating layer sets the animation's length. |
 | `apply_selection_as_mask` | Mask a layer with the current selection: pass `layerId` to mask an existing layer, or `kind` (plus optional `params`) to create a new masked layer in one step. `density` 0..1 and `feather` px soften the mask non-destructively. Returns `layerId`, kind, mask info and the selection summary. |
 | `stroke_selection` | Edit › Stroke: a band `width` px (≤ 250) `outside` (default), `inside` or `center` on the selection edge, with `color`, `opacity`, `blend`, on a layer's pixels or mask (`channel`). One undo step. Returns the changed `bounds`. |

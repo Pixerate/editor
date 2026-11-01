@@ -30,6 +30,8 @@ export interface ImageEffectsToolProviderOptions {
   playbackSurface?: string;
 }
 
+const FILTER_BLEND_SCHEMA = { type: 'string', enum: BLEND_MODES.map((m) => m.id).filter((b) => b !== 'pigment'), description: 'How the effect\'s result blends with the layer below it in the stack (default normal).' } as const;
+
 const ANIMATE_SCHEMA = {
   type: 'object',
   properties: { duration: { type: 'number', exclusiveMinimum: 0, maximum: MAX_EFFECT_ANIMATION_MS, description: `How long it plays in ms (at most ${MAX_EFFECT_ANIMATION_MS}).` } },
@@ -45,7 +47,7 @@ export function imageLayerAppliedEffects(layer: ImageLayer): AppliedEffectInfo[]
   if (layer.type === 'pixel' && layer.generator) out.push({ id: 'generator', ...ref(layer.generator), role: 'effect layer', enabled: true, values: layer.generator.values, ...(layer.generator.time ? { time: layer.generator.time } : {}), ...(layer.generator.animate ? { animate: layer.generator.animate } : {}) } as AppliedEffectInfo);
   if (layer.type === 'smart')
     (layer.smartFilters?.filters ?? []).forEach((f, index) => {
-      if (f.kind === 'effect') out.push({ id: f.id, ...ref(f), role: 'smart filter', enabled: f.enabled && layer.smartFilters!.enabled, opacity: f.opacity, blend: f.blend, values: f.values, index } as AppliedEffectInfo);
+      if (f.kind === 'effect') out.push({ id: f.id, ...ref(f), role: 'smart filter', enabled: f.enabled && layer.smartFilters!.enabled, opacity: f.opacity, blend: f.blend, preserveTransparency: Boolean(f.preserveTransparency), values: f.values, index } as AppliedEffectInfo);
     });
   return out;
 }
@@ -79,9 +81,17 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
     target: { noun: 'layer', id: 'A layer id from list_layers.' },
     applyUses: ['filter'],
     applyDetails:
-      'The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). With a selection, the filter mask is set from it in the same step, so the filter only changes the selected area (the result says masked); deselect first to filter the whole layer. Generators and overlays go on their own layer through add_effect_layer.',
+      'The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. It keeps the layer\'s transparency by default (preserveTransparency: the result only changes the layer\'s own pixels, never fills transparent ones); preserveTransparency false lets it draw over the whole canvas. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). With a selection, the filter mask is set from it in the same step, so the filter only changes the selected area (the result says masked); deselect first to filter the whole layer. Generators and overlays go on their own layer through add_effect_layer.',
     provider: () => controller.effectsProvider,
     readOnlyReason,
+    applyOptions: {
+      preserveTransparency: { type: 'boolean', description: 'Keep the layer\'s transparency: the result is drawn over the layer and takes its alpha, so transparent pixels stay transparent and only the layer\'s content changes (default true). false lets the effect\'s own alpha replace the layer\'s, so a shader can fill the empty area.' },
+      blend: FILTER_BLEND_SCHEMA
+    },
+    updateOptions: {
+      preserveTransparency: { type: 'boolean', description: 'Keep the layer\'s transparency (true) or let the effect fill transparent pixels (false). Smart filters only.' },
+      blend: FILTER_BLEND_SCHEMA
+    },
     list: (target) => {
       const layers = target ? [layerOf(target)] : flattenLayers(controller.getState().layers);
       return layers
@@ -89,19 +99,19 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         .filter((t) => target || t.effects.length);
     },
     apply: async (target, effect, args) => {
-      const r = await controller.applyEffectFilter(target, effect, { values: plainValues(args.values), index: args.index, enabled: args.enabled, opacity: args.opacity, useSelection: true });
+      const r = await controller.applyEffectFilter(target, effect, { values: plainValues(args.values), index: args.index, enabled: args.enabled, opacity: args.opacity, blend: args.blend as string | undefined, preserveTransparency: args.preserveTransparency !== false, useSelection: true });
       return result(r.layerId, r.filter.id, { converted: r.converted, masked: r.masked });
     },
     update: async (target, instance, changes) => {
       const layer = layerOf(target);
       if (instance === 'generator') {
-        const extra = (['enabled', 'opacity', 'index'] as const).filter((k) => changes[k] !== undefined);
+        const extra = (['enabled', 'opacity', 'index', 'blend', 'preserveTransparency'] as const).filter((k) => changes[k] !== undefined);
         if (extra.length) throw new Error(`An effect layer's own effect only takes values; change the layer's ${extra.join(', ')} with update_layer.`);
         if (layer.type !== 'pixel' || !layer.generator) throw new Error(`"${target}" is not an effect layer.`);
         await controller.updateEffectLayer(target, { values: changes.values as Record<string, EffectValue | null> | undefined });
         return result(target, 'generator');
       }
-      await controller.updateEffectFilter(target, instance, { values: changes.values as Record<string, EffectValue | null> | undefined, enabled: changes.enabled, opacity: changes.opacity, index: changes.index });
+      await controller.updateEffectFilter(target, instance, { values: changes.values as Record<string, EffectValue | null> | undefined, enabled: changes.enabled, opacity: changes.opacity, index: changes.index, blend: changes.blend as string | undefined, preserveTransparency: changes.preserveTransparency as boolean | undefined });
       return result(target, instance);
     },
     remove: async (target, instance) => {
@@ -118,7 +128,7 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         name: 'add_effect_layer',
         title: 'Add an effect layer',
         description:
-          'Adds a layer drawn by a provider generator, overlay or title effect (search_effects with use generator, overlay or title) at the document\'s size and bit depth, above the active layer unless placed. Masks, blend mode, opacity and layer styles apply as to any layer; transparent effects show the layers beneath, and an effect with its own background (describe_effect backgroundOpacity) starts with it transparent when there are layers below, unless values set it. animate makes it play when the document is output as an animation. set_effect_layer changes its effect, frame or animation; update_effect with effect "generator" draws it again with new values; remove_effect "generator" keeps its pixels as a plain layer. One undo step. Returns the new layer id and its effect.',
+          'Adds a layer drawn by a provider generator, overlay or title effect (search_effects with use generator, overlay or title) at the document\'s size and bit depth, above the active layer unless placed. Masks, blend mode, opacity and layer styles apply as to any layer; transparent effects show the layers beneath, and an effect with its own background (describe_effect backgroundOpacity) starts with it transparent when there are layers below, unless values set it. animate makes it play when the document is output as an animation. clipped clips it to the layer directly below (a clipping mask) in the same step, so it only shows over that layer\'s pixels. set_effect_layer changes its effect, frame or animation; update_effect with effect "generator" draws it again with new values; remove_effect "generator" keeps its pixels as a plain layer. One undo step. Returns the new layer id, whether it is clipped, and its effect.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -130,7 +140,8 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
             aboveId: { type: 'string', minLength: 1, description: 'Put it directly above this layer (default: above the active layer, else on top).' },
             belowId: { type: 'string', minLength: 1, description: 'Put it directly below this layer.' },
             opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1 (default 1).' },
-            blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id).filter((b) => b !== 'pigment'), description: 'Layer blend mode (default normal); screen or add for light effects, multiply for textures.' }
+            blend: { type: 'string', enum: BLEND_MODES.map((m) => m.id).filter((b) => b !== 'pigment'), description: 'Layer blend mode (default normal); screen or add for light effects, multiply for textures.' },
+            clipped: { type: 'boolean', description: 'Clip it to the layer directly below (a clipping mask), so it only shows over that layer\'s pixels (default false). Refused when nothing is below it in its group or the stack.' }
           },
           required: ['effect'],
           additionalProperties: false
@@ -138,8 +149,8 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
         annotations: { title: 'Add an effect layer', ...ctx.annotations.write },
         handler: async (args) => {
           ctx.requireProvider();
-          const id = await controller.addEffectLayer(args.effect, { values: plainValues(args.values), time: args.time, animate: args.animate, name: args.name, aboveId: args.aboveId, belowId: args.belowId, opacity: args.opacity, blend: args.blend });
-          return { layerId: id, effects: imageLayerAppliedEffects(layerOf(id)) };
+          const id = await controller.addEffectLayer(args.effect, { values: plainValues(args.values), time: args.time, animate: args.animate, name: args.name, aboveId: args.aboveId, belowId: args.belowId, opacity: args.opacity, blend: args.blend, clipped: args.clipped });
+          return { layerId: id, clipped: Boolean(layerOf(id).clipped), effects: imageLayerAppliedEffects(layerOf(id)) };
         }
       },
       {

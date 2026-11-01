@@ -22,6 +22,13 @@ user where to find what you changed.
 ## Best practices
 
 - Prefer smart filters to baking: they stay editable, reorderable and maskable.
+- **To affect one layer only,** apply the filter to that layer: `apply_effect` keeps its
+  transparency by default (`preserveTransparency: true`), so the effect only recolours the
+  layer's own pixels and follows later edits to them. Set `preserveTransparency: false`
+  (`apply_effect` or `update_effect`) only when the effect should draw into the empty area, such
+  as a glow or background around a cutout.
+- For a generator or overlay limited to one layer, `add_effect_layer` with `aboveId` that layer
+  and `clipped: true`: one undo step, no `set_layer_properties` call needed.
 - For light leaks and glows, add an overlay effect layer with blend `screen` or `add`. For
   textures, use `multiply`.
 - Several effect filters render in order: each waits for the one below it.
@@ -31,6 +38,10 @@ user where to find what you changed.
 - **Effects render in the background.** Right after `apply_effect` or `update_effect`, the smart
   object shows the pixels without the new effect until the provider's result lands. This is a
   redraw, not an undo step. Render a preview after the effect has rendered.
+- **Shaders ignore transparency.** Many provider shaders write opaque pixels everywhere. With
+  `preserveTransparency: false` (or a filter from an older document, where it is missing) the
+  effect's alpha replaces the layer's and fills its transparent area. `list_applied_effects`
+  shows the setting; turn it on with `update_effect`.
 - **Smart filters run on 8-bit pixels.** Effect layers render at the document's bit depth.
 - **Without a provider,** effect filters pass pixels through and effect layers keep their last
   pixels. Both keep their effect ids and values and save unchanged. The write tools refuse.

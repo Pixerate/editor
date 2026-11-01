@@ -19,15 +19,18 @@ const fmt = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
  * Provider effects for the active layer. An effect layer first: its effect (change it or
  * rasterize it), a still frame or an animation for an effect that moves, and its controls. Then
  * the provider filters applied to the layer (smart filters; applying one converts a pixel layer to
- * a smart object in the same undo step). Layer styles (drop shadow, stroke…) are not here: they
- * are part of the layer's properties (`LayerEffectsPanel`). New effect layers come from the layers
- * panel. Without a provider it says why nothing can be added.
+ * a smart object in the same undo step), each keeping the layer's transparency unless "Keep
+ * transparency" is cleared. Then adding an effect layer, above the active layer and optionally
+ * clipped to it. Layer styles (drop shadow, stroke…) are not here: they are part of the layer's
+ * properties (`LayerEffectsPanel`). Without a provider it says why nothing can be added.
  */
 export function ImageProviderEffectsPanel({ controller, className = '', components }: ImageProviderEffectsPanelProps) {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   /** The open effect browser: filters to apply, or effects to change an effect layer to. */
-  const [browse, setBrowse] = useState<null | 'filter' | 'change'>(null);
+  const [browse, setBrowse] = useState<null | 'filter' | 'change' | 'layer'>(null);
+  /** Clip the next effect layer to the layer below it. */
+  const [clip, setClip] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [scrubbed, setScrubbed] = useState<number | null>(null);
@@ -179,7 +182,7 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
         </div>
       )}
       {browse === 'filter' && layer && (
-        <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id, { useSelection: true })))} />
+        <EffectsBrowser provider={provider} uses={['filter']} title="Filters" onPick={(e) => (setBrowse(null), run(() => controller.applyEffectFilter(layer.id, e.id, { useSelection: true, preserveTransparency: true })))} />
       )}
       {filters.length > 0 && layer && (
         <ol className="space-y-1" data-effect-part="filters" aria-label="Filters">
@@ -209,6 +212,14 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
                     ✕
                   </button>
                 </div>
+                <label className="mt-0.5 flex items-center gap-1 pl-0.5 text-[11px] text-muted-foreground" title="Draw the filter only over the layer's own pixels; clear it to let the effect fill transparent areas">
+                  <ImageCheckbox
+                    checked={f.preserveTransparency === true}
+                    label={`${label}: keep transparency`}
+                    onChange={(preserveTransparency) => run(() => controller.updateEffectFilter(layer.id, f.id, { preserveTransparency }))}
+                  />
+                  Keep transparency
+                </label>
                 {open === f.id && (
                   <div className="mt-1 space-y-2">
                     <label className="flex items-center gap-1">
@@ -240,7 +251,24 @@ export function ImageProviderEffectsPanel({ controller, className = '', componen
         </ol>
       )}
       {layer && canFilter && !generator && filters.length === 0 && (
-        <p className="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties; new effect layers are added from the layers panel.</p>
+        <p className="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties.</p>
+      )}
+      {provider && (
+        <div className="space-y-1" data-effect-part="add-layer">
+          <div className="flex items-center gap-1">
+            <span className="flex-1 font-semibold uppercase tracking-wider text-[11px] text-foreground">Effect layers</span>
+            <button type="button" className={imageOutlineButtonClass} aria-pressed={browse === 'layer'} onClick={() => setBrowse(browse === 'layer' ? null : 'layer')}>
+              Add effect layer…
+            </button>
+          </div>
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Show the new effect layer only over the pixels of the layer below it (a clipping mask)">
+            <ImageCheckbox checked={clip} label="Clip to layer below" onChange={setClip} />
+            Clip to layer below
+          </label>
+          {browse === 'layer' && (
+            <EffectsBrowser provider={provider} uses={EFFECT_LAYER_USES} title="Add an effect layer" onPick={(e) => (setBrowse(null), run(() => controller.addEffectLayer(e.id, { clipped: clip })))} />
+          )}
+        </div>
       )}
       {!layer && <p className="text-[11px] text-muted-foreground">Select a layer to apply effects to it.</p>}
       {message && (

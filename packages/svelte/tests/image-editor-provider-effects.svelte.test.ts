@@ -84,6 +84,32 @@ describe("ImageProviderEffectsPanel (Svelte)", () => {
     expect((c.getLayer(id) as SmartObjectLayer).smartFilters?.filters ?? []).toEqual([]);
   });
 
+  it("keeps the layer's transparency for a new filter, toggled by Keep transparency", async () => {
+    const { c, id } = setup();
+    render(ImageProviderEffectsPanel, { controller: c });
+    await click(button("Add filter…"));
+    await click(q('[data-effect-id="fake.invert"]'));
+    const f = (c.getLayer(id) as SmartObjectLayer).smartFilters!.filters[0];
+    expect(f).toMatchObject({ kind: "effect", preserveTransparency: true });
+    const keep = q<HTMLInputElement>('input[aria-label="Invert: keep transparency"]');
+    expect(keep.checked).toBe(true);
+    await click(keep);
+    expect((c.getLayer(id) as SmartObjectLayer).smartFilters!.filters[0]).toMatchObject({ preserveTransparency: false });
+    expect(q<HTMLInputElement>('input[aria-label="Invert: keep transparency"]').checked).toBe(false);
+  });
+
+  it("adds an effect layer above the active layer, clipped to it with Clip to layer below", async () => {
+    const { c, id } = setup();
+    render(ImageProviderEffectsPanel, { controller: c });
+    await click(q('input[aria-label="Clip to layer below"]'));
+    await click(button("Add effect layer…"));
+    await click(q('[data-effect-id="fake.gradient"]'));
+    const layers = c.getState().layers;
+    const added = layers[layers.length - 1];
+    expect(added).toMatchObject({ type: "pixel", clipped: true, generator: { effect: "fake.gradient" } });
+    expect(layers[layers.length - 2].id).toBe(id);
+  });
+
   it("leaves layer styles to the layer's properties", async () => {
     const { c, id } = setup();
     c.addLayerEffect(id, "drop-shadow");

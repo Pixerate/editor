@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/image-editor] Provider Shader Filters Filled a Layer's Transparent Pixels
+
+- **Issue / Symptom**: A provider filter effect (`apply_effect`, a Flair shader) applied to a cutout or a text layer painted over the whole canvas: the transparent area around the content became opaque, so the effect no longer looked like it belonged to that layer.
+- **Root Cause**: An effect smart filter's result replaced its input outright (`applySmartFilters` in `layers/smart.ts`), alpha included. Many shaders ignore the source alpha and write opaque pixels everywhere, so the filter's alpha won.
+- **Solution / Workaround**: `EffectSmartFilter.preserveTransparency`. When set, `keepAlphaOf` draws the result over the filter's input and gives it the input's alpha, before the filter's blend and opacity. New filters from `apply_effect` and the effects panels set it to true. A missing value means false, so older documents render as before. The provider's result is cached by input only (`preserveTransparency` is left out of that key), so toggling it does not re-run the shader. For generators and overlays, use `add_effect_layer` / `add_adjustment_layer` `clipped: true` instead.
+
 ### [core/effects] Effects That Draw No Pixels Must Be Kept Out of Pixel Pickers
 
 - **Issue / Symptom**: A new effect kind that draws no pixels (a `motion` effect, a `camera` move) shows up in editors' effect browsers, `apply_effect` enums and thumbnails, where creating a renderer for it fails ("No preview", or an `unsupported` error after the agent picked it).

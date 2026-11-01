@@ -353,13 +353,14 @@ export function applySmartFilters(placed: PixelSurface, stack: SmartFilterStack 
         // An effect above one still rendering would get the wrong input: wait for that one first.
         if (incomplete) continue;
         // The input is the placed contents through the filters below: key it by those.
-        const inputKey = JSON.stringify([surfaceId(placed), W, H, active.slice(0, i + 1).map((x) => ({ ...x, id: undefined, blend: x === f ? undefined : x.blend, opacity: x === f ? undefined : x.opacity }))]);
+        const inputKey = JSON.stringify([surfaceId(placed), W, H, active.slice(0, i + 1).map((x) => (x === f ? { ...x, id: undefined, blend: undefined, opacity: undefined, preserveTransparency: undefined } : { ...x, id: undefined }))]);
         const r = canvas.effects?.resolve(f, acc, W, H, inputKey);
         if (!r?.result) {
           if (r?.pending) incomplete = true;
           continue;
         }
         out = new Uint8ClampedArray(r.result);
+        if (f.preserveTransparency) keepAlphaOf(out, acc);
       } else {
         out = new Uint8ClampedArray(acc);
         runLayerFilters(out, W, H, [f]);
@@ -384,6 +385,23 @@ export function applySmartFilters(placed: PixelSurface, stack: SmartFilterStack 
   const out = surfaceFromPixels({ width: W, height: H, data: result }, 4, 0, 0);
   if (incomplete) incompleteSurfaces.add(out);
   return out;
+}
+
+/**
+ * An effect's result kept to its input's transparency, in place: the result drawn over the input,
+ * with the input's alpha. Transparent input stays transparent.
+ */
+function keepAlphaOf(result: Uint8ClampedArray, input: Uint8ClampedArray): void {
+  for (let i = 0; i < result.length; i += 4) {
+    const ia = input[i + 3];
+    const ta = result[i + 3] / 255;
+    if (ta < 1) {
+      const ba = ia / 255;
+      const a = ta + ba * (1 - ta);
+      for (let c = 0; c < 3; c++) result[i + c] = a > 0 ? (result[i + c] * ta + input[i + c] * ba * (1 - ta)) / a : 0;
+    }
+    result[i + 3] = ia;
+  }
 }
 
 /** `dst = lerp(dst, src, k · coverage)` per channel. */
@@ -842,6 +860,7 @@ function normalizeEffectSmartFilter(raw: Record<string, unknown>, id: string): E
   if (typeof raw.effect !== 'string' || !raw.effect) fail('An effect smart filter needs an "effect" id from search_effects.');
   const values = raw.values ?? {};
   if (typeof values !== 'object' || values === null || Array.isArray(values)) fail('"values" must be an object of control values.');
+  if (raw.preserveTransparency !== undefined && typeof raw.preserveTransparency !== 'boolean') fail('"preserveTransparency" must be true or false.');
   return {
     id,
     kind: 'effect',
@@ -849,7 +868,8 @@ function normalizeEffectSmartFilter(raw: Record<string, unknown>, id: string): E
     effect: raw.effect as string,
     ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
     ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
-    values: { ...(values as Record<string, EffectValue>) }
+    values: { ...(values as Record<string, EffectValue>) },
+    ...(typeof raw.preserveTransparency === 'boolean' ? { preserveTransparency: raw.preserveTransparency } : {})
   };
 }
 

@@ -23,7 +23,9 @@
     return untrack(() => c.subscribe(() => tick++));
   });
   /** The open effect browser: filters to apply, or effects to change an effect layer to. */
-  let browse = $state<null | 'filter' | 'change'>(null);
+  let browse = $state<null | 'filter' | 'change' | 'layer'>(null);
+  /** Clip the next effect layer to the layer below it. */
+  let clip = $state(false);
   let message = $state<string | null>(null);
   let open = $state<string | null>(null);
   const snapshot = $derived.by(() => {
@@ -84,9 +86,10 @@
   Provider effects for the active layer. An effect layer first: its effect (change it or
   rasterize it), a still frame or an animation for an effect that moves, and its controls. Then
   the provider filters applied to the layer (smart filters; applying one converts a pixel layer to
-  a smart object in the same undo step). Layer styles (drop shadow, stroke…) are not here: they
-  are part of the layer's properties (LayerEffectsPanel). New effect layers come from the layers
-  panel. Without a provider it says why nothing can be added.
+  a smart object in the same undo step), each keeping the layer's transparency unless "Keep
+  transparency" is cleared. Then adding an effect layer, above the active layer and optionally
+  clipped to it. Layer styles (drop shadow, stroke…) are not here: they are part of the layer's
+  properties (LayerEffectsPanel). Without a provider it says why nothing can be added.
 -->
 <section class="flex flex-col gap-2 text-xs {className}" aria-label="Effects" data-image-provider-effects="">
   {#if !provider}<p class="text-[11px] text-muted-foreground">No effects provider is registered. Effects in the document are kept.</p>{/if}
@@ -162,7 +165,7 @@
     </div>
     {#if browse === 'filter'}
       {@const id = layer.id}
-      <EffectsBrowser {provider} uses={['filter']} title="Filters" onpick={(e) => ((browse = null), run(() => controller.applyEffectFilter(id, e.id, { useSelection: true })))} />
+      <EffectsBrowser {provider} uses={['filter']} title="Filters" onpick={(e) => ((browse = null), run(() => controller.applyEffectFilter(id, e.id, { useSelection: true, preserveTransparency: true })))} />
     {/if}
   {/if}
   {#if layer && all.some((f) => f.kind === 'effect')}
@@ -181,6 +184,12 @@
               <button type="button" class={imageOutlineButtonClass} disabled={index === 0} aria-label="Move down" onclick={() => run(() => controller.updateEffectFilter(id, f.id, { index: index - 1 }))}>↓</button>
               <button type="button" class={imageOutlineButtonClass} aria-label="Remove {label}" onclick={() => run(() => controller.removeSmartFilter(id, f.id))}>✕</button>
             </div>
+            <label class="mt-0.5 flex items-center gap-1 pl-0.5 text-[11px] text-muted-foreground" title="Draw the filter only over the layer's own pixels; clear it to let the effect fill transparent areas">
+              <ImageCheckbox checked={f.preserveTransparency === true} label="{label}: keep transparency" onchange={(preserveTransparency) => {
+                run(() => controller.updateEffectFilter(id, f.id, { preserveTransparency }));
+              }} />
+              Keep transparency
+            </label>
             {#if open === f.id}
               <div class="mt-1 space-y-2">
                 <label class="flex items-center gap-1">
@@ -206,7 +215,22 @@
     </ol>
   {/if}
   {#if layer && canFilter && !generator && !all.some((f) => f.kind === 'effect')}
-    <p class="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties; new effect layers are added from the layers panel.</p>
+    <p class="text-[11px] text-muted-foreground">No filters yet. A filter changes the layer's pixels and stays editable. Layer styles such as a drop shadow are in the layer's properties.</p>
+  {/if}
+  {#if provider}
+    <div class="space-y-1" data-effect-part="add-layer">
+      <div class="flex items-center gap-1">
+        <span class="flex-1 text-[11px] font-semibold uppercase tracking-wider text-foreground">Effect layers</span>
+        <button type="button" class={imageOutlineButtonClass} aria-pressed={browse === 'layer'} onclick={() => (browse = browse === 'layer' ? null : 'layer')}>Add effect layer…</button>
+      </div>
+      <label class="flex items-center gap-1 text-[11px] text-muted-foreground" title="Show the new effect layer only over the pixels of the layer below it (a clipping mask)">
+        <ImageCheckbox checked={clip} label="Clip to layer below" onchange={(v) => (clip = v)} />
+        Clip to layer below
+      </label>
+      {#if browse === 'layer'}
+        <EffectsBrowser {provider} uses={EFFECT_LAYER_USES} title="Add an effect layer" onpick={(e) => ((browse = null), run(() => controller.addEffectLayer(e.id, { clipped: clip })))} />
+      {/if}
+    </div>
   {/if}
   {#if !layer}<p class="text-[11px] text-muted-foreground">Select a layer to apply effects to it.</p>{/if}
   {#if message}<p role="alert" class="text-[11px] text-destructive">{message}</p>{/if}
