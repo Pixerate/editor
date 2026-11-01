@@ -254,4 +254,16 @@ describe('ImageEditorCanvas (Svelte)', () => {
     expect(drafts.at(-1)).toBeNull();
     expect(c.getState().crop).toMatchObject({ x: 20, y: 10, width: 120, height: 80 });
   });
+
+  it('picks the composite colour as the foreground in sample mode (the Eyedropper)', () => {
+    const picked: string[] = [];
+    const { c } = setup({ mode: 'sample', onsample: (color: string) => picked.push(color) });
+    c.addPixelLayer({ color: '#3366cc' });
+    c.setTool('eyedropper');
+    flushSync();
+    canvas().dispatchEvent(pointer('mousedown', 400, 250));
+    expect(picked).toEqual(['#3366cc']);
+    expect(c.getState().paint.foreground).toBe('#3366cc');
+    expect(c.getLayerBounds(c.getState().activeLayerId!)).not.toBeNull();
+  });
 });

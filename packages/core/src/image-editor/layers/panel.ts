@@ -627,6 +627,7 @@ export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOption
 
   if (layer.type === 'pixel') {
     effects();
+    panels.push({ id: 'color', title: 'Color Adjustments' });
     panels.push({ id: 'paint', title: 'Brush Options' });
   } else if (layer.type === 'adjustment') {
     panels.push({ id: 'adjustment', title: adjustmentKindLabel(layer.kind) });
@@ -636,7 +637,10 @@ export function layerPanels(layer: ImageLayer | null, options: LayerPanelsOption
   } else if (layer.type === 'shape') {
     panels.push({ id: 'shape', title: 'Shape Options' });
     effects();
-  } else if (layer.type === 'smart' || layer.type === 'group') {
+  } else if (layer.type === 'smart') {
+    effects();
+    panels.push({ id: 'color', title: 'Color Adjustments' });
+  } else if (layer.type === 'group') {
     effects();
   }
 

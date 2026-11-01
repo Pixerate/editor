@@ -1,10 +1,15 @@
 <script lang="ts">
-  import type { ImageEditorController, ImageLayer } from '@pixerate/editor/image-editor';
+  import type { ImageEditorController, ImageHistogram, ImageLayer } from '@pixerate/editor/image-editor';
   import {
     ADJUSTMENT_LAYER_OPACITY_CONTROL,
     DEFAULT_SHAPE_TOOL_OPTIONS,
     DEFAULT_TYPE_TOOL_OPTIONS,
     DEFAULT_SELECTION_TOOL_OPTIONS,
+    IMAGE_ADJUSTMENT_CONTROLS,
+    readAdjustmentControls,
+    type SelectionToolOptions,
+    type ShapeToolOptions,
+    type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
   import CanvasSizePanel from './CanvasSizePanel.svelte';
@@ -21,14 +26,32 @@
   import PathsPanel from './PathsPanel.svelte';
   import EdgeColorPanel from './EdgeColorPanel.svelte';
   import VectorMaskEdgesPanel from './VectorMaskEdgesPanel.svelte';
+  import Histogram from './Histogram.svelte';
 
   interface Props {
     controller: ImageEditorController;
     panelId: string;
+    /**
+     * The Selection panel's tool options. Bind them (with the canvas's `selectionOptions`) so the
+     * tool and settings picked here are the ones the canvas selects with; unbound, the panel keeps
+     * its own.
+     */
+    selectionOptions?: SelectionToolOptions;
+    /** The Shape Options panel's options; bind them with the canvas's `shapeOptions`. */
+    shapeOptions?: ShapeToolOptions;
+    /** The Typography panel's options; bind them with the canvas's `typeOptions`. */
+    typeOptions?: TypeToolOptions;
     class?: string;
   }
 
-  let { controller, panelId, class: className = '' }: Props = $props();
+  let {
+    controller,
+    panelId,
+    selectionOptions = $bindable({ ...DEFAULT_SELECTION_TOOL_OPTIONS }),
+    shapeOptions = $bindable({ ...DEFAULT_SHAPE_TOOL_OPTIONS }),
+    typeOptions = $bindable({ ...DEFAULT_TYPE_TOOL_OPTIONS }),
+    class: className = '',
+  }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -41,9 +64,19 @@
     void tick;
     return controller.getActiveLayer();
   });
-  let shapeOptions = $state({ ...DEFAULT_SHAPE_TOOL_OPTIONS });
-  let typeOptions = $state({ ...DEFAULT_TYPE_TOOL_OPTIONS });
-  let selectionOptions = $state({ ...DEFAULT_SELECTION_TOOL_OPTIONS });
+  const adjustments = $derived.by(() => {
+    void tick;
+    return readAdjustmentControls(controller.getState().adjustments);
+  });
+  let histogram = $state.raw<ImageHistogram | null>(null);
+  $effect(() => {
+    if (panelId !== 'color') return;
+    const c = controller;
+    return untrack(() => {
+      histogram = c.getHistogram();
+      return c.subscribeHistogram((h) => (histogram = h));
+    });
+  });
   /** Layers whose soft edge takes Edge Colour (decontaminate, despill, cast). */
   const EDGE_COLOR_TYPES = new Set(['pixel', 'shape', 'type', 'smart']);
 </script>
@@ -91,6 +124,18 @@
   {:else if panelId === 'effects'}
     <!-- Kept for hosts that still ask for it by id: layerPanels() folds it into 'properties'. -->
     <LayerEffectsPanel {controller} />
+  {:else if panelId === 'color'}
+    <!-- The colour adjustments (white balance, light, colour) without Add Adjustment Layer, which a host's layers panel offers. -->
+    <div class="flex flex-col gap-3 text-xs text-foreground">
+      <div class="flex items-center justify-between">
+        <span class="font-medium text-sm">Color Adjustments</span>
+        <button type="button" class="text-[10px] text-destructive hover:underline" onclick={() => controller.resetAdjustments()}>Reset</button>
+      </div>
+      {#if histogram}<Histogram {histogram} />{/if}
+      {#each IMAGE_ADJUSTMENT_CONTROLS as spec (spec.id)}
+        <ControlSlider {spec} value={adjustments[spec.id]} onchange={(v) => controller.setAdjustments({ [spec.id]: v })} />
+      {/each}
+    </div>
   {:else if panelId === 'adjustment'}
     <AdjustmentLayersPanel {controller} />
   {:else if panelId === 'type'}

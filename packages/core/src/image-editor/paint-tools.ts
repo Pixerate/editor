@@ -246,5 +246,28 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
     annotations: { title: 'Get the paint', ...READ },
     handler: () => paintView(),
   };
-  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint];
+  const sampleColor: AgentTool = {
+    name: 'sample_color',
+    title: 'Sample a colour (Eyedropper)',
+    description:
+      'The Eyedropper: reads the composite colour at a point in document pixels, averaged over a size × size square (default 1), and by default makes it the paint foreground. Fails outside the canvas or where every layer is transparent. View state, not an undo step. Returns the colour (#rrggbb) and the foreground.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Document x in pixels.' },
+        y: { type: 'number', description: 'Document y in pixels.' },
+        size: { type: 'integer', minimum: 1, maximum: 101, description: 'Sample square in pixels (odd values centre on the point). Default 1.' },
+        setForeground: { type: 'boolean', description: 'Make the colour the paint foreground (default true).' },
+      },
+      required: ['x', 'y'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Sample a colour (Eyedropper)', ...SET },
+    handler: (args) => {
+      const color = controller.sampleColor({ x: args.x as number, y: args.y as number }, { size: args.size as number | undefined, setForeground: args.setForeground !== false });
+      if (!color) throw new LayerOperationError(`Nothing to sample at (${args.x}, ${args.y}): the point is outside the canvas or transparent. Read the canvas size with get_image_info, then sample inside it.`);
+      return { color, foreground: controller.getState().paint.foreground };
+    },
+  };
+  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor];
 }

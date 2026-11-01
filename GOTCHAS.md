@@ -3268,3 +3268,17 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A cache keyed by `McpToolDefinition` or `ToolsetInfo` objects (a `WeakMap`, or reusing a result when the `tools` array is the same) never hits on the real `search_tools` path, so `searchTools` kept re-indexing all ~580 tools (~14 ms per query, even one matching nothing).
 - **Root Cause**: `ToolRegistry.listTools()` builds each definition afresh (`toDefinition` spreads the `AgentTool`), `toolsets()` builds new `ToolsetInfo` objects, and `ToolRegistryView` filters them into new arrays per call. Some providers also build new tools, schemas included, on every `tools()` read (rich text formatting, `run_command`, the effects providers).
 - **Solution / Workaround**: Key per-tool caches by content: `search.ts` caches token sets by the text itself (`tokenCache`, cleared past 20k entries) and argument text by `inputSchema` object, which the spread keeps. That survives fresh listings and invalidates on any change to a name, title, description or toolset text. Don't rely on definition identity across `listTools()` calls.
+
+### [svelte/image-editor] Selection and Shape Panel Options Never Reached a Host's Canvas
+
+- **Area**: Svelte `LayerPanel`, `ImageEditorCanvas` (`selectionOptions`, `shapeOptions`, `typeOptions`)
+- **Symptom**: In a host sidebar built from `layerPanels` + `LayerPanel` (Pixerate's Image Studio), picking Lasso in the Selection panel or Ellipse in Shape Options changed nothing on the canvas: it kept selecting with the Magic Wand and drawing rectangles.
+- **Root Cause**: `LayerPanel` kept its own `$state` copies of the options. The canvas takes them as props from the host, which never saw the panel's copies.
+- **Solution**: `LayerPanel` takes bindable `selectionOptions`, `shapeOptions` and `typeOptions`. A host binds the same state to the panel and the canvas. Unbound, the panel still keeps its own (the editor's own `ImageEditor` is unaffected).
+
+### [monorepo] Vitest "Cannot find native binding" When Run Through an Intel `timeout`
+
+- **Area**: Local test runs on Apple Silicon (rolldown native binding)
+- **Symptom**: `vitest` fails at startup with "Cannot find native binding … Cannot find module '@rolldown/binding-wasm32-wasi'", though `@rolldown/binding-darwin-arm64` is installed and loads from plain `node`.
+- **Root Cause**: The command was wrapped in Homebrew's `/usr/local/bin/timeout`, an x86_64 binary. A universal `node` started from it runs under Rosetta as `x64`, so rolldown looks for `binding-darwin-x64`.
+- **Solution**: Run vitest without the Intel wrapper, or prefix it with `arch -arm64`. Check with `node -p process.arch` under the same wrapper.

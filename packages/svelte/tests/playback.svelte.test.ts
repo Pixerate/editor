@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { createRawSnippet, flushSync, mount, unmount } from 'svelte';
 import { ToolRegistry, PresenceStore, createAgentPlayback, createInstantPresenceClock } from '@pixerate/editor/tools';
 import { createEditorMcpToolProvider, type AgentStep } from '@pixerate/editor/agent';
 import type { CanvasNode } from '@pixerate/editor/canvas';
@@ -36,6 +36,21 @@ describe('PresenceLayer (Svelte)', () => {
 		expect(layer.querySelector('[data-actor-message="a"]')!.textContent).toBe('Aligning');
 		const ring = layer.querySelector('[data-actor-focus="a"]') as HTMLElement;
 		expect([ring.style.left, ring.style.width]).toEqual(['6px', '28px']);
+	});
+
+	it('draws a host cursor in place of the default arrow and tag, keeping the focus ring', () => {
+		const presence = new PresenceStore();
+		const cursor = createRawSnippet((actor: () => { name: string }) => ({
+			render: () => `<span data-host-cursor>${actor().name}</span>`
+		}));
+		const { target } = render(PresenceLayer, { presence, cursor });
+		presence.set({ id: 'a', name: 'Pixie', color: '#c026d3', x: 5, y: 5, message: 'Painting', focus: { x: 0, y: 0, width: 10, height: 10 } });
+		flushSync();
+		const actor = target.querySelector('[data-actor="a"]')!;
+		expect(actor.querySelector('[data-host-cursor]')!.textContent).toBe('Pixie');
+		expect(actor.querySelector('svg')).toBeNull();
+		expect(target.querySelector('[data-actor-message="a"]')).toBeNull();
+		expect(target.querySelector('[data-actor-focus="a"]')).not.toBeNull();
 	});
 });
 

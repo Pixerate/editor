@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Annotation, CropBox, CropHandle, ImageEditorFit, ImagePoint } from '@pixerate/editor/image-editor';
-  import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+  import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef, PresenceActor } from '@pixerate/editor/tools';
   import {
     canvasToImagePoint,
     imageToCanvasPoint,
@@ -38,7 +38,7 @@
     type TransformOverlay,
     type TypeToolOptions,
   } from '@pixerate/editor/image-editor';
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import { trackPresenceDrag } from '@pixerate/editor/tools';
   import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
   import PresenceLayer from '../playback/PresenceLayer.svelte';
@@ -51,7 +51,8 @@
     /**
      * What pointer gestures do: `crop` (crop box and its overlay, in the crop margin), `select`
      * (the selection tools), `paint` (brush, eraser, move and their shortcuts), `annotate`
-     * (annotations, shape and type layers, by the active tool) or `none` (view only). Free
+     * (annotations, shape and type layers, by the active tool), `sample` (the Eyedropper: a click
+     * picks the composite's colour as the paint foreground) or `none` (view only). Free
      * Transform works in every mode. Default `none`.
      */
     mode?: ImageEditorCanvasMode;
@@ -105,6 +106,10 @@
      * does, and the canvas's own gestures pause. Needs `viewportGestures`. Default false.
      */
     panMode?: boolean;
+    /** The Eyedropper picked a colour (`sample` mode); it is already the paint foreground. */
+    onsample?: (color: string) => void;
+    /** Draws each agent cursor during playback in place of the default arrow and name tag. */
+    presenceCursor?: Snippet<[PresenceActor]>;
     class?: string;
     style?: string;
   }
@@ -131,6 +136,8 @@
     open,
     viewportGestures = true,
     panMode = false,
+    onsample,
+    presenceCursor,
     class: className = '',
     style = '',
   }: Props = $props();
@@ -715,6 +722,13 @@
     if (transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
+    if (mode === 'sample') {
+      const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
+      const color = editor.controller.sampleColor(imgPt, { setForeground: true });
+      if (color) onsample?.(color);
+      return;
+    }
+
     if (mode === 'select') {
       const gesture = selectionGesture;
       const imgPt = canvasToImagePoint(canvasPt, editor.state, view.width, view.height, false);
@@ -1145,6 +1159,6 @@
     {/if}
   </div>
   {#if playing}
-    <PresenceLayer presence={agentPresence} viewport={docToRoot} clip={false} />
+    <PresenceLayer presence={agentPresence} viewport={docToRoot} clip={false} cursor={presenceCursor} />
   {/if}
 </div>
