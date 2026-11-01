@@ -367,7 +367,9 @@ export type ImageEditorTool =
   /** The path tools (see `PathEditGesture`): Path Selection, Direct Selection and the Pen for paths. */
   | 'path-select'
   | 'direct-select'
-  | 'path-pen';
+  | 'path-pen'
+  /** The Eyedropper: clicking the canvas picks the composite's colour as the paint foreground. */
+  | 'eyedropper';
 
 export type ImageEditorFit = 'contain' | 'margin';
 

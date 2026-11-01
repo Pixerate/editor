@@ -163,6 +163,19 @@ export function clampCropToImage(crop: CropBox, width: number, height: number): 
   };
 }
 
+/**
+ * The `margin` fit's gutter on each side: 7.5 % of the view (85 % fit), and never less than the
+ * room the transform frame's rotate handle needs above the image (`TRANSFORM_ROTATE_HANDLE_OFFSET`
+ * out, plus the handle), so a full-size layer's handles stay inside a small view.
+ */
+export const MARGIN_FIT_MIN_GUTTER = 36;
+
+function marginFitSpan(size: number): number {
+  const gutter = Math.max(size * 0.075, MARGIN_FIT_MIN_GUTTER);
+  // A view too small for the gutter still shows the image, at the plain 85 %.
+  return size - 2 * gutter > size * 0.5 ? size - 2 * gutter : size * 0.85;
+}
+
 function resolveViewport(
   state: ImageEditorState,
   vpWidth: number,
@@ -186,7 +199,7 @@ function resolveViewport(
   const fitScale =
     fit === 'contain'
       ? Math.min(vpWidth / baseW, vpHeight / baseH)
-      : Math.min((vpWidth * 0.85) / baseW, (vpHeight * 0.85) / baseH, 1);
+      : Math.min(marginFitSpan(vpWidth) / baseW, marginFitSpan(vpHeight) / baseH, 1);
   const centerX = vpWidth / 2 + pan.x;
   const centerY = vpHeight / 2 + pan.y;
 

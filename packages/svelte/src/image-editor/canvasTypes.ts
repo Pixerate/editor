@@ -1,4 +1,4 @@
 /** What pointer gestures on `ImageEditorCanvas` do (and whether the crop overlay shows). */
-export type ImageEditorCanvasMode = 'crop' | 'select' | 'paint' | 'annotate' | 'transform' | 'none';
+export type ImageEditorCanvasMode = 'crop' | 'select' | 'paint' | 'annotate' | 'transform' | 'sample' | 'none';
 /** Which gesture an `ImageEditorCanvas` `onerror` report comes from. */
 export type ImageEditorCanvasErrorSource = 'paint' | 'select' | 'shape' | 'type' | 'transform' | 'path';

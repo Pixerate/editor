@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
+import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef, PresenceActor } from '@pixerate/editor/tools';
 import type { Annotation, CropBox, CropHandle, ImageEditorFit, ImagePoint } from '@pixerate/editor/image-editor';
 import {
   canvasToImagePoint,
@@ -42,7 +42,7 @@ import { PresenceLayer } from '../playback/PresenceLayer';
 import type { UseImageEditorReturn } from './useImageEditor';
 
 /** What pointer gestures on the canvas do (and whether the crop overlay shows). */
-export type ImageEditorCanvasMode = 'crop' | 'select' | 'paint' | 'annotate' | 'none';
+export type ImageEditorCanvasMode = 'crop' | 'select' | 'paint' | 'annotate' | 'sample' | 'none';
 /** Which gesture an `onError` report comes from. */
 export type ImageEditorCanvasErrorSource = 'paint' | 'select' | 'shape' | 'type' | 'path';
 
@@ -52,10 +52,15 @@ export interface ImageEditorCanvasProps {
   /**
    * What pointer gestures do: `crop` (crop box and its overlay, in the crop margin), `select`
    * (the selection tools), `paint` (brush, eraser, move and their shortcuts), `annotate`
-   * (annotations, shape and type layers, by the active tool) or `none` (view only). Free
-   * Transform works in every mode. Default `none`.
+   * (annotations, shape and type layers, by the active tool), `sample` (the Eyedropper: a click
+   * picks the composite's colour as the paint foreground) or `none` (view only). Free Transform
+   * works in every mode. Default `none`.
    */
   mode?: ImageEditorCanvasMode;
+  /** The Eyedropper picked a colour (`sample` mode); it is already the paint foreground. */
+  onSample?: (color: string) => void;
+  /** Draws each agent cursor during playback in place of the default arrow and name tag. */
+  renderPresenceCursor?: (actor: PresenceActor) => React.ReactNode;
   /** How the image fits the canvas (default: the renderer's). */
   fit?: ImageEditorFit;
   /** Options of the selection tools (magic wand tolerance, feather, …). */
@@ -135,6 +140,8 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
   locate,
   locateElement,
   open,
+  onSample,
+  renderPresenceCursor,
   className = '',
   style,
 }) => {
@@ -618,6 +625,13 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
     if (!canvas || transformTool.active) return;
     const canvasPt = getCanvasEventPoint(e);
 
+    if (mode === 'sample') {
+      const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
+      const color = controller.sampleColor(imgPt, { setForeground: true });
+      if (color) onSample?.(color);
+      return;
+    }
+
     if (mode === 'select') {
       const gesture = selectionGestureRef.current!;
       const imgPt = canvasToImagePoint(canvasPt, state, viewRef.current.width, viewRef.current.height, false);
@@ -1032,7 +1046,7 @@ export const ImageEditorCanvas: React.FC<ImageEditorCanvasProps> = ({
           />
         )}
       </div>
-      {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} clip={false} />}
+      {playing && <PresenceLayer presence={agentPresence} viewport={docToRoot} clip={false} renderCursor={renderPresenceCursor} />}
     </div>
   );
 };
