@@ -53,6 +53,8 @@ request like "clean up this export" finds it.
 | [`pixerate-video-social-cut`](pixerate-video-social-cut/SKILL.md) | Video (`pixerate-video-editor`) | Vertical or square reframes that fill the frame, the hook first, platform lengths, titles in the safe area. |
 | [`pixerate-video-colour-grade`](pixerate-video-colour-grade/SKILL.md) | Video (`pixerate-video-editor`) | Correct and match shots, then one look on an adjustment clip; LUTs at moderate strength with skin protected. |
 | [`pixerate-video-montage`](pixerate-video-montage/SKILL.md) | Video (`pixerate-video-editor`) | Selects on the beat, varied pacing, short transitions with handles, music under everything and a clean ending. |
+| [`pixerate-chart-choose-and-build`](pixerate-chart-choose-and-build/SKILL.md) | Chart (`pixerate-chart`) | From the question to the type, clean ordered data, honest axes, units and colour-blind-safe colours. |
+| [`pixerate-chart-annotate`](pixerate-chart-annotate/SKILL.md) | Chart (`pixerate-chart`) | A takeaway title, highlights, labelled targets and ranges, callouts and a source note, kept few. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -117,7 +119,8 @@ same change.
   user's words), a `fixture` (the starting document: `{ "editor": "spreadsheet", "rows" }`,
   `{ "editor": "image", "width", "height", "background", "shapes" }` or `{ "editor":
   "vector", "width", "height", "setup" }` with commands that draw the starting art, 
-  `{ "editor": "paint", "width", "height", "setup" }` or `{ "editor": "video", "setup" }` with tool calls), `checks` (a read-only
+  `{ "editor": "paint", "width", "height", "setup" }` `{ "editor": "video", "setup" }` or `{ "editor":
+  "chart", "setup" }` with tool calls), `checks` (a read-only
   tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place

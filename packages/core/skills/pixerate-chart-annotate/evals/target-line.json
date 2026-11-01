@@ -1,0 +1,85 @@
+{
+	"prompt": "Show our quarterly target of 100,000 on the revenue chart so it's clear which quarters hit it.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"Q1",
+						"Q2",
+						"Q3",
+						"Q4"
+					],
+					"series": [
+						{
+							"name": "Revenue",
+							"values": [
+								82000,
+								91000,
+								118000,
+								96000
+							]
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "bar",
+					"title": "Quarterly revenue"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a labelled reference line at 100,000 on the value axis",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"referenceLines": {
+						"$some": {
+							"value": 100000,
+							"label": {
+								"$match": [
+									"target",
+									"i"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "the data is unchanged",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"series": [
+						{
+							"values": [
+								82000,
+								91000,
+								118000,
+								96000
+							]
+						}
+					]
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "add_chart_reference_line",
+			"args": {
+				"value": 100000,
+				"label": "Target"
+			}
+		}
+	]
+}

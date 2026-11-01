@@ -18,6 +18,7 @@ import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
 import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
+import { ChartController, createChartToolProvider } from '../src/chart';
 import { SpreadsheetController } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -33,7 +34,7 @@ interface Check extends ToolCall {
 }
 interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetFixture | ImageFixture | VectorFixture | PaintFixture | VideoFixture;
+	fixture: SpreadsheetFixture | ImageFixture | VectorFixture | PaintFixture | VideoFixture | ChartFixture;
 	checks: Check[];
 	solution: ToolCall[];
 }
@@ -71,6 +72,12 @@ interface PaintFixture {
 interface VideoFixture {
 	editor: 'video';
 	/** Tool calls that build the starting project (settings, assets, clips, markers), run in order. */
+	setup?: ToolCall[];
+}
+
+interface ChartFixture {
+	editor: 'chart';
+	/** Tool calls that build the starting chart (`set_chart_data`, `update_chart`), run in order. */
 	setup?: ToolCall[];
 }
 
@@ -140,7 +147,14 @@ async function video(f: VideoFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video } as const;
+async function chart(f: ChartFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createChartToolProvider(new ChartController(), { id: 'chart' }));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

@@ -1,0 +1,175 @@
+{
+	"prompt": "This is our 2026 monthly revenue in thousands of US dollars, pasted in a muddle. Make a chart that shows how revenue changed over the year.",
+	"fixture": {
+		"editor": "chart",
+		"setup": [
+			{
+				"tool": "set_chart_data",
+				"args": {
+					"categories": [
+						"Mar",
+						"Jan",
+						"Feb",
+						"Jun",
+						"Apr",
+						"May",
+						"Sep",
+						"Jul",
+						"Aug",
+						"Dec",
+						"Oct",
+						"Nov"
+					],
+					"series": [
+						{
+							"name": "Revenue",
+							"values": [
+								51,
+								42,
+								45,
+								61,
+								48,
+								55,
+								70,
+								58,
+								64,
+								82,
+								68,
+								75
+							]
+						}
+					]
+				}
+			},
+			{
+				"tool": "update_chart",
+				"args": {
+					"type": "pie"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "a line or area chart for change over time",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"type": {
+						"$in": [
+							"line",
+							"area"
+						]
+					}
+				}
+			}
+		},
+		{
+			"why": "months in calendar order, with their own values",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"categories": [
+						"Jan",
+						"Feb",
+						"Mar",
+						"Apr",
+						"May",
+						"Jun",
+						"Jul",
+						"Aug",
+						"Sep",
+						"Oct",
+						"Nov",
+						"Dec"
+					],
+					"series": [
+						{
+							"values": [
+								42,
+								45,
+								51,
+								48,
+								55,
+								61,
+								58,
+								64,
+								70,
+								68,
+								75,
+								82
+							]
+						}
+					]
+				}
+			}
+		},
+		{
+			"why": "a title and a value axis that says the unit",
+			"tool": "get_chart",
+			"expect": {
+				"spec": {
+					"title": {
+						"$match": "\\S"
+					},
+					"yAxis": {
+						"$expr": "/usd|\\$|dollar/i.test(v.title) || v.format.style === 'currency' || /\\$/.test(v.format.prefix || '')"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_chart"
+		},
+		{
+			"tool": "set_chart_data",
+			"args": {
+				"categories": [
+					"Jan",
+					"Feb",
+					"Mar",
+					"Apr",
+					"May",
+					"Jun",
+					"Jul",
+					"Aug",
+					"Sep",
+					"Oct",
+					"Nov",
+					"Dec"
+				],
+				"series": [
+					{
+						"name": "Revenue",
+						"values": [
+							42,
+							45,
+							51,
+							48,
+							55,
+							61,
+							58,
+							64,
+							70,
+							68,
+							75,
+							82
+						]
+					}
+				]
+			}
+		},
+		{
+			"tool": "update_chart",
+			"args": {
+				"type": "line",
+				"title": "Revenue grew through 2026",
+				"yAxis": {
+					"title": "Revenue (USD thousands)"
+				}
+			}
+		}
+	]
+}
