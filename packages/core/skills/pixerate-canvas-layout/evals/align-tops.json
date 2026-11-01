@@ -1,0 +1,98 @@
+{
+	"prompt": "Line up the tops of the three cards.",
+	"fixture": {
+		"editor": "canvas",
+		"nodes": [
+			{
+				"id": "a",
+				"type": "shape",
+				"position": {
+					"x": 0,
+					"y": 10
+				},
+				"width": 100,
+				"height": 80,
+				"data": {
+					"label": "Card A",
+					"shape": {
+						"kind": "rect",
+						"fill": "#eeeeee"
+					}
+				}
+			},
+			{
+				"id": "b",
+				"type": "shape",
+				"position": {
+					"x": 130,
+					"y": 30
+				},
+				"width": 100,
+				"height": 80,
+				"data": {
+					"label": "Card B",
+					"shape": {
+						"kind": "rect",
+						"fill": "#eeeeee"
+					}
+				}
+			},
+			{
+				"id": "c",
+				"type": "shape",
+				"position": {
+					"x": 300,
+					"y": 0
+				},
+				"width": 100,
+				"height": 80,
+				"data": {
+					"label": "Card C",
+					"shape": {
+						"kind": "rect",
+						"fill": "#eeeeee"
+					}
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "all three tops at the same y",
+			"tool": "get_canvas_document",
+			"expect": {
+				"document": {
+					"nodes": {
+						"$expr": "new Set(v.map((n) => n.position.y)).size === 1"
+					}
+				}
+			}
+		},
+		{
+			"why": "the horizontal positions are unchanged",
+			"tool": "get_canvas_document",
+			"expect": {
+				"document": {
+					"nodes": {
+						"$expr": "v.map((n) => n.position.x).join() === '0,130,300'"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "canvas.alignTop",
+				"params": {
+					"ids": [
+						"a",
+						"b",
+						"c"
+					]
+				}
+			}
+		}
+	]
+}

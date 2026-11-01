@@ -1,0 +1,172 @@
+{
+	"prompt": "These two buttons are versions of one button. Combine them into a single component with a 'Style' property whose values are Primary and Secondary.",
+	"fixture": {
+		"editor": "canvas",
+		"nodes": [
+			{
+				"id": "primary",
+				"type": "group",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Button / Primary"
+				}
+			},
+			{
+				"id": "pbg",
+				"type": "shape",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Bg",
+					"shape": {
+						"kind": "rect",
+						"fill": "#1d3557"
+					}
+				},
+				"parentId": "primary"
+			},
+			{
+				"id": "secondary",
+				"type": "group",
+				"position": {
+					"x": 0,
+					"y": 60
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Button / Secondary"
+				}
+			},
+			{
+				"id": "sbg",
+				"type": "shape",
+				"position": {
+					"x": 0,
+					"y": 0
+				},
+				"width": 120,
+				"height": 40,
+				"data": {
+					"label": "Bg",
+					"shape": {
+						"kind": "rect",
+						"fill": "#ffffff"
+					}
+				},
+				"parentId": "secondary"
+			}
+		],
+		"setup": [
+			{
+				"tool": "create_component",
+				"args": {
+					"ids": [
+						"primary"
+					]
+				}
+			},
+			{
+				"tool": "create_component",
+				"args": {
+					"ids": [
+						"secondary"
+					]
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "one component set with a Style property whose values are Primary and Secondary",
+			"tool": "list_components",
+			"expect": {
+				"sets": {
+					"$length": 1,
+					"$some": {
+						"options": [
+							{
+								"name": "Style",
+								"values": {
+									"$expr": "[...v].sort().join() === 'Primary,Secondary'"
+								}
+							}
+						]
+					}
+				}
+			}
+		},
+		{
+			"why": "the primary button is the Primary variant",
+			"tool": "list_components",
+			"expect": {
+				"components": {
+					"$some": {
+						"id": "primary",
+						"variant": {
+							"Style": "Primary"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "combine_as_variants",
+			"args": {
+				"ids": [
+					"primary",
+					"secondary"
+				]
+			}
+		},
+		{
+			"tool": "list_components"
+		},
+		{
+			"tool": "rename_variant_property",
+			"args": {
+				"name": "Property 1",
+				"newName": "Style",
+				"setId": {
+					"$read": "list_components",
+					"path": "sets.0.id"
+				}
+			}
+		},
+		{
+			"tool": "rename_variant_value",
+			"args": {
+				"property": "Style",
+				"value": "Default",
+				"newValue": "Primary",
+				"setId": {
+					"$read": "list_components",
+					"path": "sets.0.id"
+				}
+			}
+		},
+		{
+			"tool": "rename_variant_value",
+			"args": {
+				"property": "Style",
+				"value": "Variant2",
+				"newValue": "Secondary",
+				"setId": {
+					"$read": "list_components",
+					"path": "sets.0.id"
+				}
+			}
+		}
+	]
+}

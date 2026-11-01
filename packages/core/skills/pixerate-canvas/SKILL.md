@@ -25,6 +25,14 @@ from `get_editor_state`; component and set ids from `list_components`. Tools tha
 just selected with `canvas_select`. See `pixerate-agent-tools` for namespacing, `run_commands`
 batching and error codes.
 
+## Workflow skills
+
+For these jobs, load the workflow skill too: it has the method, the checks between steps and
+the pitfalls, and uses the tools below.
+
+- `pixerate-canvas-design-system-components`: components, instances, variant sets and overrides.
+- `pixerate-canvas-layout`: align, distribute, order and lock.
+
 ## Working method
 
 1. **Read.** `get_editor_state` with `includeDocument: false` returns `canvas.nodes` and
