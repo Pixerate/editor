@@ -2696,6 +2696,36 @@ export class ImageEditorController {
     return { width: r.width, height: r.height, data };
   }
 
+  /**
+   * The Eyedropper: the colour (#rrggbb) of the composite at a document point, or the average of
+   * the `size` × `size` square round it (1, 3 or 5…), or null outside the canvas or where every
+   * layer is transparent. With `setForeground` it also becomes the paint foreground.
+   */
+  public sampleColor(point: { x: number; y: number }, options: { size?: number; setForeground?: boolean } = {}): string | null {
+    const { width, height } = this.naturalSize;
+    const size = Math.max(1, Math.floor(options.size ?? 1));
+    const cx = Math.floor(point.x);
+    const cy = Math.floor(point.y);
+    if (cx < 0 || cy < 0 || cx >= width || cy >= height) return null;
+    const half = Math.floor(size / 2);
+    const x = Math.max(0, cx - half);
+    const y = Math.max(0, cy - half);
+    const rect = { x, y, width: Math.min(width, cx + half + 1) - x, height: Math.min(height, cy + half + 1) - y };
+    const { data } = this.compositePixels(rect);
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const w = data[i + 3];
+      r += data[i] * w;
+      g += data[i + 1] * w;
+      b += data[i + 2] * w;
+      a += w;
+    }
+    if (a === 0) return null;
+    const hex = toHex([r / a, g / a, b / a]);
+    if (options.setForeground) this.setPaintOptions({ foreground: hex });
+    return hex;
+  }
+
   private compositorSources(): CompositorSources {
     const { width, height } = this.naturalSize;
     return {

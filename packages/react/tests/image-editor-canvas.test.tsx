@@ -43,6 +43,20 @@ async function renderCanvas(props: Partial<ImageEditorCanvasProps> = {}) {
 }
 
 describe('ImageEditorCanvas (React)', () => {
+  it('picks the composite colour as the foreground in sample mode (the Eyedropper)', async () => {
+    const picked: string[] = [];
+    const { c } = await renderCanvas({ mode: 'sample', onSample: (color) => picked.push(color) });
+    await act(async () => {
+      c.addPixelLayer({ color: '#3366cc' });
+      c.setTool('eyedropper');
+    });
+    await act(async () => {
+      canvas().dispatchEvent(pointer('mousedown', 400, 250));
+    });
+    expect(picked).toEqual(['#3366cc']);
+    expect(c.getState().paint.foreground).toBe('#3366cc');
+  });
+
   it('renders on its own, sized by its box, with the class it is given', async () => {
     await renderCanvas();
     const rootEl = container.querySelector('[data-testid="image-editor-canvas-root"]') as HTMLElement;

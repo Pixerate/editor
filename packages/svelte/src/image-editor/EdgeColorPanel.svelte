@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImageCheckbox from './controls/ImageCheckbox.svelte';
   import type { ImageEditorController, ImageLayer } from '@pixerate/editor/image-editor';
   import { untrack } from 'svelte';
 
@@ -71,15 +72,13 @@
       </label>
     {/each}
     <label class="flex items-center gap-1.5 text-foreground">
-      <input
-        type="checkbox"
-        aria-label="Fixed cast colour"
+      <ImageCheckbox
+        label="Fixed cast colour"
         checked={fixed}
-        onchange={(e) => {
+        onchange={(on) => {
           commitNext = true;
-          set({ ambientColor: (e.currentTarget as HTMLInputElement).checked ? '#808080' : 'auto' });
+          set({ ambientColor: on ? '#808080' : 'auto' });
         }}
-        class="accent-primary"
       />
       Fixed cast colour
       {#if fixed}

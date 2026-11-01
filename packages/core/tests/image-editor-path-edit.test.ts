@@ -25,7 +25,7 @@ describe('path tools', () => {
     expect(isPathEditTool('path-pen')).toBe(true);
     expect(isPathEditTool('pen')).toBe(false);
     expect(imageToolCanvasMode('direct-select')).toBe('annotate');
-    expect(imageToolGroup('direct-select').tools).toEqual(['path-select', 'direct-select']);
+    expect(imageToolGroup('direct-select').tools).toEqual(['path-pen', 'path-select', 'direct-select']);
     expect(imageToolForShortcut('p')).toBe('path-pen');
     expect(imageToolForShortcut('a')).toBe('path-select');
     expect(imageToolForShortcut('a', true)).toBe('direct-select');

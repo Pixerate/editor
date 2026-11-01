@@ -33,10 +33,12 @@
     quickMask?: boolean;
     /** How the canvas shows the selection (`state.selectionDisplay`); wins over `quickMask`. */
     selectionDisplay?: SelectionDisplay;
+    /** The tool picker row (default true); hide it when the host's toolbar offers the same choice. */
+    showTools?: boolean;
     class?: string;
   }
 
-  let { controller, options, onOptionsChange, selection, quickMask, selectionDisplay, class: className = '' }: Props = $props();
+  let { controller, options, onOptionsChange, selection, quickMask, selectionDisplay, showTools = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -202,13 +204,15 @@
 </script>
 
 <div data-testid="selection-options-bar" class="flex flex-col gap-3 text-xs {className}">
-  <div role="group" aria-label="Selection tool" class="flex flex-wrap gap-1">
-    {#each SELECTION_TOOLS as t (t.id)}
-      <button type="button" aria-pressed={options.tool === t.id} class={btn(options.tool === t.id)} onclick={() => set({ tool: t.id })}>
-        {t.label}
-      </button>
-    {/each}
-  </div>
+  {#if showTools}
+    <div role="group" aria-label="Selection tool" class="flex flex-wrap gap-1">
+      {#each SELECTION_TOOLS as t (t.id)}
+        <button type="button" aria-pressed={options.tool === t.id} class={btn(options.tool === t.id)} onclick={() => set({ tool: t.id })}>
+          {t.label}
+        </button>
+      {/each}
+    </div>
+  {/if}
   <div role="group" aria-label="Selection mode" class="flex flex-wrap gap-1">
     {#each SELECTION_MODES as m (m)}
       <button type="button" aria-pressed={options.mode === m} class={btn(options.mode === m)} onclick={() => set({ mode: m })}>

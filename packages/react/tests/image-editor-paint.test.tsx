@@ -3,8 +3,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrushOptionsBar, ImageEditor, useImageEditor } from '../src/image-editor';
-import { ImageEditorController } from '@pixerate/editor/image-editor';
+import { BrushOptionsBar, ImageEditor, SelectionOptionsBar, ShapeOptionsBar, useImageEditor } from '../src/image-editor';
+import { DEFAULT_SELECTION_TOOL_OPTIONS, DEFAULT_SHAPE_TOOL_OPTIONS, ImageEditorController } from '@pixerate/editor/image-editor';
 
 let container: HTMLDivElement;
 let root: any;
@@ -57,6 +57,19 @@ describe('React paint tools', () => {
     expect(c.getState().paint.paint).toMatchObject({ map: { by: 'velocity' } });
     await act(async () => button('Gradient').click());
     expect(c.getState().paint.paint.type).toBe('color');
+  });
+
+  it('the option bars leave out their tool pickers for a host with its own toolbar', async () => {
+    const c = controller();
+    await act(async () => root.render(<BrushOptionsBar controller={c} showTools={false} />));
+    expect(container.querySelector('[data-testid="brush-options"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Paint tools"]')).toBeNull();
+    await act(async () =>
+      root.render(<SelectionOptionsBar controller={c} options={DEFAULT_SELECTION_TOOL_OPTIONS} onOptionsChange={() => {}} showTools={false} />),
+    );
+    expect(container.querySelector('[aria-label="Selection tool"]')).toBeNull();
+    await act(async () => root.render(<ShapeOptionsBar controller={c} options={DEFAULT_SHAPE_TOOL_OPTIONS} onChange={() => {}} showTools={false} />));
+    expect(container.querySelector('[aria-label="Shape kind"]')).toBeNull();
   });
 
   it('BrushOptionsBar sets tools, brush settings, colours and fills', async () => {

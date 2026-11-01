@@ -93,6 +93,57 @@ describe('image editor colour controls', () => {
 });
 
 describe('LayerPanel', () => {
+  it('shows the colour adjustments without Add Adjustment Layer', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const { IMAGE_ADJUSTMENT_CONTROLS } = await import('@pixerate/editor/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    controller.setActiveLayer(controller.addPixelLayer({ name: 'Paint' }));
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'color' } });
+    flushSync();
+    expect(target.textContent).toContain('Color Adjustments');
+    const spec = IMAGE_ADJUSTMENT_CONTROLS[0];
+    const input = target.querySelector(`input[type="range"][aria-label="${spec.label}"]`) as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(target.querySelectorAll('input[type="range"]').length).toBe(IMAGE_ADJUSTMENT_CONTROLS.length);
+    expect(target.textContent).not.toMatch(/Add adjustment/i);
+    input.value = String(spec.max);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(input.value).toBe(String(spec.max));
+  });
+
+  it('leaves out the tool pickers for a host with its own toolbar', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    controller.setActiveLayer(controller.addPixelLayer({ name: 'Paint' }));
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint', showTools: false } });
+    flushSync();
+    expect(target.querySelector('[data-testid="brush-options"]')).not.toBeNull();
+    expect(target.querySelector('[aria-label="Paint tools"]')).toBeNull();
+    for (const [panelId, label] of [['selection', 'Selection tool'], ['shape', 'Shape kind']]) {
+      unmount(component);
+      component = mount(LayerPanel, { target, props: { controller, panelId, showTools: false } });
+      flushSync();
+      expect(target.querySelector(`[aria-label="${label}"]`)).toBeNull();
+    }
+    unmount(component);
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint' } });
+    flushSync();
+    expect(target.querySelector('[aria-label="Paint tools"]')).not.toBeNull();
+  });
+
+  it('uses the selection options its host gives it', async () => {
+    const { LayerPanel } = await import('../src/image-editor');
+    const { DEFAULT_SELECTION_TOOL_OPTIONS } = await import('@pixerate/editor/image-editor');
+    const controller = new ImageEditorController();
+    controller.setImageDimensions?.(40, 40);
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'selection', selectionOptions: { ...DEFAULT_SELECTION_TOOL_OPTIONS, tool: 'magnetic' } } });
+    flushSync();
+    expect(target.querySelector('[data-testid="magnetic-lasso-options"]')).not.toBeNull();
+  });
+
   it('follows changes to the active layer', async () => {
     const { LayerPanel } = await import('../src/image-editor');
     const controller = new ImageEditorController();
