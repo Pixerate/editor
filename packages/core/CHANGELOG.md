@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.227.1
+
+### Patch Changes
+
+- 5a1d031: Canvas effects that cannot be drawn now say why instead of vanishing. `canvasEffectStatus` (and `CanvasEffectsController.status`) reports an effect saved from another provider; the React and Svelte effect layers draw a faint hatch with the reason for that and for failed renders, and `CanvasEffectsPanel` shows it. The shared `list_applied_effects` tool now marks effects saved from another provider `available: false`, with a `reason`, in every editor.
+
 ## 0.227.0
 
 ### Minor Changes
