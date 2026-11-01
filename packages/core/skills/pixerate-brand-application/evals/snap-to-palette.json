@@ -1,0 +1,148 @@
+{
+	"prompt": "These colours are almost our brand colours but not exact. Snap each shape to the nearest colour in the palette: #1d3557, #457b9d, #a8dadc, #e63946.",
+	"fixture": {
+		"editor": "vector",
+		"width": 160,
+		"height": 40,
+		"colorTools": true,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 0,
+					"y": 0,
+					"width": 40,
+					"height": 40,
+					"name": "A",
+					"fill": "#1f3759",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 40,
+					"y": 0,
+					"width": 40,
+					"height": 40,
+					"name": "B",
+					"fill": "#4a7fa0",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 80,
+					"y": 0,
+					"width": 40,
+					"height": 40,
+					"name": "C",
+					"fill": "#aadcde",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 120,
+					"y": 0,
+					"width": 40,
+					"height": 40,
+					"name": "D",
+					"fill": "#e43b48",
+					"stroke": null
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "each shape in its nearest brand colour",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$expr": "v.map((n) => (n.fill || '').toLowerCase()).join() === '#1d3557,#457b9d,#a8dadc,#e63946'"
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "run_commands",
+			"args": {
+				"steps": [
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.0.id"
+								}
+							],
+							"fill": "#1d3557"
+						}
+					},
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.1.id"
+								}
+							],
+							"fill": "#457b9d"
+						}
+					},
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.2.id"
+								}
+							],
+							"fill": "#a8dadc"
+						}
+					},
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.3.id"
+								}
+							],
+							"fill": "#e63946"
+						}
+					}
+				]
+			}
+		}
+	]
+}

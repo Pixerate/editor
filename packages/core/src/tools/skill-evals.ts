@@ -50,6 +50,8 @@ export interface VectorEvalFixture {
 	height: number;
 	/** Commands that build the starting artwork, run in order (`"$0.id"` refers to an earlier result). */
 	setup?: Array<{ id: string; params?: Record<string, unknown> }>;
+	/** Also register the colour tools (`check_color_contrast`, `check_color_palette`, ...). */
+	colorTools?: boolean;
 }
 
 export interface PaintEvalFixture {

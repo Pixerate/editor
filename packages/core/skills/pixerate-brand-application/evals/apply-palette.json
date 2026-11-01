@@ -1,0 +1,148 @@
+{
+	"prompt": "Apply our brand palette to this layout: the background is #f1faee, the big panel is primary #1d3557, and the small badge is accent #e63946.",
+	"fixture": {
+		"editor": "vector",
+		"width": 200,
+		"height": 120,
+		"colorTools": true,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 0,
+					"y": 0,
+					"width": 200,
+					"height": 120,
+					"name": "Background",
+					"fill": "#ffffff",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 20,
+					"y": 20,
+					"width": 160,
+					"height": 80,
+					"name": "Panel",
+					"fill": "#334455",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "ellipse",
+					"x": 150,
+					"y": 10,
+					"width": 30,
+					"height": 30,
+					"name": "Badge",
+					"fill": "#ff6600",
+					"stroke": null
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "each part in its brand colour",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$expr": "(() => { const f = (n) => (v.find((x) => x.name === n).fill || '').toLowerCase(); return f('Background') === '#f1faee' && f('Panel') === '#1d3557' && f('Badge') === '#e63946'; })()"
+					}
+				}
+			}
+		},
+		{
+			"why": "nothing moved",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$some": {
+							"name": "Badge",
+							"bounds": {
+								"x": 150,
+								"y": 10,
+								"width": 30,
+								"height": 30
+							}
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			}
+		},
+		{
+			"tool": "run_commands",
+			"args": {
+				"steps": [
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.0.id"
+								}
+							],
+							"fill": "#f1faee"
+						}
+					},
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.1.id"
+								}
+							],
+							"fill": "#1d3557"
+						}
+					},
+					{
+						"id": "vector.setStyle",
+						"params": {
+							"ids": [
+								{
+									"$read": "run_command",
+									"args": {
+										"id": "vector.list"
+									},
+									"path": "result.nodes.2.id"
+								}
+							],
+							"fill": "#e63946"
+						}
+					}
+				]
+			}
+		}
+	]
+}

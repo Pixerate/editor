@@ -1,0 +1,109 @@
+{
+	"prompt": "The outline icon on this card is too faint. Make sure it meets the WCAG contrast for non-text graphics (3:1) against the card.",
+	"fixture": {
+		"editor": "vector",
+		"width": 120,
+		"height": 120,
+		"colorTools": true,
+		"setup": [
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "rect",
+					"x": 0,
+					"y": 0,
+					"width": 120,
+					"height": 120,
+					"name": "Card",
+					"fill": "#ffffff",
+					"stroke": null
+				}
+			},
+			{
+				"id": "vector.addShape",
+				"params": {
+					"kind": "ellipse",
+					"x": 40,
+					"y": 40,
+					"width": 40,
+					"height": 40,
+					"name": "Icon",
+					"fill": null,
+					"stroke": "#c8c8c8",
+					"strokeWidth": 2
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the icon stroke against the card is at least 3:1",
+			"tool": "check_color_contrast",
+			"args": {
+				"foreground": {
+					"$read": "run_command",
+					"args": {
+						"id": "vector.list"
+					},
+					"path": "result.nodes.1.stroke"
+				},
+				"background": {
+					"$read": "run_command",
+					"args": {
+						"id": "vector.list"
+					},
+					"path": "result.nodes.0.fill"
+				}
+			},
+			"expect": {
+				"ratio": {
+					"$min": 3
+				}
+			}
+		},
+		{
+			"why": "the card is unchanged",
+			"tool": "run_command",
+			"args": {
+				"id": "vector.list"
+			},
+			"expect": {
+				"result": {
+					"nodes": {
+						"$some": {
+							"name": "Card",
+							"fill": "#ffffff"
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "check_color_contrast",
+			"args": {
+				"foreground": "#c8c8c8",
+				"background": "#ffffff"
+			}
+		},
+		{
+			"tool": "run_command",
+			"args": {
+				"id": "vector.setStyle",
+				"params": {
+					"ids": [
+						{
+							"$read": "run_command",
+							"args": {
+								"id": "vector.list"
+							},
+							"path": "result.nodes.1.id"
+						}
+					],
+					"stroke": "#767676"
+				}
+			}
+		}
+	]
+}

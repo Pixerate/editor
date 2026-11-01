@@ -53,6 +53,7 @@ import {
 } from '../src/generation';
 import { createMemoryStorage } from '../src/persistence';
 import { createEffectAuthoringToolProvider, createFakeEffectProvider } from '../src/effects';
+import { createColorToolProvider } from '../src/color';
 import { SpreadsheetController, createRichTextPreset } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -93,6 +94,7 @@ async function vector(f: VectorFixture): Promise<ToolRegistry> {
 	for (const spec of createVectorCommands(c)) commands.register(spec);
 	const registry = new ToolRegistry();
 	registry.register(createCommandToolProvider(commands));
+	if (f.colorTools) registry.register(createColorToolProvider());
 	if (f.setup?.length) {
 		const res = await registry.callTool('run_commands', { steps: f.setup });
 		if (res.isError) throw new Error(`fixture setup: ${(res.content?.[0] as { text?: string })?.text}`);
