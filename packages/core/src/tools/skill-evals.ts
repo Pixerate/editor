@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -82,6 +82,12 @@ export interface RichTextEvalFixture {
 	editor: 'rich-text';
 	/** The starting document as HTML. */
 	html: string;
+}
+
+export interface AnimationEvalFixture {
+	editor: 'animation';
+	/** Tool calls that build the starting scene (`set_animation_artwork_svg`, `insert_shots`), run in order. */
+	setup?: SkillEvalToolCall[];
 }
 
 /** One eval file of a skill. */

@@ -1,0 +1,96 @@
+{
+	"prompt": "The bar's slide across looks mechanical. Make the movement feel natural.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 200 100\"><rect id=\"bar1\" x=\"20\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar2\" x=\"60\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar3\" x=\"100\" y=\"20\" width=\"20\" height=\"60\"/></svg>"
+				}
+			},
+			{
+				"tool": "insert_shots",
+				"args": {
+					"shots": [
+						{
+							"id": "slide",
+							"run": [
+								{
+									"type": "move",
+									"targets": [
+										"bar1"
+									],
+									"by": {
+										"x": 60,
+										"y": 0
+									},
+									"ease": "linear"
+								}
+							]
+						}
+					]
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the move eases instead of running at constant speed",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$some": {
+						"id": "slide",
+						"commands": {
+							"$some": {
+								"type": "move",
+								"$expr": "v.ease !== 'linear'"
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "it still slides the same distance",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$some": {
+						"id": "slide",
+						"commands": {
+							"$some": {
+								"type": "move",
+								"by": {
+									"x": 60,
+									"y": 0
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "no errors or warnings in the check",
+			"tool": "check_animation",
+			"expect": {
+				"errors": 0,
+				"warnings": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "update_command",
+			"args": {
+				"shot": "slide",
+				"command": 0,
+				"set": {
+					"ease": "ease-in-out"
+				}
+			}
+		}
+	]
+}

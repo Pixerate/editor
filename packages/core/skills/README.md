@@ -61,6 +61,8 @@ request like "clean up this export" finds it.
 | [`pixerate-diagram-architecture`](pixerate-diagram-architecture/SKILL.md) | Diagram (`pixerate-diagram`) | Systems at one level of detail, store shapes, tiers and trust boundaries, flows labelled with protocols. |
 | [`pixerate-rich-text-report`](pixerate-rich-text-report/SKILL.md) | Rich text (`pixerate-rich-text`) | Reports with one title and a heading hierarchy, lists, tables and charts, and a consistency pass. |
 | [`pixerate-rich-text-revise`](pixerate-rich-text-revise/SKILL.md) | Rich text (`pixerate-rich-text`) | Proofreading, renaming terms with exceptions and tightening, as minimal targeted edits. |
+| [`pixerate-animation-motion-graphics`](pixerate-animation-motion-graphics/SKILL.md) | Animation (`pixerate-animation-editor`) | One idea per shot, staggered entrances, natural easing, holds to read, fitting a length, checks and export. |
+| [`pixerate-animation-logo-reveal`](pixerate-animation-logo-reveal/SKILL.md) | Animation (`pixerate-animation-editor`) | A short reveal built from the logo's parts, landing on the beat and ending on the held, finished logo. |
 | [`pixerate-talking-head-edit`](pixerate-talking-head-edit/SKILL.md) | Video (`pixerate-video-editor`) | Talking-head cleanup by transcript: fillers, long pauses and stutters found in one pass and cut as one plan reviewed before it applies. Owns the dialogue tools. |
 | [`pixerate-bgm-alignment`](pixerate-bgm-alignment/SKILL.md) | Video (`pixerate-video-editor`) | Background music: beats and cuts on the beat, ducking under speech, loudness in LUFS. Owns the music tools. |
 
@@ -127,7 +129,8 @@ same change.
   "vector", "width", "height", "setup" }` with commands that draw the starting art, 
   `{ "editor": "paint", "width", "height", "setup" }` `{ "editor": "video", "setup" }` or `{ "editor":
   "chart", "setup" }` `{ "editor": "diagram", "setup" }` with tool calls,
-  or `{ "editor": "rich-text", "html" }`), `checks` (a read-only
+  `{ "editor": "rich-text", "html" }`, or
+  `{ "editor": "animation", "setup" }`), `checks` (a read-only
   tool, or `run_command` with a read-only command such as `vector.list`, its `args`, what its result must match in `expect`, and `why`) and a `solution` (the
   tool calls an expert would make). The test proves each eval: some check fails on the fixture,
   and all pass after the solution. A model harness runs the same file with the model in place

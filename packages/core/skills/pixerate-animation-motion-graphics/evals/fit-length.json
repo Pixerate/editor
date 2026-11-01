@@ -1,0 +1,109 @@
+{
+	"prompt": "This animation needs to be exactly 4 seconds long for the ad slot. Keep the pacing natural.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 200 100\"><rect id=\"bar1\" x=\"20\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar2\" x=\"60\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar3\" x=\"100\" y=\"20\" width=\"20\" height=\"60\"/></svg>"
+				}
+			},
+			{
+				"tool": "insert_shots",
+				"args": {
+					"shots": [
+						{
+							"id": "intro",
+							"run": [
+								{
+									"type": "enter",
+									"targets": [
+										"bar1",
+										"bar2",
+										"bar3"
+									],
+									"stagger": 200
+								}
+							],
+							"hold": 600
+						},
+						{
+							"id": "middle",
+							"run": [
+								{
+									"type": "move",
+									"targets": [
+										"bar2"
+									],
+									"by": {
+										"x": 0,
+										"y": -20
+									}
+								}
+							],
+							"hold": 1500
+						},
+						{
+							"id": "end",
+							"run": [
+								{
+									"type": "exit",
+									"targets": [
+										"bar1",
+										"bar2",
+										"bar3"
+									]
+								}
+							],
+							"hold": 1000
+						}
+					]
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "exactly 4 seconds",
+			"tool": "get_animation",
+			"expect": {
+				"duration": {
+					"$min": 3980,
+					"$max": 4020
+				}
+			}
+		},
+		{
+			"why": "the same shots, in order",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$expr": "v.map((s) => s.id).join() === 'intro,middle,end'"
+				}
+			}
+		},
+		{
+			"why": "no errors or warnings in the check",
+			"tool": "check_animation",
+			"expect": {
+				"errors": 0,
+				"warnings": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_animation"
+		},
+		{
+			"tool": "fit_animation",
+			"args": {
+				"seconds": 4
+			}
+		},
+		{
+			"tool": "check_animation"
+		}
+	]
+}

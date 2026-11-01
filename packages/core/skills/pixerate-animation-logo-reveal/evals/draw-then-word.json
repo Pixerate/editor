@@ -1,0 +1,77 @@
+{
+	"prompt": "Make a logo reveal under three seconds: draw the circle mark on, then bring in the wordmark, and end holding the full logo for at least half a second.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 240 100\"><circle id=\"mark\" cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"6\"/><rect id=\"wordmark\" x=\"100\" y=\"40\" width=\"120\" height=\"20\" fill=\"#1d3557\"/></svg>"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the mark is drawn on before the wordmark arrives",
+			"tool": "get_animation",
+			"expect": {
+				"$expr": "(() => { const cs = v.shots.flatMap((s) => s.commands); const m = cs.find((c) => c.targets.includes('mark') && (c.type === 'draw' || (c.type === 'enter' && c.style === 'draw'))); const w = cs.find((c) => c.targets.includes('wordmark') && c.type === 'enter'); return !!m && !!w && m.start < w.start; })()"
+			}
+		},
+		{
+			"why": "under three seconds, ending on a hold of at least half a second",
+			"tool": "get_animation",
+			"expect": {
+				"duration": {
+					"$max": 3000
+				},
+				"shots": {
+					"$expr": "(() => { const s = v[v.length - 1]; return s.end - Math.max(...s.commands.map((c) => c.end)) >= 500; })()"
+				}
+			}
+		},
+		{
+			"why": "no errors or warnings in the check",
+			"tool": "check_animation",
+			"expect": {
+				"errors": 0,
+				"warnings": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "insert_shots",
+			"args": {
+				"shots": [
+					{
+						"id": "reveal",
+						"label": "Logo reveal",
+						"run": [
+							{
+								"type": "enter",
+								"targets": [
+									"mark"
+								],
+								"style": "draw"
+							},
+							{
+								"type": "enter",
+								"targets": [
+									"wordmark"
+								],
+								"style": "slide",
+								"direction": "right"
+							}
+						],
+						"hold": 700
+					}
+				]
+			}
+		},
+		{
+			"tool": "check_animation"
+		}
+	]
+}

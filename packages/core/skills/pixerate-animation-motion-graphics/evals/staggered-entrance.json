@@ -1,0 +1,69 @@
+{
+	"prompt": "Animate the three bars coming in one after another with a short, snappy stagger, then hold on all three.",
+	"fixture": {
+		"editor": "animation",
+		"setup": [
+			{
+				"tool": "set_animation_artwork_svg",
+				"args": {
+					"svg": "<svg viewBox=\"0 0 200 100\"><rect id=\"bar1\" x=\"20\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar2\" x=\"60\" y=\"20\" width=\"20\" height=\"60\"/><rect id=\"bar3\" x=\"100\" y=\"20\" width=\"20\" height=\"60\"/></svg>"
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "each bar enters, at a different time, within about half a second of each other",
+			"tool": "get_animation",
+			"expect": {
+				"$expr": "(() => { const starts = {}; for (const s of v.shots) for (const c of s.commands) if (c.type === 'enter') c.targets.forEach((t, i) => { starts[t] = c.start + (c.delay || 0) + i * (c.stagger || 0); }); const xs = ['bar1', 'bar2', 'bar3'].map((b) => starts[b]); return xs.every((x) => x !== undefined) && new Set(xs).size === 3 && Math.max(...xs) - Math.min(...xs) <= 600; })()"
+			}
+		},
+		{
+			"why": "it ends holding on the bars",
+			"tool": "get_animation",
+			"expect": {
+				"shots": {
+					"$expr": "(() => { const s = v[v.length - 1]; return s.end - Math.max(...s.commands.map((c) => c.end)) >= 300; })()"
+				}
+			}
+		},
+		{
+			"why": "no errors or warnings in the check",
+			"tool": "check_animation",
+			"expect": {
+				"errors": 0,
+				"warnings": 0
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "insert_shots",
+			"args": {
+				"shots": [
+					{
+						"id": "bars",
+						"label": "Bars enter",
+						"run": [
+							{
+								"type": "enter",
+								"targets": [
+									"bar1",
+									"bar2",
+									"bar3"
+								],
+								"style": "rise",
+								"stagger": 120
+							}
+						],
+						"hold": 800
+					}
+				]
+			}
+		},
+		{
+			"tool": "check_animation"
+		}
+	]
+}
