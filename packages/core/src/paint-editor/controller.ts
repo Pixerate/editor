@@ -94,6 +94,7 @@ import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type Tim
 import { EffectsSlot } from '../effects/helpers.js';
 import { resolveEffectValues } from '../effects/helpers.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
+import { effectPaintKey, isPaintEffectPaint, readPaintEffectPaint, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
 
@@ -161,6 +162,13 @@ export interface PaintEditorState {
    * own gradient (`brush.paint`) paints that instead.
    */
   paint: PaintSource;
+  /**
+   * Effect paint (`setEffectPaint`): a provider effect strokes take each pixel's colour from,
+   * instead of `paint`; `null` when they paint `paint`. `setColor` and `setPaint` clear it.
+   */
+  effectPaint: PaintEffectPaint | null;
+  /** The effect paint is still rendering: strokes that would paint with it wait (they throw). */
+  effectPaintRendering: boolean;
   /** What the Mixer Brush carries between strokes. */
   mixerLoad: MixerLoad;
   view: PaintView;
@@ -208,10 +216,11 @@ export interface PaintStrokeInit {
   /** Default the editor colour. */
   color?: string;
   /**
-   * What this stroke paints with, instead of the editor's paint: a colour, or gradient paint
-   * (`@pixerate/editor/paint` `PaintSource`). A colour here is the same as `color`.
+   * What this stroke paints with, instead of the editor's paint: a colour, gradient paint
+   * (`@pixerate/editor/paint` `PaintSource`), or effect paint (render it first with
+   * `prepareEffectPaints`). A colour here is the same as `color`.
    */
-  paint?: PaintSource | string;
+  paint?: PaintSource | PaintEffectPaint | string;
   /** Default the active brush. */
   brushId?: string;
   /** Changes to the brush for this stroke only. */
@@ -363,6 +372,13 @@ export class PaintEditorController {
   private secondaryColor = '#ffffff';
   /** Gradient paint chosen with `setPaint` (`null`: the paint colour). */
   private gradient: PaintGradientSource | null = null;
+  /** Effect paint chosen with `setEffectPaint` (rendered), and one still rendering. */
+  private effectPaint: PaintEffectPaint | null = null;
+  private effectPaintPending: PaintEffectPaint | null = null;
+  /** Changes whenever the paint is chosen, so an effect paint that finishes rendering late does not take over. */
+  private paintEpoch = 0;
+  /** Rendered effect paints by `effectPaintKey` (most recently used last). */
+  private readonly effectPaintPixels = new Map<string, EffectPaintPixels>();
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
@@ -462,6 +478,8 @@ export class PaintEditorController {
       color: this.color,
       secondaryColor: this.secondaryColor,
       paint: this.gradient ?? { type: 'color', color: this.color },
+      effectPaint: this.effectPaintPending ?? this.effectPaint,
+      effectPaintRendering: Boolean(this.effectPaintPending),
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
@@ -1326,6 +1344,151 @@ export class PaintEditorController {
     return { layerId: now.id, source: this.sourceOf(d, values, options.time) };
   }
 
+  // --- Effect paint ----------------------------------------------------------------
+
+  /** At most this many rendered effect paints are kept (each is canvas-sized). */
+  private static readonly EFFECT_PAINT_CACHE = 6;
+
+  /** The effect paint strokes use (or the one rendering), or `null`. */
+  getEffectPaint(): PaintEffectPaint | null {
+    const p = this.effectPaintPending ?? this.effectPaint;
+    return p ? { ...p, values: JSON.parse(JSON.stringify(p.values)) } : null;
+  }
+
+  /**
+   * Paints with a provider generator, overlay or title effect: it is rendered once at the canvas
+   * size, and brushes then take each pixel's colour (and alpha) from it, fixed to the canvas, as if
+   * painting a hidden picture into view. `setColor` and `setPaint` go back to colour. Editor state,
+   * not an undo step. Strokes that would paint with it throw while it renders. Returns the paint.
+   */
+  async setEffectPaint(source: { effect: string; values?: Record<string, EffectValue | null>; time?: number }): Promise<PaintEffectPaint> {
+    if (!source || typeof source.effect !== 'string' || !source.effect) throw new PaintEditorError('effect is missing; pass an effect id from search_effects (use generator, overlay or title).');
+    this.checkTime(source.time);
+    const epoch = ++this.paintEpoch;
+    const changed = (name: string) => new PaintEditorError(`The paint changed while "${name}" rendered (set_color, set_paint or another set_effect_paint); call set_effect_paint again to paint with it.`);
+    const d = await this.describeEffect(source.effect, 'paint');
+    const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, source.values);
+    if (epoch !== this.paintEpoch) throw changed(d.name);
+    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.effects.require().id, values, time: source.time ?? 0 };
+    this.effectPaintPending = paint;
+    this.emit([]);
+    try {
+      await this.renderEffectPaint(paint);
+    } catch (e) {
+      if (this.effectPaintPending === paint) {
+        this.effectPaintPending = null;
+        this.emit([]);
+      }
+      throw e;
+    }
+    if (this.effectPaintPending !== paint || epoch !== this.paintEpoch) throw changed(d.name);
+    this.effectPaintPending = null;
+    this.effectPaint = paint;
+    this.gradient = null;
+    this.emit([]);
+    return this.getEffectPaint()!;
+  }
+
+  /** The rendered pixels of an effect paint at the current canvas size, or `null` when it has not been rendered. */
+  private effectPaintImage(p: PaintEffectPaint): EffectPaintPixels | null {
+    const key = effectPaintKey(p);
+    const img = this.effectPaintPixels.get(key);
+    if (!img || img.width !== this.doc.canvas.width || img.height !== this.doc.canvas.height) return null;
+    this.effectPaintPixels.delete(key);
+    this.effectPaintPixels.set(key, img);
+    return img;
+  }
+
+  /** Renders an effect paint at the canvas size into the cache (nothing when it is there already). */
+  private async renderEffectPaint(p: PaintEffectPaint): Promise<EffectPaintPixels> {
+    const have = this.effectPaintImage(p);
+    if (have) return have;
+    const provider = this.effects.provider;
+    const what = `the effect "${p.effect}"${p.provider ? ` from provider "${p.provider}"` : ''}`;
+    if (!provider) throw new PaintEditorError(`Effect paint needs ${what}, but no effects provider is registered; register it (setEffectsProvider) and try again.`);
+    if (p.provider && provider.id !== p.provider) throw new PaintEditorError(`Effect paint needs ${what}, but the registered provider is "${provider.id}"; register "${p.provider}" (setEffectsProvider) and try again.`);
+    const { width, height } = this.doc.canvas;
+    let pixels: EffectPixels;
+    try {
+      pixels = await this.effectsRenderer.render(provider, p.effect, { width, height }, { time: p.time, values: p.values });
+    } catch (e) {
+      throw new PaintEditorError(`Effect paint could not render ${what}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const img: EffectPaintPixels = { width, height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>) };
+    this.effectPaintPixels.set(effectPaintKey(p), img);
+    while (this.effectPaintPixels.size > PaintEditorController.EFFECT_PAINT_CACHE) this.effectPaintPixels.delete(this.effectPaintPixels.keys().next().value!);
+    return img;
+  }
+
+  /**
+   * Renders effect paints that are not rendered yet (strokes and replays need them rendered
+   * first, since strokes are synchronous). Throws naming the effect and provider when one cannot be.
+   */
+  async prepareEffectPaints(paints: Iterable<PaintEffectPaint>): Promise<void> {
+    const seen = new Set<string>();
+    for (const p of paints) {
+      const key = effectPaintKey(p);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await this.renderEffectPaint(p);
+    }
+  }
+
+  /** Renders the effect paints of recorded strokes (default all of them) before a replay. */
+  async prepareStrokeEffects(strokeIds?: readonly string[]): Promise<void> {
+    const ids = strokeIds ? new Set(strokeIds) : null;
+    const paints = this.doc.strokes.filter((s) => (!ids || ids.has(s.id)) && s.paint?.type === 'effect').map((s) => s.paint as PaintEffectPaint);
+    await this.prepareEffectPaints(paints);
+  }
+
+  /** A small preview of the effect paint (a PNG data URL `size` px wide), or `null` without a rendered one. */
+  effectPaintThumbnail(size = 48): string | null {
+    const p = this.effectPaint;
+    const img = p ? this.effectPaintImage(p) : null;
+    if (!img) return null;
+    const w = Math.max(1, Math.min(img.width, Math.round(size)));
+    const h = Math.max(1, Math.round((img.height / img.width) * w));
+    const out = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      const sy = Math.min(img.height - 1, Math.floor(((y + 0.5) * img.height) / h));
+      for (let x = 0; x < w; x++) {
+        const sx = Math.min(img.width - 1, Math.floor(((x + 0.5) * img.width) / w));
+        const i = (sy * img.width + sx) * 4;
+        const o = (y * w + x) * 4;
+        for (let c = 0; c < 4; c++) out[o + c] = img.data[i + c];
+      }
+    }
+    return pngDataUrl(w, h, out);
+  }
+
+  /**
+   * The effect paint a stroke paints with and its pixels, or `null`: the stroke's own effect
+   * `paint`, else (without its own `paint` or `color`, and with no brush gradient) the editor's.
+   * Throws while the editor's is still rendering, for an engine that cannot paint with it, or when
+   * its pixels are not rendered.
+   */
+  private strokeEffect(init: PaintStrokeInit, brush: PaintBrush): { source: PaintEffectPaint; pixels: EffectPaintPixels } | null {
+    if (!brushTakesPaint(brush)) return null;
+    let source: PaintEffectPaint | null = null;
+    if (init.paint !== undefined) {
+      if (!isPaintEffectPaint(init.paint)) return null;
+      source = readPaintEffectPaint(init.paint);
+      if (!source) throw new PaintEditorError('The stroke\'s effect paint needs an effect id and values (getEffectPaint returns one).');
+    } else if (init.color === undefined && !brush.paint) {
+      if (this.effectPaintPending) throw new PaintEditorError(`The effect paint "${this.effectPaintPending.effect}" is still rendering; wait for set_effect_paint to finish, then paint.`);
+      source = this.effectPaint;
+    }
+    if (!source) return null;
+    if (brush.engine === 'wet' || brush.engine === 'impasto' || brush.engine === 'sticker') {
+      throw new PaintEditorError(
+        `The ${brush.name} brush (${brush.engine} engine) cannot paint with effect paint: it carries one colour as ${brush.engine === 'sticker' ? 'stickers' : brush.engine === 'wet' ? 'wet pigment' : 'thick paint'}. Paint with a dry brush (a dab, particle, bristle or mixer brush), or paint the shape first and fill it with fill_layer_with_effect {lockTransparency: true}.`
+      );
+    }
+    const pixels = this.effectPaintImage(source);
+    if (!pixels) throw new PaintEditorError(`The effect paint "${source.effect}"${source.provider ? ` from provider "${source.provider}"` : ''} is not rendered at this canvas size; call set_effect_paint (or prepareEffectPaints) first.`);
+    return { source, pixels };
+  }
+
   /**
    * Runs a filter effect (light, glow, colour grade …) on a layer's dried paint and bakes it in, at
    * `amount` strength (0..1, default 1). Transparent areas stay transparent; thick paint keeps its
@@ -1483,6 +1646,8 @@ export class PaintEditorController {
   setColor(color: string): string {
     this.color = parseColor(color);
     this.gradient = null;
+    this.effectPaint = this.effectPaintPending = null;
+    this.paintEpoch++;
     this.emit([]);
     return this.color;
   }
@@ -1506,6 +1671,8 @@ export class PaintEditorController {
       return p;
     }
     this.gradient = p;
+    this.effectPaint = this.effectPaintPending = null;
+    this.paintEpoch++;
     this.emit([]);
     return p;
   }
@@ -1519,6 +1686,7 @@ export class PaintEditorController {
     if (!brushTakesPaint(brush)) return null;
     let g: PaintGradientSource | null = null;
     if (init.paint !== undefined) {
+      if (isPaintEffectPaint(init.paint)) return null;
       const p = this.readStrokePaint(init.paint);
       g = p.type === 'gradient' ? p : null;
     } else g = brush.paint ?? (init.color === undefined ? this.gradient : null);
@@ -1624,7 +1792,7 @@ export class PaintEditorController {
   }
 
   private sessionFor(doc: PaintDocumentState, init: PaintStrokeInit, host: StrokeSessionHost): PaintStrokeSession {
-    if (init.paint !== undefined) {
+    if (init.paint !== undefined && !isPaintEffectPaint(init.paint)) {
       const p = this.readStrokePaint(init.paint);
       if (p.type === 'color') init = { ...init, color: p.color, paint: undefined };
       else init = { ...init, paint: p };
@@ -1641,6 +1809,7 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
+    const effect = this.strokeEffect(init, brush);
     const stickerLayer = Boolean(doc.stickers?.[layer.id]?.length);
     if (brush.engine === 'sticker') {
       if (!stickerLayer && contentBounds(layer.surface)) throw new PaintEditorError(`Layer "${layer.name}" already has paint; spray stickers onto an empty layer (add_layer) so they stay editable.`);
@@ -1724,7 +1893,8 @@ export class PaintEditorController {
       wet,
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc) } : undefined,
-      paint: this.strokeGradient(init, brush, color),
+      paint: effect ? null : this.strokeGradient(init, brush, color),
+      effect,
     });
     if (wet) this.wet.driver = wet.driver;
     if (init.maskStencils) session.maskStencils = init.maskStencils;
@@ -1742,7 +1912,8 @@ export class PaintEditorController {
       seed: init.seed,
     };
     if (init.affineCopies.length) stroke.copies = init.affineCopies.map((m) => [...m] as unknown as Affine);
-    if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
+    if (init.effect) stroke.paint = JSON.parse(JSON.stringify(init.effect.source));
+    else if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
     if (init.wet) stroke.steps = [...init.wet.driver.steps];
     if (init.selection) {
@@ -1918,6 +2089,13 @@ export class PaintEditorController {
     if (options.color !== undefined) parseColor(options.color);
     if (options.brushId !== undefined) this.requireBrush(options.brushId);
     if (options.layerId !== undefined) this.paintTarget(options.layerId, 'replay onto');
+    if (options.color === undefined) {
+      for (const s of strokes) {
+        if (s.paint?.type === 'effect' && !this.effectPaintImage(s.paint)) {
+          throw new PaintEditorError(`Stroke "${s.id}" paints with the effect "${s.paint.effect}"${s.paint.provider ? ` from provider "${s.paint.provider}"` : ''}, which is not rendered in this editor; render it first (prepareStrokeEffects; the replay_strokes tool does this) or recolour the replay with color.`);
+        }
+      }
+    }
     let origin = options.origin;
     if (!origin) {
       const b = strokeBounds(strokes.flatMap((s) => s.points));
@@ -2022,6 +2200,9 @@ export class PaintEditorController {
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
+    // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
+    target.effects.set(this.effects.provider);
+    if (w === width && h === height) for (const [key, img] of this.effectPaintPixels) target.effectPaintPixels.set(key, img);
     return target;
   }
 
@@ -2080,6 +2261,7 @@ export class PaintEditorController {
   dispose(): void {
     this.wet.destroy();
     this.effectsRenderer.dispose();
+    this.effectPaintPixels.clear();
   }
 
   /** Resolves when wet paint is between steps (edits, undo and exports can run). */

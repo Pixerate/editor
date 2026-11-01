@@ -225,6 +225,31 @@ for the controls and presets.
 - **Light on dried paint** (`apply_effect`): a filter (light, glow, grade) run on a layer's paint
   and baked in, at `opacity` strength. Transparent areas stay transparent, and thick paint keeps
   its relief and stays lit by the editor's light. Dry wet paint first (`dry_paint`).
+- **Effect paint** (`set_effect_paint`): brushes paint with the effect itself; see below.
+
+## Effect paint
+
+`set_effect_paint` makes a generator, overlay or title effect the paint. It is rendered once at
+the canvas size, and every stroke then takes each pixel's colour from that picture, fixed to the
+canvas: painting reveals a hidden image where the brush goes. Its transparency paints nothing, so
+an overlay paints only where it has pixels.
+
+1. `search_effects` (`use` generator, overlay or title) and `describe_effect` for the controls.
+2. `set_effect_paint` with `effect`, `values` and `time` (ms, default 0). Wait for it: strokes that
+   would use it are refused while it renders.
+3. Paint with a dry brush: dab, particle and bristle brushes take the colour per pixel (the most
+   faithful), the Mixer Brush and dab brushes with `behavior.pickup` take it per dab at the dab's
+   centre and mix it with what they pick up. Brush opacity, flow, grain and pressure still apply.
+4. `set_color` or `set_paint` goes back to colour; `remove_effect` (target and effect `paint`)
+   does too, and `update_effect` (target and effect `paint`, `values`) renders new values.
+
+When to use which:
+
+| Want | Use |
+| --- | --- |
+| The effect inside brushed marks, hand-painted edges | `set_effect_paint` and a dry brush |
+| The effect inside an exact shape, or in wet / thick paint | Paint the shape, dry it, then `fill_layer_with_effect` with `lockTransparency: true` |
+| The effect over the whole sheet | `set_paper_effect` or `add_effect_layer` |
 
 ## Canvas-hosted layer
 
@@ -283,8 +308,8 @@ view), so work with the tools you are given.
 | Tool | Use |
 | --- | --- |
 | `mix_colors` | Predict a mix: `colors` with `weight` parts (and optional tinting `strength`), `model` `pigment` (default, Kubelka-Munk: what pigment blends, the Mixer Brush, pigment blending tools and the pad do) or `rgb` (what normal blending and rgb mixing do). Returns `mixed` by the model plus `pigment` and `rgbLerp` for comparison. Changes nothing. Use it to choose stroke colours. |
-| `set_color` | Set the default paint `color` (and `secondaryColor`); back to one colour after gradient paint. |
-| `set_paint` | Set the paint: one colour, or gradient paint (`stops`, `space`, `map`, `softness`; see Gradient paint). Errors say what is wrong (unsorted stops, a bad mapping). Returns `paint`, `color`, `secondaryColor`. |
+| `set_color` | Set the default paint `color` (and `secondaryColor`); back to one colour after gradient paint or effect paint. |
+| `set_paint` | Set the paint: one colour, or gradient paint (`stops`, `space`, `map`, `softness`; see Gradient paint). Ends effect paint. Errors say what is wrong (unsorted stops, a bad mapping). Returns `paint`, `color`, `secondaryColor`. |
 | `pick_color` | Read the colour at `x`, `y`: of the painting with its paper, or of one layer (with alpha). |
 | `get_mixer_brush` | Read what the brush carries: the Mixer Brush `reservoir` and `amount` left, and `pickup` (paint picked up, kept by dirty brushes). |
 | `load_mixer_brush` | Fill the Mixer Brush reservoir with a colour (keeps its pickup). |
@@ -352,13 +377,14 @@ view), so work with the tools you are given.
 | --- | --- |
 | `search_effects` | Find provider effects by `query`, `kind`, `category` and `use` (`generator` for paper and layers, `overlay` / `title` for layers and fills, `filter` for light on paint). `available: false` when no provider is registered. Call before the tools below. |
 | `describe_effect` | Read an effect's controls (types, ranges, defaults), presets and inputs. Call before passing `values`. |
-| `list_applied_effects` | Read the effect paper (target `paper`) and every effect layer with its effect and values; with `target`, one of them. Baked light and fills are pixels and are not listed. Works without a provider. |
+| `list_applied_effects` | Read the effect paint (target `paint`), the effect paper (target `paper`) and every effect layer with its effect and values; with `target`, one of them. Baked light and fills are pixels and are not listed. Works without a provider. |
 | `apply_effect` | Light on dried paint: run a `filter` effect on a layer's paint and bake it in (`values`, `opacity` = strength 0..1). Refused on empty, wet, locked or hidden layers, with the fix. One undo step; undo takes it back. Returns the effect used and `baked: true`. |
-| `update_effect` | Change the effect paper (`target` and `effect` "paper": `values`, `opacity`) or draw an effect layer again (`effect` "effect": `values`; `null` resets a control). Returns the effect. |
-| `remove_effect` | Remove the effect paper, or turn an effect layer into a plain layer keeping its pixels (`keptPixels`). |
+| `update_effect` | Change the effect paint (`target` and `effect` "paint": `values`), the effect paper (`target` and `effect` "paper": `values`, `opacity`) or draw an effect layer again (`effect` "effect": `values`; `null` resets a control). Returns the effect. |
+| `remove_effect` | End the effect paint (back to the paint colour), remove the effect paper, or turn an effect layer into a plain layer keeping its pixels (`keptPixels`). |
 | `set_paper_effect` | Draw a generator over the paper (`values`, `opacity`, `blend` default `multiply`, `time`); `effect: null` removes it. One undo step. Returns the effect paper. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect (`values`, `name`, `aboveId`, `opacity`, `blend`, `time`); it becomes active. Returns the layer and its effect. |
 | `fill_layer_with_effect` | Composite a generator, overlay or title effect onto a layer (`layerId`, `values`, `opacity`, `lockTransparency`, `time`). One undo step. Returns the layer id and the effect. |
+| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it. Call after `describe_effect`, then `paint_stroke` with a dry brush. Editor state, not an undo step. Returns `effectPaint` (`effect`, `provider`, `values`, `time`). |
 
 ### Guides
 
@@ -447,6 +473,16 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   `export_high_res` start those layers empty; paint with strokes when the replay matters.
 - **Effects are pixels in replays.** Effect paper, effect layers, effect fills and baked light
   need the provider when they are made; replays and time-lapses do not repeat them. Add them
-  after the painting, or keep the effect layer and redraw it.
+  after the painting, or keep the effect layer and redraw it. Effect paint is the exception:
+  strokes record it, and replays render it again first, so they need the same provider (an
+  error names the effect and provider when it is missing; `color` on `replay_strokes` repaints
+  in one colour instead).
+- **Effect paint refuses wet, impasto and sticker brushes** (they carry one colour as pigment,
+  thick paint or stamps). Paint the shape, dry it, and `fill_layer_with_effect` with
+  `lockTransparency: true`. Erasers, blenders and smudges ignore it, and a brush with its own
+  gradient, a stroke `color` or `paint`, or `set_color` / `set_paint` paints colour instead.
+- **Effect paint is fixed to the canvas, not the stroke**: a replayed or moved stroke shows the
+  part of the effect under its new place. Wait for `set_effect_paint` to return before painting;
+  strokes are refused while it renders.
 - **Recorded strokes are kept in saved documents** (`save_paint_document`, `get_paint_document`),
   so a painting can be replayed and repainted at a higher resolution.

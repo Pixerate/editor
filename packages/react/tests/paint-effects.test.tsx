@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { createFakeEffectProvider } from '@pixerate/editor/effects';
 import { PaintEditorController, type PaintPixelLayer } from '@pixerate/editor/paint-editor';
 import { readPixel } from '@pixerate/editor/raster';
-import { PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
+import { ColorPanel, PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
@@ -83,5 +83,37 @@ describe('paint effects (React)', () => {
     expect([...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).not.toContain('Effects');
     act(() => c.setEffectsProvider(createFakeEffectProvider()));
     expect([...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toContain('Effects');
+  });
+
+  it('paints with an effect: the Paint placement, its controls, and the thumbnail in the paint well', async () => {
+    const c = new PaintEditorController({ width: 16, height: 8 });
+    c.setEffectsProvider(createFakeEffectProvider());
+    act(() =>
+      root.render(
+        <>
+          <PaintEffectsPanel controller={c} />
+          <ColorPanel controller={c} />
+        </>
+      )
+    );
+    await click(button('Paint…'));
+    await pickEffect('fake.gradient');
+    for (let i = 0; i < 4; i++) await settle();
+    expect(c.getEffectPaint()).toMatchObject({ type: 'effect', effect: 'fake.gradient' });
+    const part = container.querySelector('[data-effect-part="paint"]')!;
+    expect(part.textContent).toContain('fake.gradient');
+    expect(part.querySelector<HTMLImageElement>('[data-testid="effect-paint-thumbnail"]')!.src).toMatch(/^data:image\/png/);
+    const well = container.querySelector<HTMLElement>('[data-testid="paint-well"]')!;
+    expect(well.getAttribute('data-effect-paint')).toBe('fake.gradient');
+    expect(well.getAttribute('aria-label')).toBe('Effect paint: fake.gradient');
+    expect(well.style.background).toContain('data:image/png');
+
+    c.paintStroke({ brushId: 'ink-pen', points: [{ x: 2, y: 4 }, { x: 14, y: 4 }] });
+    expect(c.getStrokes().at(-1)!.paint).toMatchObject({ type: 'effect' });
+
+    await click(container.querySelector('[aria-label="Stop painting with the effect"]')!);
+    expect(c.getEffectPaint()).toBeNull();
+    expect(container.querySelector('[data-effect-part="paint"]')).toBeNull();
+    expect(container.querySelector('[data-testid="paint-well"]')!.getAttribute('data-effect-paint')).toBeNull();
   });
 });

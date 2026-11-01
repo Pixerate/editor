@@ -58,7 +58,7 @@ describe("paint agent scripts", () => {
     const { controller, registry } = setup();
     await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-gradient")!, { control: { speed: Infinity, stopped: false } });
     const strokes = controller.getStrokes();
-    expect(strokes.map((s) => s.paint?.map.by)).toEqual(["distance", "distance", "across-tip", "pressure"]);
+    expect(strokes.map((s) => (s.paint?.type === "gradient" ? s.paint.map.by : undefined))).toEqual(["distance", "distance", "across-tip", "pressure"]);
     expect(controller.getState().swatches.at(-1)!.name).toBe("Sunset");
   }, 120_000);
 

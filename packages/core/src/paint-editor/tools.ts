@@ -824,7 +824,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'set_color',
     title: 'Set the paint colour',
-    description: 'Sets the paint colour (and optionally the second colour) that strokes and fills use by default. Editor state, not an undo step. Returns both colours.',
+    description: 'Sets the paint colour (and optionally the second colour) that strokes and fills use by default. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). Editor state, not an undo step. Returns both colours.',
     inputSchema: {
       type: 'object',
       properties: { color: { ...COLOR, description: 'Paint colour #rrggbb.' }, secondaryColor: { ...COLOR, description: 'Second colour #rrggbb.' } },
@@ -843,7 +843,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'set_paint',
     title: 'Set the paint (colour or gradient)',
     description:
-      'Sets what strokes paint with: one colour, or gradient paint that changes colour as the stroke goes. Gradient paint: 2..16 stops sorted by offset (#rrggbb, or "paint" / "secondary" for the two editor colours), space pigment (default: mixes like paint) / oklab / srgb, and map: distance (default: the colour changes as the stroke is dragged out, 300 px then mirrored back), pressure, tilt, velocity, direction, time, across-tip or random. Every stroking brush samples it per dab (dab, mixer, watercolour and gouache, oil and impasto, particle, bristle, sticker); erasers, blenders and smudges ignore it, and a brush with its own gradient (get_brush paint) paints that instead. set_color goes back to one colour. Editor state, not an undo step. Returns paint, color and secondaryColor.',
+      'Sets what strokes paint with: one colour, or gradient paint that changes colour as the stroke goes. Gradient paint: 2..16 stops sorted by offset (#rrggbb, or "paint" / "secondary" for the two editor colours), space pigment (default: mixes like paint) / oklab / srgb, and map: distance (default: the colour changes as the stroke is dragged out, 300 px then mirrored back), pressure, tilt, velocity, direction, time, across-tip or random. Every stroking brush samples it per dab (dab, mixer, watercolour and gouache, oil and impasto, particle, bristle, sticker); erasers, blenders and smudges ignore it, and a brush with its own gradient (get_brush paint) paints that instead. It also ends effect paint (set_effect_paint); set_color goes back to one colour. Editor state, not an undo step. Returns paint, color and secondaryColor.',
     inputSchema: { type: 'object', properties: { paint: PAINT_SOURCE_JSON_SCHEMA }, required: ['paint'], additionalProperties: false },
     annotations: { title: 'Set the paint (colour or gradient)', ...SET },
     handler: ({ paint }) => {
@@ -1005,8 +1005,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     },
     annotations: { title: 'Replay strokes, varied', ...WRITE },
     coordinates: { in: ['origin'], out: ['bounds'] },
-    handler: (a) => {
+    handler: async (a) => {
       const replay = a as Parameters<PaintEditorController['replayStrokes']>[0];
+      // Strokes painted with effect paint need it rendered first (unless recoloured).
+      if (replay.color === undefined) await c.prepareStrokeEffects(replay.strokeIds);
       return act({ kind: 'replay', replay }, () => c.replayStrokes(replay));
     },
   });

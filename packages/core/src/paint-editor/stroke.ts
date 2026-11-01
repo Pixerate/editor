@@ -17,6 +17,7 @@ import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, 
 import { usesPaintExchange, type PaintBrush } from './brushes';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import { PaintDabStroke } from './dab-stroke';
+import type { EffectPaintPixels, PaintEffectPaint } from './effect-paint';
 import { DryStroke, IDENTITY_COPY, type PenPoint, type StrokeCopy } from './engine';
 import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
@@ -69,6 +70,11 @@ export interface StrokeSessionInit {
   sticker?: { nextId: number };
   /** Gradient paint (resolved: concrete colours), or `null` for the one colour. Recorded with the stroke. */
   paint?: PaintGradientSource | null;
+  /**
+   * Effect paint: the effect (recorded with the stroke) and its canvas-sized pixels, which dry
+   * dab, particle and bristle brushes sample per pixel and mixer / pickup brushes per dab.
+   */
+  effect?: { source: PaintEffectPaint; pixels: EffectPaintPixels } | null;
 }
 
 export interface PaintStrokeResult {
@@ -136,6 +142,8 @@ export class PaintStrokeSession {
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
     if (init.wet) this.wetDriver = init.wet.driver;
+    const effect = init.effect?.pixels ?? null;
+    if (effect && (init.wet || init.thick || init.sticker)) throw new Error(`The ${brush.name} brush (${brush.engine} engine) cannot paint with effect paint.`);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -165,9 +173,10 @@ export class PaintStrokeSession {
         seed: init.seed,
         copies: this.copies,
         paint: init.paint ?? null,
+        effect,
       });
     } else {
-      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null };
+      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect };
       this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
   }

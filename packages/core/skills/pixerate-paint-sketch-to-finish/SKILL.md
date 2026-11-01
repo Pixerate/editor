@@ -62,6 +62,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 | Sketch | `pencil-hb`, light colour, own layer, hidden at the end |
 | Line art | `ink-pen` (even), `brush-pen` (swelling); own layer on top |
 | Flats | `marker` or a flat brush on a layer under the ink |
+| Patterned or textured flats (sky, gradient, galaxy) | `set_effect_paint` with a provider generator, then a flat dry brush on the Flats layer; `set_color` after |
 | Shadows | Clipped layer, `multiply` or `shadow`, a cool colour |
 | Light, glow | Clipped layer, `highlight` or `screen` |
 | Warm or cool a whole area | Clipped layer in `tint` |
@@ -71,6 +72,11 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 
 **Flats under ink.** `add_layer` "Flats" → `move_layer` with the new layer's id and `index` below
 the Ink layer → `set_brush` `marker` → `set_color` → strokes inside the shape.
+
+**Effect flats.** With an effects provider: `search_effects` (`use` generator) → `describe_effect`
+→ `set_effect_paint` → `marker` strokes inside the shape on the Flats layer (the effect shows
+where the brush goes, fixed to the canvas) → `set_color` to go back to plain colour. Wet,
+impasto and sticker brushes refuse effect paint.
 
 **Clipped shading.** `add_layer` "Shading" above Flats → `update_layer` `{ blend: "multiply",
 clipped: true }` → `set_brush` `airbrush` → paint the shadow side.
@@ -92,6 +98,7 @@ clipped: true }` → `set_brush` `airbrush` → paint the shadow side.
 - `set_paper`, `fill_layer`: the ground and backgrounds
 - `add_layer`, `update_layer`, `move_layer`, `remove_layer`: one layer per pass; hide, clip, blend
 - `set_brush`, `set_color`, `paint_stroke`, `replay_strokes`: sketch, ink, flats and shading
+- `search_effects`, `describe_effect`, `set_effect_paint`: flats painted with a provider effect
 - `set_symmetry`, `set_perspective_guide`, `set_tracing_image`: construction guides
 - `undo_paint`: take back a step
 - `export_image`, `export_psd`: deliver
