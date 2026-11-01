@@ -107,27 +107,32 @@ describe('extendCanvas', () => {
   });
 
   describe('by whole wet tiles, while paint is wet', () => {
+    // 2 × 2 wet tiles, strokes that cross the tile edges, and few steps: the flow test took
+    // 5.6 s on CI with 30-point strokes, a 512 px shift down and 20 + 60 steps.
     const wetEditor = () => new PaintEditorController({ width: 512, height: 512, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0 } });
-    const across = (y: number) => wave(y, 30, 140, 380);
-    const down = Array.from({ length: 30 }, (_, i) => ({ x: 256 + Math.sin(i / 4) * 10, y: 140 + (240 * i) / 29, pressure: 0.7 }));
+    const across = (y: number) => wave(y, 16, 140, 380);
+    const down = Array.from({ length: 16 }, (_, i) => ({ x: 256 + Math.sin(i / 2) * 10, y: 140 + (240 * i) / 15, pressure: 0.7 }));
 
     it('keeps the paint wet, in place, and it flows on exactly as if the canvas had not grown', async () => {
       const a = wetEditor();
       const b = wetEditor();
       for (const c of [a, b]) {
         c.paintStroke({ points: across(256), brushId: 'watercolor-round', color: '#1d4ed8' });
-        await c.advanceWet({ steps: 20 });
+        await c.advanceWet({ steps: 6 });
       }
       const before = b.compositePixels();
-      b.extendCanvas({ left: 256, top: 512, right: 40, bottom: 7 });
+      b.extendCanvas({ left: 256, top: 256, right: 40, bottom: 7 });
       expect(b.getState().wet.wet).toBe(true);
-      expect(same(crop(b.compositePixels(), 256, 512, 512, 512), before.data)).toBe(true);
+      expect(same(crop(b.compositePixels(), 256, 256, 512, 512), before.data)).toBe(true);
 
       // A second stroke mixes into the first, and the paint moves on as it would have.
       a.paintStroke({ points: down, brushId: 'watercolor-round', color: '#b91c1c' });
-      b.paintStroke({ points: down.map((p) => ({ ...p, x: p.x + 256, y: p.y + 512 })), brushId: 'watercolor-round', color: '#b91c1c' });
-      for (const c of [a, b]) await c.advanceWet({ steps: 60 });
-      expect(same(crop(b.compositePixels(), 256, 512, 512, 512), a.compositePixels().data)).toBe(true);
+      b.paintStroke({ points: down.map((p) => ({ ...p, x: p.x + 256, y: p.y + 256 })), brushId: 'watercolor-round', color: '#b91c1c' });
+      const mixed = a.compositePixels();
+      for (const c of [a, b]) await c.advanceWet({ steps: 12 });
+      // The paint did move on, so matching pixels mean it moved the same way.
+      expect(same(a.compositePixels().data, mixed.data)).toBe(false);
+      expect(same(crop(b.compositePixels(), 256, 256, 512, 512), a.compositePixels().data)).toBe(true);
     });
 
     it('is one undo step: undo brings back the old size with the paint still wet, redo the larger one', async () => {

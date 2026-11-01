@@ -132,7 +132,9 @@ describe('wet oil', () => {
     await c.wetReady();
     // Oil barely evaporates (watercolour is 0.45 and dries here in ~450 steps).
     expect(c.wetLayerInfo().params.evaporation).toBeLessThan(0.1);
-    await c.advanceWet({ steps: 200 });
+    // About a quarter of the time watercolour takes to dry is plenty to show oil doesn't (200 steps
+    // took 2.7 s on CI).
+    await c.advanceWet({ steps: 100 });
     expect(c.getState().wet.wet).toBe(true);
     // A second stroke picks up and mixes the wet oil (pigment mixing).
     const r2 = c.paintStroke({ points: line(132), brushId: 'oil-round', brush: { behavior: { dirty: true } }, color: '#f6e58d' });

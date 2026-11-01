@@ -25,6 +25,11 @@ beforeAll(() => {
 
 afterAll(() => catalogue?.dispose());
 
+// Each search_tools call ranks all ~580 tools afresh (about 18 ms here, ~3× that on CI), so the
+// 72-task eval took up to 4.5 s of the default 5 s on CI. The work is the eval itself, so the two
+// eval tests get their own timeout rather than fewer tasks.
+const EVAL_TIMEOUT = 30_000;
+
 describe('search_tools over the full catalogue', () => {
 	it('every case names tools that exist', () => {
 		const names = new Set(registry.listTools().tools.map((t) => t.name));
@@ -34,13 +39,13 @@ describe('search_tools over the full catalogue', () => {
 		expect(missing).toEqual([]);
 	});
 
-	it('ranks a right tool first for most tasks and in the top five for nearly all', async () => {
+	it('ranks a right tool first for most tasks and in the top five for nearly all', { timeout: EVAL_TIMEOUT }, async () => {
 		const { top1, top5, report } = await evaluate(TOOL_SELECTION_CASES);
 		expect(top1, report).toBeGreaterThanOrEqual(0.68);
 		expect(top5, report).toBeGreaterThanOrEqual(0.88);
 	});
 
-	it('does about as well on tasks it was not tuned on', async () => {
+	it('does about as well on tasks it was not tuned on', { timeout: EVAL_TIMEOUT }, async () => {
 		const { top5, report } = await evaluate(HELD_OUT_CASES);
 		expect(top5, report).toBeGreaterThanOrEqual(0.75);
 	});
