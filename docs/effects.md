@@ -21,6 +21,9 @@ interface EffectProvider {
   applyVectorEffect?(id, target, values?): MaybePromise<EffectVectorMotion>;
   cameraView?(id, ctx, values?): CameraView;                // camera moves; sync and pure
   sampleCameraMove?(id, request): MaybePromise<CameraMoveSample>;
+  listTemplates?(options?): MaybePromise<EffectTemplateSummary[]>;          // sequence templates
+  describeTemplate?(id): MaybePromise<EffectTemplateDescription>;            // slots shaped for a form
+  instantiateTemplate?(id, values?, options?): MaybePromise<EffectTemplateResult>;
 }
 
 interface EffectRenderer {
@@ -34,8 +37,8 @@ interface EffectRenderer {
 ```
 
 - **Kinds** are `shader`, `vector`, `motion` and `camera`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive` and `camera`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion and camera effects only where their use is named).
-- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring` and `supportsCamera`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
-- **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed` and `no_provider` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`; `isEffectError`). Agent tools turn them into `isError` results.
+- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera` and `supportsTemplates`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
+- **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider` and `unknown_template` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`, `UnknownTemplateError`; `isEffectError`). Agent tools turn them into `isError` results.
 - **One render at a time per renderer.** `EffectRendererPool` (`pool.ts`) keeps a few renderers alive per effect, size and depth (default 4) and disposes the least recently used. GPU providers hold one WebGL context per renderer, and browsers drop the oldest after about sixteen (#281).
 - **Saved documents** keep the provider id, effect id and values. They load and save unchanged without a provider; filters pass pixels through and generated layers keep their last pixels.
 
@@ -98,6 +101,33 @@ A `camera` effect moves a scene's camera rather than drawing pixels: Flair's `ca
 - **Checks.** `checkEffectProvider` checks the summary fields, that camera moves are listed only with `supportsCamera`, and calls `cameraView` along a probe move (a view at each step, the same view twice, refusing unknown ids, other kinds and unknown controls), and compares `sampleCameraMove` with it at both ends. `createFakeEffectProvider({ camera: true })` adds three camera moves: `fake.glide`, `fake.whip` (cuts at 0.5) and `fake.drift` (a hold).
 - **Agents.** `search_effects` filters by `kind: 'camera'` and returns each move's `camera` fields; `describe_effect` reports them with `appliesHere: false` in the editors that cannot use them yet. The animation and video editors adopt camera moves (shot cameras, baked holds, whip and punch transitions) in follow-ups, with their own tools.
 
+## Sequence templates
+
+A template is a sequence of shots with typed slots that a person (through a form) or an agent fills: Flair's `product-reveal`, `before-after`, `stat-countdown` and others. A provider offers them by setting `capabilities.supportsTemplates` and implementing all three methods; a provider without them is unchanged and conforms as before.
+
+- **`listTemplates({ query?, tags?, limit? })`** returns summaries: `{ id, name, description, tags?, shots, durationMs? }`. `searchTemplateSummaries` applies the options.
+- **`describeTemplate(id)`** adds `slots`, in the order a form shows them. Each has a `name`, `label`, optional `description` and a `type`: `image`, `video` or `svg` (subject slots, with `hasDefault` instead of their default, which can be large), `text` (`default`, `maxLength?`), `color` (`default` as `#RRGGBB`) or `number` (`default`, `min?`, `max?`, `integer?`). This is the shape of Flair's `describeTemplateSlots`.
+- **`instantiateTemplate(id, values?, { name? })`** fills the slots and returns `{ ok: true, sequence, openSlots, notes }`, or `{ ok: false, errors }` with a sentence for every value that does not fit, all at once. Slots left out take their defaults. A subject slot takes a URL, markup, a subject object, or `{ slot: name }` to leave it for the host; `openSlots` lists those left open. `notes` says what the provider left out because a sequence cannot hold it.
+- **`EffectSequence`** is what a template fills to: `{ name, title?, stage: { width, height }, shots }`. Each shot has `hold` (ms after its lead-in), `title?`, `caption?`, `camera?: { framing?, in?, during? }` (camera moves as `CameraMoveSpec`), `layers` (bottom to top) and `transition?`.
+  - A **layer** (`EffectLayer`, the shape of Flair's `SceneLayer`) is an effect (`effect`, `preset`, `values`) that may take a `subject` (`{ image }`, `{ video }`, `{ svg }`, `{ text }` or `{ slot }`). A layer can also be a bare subject. Its other fields are `role` (`background`, `subject` or `overlay`), `rect` (stage units; absent fills the screen), `from` / `until` (ms, or `{ shots: n }`), `opacity` and `fade`. The subject feeds the effect's `source` input, else its first image input (`effectLayerInput`). A layer's effect is a generator, filter, overlay or title (`effectLayerOffered`).
+  - A **transition** (`EffectShotTransition`, Flair's `ShotTransition`) names an effect with the use `transition`, plus `ms` (default 800), `preset` and `values`. It blends the outgoing shot's last frame (`from`) into the incoming shot (`to`) as `progress` runs from 0 to 1. The first shot has none.
+- **Helpers.**
+  - `templateValuesSchema(slots)` is a strict JSON Schema for the values, for tools and forms.
+  - `checkTemplateValues(slots, values)` gives the same sentences before asking the provider.
+  - `templateDefaultValues(slots)` gives an example to change.
+  - `checkEffectSequence(sequence, catalog?)` checks a sequence before an editor loads it.
+- **Checks.** `checkEffectProvider` checks the following:
+  - the flag agrees with the methods;
+  - template ids are unique;
+  - each slot is sound, and its default fits;
+  - unknown ids reject with `unknown_template`;
+  - each template fills with its defaults to a sound sequence whose effects are in `list()`;
+  - `openSlots` covers the `{ slot }` subjects;
+  - an unknown slot together with a value of the wrong type gives `ok: false` with an error for each.
+- **Fake templates.** `createFakeEffectProvider({ templates: true })` adds two templates:
+  - `fake.title-sequence` (text, colour and number slots; a gradient, a lower-third bar and a crossfade);
+  - `fake.picture-reveal` (an image slot with a default, and one without, which is left for the host).
+
 ## Effect authoring
 
 Providers that let effects be edited, not only used, set `capabilities.supportsAuthoring: true` and implement `openAuthoring(source)`, which returns an `EffectAuthoringSession` (`packages/core/src/effects/authoring.ts`). Both are optional: a provider without them is unchanged and conforms as before.
@@ -154,6 +184,7 @@ The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a so
 2. Throw the typed errors: an unknown id, invalid values, or something the provider can't do (a vector effect in a Worker, float output without float support).
 3. Make `render` deterministic for the same request, and free GPU or Worker resources in `dispose`.
 4. For camera moves, set `supportsCamera`, give each `camera: { role, durationMs, cut? }` and the use `camera`, and implement `cameraView` as a pure function (see [Camera moves](#camera-moves)).
-5. Run `checkEffectProvider` in your tests.
+5. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
+6. Run `checkEffectProvider` in your tests.
 
 See [outstanding.md](./outstanding.md) for what is not done here.
