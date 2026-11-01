@@ -8,7 +8,7 @@
 		"shapes": [{ "shape": "rect", "x": 40, "y": 25, "width": 40, "height": 40, "color": [30, 90, 160] }]
 	},
 	"checks": [
-		{ "why": "the product is on its own layer, cut to its shape", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "pixel", "bounds": { "x": { "$min": 39, "$max": 41 }, "y": { "$min": 24, "$max": 26 }, "width": { "$min": 39, "$max": 42 }, "height": { "$min": 39, "$max": 42 } } } } } },
+		{ "why": "the product is on its own layer, cut to its shape: by its pixels, or by its mask (masked, not erased)", "tool": "list_layers", "expect": { "layers": { "$some": { "type": "pixel", "$in": [{ "bounds": { "x": { "$min": 39, "$max": 41 }, "y": { "$min": 24, "$max": 26 }, "width": { "$min": 39, "$max": 42 }, "height": { "$min": 39, "$max": 42 } } }, { "mask": { "paintedBounds": { "x": { "$min": 39, "$max": 41 }, "y": { "$min": 24, "$max": 26 }, "width": { "$min": 39, "$max": 42 }, "height": { "$min": 39, "$max": 42 } } } }] } } } },
 		{ "why": "a live drop shadow on that layer", "tool": "list_layers", "expect": { "layers": { "$some": { "effects": { "$expr": "v && JSON.stringify(v).includes('drop-shadow')" } } } } }
 	],
 	"solution": [
