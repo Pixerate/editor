@@ -41,8 +41,11 @@
     shapeOptions?: ShapeToolOptions;
     /** The Typography panel's options; bind them with the canvas's `typeOptions`. */
     typeOptions?: TypeToolOptions;
-    /** Brush Options' row of paint tool buttons (default true); hide it when the host has its own toolbar. */
-    brushTools?: boolean;
+    /**
+     * The tool pickers in Brush Options (paint tools), Selection (selection tools) and Shape Options
+     * (shape kinds); default true. Hide them when the host's toolbar offers the same choices.
+     */
+    showTools?: boolean;
     class?: string;
   }
 
@@ -52,7 +55,7 @@
     selectionOptions = $bindable({ ...DEFAULT_SELECTION_TOOL_OPTIONS }),
     shapeOptions = $bindable({ ...DEFAULT_SHAPE_TOOL_OPTIONS }),
     typeOptions = $bindable({ ...DEFAULT_TYPE_TOOL_OPTIONS }),
-    brushTools = true,
+    showTools = true,
     class: className = '',
   }: Props = $props();
 
@@ -122,7 +125,7 @@
   {:else if panelId === 'paint'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Brush & Paint</div>
-      <BrushOptionsBar {controller} showTools={brushTools} />
+      <BrushOptionsBar {controller} {showTools} />
     </div>
   {:else if panelId === 'effects'}
     <!-- Kept for hosts that still ask for it by id: layerPanels() folds it into 'properties'. -->
@@ -149,7 +152,7 @@
   {:else if panelId === 'shape'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Shape Options</div>
-      <ShapeOptionsBar {controller} options={shapeOptions} onchange={(o) => (shapeOptions = o)} />
+      <ShapeOptionsBar {controller} options={shapeOptions} onchange={(o) => (shapeOptions = o)} {showTools} />
     </div>
   {:else if panelId === 'smart-filters'}
     <!-- Kept for hosts that still ask for it by id: smart filters are under 'provider-effects'. -->
@@ -159,7 +162,7 @@
   {:else if panelId === 'selection'}
     <div class="flex flex-col gap-3">
       <div class="font-medium text-sm text-foreground">Selection</div>
-      <SelectionOptionsBar {controller} options={selectionOptions} onOptionsChange={(o) => (selectionOptions = o)} />
+      <SelectionOptionsBar {controller} options={selectionOptions} onOptionsChange={(o) => (selectionOptions = o)} {showTools} />
       <RefineEdgePanel {controller} />
     </div>
   {:else if panelId === 'channels'}

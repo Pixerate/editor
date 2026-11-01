@@ -113,15 +113,21 @@ describe('LayerPanel', () => {
     expect(input.value).toBe(String(spec.max));
   });
 
-  it('leaves out Brush Options’ paint tool row for a host with its own toolbar', async () => {
+  it('leaves out the tool pickers for a host with its own toolbar', async () => {
     const { LayerPanel } = await import('../src/image-editor');
     const controller = new ImageEditorController();
     controller.setImageDimensions?.(40, 40);
     controller.setActiveLayer(controller.addPixelLayer({ name: 'Paint' }));
-    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint', brushTools: false } });
+    component = mount(LayerPanel, { target, props: { controller, panelId: 'paint', showTools: false } });
     flushSync();
     expect(target.querySelector('[data-testid="brush-options"]')).not.toBeNull();
     expect(target.querySelector('[aria-label="Paint tools"]')).toBeNull();
+    for (const [panelId, label] of [['selection', 'Selection tool'], ['shape', 'Shape kind']]) {
+      unmount(component);
+      component = mount(LayerPanel, { target, props: { controller, panelId, showTools: false } });
+      flushSync();
+      expect(target.querySelector(`[aria-label="${label}"]`)).toBeNull();
+    }
     unmount(component);
     component = mount(LayerPanel, { target, props: { controller, panelId: 'paint' } });
     flushSync();

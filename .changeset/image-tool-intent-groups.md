@@ -14,5 +14,5 @@ Image editor tools grouped by intent. `IMAGE_TOOL_GROUPS` is now Move, Select, C
 - Svelte `LayerPanel` takes bindable `selectionOptions`, `shapeOptions` and `typeOptions`, so a host can share them with the canvas. Before this, options picked in the Selection or Shape panel never reached the host's canvas.
 - `PresenceLayer` takes a `cursor` snippet (Svelte) or `renderCursor` (React) to draw a host's own agent cursor, and `ImageEditorCanvas` passes one through (`presenceCursor` / `renderPresenceCursor`).
 - The `margin` fit keeps a gutter of at least `MARGIN_FIT_MIN_GUTTER` (36 px), so the Free Transform rotate handle stays inside a small view.
-- `BrushOptionsBar` takes `showTools` (default true; Svelte and React) and Svelte `LayerPanel` passes `brushTools` through, so a host with its own toolbar can leave out the paint tool row.
+- `BrushOptionsBar`, `SelectionOptionsBar` and `ShapeOptionsBar` take `showTools` (default true; Svelte and React), and Svelte `LayerPanel` passes it through. A host whose toolbar already offers the paint tools, selection tools and shape kinds can leave those pickers out.
 - Refine Edge, Edge Colour and Separate Subject's on/off options go through the host's `Checkbox` control (`setImageEditorControls`) like the other panels' options.

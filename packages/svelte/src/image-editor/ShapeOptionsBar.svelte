@@ -16,10 +16,12 @@
     controller: ImageEditorController;
     options: ShapeToolOptions;
     onchange: (options: ShapeToolOptions) => void;
+    /** The tool picker row (default true); hide it when the host's toolbar offers the same choice. */
+    showTools?: boolean;
     class?: string;
   }
 
-  let { controller, options, onchange, class: className = '' }: Props = $props();
+  let { controller, options, onchange, showTools = true, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -50,11 +52,13 @@
 </script>
 
 <div class="flex flex-col gap-2 text-xs text-foreground {className}" data-testid="shape-options">
-  <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
-    {#each LIVE_SHAPE_KINDS as k (k)}
-      <button type="button" aria-pressed={options.kind === k} class={imageChipClass(options.kind === k)} onclick={() => onchange({ ...options, kind: k })}>{SHAPE_KIND_LABELS[k]}</button>
-    {/each}
-  </div>
+  {#if showTools}
+    <div class="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
+      {#each LIVE_SHAPE_KINDS as k (k)}
+        <button type="button" aria-pressed={options.kind === k} class={imageChipClass(options.kind === k)} onclick={() => onchange({ ...options, kind: k })}>{SHAPE_KIND_LABELS[k]}</button>
+      {/each}
+    </div>
+  {/if}
   <div class="flex flex-wrap items-center gap-3">
     <label class="flex items-center gap-1">
       <ImageCheckbox label="Fill" checked={options.fill !== null} onchange={(on) => set({ fill: on ? '#4f46e5' : null })} />

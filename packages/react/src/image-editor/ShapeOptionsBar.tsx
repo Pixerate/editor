@@ -8,6 +8,8 @@ export interface ShapeOptionsBarProps {
   controller: ImageEditorController;
   options: ShapeToolOptions;
   onChange: (options: ShapeToolOptions) => void;
+  /** The tool picker row (default true); hide it when the host's toolbar offers the same choice. */
+  showTools?: boolean;
   className?: string;
 }
 
@@ -18,7 +20,7 @@ export interface ShapeOptionsBarProps {
  * the kind's own settings (corner radius, sides, points, line weight and arrowhead). Changes also
  * apply to the active shape layer, as one undo step each.
  */
-export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, options, onChange, className }) => {
+export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, options, onChange, showTools = true, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +40,15 @@ export const ShapeOptionsBar: React.FC<ShapeOptionsBarProps> = ({ controller, op
 
   return (
     <div className={`flex flex-col gap-2 text-xs text-foreground ${className ?? ''}`} data-testid="shape-options">
-      <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
-        {LIVE_SHAPE_KINDS.map((k: LiveShapeKind) => (
-          <button key={k} type="button" aria-pressed={options.kind === k} className={imageChipClass(options.kind === k)} onClick={() => onChange({ ...options, kind: k })}>
-            {SHAPE_KIND_LABELS[k]}
-          </button>
-        ))}
-      </div>
+      {showTools && (
+        <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Shape kind">
+          {LIVE_SHAPE_KINDS.map((k: LiveShapeKind) => (
+            <button key={k} type="button" aria-pressed={options.kind === k} className={imageChipClass(options.kind === k)} onClick={() => onChange({ ...options, kind: k })}>
+              {SHAPE_KIND_LABELS[k]}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1">
           <ImageCheckbox label="Fill" checked={options.fill !== null} onChange={(on) => set({ fill: on ? '#4f46e5' : null })} />
