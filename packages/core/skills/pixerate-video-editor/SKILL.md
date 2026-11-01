@@ -33,6 +33,9 @@ the pitfalls, and uses the tools below.
 
 - `pixerate-talking-head-edit`: dialogue cleanup by transcript: fillers, pauses, stutters.
 - `pixerate-bgm-alignment`: cutting to the beat, ducking music under speech, loudness.
+- `pixerate-video-social-cut`: vertical reframes, the hook first, platform lengths, titles in the safe area.
+- `pixerate-video-colour-grade`: correct and match shots, one look on an adjustment clip, LUTs and skin.
+- `pixerate-video-montage`: selects on the beat, pacing, transitions, music and the ending.
 
 ## Working method
 

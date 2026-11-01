@@ -1,0 +1,16 @@
+{
+	"prompt": "Give the whole piece a warm, slightly desaturated look that I can tweak in one place later, on top of the shot corrections.",
+	"fixture": { "editor": "video", "setup": [{ "tool": "add_video_asset", "args": { "id": "a", "kind": "video", "src": "shot-a.mp4", "duration": 8000 } },
+			{ "tool": "add_video_asset", "args": { "id": "b", "kind": "video", "src": "shot-b.mp4", "duration": 8000 } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "a", "id": "c1", "start": 0, "duration": 6000 } } },
+			{ "tool": "add_video_clip", "args": { "track": "v1", "clip": { "type": "media", "asset": "b", "id": "c2", "start": 6000, "duration": 6000 } } }] },
+	"checks": [
+		{ "why": "one adjustment clip over the whole timeline", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "type": "adjustment", "start": 0, "duration": { "$min": 12000 } } } } } } },
+		{ "why": "warm and a little desaturated", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$some": { "type": "adjustment", "grade": { "temperature": { "$min": 0.05, "$max": 0.5 }, "saturation": { "$min": -0.4, "$max": -0.02 } } } } } } } },
+		{ "why": "the shots' own grades are left alone", "tool": "get_video_project", "expect": { "tracks": { "$some": { "clips": { "$expr": "v.filter((c) => c.type === 'media').every((c) => !c.grade)" } } } } }
+	],
+	"solution": [
+		{ "tool": "add_video_track", "args": { "kind": "video", "id": "v0", "at": 0 } },
+		{ "tool": "add_video_adjustment_clip", "args": { "track": "v0", "start": 0, "duration": 12000, "grade": { "temperature": 0.2, "saturation": -0.15 } } }
+	]
+}

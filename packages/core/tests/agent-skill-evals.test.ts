@@ -24,12 +24,14 @@ import {
 	type SkillEval,
 	type SkillEvalCheck as Check,
 	type SpreadsheetEvalFixture as SpreadsheetFixture,
-	type VectorEvalFixture as VectorFixture
+	type VectorEvalFixture as VectorFixture,
+	type VideoEvalFixture as VideoFixture
 } from '../src/tools';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
 import { PaintEditorController, createPaintEditorToolProvider } from '../src/paint-editor';
+import { VideoEditorController, createVideoEditorToolProvider } from '../src/video-editor';
 import { SpreadsheetController } from '../src';
 
 const SKILLS_DIR = join(__dirname, '..', 'skills');
@@ -79,7 +81,14 @@ async function paint(f: PaintFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint } as const;
+async function video(f: VideoFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createVideoEditorToolProvider(new VideoEditorController()));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */
@@ -136,5 +145,6 @@ describe.each(evals)('%s', (_, ev) => {
 		expect((await failedChecks(registry, ev.checks)).length, 'some check fails before the job is done').toBeGreaterThan(0);
 		for (const step of ev.solution) await call(registry, step);
 		expect(await failedChecks(registry, ev.checks)).toEqual([]);
-	});
+		// Wet paint and compositing run real simulations, slower on CI runners.
+	}, 30_000);
 });

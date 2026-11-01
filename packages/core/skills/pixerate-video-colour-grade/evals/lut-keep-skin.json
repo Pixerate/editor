@@ -1,0 +1,132 @@
+{
+	"prompt": "The teal-and-orange LUT on both shots is too strong and turns the faces orange. Tone the look down to a moderate strength and keep the skin tones natural.",
+	"fixture": {
+		"editor": "video",
+		"setup": [
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "a",
+					"kind": "video",
+					"src": "shot-a.mp4",
+					"duration": 8000
+				}
+			},
+			{
+				"tool": "add_video_asset",
+				"args": {
+					"id": "b",
+					"kind": "video",
+					"src": "shot-b.mp4",
+					"duration": 8000
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "a",
+						"id": "c1",
+						"start": 0,
+						"duration": 6000
+					}
+				}
+			},
+			{
+				"tool": "add_video_clip",
+				"args": {
+					"track": "v1",
+					"clip": {
+						"type": "media",
+						"asset": "b",
+						"id": "c2",
+						"start": 6000,
+						"duration": 6000
+					}
+				}
+			},
+			{
+				"tool": "set_video_lut",
+				"args": {
+					"clips": [
+						"c1",
+						"c2"
+					],
+					"src": "data:text/plain,TITLE%20%22Teal%20orange%22%0ALUT_3D_SIZE%202%0A0%200.1%200.1%0A1%200.5%200.2%0A0%201%200.9%0A1%201%200.6%0A0%200.2%201%0A1%200.4%200.9%0A0%201%201%0A1%201%201%0A",
+					"strength": 1
+				}
+			}
+		]
+	},
+	"checks": [
+		{
+			"why": "the LUT is still on both shots, at a moderate strength",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"clips": {
+							"$length": 2,
+							"$every": {
+								"grade": {
+									"lut": {
+										"src": {
+											"$match": "^data:"
+										},
+										"strength": {
+											"$min": 0.3,
+											"$max": 0.85
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"why": "skin tones protected",
+			"tool": "get_video_project",
+			"expect": {
+				"tracks": {
+					"$some": {
+						"clips": {
+							"$every": {
+								"grade": {
+									"lut": {
+										"preserveSkinTones": {
+											"$min": 0.4
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	],
+	"solution": [
+		{
+			"tool": "get_video_project"
+		},
+		{
+			"tool": "set_video_lut",
+			"args": {
+				"clips": [
+					"c1",
+					"c2"
+				],
+				"src": {
+					"$read": "get_video_project",
+					"path": "tracks.0.clips.0.grade.lut.src"
+				},
+				"strength": 0.6,
+				"preserve_skin_tones": 0.7
+			}
+		}
+	]
+}
