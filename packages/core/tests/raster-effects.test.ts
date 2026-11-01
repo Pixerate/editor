@@ -299,16 +299,9 @@ describe('layer effects in the tiled compositor', () => {
           ],
         },
       ],
-      [
-        'satin and a pillow emboss',
-        {
-          enabled: true,
-          items: [
-            fx('satin', { distance: 6, size: 8 }),
-            fx('bevel-emboss', { style: 'pillow-emboss', technique: 'chisel-soft', size: 8, soften: 2 }),
-          ],
-        },
-      ],
+      ['satin', { enabled: true, items: [fx('satin', { distance: 6, size: 8 })] }],
+      ['a hard chisel bevel', { enabled: true, items: [fx('bevel-emboss', { technique: 'chisel-hard', size: 7, soften: 1 })] }],
+      ['a pillow emboss', { enabled: true, items: [fx('bevel-emboss', { style: 'pillow-emboss', technique: 'chisel-soft', size: 8, soften: 2 })] }],
       [
         'outside and inside strokes',
         {
@@ -321,10 +314,7 @@ describe('layer effects in the tiled compositor', () => {
       ],
     ];
 
-    // Not split like the first stack: on its own the pillow emboss patches 4–6 levels off a fresh
-    // composite, which satin's wider margin hides. Until that is fixed this stack keeps its 3.2 s
-    // (on CI) and every stack gets a longer timeout.
-    it.each(STACKS)('matches a fresh compositor after every stroke with %s', { timeout: 15_000 }, (_name, effects) => {
+    it.each(STACKS)('matches a fresh compositor after every stroke with %s', (_name, effects) => {
       let surface = dab(solidSurface(4, { x: 150, y: 150, width: 160, height: 120 }, 0xd02020ff), 330, 160, 20, [200, 30, 30, 255]);
       const layers = (): RasterLayer[] => [
         { type: 'pixel', id: 'bg', name: 'bg', visible: true, opacity: 1, blend: 'normal', surface: solidSurface(4, BIG, 0xf0f0f0ff), offset: { x: 0, y: 0 } },

@@ -396,8 +396,15 @@ export function effectReach(e: LayerEffect): number {
       return e.size;
     case 'satin':
       return Math.max(1, e.distance) + e.size;
-    case 'bevel-emboss':
-      return e.size + e.soften + 1;
+    case 'bevel-emboss': {
+      if (e.technique === 'smooth') return e.size + e.soften + 1;
+      // Chiselled heights read the nearest edge up to size + 2 px away and its normal one px past
+      // that; chisel-soft and soften then blur them (tents of radius up to width + 1) and the
+      // lighting reads one px around. The margin patches effect maps, so it must cover all of it.
+      const size = Math.max(e.size, 1);
+      const chiselSoft = e.technique === 'chisel-soft' ? Math.max(size / 4, 1) + 1 : 0;
+      return size + 3 + chiselSoft + e.soften + 1 + 1;
+    }
     default:
       return 0;
   }
