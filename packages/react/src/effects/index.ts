@@ -4,3 +4,4 @@ export * from './EffectsBrowser';
 export * from './EffectParameters';
 export * from './useEffectAuthoring';
 export * from './EffectAuthoringEditor';
+export * from './EffectTemplates';

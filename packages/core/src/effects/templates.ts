@@ -5,10 +5,16 @@
  */
 
 import type { JsonSchema } from '../tools/schema.js';
+import { EffectUnsupportedError, NoEffectsProviderError } from './errors.js';
 import { hasEffectTags } from './helpers.js';
 import {
 	EFFECT_LAYER_ROLES,
+	EFFECT_TRANSITION_MS,
 	type EffectDescription,
+	type EffectProvider,
+	type EffectTemplateDescription,
+	type EffectTemplateOptions,
+	type EffectTemplateValues,
 	type EffectLayer,
 	type EffectLayerRole,
 	type EffectLayerTime,
@@ -312,4 +318,58 @@ export function effectSequenceSlots(sequence: EffectSequence): string[] {
 	const out = new Set<string>();
 	for (const shot of sequence.shots) for (const l of shot.layers) if (l.subject && 'slot' in l.subject) out.add((l.subject as Extract<EffectSubject, { slot: string }>).slot);
 	return [...out];
+}
+
+/** A filled template, checked and ready for an editor to load. */
+export interface FilledEffectTemplate {
+	template: EffectTemplateDescription;
+	sequence: EffectSequence;
+	openSlots: string[];
+	notes: string[];
+}
+
+/**
+ * Fills a provider template for an editor: checks the provider has templates, checks `values`
+ * against the slots first (every problem at once, as sentences), fills it, and checks the
+ * sequence against the provider's catalog before anything is loaded. Throws an `Error` whose
+ * message says what is wrong and what to call instead; never returns a sequence that names
+ * effects the provider does not list.
+ */
+export async function fillEffectTemplate(provider: EffectProvider | null | undefined, id: string, values: unknown = {}, options: EffectTemplateOptions = {}): Promise<FilledEffectTemplate> {
+	if (!provider) throw new NoEffectsProviderError();
+	if (!provider.capabilities.supportsTemplates || !provider.describeTemplate || !provider.instantiateTemplate) throw new EffectUnsupportedError(`${provider.name} has no sequence templates (capabilities.supportsTemplates is not set).`);
+	const template = await provider.describeTemplate(id);
+	const errors = checkTemplateValues(template.slots, values);
+	if (errors.length) throw new Error(`${errors.join(' ')} describe_template lists what each slot takes.`);
+	const result = await provider.instantiateTemplate(id, values as EffectTemplateValues, options);
+	if (!result.ok) throw new Error(`${result.errors.join(' ')} describe_template lists what each slot takes.`);
+	const problems = checkEffectSequence(result.sequence, await provider.list());
+	if (problems.length) throw new Error(`${provider.name} filled "${id}" with a sequence this editor cannot load: ${problems.join(' ')}`);
+	return { template, sequence: result.sequence, openSlots: [...result.openSlots], notes: [...result.notes] };
+}
+
+/** Where a layer of a sequence shows, in ms from the sequence's start, given each shot's start and the total length. */
+export function effectLayerSpan(layer: Pick<EffectLayer, 'from' | 'until'>, shotIndex: number, shotStarts: readonly number[], total: number): { start: number; end: number } {
+	const at = (t: EffectLayerTime | undefined, fallback: number) => (t === undefined ? fallback : typeof t === 'number' ? shotStarts[shotIndex] + t : (shotStarts[shotIndex + t.shots] ?? total));
+	const start = at(layer.from, shotStarts[shotIndex]);
+	return { start, end: Math.max(start, at(layer.until ?? { shots: 1 }, total)) };
+}
+
+/**
+ * When each shot of a sequence starts and how long it all lasts (ms): a shot plays its lead-in (the
+ * longer of its transition and its camera move in, when the move says its `ms`) and then holds.
+ */
+export function effectSequenceTiming(sequence: EffectSequence): { starts: number[]; leadIns: number[]; total: number } {
+	const starts: number[] = [];
+	const leadIns: number[] = [];
+	let t = 0;
+	sequence.shots.forEach((shot, i) => {
+		const transition = i > 0 && shot.transition ? (shot.transition.ms ?? EFFECT_TRANSITION_MS) : 0;
+		const move = typeof shot.camera?.in === 'object' && i > 0 ? (shot.camera.in.ms ?? 0) : 0;
+		const lead = Math.max(transition, move);
+		starts.push(t);
+		leadIns.push(lead);
+		t += lead + shot.hold;
+	});
+	return { starts, leadIns, total: t };
 }

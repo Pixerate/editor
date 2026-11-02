@@ -19,6 +19,8 @@ import type { VideoCameraFraming, VideoClip, VideoClipCamera, VideoClipEffect, V
 import { cameraMoveField, EffectsSlot, resolveCameraMoveSpec } from '../effects/helpers.js';
 import { bakeVideoClipCamera, videoCameraBase, type VideoCameraBake } from './camera.js';
 import { isEffectError } from '../effects/errors.js';
+import { fillEffectTemplate } from '../effects/templates.js';
+import { videoEditsFromSequence } from './sequence.js';
 import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
 import { checkVideoEffectPlace, checkVideoEffectValues, VideoEffectsEngine, type VideoEffectPlace } from './effects.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeysOf, type VideoAnimatable, type VideoKey } from './keyframes.js';
@@ -58,6 +60,11 @@ export interface VideoEditorOptions {
 
 /** What `applyClipEffect` and the other effect edits return: the edit result plus what they made or changed. */
 /** What setting or clearing a clip's camera move did: its camera now, the keys baked per property, any cuts and when each move plays (clip ms). */
+/** What filling a template did (see `fillTemplate`). */
+export type VideoTemplateResult =
+	| { ok: true; template: string; tracks: string[]; clips: string[]; assets: string[]; start: number; end: number; placeholders: Record<string, string[]>; openSlots: string[]; notes: string[] }
+	| { ok: false; error: string };
+
 export type VideoCameraMoveResult =
 	| { ok: true; clip: string; camera: VideoClipCamera | null; keys: Record<'x' | 'y' | 'scale' | 'rotation', number>; cuts: number[]; windows: VideoCameraBake['windows']; notes: string[] }
 	| { ok: false; error: string };
@@ -512,6 +519,30 @@ export class VideoEditorController {
 		const d = await this.effects.require().describe(effect);
 		if (place) checkVideoEffectPlace(d, place);
 		return d;
+	}
+
+	/**
+	 * Fills a provider sequence template and puts it on the timeline at `at` (default the end), on
+	 * new tracks above the others (see `videoEditsFromSequence`). Values are checked first and every
+	 * problem is refused at once. One undo step. Returns the new tracks, clips and assets, where it
+	 * starts and ends, the placeholder clips standing in for open slots, and notes.
+	 */
+	async fillTemplate(template: string, values: Record<string, unknown> = {}, options: { name?: string; at?: number } = {}): Promise<VideoTemplateResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refused(reason);
+		if (options.at !== undefined && !(Number.isFinite(options.at) && options.at >= 0)) return this.refused(`"at" is a time in ms, 0 or more (got ${options.at}).`);
+		let filled;
+		try {
+			filled = await fillEffectTemplate(this.effects.provider, template, values, options.name ? { name: options.name } : {});
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refused((error as Error).message);
+			throw error;
+		}
+		const made = videoEditsFromSequence(this.getState().project, filled.sequence, { at: options.at, provider: this.effects.provider!.id });
+		const r = this.apply(made.edits, `Template ${filled.template.name}`);
+		if (!r.ok) return r;
+		const { edits: _edits, notes, ...rest } = made;
+		return { ok: true, template, ...rest, openSlots: filled.openSlots, notes: [...filled.notes, ...notes] };
 	}
 
 	private refused(message: string): { ok: false; error: string } {

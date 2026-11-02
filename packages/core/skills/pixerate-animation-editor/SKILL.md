@@ -172,6 +172,9 @@ refuse.
 | `remove_shot_layer` | Remove a layer. |
 | `set_shot_transition` | Set the transition into a shot from the one before (a provider effect with use `transition`, its `ms`, `preset`, `values`). Not on the first shot. Returns the transition with `start` / `end`. |
 | `clear_shot_transition` | Remove a shot's transition, so it cuts (or the camera eases) again. |
+| `list_templates` | List the provider's sequence templates (`query`, `tags`): ids, names, shot counts, lengths. Returns `available: false` without templates. Call before `describe_template`. |
+| `describe_template` | Read a template's slots (type, label, default, limits), its `valuesSchema` and `exampleValues`. Call before `fill_template`. |
+| `fill_template` | Fill a template (`template`, `values`, `name`, `mode` replace or append) and load its shots as one undo step. Every value that does not fit is refused at once. Returns the new `shots`, `layers`, `openSlots` and `notes`. |
 
 ### Save and open
 
@@ -227,6 +230,13 @@ Flair's scenes do:
    `{ slot }` subject nobody filled), `transition-unknown`, `transition-first-shot`,
    `layer-not-drawn` and `transition-not-played` (no provider: effect layers are left out and
    transitions crossfade).
+
+A provider's **sequence templates** are whole scenes of such shots with slots to fill (a
+product reveal, before and after, a stat countdown): `list_templates`, `describe_template`, then
+`fill_template` with `values` (start from `exampleValues`). `mode` replace (default) makes a new
+scene the size of the template's stage; append adds its shots after yours, scaled to the
+artwork. Titles and captions become overlay word layers. Fill the `openSlots` it reports with
+`update_shot_layer` (`subject`), then animate artwork over the shots as usual.
 
 Layers are pixels: the Flair `SvgMotion` export leaves them out. Use them for backgrounds, looks
 and titles, and keep what should animate node by node in the artwork.

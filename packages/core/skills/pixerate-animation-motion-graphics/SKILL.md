@@ -68,6 +68,8 @@ This skill is the method. `pixerate-animation-editor` has the full tool referenc
 | A set length | `fit_animation` with `seconds`, `keep` for fixed shots |
 | The camera travels to the next part | `update_shot` camera `frame`, then `set_shot_camera_move` role `transition` (a glide; a whip pan for energy) |
 | A slow push while a shot holds | `set_shot_camera_move` role `hold` (a Ken Burns drift), with a longer `hold` |
+| A background, look or title behind or over a shot | `add_shot_layer` (a generator for a background, an overlay or title over it); `set_shot_transition` between shots |
+| A whole ready-made sequence (a reveal, a countdown) | `list_templates`, `describe_template`, `fill_template` (mode append keeps your shots), then animate artwork over it |
 
 ## Recipes
 
@@ -98,6 +100,8 @@ This skill is the method. `pixerate-animation-editor` has the full tool referenc
 - `edit_animation`: several edits as one undo step
 - `fit_animation`, `set_animation_settings`, `get_timing_grid`: length, settings and cues
 - `list_camera_moves`, `set_shot_camera_move`: provider camera moves into and during a shot
+- `add_shot_layer`, `set_shot_transition`: provider effect layers and transitions on shots
+- `list_templates`, `describe_template`, `fill_template`: a provider's sequence template as shots
 - `check_animation`, `get_motion_path`, `render_animation_frame`: check and look
 - `export_lottie`, `export_flair_motion`: deliver
 - `undo_animation`: take back a step

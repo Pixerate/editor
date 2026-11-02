@@ -34,6 +34,7 @@ export * from './camera-tools.js';
 export * from './layers.js';
 export * from './layer-edit.js';
 export * from './layer-tools.js';
+export * from './sequence.js';
 export * from './effect-tools.js';
 export * from './playback.js';
 export * from './editorDocument.js';

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { indexMotionNodes, type AnimationEditorController, type MotionEffectResult } from '@pixerate/editor/animation-editor';
-import { EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
+import { EffectParameters, EffectsBrowser, EffectTemplates, useEffectDescription } from '../effects';
 import { useAnimationEditorState } from './useAnimationEditor';
 
 export interface AnimationEffectsPanelProps {
@@ -74,6 +74,7 @@ export function AnimationEffectsPanel({ controller, node, className = '' }: Anim
       {browse === 'motion' && (
         <EffectsBrowser provider={provider} uses={['motion']} kinds={['motion']} title={`Motion for ${target}`} onPick={(e) => (setBrowse(null), report(controller.applyMotionEffect(e.id, [target])))} />
       )}
+      <EffectTemplates provider={provider} disabled={disabled} fillLabel="New scene from template" onFill={(t, v) => controller.fillTemplate(t, v).then((r) => (r.ok && r.notes.length && setMessage(r.notes.join(' ')), r))} />
       {browse === 'vector' && <EffectsBrowser provider={provider} kinds={['vector']} title="Vector effects" onPick={(e) => (setBrowse(null), report(controller.addVectorEffect(e.id)))} />}
       <ol className="space-y-1">
         {applied.map((e) => (

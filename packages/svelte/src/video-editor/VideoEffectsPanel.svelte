@@ -2,6 +2,7 @@
   import { findVideoClip, isVideoKeyframes, openVideoClipEffectAuthoring, type VideoClipEffectAuthoring, type VideoEditorController, type VideoEffectEditResult, type VideoEffectValues } from '@pixerate/editor/video-editor';
   import { onDestroy } from 'svelte';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
+  import EffectTemplates from '../effects/EffectTemplates.svelte';
   import EffectAuthoringEditor from '../effects/EffectAuthoringEditor.svelte';
   import EffectControls from './EffectControls.svelte';
   import { videoEditorStateOf } from './createVideoEditor.svelte.js';
@@ -75,6 +76,7 @@
   {#if browse === 'generator'}
     <EffectsBrowser {provider} uses={['generator', 'title', 'overlay']} title="Generators and titles" onpick={(e) => ((browse = null), addEffectClip(e.id))} />
   {/if}
+  <EffectTemplates {provider} {disabled} fillLabel="Insert template" onfill={(t, v) => controller.fillTemplate(t, v, { at: Math.round(ed.time) }).then((r) => (r.ok && r.notes.length && (message = r.notes.join(' ')), r))} />
   {#if !clip}
     <p class="text-[11px] text-muted-foreground">Select a clip to see its effects.</p>
   {:else}

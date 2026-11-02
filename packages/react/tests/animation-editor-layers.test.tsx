@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { AnimationEditorController, type MotionScene } from "@pixerate/editor/animation-editor";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
-import { ShotLayers, ShotTransition } from "../src/animation-editor";
+import { AnimationStage, ShotLayers, ShotTransition } from "../src/animation-editor";
 
 const SCENE: MotionScene = {
   version: 1,
@@ -89,5 +89,23 @@ describe("ShotTransition (React)", () => {
     expect($("[data-shot-transition-controls]")).not.toBeNull();
     await change($<HTMLSelectElement>('select[aria-label="Transition in"]'), "");
     expect(c.getState().scene.shots[1].transition).toBeUndefined();
+  });
+});
+
+describe("AnimationStage (React) with shot layers", () => {
+  it("draws a layer's picture once the engine has rendered it", async () => {
+    const host = {
+      rasterize: async (_svg: string, width: number, height: number) => ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
+      encode: () => "data:image/png;base64,PICTURE",
+      loadImage: async (url: string) => url,
+    };
+    const scene: MotionScene = { ...SCENE, shots: [{ id: "intro", run: [], hold: 500, layers: [{ id: "sky", effect: "fake.gradient" }] }] };
+    const c = new AnimationEditorController({ scene, effects: createFakeEffectProvider(), layerHost: host });
+    act(() => root.render(<AnimationStage controller={c} />));
+    await act(async () => {
+      await c.layers.idle();
+    });
+    await settle();
+    expect(container.innerHTML).toContain('data-layer="sky"');
   });
 });

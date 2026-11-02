@@ -43,7 +43,7 @@ export function AnimationStage({ controller, values, onionSkin, motionPaths, onP
         controller.toSvg(time, { pretty: false, idPrefix: 'ae-', values, onionSkin, motionPaths }).replace(/<svg ([^>]*?)width="[^"]*" height="[^"]*"/, '<svg $1width="100%" height="100%"'),
         highlight ?? [],
       ),
-    [controller, scene, time, samples, values, onionSkin, motionPaths, key, state.effectsProvider],
+    [controller, scene, time, samples, values, onionSkin, motionPaths, key, state.effectsProvider, state.layerPictures],
   );
   // A camera move's tilt and turn are 3D, so the stage element turns (its roll and blur are in the SVG).
   const stageRef = useRef<HTMLDivElement | null>(null);

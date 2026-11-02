@@ -89,6 +89,14 @@ the pitfalls, and uses the tools below.
     plays across the rest of the clip at `framing` (a Ken Burns drift on a still). The moves are
     baked into the clip's x, y, scale and rotation keys at the project's fps, two keys at a cut,
     so the preview and exports play them without the provider. Check with `get_video_frame`.
+13. **Sequence templates** (a provider with templates): for a ready-made opening, reveal or
+    countdown, `list_templates`, then `describe_template` for its slots, then `fill_template`
+    with `values` (start from its `exampleValues`) and `at`. It lands on new tracks above the
+    others as one undo step: each shot's bottom layer on a base track carrying the shot's
+    transition, other layers as effect, picture and text clips by role. Open slots come back as
+    grey placeholder clips (`placeholders`); put the real picture over one with
+    `add_video_asset` and `add_video_clip` in `overwrite` mode. Camera moves are not carried
+    over: add them with `set_clip_camera_move`.
 
 ## Best practices
 
@@ -302,6 +310,9 @@ and every write tool is refused with the reason.
 | `list_video_camera_moves` | List the provider's camera moves for a `role` (`transition` into a clip, `hold` across it) with `durationMs` and `cut`. Returns `available: false` without camera moves. Call before `set_clip_camera_move`. |
 | `set_clip_camera_move` | Play a camera move on a clip's picture (`clip`, `role`, `move`, `ms` for a transition, `preset`, `values`, `from` and `framing` as `{ zoom, x, y }`): baked into its transform keys, one per frame, two at a cut. Returns the camera, key counts, `cuts`, `windows` and `notes` (tilt, turn and blur cannot be baked). Refuses a clip keyed by hand. |
 | `clear_clip_camera_move` | Remove a clip's move for a `role` and re-bake the other; with none left the transform goes back to what it was. |
+| `list_templates` | List the provider's sequence templates (`query`, `tags`): ids, names, shot counts, lengths. Returns `available: false` without templates. Call before `describe_template`. |
+| `describe_template` | Read a template's slots (type, label, default, limits), its `valuesSchema` and `exampleValues`. Call before `fill_template`. |
+| `fill_template` | Fill a template (`template`, `values`, `name`, `at` ms) and put it on new tracks at `at` as one undo step. Every value that does not fit is refused at once. Returns the new `tracks`, `clips`, `assets`, `start`, `end`, `placeholders` by open slot, and `notes`. |
 
 ### Save and open
 

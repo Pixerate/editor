@@ -5,6 +5,7 @@
  * `set_shot_camera_move`, `clear_shot_camera_move`).
  */
 
+import { effectTemplateTools } from '../effects/template-tools.js';
 import { animationShotLayerTools } from './layer-tools.js';
 import { animationCameraMoveTools } from './camera-tools.js';
 import { withAnimationPlayback } from './playback.js';
@@ -78,6 +79,21 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 		extraTools: (ctx): AgentTool[] => [
 			...animationCameraMoveTools(controller, ctx),
 			...animationShotLayerTools(controller, ctx),
+			...effectTemplateTools(
+				{
+					provider: () => controller.effectsProvider,
+					fillDetails:
+						'mode replace (default) makes a new scene from the template\'s shots, the size of its stage; mode append adds its shots after the current ones, scaled to the artwork. Each shot keeps its framing and camera moves, its layers and its transition; its title and caption become overlay word layers. Returns { template, mode, shots (new shot ids), layers (new layer ids), openSlots, notes }. Check the result with render_animation_frame.',
+					fillOptions: { mode: { type: 'string', enum: ['replace', 'append'], description: 'replace (default): a new scene from the template; append: its shots after the current ones.' } },
+					fill: async (template, values, options) => {
+						const r = await controller.fillTemplate(template, values, { name: options.name as string | undefined, mode: options.mode as 'replace' | 'append' | undefined });
+						if (!r.ok) throw new Error(r.error);
+						const { ok: _ok, ...rest } = r;
+						return rest;
+					}
+				},
+				ctx
+			),
 			{
 				name: 'add_vector_effect',
 				title: 'Add a vector effect',
