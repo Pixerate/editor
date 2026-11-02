@@ -165,6 +165,13 @@ refuse.
 | `list_camera_moves` | List the provider's camera moves for a `role` (`transition`: how the camera gets into a shot; `hold`: how it moves while the shot holds), with `durationMs` and `cut`. Returns `available: false` without camera moves. Call before `set_shot_camera_move`; `describe_effect` gives a move's controls and presets. |
 | `set_shot_camera_move` | Give a shot a camera move (`shot`, `role`, `move`, optional `ms` for a transition, `preset`, `values`): it is saved on the shot's camera as `in` or `during`. Returns the shot's camera and the `window` (ms) the move plays in. A wrong-role id is refused naming the moves that fit. |
 | `clear_shot_camera_move` | Remove a shot's move for a `role`, keeping its framing. Returns the shot's camera (null when nothing is left). |
+| `list_shot_layers` | See every shot's layers (ids, effect, subject, role, rect, `start` / `end` in ms) and its transition. Works without a provider. Call before changing a layer. |
+| `add_shot_layer` | Add a layer to a shot: a provider effect (a generator background, a filter applied to a `subject`, an overlay or title) or a bare `subject` (picture, SVG, words). Fills the screen unless given a `rect`; shows until the next shot unless `until` says. Returns the layer with its id. |
+| `update_shot_layer` | Change a layer's fields; list optional ones in `clear` to remove them. Returns the layer. |
+| `move_shot_layer` | Restack a layer in its shot (`index`, 0 = bottom). |
+| `remove_shot_layer` | Remove a layer. |
+| `set_shot_transition` | Set the transition into a shot from the one before (a provider effect with use `transition`, its `ms`, `preset`, `values`). Not on the first shot. Returns the transition with `start` / `end`. |
+| `clear_shot_transition` | Remove a shot's transition, so it cuts (or the camera eases) again. |
 
 ### Save and open
 
@@ -199,7 +206,37 @@ holding), a shot's camera can play one as it arrives and one while it holds:
 Exports to Flair tag each camera change with `<move>@<shot>`; with the provider set the camera
 is sampled from the move, and a cut stays a jump.
 
+### Shot layers and transitions
+
+With a provider that draws pixels (Flair: gradients, light, film looks, lower thirds, image
+filters, 30 transitions), a shot can show effects as layers over and under its artwork, as
+Flair's scenes do:
+
+1. `search_effects` with `use` `generator` (backgrounds), `filter` (changes a picture),
+   `overlay` or `title`, then `add_shot_layer`. A filter needs a `subject` (`{ image }`,
+   `{ svg }`, `{ text }`); a generator or title draws its own picture and takes none.
+2. `role` places it: `background` under the artwork, `subject` over it, `overlay` over
+   everything. A layer with a `rect` sits on the artwork and moves with the camera; without one
+   it fills the screen. `until: { shots: 2 }` keeps a background going under the next shot too;
+   `fade` softens its start and end.
+3. `search_effects` with `use` `transition`, then `set_shot_transition` on the shot it leads
+   into (never the first). With no camera move in, the camera cuts and the transition does the
+   move; with one (`set_shot_camera_move`), both play together.
+4. `render_animation_frame` to look (it waits for the provider's pictures), and
+   `check_animation`: `layer-effect-unknown`, `layer-effect-values`, `layer-slot-empty` (a
+   `{ slot }` subject nobody filled), `transition-unknown`, `transition-first-shot`,
+   `layer-not-drawn` and `transition-not-played` (no provider: effect layers are left out and
+   transitions crossfade).
+
+Layers are pixels: the Flair `SvgMotion` export leaves them out. Use them for backgrounds, looks
+and titles, and keep what should animate node by node in the artwork.
+
 ## Pitfalls
+
+- **A transition belongs to the shot it leads into.** Setting one on the first shot is refused;
+  moving a shot with a transition to the front makes it a `transition-first-shot` note.
+- **Layer effects are not motion effects.** A transition or a camera move is refused as a layer,
+  and a motion effect (`fade-in`) goes on nodes with `apply_effect`.
 
 - **One move per role per shot.** Whip pans and cuts jump half way: put them between framings
   that differ, and do not follow a cut with a long glide into the same framing.

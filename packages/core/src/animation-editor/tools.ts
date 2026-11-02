@@ -631,7 +631,7 @@ export function createAnimationEditorToolProvider(controller: AnimationEditorCon
 				}
 				return { times, svg: sheet };
 			}
-			const svg = controller.toSvg(t, { pretty: false, ...overlays });
+			const svg = await controller.toSvgExact(t, { pretty: false, ...overlays });
 			if (format === 'png') {
 				if (!options.rasterize) throw new Error('This host cannot make PNG images; call render_animation_frame with format "svg".');
 				const image = await options.rasterize(svg, { width: s.artwork.width, height: s.artwork.height });

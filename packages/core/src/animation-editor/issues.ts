@@ -46,7 +46,14 @@ export const MOTION_ISSUE_CODES = {
 	'camera-move-first-shot': { severity: 'note', wording: 'The first shot cuts to its framing, so the move its camera gets in with does not play.' },
 	'camera-move-not-played': { severity: 'note', wording: 'A shot names a camera move, but there is no effects provider with camera moves to play it, so the camera eases instead.' },
 	'camera-move-unknown': { severity: 'error', wording: 'A shot names a camera move the effects provider does not have, or one of the wrong role.' },
-	'camera-move-values': { severity: 'error', wording: 'A camera move\'s preset or values do not fit its controls.' }
+	'camera-move-values': { severity: 'error', wording: 'A camera move\'s preset or values do not fit its controls.' },
+	'layer-effect-unknown': { severity: 'error', wording: 'A shot layer names an effect the provider does not have, one that cannot be a layer, or a subject its effect cannot take.' },
+	'layer-effect-values': { severity: 'error', wording: 'A shot layer\'s preset or values do not fit its effect\'s controls.' },
+	'layer-not-drawn': { severity: 'note', wording: 'Shot layers name provider effects, but there is no effects provider to draw them, so they are left out of frames.' },
+	'layer-slot-empty': { severity: 'warning', wording: 'A shot layer\'s subject is a slot nobody has filled, so it draws nothing.' },
+	'transition-unknown': { severity: 'error', wording: 'A shot names a transition the provider does not have, or an effect that is not a transition.' },
+	'transition-first-shot': { severity: 'note', wording: 'The first shot has a transition, but there is no shot before it, so it does not play.' },
+	'transition-not-played': { severity: 'note', wording: 'Shots name transitions, but there is no effects provider to play them, so they crossfade.' }
 } as const satisfies Record<string, { severity: MotionIssueSeverity; wording: string }>;
 
 export type MotionIssueCode = keyof typeof MOTION_ISSUE_CODES;

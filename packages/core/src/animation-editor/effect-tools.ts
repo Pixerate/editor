@@ -5,6 +5,7 @@
  * `set_shot_camera_move`, `clear_shot_camera_move`).
  */
 
+import { animationShotLayerTools } from './layer-tools.js';
 import { animationCameraMoveTools } from './camera-tools.js';
 import { withAnimationPlayback } from './playback.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult } from '../effects/tools.js';
@@ -76,6 +77,7 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 		subscribe: (notify) => controller.subscribe(() => notify()),
 		extraTools: (ctx): AgentTool[] => [
 			...animationCameraMoveTools(controller, ctx),
+			...animationShotLayerTools(controller, ctx),
 			{
 				name: 'add_vector_effect',
 				title: 'Add a vector effect',

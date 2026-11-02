@@ -7,6 +7,7 @@ import {
 	applyMotionEdits,
 	checkMotionScene,
 	checkMotionCameraMoves,
+	checkMotionShotLayers,
 	compileMotionScene,
 	createAnimationEditorToolProvider,
 	createMotionScene,
@@ -243,6 +244,12 @@ describe('checkMotionScene', () => {
 		]);
 		collect(moves);
 		for (const provider of [createFakeEffectProvider({ camera: true }), null]) (await checkMotionCameraMoves(moves, provider)).forEach((i) => reported.add(i.code));
+		// Shot layers and transitions, checked against a provider and without one.
+		const layered = scene([
+			{ id: 'l1', run: [], transition: { effect: 'fake.crossfade' }, layers: [{ id: 'a', effect: 'fake.nope' }, { id: 'b', effect: 'fake.gradient', values: { angle: 999 } }, { id: 'c', subject: { slot: 'logo' } }] },
+			{ id: 'l2', run: [], transition: { effect: 'fake.tint' } }
+		]);
+		for (const provider of [createFakeEffectProvider(), null]) (await checkMotionShotLayers(layered, provider)).forEach((i) => reported.add(i.code));
 		expect([...reported].sort()).toEqual(Object.keys(MOTION_ISSUE_CODES).sort());
 	});
 

@@ -1,4 +1,4 @@
-import type { CameraMoveSpec, EffectValue } from '../effects/types.js';
+import type { CameraMoveSpec, EffectLayer, EffectShotTransition, EffectValue } from '../effects/types.js';
 import type { AnimationEasing } from '../animation/easing.js';
 import type { AnimationLoopMode } from '../animation/evaluate.js';
 import type { VectorDocument } from '../vector/types.js';
@@ -156,6 +156,42 @@ export interface MotionShot {
 	 * durations, staggers and hold all scale by 1 / speed. `fit_animation` sets it to fit a length.
 	 */
 	speed?: number;
+	/**
+	 * Provider effects and pictures shown with the shot, bottom to top (see `MotionShotLayer`):
+	 * `background` layers under the artwork, `subject` and `overlay` layers over it.
+	 */
+	layers?: MotionShotLayer[];
+	/**
+	 * How the shot before gives way to this one: a provider transition effect blends the last
+	 * frame of the shot before into this shot over `ms`. With no camera `in`, the camera cuts.
+	 */
+	transition?: MotionShotTransition;
+}
+
+/** What a shot layer shows or feeds its effect: a picture or SVG (URL, `data:` URL or markup), words, or a `slot` the host fills. */
+export type MotionLayerSubject = { image: string } | { svg: string } | { text: string; font?: string; weight?: number | string } | { slot: string };
+
+/**
+ * A layer of a shot (the shape of Flair's `SceneLayer` and the effects contract's
+ * `EffectLayer`): a provider effect (a generator, filter, overlay or title), optionally applied
+ * to a `subject`, or a bare subject. It lasts from `from` to `until` (default: from the shot's
+ * start until the next shot starts), placed at `rect` in artwork units (moving with the camera)
+ * or filling the screen.
+ */
+export interface MotionShotLayer extends Omit<EffectLayer, 'id' | 'subject'> {
+	/** Unique in the scene (e.g. `layer1`). */
+	id: string;
+	subject?: MotionLayerSubject;
+	/** The provider it was added with (its `id`). */
+	provider?: string;
+	/** The effect's name when it was added, shown where no provider can draw it. */
+	name?: string;
+}
+
+/** A provider transition into a shot (the effects contract's `EffectShotTransition`). */
+export interface MotionShotTransition extends EffectShotTransition {
+	provider?: string;
+	name?: string;
 }
 
 /** How `split` splits outlined text. */

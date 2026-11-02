@@ -12,12 +12,14 @@ import { motionFrameAt, motionFrameToSvg, type MotionFrame, type MotionFrameOpti
 import { toFlairEffectDocument, toFlairSvgMotion, toFlairVectorEffect, type FlairEffectOptions, type FlairExportOptions } from './flair.js';
 import type { MotionIssue } from './issues.js';
 import { parseMotionScene } from './parse.js';
-import { motionCameraFramed, type MotionCamera, type MotionEffectSource, type MotionScene } from './types.js';
+import { motionCameraFramed, type MotionCamera, type MotionEffectSource, type MotionScene, type MotionShotLayer, type MotionShotTransition } from './types.js';
 import { cameraMoveField, EffectsSlot, resolveCameraMoveSpec, resolveEffectValues } from '../effects/helpers.js';
 import { effectsPlayCamera, motionCameraMoves } from './camera.js';
 import { EffectUnsupportedError, isEffectError } from '../effects/errors.js';
 import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
 import { motionClientToDocument, motionNodePose, motionTakeProblems, motionTakeShot, type MotionNodePose, type MotionTake, type MotionTakeOptions, type MotionTakeResult, type MotionTakeSample } from './record.js';
+import { browserMotionLayerHost, MotionLayersEngine, type MotionLayerHost } from './layers.js';
+import { findMotionShotLayer, freshMotionLayerId, motionShotLayersInfo, resolveMotionShotLayer, resolveMotionShotTransition, type MotionShotLayerInfo, type MotionShotLayersInfo } from './layer-edit.js';
 import { motionArtworkSvg, motionCommandsFromEffect, motionPartsFromVectorEffect, motionSceneEffects, nextMotionEffectInstance, withoutMotionEffect, type AppliedMotionEffect } from './effects.js';
 
 export interface AnimationEditorOptions {
@@ -36,6 +38,12 @@ export interface AnimationEditorOptions {
 	 * scenes keep the commands effects made. Change it later with `setEffectsProvider`.
 	 */
 	effects?: EffectProvider | null;
+	/**
+	 * Makes shot layer and transition pictures (see `MotionLayersEngine`). Default: the browser's
+	 * canvas (`browserMotionLayerHost`), or none outside a browser, where effect layers are left
+	 * out of frames and transitions crossfade.
+	 */
+	layerHost?: MotionLayerHost | null;
 }
 
 /** What the effect edits return. */
@@ -43,6 +51,15 @@ export type MotionEffectResult = { ok: true; effect: AppliedMotionEffect; notes:
 
 /** What setting or clearing a shot's camera move did: the shot's camera now, and (when set) when the move plays (ms). */
 export type MotionCameraMoveResult = { ok: true; shot: string; camera: MotionCamera | null; window?: { start: number; end: number }; notes: string[] } | { ok: false; error: string };
+
+/** What a shot layer or transition edit did: the layer it added or changed (when there is one) and the shot's layers and transition afterwards. */
+export type MotionShotLayerResult = ({ ok: true; layer?: MotionShotLayerInfo; notes: string[] } & MotionShotLayersInfo) | { ok: false; error: string };
+
+/** A layer as `addShotLayer` takes it: its id is made when left out. */
+export type MotionShotLayerInput = Omit<MotionShotLayer, 'id' | 'provider' | 'name'> & { id?: string };
+
+/** Changes to a layer: fields to set, and `null` to clear an optional one. */
+export type MotionShotLayerChanges = { [K in Exclude<keyof MotionShotLayer, 'id' | 'provider' | 'name'>]?: MotionShotLayer[K] | null };
 
 /** What is selected on the timeline: a shot, and optionally one of its commands. */
 export interface AnimationEditorSelection {
@@ -130,6 +147,8 @@ export class AnimationEditorController {
 	readonly player: AnimationPlayer;
 	/** The effects provider slot (see `setEffectsProvider`). */
 	readonly effects = new EffectsSlot();
+	/** Renders shot layer and transition pictures for frames (see `MotionLayersEngine`). */
+	readonly layers: MotionLayersEngine;
 	private scene: MotionScene;
 	private issues: MotionIssue[];
 	private selection: AnimationEditorSelection | null = null;
@@ -150,6 +169,11 @@ export class AnimationEditorController {
 		this.readOnly = options.readOnly ?? false;
 		this.onChange = options.onChange;
 		if (options.effects) this.effects.set(options.effects);
+		this.layers = new MotionLayersEngine({
+			slot: this.effects,
+			host: options.layerHost === undefined ? browserMotionLayerHost() : options.layerHost,
+			frameSvg: (scene, time) => motionFrameToSvg(scene, time, { effects: this.effects.provider, layers: this.layers, transitions: false, pretty: false })
+		});
 		this.player = new AnimationPlayer({ clock: options.clock, duration: () => compileMotionScene(this.scene).duration, loop: this.scene.loop ?? 'none' });
 		this.state = this.computeState();
 		this.connect();
@@ -162,7 +186,8 @@ export class AnimationEditorController {
 			this.history.subscribe(() => {
 				if (!this.applying) this.notify();
 			}),
-			this.effects.subscribe(() => this.notify())
+			this.effects.subscribe(() => this.notify()),
+			this.layers.subscribe(() => this.notify())
 		);
 	}
 
@@ -616,9 +641,165 @@ export class AnimationEditorController {
 		return motionFrameAt(this.viewScene(), time, { effects: this.effects.provider, ...options });
 	}
 
-	/** The scene at `time` (default: the playhead) as SVG. */
+	/**
+	 * The scene at `time` (default: the playhead) as SVG. Shot layer and transition pictures that
+	 * are not rendered yet are left out (a transition crossfades) and come in on a later frame;
+	 * `toSvgExact` waits for them.
+	 */
 	toSvg(time = this.player.currentTime, options: MotionSvgOptions & MotionOverlayOptions = {}): string {
-		return motionStageSvg(this.viewScene(), time, { effects: this.effects.provider, ...options });
+		return motionStageSvg(this.viewScene(), time, { effects: this.effects.provider, layers: this.layers, ...options });
+	}
+
+	/** Like `toSvg`, once every shot layer and transition picture of the frame is rendered (or has failed). */
+	async toSvgExact(time = this.player.currentTime, options: MotionSvgOptions & MotionOverlayOptions = {}): Promise<string> {
+		let svg = this.toSvg(time, options);
+		for (let pass = 0; pass < 8 && this.layers.busy; pass++) {
+			await this.layers.idle();
+			svg = this.toSvg(time, options);
+		}
+		return svg;
+	}
+
+	// ---------------------------------------------------------------------------------------
+	// Shot layers and transitions
+	// ---------------------------------------------------------------------------------------
+
+	/** Every shot's layers and transition (or one shot's). Throws for an unknown shot, naming the shots. */
+	shotLayers(shot?: string): MotionShotLayersInfo[] {
+		if (shot !== undefined && !this.scene.shots.some((s) => s.id === shot)) throw new Error(this.noShot(shot));
+		return motionShotLayersInfo(this.scene, shot);
+	}
+
+	private noShot(shot: string): string {
+		return `There is no shot "${shot}"; the shots are ${this.scene.shots.map((s) => `"${s.id}"`).join(', ') || 'none yet'}.`;
+	}
+
+	private noLayer(layer: string): string {
+		const ids = this.scene.shots.flatMap((s) => (s.layers ?? []).map((l) => `"${l.id}"`));
+		return `There is no layer "${layer}"; ${ids.length ? `the layers are ${ids.join(', ')}` : 'the scene has no layers yet (add_shot_layer adds one)'}.`;
+	}
+
+	private layerResult(shot: string, layerId: string | undefined, notes: string[] = []): MotionShotLayerResult {
+		const info = motionShotLayersInfo(this.scene, shot)[0];
+		const layer = layerId ? info.layers.find((l) => l.id === layerId) : undefined;
+		return { ok: true, ...info, ...(layer ? { layer } : {}), notes };
+	}
+
+	private async layerEdit(work: () => Promise<{ shot: number; layers: MotionShotLayer[]; label: string; layer?: string; notes?: string[] }>, merge?: string): Promise<MotionShotLayerResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		let plan;
+		try {
+			plan = await work();
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refuse((error as Error).message) as { ok: false; error: string };
+			throw error;
+		}
+		const id = this.scene.shots[plan.shot].id;
+		const r = this.apply(plan.layers.length ? { op: 'update_shot', shot: id, set: { layers: plan.layers } } : { op: 'update_shot', shot: id, remove: ['layers'] }, plan.label, { merge });
+		if (!r.ok) return r;
+		return this.layerResult(id, plan.layer, plan.notes);
+	}
+
+	/**
+	 * Adds a layer to a shot: a provider effect (a generator, filter, overlay or title), optionally
+	 * applied to a `subject`, or a bare subject. Checked against the provider first; at `index`
+	 * (default the top). One undo step. Returns the layer (with its id) and the shot's layers.
+	 */
+	addShotLayer(shot: string, layer: MotionShotLayerInput, options: { index?: number } = {}): Promise<MotionShotLayerResult> {
+		return this.layerEdit(async () => {
+			const at = this.scene.shots.findIndex((s) => s.id === shot);
+			if (at < 0) throw new Error(this.noShot(shot));
+			const id = layer.id ?? freshMotionLayerId(this.scene);
+			if (findMotionShotLayer(this.scene, id)) throw new Error(`Layer id "${id}" is already used; choose another (e.g. "${freshMotionLayerId(this.scene)}").`);
+			const resolved = await resolveMotionShotLayer(this.effects.provider, { ...layer, id } as MotionShotLayer);
+			const layers = [...(this.scene.shots[at].layers ?? [])];
+			const index = options.index ?? layers.length;
+			if (!Number.isInteger(index) || index < 0 || index > layers.length) throw new Error(`"index" must be a whole number from 0 to ${layers.length} (got ${index}).`);
+			layers.splice(index, 0, resolved);
+			const notes = resolved.subject && 'slot' in resolved.subject ? [`The subject is slot "${resolved.subject.slot}", which draws nothing until it is filled; set "subject" with update_shot_layer.`] : [];
+			return { shot: at, layers, label: `Add layer ${resolved.name ?? id}`, layer: id, notes };
+		});
+	}
+
+	/** Changes a layer's fields (`null` clears an optional one); the result is checked against the provider. One undo step (`merge` folds a slider drag into one). */
+	updateShotLayer(layer: string, changes: MotionShotLayerChanges, options: { merge?: string } = {}): Promise<MotionShotLayerResult> {
+		return this.layerEdit(async () => {
+			const found = findMotionShotLayer(this.scene, layer);
+			if (!found) throw new Error(this.noLayer(layer));
+			const was = this.scene.shots[found.shot].layers![found.index];
+			const next = { ...was } as Record<string, unknown>;
+			for (const [k, v] of Object.entries(changes)) {
+				if (v === null) delete next[k];
+				else if (v !== undefined) next[k] = v;
+			}
+			// A new effect starts from its own defaults; a changed preset is written out over the values given.
+			if (changes.effect !== undefined && changes.effect !== was.effect && changes.values === undefined) delete next.values;
+			const resolved = await resolveMotionShotLayer(this.effects.provider, next as unknown as MotionShotLayer);
+			const layers = this.scene.shots[found.shot].layers!.map((l, i) => (i === found.index ? resolved : l));
+			return { shot: found.shot, layers, label: `Change layer ${resolved.name ?? layer}`, layer };
+		}, options.merge);
+	}
+
+	/** Removes a layer. One undo step. Works without a provider. */
+	removeShotLayer(layer: string): Promise<MotionShotLayerResult> {
+		return this.layerEdit(async () => {
+			const found = findMotionShotLayer(this.scene, layer);
+			if (!found) throw new Error(this.noLayer(layer));
+			const layers = this.scene.shots[found.shot].layers!.filter((_, i) => i !== found.index);
+			return { shot: found.shot, layers, label: 'Remove layer' };
+		});
+	}
+
+	/** Moves a layer to `index` in its shot (0 = bottom). One undo step. */
+	moveShotLayer(layer: string, index: number): Promise<MotionShotLayerResult> {
+		return this.layerEdit(async () => {
+			const found = findMotionShotLayer(this.scene, layer);
+			if (!found) throw new Error(this.noLayer(layer));
+			const layers = [...this.scene.shots[found.shot].layers!];
+			if (!Number.isInteger(index) || index < 0 || index >= layers.length) throw new Error(`"index" must be a whole number from 0 to ${layers.length - 1} (got ${index}).`);
+			const [moved] = layers.splice(found.index, 1);
+			layers.splice(index, 0, moved);
+			return { shot: found.shot, layers, label: 'Move layer', layer };
+		});
+	}
+
+	/**
+	 * Sets the provider transition into a shot from the shot before (not the first shot). Checked
+	 * against the provider (its use, preset and values; its length is written out). With no camera
+	 * move in, the camera cuts. One undo step (`merge` folds a slider drag into one).
+	 */
+	async setShotTransition(shot: string, transition: MotionShotTransition, options: { merge?: string } = {}): Promise<MotionShotLayerResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		const at = this.scene.shots.findIndex((s) => s.id === shot);
+		if (at < 0) return this.refuse(this.noShot(shot)) as { ok: false; error: string };
+		if (at === 0) return this.refuse(`Shot "${shot}" is the first shot, so there is no shot before it to transition from; set the transition on a later shot${this.scene.shots[1] ? ` (e.g. "${this.scene.shots[1].id}")` : ''}.`) as { ok: false; error: string };
+		let resolved: MotionShotTransition;
+		try {
+			const { provider: _p, name: _n, ...given } = transition;
+			resolved = await resolveMotionShotTransition(this.effects.provider, given);
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refuse((error as Error).message) as { ok: false; error: string };
+			throw error;
+		}
+		if (!this.scene.shots.some((s) => s.id === shot)) return this.refuse(`Shot "${shot}" was removed while the transition was checked.`) as { ok: false; error: string };
+		const r = this.apply({ op: 'update_shot', shot, set: { transition: resolved } }, `Transition ${resolved.name ?? resolved.effect}`, { merge: options.merge });
+		if (!r.ok) return r;
+		const camera = this.scene.shots.find((s) => s.id === shot)!.camera;
+		return this.layerResult(shot, undefined, camera?.in === undefined ? ['With no camera move in, the camera cuts to this shot\'s framing and the transition does the move.'] : []);
+	}
+
+	/** Removes a shot's transition. One undo step. Works without a provider. */
+	clearShotTransition(shot: string): MotionShotLayerResult {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		const found = this.scene.shots.find((s) => s.id === shot);
+		if (!found) return this.refuse(this.noShot(shot)) as { ok: false; error: string };
+		if (!found.transition) return this.refuse(`Shot "${shot}" has no transition to clear.`) as { ok: false; error: string };
+		const r = this.apply({ op: 'update_shot', shot, remove: ['transition'] }, 'Clear transition');
+		if (!r.ok) return r;
+		return this.layerResult(shot, undefined);
 	}
 
 	// ---------------------------------------------------------------------------------------
