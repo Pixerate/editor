@@ -1,5 +1,18 @@
 # @pixerate/editor
 
+## 0.241.0
+
+### Minor Changes
+
+- fc3d4a9: Paint editor: effect paint now works with wet and impasto brushes, and with sticker sprays. Watercolour, gouache and oil brushes take each pixel's colour from the effect, shifted by any paint the brush picks up; the pattern then flows, blooms and granulates with the water, and replays stay exact. Impasto brushes take the effect's colours and keep the same relief as a flat colour. Each sprayed sticker takes the effect's colour at its centre and stays recolourable; none lands where the effect is transparent. These brushes no longer refuse effect paint.
+- c1509ba: Paint editor: effect paint can be laid along each stroke, and can play live.
+
+  - **Along the stroke:** `setEffectPaint({ map: { by: 'stroke', length, repeat } })` renders the effect as a strip and paints each pixel with the colour at its distance along the stroke and place across the tip (repeat, mirror or clamp), for dab, particle, bristle, mixer, wet and impasto brushes and sprayed stickers. Replays stay exact, and scaled replays scale the length.
+  - **Live:** with `live: true`, strokes on a stroke layer keep playing the effect in the view. The document is unchanged. Only the live strokes' areas are redrawn each frame, at most `fps` a second, with one render in flight and at most 8 live effects per painting.
+  - **API:** `setEffectPlayback`, `getAnimation`, `showEffectTime`, `playEffects`, `renderAnimationFrame` and `withEffectTime`.
+  - **Agent tools:** `set_effect_paint` takes `map` and `live`, the new `set_effect_playback` plays or pauses live paint, and `export_image` / `export_psd` take `time`.
+  - **React and Svelte:** the effects panel gets "Along the stroke" (length, repeat) and "Live" options and a play/pause row with a frame rate. The canvas plays live paint while it is mounted.
+
 ## 0.240.0
 
 ### Minor Changes
