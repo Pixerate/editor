@@ -1,7 +1,0 @@
----
-"@pixerate/editor": minor
-"@pixerate/editor-react": minor
-"@pixerate/editor-svelte": minor
----
-
-Animation editor: shot layers and catalog transitions, as Flair's scenes have them. A shot's `layers` are provider effects (a generator background, a filter applied to a picture, SVG or words, an overlay or title) or bare subjects, with a role (background under the artwork, subject or overlay over it), a placement on the artwork or the full screen, `from` / `until`, opacity and fade. A shot's `transition` blends the last frame of the shot before into it through a provider transition (`from` / `to` / `progress`); with no camera move in, the camera cuts. Frames stay SVG: `MotionLayersEngine` renders layer and transition pictures through the provider and draws them in as images (`browserMotionLayerHost` in the browser, `layerHost` to supply your own), and `toSvgExact` waits for them; `render_animation_frame` draws exact frames. Without a provider, effect layers are left out and transitions crossfade. New: `motionLayersAt`, `motionLayerSpans`, `motionTransitionAt`, `checkMotionShotLayers` (issue codes `layer-*` and `transition-*`), `AnimationEditorController.addShotLayer` / `updateShotLayer` / `moveShotLayer` / `removeShotLayer` / `setShotTransition` / `clearShotTransition` / `shotLayers`, the agent tools `list_shot_layers`, `add_shot_layer`, `update_shot_layer`, `move_shot_layer`, `remove_shot_layer`, `set_shot_transition` and `clear_shot_transition`, and `<ShotLayers>` / `<ShotTransition>` (in `<ShotInspector>`) for React and Svelte.
