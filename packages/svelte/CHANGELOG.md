@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.175.0
+
+### Minor Changes
+
+- 226b226: `LoadingNode` no longer renders the ⏳ emoji. Its placeholder is now an accessible `<span role="status" aria-label="Loading…">` around an SVG spinner drawn in `currentColor` (so text colour utilities tint it), and it no longer uses `animate-pulse`. Configure it with `LoadingNode.configure({ label, HTMLAttributes, renderIndicator, nodeView })`; `loadingSpinnerSpec()` is the default indicator. React adds `usePromptEditor({ loadingIndicator, loadingLabel })` and `createReactLoadingNodeView(Component)`; Svelte adds `createSvelteLoadingNodeView(Component)` for a design-system loader inside the placeholder.
+
+### Patch Changes
+
+- Updated dependencies [226b226]
+  - @pixerate/editor@0.237.0
+
 ## 0.174.1
 
 ### Patch Changes
