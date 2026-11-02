@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor-svelte",
-  "version": "0.176.1",
+  "version": "0.177.0",
   "description": "Svelte bindings and prompt/rich-text components for @pixerate/editor",
   "author": "Pixerate",
   "license": "MIT",
