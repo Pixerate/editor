@@ -8,6 +8,8 @@ import type CommandInspectorComponent from "./CommandInspector.svelte";
 import type EasePickerComponent from "./EasePicker.svelte";
 import type ShotInspectorComponent from "./ShotInspector.svelte";
 import type ShotCameraMovesComponent from "./ShotCameraMoves.svelte";
+import type ShotLayersComponent from "./ShotLayers.svelte";
+import type ShotTransitionComponent from "./ShotTransition.svelte";
 import type SceneSettingsComponent from "./SceneSettings.svelte";
 import type AnimationRecordPanelComponent from "./AnimationRecordPanel.svelte";
 
@@ -20,6 +22,8 @@ export { default as CommandInspector } from "./CommandInspector.svelte";
 export { default as EasePicker } from "./EasePicker.svelte";
 export { default as ShotInspector } from "./ShotInspector.svelte";
 export { default as ShotCameraMoves } from "./ShotCameraMoves.svelte";
+export { default as ShotLayers } from "./ShotLayers.svelte";
+export { default as ShotTransition } from "./ShotTransition.svelte";
 export { default as SceneSettings } from "./SceneSettings.svelte";
 export { default as AnimationEffectsPanel } from "./AnimationEffectsPanel.svelte";
 export { default as AnimationRecordPanel } from "./AnimationRecordPanel.svelte";
@@ -34,5 +38,7 @@ export type CommandInspectorProps = ComponentProps<typeof CommandInspectorCompon
 export type EasePickerProps = ComponentProps<typeof EasePickerComponent>;
 export type ShotInspectorProps = ComponentProps<typeof ShotInspectorComponent>;
 export type ShotCameraMovesProps = ComponentProps<typeof ShotCameraMovesComponent>;
+export type ShotLayersProps = ComponentProps<typeof ShotLayersComponent>;
+export type ShotTransitionProps = ComponentProps<typeof ShotTransitionComponent>;
 export type SceneSettingsProps = ComponentProps<typeof SceneSettingsComponent>;
 export type AnimationRecordPanelProps = ComponentProps<typeof AnimationRecordPanelComponent>;

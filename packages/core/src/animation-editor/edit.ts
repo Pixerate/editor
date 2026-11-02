@@ -13,7 +13,7 @@ import type { MotionClip, MotionDriver, MotionCommand, MotionControl, MotionPres
 export type MotionEdit =
 	| { op: 'set_settings'; name?: string; description?: string | null; loop?: MotionScene['loop']; trigger?: MotionScene['trigger'] | null; fps?: number; steps?: number | null; beat?: MotionScene['beat'] | null; motionBlur?: MotionScene['motionBlur'] | null; narration?: MotionScene['narration'] | null; target?: [number, number] | null }
 	| { op: 'insert_shots'; shots: MotionShot[]; at?: number }
-	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold' | 'speed' | 'at')[] }
+	| { op: 'update_shot'; shot: string; set?: Partial<MotionShot>; remove?: ('label' | 'camera' | 'hold' | 'speed' | 'at' | 'layers' | 'transition')[] }
 	| { op: 'delete_shots'; shots: string[] }
 	| { op: 'move_shot'; shot: string; to: number }
 	| { op: 'add_commands'; shot: string; commands: MotionCommand[]; at?: number }

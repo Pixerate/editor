@@ -8,6 +8,7 @@ import type { VectorDocument, VectorEffect, VectorGradient, VectorNode, VectorPa
 import { activeSegment, compileMotionScene, indexMotionNodes, motionAddTrackKey, motionTrackKey, withMotionLayers, segmentProgress, trackValue, type MotionNodeEntry, type MotionProperty, type MotionTimeline, applyMotionDrivers, motionDrivenNodes, motionPropertyValue } from './compile.js';
 import type { CameraView, EffectProvider } from '../effects/types.js';
 import { motionCameraBox, motionCameraViewAt, withCameraViewEffects } from './camera.js';
+import { motionSceneHasLayers, motionTransitionAt, motionTransitionSvg, withMotionShotLayers, type MotionLayerPictures } from './layers.js';
 import type { MotionDrivenProperty, MotionRect, MotionScene } from './types.js';
 
 /**
@@ -43,6 +44,13 @@ export interface MotionFrameOptions {
 	offsets?: boolean;
 	/** An effects provider to play the shots' camera moves (`MotionCamera.in` / `during`); without one the camera eases between framings. */
 	effects?: EffectProvider | null;
+}
+
+export interface MotionLayerFrameOptions {
+	/** Where shot layer and transition pictures come from (the controller's `MotionLayersEngine`). Without it, effect layers are left out and transitions crossfade. */
+	layers?: MotionLayerPictures;
+	/** Play shot transitions (default true). Off draws each shot's own frame. */
+	transitions?: boolean;
 }
 
 /** Id of the trim effect that draws strokes on. */
@@ -295,7 +303,7 @@ export function motionFrameAt(scene: MotionScene, time: number, options: MotionF
 	return { time, document, camera: { x: tidy(box[0]), y: tidy(box[1]), width: tidy(box[2]), height: tidy(box[3]) }, ...(view ? { view } : {}), clips };
 }
 
-export interface MotionSvgOptions extends MotionFrameOptions, VectorSvgExportOptions {}
+export interface MotionSvgOptions extends MotionFrameOptions, MotionLayerFrameOptions, VectorSvgExportOptions {}
 
 /** A clip shape's SVG attributes. */
 export function motionClipAttrs(clip: MotionClipShape): Record<string, number> {
@@ -310,7 +318,16 @@ export function motionFrameToSvg(scene: MotionScene, time: number, options: Moti
 	const wrap: Record<string, readonly VectorSvgWrapper[]> = { ...options.wrap };
 	for (const [id, clips] of Object.entries(frame.clips))
 		wrap[id] = [...(wrap[id] ?? []), ...clips.map((clip, i) => ({ clip: { id: `${prefix}reveal-${id}-${i}`, shape: clip.shape, attrs: motionClipAttrs(clip) } }))];
-	return withCameraViewEffects(withViewBox(vectorDocumentToSvg(frame.document, { ...options, wrap }), frame.camera), frame.view, frame.camera, prefix);
+	if (!motionSceneHasLayers(scene)) return withCameraViewEffects(withViewBox(vectorDocumentToSvg(frame.document, { ...options, wrap }), frame.camera), frame.view, frame.camera, prefix);
+	const art = vectorDocumentToSvg(frame.document, { ...options, wrap, background: false });
+	let svg = withViewBox(withMotionShotLayers(art, scene, time, frame.camera, options.layers, options.background !== false), frame.camera);
+	const transition = options.transitions === false ? null : motionTransitionAt(scene, time);
+	if (transition) {
+		const picture = options.layers?.transition(scene, time, transition);
+		const from = picture ? '' : motionFrameToSvg(scene, Math.max(0, transition.start - 0.001), { ...options, transitions: false, idPrefix: `${prefix}from-` });
+		svg = motionTransitionSvg(svg, from, transition, frame.camera, picture);
+	}
+	return withCameraViewEffects(svg, frame.view, frame.camera, prefix);
 }
 
 /** Replaces the root `viewBox` of an SVG string. */

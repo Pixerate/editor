@@ -1,5 +1,7 @@
 import { isAnimationEasing } from '../animation/easing.js';
 import { namedWithSuggestion } from './issues.js';
+import { EFFECT_LAYER_ROLES } from '../effects/types.js';
+import { effectSubjectKind } from '../effects/templates.js';
 import { MOTION_COMMAND_TYPES, MOTION_DIRECTIONS, MOTION_ENTER_STYLES, MOTION_EXIT_STYLES, MOTION_REPEAT_MODES, MOTION_TRIGGERS, MOTION_TEXT_UNITS, MOTION_CASCADES, MOTION_DRIVEN_PROPERTIES, MOTION_BLENDS, MOTION_IRIS_SHAPES, MOTION_SPLIT_ORIENTATIONS, type MotionCommand, type MotionCommandType, type MotionScene, type MotionShot } from './types.js';
 
 /**
@@ -17,7 +19,10 @@ export class MotionSceneFormatError extends Error {
 }
 
 const SCENE_KEYS = ['version', 'name', 'description', 'artwork', 'shots', 'clips', 'drivers', 'motionBlur', 'loop', 'trigger', 'fps', 'steps', 'beat', 'narration', 'target', 'controls', 'presets'];
-const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed'];
+const SHOT_KEYS = ['id', 'label', 'camera', 'at', 'run', 'hold', 'speed', 'layers', 'transition'];
+const LAYER_KEYS = ['id', 'effect', 'preset', 'values', 'subject', 'role', 'rect', 'from', 'until', 'opacity', 'fade', 'provider', 'name'];
+const TRANSITION_KEYS = ['effect', 'ms', 'preset', 'values', 'provider', 'name'];
+const LAYER_ID = /^[A-Za-z_][\w.-]*$/;
 const CAMERA_KEYS = ['x', 'y', 'width', 'height', 'frame', 'padding', 'ease', 'ms', 'geometric', 'in', 'during'];
 const CAMERA_MOVE_KEYS = ['move', 'ms', 'preset', 'values'];
 const BASE_KEYS = ['type', 'targets', 'duration', 'delay', 'stagger', 'with', 'ease', 'note', 'repeat', 'repeatMode', 'steps', 'split', 'cascade', 'source'];
@@ -298,6 +303,53 @@ export function shotShapeProblems(shot: unknown, where: string): string[] {
 	}
 	if (!Array.isArray(shot.run)) problems.push(`${name}: "run" must be a list of commands (it may be empty).`);
 	else shot.run.forEach((command, i) => problems.push(...commandShapeProblems(command, `${name}, command ${i + 1}`)));
+	problems.push(...shotLayersShapeProblems(shot, name));
+	return problems;
+}
+
+const isLayerTime = (t: unknown): boolean => (isNum(t) && t >= 0) || (isObject(t) && Object.keys(t).length === 1 && Number.isInteger(t.shots) && (t.shots as number) >= 1);
+
+/** Problems with a shot's `layers` and `transition`. */
+export function shotLayersShapeProblems(shot: Record<string, unknown>, name: string): string[] {
+	const problems: string[] = [];
+	if (shot.layers !== undefined) {
+		if (!Array.isArray(shot.layers)) problems.push(`${name}: "layers" must be a list of layers.`);
+		else
+			shot.layers.forEach((layer: unknown, i: number) => {
+				const where = `${name}, layer ${i + 1}`;
+				if (!isObject(layer)) return void problems.push(`${where} must be an object.`);
+				unknownKeys(layer, LAYER_KEYS, where, problems);
+				if (typeof layer.id !== 'string' || !LAYER_ID.test(layer.id)) problems.push(`${where}: "id" must be letters, digits, "_", "-" or "." (e.g. "layer1").`);
+				if (layer.effect === undefined && layer.subject === undefined) problems.push(`${where} needs an "effect", a "subject" or both.`);
+				if (layer.effect !== undefined && (typeof layer.effect !== 'string' || !layer.effect)) problems.push(`${where}: "effect" must be an effect id.`);
+				if (layer.subject !== undefined) {
+					const kind = effectSubjectKind(layer.subject);
+					if (kind === 'video') problems.push(`${where}: an animation layer cannot play a video; use { "image" }, { "svg" }, { "text" } or { "slot" } (the video editor plays video).`);
+					else if (!kind || !String((layer.subject as Record<string, unknown>)[kind]).trim()) problems.push(`${where}: "subject" must be { "image": url }, { "svg": markup }, { "text": words } or { "slot": name }.`);
+				}
+				if (layer.role !== undefined && !EFFECT_LAYER_ROLES.includes(layer.role as never)) problems.push(`${where}: "role" must be one of ${EFFECT_LAYER_ROLES.join(', ')}.`);
+				if (layer.rect !== undefined) {
+					const r = layer.rect;
+					if (!isObject(r) || !['x', 'y', 'width', 'height'].every((k) => isNum(r[k])) || !((r.width as number) > 0 && (r.height as number) > 0)) problems.push(`${where}: "rect" must be { x, y, width, height } in artwork units, width and height > 0.`);
+				}
+				for (const k of ['from', 'until'] as const) if (layer[k] !== undefined && !isLayerTime(layer[k])) problems.push(`${where}: "${k}" must be ms ≥ 0 after the shot starts, or { "shots": n } (n ≥ 1: when the n-th shot after this one starts).`);
+				if (layer.opacity !== undefined && !(isNum(layer.opacity) && layer.opacity >= 0 && layer.opacity <= 1)) problems.push(`${where}: "opacity" must be a number from 0 to 1.`);
+				if (layer.fade !== undefined && !(isNum(layer.fade) && layer.fade >= 0)) problems.push(`${where}: "fade" must be ms ≥ 0.`);
+				if (layer.preset !== undefined && typeof layer.preset !== 'string') problems.push(`${where}: "preset" is a preset's name.`);
+				if (layer.values !== undefined && !isObject(layer.values)) problems.push(`${where}: "values" is an object of the effect's control values.`);
+				for (const k of ['provider', 'name'] as const) if (layer[k] !== undefined && typeof layer[k] !== 'string') problems.push(`${where}: "${k}" must be a string.`);
+			});
+	}
+	if (shot.transition !== undefined) {
+		const t = shot.transition;
+		if (!isObject(t) || typeof t.effect !== 'string' || !t.effect) problems.push(`${name}: "transition" is { "effect": id, "ms"?, "preset"?, "values"? }.`);
+		else {
+			unknownKeys(t, TRANSITION_KEYS, `${name} transition`, problems);
+			if (t.ms !== undefined && !(isNum(t.ms) && t.ms > 0 && t.ms <= 60000)) problems.push(`${name} transition: "ms" must be a number from 1 to 60000.`);
+			if (t.preset !== undefined && typeof t.preset !== 'string') problems.push(`${name} transition: "preset" is a preset's name.`);
+			if (t.values !== undefined && !isObject(t.values)) problems.push(`${name} transition: "values" is an object of the effect's control values.`);
+		}
+	}
 	return problems;
 }
 
@@ -347,6 +399,16 @@ export function motionSceneShapeProblems(input: unknown): string[] {
 		problems.push('Scene: "presets" must be a list of { name, values }.');
 	if (!Array.isArray(input.shots)) problems.push('Scene: "shots" must be a list.');
 	else input.shots.forEach((shot, i) => problems.push(...shotShapeProblems(shot, `Shot ${i + 1}`)));
+	if (Array.isArray(input.shots)) {
+		const seen = new Set<string>();
+		for (const shot of input.shots as { id?: unknown; layers?: unknown }[])
+			if (isObject(shot) && Array.isArray(shot.layers))
+				for (const layer of shot.layers as { id?: unknown }[])
+					if (isObject(layer) && typeof layer.id === 'string') {
+						if (seen.has(layer.id)) problems.push(`Layer id "${layer.id}" is used twice; layer ids are unique in the scene.`);
+						seen.add(layer.id);
+					}
+	}
 	return problems;
 }
 

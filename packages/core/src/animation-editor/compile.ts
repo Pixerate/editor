@@ -40,6 +40,7 @@ import {
 	type MotionShot
 } from './types.js';
 import { cameraMoveParts } from '../effects/helpers.js';
+import { EFFECT_TRANSITION_MS } from '../effects/types.js';
 
 /**
  * Compiling a scene: shots and commands become timed segments, one per (node, property)
@@ -135,6 +136,9 @@ export interface MotionShotTiming {
 	cameraIn?: string;
 	/** The provider camera move it plays while it holds (`camera.during`), from `commandsEnd` to `end`. */
 	cameraDuring?: string;
+	/** The provider transition into it (`transition.effect`), played from `start` to `transitionEnd`. Never on the first shot. */
+	transition?: string;
+	transitionEnd?: number;
 }
 
 export interface MotionCommandTiming {
@@ -649,6 +653,8 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 		// A shot's speed scales all of its time: camera move, delays, durations, staggers and hold.
 		const f = motionShotTimeScale(shot);
 		const moveIn = shot.camera ? cameraMoveParts(shot.camera.in) : undefined;
+		// A transition from the shot before (never into the first shot). With no camera move in, the camera cuts.
+		const transitionMs = index > 0 && shot.transition ? (shot.transition.ms ?? EFFECT_TRANSITION_MS) * f : 0;
 		const moveDuring = shot.camera ? cameraMoveParts(shot.camera.during) : undefined;
 		let playsIn = false;
 		if (shot.camera) {
@@ -657,7 +663,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			const rect = framed ? resolveMotionCamera(shot.camera, scene) : null;
 			if ((rect && rect.width > 0 && rect.height > 0) || (!framed && moveIn)) {
 				// The first shot cuts to its framing: there is no framing before it to move from.
-				const ms = index === 0 ? 0 : (moveIn?.ms ?? shot.camera.ms ?? MOTION_CAMERA_MS) * f;
+				const ms = index === 0 || (transitionMs > 0 && !moveIn) ? 0 : (moveIn?.ms ?? shot.camera.ms ?? MOTION_CAMERA_MS) * f;
 				cameraMoves.push({ shot: shot.id, start, end: start + ms, to: rect, ease: shot.camera.ease ?? MOTION_EASE_IN_OUT, geometric: shot.camera.geometric === true });
 				cursor = start + ms;
 				playsIn = !!moveIn && index > 0;
@@ -679,7 +685,7 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			prevStart = begin;
 			runEnd = Math.max(runEnd, end);
 		});
-		const end = runEnd + (shot.hold ?? MOTION_DEFAULT_HOLD) * f;
+		const end = Math.max(runEnd, start + transitionMs) + (shot.hold ?? MOTION_DEFAULT_HOLD) * f;
 		shots.push({
 			id: shot.id,
 			index,
@@ -691,7 +697,8 @@ export function compileMotionScene(scene: MotionScene): MotionTimeline {
 			...(cue !== undefined ? { cue } : {}),
 			...(missedBy !== undefined ? { missedBy } : {}),
 			...(playsIn ? { cameraIn: moveIn!.move } : {}),
-			...(moveDuring ? { cameraDuring: moveDuring.move } : {})
+			...(moveDuring ? { cameraDuring: moveDuring.move } : {}),
+			...(transitionMs > 0 ? { transition: shot.transition!.effect, transitionEnd: start + transitionMs } : {})
 		});
 		t = end;
 	});

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { describeMotionElements, freshShotId, motionCameraFramed, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
 import { CommitInput } from './CommitInput';
+import { ShotLayers, ShotTransition } from './ShotLayers';
 import { ShotCameraMoves } from './ShotCameraMoves';
 import { useAnimationEditorState } from './useAnimationEditor';
 
@@ -17,7 +18,7 @@ const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opa
 
 /**
  * The selected shot: its label, hold, speed, the node the camera frames, the cue it starts
- * on (a beat of the scene's grid or a narration word) and its camera moves (`ShotCameraMoves`). Also adds, moves and deletes shots.
+ * on (a beat of the scene's grid or a narration word), its camera moves (`ShotCameraMoves`), its transition in (`ShotTransition`) and its layers (`ShotLayers`). Also adds, moves and deletes shots.
  * Every change is one undo step.
  */
 export function ShotInspector({ controller, shot, className = '' }: ShotInspectorProps) {
@@ -136,6 +137,8 @@ export function ShotInspector({ controller, shot, className = '' }: ShotInspecto
         </div>
       )}
       {current && <ShotCameraMoves controller={controller} shot={current.id} />}
+      {current && <ShotTransition controller={controller} shot={current.id} />}
+      {current && <ShotLayers controller={controller} shot={current.id} />}
       {message && (
         <p className="text-red-500" role="alert" data-edit-error="">
           {message}

@@ -2,6 +2,8 @@
   import { describeMotionElements, freshShotId, motionCameraFramed, motionCueChoices, motionCueFromKey, motionCueKey, type AnimationEditorController, type MotionEdit } from '@pixerate/editor/animation-editor';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
   import ShotCameraMoves from './ShotCameraMoves.svelte';
+  import ShotLayers from './ShotLayers.svelte';
+  import ShotTransition from './ShotTransition.svelte';
 
   interface Props {
     controller: AnimationEditorController;
@@ -67,7 +69,7 @@
 
 <!--
   The selected shot: label, hold, speed, the node the camera frames, the cue it starts on (a
-  beat or a narration word) and its camera moves (ShotCameraMoves). Also adds, moves and deletes shots. Every change is one undo step.
+  beat or a narration word), its camera moves (ShotCameraMoves), its transition in (ShotTransition) and its layers (ShotLayers). Also adds, moves and deletes shots. Every change is one undo step.
 -->
 <div class="flex flex-col gap-1.5 text-xs {className}" data-shot-inspector="">
   <div class="flex items-center gap-1">
@@ -118,6 +120,8 @@
     </div>
   {/if}
   {#if current}<ShotCameraMoves {controller} shot={current.id} />{/if}
+  {#if current}<ShotTransition {controller} shot={current.id} />{/if}
+  {#if current}<ShotLayers {controller} shot={current.id} />{/if}
   {#if message}
     <p class="text-red-500" role="alert" data-edit-error="">{message}</p>
   {/if}

@@ -33,6 +33,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: An effect smart filter's result replaced its input outright (`applySmartFilters` in `layers/smart.ts`), alpha included. Many shaders ignore the source alpha and write opaque pixels everywhere, so the filter's alpha won.
 - **Solution / Workaround**: `EffectSmartFilter.preserveTransparency`. When set, `keepAlphaOf` draws the result over the filter's input and gives it the input's alpha, before the filter's blend and opacity. New filters from `apply_effect` and the effects panels set it to true. A missing value means false, so older documents render as before. The provider's result is cached by input only (`preserveTransparency` is left out of that key), so toggling it does not re-run the shader. For generators and overlays, use `add_effect_layer` / `add_adjustment_layer` `clipped: true` instead.
 
+### [core/animation-editor] Shot Layer Pictures Inside SVG Frames: Outside URLs and Transition Frames
+
+- **Issue / Symptom**: (1) A layer's picture subject showed on the live stage but not in PNG frames, in a filter's input or in a transition's `from` / `to`. (2) Drawing a transition's frames to feed the provider asked for the same transition again.
+- **Root Cause**: (1) The live stage draws inline SVG, where an `<image href="https://…">` loads. A rasterized frame is an SVG drawn through `Image`, and an SVG used as an image loads no outside resources, so those pictures came out blank. (2) A transition's `to` is the frame at the same moment, and that frame is itself a transition frame.
+- **Solution / Workaround**: (1) `MotionLayersEngine.subject` turns picture URLs into `data:` URLs through the host's `loadImage`, and frames use them once they are ready. This needs the picture's server to allow cross-origin use. (2) The engine's `frameSvg` draws with `transitions: false`, and it waits for the layer pictures those frames need (`idleExcept`) before rasterizing them. Keep both when changing how frames are drawn.
+
 ### [core/effects] Effects That Draw No Pixels Must Be Kept Out of Pixel Pickers
 
 - **Issue / Symptom**: A new effect kind that draws no pixels (a `motion` effect, a `camera` move) shows up in editors' effect browsers, `apply_effect` enums and thumbnails, where creating a renderer for it fails ("No preview", or an `unsupported` error after the agent picked it).
