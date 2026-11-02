@@ -80,6 +80,44 @@ export const DOCUMENT_SCRIPTS: AgentScript[] = [
   },
 ];
 
+/** The first item of a list result (`changes`, `comments`), or a hint to run the first review script. */
+const firstOf = (ctx: AgentScriptContext, key: string, list: "changes" | "comments") => {
+  const item = ctx.results[key]?.[list]?.find((x: any) => !x.resolved);
+  if (!item) throw new Error(`There are no open ${list}; play "Suggest a clearer intro" first.`);
+  return item as { id: string };
+};
+
+export const REVIEW_SCRIPTS: AgentScript[] = [
+  {
+    id: "review-suggest",
+    prompt: "Suggest a clearer intro and flag anything unclear",
+    steps: [
+      { say: "Reading the document.", tool: "review__get_text", args: { format: "text" } },
+      { say: "Turning tracking on, so my edit is a suggestion you can accept or reject.", tool: "review__set_track_changes", args: { enabled: true } },
+      { say: "The second sentence is long; suggesting a shorter one.", tool: "review__find_text", args: { query: "Turn on tracking and edit this paragraph" }, as: "long" },
+      { tool: "review__replace_range", args: (ctx) => ({ ...pick(firstMatch(ctx, "long")), text: "With tracking on, edit this paragraph" }) },
+      { say: "Who accepts changes is unclear; leaving a comment rather than guessing.", tool: "review__find_text", args: { query: "until accepted or rejected" }, as: "unclear" },
+      {
+        tool: "review__add_comment",
+        args: (ctx) => ({ ...pick(firstMatch(ctx, "unclear")), body: "Say who can accept or reject: any reviewer, or only the author?" }),
+      },
+      { say: "Here is what I suggested.", tool: "review__list_changes", args: {} },
+    ],
+  },
+  {
+    id: "review-triage",
+    prompt: "Accept the first suggestion and resolve the open comment",
+    steps: [
+      { say: "Listing the tracked changes.", tool: "review__list_changes", args: {}, as: "changes" },
+      { say: "Accepting the first one by its id.", tool: "review__accept_change", args: (ctx) => ({ changeId: firstOf(ctx, "changes", "changes").id }) },
+      { say: "Now the comments.", tool: "review__list_comments", args: { includeResolved: false }, as: "comments" },
+      { tool: "review__reply_to_comment", args: (ctx) => ({ commentId: firstOf(ctx, "comments", "comments").id, body: "Any reviewer can; noted in the docs." }) },
+      { say: "Resolving it now it has an answer.", tool: "review__resolve_comment", args: (ctx) => ({ commentId: firstOf(ctx, "comments", "comments").id }) },
+      { say: "What is left to review.", tool: "review__list_changes", args: {} },
+    ],
+  },
+];
+
 /** Spreadsheet rows (1-based) of the sales table: the rows after the header with a Revenue formula. */
 function salesRows(ctx: AgentScriptContext): number[] {
   const raw = ctx.results.data.raw as string[][];

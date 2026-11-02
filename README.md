@@ -221,7 +221,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Review: comments, tracked changes, compare</strong> (9)</summary>
+<summary><strong>Review: comments, tracked changes, compare</strong> (10)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -234,6 +234,7 @@ Every feature is available from core and from both framework packages, except wh
 | Tracked moves (cut + paste / drag of a sentence or paragraph, linked move-from/move-to, accept/reject as one, `acceptMove`/`rejectMove`) | ✅ (`isMoveSized`, `trackMoves`, `isMove`) | `ReviewToolbar`, `TrackedChangesList` | `ReviewToolbar`, `TrackedChangesList` |
 | Tracked changes list (accept/reject each change, select on click) | `getTrackedChanges`, `selectChange`, `trackedChangeLabel` | `TrackedChangesList` | `TrackedChangesList` |
 | Compare Documents into tracked changes (word/char, ignore case/white space, formatting, whole-block insert/delete, optional moved paragraphs via `detectMoves`) | `compareDocuments`, `compareHtml`, `diffSequences` (`@pixerate/editor/compare`) & `setContentFromComparison` | `useDocumentCompare` | `createDocumentCompare` |
+| Review agent tools (`list_comments`, `add_comment`, `reply_to_comment`, `resolve_comment`, `delete_comment`, `list_changes`, `accept_change`, `reject_change`, `accept_all_changes`, `reject_all_changes`, `set_track_changes`; one undo step each) | `createReviewToolProvider` (`@pixerate/editor/agent`) | `useAgentToolProvider` | `useAgentToolProvider` |
 
 </details>
 
