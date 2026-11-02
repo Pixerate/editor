@@ -7,6 +7,7 @@ import { EffectsProviderSwitch } from './EffectsProviderSwitch';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
 import { EditorDocumentAutosave, useDemoDocumentTools } from './EditorDocumentAutosave';
 import { AgentScriptPanel } from './AgentScriptPanel';
+import { EditorPage, EditorPanel, useOpenPanel } from './EditorPage';
 import { IMAGE_SCRIPTS } from '../agentScripts';
 import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
 
@@ -44,9 +45,52 @@ const SAMPLE_IMAGES = [
   },
 ];
 
-export function ImageEditorTab() {
-  const [selectedImage, setSelectedImage] = useState<string>(SAMPLE_IMAGES[0].url);
+/** Picks the image both views edit: a sample, or one uploaded from disk. */
+function ImagePicker({ image, onPick }: { image: string; onPick: (url: string) => void }) {
+  const sample = SAMPLE_IMAGES.some((img) => img.url === image);
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          onPick(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <label className="flex items-center gap-1.5 text-slate-400">
+        <ImageIcon className="w-3.5 h-3.5" />
+        <span className="sr-only">Image</span>
+        <select
+          value={sample ? image : ''}
+          onChange={(e) => e.target.value && onPick(e.target.value)}
+          className="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-slate-200"
+          aria-label="Sample image"
+        >
+          {!sample && <option value="">Uploaded image</option>}
+          {SAMPLE_IMAGES.map((img) => (
+            <option key={img.url} value={img.url}>
+              {img.name.split(' (')[0]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 cursor-pointer transition-colors">
+        <Upload className="w-3.5 h-3.5" />
+        <span>Upload</span>
+        <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+      </label>
+    </div>
+  );
+}
+
+function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (url: string) => void }) {
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
+  const openPanel = useOpenPanel();
   const editor = useImageEditor();
   // The long selections (Select Subject, Sky, Focus Area, Object and Quick Selection, the Select
   // and Mask preview) run in a worker, so the page stays responsive.
@@ -65,10 +109,6 @@ export function ImageEditorTab() {
     });
     return () => editor.controller.setDocumentOpener(null);
   }, [editor.controller]);
-  // A second editor for the standalone canvas below, with its own small toolbar.
-  const canvasOnly = useImageEditor();
-  const [canvasMode, setCanvasMode] = useState<ImageEditorCanvasMode>('paint');
-  const [canvasError, setCanvasError] = useState<string | null>(null);
   const [maskNote, setMaskNote] = useState<string | null>(null);
   // Agents get the image__* tools (adjustments, layers, selections, previews).
   const provider = useMemo(() => createImageEditorToolProvider(editor.controller, { id: 'image', namespace: 'image' }), [editor.controller]);
@@ -83,21 +123,13 @@ export function ImageEditorTab() {
   useAgentToolProvider(demoToolRegistry, effectTools);
 
   useEffect(() => {
-    void editor.controller.loadImage(selectedImage);
-  }, [editor.controller, selectedImage]);
-  useEffect(() => {
-    void canvasOnly.controller.loadImage(selectedImage).then(() => canvasOnly.controller.addPixelLayer({ name: 'Paint' }));
-  }, [canvasOnly.controller, selectedImage]);
-  const pickCanvasMode = (mode: ImageEditorCanvasMode) => {
-    setCanvasMode(mode);
-    setCanvasError(null);
-    canvasOnly.setTool(mode === 'paint' ? 'brush' : mode === 'annotate' ? 'pen' : mode === 'crop' ? 'crop' : 'select');
-  };
+    void editor.controller.loadImage(image);
+  }, [editor.controller, image]);
 
   const loadCoarseMask = async () => {
     const { width, height } = editor.controller.getState().imageDimensions;
     await editor.controller.loadSelectionFromImage(coarseMask(width, height));
-    setMaskNote('Coarse mask loaded. Open "Select & Mask" and press Refine Edge (or use Refine below).');
+    setMaskNote('Coarse mask loaded. Open "Select & Mask" and press Refine Edge (or use Refine Edge here).');
   };
 
   const refineToEdges = async () => {
@@ -109,83 +141,10 @@ export function ImageEditorTab() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setSelectedImage(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-indigo-400" />
-            Media & Image Editor Studio
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            UI-agnostic Canvas 2D engine with freeform/aspect crop, color adjustments, annotations, depth alpha masking,
-            Select &amp; Mask: magic wand, marquees, lasso, Refine Edge and adjustment layer masks, and Free Transform
-            (Ctrl/Cmd+T or the Free Transform button: drag handles to scale, outside to rotate, Ctrl/Cmd to distort).
-          </p>
-        </div>
-
-        {/* Preset Selectors & Custom Upload */}
-        <div className="flex flex-wrap items-center gap-2">
-          {SAMPLE_IMAGES.map((img) => (
-            <button
-              key={img.name}
-              type="button"
-              onClick={() => setSelectedImage(img.url)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                selectedImage === img.url
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow'
-                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              {img.name.split(' (')[0]}
-            </button>
-          ))}
-
-          <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer transition-colors">
-            <Upload className="w-3.5 h-3.5" />
-            <span>Upload Image</span>
-            <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-          </label>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <ImagePicker image={image} onPick={onPickImage} />
       <EditorDocumentAutosave doc={editor.editorDocument} name="Image" />
-
-      {/* Selection demo: simulate an AI segmentation and refine it to the image edges */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <button
-          type="button"
-          onClick={loadCoarseMask}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-        >
-          <Wand2 className="w-3.5 h-3.5" />
-          Load coarse “AI” mask
-        </button>
-        <button
-          type="button"
-          onClick={refineToEdges}
-          disabled={!editor.state.selection}
-          className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40"
-        >
-          Refine Edge
-        </button>
-        {maskNote && <span className="text-slate-400">{maskNote}</span>}
-      </div>
-
-
-      {/* Editor Component */}
       <EffectsProviderSwitch />
       <div className="relative w-full">
         {/* The editor acts out every image__* / imagefx__* call (agent playback), opening each tool's panel itself. */}
@@ -195,64 +154,137 @@ export function ImageEditorTab() {
           playback={demoPlayback}
           onSave={(dataUrl) => {
             setExportedUrl(dataUrl);
+            openPanel('export');
           }}
         />
       </div>
-      {/* The canvas alone (ImageEditorCanvas): your own chrome around it, sized by its box. */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold uppercase tracking-wider text-slate-300">Canvas only</span>
-          {(['paint', 'crop', 'select', 'annotate', 'none'] as ImageEditorCanvasMode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={canvasMode === m}
-              onClick={() => pickCanvasMode(m)}
-              className={`px-2.5 py-1 rounded-md border capitalize ${canvasMode === m ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
-            >
-              {m}
-            </button>
-          ))}
-          {canvasError && <span role="alert" className="text-rose-400">{canvasError}</span>}
-        </div>
-        <div className="resize overflow-hidden rounded-lg border border-slate-800" style={{ width: 480, height: 280, minWidth: 200, minHeight: 120 }}>
-          <ImageEditorCanvas
-            editor={canvasOnly}
-            mode={canvasMode}
-            playback={null}
-            onError={(_source, message) => setCanvasError(message)}
-            className="h-full w-full bg-slate-950"
-          />
-        </div>
-      </div>
       <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
 
-      {/* Export Preview */}
-      {exportedUrl && (
-        <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Latest Export Output
-            </span>
-            <a
-              href={exportedUrl}
-              download="pixerate-edited-image.png"
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download PNG
-            </a>
-          </div>
-          <div className="flex justify-center p-2 bg-slate-950 rounded-lg border border-slate-800/80">
-            <img
-              src={exportedUrl}
-              alt="Exported output"
-              className="max-h-64 rounded object-contain shadow-lg"
-            />
-          </div>
+      {/* Selection demo: simulate an AI segmentation and refine it to the image edges */}
+      <EditorPanel id="mask" label="AI mask" icon={Wand2}>
+        <p className="text-xs leading-relaxed text-slate-400">
+          Stands in for an AI segmentation: loads a coarse, blocky mask as the selection, then Refine Edge snaps it to the real edges of the image.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={loadCoarseMask}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            Load coarse “AI” mask
+          </button>
+          <button
+            type="button"
+            onClick={refineToEdges}
+            disabled={!editor.state.selection}
+            className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+          >
+            Refine Edge
+          </button>
         </div>
-      )}
+        {maskNote && <p className="text-xs text-slate-400">{maskNote}</p>}
+      </EditorPanel>
+
+      {/* Export Preview */}
+      <EditorPanel id="export" label="Export" icon={Sparkles}>
+        {exportedUrl ? (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <a
+                href={exportedUrl}
+                download="pixerate-edited-image.png"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download PNG
+              </a>
+            </div>
+            <div className="flex justify-center p-2 bg-slate-950 rounded-lg border border-slate-800/80">
+              <img src={exportedUrl} alt="Exported output" className="max-h-64 rounded object-contain shadow-lg" />
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Save from the editor's toolbar and the exported PNG shows here, ready to download.</p>
+        )}
+      </EditorPanel>
+
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          UI-agnostic Canvas 2D engine with freeform/aspect crop, color adjustments, annotations, depth alpha masking,
+          Select &amp; Mask: magic wand, marquees, lasso, Refine Edge and adjustment layer masks, and Free Transform
+          (Ctrl/Cmd+T or the Free Transform button: drag handles to scale, outside to rotate, Ctrl/Cmd to distort).
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+/** The canvas alone (ImageEditorCanvas): your own chrome around it, sized by its box. */
+function CanvasOnlyView({ image, onPickImage }: { image: string; onPickImage: (url: string) => void }) {
+  // A second editor with its own small toolbar.
+  const canvasOnly = useImageEditor();
+  const [canvasMode, setCanvasMode] = useState<ImageEditorCanvasMode>('paint');
+  const [canvasError, setCanvasError] = useState<string | null>(null);
+  useEffect(() => {
+    void canvasOnly.controller.loadImage(image).then(() => canvasOnly.controller.addPixelLayer({ name: 'Paint' }));
+  }, [canvasOnly.controller, image]);
+  const pickCanvasMode = (mode: ImageEditorCanvasMode) => {
+    setCanvasMode(mode);
+    setCanvasError(null);
+    canvasOnly.setTool(mode === 'paint' ? 'brush' : mode === 'annotate' ? 'pen' : mode === 'crop' ? 'crop' : 'select');
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <ImagePicker image={image} onPick={onPickImage} />
+        <span className="mx-1 h-4 border-l border-slate-800" aria-hidden />
+        {(['paint', 'crop', 'select', 'annotate', 'none'] as ImageEditorCanvasMode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={canvasMode === m}
+            onClick={() => pickCanvasMode(m)}
+            className={`px-2.5 py-1 rounded-md border capitalize ${canvasMode === m ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
+          >
+            {m}
+          </button>
+        ))}
+        {canvasError && <span role="alert" className="text-rose-400">{canvasError}</span>}
+      </div>
+      <div className="resize overflow-hidden rounded-lg border border-slate-800" style={{ width: 480, height: 280, minWidth: 200, minHeight: 120 }}>
+        <ImageEditorCanvas
+          editor={canvasOnly}
+          mode={canvasMode}
+          playback={null}
+          onError={(_source, message) => setCanvasError(message)}
+          className="h-full w-full bg-slate-950"
+        />
+      </div>
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          ImageEditorCanvas without the editor's chrome: pick a mode (paint, crop, select, annotate, or none) from your own toolbar.
+          The canvas sizes itself to its box; drag the corner to resize it.
+        </p>
+      </EditorPanel>
+    </div>
+  );
+}
+
+export function ImageEditorTab() {
+  // Both views edit the same picked image.
+  const [image, setImage] = useState<string>(SAMPLE_IMAGES[0].url);
+  return (
+    <EditorPage
+      tab="image"
+      title="Image"
+      icon={ImageIcon}
+      description="A layered photo editor: adjustments, selections and masks, crop, transform and annotations on a Canvas 2D engine."
+      views={[
+        { id: 'editor', label: 'Editor', render: () => <ImageEditorView image={image} onPickImage={setImage} /> },
+        { id: 'canvas-only', label: 'Canvas only', render: () => <CanvasOnlyView image={image} onPickImage={setImage} /> },
+      ]}
+    />
   );
 }

@@ -13,6 +13,7 @@ import {
   useDocumentCompare,
   useTrackChanges,
 } from "@pixerate/editor-react";
+import { EditorPanel } from "./EditorPage";
 
 const reviewer = { id: "demo-user", name: "You" };
 
@@ -89,7 +90,7 @@ export const ReviewDemoSection: React.FC = () => {
   if (!editor) return null;
 
   return (
-    <section className="mt-8 space-y-3">
+    <section className="space-y-3">
       <ReviewToolbar
         editor={editor}
         className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 p-2 text-slate-200"
@@ -110,7 +111,6 @@ export const ReviewDemoSection: React.FC = () => {
         >
           Tracked move example
         </button>
-        <span>Cut and paste (or drag) a sentence or paragraph with tracking on to record a move.</span>
         {comparison.summary && (
           <span>
             Compared: {comparison.summary.insertions} insertions, {comparison.summary.deletions} deletions,{" "}
@@ -179,6 +179,14 @@ export const ReviewDemoSection: React.FC = () => {
           />
         </div>
       </div>
+      <EditorPanel id="tips" label="Tips">
+        <ul className="space-y-1.5 text-xs leading-relaxed text-slate-400">
+          <li>Select text and use the bubble menu to add a comment.</li>
+          <li>Turn on tracking and edit: insertions are underlined and deletions struck through until accepted or rejected.</li>
+          <li>Cut and paste (or drag) a sentence or paragraph with tracking on to record a move.</li>
+          <li>Compare… diffs two HTML versions into the editor as tracked changes.</li>
+        </ul>
+      </EditorPanel>
     </section>
   );
 };

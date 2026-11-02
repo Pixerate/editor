@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Film } from "lucide-react";
+import { FileDown, Film } from "lucide-react";
 import { VideoEditor, useVideoDialogueTools, useVideoEditorController, useVideoEditorState, useVideoEditorTools, useVideoEffectsTools, useVideoMusicTools } from "@pixerate/editor-react/video-editor";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
@@ -9,6 +9,7 @@ import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { VIDEO_SCRIPTS } from "../agentScripts";
 import { sampleProject } from "../videoSample";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
 
 /** Records a few seconds of an animated canvas as WebM (browsers with MediaRecorder only). */
 async function recordFootage(seconds: number): Promise<{ src: string; duration: number }> {
@@ -61,7 +62,7 @@ function download(name: string, text: string, type: string) {
  * Video: the headless non-linear editor with the React timeline, preview, transport, inspector
  * and media bin; agent tools; ffmpeg and EDL export. The sample media is made in the browser.
  */
-export function VideoTab() {
+function VideoDemo() {
   const project = useMemo(sampleProject, []);
   // A frame cache with prefetch: scrubbing shows decoded frames at once (see the strip under the ruler).
   const frameCache = useMemo(() => new VideoFrameCache({ maxBytes: 256 * 1024 * 1024 }), []);
@@ -115,20 +116,6 @@ export function VideoTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Film className="h-5 w-5 text-rose-400" />
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">Video</h2>
-          <p className="text-xs text-slate-400">
-            Headless <code>VideoEditorController</code> (<code>@pixerate/editor/video-editor</code>) with the React components from{" "}
-            <code>@pixerate/editor-react/video-editor</code>. Drag clips to move them (they snap to edges, markers and the playhead), drag their edges to trim (Alt to
-            ripple), press S to split at the playhead and Delete to remove (Shift to ripple). Drop your own video, audio or images on the media bin. "Adjustment" adds a clip
-            whose grade, effects and mask change every track underneath; the inspector masks clips and protects skin under a LUT. With a transcript, the transcript marks
-            fillers, pauses and stutters and proposes cleanups as plans you accept or discard. Every change is one undo step (⌘Z), and agents make the same edits through the{" "}
-            <code>video__*</code>, <code>videodialogue__*</code> and <code>videomusic__*</code> tools.
-          </p>
-        </div>
-      </div>
       <EditorDocumentAutosave doc={editorDocument} name="Video project" />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <EffectsProviderSwitch />
@@ -146,6 +133,10 @@ export function VideoTab() {
         <button type="button" className={button} onClick={addFootage} disabled={recording || state.readOnly}>
           {recording ? "Recording 5 s…" : "Add recorded footage"}
         </button>
+      </div>
+      {message && <p className="text-xs text-slate-300">{message}</p>}
+      <EditorPanel id="export" label="Export" icon={FileDown}>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <button type="button" className={button} onClick={showFfmpeg}>
           ffmpeg command
         </button>
@@ -156,7 +147,6 @@ export function VideoTab() {
           Download project JSON
         </button>
       </div>
-      {message && <p className="text-xs text-slate-300">{message}</p>}
       {output && (
         <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
           <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
@@ -165,9 +155,32 @@ export function VideoTab() {
               Close
             </button>
           </div>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all text-[11px] text-slate-300">{output.text}</pre>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[11px] text-slate-300">{output.text}</pre>
         </div>
       )}
+      </EditorPanel>
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Headless <code>VideoEditorController</code> (<code>@pixerate/editor/video-editor</code>) with the React components from{" "}
+          <code>@pixerate/editor-react/video-editor</code>. Drag clips to move them (they snap to edges, markers and the playhead), drag their edges to trim (Alt to
+          ripple), press S to split at the playhead and Delete to remove (Shift to ripple). Drop your own video, audio or images on the media bin. "Adjustment" adds a clip
+          whose grade, effects and mask change every track underneath; the inspector masks clips and protects skin under a LUT. With a transcript, the transcript marks
+          fillers, pauses and stutters and proposes cleanups as plans you accept or discard. Every change is one undo step (⌘Z), and agents make the same edits through the{" "}
+          <code>video__*</code>, <code>videodialogue__*</code> and <code>videomusic__*</code> tools.
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+export function VideoTab() {
+  return (
+    <EditorPage
+      tab="video"
+      title="Video"
+      icon={Film}
+      description="A non-linear video editor: cut, trim and layer clips on tracks with transitions, grades and titles, then export an ffmpeg command or EDL."
+      views={[{ id: "editor", label: "Editor", render: () => <VideoDemo /> }]}
+    />
   );
 }
