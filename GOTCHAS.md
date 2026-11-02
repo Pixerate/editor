@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] Sticker Layers Are Redrawn From Their List, so Nothing May Clip a Sticker While It Is Sprayed
+
+- **Issue / Symptom**: Stickers sprayed under a mask stencil came out clipped, then lost the clipping as soon as any sticker on the layer was edited (even a recolour of another one), and a replay drew them unclipped.
+- **Root Cause**: The spray's tile target carried the stencil selection, but every later redraw (`stickerSurface`, used by `commitStickers` and the `stickers` replay event) draws the list with `selection: null`. The clip was never part of the stickers, only of the first drawing.
+- **Solution / Workaround**: A sticker stroke never takes a selection (`runStroke` passes `null`), and a live spray under an enabled mask stencil is refused with the stencil ids and how to hide them. Replays of older strokes that recorded mask stencils draw unclipped, matching the redraw. Anything new that draws stickers must go through the sticker list, not through the stroke's target.
+
 ### [core|react|svelte/extensions] `addNodeView` Must Always Return a Factory, and SVG in a `DOMOutputSpec` Needs the Namespace
 
 - **Issue / Symptom**: Making `LoadingNode`'s framework node view optional by returning `null` from `addNodeView()` when no `nodeView` option is set crashes the editor on the first placeholder (`addNodeView(...) is not a function`). Separately, an SVG spinner written as `["svg", …]` in `renderHTML` renders as an unknown HTML element and draws nothing.

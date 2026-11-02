@@ -1867,7 +1867,12 @@ export class PaintEditorController {
     const snapper = init.snapToPerspective && perspective.enabled && perspective.snap ? new PerspectiveSnapper(perspective) : null;
     const useStencils = init.stencils !== false;
     const stencilSnapper = useStencils && this.guides.stencils.some((x) => x.enabled && x.mode === 'guide') ? new StencilSnapper(this.guides.stencils) : null;
-    const selection = init.maskStencils ? this.stencilSelection(init.maskStencils) : useStencils ? this.stencilSelection() : null;
+    // Stickers are objects drawn whole (their layer is redrawn from the list unclipped), so a mask would only clip them until the next edit.
+    if (brush.engine === 'sticker' && !init.maskStencils && useStencils && this.stencilSelection()) {
+      const masks = this.guides.stencils.filter((x) => x.enabled && x.mode === 'mask').map((x) => x.id);
+      throw new PaintEditorError(`Stickers can't be clipped by mask stencils (${masks.join(', ')}): they are objects drawn whole. Hide them (update_stencil enabled false) to spray stickers, or erase stickers you don't want (remove_stickers).`);
+    }
+    const selection = brush.engine === 'sticker' ? null : init.maskStencils ? this.stencilSelection(init.maskStencils) : useStencils ? this.stencilSelection() : null;
     const inputFilter = snapper || stencilSnapper ? (p: PenPoint) => (stencilSnapper ? stencilSnapper.snap(snapper ? snapper.snap(p) : p) : snapper!.snap(p)) : undefined;
     const rgba = rgbaOf(color);
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;

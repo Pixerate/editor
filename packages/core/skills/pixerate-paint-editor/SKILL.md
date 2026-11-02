@@ -198,7 +198,9 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 - **Sticker spray** (category `sticker`): stamps (`star`, `leaf`, `confetti`, `flower`, `heart`,
   `splat`, `sparkle`, `ring`, `dot`) sprayed along the stroke onto an **empty layer**, where each
   stays an object: `list_stickers`, `update_sticker` (move, turn, resize, recolour, restamp),
-  `arrange_stickers`, `remove_stickers`. A sticker layer takes no other paint.
+  `arrange_stickers`, `remove_stickers`. A sticker layer takes no other paint. Stickers are drawn
+  whole, so a spray is refused while a mask stencil is on: hide it (`update_stencil` `enabled`
+  false) first, then remove the stickers you don't want.
 - **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until

@@ -88,6 +88,27 @@ describe('stickers', () => {
     t.dispose();
   });
 
+  it('refuses to spray under a mask stencil, and never clips stickers, live, after an edit or on replay', async () => {
+    const c = editor();
+    const stencil = c.addStencil({ kind: 'shape', shape: 'rect', mode: 'mask', rect: { x: 0, y: 0, width: 150, height: 300 } });
+    expect(() => c.paintStroke({ points: wave(110), brushId: 'sticker-stars', seed: 4 })).toThrow(new RegExp(`mask stencils \\(${stencil.id}\\).*update_stencil enabled false`));
+    expect(c.listStickers()).toHaveLength(0);
+    // A replay with recorded mask stencils (older documents) still draws stickers whole.
+    const masked = c.paintStroke({ points: wave(110), brushId: 'sticker-stars', seed: 4, maskStencils: [stencil] });
+    c.updateStencil(stencil.id, { enabled: false });
+    expect(c.document.strokes.find((s) => s.id === masked.strokeId)?.stencils).toBeUndefined();
+    const live = Buffer.from(c.compositePixels().data);
+    const list = c.listStickers();
+    expect(list.some((s) => s.x > 160)).toBe(true);
+    // An edit redraws the layer from its stickers; the pixels must not change.
+    c.updateSticker(undefined, list[0].id, { color: list[0].color });
+    expect(Buffer.from(c.compositePixels().data).equals(live)).toBe(true);
+    const t = c.createReplayTarget(1);
+    await replayPainting(c.document, t);
+    expect(Buffer.from(t.compositePixels().data).equals(live)).toBe(true);
+    t.dispose();
+  });
+
   it('agent tools list, change, arrange and delete stickers', async () => {
     const c = editor();
     const reg = new ToolRegistry();
