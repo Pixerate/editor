@@ -10,8 +10,9 @@ import { PAINT_SCRIPTS } from '../agentScripts';
 import { demoAgentSpeed } from '../agentScript';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
+import { EditorPage, EditorPanel } from './EditorPage';
 
-export function PaintTab() {
+function PaintView() {
   const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed' });
   // The agent paints on the canvas itself: its cursor draws each stroke live, rubs fills across the sheet and starts replays.
   const { presence, director } = usePaintDirector(editor.controller, { speed: demoAgentSpeed() });
@@ -35,18 +36,6 @@ export function PaintTab() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-          <Brush className="w-5 h-5 text-indigo-400" />
-          Paint
-        </h2>
-        <p className="text-xs text-slate-400 mt-1">
-          Natural media on generated paper: pencils, pastels and charcoal catch the paper's grain (press harder to fill it), plus airbrush, marker and ink. Blend
-          with a blender that mixes nearby colours like paint, a smudge (with pigment mixing) and the Mixer Brush; give any brush pick-up and mix ratios, make it
-          dirty or multi-coloured, and glaze layers in watercolour, tint, highlight or shadow mode. Watercolour and gouache are wet: a fluid simulation spreads the water, darkens drying edges, granulates, blooms and runs downhill on a tilted board until the paint dries (Wet panel: dry now, pause, water overlay, tilt, flow maps). Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
-          mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed. With an effects provider, the Effects tab adds effect paper, effect layers, effect fills and light baked onto dried paint.
-        </p>
-      </div>
       <EditorDocumentAutosave doc={editor.editorDocument} name="Painting" />
       <div className="relative">
         {/* The director's presence is the editor's playback cursor too: strokes and panel edits share it. */}
@@ -57,6 +46,28 @@ export function PaintTab() {
         scripts={scripts}
         hint="Plays a scripted agent turn with the paint__* tools. Strokes go through the paint director, so its cursor paints each one live on the canvas: paper, fills that follow the grain, pigment mixing on the pad, blending, dirty and multi-colour brushes, watercolour glazes, wet-in-wet watercolour that flows and dries, replayed and varied strokes, and kaleidoscope symmetry."
       />
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Natural media on generated paper: pencils, pastels and charcoal catch the paper's grain (press harder to fill it), plus airbrush, marker and ink. Blend
+          with a blender that mixes nearby colours like paint, a smudge (with pigment mixing) and the Mixer Brush; give any brush pick-up and mix ratios, make it
+          dirty or multi-coloured, and glaze layers in watercolour, tint, highlight or shadow mode. Watercolour and gouache are wet: a fluid simulation spreads the water, darkens drying edges, granulates, blooms and runs downhill on a tilted board until the paint dries (Wet panel: dry now, pause, water overlay, tilt, flow maps). Pens use pressure, tilt and barrel rotation. Rotate (R, Shift+wheel) and mirror (M) the view, paint
+          mirrored or as a kaleidoscope, snap to perspective guides, trace an image, and mix colours on the pad. Every stroke is kept as data and can be replayed. With an effects provider, the Effects tab adds effect paper, effect layers, effect fills and light baked onto dried paint.
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+const PAINT_VIEWS = [{ id: 'paint', label: 'Paint', render: () => <PaintView /> }];
+
+export function PaintTab() {
+  return (
+    <EditorPage
+      tab="paint"
+      title="Paint"
+      icon={Brush}
+      description="Natural-media painting on generated paper: dry and wet brushes, pigment mixing and watercolour that flows and dries."
+      views={PAINT_VIEWS}
+    />
   );
 }

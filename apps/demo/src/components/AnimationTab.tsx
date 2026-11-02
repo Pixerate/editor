@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Clapperboard } from "lucide-react";
+import { ArrowDownUp, Clapperboard } from "lucide-react";
 import { createVectorEffect, ellipseSubpath, rectSubpath, starSubpath, type VectorDocument } from "@pixerate/editor/vector";
 import { createAnimationEditorDocument, AnimationEditorController, fromFlairVectorEffect, fromPptxAnimation, toLottie, type FlairVectorEffect, type LottieAnimation, type MotionScene } from "@pixerate/editor/animation-editor";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
@@ -9,6 +9,7 @@ import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
 import { VectorEditor, useVectorEditorController } from "@pixerate/editor-react/vector";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
 import { ANIMATION_SCRIPTS } from "../agentScripts";
 import bookmark from "../flair-samples/bookmark.json";
 import checkbox from "../flair-samples/checkbox.json";
@@ -140,7 +141,7 @@ function LottiePreview({ lottie }: { lottie: LottieAnimation }) {
  * Vector animation: the whole hand editor (stage picking, scrubber, command list and inspector,
  * shot and scene settings), agent tools, Flair import and Flair / Lottie export with previews.
  */
-export function AnimationTab() {
+function AnimationDemo() {
   const controller = useAnimationEditorController({ scene: SCENE });
   const state = useAnimationEditorState(controller);
   useAnimationEditorTools(demoToolRegistry, controller, { id: "animation", namespace: "animation" });
@@ -183,18 +184,6 @@ export function AnimationTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Clapperboard className="h-5 w-5 text-rose-400" />
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">Vector animation</h2>
-          <p className="text-xs text-slate-400">
-            Headless <code>AnimationEditorController</code> (<code>@pixerate/editor/animation-editor</code>) with the React controls from{" "}
-            <code>@pixerate/editor-react/animation-editor</code>. Scrub the ruler, pick a shot, then add, reorder and edit its commands; click an element on the stage to pick
-            it (shift-click toggles it as a target of the selected command). Every change is one undo step (⌘Z). Agents use the same edits through the{" "}
-            <code>animation__*</code> tools.
-          </p>
-        </div>
-      </div>
       <EditorDocumentAutosave doc={editorDocument} name="Vector animation" />
       <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
@@ -210,6 +199,12 @@ export function AnimationTab() {
             {accentControl.label ?? "Accent"} <input type="color" value={accent} onChange={(e) => setAccent(e.currentTarget.value)} />
           </label>
         )}
+        <button type="button" className={button} onClick={() => setEditing((e) => !e)}>
+          {editing ? "Hide artwork editor" : "Edit artwork"}
+        </button>
+      </div>
+      <EditorPanel id="files" label="Import & export" icon={ArrowDownUp}>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <select className="rounded border border-slate-700 bg-slate-900 px-2 py-1" aria-label="Load from Flair" value="" onChange={(e) => loadFlair(e.target.value)} data-load-flair="">
           <option value="">Load from Flair…</option>
           {FLAIR_SAMPLES.map((e) => (
@@ -234,44 +229,9 @@ export function AnimationTab() {
         <button type="button" className={button} onClick={() => setExported({ kind: "json", scene: state.scene })}>
           Scene JSON
         </button>
-        <button type="button" className={button} onClick={() => setEditing((e) => !e)}>
-          {editing ? "Hide artwork editor" : "Edit artwork"}
-        </button>
       </div>
-      {message && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300" data-import-notes="">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{message.title}</span>
-            <button type="button" className={`${button} ml-auto`} onClick={() => setMessage(null)}>
-              Dismiss
-            </button>
-          </div>
-          {message.lines.length > 0 && (
-            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-slate-400">
-              {message.lines.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      {editing && (
-        <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-          <VectorEditor controller={vector} height={360} />
-          <button
-            type="button"
-            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
-            onClick={() => {
-              const result = controller.setArtwork(vector.getState().document);
-              setMessage(result.ok ? null : { title: "The artwork was not used", lines: [result.error] });
-            }}
-          >
-            Use this artwork
-          </button>
-        </div>
-      )}
       {exported && (
-        <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs text-slate-300 lg:grid-cols-2" data-export-preview={exported.kind}>
+        <div className="space-y-3 text-xs text-slate-300" data-export-preview={exported.kind}>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="font-medium">{exported.kind === "flair" ? "Flair vector effect (re-imported preview)" : exported.kind === "lottie" ? "Lottie (played by lottie-web)" : "Scene JSON"}</span>
@@ -307,6 +267,59 @@ export function AnimationTab() {
           </pre>
         </div>
       )}
+      </EditorPanel>
+      {editing && (
+        <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+          <VectorEditor controller={vector} height={360} />
+          <button
+            type="button"
+            className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+            onClick={() => {
+              const result = controller.setArtwork(vector.getState().document);
+              setMessage(result.ok ? null : { title: "The artwork was not used", lines: [result.error] });
+            }}
+          >
+            Use this artwork
+          </button>
+        </div>
+      )}
+      {message && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300" data-import-notes="">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{message.title}</span>
+            <button type="button" className={`${button} ml-auto`} onClick={() => setMessage(null)}>
+              Dismiss
+            </button>
+          </div>
+          {message.lines.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-slate-400">
+              {message.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Headless <code>AnimationEditorController</code> (<code>@pixerate/editor/animation-editor</code>) with the React controls from{" "}
+          <code>@pixerate/editor-react/animation-editor</code>. Scrub the ruler, pick a shot, then add, reorder and edit its commands; click an element on the stage to pick
+          it (shift-click toggles it as a target of the selected command). Every change is one undo step (⌘Z). Agents use the same edits through the{" "}
+          <code>animation__*</code> tools.
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+export function AnimationTab() {
+  return (
+    <EditorPage
+      tab="animation"
+      title="Animation"
+      icon={Clapperboard}
+      description="A motion editor for vector art: build shots of enter, follow, morph and effect commands, then export to Flair or Lottie."
+      views={[{ id: "editor", label: "Editor", render: () => <AnimationDemo /> }]}
+    />
   );
 }

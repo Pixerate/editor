@@ -39,10 +39,14 @@ import {
   Table as TableIcon,
   BarChart3,
   TrendingUp,
+  FileText,
+  FileInput,
 } from "lucide-react";
 import { demoCommandRegistry, demoToolRegistry } from "../agentTools";
 import { RichDocumentAutosave } from "./RichDocumentAutosave";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
+import { ReviewDemoSection } from "./ReviewDemoSection";
 import { demoTextPresence } from "../agentScript";
 import { DOCUMENT_SCRIPTS } from "../agentScripts";
 import { samplePdfFile, samplePdfRegistry } from "../samplePdf";
@@ -110,7 +114,7 @@ const QUICK_TABLE_ITEMS = DEFAULT_TABLE_TOOLBAR.filter((item) =>
   ["addRowAfter", "addColumnAfter", "deleteRow", "deleteColumn", "toggleHeaderRow"].includes(item.id),
 );
 
-export const RichDocumentTab: React.FC = () => {
+const RichDocumentDemo: React.FC = () => {
   const [corrections, setCorrections] = useState<string[]>([]);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [bookmarkName, setBookmarkName] = useState("");
@@ -298,18 +302,6 @@ export const RichDocumentTab: React.FC = () => {
         >
           <Search className="w-4 h-4" />
         </button>
-
-        <div className="ml-auto flex items-center gap-3 text-xs text-slate-400">
-          <span className="flex items-center gap-1">
-            <Smile className="w-3.5 h-3.5 text-amber-400" /> Smilies
-          </span>
-          <span className="flex items-center gap-1">
-            <Palette className="w-3.5 h-3.5 text-blue-400" /> Color highlighter
-          </span>
-          <span className="flex items-center gap-1">
-            <Wand2 className="w-3.5 h-3.5 text-emerald-400" /> Autocorrect
-          </span>
-        </div>
       </div>
 
       {/* Table toolbar: shown while the cursor is in a table */}
@@ -321,125 +313,156 @@ export const RichDocumentTab: React.FC = () => {
         separatorClassName="w-px h-4 bg-slate-700 mx-1"
       />
 
-      {/* Bookmarks, cross-references and import */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
-        <form
-          className="flex items-center gap-1.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!bookmarkName.trim()) return;
-            if (editor.chain().focus().setBookmark({ name: bookmarkName.trim() }).run()) {
-              setBookmarkName("");
-            }
-          }}
-        >
-          <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-          <input
-            value={bookmarkName}
-            onChange={(e) => setBookmarkName(e.target.value)}
-            placeholder="Bookmark name"
-            aria-label="Bookmark name"
-            className="w-36 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500/50"
-          />
-          <button type="submit" className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200">
-            Bookmark selection
-          </button>
-        </form>
-
-        <div className="w-px h-5 bg-slate-800 mx-1" />
-
-        <div className="flex items-center gap-1.5">
-          <Link2 className="w-3.5 h-3.5 text-sky-400" />
-          <select
-            value={selectedTarget ? `${selectedTarget.type}:${selectedTarget.id}` : ""}
-            onChange={(e) => setCrossRefTarget(e.target.value)}
-            aria-label="Cross-reference target"
-            className="max-w-[14rem] bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
-          >
-            {targets.length === 0 && <option value="">No headings or bookmarks</option>}
-            {targets.map((t) => (
-              <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>
-                {t.type === "heading" ? `H${t.level}: ${t.text}` : `Bookmark: ${t.name}`}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!selectedTarget}
-            onClick={() =>
-              selectedTarget &&
-              editor
-                .chain()
-                .focus()
-                .insertCrossReference({ targetType: selectedTarget.type, targetId: selectedTarget.id })
-                .run()
-            }
-            className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
-          >
-            Insert cross-reference
-          </button>
+      {/* Import and export results (a dropped file imports too, so these show next to the editor). */}
+      {(exportMessage || importMessage || fileImport.error || pdfSummary) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          {exportMessage && (
+            <span className="text-emerald-300" data-testid="export-status">
+              {exportMessage}
+            </span>
+          )}
+          {(importMessage || fileImport.error) && (
+            <span className={fileImport.error ? "text-red-400" : "text-emerald-300"} data-testid="import-status">
+              {fileImport.error ? fileImport.error.message : importMessage}
+            </span>
+          )}
+          {pdfSummary && (
+            <span className="text-emerald-300" data-testid="pdf-structure-summary">
+              {pdfSummary.mode === "plain"
+                ? `Plain import: ${pdfSummary.paragraphs} paragraphs`
+                : `${pdfSummary.headings} headings, ${pdfSummary.lists} lists, ${pdfSummary.tables} tables, ` +
+                  `${pdfSummary.multiColumnPages} multi-column page(s) · confidence ${Math.round(pdfSummary.confidence * 100)}%`}
+            </span>
+          )}
         </div>
+      )}
 
-        <div className="w-px h-5 bg-slate-800 mx-1" />
+      <EditorPanel id="references" label="References" icon={Bookmark}>
+        <div className="space-y-3 text-xs">
+          <form
+            className="space-y-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!bookmarkName.trim()) return;
+              if (editor.chain().focus().setBookmark({ name: bookmarkName.trim() }).run()) {
+                setBookmarkName("");
+              }
+            }}
+          >
+            <label className="flex items-center gap-1.5 text-slate-400">
+              <Bookmark className="w-3.5 h-3.5 text-amber-400" /> Bookmark the selection
+            </label>
+            <div className="flex gap-1.5">
+              <input
+                value={bookmarkName}
+                onChange={(e) => setBookmarkName(e.target.value)}
+                placeholder="Bookmark name"
+                aria-label="Bookmark name"
+                className="min-w-0 flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-rose-500/50"
+              />
+              <button type="submit" className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50">
+                Bookmark selection
+              </button>
+            </div>
+          </form>
 
-        <button
-          type="button"
-          onClick={() => void fileImport.openFilePicker()}
-          disabled={fileImport.isImporting}
-          className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
-          title={`Accepts ${fileImport.accept}`}
-        >
-          <Upload className="w-3.5 h-3.5" /> {fileImport.isImporting ? "Importing…" : "Import file"}
-        </button>
-        <ExportDocxButton
-          editor={editor}
-          title="Rich document demo"
-          author={{ id: "you", name: "You" }}
-          className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
-          onExported={(report: DocxExportReport) =>
-            setExportMessage(
-              `Exported ${report.written.paragraphs} paragraphs, ${report.written.comments} comment(s), ` +
-                `${report.written.trackedChanges} tracked change(s)` +
-                (report.dropped.length ? `; left out: ${report.dropped.map((d) => `${d.name} (${d.reason})`).join(", ")}` : ""),
-            )
-          }
-        />
-        {exportMessage && (
-          <span className="text-emerald-300" data-testid="export-status">
-            {exportMessage}
-          </span>
-        )}
-        {(importMessage || fileImport.error) && (
-          <span className={fileImport.error ? "text-red-400" : "text-emerald-300"} data-testid="import-status">
-            {fileImport.error ? fileImport.error.message : importMessage}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => void sampleImport.importFiles([samplePdfFile()])}
-          disabled={sampleImport.isImporting}
-          className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
-          title="Imports a generated two-column PDF fixture through the PDF adapter"
-        >
-          <Upload className="w-3.5 h-3.5" /> Import sample PDF
-        </button>
-        <label className="flex items-center gap-1 text-slate-300">
-          <input
-            type="checkbox"
-            checked={detectPdfStructure}
-            onChange={(e) => setDetectPdfStructure(e.target.checked)}
-          />
-          Detect structure
-        </label>
-        {pdfSummary && (
-          <span className="text-emerald-300" data-testid="pdf-structure-summary">
-            {pdfSummary.mode === "plain"
-              ? `Plain import: ${pdfSummary.paragraphs} paragraphs`
-              : `${pdfSummary.headings} headings, ${pdfSummary.lists} lists, ${pdfSummary.tables} tables, ` +
-                `${pdfSummary.multiColumnPages} multi-column page(s) · confidence ${Math.round(pdfSummary.confidence * 100)}%`}
-          </span>
-        )}
-      </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <Link2 className="w-3.5 h-3.5 text-sky-400" /> Cross-reference a heading or bookmark
+            </div>
+            <div className="flex gap-1.5">
+              <select
+                value={selectedTarget ? `${selectedTarget.type}:${selectedTarget.id}` : ""}
+                onChange={(e) => setCrossRefTarget(e.target.value)}
+                aria-label="Cross-reference target"
+                className="min-w-0 flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200"
+              >
+                {targets.length === 0 && <option value="">No headings or bookmarks</option>}
+                {targets.map((t) => (
+                  <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>
+                    {t.type === "heading" ? `H${t.level}: ${t.text}` : `Bookmark: ${t.name}`}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!selectedTarget}
+                onClick={() =>
+                  selectedTarget &&
+                  editor
+                    .chain()
+                    .focus()
+                    .insertCrossReference({ targetType: selectedTarget.type, targetId: selectedTarget.id })
+                    .run()
+                }
+                className="px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+              >
+                Insert cross-reference
+              </button>
+            </div>
+          </div>
+        </div>
+      </EditorPanel>
+
+      <EditorPanel id="import" label="Import & export" icon={FileInput}>
+        <div className="space-y-3 text-xs">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => void fileImport.openFilePicker()}
+              disabled={fileImport.isImporting}
+              className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+              title={`Accepts ${fileImport.accept}`}
+            >
+              <Upload className="w-3.5 h-3.5" /> {fileImport.isImporting ? "Importing…" : "Import file"}
+            </button>
+            <ExportDocxButton
+              editor={editor}
+              title="Rich document demo"
+              author={{ id: "you", name: "You" }}
+              className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+              onExported={(report: DocxExportReport) =>
+                setExportMessage(
+                  `Exported ${report.written.paragraphs} paragraphs, ${report.written.comments} comment(s), ` +
+                    `${report.written.trackedChanges} tracked change(s)` +
+                    (report.dropped.length ? `; left out: ${report.dropped.map((d) => `${d.name} (${d.reason})`).join(", ")}` : ""),
+                )
+              }
+            />
+          </div>
+          <p className="text-slate-400">Or drop a <code>.md</code>, <code>.html</code>, <code>.txt</code> or <code>.rtf</code> file onto the editor.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void sampleImport.importFiles([samplePdfFile()])}
+              disabled={sampleImport.isImporting}
+              className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50"
+              title="Imports a generated two-column PDF fixture through the PDF adapter"
+            >
+              <Upload className="w-3.5 h-3.5" /> Import sample PDF
+            </button>
+            <label className="flex items-center gap-1 text-slate-300">
+              <input
+                type="checkbox"
+                checked={detectPdfStructure}
+                onChange={(e) => setDetectPdfStructure(e.target.checked)}
+              />
+              Detect structure
+            </label>
+          </div>
+        </div>
+      </EditorPanel>
+
+      <EditorPanel id="tips" label="Tips">
+        <ul className="space-y-1.5 text-xs leading-relaxed text-slate-400">
+          <li className="flex gap-1.5"><Smile className="mt-0.5 w-3.5 h-3.5 shrink-0 text-amber-400" /> Smilies: type <code>:)</code>, <code>&lt;3</code> or <code>/shrug</code>.</li>
+          <li className="flex gap-1.5"><Palette className="mt-0.5 w-3.5 h-3.5 shrink-0 text-blue-400" /> Hex colours like #ef4444 are highlighted as you type.</li>
+          <li className="flex gap-1.5"><Wand2 className="mt-0.5 w-3.5 h-3.5 shrink-0 text-emerald-400" /> Autocorrect fixes quotes, dashes, fractions and sentence case; the outline lists what it changed.</li>
+          <li>Mod+F finds, Mod+H replaces. Tab moves between table cells; drag a column border to resize it.</li>
+          <li>Click a chart to edit it on its canvas, in the inspector or in the data grid.</li>
+          <li>Copy and paste between editors keeps footnotes, bookmarks and cross-references (rich clipboard).</li>
+        </ul>
+      </EditorPanel>
 
       <div className="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
         <aside className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 h-fit md:sticky md:top-32 space-y-4">
@@ -515,3 +538,18 @@ export const RichDocumentTab: React.FC = () => {
     </div>
   );
 };
+
+const RICH_VIEWS = [
+  { id: "document", label: "Document", render: () => <RichDocumentDemo /> },
+  { id: "review", label: "Review mode", render: () => <ReviewDemoSection /> },
+];
+
+export const RichDocumentTab: React.FC = () => (
+  <EditorPage
+    tab="rich"
+    title="Documents"
+    icon={FileText}
+    description="A rich-text document editor with tables, charts, footnotes, comments and tracked changes, that imports Markdown, HTML and PDF and exports Word."
+    views={RICH_VIEWS}
+  />
+);

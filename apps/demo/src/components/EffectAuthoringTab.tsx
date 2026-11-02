@@ -6,8 +6,10 @@ import { useAgentToolProvider } from "@pixerate/editor-react";
 import { useDemoEffects } from "../demoEffects";
 import { demoToolRegistry } from "../agentTools";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
+import { EditorPage, EditorPanel } from "./EditorPage";
+import { Wand2 } from "lucide-react";
 
-export function EffectAuthoringTab() {
+function EffectAuthoringView() {
   const { provider, error, loading } = useDemoEffects();
   const [selectedEffectId, setSelectedEffectId] = useState<string>("fake.invert");
   const [session, setSession] = useState<EffectAuthoringSession | null>(null);
@@ -62,18 +64,9 @@ export function EffectAuthoringTab() {
   useAgentToolProvider(demoToolRegistry, authoringTools);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-100">Effect Authoring</h2>
-          <p className="text-xs text-slate-400">
-            Interactive visual editor, keyframe timeline, parameter controls and source editing.
-          </p>
-        </div>
-        <EffectsProviderSwitch />
-      </div>
-
+    <div className="space-y-4">
+      {/* Picks the provider whose effects the catalog lists (shows in Options). */}
+      <EffectsProviderSwitch />
       {loading && <p className="text-xs text-slate-400">Loading effects provider…</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -96,10 +89,6 @@ export function EffectAuthoringTab() {
 
         {/* Right Column: Authoring Editor */}
         <div className="space-y-3 lg:col-span-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Authoring Workspace
-          </h3>
-
           {!provider ? (
             <div className="rounded-lg border border-slate-800 bg-slate-900/20 p-8 text-center text-xs text-slate-500">
               Select an effects provider to author effects.
@@ -125,6 +114,27 @@ export function EffectAuthoringTab() {
           )}
         </div>
       </div>
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Pick an effect in the catalog to open an authoring session for it: a visual editor, a keyframe timeline, parameter
+          controls and source editing. Authoring needs a provider that supports it; switch providers under Options. While a
+          session is open, agents get its authoring tools (see Tools).
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+const EFFECTS_VIEWS = [{ id: "authoring", label: "Authoring", render: () => <EffectAuthoringView /> }];
+
+export function EffectAuthoringTab() {
+  return (
+    <EditorPage
+      tab="effects"
+      title="Effect Authoring"
+      icon={Wand2}
+      description="Build and tune effects from a provider's catalog: visual editing, keyframes, parameters and source."
+      views={EFFECTS_VIEWS}
+    />
   );
 }

@@ -3,6 +3,7 @@ import { useAgentToolProvider } from "@pixerate/editor-react";
 import { RecoveryPrompt, useEditorAutosave } from "@pixerate/editor-react/persistence";
 import { createDocumentToolProvider, type EditorDocument } from "@pixerate/editor/persistence";
 import { demoDocumentStorage, demoDocumentStore, demoToolRegistry } from "../agentTools";
+import { EditorPanel } from "./EditorPage";
 
 /**
  * An editor's `EditorDocument` for a demo tab, with its save / load tools registered while the
@@ -55,17 +56,19 @@ export const EditorDocumentAutosave: React.FC<{ doc: EditorDocument; name: strin
         onRestore={() => void autosave.restore()}
         onDiscard={() => void autosave.discard()}
       />
-      <div className="flex items-center gap-3 text-xs text-slate-400">
-        <span data-autosave-status={status}>{label}</span>
-        <button
-          type="button"
-          className="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800"
-          onClick={() => void autosave.markClean()}
-          title="Pretend the document was saved: retires the recovery snapshot"
-        >
-          Mark saved
-        </button>
-      </div>
+      <EditorPanel id={`autosave:${doc.kind}`} label={`${name} recovery`} slot="options">
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span data-autosave-status={status}>{label}</span>
+          <button
+            type="button"
+            className="px-2 py-1 rounded border border-slate-700 hover:bg-slate-800"
+            onClick={() => void autosave.markClean()}
+            title="Pretend the document was saved: retires the recovery snapshot"
+          >
+            Mark saved
+          </button>
+        </div>
+      </EditorPanel>
     </div>
   );
 };

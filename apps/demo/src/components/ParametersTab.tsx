@@ -16,6 +16,7 @@ import { ParametersPanel, useParameterCommands, useParameters, useParametersCont
 import { Pause, Play, SlidersHorizontal } from "lucide-react";
 import { demoCommandRegistry, demoPlayback } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
 import { PARAMETER_SCRIPTS } from "../agentScripts";
 
 /** Small inline SVG backdrops, so the image picker works offline. */
@@ -159,19 +160,19 @@ function ShaderControlsDemo() {
   );
 }
 
-export function ParametersTab() {
-  const keyframes = useMemo(
-    () =>
-      createParameterKeyframeStore({
-        radius: { keyframes: [{ time: 0, value: 35, easing: "ease-in-out" }, { time: 1500, value: 85, easing: "ease-in-out" }, { time: 3000, value: 35 }] },
-        tint: { keyframes: [{ time: 0, value: "#f43f5e" }, { time: 3000, value: "#a855f7" }] },
-      }),
-    [],
-  );
-  const controller = useParametersController({ schema: SCHEMA, keyframes });
+type GlowController = ReturnType<typeof useParametersController>;
+
+/** The glow effect: preview, timeline and panel, driven by the tab's controller and keyframes. */
+function GlowEffectView({
+  controller,
+  keyframes,
+  editorDocument,
+}: {
+  controller: GlowController;
+  keyframes: ReturnType<typeof createParameterKeyframeStore>;
+  editorDocument: ReturnType<typeof useDemoEditorDocument>;
+}) {
   const { state } = useParameters(controller);
-  useParameterCommands(demoCommandRegistry, controller, { group: "Parameters" });
-  const editorDocument = useDemoEditorDocument(controller, createParametersEditorDocument, { namespace: "parameters", skill: "pixerate-parameters", history: false });
 
   const [playing, setPlaying] = useState(false);
   const seek = (time: number) => {
@@ -202,18 +203,7 @@ export function ParametersTab() {
   }, [playing, controller]);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
-          <SlidersHorizontal className="h-5 w-5 text-rose-400" /> Parameters editor
-        </h2>
-        <p className="max-w-3xl text-sm text-slate-400">
-          One schema drives the whole panel: sliders, toggles, choices, colours, vectors, an image picker and text, with groups that
-          collapse or appear only when relevant (the Pattern group needs a non-orb shape). Slider drags are one undo step, invalid
-          values are refused with a sentence, presets save and apply, and the diamonds key values at the playhead. Agents get the same
-          actions as <code>parameters.*</code> commands in the panel below.
-        </p>
-      </div>
+    <div className="space-y-4">
       <EditorDocumentAutosave doc={editorDocument} name="Parameters" />
 
       <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -240,10 +230,6 @@ export function ParametersTab() {
             />
             <span className="w-16 text-right font-mono text-xs text-slate-400">{(state.time / 1000).toFixed(2)}s</span>
           </div>
-          <p className="text-xs text-slate-500">
-            Radius and tint are keyed at 0s, 1.5s and 3s. Move the playhead onto a key (filled diamond) and change the value to update
-            it, or click a hollow diamond to add one.
-          </p>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <ParametersPanel controller={controller} playback={demoPlayback} />
@@ -251,7 +237,49 @@ export function ParametersTab() {
       </div>
       <AgentScriptPanel scripts={PARAMETER_SCRIPTS} hint="Plays a scripted agent turn through commands__run_command with the parameters.* commands; each set is validated against the schema and is one undo step. The panel acts each call out with the agent's cursor." />
 
-      <ShaderControlsDemo />
+      <EditorPanel id="tips" label="Tips">
+        <div className="space-y-2 text-xs leading-relaxed text-slate-400">
+          <p>
+            One schema drives the whole panel: sliders, toggles, choices, colours, vectors, an image picker and text, with groups that
+            collapse or appear only when relevant (the Pattern group needs a non-orb shape). Slider drags are one undo step, invalid
+            values are refused with a sentence, presets save and apply, and the diamonds key values at the playhead. Agents get the same
+            actions as <code>parameters.*</code> commands.
+          </p>
+          <p>
+            Radius and tint are keyed at 0s, 1.5s and 3s. Move the playhead onto a key (filled diamond) and change the value to update
+            it, or click a hollow diamond to add one.
+          </p>
+        </div>
+      </EditorPanel>
     </div>
+  );
+}
+
+export function ParametersTab() {
+  // The controller, its commands and its document tools live here, above the views, so agents
+  // see the parameters.* commands whichever view the tab opens on.
+  const keyframes = useMemo(
+    () =>
+      createParameterKeyframeStore({
+        radius: { keyframes: [{ time: 0, value: 35, easing: "ease-in-out" }, { time: 1500, value: 85, easing: "ease-in-out" }, { time: 3000, value: 35 }] },
+        tint: { keyframes: [{ time: 0, value: "#f43f5e" }, { time: 3000, value: "#a855f7" }] },
+      }),
+    [],
+  );
+  const controller = useParametersController({ schema: SCHEMA, keyframes });
+  useParameterCommands(demoCommandRegistry, controller, { group: "Parameters" });
+  const editorDocument = useDemoEditorDocument(controller, createParametersEditorDocument, { namespace: "parameters", skill: "pixerate-parameters", history: false });
+
+  return (
+    <EditorPage
+      tab="params"
+      title="Parameters"
+      icon={SlidersHorizontal}
+      description="Typed controls generated from one schema: sliders, colours, vectors, presets and keyframes, for effects and shaders."
+      views={[
+        { id: "glow", label: "Glow effect", render: () => <GlowEffectView controller={controller} keyframes={keyframes} editorDocument={editorDocument} /> },
+        { id: "shader", label: "Shader controls", render: () => <ShaderControlsDemo /> },
+      ]}
+    />
   );
 }

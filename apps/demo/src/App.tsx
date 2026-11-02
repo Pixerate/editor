@@ -5,7 +5,6 @@ import { demoCommandRegistry } from "./agentTools";
 // Each tab loads on first visit, so the first page doesn't download every editor.
 const PromptStudioTab = lazy(() => import("./components/PromptStudioTab").then((m) => ({ default: m.PromptStudioTab })));
 const RichDocumentTab = lazy(() => import("./components/RichDocumentTab").then((m) => ({ default: m.RichDocumentTab })));
-const ReviewDemoSection = lazy(() => import("./components/ReviewDemoSection").then((m) => ({ default: m.ReviewDemoSection })));
 const SpreadsheetTab = lazy(() => import("./components/SpreadsheetTab").then((m) => ({ default: m.SpreadsheetTab })));
 const CanvasTab = lazy(() => import("./components/CanvasTab").then((m) => ({ default: m.CanvasTab })));
 const ImageEditorTab = lazy(() => import("./components/ImageEditorTab").then((m) => ({ default: m.ImageEditorTab })));
@@ -19,7 +18,6 @@ const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ defau
 const TypographyTab = lazy(() => import("./components/TypographyTab").then((m) => ({ default: m.TypographyTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 const EffectAuthoringTab = lazy(() => import("./components/EffectAuthoringTab").then((m) => ({ default: m.EffectAuthoringTab })));
-import { AgentToolsPanel } from "./components/AgentToolsPanel";
 import {
   Sparkles,
   FileText,
@@ -44,7 +42,7 @@ interface TabInfo {
   id: TabId;
   label: string;
   icon: React.ElementType;
-  /** One line under the label in the sidebar. */
+  /** What the editor covers, shown as the sidebar link's tooltip. */
   hint: string;
 }
 
@@ -90,8 +88,8 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
 const TABS: TabInfo[] = GROUPS.flatMap((g) => g.tabs);
 
 const initialTab = (): TabId => {
-  // `#sheet`, `#canvas`, ... open a tab directly.
-  const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+  // `#sheet`, `#canvas`, ... open a tab directly; `#canvas/mermaid` opens one of its views.
+  const hash = typeof window !== "undefined" ? window.location.hash.slice(1).split("/")[0] : "";
   return TABS.some((t) => t.id === hash) ? (hash as TabId) : "image";
 };
 
@@ -122,7 +120,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-rose-500 to-violet-600 flex items-center justify-center font-bold text-white shadow-lg shadow-rose-500/20">
               P
@@ -146,7 +144,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => palette.setOpen(true)}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900/60"
+              className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900/60"
               title="Command palette"
             >
               <span>Commands</span>
@@ -170,9 +168,9 @@ export default function App() {
 
       </header>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex gap-8">
+      <div className="flex-1 max-w-[1680px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex gap-6">
         {/* Navigation: a grouped sidebar on wide screens, a menu on narrow ones */}
-        <nav aria-label="Editors" className="hidden lg:block w-52 shrink-0 py-8">
+        <nav aria-label="Editors" className="hidden lg:block w-48 shrink-0 py-6">
           <div className="sticky top-24 space-y-5">
             {GROUPS.map((group) => (
               <div key={group.label}>
@@ -184,15 +182,13 @@ export default function App() {
                         type="button"
                         onClick={() => setActiveTab(id)}
                         aria-current={activeTab === id ? "page" : undefined}
-                        className={`w-full flex items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${
-                          activeTab === id ? "bg-rose-500/10 text-rose-300" : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                        title={hint}
+                        className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                          activeTab === id ? "bg-rose-500/10 text-rose-300 font-medium" : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                         }`}
                       >
-                        <Icon className="w-4 h-4 mt-0.5 shrink-0" />
-                        <span>
-                          <span className="block text-sm font-medium">{label}</span>
-                          <span className="block text-[11px] text-slate-500">{hint}</span>
-                        </span>
+                        <Icon className="w-4 h-4 shrink-0" />
+                        {label}
                       </button>
                     </li>
                   ))}
@@ -203,7 +199,7 @@ export default function App() {
         </nav>
 
       {/* Main Content Body */}
-      <main className="flex-1 min-w-0 py-8">
+      <main className="flex-1 min-w-0 py-6">
         <label className="lg:hidden mb-6 flex items-center gap-2 text-xs text-slate-400">
           <span>Editor</span>
           <select
@@ -225,7 +221,6 @@ export default function App() {
         <Suspense fallback={<p className="py-16 text-center text-sm text-slate-500" role="status">Loading…</p>}>
           {activeTab === "prompt" && <PromptStudioTab />}
           {activeTab === "rich" && <RichDocumentTab />}
-          {activeTab === "rich" && <ReviewDemoSection />}
           {activeTab === "sheet" && <SpreadsheetTab />}
           {activeTab === "canvas" && <CanvasTab />}
           {activeTab === "image" && <ImageEditorTab />}
@@ -240,17 +235,6 @@ export default function App() {
           {activeTab === "effects" && <EffectAuthoringTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
-        {activeTab !== "parity" && (
-          <details className="group mt-8 rounded-xl border border-slate-800 bg-slate-900/40">
-            <summary className="cursor-pointer list-none px-4 py-3 text-xs font-medium text-slate-300 hover:text-slate-100 flex items-center justify-between">
-              <span>Agent tools for this editor</span>
-              <span className="text-slate-500 group-open:rotate-180 transition-transform">▾</span>
-            </summary>
-            <div className="px-1 pb-1">
-              <AgentToolsPanel />
-            </div>
-          </details>
-        )}
       </main>
       </div>
 
