@@ -446,4 +446,22 @@ describe('Svelte paint editor', () => {
     click(Array.from(target.querySelectorAll('[data-testid="sticker-edit"] button')).find((b) => b.textContent?.trim() === 'Delete')!);
     expect(c.listStickers().length).toBe(list.length - 1);
   });
+
+  it('the sticker panel follows the canvas pick, moves a sticker by X/Y, and the canvas outlines it', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    show(PaintEditor, { controller: c });
+    click(byText('Stickers'));
+    expect(byText('Stickers').getAttribute('aria-pressed')).toBe('true');
+    click(byText('Layers'));
+    const [placed] = c.addStickers(undefined, [{ stamp: 'heart', x: 60, y: 50 }, { stamp: 'star', x: 200, y: 120 }]);
+    c.selectSticker(placed.id);
+    flushSync();
+    expect(target.querySelector('[data-testid="sticker-panel"] [aria-selected="true"]')).not.toBeNull();
+    expect(target.querySelectorAll('svg line[stroke="#818cf8"]').length).toBe(4);
+    const x = target.querySelector('input[aria-label="Sticker x"]') as HTMLInputElement;
+    expect(x.value).toBe('60');
+    setValue(x, '90', true);
+    expect(c.listStickers()[0]).toMatchObject({ x: 90, y: 50 });
+    expect(c.getState().undoLabel).toBe('Edit sticker');
+  });
 });

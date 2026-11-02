@@ -10,12 +10,13 @@
  * same stickers.
  */
 
-import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { TileMedium, type PaintTileTarget } from '../paint/exchange';
 import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradient-paint';
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2, rand01 } from './noise';
+import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
 
 export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
 export const STAMP_KINDS: readonly StampKind[] = ['dot', 'star', 'heart', 'leaf', 'flower', 'confetti', 'splat', 'sparkle', 'ring'];
@@ -42,7 +43,7 @@ export interface Sticker {
 export interface StickerSettings {
   /** The stamps to spray (picked at random per sticker). */
   stamps: StampKind[];
-  /** Stickers per tip diameter of travel. */
+  /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
   density: number;
   /** Random size change. */
   sizeJitter: number;
@@ -184,16 +185,29 @@ export function drawSticker(medium: TileMedium, s: Sticker): RasterRect {
   return rect;
 }
 
-/** A colour moved in lightness and hue by up to `amount` (deterministic). */
+/**
+ * A colour moved in lightness and hue by up to `amount` (deterministic): in OKLCH, up to ±0.15 L
+ * and ±40° of hue at `amount` 1, with chroma reduced (not channels clipped) to stay in sRGB.
+ */
 function jitterColor(hex: string, amount: number, seed: number, i: number): string {
   const [r, g, b] = hexRgb(hex);
-  const l = (rand01(seed, i, 61) - 0.5) * amount * 0.6;
-  const h = (rand01(seed, i, 63) - 0.5) * amount;
-  // A small rotation in RGB around grey, then lightness.
-  const m = (r + g + b) / 3;
-  const rot = (c0: number, c1: number) => c0 + (c1 - c0) * h;
-  const out = [rot(r, g), rot(g, b), rot(b, r)].map((c) => Math.min(1, Math.max(0, c + l + (c - m) * 0)));
-  return '#' + out.map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+  const lch = oklabToOklch(rgbToOklab({ r, g, b, a: 1 }));
+  const l = Math.min(1, Math.max(0, lch.l + (rand01(seed, i, 61) - 0.5) * amount * 0.3));
+  const h = lch.h + (rand01(seed, i, 63) - 0.5) * amount * 80;
+  const at = (c: number) => oklabToRgb(oklchToOklab({ l, c, h, alpha: 1 }));
+  const inGamut = (o: { r: number; g: number; b: number }) => [o.r, o.g, o.b].every((v) => v >= -1e-4 && v <= 1 + 1e-4);
+  let out = at(lch.c);
+  if (!inGamut(out)) {
+    let lo = 0;
+    let hi = lch.c;
+    for (let k = 0; k < 12; k++) {
+      const mid = (lo + hi) / 2;
+      if (inGamut(at(mid))) lo = mid;
+      else hi = mid;
+    }
+    out = at(lo);
+  }
+  return '#' + [out.r, out.g, out.b].map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('');
 }
 
 export interface StickerSprayInit {
@@ -337,9 +351,16 @@ export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial
   return out;
 }
 
-/** A sticker layer's pixels: its stickers drawn bottom first over a transparent layer. */
-export function stickerSurface(stickers: readonly Sticker[]): TiledSurface {
+/**
+ * A sticker layer's pixels: its stickers drawn bottom first over a transparent layer. With `base`
+ * (the layer's current pixels, at offset 0) and `dirty` rects, only the tiles those rects touch are
+ * drawn again, from the stickers that reach them; the rest are kept. The pixels are the same as a
+ * full redraw, since a tile depends only on the stickers over it.
+ */
+export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface, dirty?: readonly RasterRect[]): TiledSurface {
+  const only = base && dirty ? new Set(dirty.flatMap((r) => tilesInRect(r).map(({ tx, ty }) => tileKey(tx, ty)))) : null;
   const live = new Map<TileKey, Uint8ClampedArray>();
+  let scratch: Uint8ClampedArray | null = null;
   const target: PaintTileTarget = {
     offset: { x: 0, y: 0 },
     lockTransparency: false,
@@ -347,16 +368,37 @@ export function stickerSurface(stickers: readonly Sticker[]): TiledSurface {
     readTile: (tx, ty) => live.get(tileKey(tx, ty)) ?? null,
     writeTile: (tx, ty) => {
       const k = tileKey(tx, ty);
+      // Writes to kept tiles go nowhere.
+      if (only && !only.has(k)) return (scratch ??= new Uint8ClampedArray(TILE * TILE * 4)).fill(0);
       let t = live.get(k);
       if (!t) live.set(k, (t = new Uint8ClampedArray(TILE * TILE * 4)));
       return t;
     },
   };
-  renderStickers(stickers, target);
+  const reaches = (s: Sticker) => !only || tilesInRect(stickerRect(s)).some(({ tx, ty }) => only.has(tileKey(tx, ty)));
+  renderStickers(stickers.filter(reaches), target);
   const tiles = new Map<TileKey, Tile>();
+  if (only && base) for (const [k, t] of base.tiles) if (!only.has(k)) tiles.set(k, t);
   for (const [k, d] of live) {
     const t = finishTile(d, 4, 0);
     if (t) tiles.set(k, t);
   }
   return new TiledSurface(4, tiles, 0);
+}
+
+/** The top-most sticker under a point (document pixels), by its stamp's shape, or `null`. */
+export function stickerAt(stickers: readonly Sticker[], x: number, y: number): Sticker | null {
+  for (let i = stickers.length - 1; i >= 0; i--) {
+    const s = stickers[i];
+    const rad = s.size / 2;
+    const a = (s.rotation * Math.PI) / 180;
+    const dx = x - s.x;
+    const dy = y - s.y;
+    const u = (dx * Math.cos(a) + dy * Math.sin(a)) / rad;
+    const v = (-dx * Math.sin(a) + dy * Math.cos(a)) / rad;
+    if (Math.abs(u) > 1.05 || Math.abs(v) > 1.05) continue;
+    // Small stickers are hard to hit exactly: their whole box counts.
+    if (s.size < 16 || stampCoverage(s.stamp, u, v, s.seed) > 0.25) return s;
+  }
+  return null;
 }

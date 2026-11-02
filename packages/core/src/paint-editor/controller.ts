@@ -81,7 +81,7 @@ import {
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
-import { normalizeStickerUpdate, STAMP_KINDS, stickerSurface, type Sticker } from './stickers';
+import { normalizeStickerUpdate, STAMP_KINDS, stickerAt as hitSticker, stickerRect, stickerSurface, type Sticker } from './stickers';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
@@ -173,6 +173,8 @@ export interface PaintEditorState {
   mixerLoad: MixerLoad;
   view: PaintView;
   hand: Hand;
+  /** The sticker picked on the canvas or in the sticker panel (editor state, not an undo step). */
+  selectedSticker: string | null;
   canUndo: boolean;
   canRedo: boolean;
   undoLabel: string | null;
@@ -333,6 +335,8 @@ interface HistoryEntry {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
+/** The most stickers one `addStickers` call places. */
+const MAX_ADD_STICKERS = 500;
 
 function parseColor(value: unknown, what = 'color'): string {
   if (typeof value !== 'string' || !HEX.test(value.trim())) throw new PaintEditorError(`${what} is ${JSON.stringify(value)}; use #rrggbb, e.g. "#2a4b8d".`);
@@ -382,6 +386,9 @@ export class PaintEditorController {
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
+  private selectedSticker: string | null = null;
+  /** A sticker drag in progress (`previewSticker`): the document before it, so the drop undoes in one step, and the one it showed last. */
+  private stickerPreview: { base: PaintDocumentState; shown: PaintDocumentState } | null = null;
   private readonly encodeImage: ImageEncoder | undefined;
   private listeners = new Set<() => void>();
   private version = 0;
@@ -483,6 +490,7 @@ export class PaintEditorController {
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
+      selectedSticker: this.selectedSticker,
       canUndo: this.undoStack.length > 0 && !this.session,
       canRedo: this.redoStack.length > 0 && !this.session,
       undoLabel: last?.label ?? null,
@@ -1867,7 +1875,12 @@ export class PaintEditorController {
     const snapper = init.snapToPerspective && perspective.enabled && perspective.snap ? new PerspectiveSnapper(perspective) : null;
     const useStencils = init.stencils !== false;
     const stencilSnapper = useStencils && this.guides.stencils.some((x) => x.enabled && x.mode === 'guide') ? new StencilSnapper(this.guides.stencils) : null;
-    const selection = init.maskStencils ? this.stencilSelection(init.maskStencils) : useStencils ? this.stencilSelection() : null;
+    // Stickers are objects drawn whole (their layer is redrawn from the list unclipped), so a mask would only clip them until the next edit.
+    if (brush.engine === 'sticker' && !init.maskStencils && useStencils && this.stencilSelection()) {
+      const masks = this.guides.stencils.filter((x) => x.enabled && x.mode === 'mask').map((x) => x.id);
+      throw new PaintEditorError(`Stickers can't be clipped by mask stencils (${masks.join(', ')}): they are objects drawn whole. Hide them (update_stencil enabled false) to spray stickers, or erase stickers you don't want (remove_stickers).`);
+    }
+    const selection = brush.engine === 'sticker' ? null : init.maskStencils ? this.stencilSelection(init.maskStencils) : useStencils ? this.stencilSelection() : null;
     const inputFilter = snapper || stencilSnapper ? (p: PenPoint) => (stencilSnapper ? stencilSnapper.snap(snapper ? snapper.snap(p) : p) : snapper!.snap(p)) : undefined;
     const rgba = rgbaOf(color);
     const seed = init.seed ?? mix32((this.seedCounter++ * 0x9e3779b1) >>> 0) & 0x7fffffff;
@@ -3061,12 +3074,82 @@ export class PaintEditorController {
     return (this.doc.stickers?.[id] ?? []).map((s) => ({ ...s }));
   }
 
-  /** Replaces a layer's stickers and redraws its pixels from them (one undo step). */
-  private commitStickers(label: string, layer: PaintPixelLayer, stickers: Sticker[]): void {
+  /**
+   * Replaces a layer's stickers and redraws its pixels from them (one undo step). With `dirty`,
+   * only the tiles under those rects are redrawn.
+   */
+  private commitStickers(label: string, layer: PaintPixelLayer, stickers: Sticker[], dirty?: RasterRect[]): void {
     if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
-    const surface = stickerSurface(stickers);
+    const before = this.previewBase() ?? this.doc;
+    this.stickerPreview = null;
+    const surface = this.redrawStickers(layer, stickers, dirty);
     const doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => ({ ...layer, surface, offset: { x: 0, y: 0 } })), stickers: { ...(this.doc.stickers ?? {}), [layer.id]: stickers } };
-    this.commit(label, this.withPaintEvent(doc, { kind: 'stickers', layerId: layer.id, data: { stickers: stickers.map((s) => ({ ...s })) } }));
+    this.commit(label, this.withPaintEvent(doc, { kind: 'stickers', layerId: layer.id, data: { stickers: stickers.map((s) => ({ ...s })) } }), before);
+  }
+
+  private redrawStickers(layer: PaintPixelLayer, stickers: readonly Sticker[], dirty?: RasterRect[]): TiledSurface {
+    const partial = dirty && !layer.offset.x && !layer.offset.y;
+    return partial ? stickerSurface(stickers, layer.surface, dirty) : stickerSurface(stickers);
+  }
+
+  /** The document from before the sticker preview on screen, or `null` when none is (anything else changed the document since). */
+  private previewBase(): PaintDocumentState | null {
+    return this.stickerPreview?.shown === this.doc ? this.stickerPreview.base : null;
+  }
+
+  private readStickerUpdate(update: Partial<Omit<Sticker, 'id'>>): Partial<Omit<Sticker, 'id'>> {
+    try {
+      return normalizeStickerUpdate(update);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+  }
+
+  /** The top-most sticker under a point (document pixels) on a layer (default the active one), or `null`. */
+  stickerAt(layerId: string | undefined, x: number, y: number): Sticker | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new PaintEditorError('x and y must be numbers of document pixels.');
+    const id = layerId ?? this.doc.activeLayerId;
+    if (!id) return null;
+    this.requireLayer(id);
+    const hit = hitSticker(this.doc.stickers?.[id] ?? [], x, y);
+    return hit ? { ...hit } : null;
+  }
+
+  /** Picks a sticker for the panel and canvas (`null` for none). Editor state, not an undo step. */
+  selectSticker(id: string | null): void {
+    if (id === this.selectedSticker) return;
+    this.selectedSticker = id;
+    this.emit([]);
+  }
+
+  /**
+   * Shows a sticker change without committing it (a drag in progress): only the tiles under its
+   * old and new place are redrawn. `updateSticker` then commits it as one undo step from before
+   * the first preview; `cancelStickerPreview` puts it back.
+   */
+  previewSticker(layerId: string | undefined, id: string, update: Partial<Omit<Sticker, 'id'>>): Sticker {
+    const { layer, stickers } = this.stickerLayer(layerId);
+    if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
+    const i = stickers.findIndex((s) => s.id === id);
+    if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
+    const next = { ...stickers[i], ...this.readStickerUpdate(update) };
+    const list = stickers.map((s, j) => (j === i ? next : s));
+    const dirty = [stickerRect(stickers[i]), stickerRect(next)];
+    const base = this.previewBase() ?? this.doc;
+    const surface = this.redrawStickers(layer, list, dirty);
+    this.doc = { ...this.doc, layers: mapLayer(this.doc.layers, layer.id, () => ({ ...layer, surface, offset: { x: 0, y: 0 } })), stickers: { ...(this.doc.stickers ?? {}), [layer.id]: list } };
+    this.stickerPreview = { base, shown: this.doc };
+    this.emit(dirty);
+    return { ...next };
+  }
+
+  /** Drops a sticker preview, restoring the document from before it. */
+  cancelStickerPreview(): void {
+    const base = this.previewBase();
+    this.stickerPreview = null;
+    if (!base) return;
+    this.doc = base;
+    this.emit();
   }
 
   /** Moves, turns, resizes, recolours or restamps one sticker (one undo step). Returns it. */
@@ -3074,15 +3157,40 @@ export class PaintEditorController {
     const { layer, stickers } = this.stickerLayer(layerId);
     const i = stickers.findIndex((s) => s.id === id);
     if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
-    let u: Partial<Omit<Sticker, 'id'>>;
-    try {
-      u = normalizeStickerUpdate(update);
-    } catch (e) {
-      throw new PaintEditorError((e as Error).message);
-    }
+    const u = this.readStickerUpdate(update);
     const next = { ...stickers[i], ...u };
-    this.commitStickers('Edit sticker', layer, stickers.map((s, j) => (j === i ? next : s)));
+    this.commitStickers('Edit sticker', layer, stickers.map((s, j) => (j === i ? next : s)), [stickerRect(stickers[i]), stickerRect(next)]);
     return { ...next };
+  }
+
+  /**
+   * Places stickers exactly (one undo step), on top of a sticker layer or onto an empty layer,
+   * which becomes one. Missing fields: size 48 px, rotation 0, the paint colour, opacity 1, a seed
+   * from the new id. Returns the new stickers with their ids.
+   */
+  addStickers(layerId: string | undefined, input: readonly (Partial<Omit<Sticker, 'id'>> & Pick<Sticker, 'stamp' | 'x' | 'y'>)[]): Sticker[] {
+    const layer = this.wetLayer(layerId, 'add stickers to');
+    if (!input.length) throw new PaintEditorError('Pass at least one sticker (stamp, x, y).');
+    if (input.length > MAX_ADD_STICKERS) throw new PaintEditorError(`At most ${MAX_ADD_STICKERS} stickers per call; split them over several calls.`);
+    const existing = this.doc.stickers?.[layer.id];
+    if (!existing?.length) {
+      if (this.wet.wetLayerIds().includes(layer.id) || contentBounds(layer.surface)) throw new PaintEditorError(`Layer "${layer.name}" already has paint; add stickers to an empty layer (add_layer) or a sticker layer so they stay editable.`);
+    }
+    let n = this.nextStickerNumber();
+    const added = input.map((raw, i) => {
+      for (const k of ['stamp', 'x', 'y'] as const) if (raw[k] === undefined) throw new PaintEditorError(`Sticker ${i} needs ${k}.`);
+      let u: Partial<Omit<Sticker, 'id'>>;
+      try {
+        u = this.readStickerUpdate(raw);
+      } catch (e) {
+        throw new PaintEditorError(`Sticker ${i}: ${(e as Error).message}`);
+      }
+      if (raw.seed !== undefined && !Number.isInteger(raw.seed)) throw new PaintEditorError(`Sticker ${i}: seed must be a whole number.`);
+      const id = n++;
+      return { id: `st${id}`, size: 48, rotation: 0, color: this.color, opacity: 1, seed: raw.seed ?? (mix32((id * 0x9e3779b1) >>> 0) & 0x7fffffff), ...u } as Sticker;
+    });
+    this.commitStickers('Add stickers', layer, [...(existing ?? []), ...added], existing?.length ? added.map(stickerRect) : undefined);
+    return added.map((s) => ({ ...s }));
   }
 
   /** Brings stickers to the top (`front`) or bottom of their layer (one undo step). */
@@ -3092,7 +3200,7 @@ export class PaintEditorController {
     const picked = stickers.filter((s) => ids.includes(s.id));
     const rest = stickers.filter((s) => !ids.includes(s.id));
     const next = to === 'front' ? [...rest, ...picked] : [...picked, ...rest];
-    this.commitStickers('Arrange stickers', layer, next);
+    this.commitStickers('Arrange stickers', layer, next, picked.map(stickerRect));
     return next.map((s) => s.id);
   }
 
@@ -3101,7 +3209,7 @@ export class PaintEditorController {
     const { layer, stickers } = this.stickerLayer(layerId);
     if (ids) for (const id of ids) if (!stickers.some((s) => s.id === id)) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
     const removed = ids ? [...ids] : stickers.map((s) => s.id);
-    this.commitStickers('Remove stickers', layer, stickers.filter((s) => !removed.includes(s.id)));
+    this.commitStickers('Remove stickers', layer, stickers.filter((s) => !removed.includes(s.id)), ids ? stickers.filter((s) => removed.includes(s.id)).map(stickerRect) : undefined);
     return removed;
   }
 
