@@ -302,6 +302,224 @@ export interface CameraMoveSample {
 	cut?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Sequences and templates
+// ---------------------------------------------------------------------------
+
+/** A box in a sequence's stage units (pixels of `EffectSequence.stage`). */
+export interface EffectRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * Something a layer shows or applies its effect to: a picture or SVG (a URL, a `data:` URL or
+ * `<svg>` markup), a video by URL, words, or `{ slot }`: a subject the host fills in by name.
+ */
+export type EffectSubject =
+	| { image: string }
+	| { video: string }
+	| { svg: string }
+	| { text: string; font?: string; weight?: number | string }
+	| { slot: string };
+
+/** The kinds of subject, as `EffectSubject` keys. */
+export const EFFECT_SUBJECT_KINDS = ['image', 'video', 'svg', 'text', 'slot'] as const;
+export type EffectSubjectKind = (typeof EFFECT_SUBJECT_KINDS)[number];
+
+/**
+ * Where a layer sits in a shot's stack: `background` under the shot's own content, `subject`
+ * with it, `overlay` above everything.
+ */
+export type EffectLayerRole = 'background' | 'subject' | 'overlay';
+export const EFFECT_LAYER_ROLES: readonly EffectLayerRole[] = ['background', 'subject', 'overlay'];
+
+/** When a layer starts or stops: ms after its shot starts, or `{ shots: n }` for when the n-th shot after its own begins. */
+export type EffectLayerTime = number | { shots: number };
+
+/**
+ * One layer of a shot (the shape of Flair's `SceneLayer`): a catalog effect, optionally applied
+ * to a subject, or a bare subject (no `effect`), placed on the stage for a stretch of time.
+ * The subject feeds the effect's `source` input, else its first image input.
+ */
+export interface EffectLayer {
+	/** A name unique in the sequence. */
+	id?: string;
+	/** The effect's id (a generator, filter, overlay or title). Absent for a bare subject. */
+	effect?: string;
+	/** A preset of the effect's, by name; its values are written out in `values` too. */
+	preset?: string;
+	/** Control values over the effect's defaults. */
+	values?: Record<string, EffectValue>;
+	subject?: EffectSubject;
+	/** Default `subject` when placed with `rect`, else `background`. */
+	role?: EffectLayerRole;
+	/** Where it sits, in stage units; it moves with the camera. Absent: it fills the screen. */
+	rect?: EffectRect;
+	/** When it starts (default 0: as its shot starts). */
+	from?: EffectLayerTime;
+	/** When it stops (default `{ shots: 1 }`: as the next shot starts). */
+	until?: EffectLayerTime;
+	/** 0–1 (default 1). */
+	opacity?: number;
+	/** Ms it fades in and out over (default 0: it cuts). */
+	fade?: number;
+}
+
+/**
+ * A transition into a shot (the shape of Flair's `ShotTransition`): an effect with the use
+ * `transition` blends the outgoing shot's last frame (`from`) into the incoming shot (`to`) as
+ * `progress` runs 0 → 1 over `ms`.
+ */
+export interface EffectShotTransition {
+	effect: string;
+	/** Length (ms), default `EFFECT_TRANSITION_MS`. */
+	ms?: number;
+	preset?: string;
+	values?: Record<string, EffectValue>;
+}
+
+/** How long a shot transition takes when it does not say (ms). */
+export const EFFECT_TRANSITION_MS = 800;
+
+/** One shot of a sequence. */
+export interface EffectSequenceShot {
+	/** Ms the shot holds after its lead-in (the longer of its camera move and its transition). */
+	hold: number;
+	/** Words shown large over the shot. */
+	title?: string;
+	/** Words shown small at the foot of the shot. */
+	caption?: string;
+	camera?: {
+		/** What the camera frames, in stage units (default the whole stage). */
+		framing?: EffectRect;
+		/** A `transition` camera move into this framing. */
+		in?: CameraMoveSpec;
+		/** A `hold` camera move while the shot holds. */
+		during?: CameraMoveSpec;
+	};
+	/** Bottom to top. */
+	layers: EffectLayer[];
+	/** How the shot before gives way to this one; absent on the first shot. */
+	transition?: EffectShotTransition;
+}
+
+/**
+ * A sequence of shots built from catalog effects: what a template fills to. Renderer-neutral;
+ * editors load it into their own documents (an animation's shots, a video's clips).
+ */
+export interface EffectSequence {
+	name: string;
+	title?: string;
+	/** Stage size in pixels; rects and framings are in these units. */
+	stage: CameraStage;
+	shots: EffectSequenceShot[];
+}
+
+/** One template of a provider's catalog. */
+export interface EffectTemplateSummary {
+	/** Stable id. */
+	id: string;
+	name: string;
+	description: string;
+	tags?: readonly string[];
+	/** How many shots it fills to. */
+	shots: number;
+	/** Length with its defaults (ms), when the provider knows it. */
+	durationMs?: number;
+}
+
+/** The kinds of template slot: a subject (`image`, `video`, `svg`), `text`, `color` or `number`. */
+export const EFFECT_TEMPLATE_SLOT_TYPES = ['image', 'video', 'svg', 'text', 'color', 'number'] as const;
+export type EffectTemplateSlotType = (typeof EFFECT_TEMPLATE_SLOT_TYPES)[number];
+
+interface EffectTemplateSlotBase {
+	/** Letters, digits, `-` and `_`, starting with a letter. */
+	name: string;
+	/** What a form shows for it. */
+	label: string;
+	/** A sentence on what it is for. */
+	description?: string;
+}
+
+/**
+ * A slot for a picture, SVG or video. Its default (which may be large) is not described, only
+ * whether there is one; with none, an unfilled slot is left for the host (`openSlots`).
+ */
+export interface EffectTemplateSubjectSlot extends EffectTemplateSlotBase {
+	type: 'image' | 'video' | 'svg';
+	hasDefault: boolean;
+}
+
+export interface EffectTemplateTextSlot extends EffectTemplateSlotBase {
+	type: 'text';
+	default: string;
+	/** The most characters it takes. */
+	maxLength?: number;
+}
+
+/** A colour, `#RRGGBB`. */
+export interface EffectTemplateColorSlot extends EffectTemplateSlotBase {
+	type: 'color';
+	default: string;
+}
+
+export interface EffectTemplateNumberSlot extends EffectTemplateSlotBase {
+	type: 'number';
+	default: number;
+	min?: number;
+	max?: number;
+	/** Whole numbers only. */
+	integer?: boolean;
+}
+
+/** A slot of a template, shaped for a form (Flair's `describeTemplateSlots`). */
+export type EffectTemplateSlot = EffectTemplateSubjectSlot | EffectTemplateTextSlot | EffectTemplateColorSlot | EffectTemplateNumberSlot;
+
+/** A template with its slots, in the order a form shows them. */
+export interface EffectTemplateDescription extends EffectTemplateSummary {
+	slots: readonly EffectTemplateSlot[];
+}
+
+/**
+ * What fills a slot: words, a colour or a number; for a subject slot a URL or markup, a subject
+ * object, or `{ slot: name }` to leave it for the host.
+ */
+export type EffectTemplateValue = string | number | EffectSubject;
+export type EffectTemplateValues = Readonly<Record<string, EffectTemplateValue>>;
+
+export interface EffectTemplateSearchOptions {
+	/** Only templates matching every word (in name, id, tags or description). */
+	query?: string;
+	/** Only templates carrying every one of these tags. */
+	tags?: readonly string[];
+	/** Most results to return. */
+	limit?: number;
+}
+
+export interface EffectTemplateOptions {
+	/** The sequence's name: lowercase words and dashes (default the template's id). */
+	name?: string;
+}
+
+/** What `instantiateTemplate` gives. Values that do not fit are refused all at once, never in part. */
+export type EffectTemplateResult =
+	| {
+			ok: true;
+			sequence: EffectSequence;
+			/** Subject slots left for the host to fill (no value and no default, or `{ slot }`). */
+			openSlots: readonly string[];
+			/** What the provider left out or changed, in sentences (empty when nothing was). */
+			notes: readonly string[];
+	  }
+	| {
+			ok: false;
+			/** Each a sentence naming the slot and what it takes. */
+			errors: readonly string[];
+	  };
+
 /** What a provider can do, so editors can degrade cleanly. */
 export interface EffectProviderCapabilities {
 	/** Renders off the main thread. */
@@ -320,6 +538,8 @@ export interface EffectProviderCapabilities {
 	supportsAuthoring?: boolean;
 	/** Lists `camera` effects and implements `cameraView` (and maybe `sampleCameraMove`). */
 	supportsCamera?: boolean;
+	/** Implements `listTemplates`, `describeTemplate` and `instantiateTemplate`. */
+	supportsTemplates?: boolean;
 }
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -371,4 +591,15 @@ export interface EffectProvider {
 	 * `sampleEffectCameraMove` falls back to `cameraView` per frame. Errors as for `cameraView`.
 	 */
 	sampleCameraMove?(id: string, request: CameraMoveSampleRequest): MaybePromise<CameraMoveSample>;
+	/** Sequence templates, best match first. Present when `capabilities.supportsTemplates`. */
+	listTemplates?(options?: EffectTemplateSearchOptions): MaybePromise<readonly EffectTemplateSummary[]>;
+	/** A template with its slots. Unknown ids throw `UnknownTemplateError`. */
+	describeTemplate?(id: string): MaybePromise<EffectTemplateDescription>;
+	/**
+	 * Fills a template's slots and returns the sequence. Slots left out take their defaults.
+	 * Values that do not fit (an unknown slot, a wrong type, out of range) give `{ ok: false,
+	 * errors }`, each error a sentence. Unknown ids throw `UnknownTemplateError`. Every effect
+	 * the sequence names is in the provider's `list()`.
+	 */
+	instantiateTemplate?(id: string, values?: EffectTemplateValues, options?: EffectTemplateOptions): MaybePromise<EffectTemplateResult>;
 }

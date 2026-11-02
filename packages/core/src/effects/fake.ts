@@ -12,10 +12,14 @@
  *
  * With `camera: true` it also has camera moves (no pixels): `glide` and `whip` (transitions; the
  * whip cuts halfway) and `drift` (a hold that zooms in slowly).
+ *
+ * With `templates: true` it also has two sequence templates (see `fake-templates.ts`):
+ * `fake.title-sequence` and `fake.picture-reveal`.
  */
 
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
 import { createEffectAuthoringSession } from './authoring-session.js';
+import { fakeTemplateMethods } from './fake-templates.js';
 import { createEffectPixels, encodeEffectFloat, isEffectPixels, resolveEffectValues, sampleCameraViews, searchEffectSummaries, srgbToLinear } from './helpers.js';
 import type {
 	CameraMoveContext,
@@ -427,9 +431,11 @@ export interface FakeEffectProviderOptions {
 	authoring?: boolean;
 	/** Adds the camera moves and `cameraView` / `sampleCameraMove` (default false). */
 	camera?: boolean;
+	/** Adds two sequence templates and `listTemplates` / `describeTemplate` / `instantiateTemplate` (default false). */
+	templates?: boolean;
 }
 
-/** A deterministic CPU effects provider with seven effects, and three camera moves on request (see the module comment). */
+/** A deterministic CPU effects provider with seven effects, and camera moves and templates on request (see the module comment). */
 export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}): EffectProvider {
 	const supportsAuthoring = options.authoring ?? true;
 	const capabilities: EffectProviderCapabilities = {
@@ -440,6 +446,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		supportsVector: true,
 		supportsAuthoring,
 		...(options.camera ? { supportsCamera: true } : {}),
+		...(options.templates ? { supportsTemplates: true } : {}),
 		maxSize: 8192,
 		...options.capabilities
 	};
@@ -530,6 +537,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 					}
 			  }
 			: {}),
+		...(options.templates ? fakeTemplateMethods() : {}),
 		...(supportsAuthoring
 			? {
 					openAuthoring: (from) => createEffectAuthoringSession(from, { provider })

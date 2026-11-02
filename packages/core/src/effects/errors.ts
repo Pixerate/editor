@@ -1,8 +1,8 @@
 import type { SchemaValidationError } from '../tools/schema.js';
 
-export type EffectErrorCode = 'unknown_effect' | 'invalid_values' | 'unsupported' | 'disposed' | 'no_provider';
+export type EffectErrorCode = 'unknown_effect' | 'invalid_values' | 'unsupported' | 'disposed' | 'no_provider' | 'unknown_template';
 
-export const EFFECT_ERROR_CODES: readonly EffectErrorCode[] = ['unknown_effect', 'invalid_values', 'unsupported', 'disposed', 'no_provider'];
+export const EFFECT_ERROR_CODES: readonly EffectErrorCode[] = ['unknown_effect', 'invalid_values', 'unsupported', 'disposed', 'no_provider', 'unknown_template'];
 
 /**
  * Base of every effects error. Check `code` (or use `isEffectError`) rather than `instanceof`
@@ -29,6 +29,17 @@ export class UnknownEffectError extends EffectError {
 			effectId
 		);
 		this.name = 'UnknownEffectError';
+	}
+}
+
+/** No sequence template has this id. */
+export class UnknownTemplateError extends EffectError {
+	readonly templateId: string;
+
+	constructor(templateId: string, providerName?: string) {
+		super('unknown_template', `Unknown template "${templateId}"${providerName ? ` in ${providerName}` : ''}. Call list_templates or listTemplates() for valid ids.`);
+		this.name = 'UnknownTemplateError';
+		this.templateId = templateId;
 	}
 }
 

@@ -7,6 +7,7 @@
 export * from './types.js';
 export * from './errors.js';
 export * from './helpers.js';
+export * from './templates.js';
 export * from './conformance.js';
 export * from './fake.js';
 export * from './tools.js';
