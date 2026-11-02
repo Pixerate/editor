@@ -143,7 +143,6 @@ export class PaintStrokeSession {
     const brush = init.brush;
     if (init.wet) this.wetDriver = init.wet.driver;
     const effect = init.effect?.pixels ?? null;
-    if (effect && (init.wet || init.thick || init.sticker)) throw new Error(`The ${brush.name} brush (${brush.engine} engine) cannot paint with effect paint.`);
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
       color: init.color,
@@ -157,10 +156,10 @@ export class PaintStrokeSession {
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
     } else if (init.sticker) {
-      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null });
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
-      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null });
+      this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect });
     } else if (brush.engine === 'mixer' || brush.engine === 'blender' || brush.engine === 'smudge' || usesPaintExchange(brush, Boolean(init.paint))) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.wet = new PaintDabStroke(brush, {

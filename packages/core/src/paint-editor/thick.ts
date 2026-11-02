@@ -19,6 +19,7 @@ import { SmudgeTip } from '../paint/blending';
 import { exchangeRates, PaintExchange, TileMedium, type MixerLoad, type PaintTileTarget, type RgbTriple } from '../paint/exchange';
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
+import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { PaintBrush } from './brushes';
@@ -199,6 +200,8 @@ export interface ThickStrokeInit {
   copies: readonly StrokeCopy[];
   /** Gradient paint (resolved): the colour varies along the impasto. */
   paint?: PaintGradientSource | null;
+  /** Effect paint: each pixel's colour is the effect's there (its alpha scales the coverage); the relief is unchanged. */
+  effect?: EffectPaintPixels | null;
 }
 
 interface CopyState {
@@ -219,6 +222,7 @@ export class ThickStrokeDriver {
   private readonly height = new Map<TileKey, Uint8ClampedArray>();
   private readonly material = new Map<TileKey, Uint8ClampedArray>();
   private readonly paint: RgbTriple = [0, 0, 0];
+  private readonly centre: RgbTriple = [0, 0, 0];
   private tip = new Float32Array(0);
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
@@ -380,7 +384,11 @@ export class ThickStrokeDriver {
     // Colour: the exchange mixes the brush paint with the wet paint it picks up (like oil).
     const ex = st.exchange;
     let flow = 1;
-    if (this.sampler) {
+    const effect = this.init.effect;
+    if (effect) {
+      sampleEffectAt(effect, d.x, d.y, this.centre);
+      ex.setReservoirColor(this.centre[0], this.centre[1], this.centre[2]);
+    } else if (this.sampler) {
       const g = this.sampler.dab(d, this.sample);
       ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
       flow = g.alpha;
@@ -392,7 +400,12 @@ export class ThickStrokeDriver {
     if (dep > 0) {
       const cov = new Float32Array(n);
       for (let p = 0; p < n; p++) cov[p] = tip[p] > 0 ? Math.min(1, tip[p] * (im.tool === 'roller' || im.tool === 'gloop' || im.tool === 'tube' ? 1.6 : 1.1)) : 0;
-      this.medium.deposit(rect, cov, dep, this.paint, ex.paintPigment);
+      let field: Float32Array | null = null;
+      if (effect) {
+        field = new Float32Array(n * 3);
+        effectDabField(effect, rect, cov, this.centre, this.paint, field);
+      }
+      this.medium.deposit(rect, cov, dep, this.paint, ex.paintPigment, field);
     }
     // Height.
     const seed = this.init.seed;

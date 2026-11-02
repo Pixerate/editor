@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider, type PaintPixelLayer } from '../src/paint-editor';
+import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider, replayPainting, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 import { ToolRegistry } from '../src/tools/registry';
 
@@ -96,18 +96,86 @@ describe('effect paint', () => {
     expect(layerPx(c, layer, 16, 13)).toEqual([0, 255, 0, 255]);
   });
 
-  it('refuses wet, impasto and sticker brushes, saying what to use instead; erasers ignore it', async () => {
+  it('paints wet brushes with effect colours per pixel, picked-up paint drags through them, and replays exactly', async () => {
+    const c = editor();
+    await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE });
+    const layer = c.getActiveLayer()!.id;
+    c.paintStroke({ brushId: 'watercolor-round', brush: { tip: { size: 10 } }, points: LINE });
+    await c.advanceWet({ steps: 20 });
+    c.dryPaint();
+    const left = layerPx(c, layer, 6, 8);
+    const right = layerPx(c, layer, 26, 8);
+    expect(left[3]).toBeGreaterThan(40);
+    // Red under the left of the stroke, blue under the right: the effect's colours, not one colour.
+    expect(left[0] - left[2]).toBeGreaterThan(30);
+    expect(right[2] - right[0]).toBeGreaterThan(30);
+    const t = c.createReplayTarget(1);
+    await replayPainting(c.document, t);
+    expect(Buffer.from(t.compositePixels().data).equals(Buffer.from(c.compositePixels().data))).toBe(true);
+    t.dispose();
+    // Undo takes the wet stroke back.
+    const before = allPixels(c, layer);
+    c.paintStroke({ brushId: 'gouache', points: [{ x: 2, y: 4 }, { x: 30, y: 4 }] });
+    c.dryPaint();
+    expect(allPixels(c, layer)).not.toEqual(before);
+    c.undo();
+    c.undo();
+    expect(allPixels(c, layer)).toEqual(before);
+  });
+
+  it('a wet brush that picks up paint mixes it into the effect colours', async () => {
+    const paint = async (pickup: number) => {
+      const c = editor();
+      const layer = c.getActiveLayer()!.id;
+      // A wet green band to pick up from, then the effect stroke across it.
+      c.paintStroke({ brushId: 'watercolor-round', brush: { tip: { size: 14 } }, points: LINE, color: '#00ff00' });
+      await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE });
+      c.paintStroke({ brushId: 'watercolor-round', brush: { tip: { size: 10 }, behavior: { pickup, dirty: true } }, points: LINE, seed: 1 });
+      c.dryPaint();
+      return layerPx(c, layer, 26, 8);
+    };
+    const clean = await paint(0);
+    const dirty = await paint(1);
+    expect(dirty).not.toEqual(clean);
+  });
+
+  it('paints impasto with effect colours and the same relief as a flat colour', async () => {
+    const c = editor();
+    await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE });
+    const layer = c.getActiveLayer()!.id;
+    c.paintStroke({ brushId: 'impasto-brush', brush: { tip: { size: 10 } }, points: LINE, seed: 3 });
+    const fx = await effectPixels(RED_TO_BLUE);
+    expect(layerPx(c, layer, 6, 8)[0]).toBeGreaterThan(layerPx(c, layer, 6, 8)[2]);
+    expect(layerPx(c, layer, 26, 8)[2]).toBeGreaterThan(layerPx(c, layer, 26, 8)[0]);
+    expect(fxPx(fx, 6, 8)[0]).toBeGreaterThan(200);
+    const d = editor();
+    d.paintStroke({ brushId: 'impasto-brush', brush: { tip: { size: 10 } }, points: LINE, seed: 3, color: '#808080' });
+    const height = (e: PaintEditorController) => readPixel(e.document.thick![e.getActiveLayer()!.id].height, 16, 8)[0];
+    expect(height(c)).toBeGreaterThan(0);
+    expect(height(c)).toBe(height(d));
+  });
+
+  it('gives sprayed stickers the effect colour at their centre, and they stay editable', async () => {
+    const c = editor();
+    await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE });
+    c.paintStroke({ brushId: 'sticker-stars', brush: { tip: { size: 6 }, sticker: { colorJitter: 0, scatter: 0 } }, points: LINE, seed: 2 });
+    const fx = await effectPixels(RED_TO_BLUE);
+    const stickers = c.listStickers();
+    expect(stickers.length).toBeGreaterThan(2);
+    for (const s of stickers) {
+      const want = fxPx(fx, Math.floor(s.x), Math.floor(s.y));
+      const got = [1, 3, 5].map((i) => parseInt(s.color.slice(i, i + 2), 16));
+      expect(got).toEqual(want.slice(0, 3));
+    }
+    expect(c.updateSticker(undefined, stickers[0].id, { color: '#00ff00' }).color).toBe('#00ff00');
+  });
+
+  it('erasers ignore effect paint, and an explicit colour wins over it', async () => {
     const c = editor();
     await c.setEffectPaint({ effect: 'fake.gradient' });
-    for (const brushId of ['watercolor-round', 'impasto-brush', 'sticker-stars']) {
-      expect(() => c.paintStroke({ brushId, points: LINE }), brushId).toThrow(/cannot paint with effect paint.*dry brush.*fill_layer_with_effect/);
-    }
-    expect(() => c.beginStroke({ brushId: 'oil-round' })).toThrow(/cannot paint with effect paint/);
-    expect(c.getState().stroking).toBe(false);
     c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: LINE });
     const erased = c.paintStroke({ brushId: 'eraser-hard', points: LINE });
     expect(erased.bounds).not.toBeNull();
-    // An explicit colour wins over the effect paint.
     const layer = c.getActiveLayer()!.id;
     c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: LINE, color: '#123456' });
     expect(layerPx(c, layer, 16, 8)).toEqual([0x12, 0x34, 0x56, 255]);
@@ -252,7 +320,7 @@ describe('effect paint: agent tools', () => {
     expect(text(gone)).toMatch(/The paint has no provider effect/);
   });
 
-  it('fails usefully: filter effects, extra arguments, no provider, refused brushes', async () => {
+  it('fails usefully: filter effects, extra arguments, no provider; wet brushes paint with it', async () => {
     const { registry } = setup();
     const filter = await registry.callTool('paint-effects__set_effect_paint', { effect: 'fake.invert' });
     expect(filter.isError).toBe(true);
@@ -261,8 +329,7 @@ describe('effect paint: agent tools', () => {
     expect((await registry.callTool('paint-effects__set_effect_paint', {})).isError).toBe(true);
     await registry.callTool('paint-effects__set_effect_paint', { effect: 'fake.gradient' });
     const wet = await registry.callTool('paint_stroke', { points: LINE, brushId: 'watercolor-round' });
-    expect(wet.isError).toBe(true);
-    expect(text(wet)).toMatch(/fill_layer_with_effect/);
+    expect(wet.isError).toBeFalsy();
     const none = setup(false).registry;
     expect((await none.callTool('paint-effects__set_effect_paint', { effect: 'fake.gradient' })).isError).toBe(true);
   });

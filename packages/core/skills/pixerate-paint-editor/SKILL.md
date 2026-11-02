@@ -243,9 +243,11 @@ an overlay paints only where it has pixels.
 1. `search_effects` (`use` generator, overlay or title) and `describe_effect` for the controls.
 2. `set_effect_paint` with `effect`, `values` and `time` (ms, default 0). Wait for it: strokes that
    would use it are refused while it renders.
-3. Paint with a dry brush: dab, particle and bristle brushes take the colour per pixel (the most
-   faithful), the Mixer Brush and dab brushes with `behavior.pickup` take it per dab at the dab's
-   centre and mix it with what they pick up. Brush opacity, flow, grain and pressure still apply.
+3. Paint: dab, particle and bristle brushes take the colour per pixel (the most faithful); the
+   Mixer Brush and dab brushes with `behavior.pickup` take it per dab at its centre. Wet and
+   impasto brushes take it per pixel too, shifted by any paint they pick up: in watercolour and
+   gouache the pattern then flows, blooms and granulates with the water; impasto keeps its relief.
+   Sprayed stickers each take the colour at their centre (they stay recolourable).
 4. `set_color` or `set_paint` goes back to colour; `remove_effect` (target and effect `paint`)
    does too, and `update_effect` (target and effect `paint`, `values`) renders new values.
 
@@ -254,7 +256,8 @@ When to use which:
 | Want | Use |
 | --- | --- |
 | The effect inside brushed marks, hand-painted edges | `set_effect_paint` and a dry brush |
-| The effect inside an exact shape, or in wet / thick paint | Paint the shape, dry it, then `fill_layer_with_effect` with `lockTransparency: true` |
+| The effect in a wash that flows, or in thick paint | `set_effect_paint` and a watercolour, gouache, oil or impasto brush |
+| The effect inside an exact shape, unchanged by water | Paint the shape, dry it, then `fill_layer_with_effect` with `lockTransparency: true` |
 | The effect over the whole sheet | `set_paper_effect` or `add_effect_layer` |
 
 ## Canvas-hosted layer
@@ -492,10 +495,11 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   strokes record it, and replays render it again first, so they need the same provider (an
   error names the effect and provider when it is missing; `color` on `replay_strokes` repaints
   in one colour instead).
-- **Effect paint refuses wet, impasto and sticker brushes** (they carry one colour as pigment,
-  thick paint or stamps). Paint the shape, dry it, and `fill_layer_with_effect` with
-  `lockTransparency: true`. Erasers, blenders and smudges ignore it, and a brush with its own
-  gradient, a stroke `color` or `paint`, or `set_color` / `set_paint` paints colour instead.
+- **Effect paint in wet paint moves with the water**: the pattern bleeds and blooms like any
+  pigment, so fine detail softens. For a crisp pattern in an exact shape, paint the shape, dry it,
+  and `fill_layer_with_effect` with `lockTransparency: true`. Erasers, blenders and smudges ignore
+  effect paint; a brush with its own gradient, a stroke `color` or `paint`, or `set_color` /
+  `set_paint` paints colour instead.
 - **Effect paint is fixed to the canvas, not the stroke**: a replayed or moved stroke shows the
   part of the effect under its new place. Wait for `set_effect_paint` to return before painting;
   strokes are refused while it renders.

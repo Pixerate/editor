@@ -1518,11 +1518,6 @@ export class PaintEditorController {
       source = this.effectPaint;
     }
     if (!source) return null;
-    if (brush.engine === 'wet' || brush.engine === 'impasto' || brush.engine === 'sticker') {
-      throw new PaintEditorError(
-        `The ${brush.name} brush (${brush.engine} engine) cannot paint with effect paint: it carries one colour as ${brush.engine === 'sticker' ? 'stickers' : brush.engine === 'wet' ? 'wet pigment' : 'thick paint'}. Paint with a dry brush (a dab, particle, bristle or mixer brush), or paint the shape first and fill it with fill_layer_with_effect {lockTransparency: true}.`
-      );
-    }
     const pixels = this.effectPaintImage(source);
     if (!pixels) throw new PaintEditorError(`The effect paint "${source.effect}"${source.provider ? ` from provider "${source.provider}"` : ''} is not rendered at this canvas size; call set_effect_paint (or prepareEffectPaints) first.`);
     return { source, pixels };
@@ -1893,7 +1888,8 @@ export class PaintEditorController {
         seed: seedW,
         copies: [IDENTITY_AFFINE, ...copiesW].map(affineCopy),
         mask: init.maskStencils ? this.stencilSelection(init.maskStencils) : init.stencils !== false ? this.stencilSelection() : null,
-        paint: wetGradient,
+        paint: effect ? null : wetGradient,
+        effect: effect?.pixels ?? null,
       });
       init = { ...init, seed: seedW, load };
       wet = { driver, surface: () => world.display(id).surface };
