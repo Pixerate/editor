@@ -18,6 +18,7 @@ export * from './evaluate.js';
 export * from './audio.js';
 export * from './mix.js';
 export * from './mask.js';
+export * from './effect-path.js';
 export * from './plan.js';
 export * from './grade.js';
 export * from './lut.js';

@@ -33,7 +33,9 @@ describe('effects contract: fake provider', () => {
 
 	it('lists and searches with filters', async () => {
 		const all = await provider.list();
-		expect(all.map((e) => e.id)).toEqual(['fake.invert', 'fake.tint', 'fake.gradient', 'fake.bar', 'fake.crossfade', 'fake.fade-in', 'fake.badge']);
+		expect(all.map((e) => e.id)).toEqual(['fake.invert', 'fake.tint', 'fake.gradient', 'fake.bar', 'fake.crossfade', 'fake.fade-in', 'fake.badge', 'fake.trail', 'fake.route']);
+		expect((await provider.search('', { accepts: ['path'] })).map((e) => e.id)).toEqual(['fake.trail', 'fake.route']);
+		expect((await provider.search('', { accepts: ['path'], kind: 'vector' })).map((e) => e.id)).toEqual(['fake.route']);
 		expect((await provider.search('', { use: 'transition' })).map((e) => e.id)).toEqual(['fake.crossfade']);
 		expect((await provider.search('tint')).map((e) => e.id)).toEqual(['fake.tint']);
 		expect((await provider.search('colour', { use: 'filter' })).map((e) => e.id)).toEqual(['fake.invert', 'fake.tint']);

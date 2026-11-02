@@ -12,8 +12,8 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { isEffectError } from './errors.js';
-import { countEffectTags, effectOffered, hasEffectTags, normaliseEffectTag } from './helpers.js';
-import { EFFECT_KINDS, EFFECT_USES, type EffectDescription, type EffectProvider, type EffectSummary, type EffectUse } from './types.js';
+import { countEffectTags, effectOffered, hasEffectTags, normaliseEffectTag, pathControlsOf } from './helpers.js';
+import { EFFECT_ACCEPTS, EFFECT_KINDS, EFFECT_USES, type EffectAccept, type EffectDescription, type EffectProvider, type EffectSummary, type EffectUse } from './types.js';
 
 /** One effect applied to a target, as the tools report it. */
 export interface AppliedEffectInfo {
@@ -141,7 +141,8 @@ const summaryOut = (e: EffectSummary) => ({
 	transparent: e.transparent,
 	loop: e.loop,
 	...(e.duration !== undefined ? { duration: e.duration } : {}),
-	...(e.camera ? { camera: e.camera } : {})
+	...(e.camera ? { camera: e.camera } : {}),
+	...(e.accepts?.length ? { accepts: e.accepts } : {})
 });
 
 /** The agent tools for provider effects in one editor (see the module comment). */
@@ -212,14 +213,15 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		{
 			name: 'search_effects',
 			title: 'Search effects',
-			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one). For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves }], total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
+			description: `Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera), category, use (${EFFECT_USES.join(', ')}) or tags (effects carrying every one), and accepts ["path"] for effects that draw along a path you give. For this editor, apply_effect takes uses ${host.applyUses.join(' or ')}. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts }], total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.`,
 			inputSchema: object({
 				query: { type: 'string', description: 'Words to match (default: every effect).' },
 				kind: { type: 'string', enum: [...EFFECT_KINDS], description: 'shader (pixels), vector (animated SVG), motion (animates vector art) or camera (moves a scene\'s camera; no pixels).' },
 				category: { type: 'string', minLength: 1, description: 'The provider\'s category, e.g. "gradient", "light", "transition".' },
 				use: { type: 'string', enum: [...EFFECT_USES], description: 'What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene\'s camera.' },
 				tags: { type: 'array', items: { type: 'string', minLength: 1 }, description: 'Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens).' },
-				limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Most effects to return (default 20).' }
+				limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Most effects to return (default 20).' },
+				accepts: { type: 'array', items: { type: 'string', enum: [...EFFECT_ACCEPTS], description: 'path: the effect has a control that draws along a path given at run time.' }, description: 'Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls).' }
 			}),
 			annotations: { title: 'Search effects', ...ANNOTATIONS.read },
 			handler: async (args) => {
@@ -227,7 +229,18 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 				if (!p) return { available: false, reason: NO_PROVIDER, effects: [], total: 0 };
 				const tags = args.tags as string[] | undefined;
 				// Filtered here too: a provider with its own search may not know tags.
-				const found = (await explain(async () => p.search((args.query as string | undefined) ?? '', { kind: args.kind, category: args.category, use: args.use, tags }))).filter((e) => hasEffectTags(e, tags));
+				const accepts = args.accepts as EffectAccept[] | undefined;
+				let found = (await explain(async () => p.search((args.query as string | undefined) ?? '', { kind: args.kind, category: args.category, use: args.use, tags, ...(accepts?.length ? { accepts } : {}) }))).filter((e) => hasEffectTags(e, tags));
+				// Filtered here too: a provider that does not fill in accepts is asked for its controls.
+				if (accepts?.includes('path')) {
+					const kept: EffectSummary[] = [];
+					for (const e of found) {
+						if (e.accepts) {
+							if (accepts.every((a) => e.accepts!.includes(a))) kept.push(e);
+						} else if (kept.length < 200 && pathControlsOf(await explain(async () => p.describe(e.id))).length) kept.push(e);
+					}
+					found = kept;
+				}
 				const limit = (args.limit as number | undefined) ?? 20;
 				const out: Record<string, unknown> = { available: true, provider: { id: p.id, name: p.name, capabilities: p.capabilities }, effects: found.slice(0, limit).map(summaryOut), total: found.length, tags: countEffectTags(found).slice(0, TAG_LIMIT) };
 				if (tags?.length && !found.length) {
@@ -249,7 +262,8 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 				const p = host.provider();
 				if (!p) return { available: false, reason: NO_PROVIDER };
 				const d: EffectDescription = await explain(async () => p.describe(args.effect as string));
-				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: effectOffered(d, host.applyUses) };
+				const pathControls = pathControlsOf(d);
+				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: effectOffered(d, host.applyUses), ...(pathControls.length ? { pathControls } : {}) };
 			}
 		},
 		{

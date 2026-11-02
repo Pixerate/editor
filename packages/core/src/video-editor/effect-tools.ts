@@ -196,6 +196,48 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 				}
 			},
 			{
+				name: 'set_video_effect_path',
+				title: 'Run an effect along a path',
+				description:
+					'Gives an effect that draws along a path (search_effects with accepts ["path"]; describe_effect lists its pathControls) the path to draw along: on an effect clip (instance "generator", added with add_video_effect_clip) or a clip effect (its id, from apply_effect). Pass exactly one of: points (frame pixels from the top left, as on the preview; mapped into the pixels of the picture the effect renders, so a clip effect lines up with its moved or scaled clip), d (SVG path data the effect fits into its picture; "" clears the path), mask (use the outline of a clip\'s mask, in frame pixels), or text (words the provider writes as a single-stroke path, when it can). Refuses an effect without a path control, naming how to find one. One undo step. Returns the clip, instance, the control set and the value it took (points in picture pixels, or path data).',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						clip: { type: 'string', minLength: 1, description: 'The clip id from get_video_project.' },
+						instance: { type: 'string', minLength: 1, description: '"generator" for an effect clip\'s own picture, or a clip effect id from list_applied_effects.' },
+						control: { type: 'string', minLength: 1, description: 'Which path control (default: the effect\'s only one; describe_effect pathControls lists them).' },
+						points: { type: 'array', minItems: 4, maxItems: 4096, items: { type: 'number', description: 'x or y, frame pixels.' }, description: 'The path as frame points [x0, y0, x1, y1, …] in pixels from the frame\'s top left.' },
+						d: { type: 'string', description: 'SVG path data, fitted into the effect\'s picture as its control says; "" clears the path.' },
+						mask: { type: 'object', properties: { clip: { type: 'string', minLength: 1, description: 'The clip whose mask outline to use.' } }, required: ['clip'], additionalProperties: false, description: 'Use the outline of this clip\'s mask (set_video_clip_mask), in frame pixels.' },
+						text: {
+							type: 'object',
+							properties: {
+								text: { type: 'string', minLength: 1, description: 'The words to write.' },
+								font: { type: 'string', minLength: 1, description: 'A single-stroke font the provider offers (default its first).' },
+								align: { type: 'string', enum: ['start', 'middle', 'end'], description: 'Where the line sits (default start).' }
+							},
+							required: ['text'],
+							additionalProperties: false,
+							description: 'Words the provider writes as a single-stroke path (a signature, handwriting).'
+						}
+					},
+					required: ['clip', 'instance'],
+					oneOf: [{ required: ['points'] }, { required: ['d'] }, { required: ['mask'] }, { required: ['text'] }],
+					additionalProperties: false
+				},
+				annotations: { title: 'Run an effect along a path', ...ctx.annotations.write },
+				handler: async (args) => {
+					ctx.requireProvider();
+					const given = (['points', 'd', 'mask', 'text'] as const).filter((k) => args[k] !== undefined);
+					if (given.length !== 1) throw new Error(`Pass exactly one of points, d, mask or text${given.length ? ` (got ${given.join(', ')})` : ''}.`);
+					const k = given[0];
+					const path = (k === 'text' ? { ...(args.text as object) } : { [k]: args[k] }) as Parameters<VideoEditorController['setEffectPath']>[2];
+					const r = await controller.setEffectPath(args.clip as string, args.instance as string, path, { control: args.control as string | undefined });
+					if (!r.ok) throw new Error(r.error);
+					return { clip: args.clip, instance: args.instance, control: r.control, value: r.value };
+				}
+			},
+			{
 				name: 'set_video_effect_keyframes',
 				title: 'Keyframe an effect control',
 				description:

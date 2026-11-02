@@ -53,6 +53,7 @@ describe('video effect tools', () => {
 			'fill_template',
 			'add_video_effect_clip',
 			'set_video_effect_transition',
+			'set_video_effect_path',
 			'set_video_effect_keyframes'
 		]);
 		expect(setup({ readOnly: true }).registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_video_camera_moves', 'list_templates', 'describe_template']);
@@ -63,7 +64,7 @@ describe('video effect tools', () => {
 		registry.listTools();
 		await new Promise((r) => setTimeout(r, 0));
 		const apply = registry.listTools().tools.find((t) => baseToolName(t.name) === 'apply_effect')!;
-		expect((apply.inputSchema.properties!.effect as { enum: string[] }).enum).toEqual(['fake.invert', 'fake.tint', 'fake.bar']);
+		expect((apply.inputSchema.properties!.effect as { enum: string[] }).enum).toEqual(['fake.invert', 'fake.tint', 'fake.bar', 'fake.trail']);
 	});
 
 	it('searches and describes', async () => {

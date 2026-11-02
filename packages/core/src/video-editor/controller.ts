@@ -16,12 +16,13 @@ import type { VideoFrameCache } from './frame-cache.js';
 import { videoProjectSvg, type VideoSvgOptions } from './render.js';
 import { snapToVideoFrame, snapVideoTime, videoClipEnd, videoClipsAt, videoProjectDuration, videoSnapPoints, findVideoClip } from './timeline.js';
 import type { VideoCameraFraming, VideoClip, VideoClipCamera, VideoClipEffect, VideoEffectValues, VideoPlacementMode, VideoProject } from './types.js';
-import { cameraMoveField, EffectsSlot, resolveCameraMoveSpec } from '../effects/helpers.js';
+import { cameraMoveField, EffectsSlot, pathControlsOf, resolveCameraMoveSpec } from '../effects/helpers.js';
+import { framePointsToPicture, videoClipMaskOutline, videoClipPicture } from './effect-path.js';
 import { bakeVideoClipCamera, videoCameraBase, type VideoCameraBake } from './camera.js';
 import { isEffectError } from '../effects/errors.js';
 import { fillEffectTemplate } from '../effects/templates.js';
 import { videoEditsFromSequence } from './sequence.js';
-import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
+import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectPathValue, EffectProvider, EffectSummary, EffectValue } from '../effects/types.js';
 import { checkVideoEffectPlace, checkVideoEffectValues, VideoEffectsEngine, type VideoEffectPlace } from './effects.js';
 import { isVideoKeyframes, VIDEO_TRANSFORM_PROPERTIES, videoKeysOf, type VideoAnimatable, type VideoKey } from './keyframes.js';
 import { planVideoEdits, type VideoEditPlan, type VideoEditPlanInput } from './plan.js';
@@ -69,6 +70,20 @@ export type VideoCameraMoveResult =
 	| { ok: true; clip: string; camera: VideoClipCamera | null; keys: Record<'x' | 'y' | 'scale' | 'rotation', number>; cuts: number[]; windows: VideoCameraBake['windows']; notes: string[] }
 	| { ok: false; error: string };
 
+/** The effect a path is drawn for on the preview: a clip, its effect instance ("generator" for an effect clip) and optionally the path control. */
+export interface VideoPathDrawingTarget {
+	clip: string;
+	instance: string;
+	control?: string;
+}
+
+/** A path for an effect that draws along one (`setEffectPath`). */
+export type VideoEffectPathInput =
+	| { points: number[] }
+	| { d: string }
+	| { mask: { clip: string } }
+	| { text: string; font?: string; align?: 'start' | 'middle' | 'end' };
+
 export type VideoEffectEditResult = (VideoEditResult & { ok: true; clip: string; effect?: VideoClipEffect }) | { ok: false; error: string };
 
 /** A snapshot of the editor. The same object is returned until something changes. */
@@ -99,6 +114,8 @@ export interface VideoEditorState {
 	effectsProvider: EffectProvider | null;
 	/** Proposed edit plans waiting for review, oldest first (see `proposePlan`). Not part of the project or its undo history. */
 	plans: readonly VideoEditPlan[];
+	/** The effect a path is being drawn for on the preview (`startPathDrawing`), or `null`. Editor state. */
+	pathDrawing: VideoPathDrawingTarget | null;
 	/** Bumped on every change. */
 	revision: number;
 }
@@ -218,6 +235,7 @@ export class VideoEditorController {
 			previewScale: this.previewScale,
 			effectsProvider: this.effects.provider,
 			plans: this.plans,
+			pathDrawing: this.pathDrawing,
 			revision: this.revision
 		};
 	}
@@ -785,6 +803,86 @@ export class VideoEditorController {
 			const merged = checkVideoEffectValues(d, values, { base: t.effect.values ?? {} });
 			return { edit: { op: 'set_transition', clip, transition: { ...t, effect: { ...t.effect, values: merged } } }, label: `Change transition ${d.name}`, clip };
 		}, options.merge);
+	}
+
+	/**
+	 * Gives an effect that draws along a path (see `pathControlsOf`) its path: on an effect clip
+	 * (`instance` "generator") or a clip effect (its id). The path is frame points (`points`
+	 * `[x0, y0, …]`, mapped into the pixels of the picture the effect renders: the project frame for
+	 * an effect clip, the clip's own picture for a clip effect), SVG path data (`d`, which the effect
+	 * fits as its control says; `""` clears it), the outline of a clip's mask (`mask`), or words the
+	 * provider writes as a single-stroke path (`text`). `control` picks the path control when there
+	 * are several. Checked before anything changes; one undo step. Returns the edit, the control and
+	 * the value it took.
+	 */
+	async setEffectPath(clip: string, instance: string, path: VideoEffectPathInput, options: { control?: string } = {}): Promise<VideoEffectEditResult & { control?: string; value?: EffectPathValue }> {
+		const fail = (error: string) => ({ ok: false as const, error });
+		try {
+			const current = this.clipOrThrow(clip);
+			const effect = instance === 'generator' ? (current.type === 'effect' ? current.effect : null) : current.effects?.find((e) => e.id === instance)?.effect;
+			if (!effect) {
+				const ids = ['generator'].filter(() => current.type === 'effect').concat((current.effects ?? []).map((e) => e.id));
+				return fail(`Clip "${clip}" has no effect "${instance}"; its effects are ${ids.map((i) => `"${i}"`).join(', ') || 'none'} ("generator" is an effect clip's own picture).`);
+			}
+			const d = await this.describeEffect(effect);
+			const controls = pathControlsOf(d);
+			if (!controls.length) return fail(`"${d.id}" does not draw along a path. Find one that does with search_effects accepts ["path"].`);
+			const control = options.control ?? (controls.length === 1 ? controls[0] : undefined);
+			if (!control) return fail(`"${d.id}" has several path controls (${controls.join(', ')}); pass control.`);
+			if (!controls.includes(control)) return fail(`"${control}" is not a path control of "${d.id}"; its path controls are ${controls.join(', ')}.`);
+			const picture = videoClipPicture(this.project, current);
+			let value: EffectPathValue;
+			if ('points' in path) {
+				const pts = path.points;
+				if (!Array.isArray(pts) || pts.length < 4 || pts.length % 2 || !pts.every(Number.isFinite)) return fail('points must be at least two points as [x0, y0, x1, y1, …] in frame pixels.');
+				value = framePointsToPicture(pts, picture);
+			} else if ('d' in path) {
+				if (typeof path.d !== 'string') return fail('d must be SVG path data (a string), or "" to clear the path.');
+				value = path.d;
+			} else if ('mask' in path) {
+				const from = findVideoClip(this.project, path.mask.clip)?.clip;
+				if (!from) return fail(`There is no clip "${path.mask.clip}" to take a mask from.`);
+				const outline = videoClipMaskOutline(this.project, from);
+				if (!outline) return fail(`Clip "${path.mask.clip}" has no mask; add one with set_video_clip_mask, or pass points or d.`);
+				value = framePointsToPicture(outline, picture);
+			} else if ('text' in path) {
+				const provider = this.effects.require();
+				if (!provider.pathFromText) return fail(`The effects provider "${provider.id}" cannot write words as a path; pass points or d.`);
+				if (typeof path.text !== 'string' || !path.text.trim()) return fail('text is empty; pass the words to write.');
+				value = await provider.pathFromText(path.text, { ...(path.font ? { font: path.font } : {}), ...(path.align ? { align: path.align } : {}) });
+			} else return fail('Pass the path as one of points, d, mask or text.');
+			const r = instance === 'generator' ? await this.updateEffectValues(clip, 'generator', { [control]: value } as VideoEffectValues) : await this.updateClipEffect(clip, instance, { values: { [control]: value as EffectValue } });
+			return r.ok ? { ...r, control, value } : r;
+		} catch (e) {
+			return fail(e instanceof Error ? e.message : String(e));
+		}
+	}
+
+	private pathDrawing: VideoPathDrawingTarget | null = null;
+
+	/**
+	 * Starts drawing a path on the preview for an effect that draws along one (the preview then
+	 * takes the pointer; `finishPathDrawing` with the frame points applies it). Editor state.
+	 */
+	startPathDrawing(target: VideoPathDrawingTarget): void {
+		this.pathDrawing = { ...target };
+		this.notify();
+	}
+
+	/** Stops drawing a path without changing anything. */
+	cancelPathDrawing(): void {
+		if (!this.pathDrawing) return;
+		this.pathDrawing = null;
+		this.notify();
+	}
+
+	/** Applies the drawn path (frame points) to the effect being drawn for, and stops drawing. One undo step. */
+	async finishPathDrawing(points: number[]): Promise<VideoEffectEditResult> {
+		const target = this.pathDrawing;
+		this.pathDrawing = null;
+		this.notify();
+		if (!target) return { ok: false, error: 'No path is being drawn; start one from the effect\'s Draw path button.' };
+		return this.setEffectPath(target.clip, target.instance, { points }, { control: target.control });
 	}
 
 	/** Keys for one numeric control of a clip effect (clip-relative ms), or `null` to stop animating it (keeping its value at the clip's start). */

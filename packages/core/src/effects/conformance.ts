@@ -5,10 +5,11 @@
  */
 
 import { isEffectError } from './errors.js';
-import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels } from './helpers.js';
+import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf } from './helpers.js';
 import { checkEffectSequence, effectSequenceSlots, isSubjectTemplateSlot, templateValueProblem } from './templates.js';
 import {
 	CAMERA_MOVE_ROLES,
+	EFFECT_ACCEPTS,
 	EFFECT_KINDS,
 	EFFECT_TEMPLATE_SLOT_TYPES,
 	EFFECT_USES,
@@ -64,6 +65,7 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 	if (typeof e.loop !== 'boolean') at('loop is not a boolean');
 	if (e.duration !== undefined && !(e.duration > 0)) at('duration must be a positive number of ms when present');
 	if (e.backgroundOpacity !== undefined && (typeof e.backgroundOpacity !== 'string' || !e.backgroundOpacity)) at('backgroundOpacity must name a control when present');
+	for (const a of e.accepts ?? []) if (!EFFECT_ACCEPTS.includes(a)) at(`accepts "${a}" is not one of ${EFFECT_ACCEPTS.join(', ')}`);
 	if (e.kind === 'camera') {
 		if (e.uses?.length !== 1 || e.uses[0] !== 'camera') at('a camera effect must have exactly the use "camera"');
 		const m = e.camera;
@@ -96,6 +98,9 @@ function checkDescription(id: string, d: EffectDescription, issues: EffectConfor
 		if (!control) at(`backgroundOpacity "${d.backgroundOpacity}" is not a control`);
 		else if (control.type !== 'number' || control.minimum !== 0 || control.maximum !== 1) at(`backgroundOpacity "${d.backgroundOpacity}" must be a number control from 0 to 1`);
 	}
+	const paths = pathControlsOf(d);
+	if (paths.length && !d.accepts?.includes('path')) at(`controls ${paths.map((p) => `"${p}"`).join(', ')} take a path, but accepts does not list "path"`);
+	if (!paths.length && d.accepts?.includes('path')) at('accepts lists "path", but no control has format "svg-path"');
 	for (const e of effectValueErrors(d, d.defaults)) at(`default ${e.path}: ${e.message}`);
 	for (const p of d.presets ?? []) for (const e of effectValueErrors(d, p.values)) at(`preset "${p.name}" ${e.path}: ${e.message}`);
 	for (const input of d.inputs ?? []) {

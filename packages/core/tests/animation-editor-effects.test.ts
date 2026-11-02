@@ -3,7 +3,7 @@ import { createFakeEffectProvider } from '../src/effects';
 import { AnimationEditorController, createAnimationEffectsToolProvider, parseMotionScene, toFlairSvgMotion, type MotionScene } from '../src/animation-editor';
 import { ToolRegistry } from '../src/tools';
 import { ManualClock } from '../src/animation';
-import { ellipseSubpath, rectSubpath, type VectorDocument } from '../src/vector';
+import { ellipseSubpath, rectSubpath, vectorNodeBounds, type VectorDocument } from '../src/vector';
 import { baseToolName } from '../src/tools';
 
 const ARTWORK: VectorDocument = {
@@ -134,5 +134,65 @@ describe('animation editor: provider effect tools', () => {
 		const r = await registry.callTool('add_vector_effect', { effect: 'fake.badge' });
 		expect(r.isError).toBe(true);
 		expect(text(r)).toMatch(/No effects provider/);
+	});
+
+	describe('vector effects along a path', () => {
+		/** A two-segment path inside a group moved by (50, 30): its world outline is the points + (50, 30). */
+		const pathScene = (): MotionScene => ({
+			version: 1,
+			name: 'path',
+			artwork: {
+				width: 400,
+				height: 200,
+				background: '#ffffff',
+				nodes: [
+					{
+						id: 'g',
+						type: 'group',
+						transform: [1, 0, 0, 1, 50, 30],
+						children: [{ id: 'line', type: 'path', stroke: '#000000', subpaths: [{ closed: false, anchors: [{ x: 10, y: 20 }, { x: 110, y: 60 }, { x: 160, y: 20 }].map((p) => ({ x: p.x, y: p.y })) }] } as never],
+					} as never,
+					{ id: 'box', type: 'path', fill: '#ef4444', subpaths: [rectSubpath({ x: 20, y: 20, width: 60, height: 60 })] },
+				],
+			},
+			shots: [],
+		});
+
+		it('runs a path effect along a node: the node\'s world outline is its path, and the picture lands on the node', async () => {
+			const c = new AnimationEditorController({ scene: pathScene(), clock: new ManualClock(), effects: createFakeEffectProvider() });
+			const r = await c.addVectorEffect('fake.route', { path: { node: 'line' } });
+			expect(r).toMatchObject({ ok: true });
+			const applied = c.appliedEffects().find((e) => e.effect === 'fake.route')!;
+			expect(String(applied.values.path)).toMatch(/^M60 50\s*L160 90\s*L210 50/);
+			// The route's own line, placed, has the node's world bounds.
+			const group = c.getScene().artwork.nodes.find((n) => n.id === applied.instance)!;
+			const b = vectorNodeBounds(group)!;
+			expect(b.x).toBeCloseTo(60, 3);
+			expect(b.y).toBeCloseTo(50, 3);
+			expect(b.width).toBeCloseTo(150, 3);
+			expect(b.height).toBeCloseTo(40, 3);
+		});
+
+		it('writes words, and refuses what cannot run along a path with the fix', async () => {
+			const c = new AnimationEditorController({ scene: pathScene(), clock: new ManualClock(), effects: createFakeEffectProvider() });
+			expect(await c.addVectorEffect('fake.route', { path: { text: 'ab' } })).toMatchObject({ ok: true });
+			expect(String(c.appliedEffects().find((e) => e.effect === 'fake.route')!.values.path)).toMatch(/^M0 10 L3 0/);
+			expect(await c.addVectorEffect('fake.badge', { path: { node: 'line' } })).toMatchObject({ ok: false, error: expect.stringMatching(/does not draw along a path. Find one that does with search_effects accepts \["path"\]/) });
+			expect(await c.addVectorEffect('fake.route', { path: { node: 'nope' } })).toMatchObject({ ok: false, error: expect.stringMatching(/no node "nope"/) });
+			expect(await c.addVectorEffect('fake.route', { path: { node: 'g' } })).toMatchObject({ ok: false, error: expect.stringMatching(/is a group, not a path/) });
+			expect(await c.addVectorEffect('fake.route', { path: { text: 'ab', font: 'serif' } })).toMatchObject({ ok: false, error: expect.stringMatching(/no font "serif"/) });
+		});
+
+		it('through the tool', async () => {
+			const c = new AnimationEditorController({ scene: pathScene(), clock: new ManualClock(), effects: createFakeEffectProvider() });
+			const registry = new ToolRegistry();
+			registry.register(createAnimationEffectsToolProvider(c, { namespace: '' }));
+			let r = await registry.callTool('add_vector_effect', { effect: 'fake.route', path: { node: 'line' } });
+			expect(r.isError).toBeFalsy();
+			r = await registry.callTool('add_vector_effect', { effect: 'fake.route', path: { node: 'line', text: 'x' } });
+			expect(r.isError).toBe(true);
+			r = await registry.callTool('search_effects', { accepts: ['path'], kind: 'vector' });
+			expect((r.structuredContent as { effects: Array<{ id: string }> }).effects.map((e) => e.id)).toEqual(['fake.route']);
+		});
 	});
 });

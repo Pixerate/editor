@@ -66,7 +66,7 @@ describe('motion effects (React)', () => {
     c.setEffectsProvider(createFakeEffectProvider());
     act(() => root.render(<VectorProviderEffectsPanel controller={c} />));
     await click(button('Add effect…'));
-    expect([...container.querySelectorAll('[data-effect-id]')].map((b) => b.getAttribute('data-effect-id'))).toEqual(['fake.badge']);
+    expect([...container.querySelectorAll('[data-effect-id]')].map((b) => b.getAttribute('data-effect-id'))).toEqual(['fake.badge', 'fake.route']);
     await click(q('[data-effect-id="fake.badge"]'));
     const g = c.vectorEffectGroups()[0] as VectorGroupNode;
     expect(g.providerEffect?.effect).toBe('fake.badge');

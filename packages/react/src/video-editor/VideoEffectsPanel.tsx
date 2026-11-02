@@ -9,7 +9,7 @@ import {
   type VideoEffectEditResult,
   type VideoEffectValues,
 } from '@pixerate/editor/video-editor';
-import type { EffectProvider } from '@pixerate/editor/effects';
+import { pathControlsOf, type EffectProvider } from '@pixerate/editor/effects';
 import { EffectAuthoringEditor, EffectParameters, EffectsBrowser, EffectTemplates, useEffectDescription } from '../effects';
 import { useVideoEditorState } from './useVideoEditor';
 
@@ -21,6 +21,35 @@ export interface VideoEffectsPanelProps {
 const btn = 'rounded border border-border px-1.5 py-0.5 text-[11px] disabled:opacity-40';
 const keyedOf = (values: VideoEffectValues | undefined) => new Set(Object.entries(values ?? {}).filter(([, v]) => isVideoKeyframes(v)).map(([k]) => k));
 
+/** Where an effect's path comes from, for an effect that draws along one: drawn on the preview, a mask outline, words, or none. */
+function PathControls({ controller, clip, instance, provider, disabled, report }: { controller: VideoEditorController; clip: VideoClip; instance: string; provider: EffectProvider; disabled: boolean; report: (r: VideoEffectEditResult | Promise<VideoEffectEditResult>) => void }) {
+  const state = useVideoEditorState(controller);
+  const [words, setWords] = useState('');
+  const drawing = state.pathDrawing?.clip === clip.id && state.pathDrawing.instance === instance;
+  return (
+    <div className="flex flex-wrap items-center gap-1" data-effect-part="path">
+      <span className="text-muted-foreground">Path</span>
+      <button type="button" className={btn} disabled={disabled} aria-pressed={drawing} title="Draw the path on the preview" onClick={() => (drawing ? controller.cancelPathDrawing() : controller.startPathDrawing({ clip: clip.id, instance }))}>
+        {drawing ? 'Drawing… (Esc)' : 'Draw path'}
+      </button>
+      <button type="button" className={btn} disabled={disabled || !clip.mask} title={clip.mask ? 'Run it along this clip\'s mask outline' : 'Give the clip a mask first'} onClick={() => report(controller.setEffectPath(clip.id, instance, { mask: { clip: clip.id } }))}>
+        Use mask outline
+      </button>
+      {provider.pathFromText && (
+        <>
+          <input className="w-24 rounded border border-border bg-transparent px-1 py-0.5" aria-label="Words to write along the path" placeholder="Words" value={words} disabled={disabled} onChange={(e) => setWords(e.currentTarget.value)} />
+          <button type="button" className={btn} disabled={disabled || !words.trim()} onClick={() => report(controller.setEffectPath(clip.id, instance, { text: words }))}>
+            Write
+          </button>
+        </>
+      )}
+      <button type="button" className={btn} disabled={disabled} onClick={() => report(controller.setEffectPath(clip.id, instance, { d: '' }))}>
+        Clear path
+      </button>
+    </div>
+  );
+}
+
 /** One effect's controls, loaded from the provider; a note when the provider does not have it. */
 function EffectControls({
   provider,
@@ -30,6 +59,7 @@ function EffectControls({
   disabled,
   onChange,
   onPreset,
+  path,
 }: {
   provider: EffectProvider | null;
   effect: string;
@@ -38,12 +68,19 @@ function EffectControls({
   disabled: boolean;
   onChange: (control: string, value: unknown, gesture: string | null) => void;
   onPreset: (values: Readonly<Record<string, unknown>>) => void;
+  /** For an effect on a clip: where its path comes from, when it draws along one. */
+  path?: { controller: VideoEditorController; clip: VideoClip; instance: string; report: (r: VideoEffectEditResult | Promise<VideoEffectEditResult>) => void };
 }) {
   const { description, error } = useEffectDescription(provider, effect);
   if (!provider) return <p className="text-[11px] text-muted-foreground">No effects provider: "{name ?? effect}" is kept and shown as a placeholder.</p>;
   if (error) return <p className="text-[11px] text-amber-500">{error}</p>;
   if (!description) return <p className="text-[11px] text-muted-foreground">Loading…</p>;
-  return <EffectParameters description={description} values={values ?? {}} keyframed={keyedOf(values)} disabled={disabled} onChange={onChange} onReset={(k) => onChange(k, description.defaults[k], null)} onPreset={onPreset} />;
+  return (
+    <>
+      {path && pathControlsOf(description).length > 0 && <PathControls {...path} provider={provider} disabled={disabled} />}
+      <EffectParameters description={description} values={values ?? {}} keyframed={keyedOf(values)} disabled={disabled} onChange={onChange} onReset={(k) => onChange(k, description.defaults[k], null)} onPreset={onPreset} />
+    </>
+  );
 }
 
 /**
@@ -100,6 +137,7 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
                 disabled={disabled}
                 onChange={(k, v, gesture) => report(controller.updateEffectValues(clip.id, 'generator', { [k]: v } as VideoEffectValues, { merge: gesture ?? undefined }))}
                 onPreset={(values) => report(controller.updateEffectValues(clip.id, 'generator', values as VideoEffectValues))}
+                path={{ controller, clip, instance: 'generator', report }}
               />
             </div>
           )}
@@ -199,6 +237,7 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
                         disabled={disabled}
                         onChange={(k, v, gesture) => report(controller.updateClipEffect(clip.id, e.id, { values: { [k]: v as never } }, { merge: gesture ?? undefined }))}
                         onPreset={(values) => report(controller.updateClipEffect(clip.id, e.id, { values: values as never }))}
+                        path={{ controller, clip, instance: e.id, report }}
                       />
                     </div>
                   )}

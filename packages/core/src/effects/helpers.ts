@@ -3,7 +3,7 @@
  * and a provider slot editors hold.
  */
 
-import { validateJsonSchema, type SchemaValidationError } from '../tools/schema.js';
+import { validateJsonSchema, type JsonSchema, type SchemaValidationError } from '../tools/schema.js';
 import { EffectControlError, EffectError, EffectUnsupportedError, NoEffectsProviderError, UnknownEffectError } from './errors.js';
 import type {
 	CameraKeyframe,
@@ -23,6 +23,7 @@ import type {
 	EffectValue,
 	EffectValues
 } from './types.js';
+import { EFFECT_PATH_FORMAT } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Values
@@ -81,7 +82,23 @@ export function countEffectTags(effects: readonly Pick<EffectSummary, 'tags'>[])
 }
 
 const matchesFilters = (e: EffectSummary, o: EffectSearchOptions) =>
-	(!o.kind || e.kind === o.kind) && (!o.category || e.category === o.category) && (!o.use || e.uses.includes(o.use)) && hasEffectTags(e, o.tags);
+	(!o.kind || e.kind === o.kind) &&
+	(!o.category || e.category === o.category) &&
+	(!o.use || e.uses.includes(o.use)) &&
+	hasEffectTags(e, o.tags) &&
+	(!o.accepts?.length || o.accepts.every((a) => e.accepts?.includes(a)));
+
+/**
+ * The controls of an effect that draw along a path given at run time: those whose schema (or one
+ * of its `anyOf` / `oneOf` choices) has `format: 'svg-path'`. See `EFFECT_PATH_FORMAT` for the
+ * values they take.
+ */
+export function pathControlsOf(d: Pick<EffectDescription, 'controls'>): string[] {
+	const isPath = (s: JsonSchema | undefined): boolean => !!s && (s.format === EFFECT_PATH_FORMAT || [...(s.anyOf ?? []), ...(s.oneOf ?? [])].some((x) => isPath(x as JsonSchema)));
+	return Object.entries(d.controls?.properties ?? {})
+		.filter(([, s]) => isPath(s as JsonSchema))
+		.map(([name]) => name);
+}
 
 /**
  * Filters a catalog (kind, category, use and every tag) and ranks it against `query` (every word

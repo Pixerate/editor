@@ -9,6 +9,10 @@
  * - `crossfade` (transition)
  * - `fade-in` (motion, vector only)
  * - `badge` (a vector effect with its own picture: a disc that fades in; vector only)
+ * - `trail` (an overlay that draws a line along its `path` control, transparent)
+ * - `route` (a vector effect that draws its `path` control as a line; vector only)
+ *
+ * It writes words as path data (`pathFromText`): a zig-zag per letter, font `zig`.
  *
  * With `camera: true` it also has camera moves (no pixels): `glide` and `whip` (transitions; the
  * whip cuts halfway) and `drift` (a hold that zooms in slowly).
@@ -33,6 +37,7 @@ import type {
 	EffectRendererOptions,
 	EffectRenderRequest,
 	EffectSummary,
+	EffectTextPathOptions,
 	EffectValues,
 	EffectVectorMotion,
 	EffectVectorTarget
@@ -41,6 +46,15 @@ import type {
 const HEX = '^#[0-9a-fA-F]{6}$';
 const colour = (description: string) => ({ type: 'string' as const, pattern: HEX, description });
 const amount = (description: string) => ({ type: 'number' as const, minimum: 0, maximum: 1, description });
+
+/** A path control: SVG path data fitted into the frame, points in frame pixels, or "" for none. */
+const pathControl = (what: string) => ({
+	description: `${what}: SVG path data (fitted into the frame, contain, 8% margin), or points [x0, y0, x1, y1, …] in frame pixels from the top left (used as given), or "" for none.`,
+	anyOf: [
+		{ type: 'string' as const, format: 'svg-path', description: 'SVG path data, or "" for no path.' },
+		{ type: 'array' as const, items: { type: 'number' as const, description: 'x or y, frame pixels.' }, description: 'Points x0, y0, x1, y1, … in frame pixels.' }
+	]
+});
 
 const DESCRIPTIONS: readonly EffectDescription[] = [
 	{
@@ -206,8 +220,79 @@ const DESCRIPTIONS: readonly EffectDescription[] = [
 		defaults: { color: '#f43f5e', ms: 500 },
 		presets: [],
 		inputs: []
+	},
+	{
+		id: 'fake.trail',
+		name: 'Trail',
+		kind: 'shader',
+		category: 'path',
+		uses: ['overlay'],
+		description: 'A line drawn along its path control over transparency; with no path, a line across the middle.',
+		tags: ['path', 'line'],
+		transparent: true,
+		loop: false,
+		accepts: ['path'],
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				path: pathControl('Where the line runs'),
+				color: colour('Line colour as #rrggbb. Default #22d3ee.'),
+				width: { type: 'number', minimum: 1, maximum: 64, description: 'Line width in pixels. Default 6.' }
+			}
+		},
+		defaults: { path: '', color: '#22d3ee', width: 6 },
+		presets: [],
+		inputs: []
+	},
+	{
+		id: 'fake.route',
+		name: 'Route',
+		kind: 'vector',
+		category: 'path',
+		uses: ['title'],
+		description: 'A vector line along its path control, its picture fitted to the path (viewBox = the path bounds); with no path, a short wave.',
+		tags: ['path', 'route'],
+		transparent: true,
+		loop: false,
+		duration: 400,
+		accepts: ['path'],
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				path: pathControl('The route'),
+				color: colour('Line colour as #rrggbb. Default #f59e0b.')
+			}
+		},
+		defaults: { path: '', color: '#f59e0b' },
+		presets: [],
+		inputs: []
 	}
 ];
+
+/** The numbers of SVG path data in order (commands are read as straight lines between their end points). */
+function pathNumbers(d: string): number[] {
+	return [...d.matchAll(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)].map((m) => Number(m[0]));
+}
+
+/** A path control's value as points in frame pixels: lists as given, path data fitted (contain, 8% margin), "" as `fallback`. */
+function framePoints(value: unknown, width: number, height: number, fallback: number[]): number[] {
+	if (Array.isArray(value)) return value.length >= 4 ? (value as number[]) : fallback;
+	if (typeof value !== 'string' || !value.trim()) return fallback;
+	const n = pathNumbers(value);
+	if (n.length < 4) return fallback;
+	let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+	for (let i = 0; i + 1 < n.length; i += 2) {
+		x0 = Math.min(x0, n[i]); x1 = Math.max(x1, n[i]);
+		y0 = Math.min(y0, n[i + 1]); y1 = Math.max(y1, n[i + 1]);
+	}
+	const m = 0.08;
+	const k = Math.min((width * (1 - 2 * m)) / Math.max(1e-9, x1 - x0), (height * (1 - 2 * m)) / Math.max(1e-9, y1 - y0));
+	const ox = (width - (x1 - x0) * k) / 2 - x0 * k;
+	const oy = (height - (y1 - y0) * k) / 2 - y0 * k;
+	return n.map((v, i) => (i % 2 ? v * k + oy : v * k + ox));
+}
 
 const CAMERA_DESCRIPTIONS: readonly EffectDescription[] = [
 	{
@@ -328,6 +413,30 @@ function renderPixels(d: EffectDescription, v: Record<string, EffectValues[strin
 					const t = clamp01(((x + 0.5 - width / 2) * dx + (y + 0.5 - height / 2) * dy) / (2 * half) + 0.5);
 					for (let c = 0; c < 3; c++) o[i + c] = a[c] + (b[c] - a[c]) * t;
 					o[i + 3] = 255 * clamp01(v.opacity as number);
+				}
+			}
+			break;
+		}
+		case 'fake.trail': {
+			const rgb = hexToRgb(v.color as string);
+			const pts = framePoints(v.path, width, height, [0, height / 2, width, height / 2]);
+			const r = (v.width as number) / 2;
+			// Discs along each segment, a pixel apart.
+			for (let i = 0; i + 3 < pts.length; i += 2) {
+				const [ax, ay, bx, by] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+				const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
+				for (let s = 0; s <= steps; s++) {
+					const cx = ax + ((bx - ax) * s) / steps;
+					const cy = ay + ((by - ay) * s) / steps;
+					for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(height - 1, Math.ceil(cy + r)); y++)
+						for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(width - 1, Math.ceil(cx + r)); x++) {
+							if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > r * r) continue;
+							const i4 = (y * width + x) * 4;
+							o[i4] = rgb[0];
+							o[i4 + 1] = rgb[1];
+							o[i4 + 2] = rgb[2];
+							o[i4 + 3] = 255;
+						}
 				}
 			}
 			break;
@@ -508,10 +617,31 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 				}
 			};
 		},
+		pathFromText(text: string, opts?: EffectTextPathOptions): string {
+			if (typeof text !== 'string' || !text.trim()) throw new EffectUnsupportedError('There are no words to write; pass some text.');
+			if (opts?.font !== undefined && opts.font !== 'zig') throw new EffectUnsupportedError(`The fake provider has no font "${opts.font}"; its only font is "zig".`);
+			// A zig-zag per letter, 10 units wide, on a line 10 high.
+			return [...text].map((_, i) => `M${i * 10} 10 L${i * 10 + 3} 0 L${i * 10 + 6} 10`).join(' ');
+		},
 		applyVectorEffect(id: string, target: EffectVectorTarget, values?: EffectValues): EffectVectorMotion {
 			const d = get(id);
 			if (d.kind !== 'motion' && d.kind !== 'vector') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a vector one.`, id);
 			const v = resolveEffectValues(d, values);
+			if (d.id === 'fake.route') {
+				// The path as a line; the picture's viewBox is the path's bounds, so it lands on the path at scale 1.
+				const pts = Array.isArray(v.path) && v.path.length >= 4 ? (v.path as number[]) : typeof v.path === 'string' && pathNumbers(v.path).length >= 4 ? pathNumbers(v.path) : [0, 20, 25, 0, 50, 20, 75, 40, 100, 20];
+				const xs = pts.filter((_, i) => i % 2 === 0);
+				const ys = pts.filter((_, i) => i % 2 === 1);
+				const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
+				const [w, h] = [Math.max(1, Math.max(...xs) - x0), Math.max(1, Math.max(...ys) - y0)];
+				const dpath = 'M' + pts.map((p) => +p.toFixed(3)).join(' ').replace(/^(\S+ \S+) /, '$1 L');
+				return {
+					svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}" width="${w}" height="${h}"><path id="route" d="${dpath}" fill="none" stroke="${v.color}" stroke-width="2"/></svg>`,
+					animate: [{ id: 'route', ms: 400, attrs: { opacity: [0, 1] as const } }],
+					duration: 400,
+					loop: false
+				};
+			}
 			if (d.kind === 'vector') {
 				// Its own picture: the target is not used.
 				return { svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle id="badge" cx="50" cy="50" r="40" fill="${v.color}"/></svg>`, animate: [{ id: 'badge', ms: v.ms as number, attrs: { opacity: [0, 1] as const } }], duration: v.ms as number, loop: false };

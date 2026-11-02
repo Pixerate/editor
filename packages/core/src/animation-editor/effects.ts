@@ -112,15 +112,26 @@ export function motionPartsFromVectorEffect(
 	artwork: VectorDocument,
 	motion: Pick<EffectVectorMotion, 'svg' | 'animate'>,
 	source: MotionEffectSource,
-	box: { x: number; y: number; width: number; height: number } = { x: 0, y: 0, width: artwork.width, height: artwork.height }
+	box: { x: number; y: number; width: number; height: number } | 'viewBox' = { x: 0, y: 0, width: artwork.width, height: artwork.height }
 ): { group: VectorGroupNode; shots: MotionShot[]; notes: string[] } {
 	const imported = fromFlairSvgMotion({ svg: motion.svg, animate: [...(motion.animate ?? [])] }, { hold: 0 });
 	const art = imported.scene.artwork;
 	const prefix = `${source.instance}-`;
 	const { nodes, shots } = prefixed(art.nodes, imported.scene.shots, prefix);
-	const k = Math.min(box.width / art.width, box.height / art.height);
-	const dx = box.x + (box.width - art.width * k) / 2;
-	const dy = box.y + (box.height - art.height * k) / 2;
+	let k: number;
+	let dx: number;
+	let dy: number;
+	if (box === 'viewBox') {
+		// The picture is in artwork units already (fitted to a path given in them): at scale 1, its viewBox origin where it says.
+		const vb = /viewBox\s*=\s*["']([^"']+)["']/.exec(motion.svg)?.[1].trim().split(/[\s,]+/).map(Number) ?? [];
+		k = 1;
+		dx = vb.length === 4 && Number.isFinite(vb[0]) ? vb[0] : 0;
+		dy = vb.length === 4 && Number.isFinite(vb[1]) ? vb[1] : 0;
+	} else {
+		k = Math.min(box.width / art.width, box.height / art.height);
+		dx = box.x + (box.width - art.width * k) / 2;
+		dy = box.y + (box.height - art.height * k) / 2;
+	}
 	const group = { type: 'group', id: source.instance, name: source.name ?? source.effect, children: nodes, transform: [k, 0, 0, k, dx, dy] } as unknown as VectorGroupNode;
 	const tagged = shots.map((s, i) => ({ ...s, id: i === 0 ? source.instance + '-shot' : `${source.instance}-shot-${i + 1}`, run: tag(s.run, source) }));
 	return { group, shots: tagged.map((s) => (s.hold === 0 ? (({ hold: _h, ...rest }) => rest)(s) : s)), notes: imported.notes };
