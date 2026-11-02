@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
 import { Editor } from "@tiptap/core";
-import { createDocumentToolProvider, type EditorDocument } from "../src/persistence";
+import { createDocumentToolProvider, createEditorAssetRegistry, toEditorDocumentFile, type EditorDocument } from "../src/persistence";
 import { ToolRegistry } from "../src/tools";
 import { ChartController, createChartEditorDocument } from "../src/chart";
 import { AnimationEditorController, createAnimationEditorDocument, createMotionScene } from "../src/animation-editor";
@@ -11,7 +11,15 @@ import { VectorEditorController, createVectorEditorDocument } from "../src/vecto
 import { SpreadsheetController, createSpreadsheetEditorDocument } from "../src/spreadsheet";
 import { TokenStore, createTokensEditorDocument } from "../src/tokens";
 import { createRichTextEditorDocument, createRichTextPreset } from "../src";
-import { CanvasScenesStore, createCanvasEditorDocument, createCanvasGestureRecorder, type CanvasEdge, type CanvasNode } from "../src/canvas";
+import {
+  CanvasScenesStore,
+  canvasDocumentContentKey,
+  createCanvasEditorDocument,
+  createCanvasGestureRecorder,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasViewport,
+} from "../src/canvas";
 import { HistoryManager } from "../src/history";
 
 beforeAll(() => {
@@ -279,6 +287,145 @@ describe("editor documents", () => {
     recorder.begin();
     nodes = [{ ...nodes[0], selected: false }];
     expect(recorder.end()).toBe(false);
+  });
+
+  describe("canvas document options", () => {
+    const canvas = (options: Partial<Parameters<typeof createCanvasEditorDocument>[0]> = {}) => {
+      const state = {
+        nodes: [{ id: "a", position: { x: 0, y: 0 }, data: { label: "A" } }] as CanvasNode[],
+        edges: [] as CanvasEdge[],
+        viewport: { x: 10, y: 20, zoom: 1.5 } as CanvasViewport,
+      };
+      const history = new HistoryManager();
+      const doc = createCanvasEditorDocument({
+        getNodes: () => state.nodes,
+        setNodes: (n) => void (state.nodes = n),
+        getEdges: () => state.edges,
+        setEdges: (e) => void (state.edges = e),
+        history,
+        ...options,
+      });
+      return { state, history, doc };
+    };
+
+    it("saves and restores the viewport without counting pans as changes", async () => {
+      let viewport: CanvasViewport = { x: 10, y: 20, zoom: 1.5 };
+      const { doc, history } = canvas({ getViewport: () => viewport, setViewport: (v) => void (viewport = v) });
+      expect(doc.getDocument().viewport).toEqual({ x: 10, y: 20, zoom: 1.5 });
+      const revision = doc.revision();
+      viewport = { x: -5, y: 0, zoom: 2 };
+      expect(doc.revision()).toBe(revision);
+
+      const result: any = await tools(doc).callTool("load_canvas_document", {
+        document: { nodes: [{ id: "b", position: { x: 0, y: 0 }, data: {} }], edges: [], viewport: { x: 1, y: 2, zoom: 0.5 } },
+      });
+      expect(result.isError, text(result)).toBeFalsy();
+      expect(viewport).toEqual({ x: 1, y: 2, zoom: 0.5 });
+      history.undo();
+      expect(viewport).toEqual({ x: -5, y: 0, zoom: 2 });
+
+      // A document without a viewport leaves the view where it is.
+      doc.loadDocument({ nodes: [], edges: [] });
+      expect(viewport).toEqual({ x: -5, y: 0, zoom: 2 });
+      // Without getViewport, nothing is saved.
+      expect(canvas().doc.getDocument()).not.toHaveProperty("viewport");
+    });
+
+    it("refuses a bad viewport and changes nothing", async () => {
+      const { doc, state } = canvas({ getViewport: () => state.viewport, setViewport: (v) => void (state.viewport = v) });
+      const result: any = await tools(doc).callTool("load_canvas_document", {
+        document: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 0 } },
+      });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch("viewport must be { x, y, zoom } with finite numbers and a zoom above 0.");
+      expect(state.nodes.map((n) => n.id)).toEqual(["a"]);
+      expect(state.viewport).toEqual({ x: 10, y: 20, zoom: 1.5 });
+    });
+
+    it("leaves out the host's own runtime keys", () => {
+      const { doc, state } = canvas({ omitNodeKeys: ["draggable"], omitEdgeKeys: ["style", "markerEnd"] });
+      state.nodes = [{ ...state.nodes[0], draggable: false, selected: true } as CanvasNode];
+      state.nodes.push({ id: "b", position: { x: 1, y: 1 }, data: {} });
+      state.edges = [{ id: "e", source: "a", target: "b", style: "stroke: red", markerEnd: "arrow" } as CanvasEdge];
+      const saved = doc.getDocument();
+      expect(saved.nodes[0]).not.toHaveProperty("draggable");
+      expect(saved.nodes[0]).not.toHaveProperty("selected");
+      expect(saved.edges[0]).toEqual({ id: "e", source: "a", target: "b" });
+      // The bindings' change key ignores the same fields.
+      const options = { omitNodeKeys: ["draggable"], omitEdgeKeys: ["style"] };
+      const before = canvasDocumentContentKey(state.nodes, state.edges, options);
+      const after = canvasDocumentContentKey(
+        state.nodes.map((n) => ({ ...n, draggable: true })),
+        state.edges.map((e) => ({ ...e, style: "" } as CanvasEdge)),
+        options,
+      );
+      expect(after).toBe(before);
+      expect(canvasDocumentContentKey([{ ...state.nodes[0], position: { x: 9, y: 9 } }], [], options)).not.toBe(
+        canvasDocumentContentKey([state.nodes[0]], [], options),
+      );
+    });
+
+    it("runs the host's node check after the built-in ones", async () => {
+      const { doc, state } = canvas({
+        validateNode: (node) => (node.type && !["box", "image"].includes(node.type) ? `type "${node.type}" is not a node type here; use box or image.` : undefined),
+      });
+      const result: any = await tools(doc).callTool("load_canvas_document", {
+        document: { nodes: [{ id: "x", type: "video", position: { x: 0, y: 0 }, data: {} }], edges: [] },
+      });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch('Node "x" (nodes[0]): type "video" is not a node type here; use box or image.');
+      expect(state.nodes.map((n) => n.id)).toEqual(["a"]);
+      doc.loadDocument({ nodes: [{ id: "y", type: "image", position: { x: 0, y: 0 }, data: {} }], edges: [] });
+      expect(state.nodes.map((n) => n.id)).toEqual(["y"]);
+    });
+
+    it("normalizes raw documents and migrates files", () => {
+      const { doc, state } = canvas({
+        formatVersion: 2,
+        // Version 1 kept edges under "links".
+        migrations: { 1: (d: any) => ({ nodes: d.nodes, edges: d.links }) },
+        // Raw documents from an older host shape: { graph: { nodes, edges } }.
+        normalize: (d: any) => (d && d.graph ? d.graph : d),
+      });
+      expect(doc.formatVersion).toBe(2);
+      const nodes = [
+        { id: "p", position: { x: 0, y: 0 }, data: {} },
+        { id: "q", position: { x: 9, y: 0 }, data: {} },
+      ];
+      doc.loadDocument({ graph: { nodes, edges: [{ id: "e", source: "p", target: "q" }] } });
+      expect(state.edges.map((e) => e.id)).toEqual(["e"]);
+      const report = doc.loadDocument({
+        format: "pixerate.editor-document",
+        kind: "canvas",
+        formatVersion: 1,
+        document: { nodes, links: [{ id: "old", source: "q", target: "p" }] },
+      });
+      expect(report.migratedFrom).toBe(1);
+      expect(state.edges.map((e) => e.id)).toEqual(["old"]);
+      // A file from this version round-trips.
+      doc.loadDocument(toEditorDocumentFile(doc));
+      expect(state.edges.map((e) => e.id)).toEqual(["old"]);
+    });
+
+    it("keeps inline images in node data out of the document as assets", async () => {
+      const assets = createEditorAssetRegistry();
+      const image = `data:image/png;base64,${"A".repeat(2048)}`;
+      const { doc, state } = canvas({ assets });
+      state.nodes = [{ id: "img", position: { x: 0, y: 0 }, data: { imageUrl: image } }];
+      const saved = doc.getDocument() as any;
+      expect(saved.nodes[0].data.imageUrl).toMatch(/^pixerate-asset:/);
+      expect(doc.assets).toBe(assets);
+      state.nodes = [];
+      doc.loadDocument(saved);
+      expect((state.nodes[0].data as any).imageUrl).toBe(image);
+      // A reference whose bytes are not loaded is refused, and nothing changes.
+      const result: any = await tools(doc).callTool("load_canvas_document", {
+        document: { nodes: [{ id: "z", position: { x: 0, y: 0 }, data: { imageUrl: "pixerate-asset:zz-zz" } }], edges: [] },
+      });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch("not loaded");
+      expect(state.nodes.map((n) => n.id)).toEqual(["img"]);
+    });
   });
 
   it("read-only animation and video refuse agent loads", async () => {

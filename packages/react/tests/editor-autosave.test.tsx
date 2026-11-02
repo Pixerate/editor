@@ -231,6 +231,39 @@ describe("useCanvasEditorDocument", () => {
     expect((doc.getDocument() as any).nodes.map((n: any) => n.id)).toEqual(["a"]);
     off();
   });
+  it("saves the viewport and ignores the host's omitted keys", async () => {
+    const history = new HistoryManager();
+    let viewport = { x: 4, y: 8, zoom: 2 };
+    let setNodes!: (nodes: CanvasNode[]) => void;
+    let doc!: EditorDocument;
+    const Probe = () => {
+      const [nodes, set] = React.useState<CanvasNode[]>([{ id: "a", position: { x: 0, y: 0 }, data: {} }]);
+      setNodes = set;
+      doc = useCanvasEditorDocument({
+        nodes,
+        edges: [],
+        setNodes: set,
+        setEdges: () => {},
+        history,
+        getViewport: () => viewport,
+        setViewport: (v) => void (viewport = v),
+        omitNodeKeys: ["draggable"],
+        validateNode: (node) => (node.id.startsWith("_") ? "ids starting with _ are reserved." : undefined),
+      });
+      return null;
+    };
+    await act(async () => root.render(<Probe />));
+    let changes = 0;
+    const off = doc.subscribe(() => changes++);
+    await act(async () => setNodes([{ id: "a", position: { x: 0, y: 0 }, data: {}, draggable: false } as CanvasNode]));
+    expect(changes).toBe(0);
+    expect((doc.getDocument() as any).nodes[0]).not.toHaveProperty("draggable");
+    expect((doc.getDocument() as any).viewport).toEqual({ x: 4, y: 8, zoom: 2 });
+    await act(async () => void doc.loadDocument({ nodes: [{ id: "b", position: { x: 0, y: 0 }, data: {} }], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }));
+    expect(viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(() => doc.loadDocument({ nodes: [{ id: "_x", position: { x: 0, y: 0 }, data: {} }], edges: [] })).toThrow("ids starting with _ are reserved.");
+    off();
+  });
 });
 
 describe("image and paint hooks", () => {

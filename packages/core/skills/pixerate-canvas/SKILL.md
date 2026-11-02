@@ -168,12 +168,12 @@ the reason (for example a variant combination that already exists, or a cycle).
 
 ### Save and open
 
-The host may add the shared document tools (see `pixerate-agent-tools`). A canvas document is `{ nodes, edges, scenes }`: every node (`id`, `position`, `data`, `type`, `parentId`...) and edge without selection or measurement, plus the saved scenes.
+The host may add the shared document tools (see `pixerate-agent-tools`). A canvas document is `{ nodes, edges, scenes, viewport }`: every node (`id`, `position`, `data`, `type`, `parentId`...) and edge without selection, measurement or the fields the host leaves out, plus the saved scenes and, when the host saves it, the `viewport` (`{ x, y, zoom }`) the canvas was looking at. Large inline images in node data may come back as `pixerate-asset:` references: pass them back unchanged, they are only valid in this session.
 
 | Tool | Use |
 | --- | --- |
 | `get_canvas_document` | Take a copy of the whole canvas as `{ kind, formatVersion, revision, document }` before a risky rewrite, or to hand it on. To read the canvas, use `get_editor_state`: it is smaller and says more. Refuses very large canvases. |
-| `load_canvas_document` | Put back a copy from `get_canvas_document` (its `document`, or the whole result). Checked first: duplicate ids, edges to missing nodes and parents that do not exist are refused and nothing changes. One undo step (`undo_canvas` brings the previous canvas back). To add or change a few nodes use `canvas_add_node` / `canvas_update_node`. |
+| `load_canvas_document` | Put back a copy from `get_canvas_document` (its `document`, or the whole result). Checked first: duplicate ids, edges to missing nodes, parents that do not exist, a bad `viewport` and anything the host's own node check rejects (the error names the node and says why) are refused and nothing changes. A `viewport` in the document moves the view; leave it out to keep the current view. One undo step (`undo_canvas` brings the previous canvas back). To add or change a few nodes use `canvas_add_node` / `canvas_update_node`. |
 | `undo_canvas` | Undo the last canvas change (one tool call, command or user gesture such as a drag). Returns `undone` (the step's name) and whether more can be undone. Fails with "Nothing to undo." when there is nothing. |
 | `redo_canvas` | Redo the last undone canvas change. |
 | `save_canvas_document` | Save the canvas under a `name` in the host's storage (the same name replaces that copy). Returns the `key`. Only listed when the host has storage. Save when the user asks, not after every edit. |

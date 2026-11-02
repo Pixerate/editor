@@ -178,6 +178,33 @@ describe("createCanvasDocument", () => {
     history.undo();
     expect(nodes.map((n) => n.id)).toEqual(["a"]);
   });
+  it("saves the viewport and ignores the host's omitted keys", () => {
+    let nodes = $state<any[]>([{ id: "a", position: { x: 0, y: 0 }, data: {} }]);
+    let viewport = { x: 4, y: 8, zoom: 2 };
+    const doc = createCanvasDocument({
+      getNodes: () => nodes,
+      setNodes: (next) => void (nodes = next),
+      getEdges: () => [],
+      setEdges: () => {},
+      history: new HistoryManager(),
+      getViewport: () => viewport,
+      setViewport: (v) => void (viewport = v),
+      omitNodeKeys: ["draggable"],
+      validateNode: (node) => (node.id.startsWith("_") ? "ids starting with _ are reserved." : undefined),
+    });
+    cleanup.push(() => doc.destroy());
+    flushSync();
+    let changes = 0;
+    doc.subscribe(() => changes++);
+    nodes = [{ ...nodes[0], draggable: false }];
+    flushSync();
+    expect(changes).toBe(0);
+    expect((doc.getDocument() as any).nodes[0]).not.toHaveProperty("draggable");
+    expect((doc.getDocument() as any).viewport).toEqual({ x: 4, y: 8, zoom: 2 });
+    doc.loadDocument({ nodes: [{ id: "b", position: { x: 0, y: 0 }, data: {} }], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    expect(viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(() => doc.loadDocument({ nodes: [{ id: "_x", position: { x: 0, y: 0 }, data: {} }], edges: [] })).toThrow("ids starting with _ are reserved.");
+  });
 });
 
 describe("image and paint runes", () => {
