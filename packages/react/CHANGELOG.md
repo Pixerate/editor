@@ -1,5 +1,18 @@
 # @pixerate/editor-react
 
+## 0.161.0
+
+### Minor Changes
+
+- 07bf432: Paint editor stickers can be placed, picked and dragged. Core adds `addStickers`, `stickerAt`, `selectSticker` (with `selectedSticker` in the editor state), `previewSticker` / `cancelStickerPreview` for live drags that drop as one undo step, and the `add_stickers` and `sticker_at` agent tools. Sticker edits now redraw only the tiles they touch. A new Stickers tool (S) places the active brush's first stamp with a click, and picks and drags stickers on the canvas. The picked sticker is outlined, and `StickerPanel` follows the canvas pick and has X/Y fields, in React and Svelte.
+
+### Patch Changes
+
+- Updated dependencies [a4dfcd7]
+- Updated dependencies [5973789]
+- Updated dependencies [07bf432]
+  - @pixerate/editor@0.238.0
+
 ## 0.160.0
 
 ### Minor Changes

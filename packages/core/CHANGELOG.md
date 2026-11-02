@@ -1,5 +1,16 @@
 # @pixerate/editor
 
+## 0.238.0
+
+### Minor Changes
+
+- 07bf432: Paint editor stickers can be placed, picked and dragged. Core adds `addStickers`, `stickerAt`, `selectSticker` (with `selectedSticker` in the editor state), `previewSticker` / `cancelStickerPreview` for live drags that drop as one undo step, and the `add_stickers` and `sticker_at` agent tools. Sticker edits now redraw only the tiles they touch. A new Stickers tool (S) places the active brush's first stamp with a click, and picks and drags stickers on the canvas. The picked sticker is outlined, and `StickerPanel` follows the canvas pick and has X/Y fields, in React and Svelte.
+
+### Patch Changes
+
+- a4dfcd7: Paint editor stickers: colour jitter now shifts hue and lightness in OKLCH (up to ±40° and ±0.15 at 1) and lowers chroma instead of clipping, so sprays with colour jitter come out in slightly different colours than before. The sticker `density` setting now documents its real rate: about `density × 4` stickers per tip diameter.
+- 5973789: Paint editor: stickers are no longer clipped by mask stencils, which they lost again on the next sticker edit or replay. Spraying stickers while a mask stencil is on is now refused, naming the stencils to hide. Replays of older sticker strokes that recorded mask stencils draw the stickers whole.
+
 ## 0.237.0
 
 ### Minor Changes
