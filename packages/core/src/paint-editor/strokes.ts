@@ -204,6 +204,8 @@ export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation
   const out: RecordedStroke = { ...stroke, brush, points };
   // Effect paint is fixed to the canvas: a moved stroke reveals another part of it.
   if (stroke.paint?.type === 'gradient' && s !== 1) out.paint = scalePaintGradient(stroke.paint, s);
+  // A stroke-mapped effect keeps its pattern the same size relative to the stroke.
+  if (stroke.paint?.type === 'effect' && stroke.paint.map && s !== 1) out.paint = { ...stroke.paint, map: { ...stroke.paint.map, length: Math.min(4096, Math.max(16, Math.round(stroke.paint.map.length * s))) } };
   if (stroke.copies?.length) {
     const inv = invertAffine(m);
     out.copies = stroke.copies.map((c) => composeAffine(m, composeAffine(c, inv)));

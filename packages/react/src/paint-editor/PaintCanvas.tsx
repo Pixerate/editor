@@ -99,6 +99,12 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     if (ctx && typeof ctx.createImageData === 'function') drawWaterOverlay(controller, ctx as never);
   }, [state, controller]);
 
+  // Live effect paint plays while the canvas is mounted (idle when nothing is live or it is paused).
+  useEffect(() => {
+    const player = controller.playEffects();
+    return () => player.stop();
+  }, [controller]);
+
   // Wheel needs a non-passive listener to prevent page scroll (see GOTCHAS).
   useEffect(() => {
     const el = viewport.current;

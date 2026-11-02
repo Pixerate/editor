@@ -235,19 +235,17 @@ for the controls and presets.
 
 ## Effect paint
 
-`set_effect_paint` makes a generator, overlay or title effect the paint. It is rendered once at
-the canvas size, and every stroke then takes each pixel's colour from that picture, fixed to the
-canvas: painting reveals a hidden image where the brush goes. Its transparency paints nothing, so
-an overlay paints only where it has pixels.
+`set_effect_paint` makes a generator, overlay or title effect the paint: rendered once, every
+stroke takes each pixel's colour from it, fixed to the canvas (painting reveals a hidden image).
+Its transparency paints nothing.
 
 1. `search_effects` (`use` generator, overlay or title) and `describe_effect` for the controls.
-2. `set_effect_paint` with `effect`, `values` and `time` (ms, default 0). Wait for it: strokes that
-   would use it are refused while it renders.
-3. Paint with a dry brush: dab, particle and bristle brushes take the colour per pixel (the most
-   faithful), the Mixer Brush and dab brushes with `behavior.pickup` take it per dab at the dab's
-   centre and mix it with what they pick up. Brush opacity, flow, grain and pressure still apply.
-4. `set_color` or `set_paint` goes back to colour; `remove_effect` (target and effect `paint`)
-   does too, and `update_effect` (target and effect `paint`, `values`) renders new values.
+2. `set_effect_paint` with `effect`, `values`, `time` (ms, default 0). Wait for it to return.
+3. Paint: dab, particle and bristle brushes take the colour per pixel; the Mixer Brush and pick-up
+   dab brushes take it per dab at its centre. Opacity, flow, grain and pressure still apply.
+4. `set_color`, `set_paint` or `remove_effect` (target and effect `paint`) go back to colour;
+   `update_effect` (target and effect `paint`, `values`) renders new values.
+5. Along each stroke (`map`) or playing on stroke layers (`live`): [references/effect-paint.md](references/effect-paint.md).
 
 When to use which:
 
@@ -256,6 +254,7 @@ When to use which:
 | The effect inside brushed marks, hand-painted edges | `set_effect_paint` and a dry brush |
 | The effect inside an exact shape, or in wet / thick paint | Paint the shape, dry it, then `fill_layer_with_effect` with `lockTransparency: true` |
 | The effect over the whole sheet | `set_paper_effect` or `add_effect_layer` |
+| A pattern that follows the stroke, or paint that moves | `map: { by: "stroke" }`, `live: true` on a stroke layer |
 
 ## Canvas-hosted layer
 
@@ -399,7 +398,8 @@ view), so work with the tools you are given.
 | `set_paper_effect` | Draw a generator over the paper (`values`, `opacity`, `blend` default `multiply`, `time`); `effect: null` removes it. One undo step. Returns the effect paper. |
 | `add_effect_layer` | Add a layer drawn by a generator, overlay or title effect (`values`, `name`, `aboveId`, `opacity`, `blend`, `time`); it becomes active. Returns the layer and its effect. |
 | `fill_layer_with_effect` | Composite a generator, overlay or title effect onto a layer (`layerId`, `values`, `opacity`, `lockTransparency`, `time`). One undo step. Returns the layer id and the effect. |
-| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it. Call after `describe_effect`, then `paint_stroke` with a dry brush. Editor state, not an undo step. Returns `effectPaint` (`effect`, `provider`, `values`, `time`). |
+| `set_effect_paint` | Paint with a generator, overlay or title effect (`effect`, `values`, `time` ms default 0): rendered once at the canvas size, strokes take each pixel's colour from it; `map` `{ by: "stroke", length, repeat }` lays it along each stroke; `live` keeps it playing on stroke layers. Call after `describe_effect`, then `paint_stroke`. Editor state, not an undo step. Returns `effectPaint`. |
+| `set_effect_playback` | Play or pause live effect paint in the view (`playing`) and cap its frame rate (`fps` 1..60). Editor state. Returns `playing`, `fps`, `time` and `animation` (what plays, or null). Export a moment with `export_image` / `export_psd` `time`. |
 
 ### Guides
 
@@ -496,8 +496,8 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   thick paint or stamps). Paint the shape, dry it, and `fill_layer_with_effect` with
   `lockTransparency: true`. Erasers, blenders and smudges ignore it, and a brush with its own
   gradient, a stroke `color` or `paint`, or `set_color` / `set_paint` paints colour instead.
-- **Effect paint is fixed to the canvas, not the stroke**: a replayed or moved stroke shows the
-  part of the effect under its new place. Wait for `set_effect_paint` to return before painting;
+- **Effect paint is fixed to the canvas by default**: a replayed or moved stroke shows the part
+  under its new place (`map: { by: "stroke" }` follows the stroke). Wait for `set_effect_paint`;
   strokes are refused while it renders.
 - **Recorded strokes are kept in saved documents** (`save_paint_document`, `get_paint_document`),
   so a painting can be replayed and repainted at a higher resolution.

@@ -30,7 +30,11 @@ function PaintView() {
   useEffect(() => (effects ? editor.controller.useEffects(effects) : undefined), [editor.controller, effects]);
   usePaintEffectsTools(demoToolRegistry, editor.controller, { id: 'paint-effects', namespace: 'paintfx' });
   // The effects turn names effect ids, so play the one written for the selected provider.
-  const scripts = useMemo(() => PAINT_SCRIPTS.filter((s) => s.id !== (effectsSource === 'flair' ? 'paint-effects' : 'paint-effects-flair')), [effectsSource]);
+  // A script with a "-flair" twin runs the twin when Flair is the provider; the twins need Flair.
+  const scripts = useMemo(() => {
+    const ids = new Set(PAINT_SCRIPTS.map((s) => s.id));
+    return PAINT_SCRIPTS.filter((s) => (effectsSource === 'flair' ? !ids.has(`${s.id}-flair`) : !s.id.endsWith('-flair')));
+  }, [effectsSource]);
   // Stop the wet-media worker threads when the tab goes away.
   useEffect(() => () => editor.controller.dispose(), [editor.controller]);
 

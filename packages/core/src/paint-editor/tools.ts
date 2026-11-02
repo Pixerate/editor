@@ -293,6 +293,9 @@ const BRUSH_FIELDS = {
   paint: BRUSH_PAINT,
 } as const;
 
+/** The moment of live effect paint to export at. */
+const TIME = { type: 'number', minimum: 0, description: 'Draw live effect paint (strokes on stroke layers painted with live effect paint) this many ms into its animation (default: as painted, its own time).' } as const;
+
 const POINTS = {
   type: 'array',
   minItems: 1,
@@ -1219,7 +1222,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'export_image',
     title: 'Export the painting',
-    description: 'Exports the painting as PNG, JPEG or WebP (base64). JPEG always includes the paper; JPEG and WebP need a browser canvas. Changes nothing. Returns the data, its MIME type and size.',
+    description: 'Exports the painting as PNG, JPEG or WebP (base64). JPEG always includes the paper; JPEG and WebP need a browser canvas. With time, live effect paint is drawn at that moment (get_effect_playback / set_effect_playback). Changes nothing. Returns the data, its MIME type and size.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1227,12 +1230,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
         quality: { type: 'number', minimum: 0, maximum: 1, description: 'JPEG / WebP quality 0..1 (default 0.92).' },
         scale: { type: 'number', exclusiveMinimum: 0, maximum: 1, description: 'Shrink by this factor (default 1).' },
         paper: { type: 'boolean', description: 'Include the paper (default true).' },
+        time: TIME,
       },
       additionalProperties: false,
     },
     annotations: { title: 'Export the painting', ...READ },
-    handler: async ({ format, quality, scale, paper }) => {
-      const bytes = await c.exportImage({ format, quality, scale, paper });
+    handler: async ({ format, quality, scale, paper, time }) => {
+      const run = () => c.exportImage({ format, quality, scale, paper });
+      const bytes = time === undefined ? await run() : await c.withEffectTime(time, run);
       return { mimeType: format ?? 'image/png', bytes: bytes.length, data: bytesToBase64(bytes) };
     },
   });
@@ -1242,10 +1247,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     title: 'Export as PSD',
     description:
       'Writes the painting as an 8-bit RGB PSD (PSB above 30000 px) through the shared PSD writer: every layer and group with its opacity, blend, mask and locks, the paper as a locked "Paper" pixel layer at the bottom, and the composite as the merged image. Changes nothing. Returns the file as base64, its size, whether it is a PSB, and warnings (pigment and painterly blend modes have no PSD equivalent: they are written as the nearest standard mode, see list_blend_modes).',
-    inputSchema: EMPTY,
+    inputSchema: { type: 'object', properties: { time: TIME }, additionalProperties: false },
     annotations: { title: 'Export as PSD', ...READ },
-    handler: () => {
-      const r = c.exportPsd();
+    handler: async ({ time }) => {
+      const r = time === undefined ? c.exportPsd() : await c.withEffectTime(time, () => c.exportPsd());
       return { data: bytesToBase64(r.bytes), bytes: r.bytes.length, psb: r.psb, warnings: r.warnings };
     },
   });

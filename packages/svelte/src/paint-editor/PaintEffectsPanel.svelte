@@ -25,8 +25,16 @@
       effectPaint: editor.current.effectPaint,
       rendering: editor.current.effectPaintRendering,
       color: editor.current.color,
+      animation: controller.getAnimation(),
+      playback: editor.current.effectPlayback,
     };
   });
+  /** Paints with the effect paint again with some of it changed (the other settings kept). */
+  const repaint = (patch: { values?: Record<string, unknown>; map?: unknown; live?: boolean }) => {
+    const fx = view.effectPaint;
+    if (!fx) return;
+    run(() => controller.setEffectPaint({ effect: fx.effect, values: fx.values as never, time: fx.time, map: fx.map, live: fx.live, ...(patch as object) }));
+  };
   const thumbnail = $derived.by(() => {
     const { effectPaint, rendering } = view;
     return effectPaint && !rendering ? untrack(() => controller.effectPaintThumbnail(48)) : null;
@@ -129,9 +137,44 @@
         {provider}
         effect={fx.effect}
         values={fx.values}
-        onchange={(k, v) => run(() => controller.setEffectPaint({ effect: fx.effect, values: { ...fx.values, [k]: v as never }, time: fx.time }))}
-        onpreset={(values) => run(() => controller.setEffectPaint({ effect: fx.effect, values: { ...fx.values, ...values } as never, time: fx.time }))}
+        onchange={(k, v) => repaint({ values: { ...fx.values, [k]: v } })}
+        onpreset={(values) => repaint({ values: { ...fx.values, ...values } })}
       />
+      <div class="flex flex-wrap items-center gap-2" data-testid="effect-paint-placement">
+        <label class="flex items-center gap-1" title="Lay the effect along each stroke instead of fixing it to the canvas">
+          <input type="checkbox" checked={Boolean(fx.map)} onchange={(e) => repaint({ map: e.currentTarget.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
+          Along the stroke
+        </label>
+        <label class="flex items-center gap-1" title="Strokes on a stroke layer keep playing the effect">
+          <input type="checkbox" checked={Boolean(fx.live)} onchange={(e) => repaint({ live: e.currentTarget.checked })} />
+          Live
+        </label>
+      </div>
+      {#if fx.map}
+        {@const map = fx.map}
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="flex items-center gap-1">
+            <span class="text-slate-400">Length</span>
+            <input type="number" aria-label="Effect length along the stroke" min="16" max="4096" value={map.length} onchange={(e) => { const length = Number(e.currentTarget.value); if (length !== map.length) repaint({ map: { ...map, length } }); }} class="w-16 rounded bg-slate-800 px-1 py-0.5" />
+          </label>
+          <select aria-label="Effect repeat" value={map.repeat} onchange={(e) => repaint({ map: { ...map, repeat: e.currentTarget.value } })} class="rounded bg-slate-800 px-1 py-0.5">
+            <option value="repeat">Repeat</option>
+            <option value="mirror">Mirror</option>
+            <option value="clamp">Clamp</option>
+          </select>
+        </div>
+      {/if}
+    </div>
+  {/if}
+  {#if view.animation}
+    {@const animation = view.animation}
+    <div class="flex items-center gap-2 rounded border border-slate-700 p-1" data-effect-part="playback">
+      <span class="flex-1 truncate">Live paint: {animation.strokes} {animation.strokes === 1 ? 'stroke' : 'strokes'}</span>
+      <button type="button" class={button} aria-pressed={view.playback.playing} onclick={() => attempt(() => controller.setEffectPlayback({ playing: !view.playback.playing }), (m) => (error = m))}>{view.playback.playing ? 'Pause' : 'Play'}</button>
+      <label class="flex items-center gap-1">
+        <span class="text-slate-400">fps</span>
+        <input type="number" aria-label="Live paint frame rate" min="1" max="60" value={view.playback.fps} onchange={(e) => attempt(() => controller.setEffectPlayback({ fps: Math.round(Number(e.currentTarget.value)) }), (m) => (error = m))} class="w-12 rounded bg-slate-800 px-1 py-0.5" />
+      </label>
     </div>
   {/if}
   {#if view.layerEffect && view.activeId}

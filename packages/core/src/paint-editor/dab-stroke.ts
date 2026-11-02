@@ -245,7 +245,7 @@ export class PaintDabStroke {
     let flow = 1;
     if (this.options.effect) {
       const rgb: [number, number, number] = [0, 0, 0];
-      flow = sampleEffectAt(this.options.effect, d.x, d.y, rgb);
+      flow = sampleEffectAt(this.options.effect, d.x, d.y, rgb, d);
       ex.setReservoirColor(rgb[0], rgb[1], rgb[2]);
     } else if (this.sampler && !this.gradient) {
       const g = this.sampler.dab(d, this.sample);

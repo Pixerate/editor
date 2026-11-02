@@ -410,7 +410,7 @@ export class DryStroke {
       if (this.options.effect) {
         if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
         field = this.field.subarray(0, n * 3);
-        sampleEffectField(this.options.effect, rect, vals, field);
+        sampleEffectField(this.options.effect, rect, vals, field, d);
       }
       this.coverage.accumulate(rect, vals, d.opacity, null, field);
       rects.push(rect);

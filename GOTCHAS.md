@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] Live Effect Paint Plays in the View, Not the Document
+
+- **Issue / Symptom**: Animating effect paint by writing each frame into the document would make every frame an undo step (or none of them exact), change what saving and exporting see as the clock runs, and fight a stroke in progress.
+- **Root Cause**: The document is the undo, save and replay state, while frames depend on a clock. Effect renders are also asynchronous, and each live source needs a renderer (a WebGL context with a GPU provider) every frame.
+- **Solution / Workaround**: Frames go into `animatedLayers` (view only, each with the document surface it was drawn from, so it is dropped as soon as that surface changes) through `currentLayers()`. `showEffectTime(t)` renders each live source's frame at its own `time + t`, then redraws only the live strokes' areas with the stroke-layer region redraw (`liveEffectAt` makes `drawLiveStroke` use the frame). `playEffects(clock)` keeps one render in flight, caps the rate at `fps`, and idles while paused, while a stroke is painted, or when nothing is live. Exports at a moment use `withEffectTime` (`frameOverride`), so nothing persists. `MAX_LIVE_EFFECT_SOURCES` (8) caps distinct live sources. Painted areas only ever grow per stroke (`paintedBounds`), and live strokes also redraw their geometric reach (`liveStrokeBounds`), because a frame with more alpha can paint pixels an earlier frame did not.
+
+### [core/paint-editor] Effect Paint Along the Stroke Renders a Strip, Not the Canvas
+
+- **Issue / Symptom**: A stroke-mapped effect (`map: { by: 'stroke' }`) sampled from the canvas-sized render showed the canvas pattern, not one that follows the stroke.
+- **Root Cause**: The effect cache keyed renders by source and checked them against the canvas size.
+- **Solution / Workaround**: `effectPaintSize` renders a mapped effect as a `length × 256` strip, the cache key includes `map`, and `EffectPaintPixels.map` tells the samplers to read (distance along the stroke, place across the tip) from each dab's `travel`, `direction` and `radius` (`sampleEffectField` / `sampleEffectAt` with a dab). Particle and bristle marks use their pen dab. Scaled replays scale `length` in `varyStroke`.
+
 ### [core/paint-editor] A Stroke Layer Redraws Only Where an Edit Changes, From the Strokes' Painted Areas
 
 - **Issue / Symptom**: Redrawing a stroke layer from all of its strokes after every edit took over a second with a few dozen particle strokes, and a prefix cache (redraw from the edited stroke up) was just as slow for edits near the bottom.
