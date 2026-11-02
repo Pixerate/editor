@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/persistence] `migrations` Never Run on Documents Stored Without the File Envelope
+
+- **Issue / Symptom**: A host stored a canvas as the raw `{ nodes, edges }` from `getDocument()` (e.g. in a database column), added `migrations` for an older shape, and found they never ran: the old shape reached the load checks and was refused.
+- **Root Cause**: `defineEditorDocument` only knows a document's version from an `EditorDocumentFile` (`{ format, kind, formatVersion, document }`). A raw document has no version, so it is taken to be the current one and `migrations` are skipped.
+- **Solution / Workaround**: Store `toEditorDocumentFile(doc)` (or `serializeEditorDocument`) so the version travels with the document. For raw documents that are already stored, pass `normalize` to `createCanvasEditorDocument` / `createCanvasDocument` / `useCanvasEditorDocument`: it runs on every load, raw or migrated, before the checks, so it can recognise and rewrite the older shape.
+
 ### [core/canvas] Annotation Gestures: Seeds, One-Stroke Marks and Arrowheads
 
 - **Issue / Symptom**: (1) A gesture's playback traced a different path from the one drawn. (2) A cross drawn as one stroke showed a connecting line between its diagonals. (3) An arrow arriving at a shallow angle had a barb reaching into the box it pointed at.

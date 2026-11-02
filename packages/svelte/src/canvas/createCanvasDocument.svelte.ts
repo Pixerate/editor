@@ -1,4 +1,5 @@
 import {
+	canvasDocumentContentKey,
 	createCanvasEditorDocument,
 	type CanvasEdge,
 	type CanvasEdgeLike,
@@ -13,17 +14,12 @@ export type CreateCanvasDocumentOptions<TNode extends CanvasNode = CanvasNode, T
 	'subscribe'
 >;
 
-const contentKey = (nodes: readonly CanvasNode[], edges: readonly CanvasEdgeLike[]) =>
-	JSON.stringify([
-		nodes.map(({ selected: _s, dragging: _d, measured: _m, resizing: _r, ...rest }: any) => rest),
-		edges.map(({ selected: _s, ...rest }) => rest)
-	]);
-
 /**
  * Svelte 5 rune: the save / load / undo contract (kind `canvas`) for nodes and edges held in
  * `$state`, for `createEditorAutosave` or `createDocumentToolProvider`. Reads `getNodes()` /
  * `getEdges()` reactively, so changes the history does not see (a finished drag, an edge
- * removed by Svelte Flow) count too; selection, measuring and drag frames do not. Parity with
+ * removed by Svelte Flow) count too; selection, measuring, drag frames, `omitNodeKeys` /
+ * `omitEdgeKeys` and the viewport do not. Parity with
  * React's `useCanvasEditorDocument`. Call `destroy()` when done.
  */
 export function createCanvasDocument<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge>(
@@ -43,7 +39,7 @@ export function createCanvasDocument<TNode extends CanvasNode = CanvasNode, TEdg
 			const nodes = options.getNodes();
 			const edges = options.getEdges();
 			if (nodes.some((n) => (n as { dragging?: boolean }).dragging)) return;
-			const key = contentKey(nodes, edges);
+			const key = canvasDocumentContentKey(nodes, edges, options);
 			if (lastKey !== null && key !== lastKey) listeners.forEach((listener) => listener());
 			lastKey = key;
 		});
