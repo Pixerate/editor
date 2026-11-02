@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.232.0
+
+### Minor Changes
+
+- 45f73d9: Effects contract: sequence templates. A provider with `capabilities.supportsTemplates` implements `listTemplates`, `describeTemplate` (slots shaped for a form) and `instantiateTemplate`, which fills slots to an `EffectSequence` of shots with effect layers, catalog transitions and camera moves, or returns every bad value as a sentence. Adds `UnknownTemplateError`, the template and sequence helpers (`templateValuesSchema`, `checkTemplateValues`, `checkEffectSequence`, `effectLayerInput`, …), template checks in `checkEffectProvider`, and two templates on `createFakeEffectProvider({ templates: true })`.
+
 ## 0.231.1
 
 ### Patch Changes
