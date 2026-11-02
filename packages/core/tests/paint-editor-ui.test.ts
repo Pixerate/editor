@@ -33,6 +33,39 @@ function setup() {
 }
 
 describe('PaintGesture', () => {
+  it('the Stickers tool places, picks and drags stickers, each one undo step', () => {
+    const { c, g } = setup();
+    c.setBrush({ id: 'sticker-stars', tip: { size: 30 } });
+    c.setColor('#2563eb');
+    g.tool = 'sticker';
+    // Pressing empty canvas places the brush's first stamp and picks it; nothing to drag.
+    expect(g.down(ev(50, 50))).toBe(false);
+    const [placed] = c.listStickers();
+    expect(placed).toMatchObject({ stamp: c.getState().brush.sticker.stamps[0], x: 50, y: 50, size: 30, color: '#2563eb' });
+    expect(c.getState().selectedSticker).toBe(placed.id);
+    // Pressing a sticker picks it and dragging moves it; the drop is one undo step.
+    c.selectSticker(null);
+    expect(g.down(ev(52, 50))).toBe(true);
+    expect(c.getState().selectedSticker).toBe(placed.id);
+    g.move(ev(90, 60));
+    g.move(ev(120, 70));
+    expect(c.listStickers()[0]).toMatchObject({ x: 118, y: 70 });
+    g.up(ev(120, 70));
+    expect(c.listStickers()).toHaveLength(1);
+    c.undo();
+    expect(c.listStickers()[0]).toMatchObject({ x: 50, y: 50 });
+    // A cancelled drag puts it back.
+    g.down(ev(50, 50));
+    g.move(ev(150, 50));
+    g.cancel();
+    expect(c.listStickers()[0]).toMatchObject({ x: 50, y: 50 });
+    // A painted layer refuses placing, with the reason.
+    c.addLayer();
+    c.paintStroke({ points: [{ x: 10, y: 10 }, { x: 60, y: 30 }], brushId: 'pencil-hb' });
+    g.down(ev(150, 80));
+    expect(g.error).toMatch(/already has paint/);
+  });
+
   it('paints a stroke from pointer events, with coalesced samples and a predicted tail', () => {
     const { c, g } = setup();
     c.setBrush({ id: 'ink-pen' });

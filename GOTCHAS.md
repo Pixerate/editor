@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] A Sticker Drag Changes the Document Before It Is an Undo Step
+
+- **Issue / Symptom**: Dragging a sticker previews by replacing the document without a history entry. If the drop then committed with the current document as "before", undo would return to the last preview position, not to where the drag started. A preview base kept across other edits would undo those edits as well.
+- **Root Cause**: `commit(label, next, before = this.doc)` takes the document on screen as the undo point, and the preview put an uncommitted document there.
+- **Solution / Workaround**: `previewSticker` records `{ base, shown }`, and `commitStickers` uses `base` only while `this.doc === shown` (`previewBase()`). Any other change to the document invalidates it without needing hooks in undo, load or other commits. Partial redraws (`stickerSurface(list, base, dirty)`) are only used when the layer's offset is 0, because the tiles are addressed in layer space.
+
 ### [core/paint-editor] Sticker Layers Are Redrawn From Their List, so Nothing May Clip a Sticker While It Is Sprayed
 
 - **Issue / Symptom**: Stickers sprayed under a mask stencil came out clipped, then lost the clipping as soon as any sticker on the layer was edited (even a recolour of another one), and a replay drew them unclipped.

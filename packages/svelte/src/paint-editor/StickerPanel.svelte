@@ -11,19 +11,19 @@
   const editor = paintEditorState(() => controller);
   const layerId = $derived(editor.current.document.activeLayerId);
   const stickers = $derived(layerId ? (editor.current.document.stickers?.[layerId] ?? []) : []);
-  let picked = $state<string | null>(null);
+  const picked = $derived(editor.current.selectedSticker);
   const sel = $derived(stickers.find((s) => s.id === picked) ?? null);
   let error = $state<string | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
 </script>
 
-<!-- The active layer's stickers: pick one to change, reorder or delete it (each change one undo step). -->
+<!-- The active layer's stickers: pick one (here, or with the Stickers tool on the canvas) to move, change, reorder or delete it (each change one undo step). -->
 {#if stickers.length && layerId}
   <div class={`${panel} ${className}`} data-testid="sticker-panel">
     <span class="font-medium text-slate-300">Stickers ({stickers.length})</span>
     <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto" role="listbox" aria-label="Stickers">
       {#each stickers as s (s.id)}
-        <button type="button" role="option" aria-selected={s.id === picked} title={`${STAMP_LABELS[s.stamp]} ${s.id}`} class={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={`background: ${s.color}`} onclick={() => (picked = s.id)}></button>
+        <button type="button" role="option" aria-selected={s.id === picked} title={`${STAMP_LABELS[s.stamp]} ${s.id}`} class={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={`background: ${s.color}`} onclick={() => controller.selectSticker(s.id)}></button>
       {/each}
     </div>
     {#if sel}
@@ -34,6 +34,16 @@
             {#each STAMP_KINDS as k (k)}<option value={k}>{STAMP_LABELS[k]}</option>{/each}
           </select>
         </label>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-slate-400">Position</span>
+          <span class="flex gap-1">
+            {#each ['x', 'y'] as const as k (k)}
+              {#key `${sel.id}-${sel[k]}`}
+                <input type="number" aria-label={`Sticker ${k}`} value={sel[k]} step="1" onchange={(e) => { const v = Number(e.currentTarget.value); if (v !== sel[k]) run(() => controller.updateSticker(layerId, sel.id, { [k]: v })); }} class="w-16 rounded bg-slate-800 px-1 py-0.5" />
+              {/key}
+            {/each}
+          </span>
+        </div>
         {#each STICKER_SLIDERS as c (c.path)}
           <PaintSlider control={c} value={readPath(sel, c.path)} oncommit={(v) => run(() => controller.updateSticker(layerId, sel.id, { [c.path]: v }))} />
         {/each}
@@ -44,7 +54,7 @@
         <div class="flex flex-wrap gap-1">
           <button type="button" class={button} onclick={() => run(() => controller.arrangeStickers(layerId, [sel.id], 'front'))}>To front</button>
           <button type="button" class={button} onclick={() => run(() => controller.arrangeStickers(layerId, [sel.id], 'back'))}>To back</button>
-          <button type="button" class={button} onclick={() => run(() => { controller.removeStickers(layerId, [sel.id]); picked = null; })}>Delete</button>
+          <button type="button" class={button} onclick={() => run(() => { controller.removeStickers(layerId, [sel.id]); controller.selectSticker(null); })}>Delete</button>
         </div>
       </div>
     {/if}

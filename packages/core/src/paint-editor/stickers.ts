@@ -10,7 +10,7 @@
  * same stickers.
  */
 
-import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { TileMedium, type PaintTileTarget } from '../paint/exchange';
 import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradient-paint';
 import type { PaintBrush } from './brushes';
@@ -351,9 +351,16 @@ export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial
   return out;
 }
 
-/** A sticker layer's pixels: its stickers drawn bottom first over a transparent layer. */
-export function stickerSurface(stickers: readonly Sticker[]): TiledSurface {
+/**
+ * A sticker layer's pixels: its stickers drawn bottom first over a transparent layer. With `base`
+ * (the layer's current pixels, at offset 0) and `dirty` rects, only the tiles those rects touch are
+ * drawn again, from the stickers that reach them; the rest are kept. The pixels are the same as a
+ * full redraw, since a tile depends only on the stickers over it.
+ */
+export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface, dirty?: readonly RasterRect[]): TiledSurface {
+  const only = base && dirty ? new Set(dirty.flatMap((r) => tilesInRect(r).map(({ tx, ty }) => tileKey(tx, ty)))) : null;
   const live = new Map<TileKey, Uint8ClampedArray>();
+  let scratch: Uint8ClampedArray | null = null;
   const target: PaintTileTarget = {
     offset: { x: 0, y: 0 },
     lockTransparency: false,
@@ -361,16 +368,37 @@ export function stickerSurface(stickers: readonly Sticker[]): TiledSurface {
     readTile: (tx, ty) => live.get(tileKey(tx, ty)) ?? null,
     writeTile: (tx, ty) => {
       const k = tileKey(tx, ty);
+      // Writes to kept tiles go nowhere.
+      if (only && !only.has(k)) return (scratch ??= new Uint8ClampedArray(TILE * TILE * 4)).fill(0);
       let t = live.get(k);
       if (!t) live.set(k, (t = new Uint8ClampedArray(TILE * TILE * 4)));
       return t;
     },
   };
-  renderStickers(stickers, target);
+  const reaches = (s: Sticker) => !only || tilesInRect(stickerRect(s)).some(({ tx, ty }) => only.has(tileKey(tx, ty)));
+  renderStickers(stickers.filter(reaches), target);
   const tiles = new Map<TileKey, Tile>();
+  if (only && base) for (const [k, t] of base.tiles) if (!only.has(k)) tiles.set(k, t);
   for (const [k, d] of live) {
     const t = finishTile(d, 4, 0);
     if (t) tiles.set(k, t);
   }
   return new TiledSurface(4, tiles, 0);
+}
+
+/** The top-most sticker under a point (document pixels), by its stamp's shape, or `null`. */
+export function stickerAt(stickers: readonly Sticker[], x: number, y: number): Sticker | null {
+  for (let i = stickers.length - 1; i >= 0; i--) {
+    const s = stickers[i];
+    const rad = s.size / 2;
+    const a = (s.rotation * Math.PI) / 180;
+    const dx = x - s.x;
+    const dy = y - s.y;
+    const u = (dx * Math.cos(a) + dy * Math.sin(a)) / rad;
+    const v = (-dx * Math.sin(a) + dy * Math.cos(a)) / rad;
+    if (Math.abs(u) > 1.05 || Math.abs(v) > 1.05) continue;
+    // Small stickers are hard to hit exactly: their whole box counts.
+    if (s.size < 16 || stampCoverage(s.stamp, u, v, s.seed) > 0.25) return s;
+  }
+  return null;
 }

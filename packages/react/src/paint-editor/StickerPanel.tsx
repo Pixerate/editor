@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { STAMP_KINDS, STAMP_LABELS, STICKER_SLIDERS, readPath, type PaintEditorController, type StampKind } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { CommitColorInput, ErrorLine, PaintSlider, button, panel, useAttempt } from './shared';
@@ -9,14 +9,15 @@ export interface StickerPanelProps {
 }
 
 /**
- * The active layer's stickers: pick one to change its stamp, size, rotation, opacity and colour,
- * bring it to the front or back, or delete it (each change one undo step). Shows nothing for a
- * layer without stickers.
+ * The active layer's stickers: pick one (here, or with the Stickers tool on the canvas) to change
+ * its stamp, place, size, rotation, opacity and colour, bring it to the front or back, or delete it
+ * (each change one undo step). Shows nothing for a layer without stickers.
  */
 export const StickerPanel: React.FC<StickerPanelProps> = ({ controller, className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
-  const [picked, setPicked] = useState<string | null>(null);
+  const picked = state.selectedSticker;
+  const setPicked = (id: string | null) => controller.selectSticker(id);
   const layerId = state.document.activeLayerId;
   const stickers = layerId ? (state.document.stickers?.[layerId] ?? []) : [];
   if (!stickers.length) return null;
@@ -41,6 +42,23 @@ export const StickerPanel: React.FC<StickerPanelProps> = ({ controller, classNam
               ))}
             </select>
           </label>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-400">Position</span>
+            <span className="flex gap-1">
+              {(['x', 'y'] as const).map((k) => (
+                <input
+                  key={`${sel.id}-${k}-${sel[k]}`}
+                  type="number"
+                  aria-label={`Sticker ${k}`}
+                  defaultValue={sel[k]}
+                  step={1}
+                  onBlur={(e) => Number(e.target.value) !== sel[k] && attempt(() => controller.updateSticker(layerId!, sel.id, { [k]: Number(e.target.value) }))}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  className="w-16 rounded bg-slate-800 px-1 py-0.5"
+                />
+              ))}
+            </span>
+          </div>
           {STICKER_SLIDERS.map((c) => (
             <PaintSlider key={c.path} control={c} value={readPath(sel, c.path)} onCommit={(v) => attempt(() => controller.updateSticker(layerId!, sel.id, { [c.path]: v }))} />
           ))}

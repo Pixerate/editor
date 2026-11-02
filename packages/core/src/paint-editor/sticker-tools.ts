@@ -1,7 +1,7 @@
 /**
  * Agent tools for stickers: stamps sprayed with a sticker brush (`paint_stroke`, list_brushes
  * category sticker) stay objects on their layer, which these tools list, move, turn, resize,
- * recolour, reorder and delete. Each change is one undo step and redraws the layer.
+ * recolour, reorder and delete, find by point (`sticker_at`), and places new ones exactly (`add_stickers`). Each change is one undo step and redraws the layer.
  */
 
 import type { PaintAgentTool } from './hosted';
@@ -23,6 +23,61 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
       annotations: { title: 'List stickers', ...READ },
       coordinates: { out: ['stickers[]'] },
       handler: ({ layerId }) => ({ layerId: layerId ?? c.document.activeLayerId, stickers: c.listStickers(layerId) }),
+    },
+    {
+      name: 'sticker_at',
+      title: 'Find the sticker at a point',
+      description: 'Returns the top-most sticker under a point (document pixels) by its stamp’s shape, or sticker null when none is there, so you can pick one sticker among many similar ones before update_sticker, arrange_stickers or remove_stickers. Changes nothing.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layerId: LAYER_ID,
+          x: { type: 'number', description: 'Point x in document pixels.' },
+          y: { type: 'number', description: 'Point y in document pixels.' },
+        },
+        required: ['x', 'y'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Find the sticker at a point', ...READ },
+      coordinates: { in: [''], out: ['sticker'] },
+      handler: ({ layerId, x, y }) => ({ layerId: layerId ?? c.document.activeLayerId, sticker: c.stickerAt(layerId, x, y) }),
+    },
+    {
+      name: 'add_stickers',
+      title: 'Place stickers',
+      description: 'Places stickers exactly where you say, on top of a sticker layer or onto an empty layer (which becomes a sticker layer). Use it for deliberate placement; spray with paint_stroke and a sticker brush for a random scatter. One undo step. Returns the new stickers with their ids, for update_sticker, arrange_stickers and remove_stickers.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layerId: LAYER_ID,
+          stickers: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 500,
+            description: 'The stickers to place, drawn in this order (later ones on top).',
+            items: {
+              type: 'object',
+              properties: {
+                stamp: { type: 'string', enum: [...STAMP_KINDS], description: 'The stamp.' },
+                x: { type: 'number', description: 'Centre x in document pixels.' },
+                y: { type: 'number', description: 'Centre y in document pixels.' },
+                size: { type: 'number', minimum: 2, maximum: 2048, description: 'Diameter in pixels (default 48).' },
+                rotation: { type: 'number', minimum: -3600, maximum: 3600, description: 'Degrees clockwise (default 0).' },
+                color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Colour #rrggbb (default the paint colour).' },
+                opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
+                seed: { type: 'integer', minimum: 0, description: 'Texture seed (default from the new id); splat and confetti shapes vary with it.' },
+              },
+              required: ['stamp', 'x', 'y'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['stickers'],
+        additionalProperties: false,
+      },
+      annotations: { title: 'Place stickers', ...WRITE },
+      coordinates: { in: ['stickers[]'], out: ['stickers[]'] },
+      handler: ({ layerId, stickers }) => ({ layerId: layerId ?? c.document.activeLayerId, stickers: c.addStickers(layerId, stickers) }),
     },
     {
       name: 'update_sticker',
