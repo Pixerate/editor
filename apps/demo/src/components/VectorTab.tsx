@@ -5,7 +5,8 @@ import { VectorEditor, VectorGeneratePanel, useVectorCommands, useVectorEditorCo
 import { DEMO_VECTOR_MODELS, demoVectorGenerate } from "../vectorGeneration";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
-import { PenTool } from "lucide-react";
+import { ArrowDownUp, PenTool, Sparkles } from "lucide-react";
+import { EditorPage, EditorPanel } from "./EditorPage";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { VECTOR_SCRIPTS } from "../agentScripts";
@@ -313,7 +314,7 @@ const STARTER: VectorDocument = {
   ],
 };
 
-export function VectorTab() {
+function VectorDemo() {
   const controller = useVectorEditorController({ document: STARTER });
   const state = useVectorEditorState(controller);
   useVectorCommands(demoCommandRegistry, controller);
@@ -341,32 +342,21 @@ export function VectorTab() {
   };
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <PenTool className="h-5 w-5 text-sky-400" />
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">Vector editor</h2>
-          <p className="text-xs text-slate-400">
-            Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
-            click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
-            Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
-            Type (T): click for point text, drag for area text, double-click text to edit; Type on a Path (Q): click a path. Without loaded fonts, text draws as SVG text in the browser's fonts.
-            Symbols: select objects and press F8 (or New in the Symbols panel); double-click an instance to edit the symbol. Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
-            Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
-          </p>
-        </div>
-      </div>
       <EditorDocumentAutosave doc={editorDocument} name="Vector artwork" />
       <EffectsProviderSwitch />
       <div className="relative rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         {/* The vector canvas acts out every vector.* call (agent playback): no targets in the scripts. */}
         <VectorEditor controller={controller} height={520} effects={effects} canvasProps={{ playback: demoPlayback }} />
       </div>
-      <VectorGeneratePanel controller={controller} models={DEMO_VECTOR_MODELS} generate={demoVectorGenerate} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3" />
+      <EditorPanel id="generate" label="Generate" icon={Sparkles}>
+        <VectorGeneratePanel controller={controller} models={DEMO_VECTOR_MODELS} generate={demoVectorGenerate} />
+      </EditorPanel>
       <AgentScriptPanel scripts={VECTOR_SCRIPTS} hint="Plays a scripted agent turn through commands__run_command with the vector.* commands (the same ones in the command palette). The vector canvas acts each call out with the agent's cursor." />
+      <div className="text-xs text-slate-400">
+        {state.document.nodes.length} nodes · {state.selection.length} selected · {Math.round(state.viewport.zoom * 100)}%
+      </div>
+      <EditorPanel id="files" label="Import & export" icon={ArrowDownUp}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-        <span>
-          {state.document.nodes.length} nodes · {state.selection.length} selected · {Math.round(state.viewport.zoom * 100)}%
-        </span>
         <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setSvg(controller.toSvg())}>
           Export SVG
         </button>
@@ -438,7 +428,30 @@ export function VectorTab() {
           </button>
         )}
       </div>
-      {svg && <pre className="max-h-64 overflow-auto rounded-lg border border-slate-800 bg-slate-900 p-3 text-[11px] text-slate-300">{svg}</pre>}
+      {svg && <pre className="max-h-96 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-[11px] text-slate-300">{svg}</pre>}
+      </EditorPanel>
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Headless <code>VectorEditorController</code> (<code>@pixerate/editor/vector</code>) with React bindings. Pen (P): click for corners, drag for curves,
+          click the first point to close. Direct select (A): drag points and handles, Alt-drag a point for smooth handles, Alt-click a segment to add a point. Width (W): drag a stroke to taper it (Alt: one side); pen pressure shapes pencil strokes.
+          Distort (toolbar): drag a corner of the selection box in perspective (Shift+Alt+Cmd/Ctrl: symmetric, Cmd/Ctrl-drag a side: skew). Envelope tool (U): drag the mesh of a warped object.
+          Type (T): click for point text, drag for area text, double-click text to edit; Type on a Path (Q): click a path. Without loaded fonts, text draws as SVG text in the browser's fonts.
+          Symbols: select objects and press F8 (or New in the Symbols panel); double-click an instance to edit the symbol. Masks: select two or more objects and press Cmd/Ctrl+7 (or Clip / Opacity in the Mask panel); the topmost masks the others. Cmd/Ctrl+Alt+7 releases.
+          Drags snap to other shapes with labelled smart guides (hold Cmd/Ctrl to bypass, or switch Snap off in the toolbar). Space-drag pans, Cmd/Ctrl+wheel zooms.
+        </p>
+      </EditorPanel>
     </div>
+  );
+}
+
+export function VectorTab() {
+  return (
+    <EditorPage
+      tab="vector"
+      title="Vector"
+      icon={PenTool}
+      description="A vector illustration editor: draw and edit paths, text, gradients, masks, symbols and live effects, then export SVG, PDF or Lottie."
+      views={[{ id: "editor", label: "Editor", render: () => <VectorDemo /> }]}
+    />
   );
 }

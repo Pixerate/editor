@@ -27,9 +27,11 @@ import {
   MousePointerClick,
   Tags,
   Rows3,
+  FileText,
 } from "lucide-react";
 import { demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel, useOpenPanel } from "./EditorPage";
 import { SHEET_SCRIPTS } from "../agentScripts";
 
 // CSV and TSV adapters for `importFileIntoSpreadsheet` (registered once).
@@ -248,14 +250,14 @@ function buildLargeSheet(): Partial<SpreadsheetDocument> {
   return { name: LARGE_SHEET_NAME, columns, rows, cells, table: { frozenRowCount: 4 } };
 }
 
-export const SpreadsheetTab: React.FC = () => {
+const SpreadsheetDemo: React.FC = () => {
   const initialWorkbook = useMemo(buildSampleWorkbook, []);
   const state = useSpreadsheetEditor({ workbook: initialWorkbook });
-  const [showNames, setShowNames] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [csvPreview, setCsvPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const openPanel = useOpenPanel();
 
   const provider = useMemo(
     () => createSpreadsheetToolProvider(state.controller, { id: "sheet", namespace: "sheet" }),
@@ -279,7 +281,11 @@ export const SpreadsheetTab: React.FC = () => {
     }
   };
 
-  const exportCsv = () => setCsvPreview(state.exportToCsv());
+  // Serializes the computed values into the CSV panel, which has the download link.
+  const exportCsv = () => {
+    setCsvPreview(state.exportToCsv());
+    openPanel("csv");
+  };
 
   const openLargeSheet = () => {
     const existing = state.controller.getSheets().find((sheet) => sheet.name === LARGE_SHEET_NAME);
@@ -310,12 +316,6 @@ export const SpreadsheetTab: React.FC = () => {
     <div className="space-y-4">
       <EditorDocumentAutosave doc={editorDocument} name="Spreadsheet" />
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 shadow-md">
-        <div className="flex items-center gap-2 mr-2">
-          <Table2 className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold tracking-wide uppercase text-slate-300">
-            Spreadsheet
-          </h2>
-        </div>
         <button type="button" className={buttonClass} onClick={() => state.undo()} title="Undo (Mod+Z)">
           <Undo2 className="w-3.5 h-3.5" /> Undo
         </button>
@@ -338,23 +338,18 @@ export const SpreadsheetTab: React.FC = () => {
             e.target.value = "";
           }}
         />
-        <button type="button" className={buttonClass} onClick={exportCsv}>
+        <button type="button" className={buttonClass} onClick={exportCsv} title="Serializes the computed values to CSV">
           <Download className="w-3.5 h-3.5" /> Export CSV
+        </button>
+        <button type="button" className={buttonClass} onClick={() => openPanel("names")}>
+          <Tags className="w-3.5 h-3.5" /> Name Manager
         </button>
         <button type="button" className={buttonClass} onClick={openLargeSheet} title="Adds a 10,000-row sheet to try fast recalculation and virtualised rendering">
           <Rows3 className="w-3.5 h-3.5" /> Large sheet (50k cells)
         </button>
-        <button
-          type="button"
-          className={buttonClass}
-          aria-pressed={showNames}
-          onClick={() => setShowNames((v) => !v)}
-        >
-          <Tags className="w-3.5 h-3.5" /> Name Manager
-        </button>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-400">
           <MousePointerClick className="w-3.5 h-3.5 text-amber-400" />
-          Right-click a cell for sort, filter, freeze, hide, merge and categories
+          Right-click a cell for more
         </span>
       </div>
 
@@ -382,33 +377,25 @@ export const SpreadsheetTab: React.FC = () => {
       </div>
       <AgentScriptPanel scripts={SHEET_SCRIPTS} hint="Plays a scripted agent turn with the sheet__* tools: it reads a range, writes formulas with set_range and checks what they computed. The grid acts each call out with the agent's cursor." />
 
-      {showNames && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-slate-200">
-          <NameManager state={state} onClose={() => setShowNames(false)} />
-        </div>
-      )}
-
       {status && (
         <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-2">
           {status}
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-1.5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Try it</h3>
-          <p>Type <code className="text-slate-200">=SU</code> in a cell or the formula bar for autocomplete; inside the parentheses the argument hint follows the caret.</p>
-          <p>Select cells and drag the small square at the bottom-right corner (fill handle) to extend a series or shift formulas.</p>
-          <p>Copy (Mod+C) and paste (Mod+V) a range inside the sheet or to/from another spreadsheet app (TSV + HTML + lossless JSON).</p>
-          <p>Drop a <code className="text-slate-200">.csv</code> / <code className="text-slate-200">.tsv</code> file on the grid to import it.</p>
-          <p>Open the <strong>Summary</strong> tab: it reads Sales through <code className="text-slate-200">Sales!D2:D11</code>, named ranges and LAMBDA names. Double-click a tab to rename it (formulas follow), drag tabs to reorder, right-click for more.</p>
-          <p>Try <code className="text-slate-200">=LAMBDA(x, x*2)(21)</code>, <code className="text-slate-200">=BYROW(Sales!D2:E4, LAMBDA(r, PRODUCT(r)))</code> or define your own names in the Name Manager.</p>
-          <p>Revenue has a colour scale, Units data bars and Status a highlight rule: edit a number to see them update. Right-click → <em>Conditional formatting…</em> manages the rules.</p>
-          <p>Region is list-validated: select a Region cell for its dropdown, or type an unknown region to see the stop alert. Right-click → <em>Data validation…</em> or <em>Circle invalid data</em>.</p>
+      <EditorPanel id="names" label="Name Manager" icon={Tags}>
+        <div className="text-slate-200">
+          <NameManager state={state} />
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">CSV Export (RFC 4180)</h3>
+      </EditorPanel>
+
+      <EditorPanel id="csv" label="CSV export" icon={FileText}>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-slate-400">RFC 4180, computed values.</p>
+          <div className="flex items-center gap-3">
+            <button type="button" className="text-xs text-sky-400 hover:underline" onClick={exportCsv}>
+              {csvPreview === null ? "Serialize" : "Refresh"}
+            </button>
             {csvHref && (
               <a
                 href={csvHref}
@@ -419,14 +406,39 @@ export const SpreadsheetTab: React.FC = () => {
               </a>
             )}
           </div>
-          <pre
-            data-testid="csv-preview"
-            className="max-h-48 overflow-auto text-[11px] font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg p-2 whitespace-pre"
-          >
-            {csvPreview ?? "Click “Export CSV” to serialize the computed values."}
-          </pre>
         </div>
-      </div>
+        <pre
+          data-testid="csv-preview"
+          className="max-h-96 overflow-auto text-[11px] font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg p-2 whitespace-pre"
+        >
+          {csvPreview ?? "Click “Serialize” (or “Export CSV” in the toolbar) to serialize the computed values."}
+        </pre>
+      </EditorPanel>
+
+      <EditorPanel id="tips" label="Tips">
+        <div className="text-xs leading-relaxed text-slate-400 space-y-1.5">
+          <p>Right-click a cell for sort, filter, freeze, hide, merge and categories.</p>
+          <p>Type <code className="text-slate-200">=SU</code> in a cell or the formula bar for autocomplete; inside the parentheses the argument hint follows the caret.</p>
+          <p>Select cells and drag the small square at the bottom-right corner (fill handle) to extend a series or shift formulas.</p>
+          <p>Copy (Mod+C) and paste (Mod+V) a range inside the sheet or to/from another spreadsheet app (TSV + HTML + lossless JSON).</p>
+          <p>Drop a <code className="text-slate-200">.csv</code> / <code className="text-slate-200">.tsv</code> file on the grid to import it.</p>
+          <p>Open the <strong>Summary</strong> tab: it reads Sales through <code className="text-slate-200">Sales!D2:D11</code>, named ranges and LAMBDA names. Double-click a tab to rename it (formulas follow), drag tabs to reorder, right-click for more.</p>
+          <p>Try <code className="text-slate-200">=LAMBDA(x, x*2)(21)</code>, <code className="text-slate-200">=BYROW(Sales!D2:E4, LAMBDA(r, PRODUCT(r)))</code> or define your own names in the Name Manager.</p>
+          <p>Revenue has a colour scale, Units data bars and Status a highlight rule: edit a number to see them update. Right-click → <em>Conditional formatting…</em> manages the rules.</p>
+          <p>Region is list-validated: select a Region cell for its dropdown, or type an unknown region to see the stop alert. Right-click → <em>Data validation…</em> or <em>Circle invalid data</em>.</p>
+          <p>Large sheet adds a 10,000-row sheet to try fast recalculation and virtualised rendering.</p>
+        </div>
+      </EditorPanel>
     </div>
   );
 };
+
+export const SpreadsheetTab: React.FC = () => (
+  <EditorPage
+    tab="sheet"
+    title="Spreadsheet"
+    icon={Table2}
+    description="A spreadsheet with formulas, multiple sheets, conditional formats and validation, for tabular data people and agents edit together."
+    views={[{ id: "sheet", label: "Sheet", render: () => <SpreadsheetDemo /> }]}
+  />
+);

@@ -34,9 +34,10 @@ import {
   useChartToolProvider,
   useOfficeChartToolProvider,
 } from "@pixerate/editor-react/chart";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, FileInput, ListChecks, ShieldCheck } from "lucide-react";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
 import { CHART_SCRIPTS } from "../agentScripts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -280,7 +281,9 @@ const STREAM_SOURCE = `xychart-beta
     line "Forecast" [30, 38, 42, 50, 56, 62, 68, 74]
 `;
 
-export function ChartTab() {
+const button = "px-2.5 py-1 rounded-md text-xs border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700";
+
+function ChartEditorDemo() {
   const controller = useChartController({ spec: SAMPLES.Revenue });
   const state = useChartState(controller);
   const { presence, director, sceneRef } = useChartDirector(controller);
@@ -310,11 +313,6 @@ export function ChartTab() {
   const [copied, setCopied] = useState(false);
   const [mermaid, setMermaid] = useState("");
   const [mermaidIssues, setMermaidIssues] = useState<string[]>([]);
-  const [streamed, setStreamed] = useState({ text: "", complete: false });
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => {
-    if (timer.current) clearInterval(timer.current);
-  }, []);
 
   const summary = useMemo(() => summarizeChart(state.spec as ChartSpec, { width: 640, height: 400 }), [state.spec]);
   const recommendations = useMemo(() => recommendChartTypes(parseCsv(csv)), [csv]);
@@ -336,32 +334,16 @@ export function ChartTab() {
     downloadChartPng(state.spec, { width: 800, height: 450 }).catch((error: unknown) => setPngError(error instanceof Error ? error.message : String(error)));
   };
 
-  const stream = () => {
-    if (timer.current) clearInterval(timer.current);
-    let i = 0;
-    setStreamed({ text: "", complete: false });
-    timer.current = setInterval(() => {
-      i += 3;
-      const done = i >= STREAM_SOURCE.length;
-      setStreamed({ text: STREAM_SOURCE.slice(0, i), complete: done });
-      if (done && timer.current) clearInterval(timer.current);
-    }, 30);
-  };
-
-  const button = "px-2.5 py-1 rounded-md text-xs border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700";
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-rose-400" />
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">Chart editor</h2>
-            <p className="text-xs text-slate-400">
-              Click any part of the chart to select it, drag bars and points to change values (Alt: fine, Shift: one axis, Esc: cancel), use ← → ↑ ↓ and Delete with the
-              chart focused, or edit the grid below (paste TSV from a spreadsheet). Agents get <code>chart__*</code> tools in the panel and <code>chart.*</code> commands
-              in the palette; their edits are acted out with a cursor.
-            </p>
-          </div>
+      <EditorDocumentAutosave doc={editorDocument} name="Chart" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5" aria-label="Sample charts">
+          {Object.keys(SAMPLES).map((name) => (
+            <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>
+              {name}
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="button" className={button} onClick={copySvg}>
@@ -372,26 +354,21 @@ export function ChartTab() {
           </button>
         </div>
       </div>
-      <EditorDocumentAutosave doc={editorDocument} name="Chart" />
-      <div className="flex flex-wrap gap-1.5">
-        {Object.keys(SAMPLES).map((name) => (
-          <button key={name} type="button" className={button} onClick={() => controller.load(SAMPLES[name], { clearHistory: true })}>
-            {name}
-          </button>
-        ))}
-      </div>
 
       <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3">
         {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
         <ChartEditor controller={controller} height={400} canvasProps={{ presence, sceneRef, tooltip: 'category' }} playback={demoPlayback} />
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-slate-200" data-testid="chart-house-style">
-          <StyleFindings report={houseStyle.report} title="House style (org: Acme, locked · user: big labels)" onSelect={(f) => controller.select(f.target as ChartSelection)} />
+      </div>
+      <EditorPanel id="house-style" label="House style" icon={ShieldCheck}>
+        <div className="text-slate-200" data-testid="chart-house-style">
+          <StyleFindings report={houseStyle.report} title="Org: Acme (locked) · user: big labels" onSelect={(f) => controller.select(f.target as ChartSelection)} />
           {houseStyle.error && <p className="text-xs text-rose-400">{houseStyle.error}</p>}
         </div>
-      </div>
+      </EditorPanel>
       <AgentScriptPanel scripts={CHART_SCRIPTS} hint="Plays a scripted agent turn with the chart__* tools. Value changes go through the chart's director, so its cursor drags each bar into place; every other call is acted out on the inspector, data grid and toolbar." />
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300 space-y-1" data-chart-summary="">
+      <EditorPanel id="summary" label="Summary" icon={ListChecks}>
+      <div className="text-xs text-slate-300 space-y-1" data-chart-summary="">
         <p>{summary.description}</p>
         {summary.warnings.map((w) => (
           <p key={w.message} className="text-amber-400">
@@ -409,8 +386,11 @@ export function ChartTab() {
             ))}
         </div>
       </div>
+      </EditorPanel>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300" data-office-charts="">
+      {/* Everything that loads a chart into the editor from outside: Office files, CSV and Mermaid. */}
+      <EditorPanel id="import" label="Import & export" icon={FileInput}>
+      <details className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300" data-office-charts="">
         <summary className="cursor-pointer text-slate-200">Open an Office file</summary>
         <p className="mt-2 text-slate-400">
           Read the charts in an Excel workbook, PowerPoint deck or Word document and load one into the editor. Agents can do the same with the{" "}
@@ -450,7 +430,7 @@ export function ChartTab() {
         )}
       </details>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
+      <details className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
         <summary className="cursor-pointer text-slate-200">Import CSV</summary>
         <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={6} className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200" />
         <p className="mt-1 text-slate-400">Suggested: {recommendations.map((r) => r.label).join(", ") || "—"}</p>
@@ -472,7 +452,7 @@ export function ChartTab() {
         </div>
       </details>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
+      <details className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
         <summary className="cursor-pointer text-slate-200">Mermaid</summary>
         <textarea value={mermaid} onChange={(e) => setMermaid(e.target.value)} rows={8} placeholder="xychart-beta, pie or radar-beta" className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200" />
         {mermaidIssues.map((m) => (
@@ -498,16 +478,68 @@ export function ChartTab() {
         </div>
       </details>
 
-      <details className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs text-slate-300">
-        <summary className="cursor-pointer text-slate-200">Streaming from a model</summary>
-        <button type="button" className={`${button} mt-2`} onClick={stream}>
-          Stream a chart
-        </button>
-        <div className="mt-2 grid gap-3 md:grid-cols-2">
-          <pre className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] text-slate-300 min-h-[140px]">{streamed.text}</pre>
-          {streamed.text && <ChartStreamingView source={streamed.text} complete={streamed.complete} width={420} height={260} />}
-        </div>
-      </details>
+      </EditorPanel>
+
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
+          Click any part of the chart to select it, drag bars and points to change values (Alt: fine, Shift: one axis, Esc: cancel), use ← → ↑ ↓ and Delete with the
+          chart focused, or edit the data grid (paste TSV from a spreadsheet). Agents get <code>chart__*</code> tools and <code>chart.*</code> commands in the
+          palette; their edits are acted out with a cursor.
+        </p>
+      </EditorPanel>
     </section>
+  );
+}
+
+/** A model writing Mermaid chart source token by token: the view draws what has arrived so far. */
+function ChartStreamingDemo() {
+  const [streamed, setStreamed] = useState({ text: "", complete: false });
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+  }, []);
+
+  const stream = () => {
+    if (timer.current) clearInterval(timer.current);
+    let i = 0;
+    setStreamed({ text: "", complete: false });
+    timer.current = setInterval(() => {
+      i += 3;
+      const done = i >= STREAM_SOURCE.length;
+      setStreamed({ text: STREAM_SOURCE.slice(0, i), complete: done });
+      if (done && timer.current) clearInterval(timer.current);
+    }, 30);
+  };
+
+  return (
+    <section className="space-y-3 text-xs text-slate-300">
+      <p className="text-slate-400">
+        <code>ChartStreamingView</code> draws a chart while a model is still writing its Mermaid source, and settles once the source is complete.
+      </p>
+      <button type="button" className={button} onClick={stream}>
+        Stream a chart
+      </button>
+      <div className="grid gap-3 md:grid-cols-2">
+        <pre className="whitespace-pre-wrap rounded-md border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] text-slate-300 min-h-[140px]">{streamed.text}</pre>
+        {streamed.text && <ChartStreamingView source={streamed.text} complete={streamed.complete} width={420} height={260} />}
+      </div>
+    </section>
+  );
+}
+
+const CHART_VIEWS = [
+  { id: "editor", label: "Editor", render: () => <ChartEditorDemo /> },
+  { id: "streaming", label: "Streaming", render: () => <ChartStreamingDemo /> },
+];
+
+export function ChartTab() {
+  return (
+    <EditorPage
+      tab="chart"
+      title="Charts"
+      icon={BarChart3}
+      description="A chart editor for building, restyling and checking charts by hand or by agent, with import from CSV, Mermaid and Office files."
+      views={CHART_VIEWS}
+    />
   );
 }

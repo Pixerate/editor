@@ -83,6 +83,7 @@ import {
   Brush,
   Network,
   Plus,
+  Sparkles,
 } from "lucide-react";
 import {
   type ShapeDescription,
@@ -103,6 +104,7 @@ import { ShapeOpsDemo } from "./ShapeOpsDemo";
 import { AnimationDemo } from "./AnimationDemo";
 import { ComponentsDemo } from "./ComponentsDemo";
 import { AgentScriptPanel } from "./AgentScriptPanel";
+import { EditorPage, EditorPanel } from "./EditorPage";
 import { CANVAS_SCRIPTS } from "../agentScripts";
 
 type BoxData = { label: string; color: string; locked?: boolean; shape?: any };
@@ -251,7 +253,6 @@ const CanvasDemo: React.FC = () => {
     guides: { gridSize: 10 },
   });
   const [activeGradientKey, setActiveGradientKey] = useState<string | null>(null);
-  const [showPaintRecipe, setShowPaintRecipe] = useState(false);
 
   const draw = useCanvasDraw<BoxNode>({
     nodes,
@@ -863,7 +864,7 @@ const CanvasDemo: React.FC = () => {
         </button>
       </div>
 
-      <div className="h-[520px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
+      <div className="h-[600px] rounded-xl overflow-hidden border border-slate-800 bg-slate-950 relative" data-testid="canvas-pane" ref={agentStage}>
         <CanvasEffectsProvider provider={effects}>
         <ShapeNodeZoomProvider zoom={viewport.zoom}>
         <ReactFlow
@@ -894,23 +895,18 @@ const CanvasDemo: React.FC = () => {
       {(() => {
         const selectedShape = nodes.find((n) => n.selected && (n.data as { shape?: unknown }).shape);
         return (
+          <EditorPanel id="effects" label="Effects" icon={Sparkles}>
           <CanvasEffectsPanel
             controller={canvasEffects}
             nodeId={selectedShape?.id ?? null}
             shape={((selectedShape?.data as { shape?: never } | undefined)?.shape) ?? null}
             sceneId={scenes.currentId}
-            className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-slate-200"
+            className="text-slate-200"
           />
+          </EditorPanel>
         );
       })()}
       <AgentScriptPanel scripts={canvasScripts} hint="Plays a scripted agent turn: get_editor_state returns the ids that the arrange commands and canvas_connect take. The library acts every call out on the canvas (agent playback), with no targets in the script." />
-      {showPaintRecipe ? (
-        <CanvasPaintLayerRecipe />
-      ) : (
-        <button type="button" className="text-xs text-sky-400 hover:underline" onClick={() => setShowPaintRecipe(true)}>
-          Show the recipe: a paint layer (dry and wet brushes) under the canvas
-        </button>
-      )}
 
       {/* Scene strip */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2" aria-label="Scenes">
@@ -950,28 +946,44 @@ const CanvasDemo: React.FC = () => {
         ))}
       </div>
 
-      <p className="text-xs text-slate-500">
+      <EditorPanel id="tips" label="Tips">
+      <p className="text-xs leading-relaxed text-slate-400">
         Drag a node near another to see smart guides (edges, centres, equal spacing) and snapping; resize a selected node
         from its handles to snap its edges (10px grid otherwise). Hold Alt / Option and hover a node to measure distances
         from the selection. Shift-click or drag a selection box to select several nodes. Use toolbar buttons to insert shapes
         (Rectangle, Circle, Star) or a sample drawing, or pick Pen (P), Highlighter (H), or Eraser (E) to sketch directly onto the canvas.
         Shortcuts: Alt+A/H/D/W/V/S align, Alt+Shift+H/V distribute, Mod+L lock, Mod+]/[ layer order, PageDown/PageUp scenes, Mod+Z undo.
       </p>
-
-      <MermaidDiagramDemo />
-
-      <AutoLayoutDemo />
-
-      <TokensDemo />
-      <ShapeOpsDemo />
-      <AnimationDemo />
-      <ComponentsDemo />
+      </EditorPanel>
     </div>
   );
 };
 
+const CANVAS_VIEWS = [
+  {
+    id: "whiteboard",
+    label: "Whiteboard",
+    render: () => (
+      <ReactFlowProvider>
+        <CanvasDemo />
+      </ReactFlowProvider>
+    ),
+  },
+  { id: "mermaid", label: "Mermaid diagrams", render: () => <MermaidDiagramDemo /> },
+  { id: "components", label: "Components", render: () => <ComponentsDemo /> },
+  { id: "auto-layout", label: "Auto layout", render: () => <AutoLayoutDemo /> },
+  { id: "tokens", label: "Design tokens", render: () => <TokensDemo /> },
+  { id: "booleans", label: "Shape booleans", render: () => <ShapeOpsDemo /> },
+  { id: "keyframes", label: "Keyframes", render: () => <AnimationDemo /> },
+  { id: "paint-layer", label: "Paint layer", render: () => <CanvasPaintLayerRecipe /> },
+];
+
 export const CanvasTab: React.FC = () => (
-  <ReactFlowProvider>
-    <CanvasDemo />
-  </ReactFlowProvider>
+  <EditorPage
+    tab="canvas"
+    title="Canvas"
+    icon={Shapes}
+    description="An infinite canvas for diagrams and whiteboards: arrange, draw, connect, theme and animate nodes on React Flow."
+    views={CANVAS_VIEWS}
+  />
 );

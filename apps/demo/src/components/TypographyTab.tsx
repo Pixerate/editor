@@ -17,11 +17,12 @@ import {
 } from "@pixerate/editor/typography";
 import { demoToolRegistry } from "../agentTools";
 import { CheckCircle2, Type, XCircle } from "lucide-react";
+import { EditorPage, EditorPanel } from "./EditorPage";
 
 const SAMPLE =
   "Good typography is invisible. The reader should notice the words, not the letters: a comfortable measure, generous line spacing and enough contrast let the eye run along each line and drop to the next without effort.";
 
-export function TypographyTab() {
+function TypographyView() {
   const fontProvider = useMemo(() => createSystemFontProvider(), []);
   // One model drives the control and the agent's font picker tools, so either can change the font.
   const model = useMemo(
@@ -64,17 +65,13 @@ export function TypographyTab() {
   const css = model.css;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-          <Type className="w-5 h-5 text-indigo-400" />
-          Typography
-        </h2>
-        <p className="text-sm text-slate-400 mt-1">
+    <div>
+      <EditorPanel id="tips" label="Tips">
+        <p className="text-xs leading-relaxed text-slate-400">
           Fonts and fallback stacks, modular type scales, readability and type-aware contrast audits, and text segmentation from{" "}
           <code className="text-xs">@pixerate/editor/typography</code>. Agents get the same through the typography and font picker tools.
         </p>
-      </div>
+      </EditorPanel>
 
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         <TypographyControl model={model} onChange={setSpec} />
@@ -198,5 +195,17 @@ export function TypographyTab() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function TypographyTab() {
+  return (
+    <EditorPage
+      tab="typography"
+      title="Typography"
+      icon={Type}
+      description="Pick fonts and build type scales, then check readability and contrast for the type you chose."
+      views={[{ id: "type", label: "Type", render: () => <TypographyView /> }]}
+    />
   );
 }
