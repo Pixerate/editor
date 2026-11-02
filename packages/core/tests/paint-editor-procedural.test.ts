@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { PaintEditorController, createPaintEditorToolProvider, replayPainting } from '../src/paint-editor';
 import { ToolRegistry } from '../src/tools/registry';
 import { readPixel } from '../src/raster/surface';
+import { oklabToOklch, rgbToOklab } from '../src/color/convert';
+
+const hexToRgba = (hex: string) => ({ r: parseInt(hex.slice(1, 3), 16) / 255, g: parseInt(hex.slice(3, 5), 16) / 255, b: parseInt(hex.slice(5, 7), 16) / 255, a: 1 });
 import type { PaintPixelLayer } from '../src/paint-editor/document';
 
 const wave = (y: number, n = 40) => Array.from({ length: n }, (_, i) => ({ x: 20 + i * 6, y: y + Math.sin(i / 4) * 10, pressure: 0.5 + 0.5 * Math.sin((i / (n - 1)) * Math.PI) }));
@@ -107,6 +110,21 @@ describe('stickers', () => {
     await replayPainting(c.document, t);
     expect(Buffer.from(t.compositePixels().data).equals(live)).toBe(true);
     t.dispose();
+  });
+
+  it('jitters sticker colours in hue and lightness without clipping saturated colours', () => {
+    const c = editor();
+    c.setBrush({ id: 'sticker-confetti', sticker: { colorJitter: 1 } });
+    c.paintStroke({ points: wave(110), color: '#e11d48', seed: 9 });
+    const base = oklabToOklch(rgbToOklab(hexToRgba('#e11d48')));
+    const colors = c.listStickers().map((s) => s.color);
+    expect(new Set(colors).size).toBeGreaterThan(colors.length / 2);
+    for (const hex of colors) {
+      const o = oklabToOklch(rgbToOklab(hexToRgba(hex)));
+      const dh = Math.abs(((o.h - base.h + 540) % 360) - 180);
+      expect(dh).toBeLessThan(42);
+      expect(Math.abs(o.l - base.l)).toBeLessThan(0.16);
+    }
   });
 
   it('agent tools list, change, arrange and delete stickers', async () => {

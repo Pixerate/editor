@@ -16,6 +16,7 @@ import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradien
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2, rand01 } from './noise';
+import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
 
 export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
 export const STAMP_KINDS: readonly StampKind[] = ['dot', 'star', 'heart', 'leaf', 'flower', 'confetti', 'splat', 'sparkle', 'ring'];
@@ -42,7 +43,7 @@ export interface Sticker {
 export interface StickerSettings {
   /** The stamps to spray (picked at random per sticker). */
   stamps: StampKind[];
-  /** Stickers per tip diameter of travel. */
+  /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
   density: number;
   /** Random size change. */
   sizeJitter: number;
@@ -184,16 +185,29 @@ export function drawSticker(medium: TileMedium, s: Sticker): RasterRect {
   return rect;
 }
 
-/** A colour moved in lightness and hue by up to `amount` (deterministic). */
+/**
+ * A colour moved in lightness and hue by up to `amount` (deterministic): in OKLCH, up to ±0.15 L
+ * and ±40° of hue at `amount` 1, with chroma reduced (not channels clipped) to stay in sRGB.
+ */
 function jitterColor(hex: string, amount: number, seed: number, i: number): string {
   const [r, g, b] = hexRgb(hex);
-  const l = (rand01(seed, i, 61) - 0.5) * amount * 0.6;
-  const h = (rand01(seed, i, 63) - 0.5) * amount;
-  // A small rotation in RGB around grey, then lightness.
-  const m = (r + g + b) / 3;
-  const rot = (c0: number, c1: number) => c0 + (c1 - c0) * h;
-  const out = [rot(r, g), rot(g, b), rot(b, r)].map((c) => Math.min(1, Math.max(0, c + l + (c - m) * 0)));
-  return '#' + out.map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+  const lch = oklabToOklch(rgbToOklab({ r, g, b, a: 1 }));
+  const l = Math.min(1, Math.max(0, lch.l + (rand01(seed, i, 61) - 0.5) * amount * 0.3));
+  const h = lch.h + (rand01(seed, i, 63) - 0.5) * amount * 80;
+  const at = (c: number) => oklabToRgb(oklchToOklab({ l, c, h, alpha: 1 }));
+  const inGamut = (o: { r: number; g: number; b: number }) => [o.r, o.g, o.b].every((v) => v >= -1e-4 && v <= 1 + 1e-4);
+  let out = at(lch.c);
+  if (!inGamut(out)) {
+    let lo = 0;
+    let hi = lch.c;
+    for (let k = 0; k < 12; k++) {
+      const mid = (lo + hi) / 2;
+      if (inGamut(at(mid))) lo = mid;
+      else hi = mid;
+    }
+    out = at(lo);
+  }
+  return '#' + [out.r, out.g, out.b].map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('');
 }
 
 export interface StickerSprayInit {
