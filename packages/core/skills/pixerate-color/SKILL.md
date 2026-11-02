@@ -33,6 +33,7 @@ the pitfalls, and uses the tools below.
    - Run `check_gradient` to audit for crowded stops, banding risk, out-of-gamut colours, and text contrast along the ramp.
    - Run `list_gradient_presets` and `apply_gradient_preset` to quickly set tested gradient compositions.
    - Modify gradient structure using `set_gradient`, `set_gradient_geometry`, `add_gradient_stop`, `update_gradient_stop`, `remove_gradient_stop`, `reverse_gradient`, or `distribute_gradient_stops`.
+   - To match a gradient in a picture, read colours along a line (the image editor's `sample_gradient`, or your own picks) and pass them to `set_gradient_from_samples`. Raise `tolerance` (or lower `maxStops`) for a cleaner ramp, lower it for a closer match; `maxError` says how close it got.
 
 ## Best practices
 
@@ -65,6 +66,7 @@ the pitfalls, and uses the tools below.
 | `remove_gradient_stop` | Removes a color stop by ID | `{ gradient, css }` |
 | `reverse_gradient` | Reverses the order and offsets of all stops | `{ gradient, css }` |
 | `distribute_gradient_stops` | Evenly distributes all color stops between 0 and 1 | `{ gradient, css }` |
+| `set_gradient_from_samples` | Fits the fewest stops to colours sampled along a line (noise smoothed first) and makes them the stops, keeping type and angle, interpolation oklab. One undo step. Use it after sampling a gradient from a picture | `{ gradient, css, stopCount, maxError }` |
 | `apply_gradient_preset` | Applies a built-in gradient preset by ID | `{ preset, gradient, css }` |
 
 ## Pitfalls
@@ -72,6 +74,7 @@ the pitfalls, and uses the tools below.
 - **`light-dark()` requires `color-scheme`.** CSS `light-dark()` only resolves the dark colour when `color-scheme: light dark;` is set on the element or an ancestor (such as `:root`). Without `color-scheme`, browsers always render the light colour.
 - **JavaScript resolution required for non-CSS targets.** Canvas 2D, WebGL, SVG presentation attributes, and raster image exporters cannot read `light-dark()` strings; resolve them in JavaScript with `resolveColor(value, scheme)`.
 - **Gamut clipping.** Colours specified in wide-gamut spaces (e.g. high-chroma OKLCH) will be mapped into sRGB for hex representations. Check `inSrgbGamut` if exact fidelity is required.
+- **Sampled gradients are smoothed.** A sharp edge along the sampled line (a horizon, a hard shadow) is softened by `smoothing` and fitted as a steep ramp; pass `smoothing: 0` and a lower `tolerance` to keep it close to a step.
 - **Large text thresholds.** WCAG allows 3:1 for large text (18pt / 24px or 14pt / 18.5px bold); pass `large: true` to avoid overly aggressive contrast suggestions.
 - **Geometry fields depend on the type.** To make a radial circle, send `type: "radial"` and `shape: "circle"` in the same `set_gradient_geometry` call; sending `shape` to a linear gradient is an error.
 - **Ramp steps bounds.** `blend_colors` requires `steps` to be between 2 and 32 when generating a ramp.

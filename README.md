@@ -592,6 +592,7 @@ Every feature is available from core and from both framework packages, except wh
 | Dual colour picker (Light/Dark switch, same-in-both, derive) | `dualPickerView`, `setDualColorSide` (`/color`) | `<DualColorPicker />` (`/color`) | `<DualColorPicker />` (`/color`) |
 | Gradient model & controller (linear, radial, conic, stops, midpoints, interpolation, dual stops, CSS / SVG, undo) | `GradientController`, `createGradient`, `gradientToCss`, `parseCssGradient`, `checkGradient` (`/gradient`) | `useGradientController` (`/gradient`) | `createGradientController` (`/gradient`) |
 | Gradient editor & fill picker (stops bar, drag, keyboard, angle dial, presets, CSS output) | `stopFromTrackPosition`, `gradientKeyStep`, `angleFromPointer`, `GRADIENT_PRESETS` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) | `<GradientEditor />`, `<FillPicker />` (`/gradient`) |
+| Gradients from sampled colours (perceptual stop reduction in OKLab with noise smoothing, line sampling from any pixel reader, angle snapping; `set_gradient_from_samples` and image `sample_gradient` agent tools) | `simplifyGradientStops`, `fitGradientStops`, `sampleGradientFromLine` (`/gradient`) | Via core | Via core |
 | Colour & gradient agent tools (inspect, contrast, palette, harmony, blend, dual colours, gradient edits) | `createColorToolProvider`, `createGradientToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` |
 
 </details>
