@@ -11,6 +11,7 @@
   import PaperPanel from './PaperPanel.svelte';
   import WetPanel from './WetPanel.svelte';
   import StickerPanel from './StickerPanel.svelte';
+  import StrokePanel from './StrokePanel.svelte';
   import PaintEffectsPanel from './PaintEffectsPanel.svelte';
   import { chip, paintEffectsProvider } from './paintEditorRune.svelte.js';
 
@@ -128,7 +129,7 @@
         {#if tab === 'color'}<ColorPanel {controller} />{/if}
         {#if tab === 'wet'}<WetPanel {controller} />{/if}
         {#if tab === 'paper'}<PaperPanel {controller} />{/if}
-        {#if tab === 'layers'}<PaintLayersPanel {controller} /><StickerPanel {controller} />{/if}
+        {#if tab === 'layers'}<PaintLayersPanel {controller} /><StrokePanel {controller} /><StickerPanel {controller} />{/if}
         {#if tab === 'effects' && effects.current}<PaintEffectsPanel {controller} />{/if}
       </div>
     </div>

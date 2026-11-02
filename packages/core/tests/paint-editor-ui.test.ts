@@ -33,6 +33,31 @@ function setup() {
 }
 
 describe('PaintGesture', () => {
+  it('the Select stroke tool picks a stroke of a stroke layer and drags it, one undo step at the drop', () => {
+    const { c, g } = setup();
+    g.tool = 'stroke';
+    g.down(ev(50, 50));
+    expect(g.error).toMatch(/Pick a stroke layer/);
+    c.addLayer({ type: 'strokes' });
+    c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 90, y: 50 }], brushId: 'ink-pen', color: '#000000' });
+    const [s] = c.listLiveStrokes();
+    expect(g.down(ev(150, 90))).toBe(false);
+    expect(c.getState().selectedStroke).toBeNull();
+    expect(g.down(ev(50, 50))).toBe(true);
+    expect(c.getState().selectedStroke).toBe(s.id);
+    g.move(ev(70, 60));
+    expect(g.strokeDrag).toEqual({ id: s.id, dx: 20, dy: 10 });
+    const outline = guideOverlay(c, g.strokeDrag).filter((l) => l.kind === 'stroke');
+    expect(outline).toHaveLength(4);
+    expect(outline[0].from.x).toBe(c.liveStrokeArea(s.id)!.x + 20);
+    g.up(ev(70, 60));
+    expect(g.strokeDrag).toBeNull();
+    expect(c.listLiveStrokes()[0].points[0]).toMatchObject({ x: 40, y: 60 });
+    expect(c.getState().undoLabel).toBe('Edit stroke points');
+    c.undo();
+    expect(c.listLiveStrokes()[0].points[0]).toMatchObject({ x: 20, y: 50 });
+  });
+
   it('the Stickers tool places, picks and drags stickers, each one undo step', () => {
     const { c, g } = setup();
     c.setBrush({ id: 'sticker-stars', tip: { size: 30 } });

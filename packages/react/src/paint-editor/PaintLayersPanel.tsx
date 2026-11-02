@@ -41,6 +41,9 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
         <button type="button" className={button} onClick={() => attempt(() => controller.addLayer({ type: 'group' }))}>
           New group
         </button>
+        <button type="button" className={button} title="A layer whose strokes stay editable" onClick={() => attempt(() => controller.addLayer({ type: 'strokes' }))}>
+          New stroke layer
+        </button>
         <button type="button" className={button} disabled={!active} onClick={() => active && attempt(() => controller.duplicateLayer(active.id))}>
           Duplicate
         </button>
@@ -97,6 +100,11 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
             ) : (
               <span className="flex-1 truncate" onDoubleClick={() => setRenaming(l.id)}>
                 {l.type === 'group' ? '▸ ' : ''}
+                {l.liveStrokes !== undefined && (
+                  <span aria-label="Stroke layer" title={`Stroke layer: ${l.liveStrokes} editable strokes`}>
+                    ✎{' '}
+                  </span>
+                )}
                 {l.name}
               </span>
             )}

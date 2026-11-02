@@ -191,7 +191,9 @@ export function variationAffine(v: StrokeVariation, origin: { x: number; y: numb
 
 /** A stroke varied by `m` (points mapped; symmetry copies conjugated so they stay symmetric). */
 export function varyStroke(stroke: RecordedStroke, m: Affine, v: StrokeVariation): RecordedStroke {
-  const s = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+  // A pure rotation or flip has determinant 1 up to rounding: keep the brush size exact then.
+  const det = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+  const s = Math.abs(det - 1) < 1e-9 ? 1 : det;
   const ps = v.pressureScale ?? 1;
   const points = stroke.points.map((p) => {
     const q = mapPenPoint(m, p);

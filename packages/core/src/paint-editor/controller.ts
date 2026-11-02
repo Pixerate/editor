@@ -64,7 +64,7 @@ import {
   type SerializedPaintDocument,
 } from './serialize';
 import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
-import { affineCopy, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
+import { affineCopy, normalizeBrushStroke, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
 import { colorHarmony, DEFAULT_SWATCHES, readSwatch, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
 import {
@@ -82,6 +82,7 @@ import {
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, STAMP_KINDS, stickerAt as hitSticker, stickerRect, stickerSurface, type Sticker } from './stickers';
+import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
@@ -173,6 +174,8 @@ export interface PaintEditorState {
   mixerLoad: MixerLoad;
   view: PaintView;
   hand: Hand;
+  /** The stroke picked on a stroke layer, on the canvas or in the stroke panel (editor state, not an undo step). */
+  selectedStroke: string | null;
   /** The sticker picked on the canvas or in the sticker panel (editor state, not an undo step). */
   selectedSticker: string | null;
   canUndo: boolean;
@@ -196,6 +199,20 @@ export interface PaintEditorState {
 }
 
 /** A layer as tools and panels describe it. */
+/** A change to a live stroke (`updateStroke`): every field is optional. */
+export interface LiveStrokeUpdate {
+  /** Another brush preset; the stroke keeps its size. */
+  brushId?: string;
+  /** Brush settings to change (as `setBrush` takes), on top of `brushId` or the stroke's brush. */
+  brush?: Omit<PaintBrushInput, 'id'>;
+  /** A new colour #rrggbb (replaces gradient or effect paint). */
+  color?: string;
+  /** Paint: a colour, gradient paint or effect paint; `null` back to the plain colour. */
+  paint?: unknown;
+  /** Another jitter seed (particles, scatter and texture fall differently). */
+  seed?: number;
+}
+
 export interface PaintLayerInfo {
   id: string;
   name: string;
@@ -210,6 +227,8 @@ export interface PaintLayerInfo {
   bounds: RasterRect | null;
   parentId: string | null;
   depth: number;
+  /** A live stroke layer (its pixels are drawn from its strokes, which stay editable): how many strokes it has. */
+  liveStrokes?: number;
 }
 
 export interface PaintStrokeInit {
@@ -386,6 +405,7 @@ export class PaintEditorController {
   private mixerLoad: MixerLoad = EMPTY_MIXER_LOAD;
   private view: PaintView = { ...DEFAULT_VIEW, pan: { ...DEFAULT_VIEW.pan } };
   private hand: Hand;
+  private selectedStroke: string | null = null;
   private selectedSticker: string | null = null;
   /** A sticker drag in progress (`previewSticker`): the document before it, so the drop undoes in one step, and the one it showed last. */
   private stickerPreview: { base: PaintDocumentState; shown: PaintDocumentState } | null = null;
@@ -399,6 +419,8 @@ export class PaintEditorController {
   private dirty: RasterRect[] | 'all' = 'all';
   private seedCounter = 1;
   private strokeCounter = 1;
+  /** The area each stroke painted (document pixels; `null`: nothing), learnt as it is painted or drawn, so a stroke layer edit redraws only where it changes (see `drawLiveStrokes`). */
+  private paintedBounds = new WeakMap<RecordedStroke, RasterRect | null>();
   private guides: PaintGuides;
   private swatches: Swatch[] = DEFAULT_SWATCHES.map((s) => ({ ...s }));
   private readonly pad = new MixingPad();
@@ -490,6 +512,7 @@ export class PaintEditorController {
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
+      selectedStroke: this.selectedStroke,
       selectedSticker: this.selectedSticker,
       canUndo: this.undoStack.length > 0 && !this.session,
       canRedo: this.redoStack.length > 0 && !this.session,
@@ -878,6 +901,7 @@ export class PaintEditorController {
       locks: { ...(l.locks ?? {}) },
       active: l.id === this.doc.activeLayerId,
       bounds,
+      ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: this.doc.liveStrokes[l.id].length } : {}),
       parentId,
       depth,
     };
@@ -909,11 +933,12 @@ export class PaintEditorController {
   }
 
   /** Adds an empty pixel layer or group above `aboveId` (default: the active layer) and makes it active. */
-  addLayer(options: { name?: string; type?: 'pixel' | 'group'; aboveId?: string; parentId?: string | null } = {}): PaintLayerInfo {
+  /** Adds a layer above the active one: `pixel` (default), `group`, or `strokes`, a live stroke layer whose strokes stay editable. */
+  addLayer(options: { name?: string; type?: 'pixel' | 'group' | 'strokes'; aboveId?: string; parentId?: string | null } = {}): PaintLayerInfo {
     this.requireIdle('adding a layer');
     const count = flattenLayers(this.doc.layers).length;
     const type = options.type ?? 'pixel';
-    const name = options.name?.trim() || (type === 'group' ? `Group ${count + 1}` : `Layer ${count + 1}`);
+    const name = options.name?.trim() || (type === 'group' ? `Group ${count + 1}` : type === 'strokes' ? `Strokes ${count + 1}` : `Layer ${count + 1}`);
     const layer: PaintLayer =
       type === 'group' ? { type: 'group', id: newPaintLayerId(), name, visible: true, opacity: 1, blend: 'pass-through', children: [] } : createPaintLayer(name);
     let parentId: string | null = null;
@@ -930,7 +955,8 @@ export class PaintEditorController {
       index = loc.index + 1;
     }
     const layers = insertLayer(this.doc.layers, layer, parentId, index);
-    this.commit(type === 'group' ? 'Add group' : 'Add layer', { ...this.doc, layers, activeLayerId: layer.id });
+    const live = type === 'strokes' ? { liveStrokes: { ...(this.doc.liveStrokes ?? {}), [layer.id]: [] } } : {};
+    this.commit(type === 'group' ? 'Add group' : type === 'strokes' ? 'Add stroke layer' : 'Add layer', { ...this.doc, layers, activeLayerId: layer.id, ...live });
     return this.describeLayer(layer);
   }
 
@@ -969,7 +995,7 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)) });
+    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)), ...this.liveStrokesWithout(flattenLayers([l]).map((x) => x.id)) });
     return { removed: id, activeLayerId: active };
   }
 
@@ -983,15 +1009,18 @@ export class PaintEditorController {
     if (!loc) throw new PaintEditorError(`Unknown layer "${id}". Call list_layers for the ids.`);
     const thick: Record<string, ThickChannels> = { ...(this.doc.thick ?? {}) };
     const stickers: Record<string, Sticker[]> = { ...(this.doc.stickers ?? {}) };
+    const liveStrokes: Record<string, RecordedStroke[]> = { ...(this.doc.liveStrokes ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
+      // Stroke ids are unique across the document: the copies get new ones.
+      if (liveStrokes[l.id]) liveStrokes[id] = liveStrokes[l.id].map((x) => ({ ...x, id: `s${this.strokeCounter++}`, layerId: id }));
       return l.type === 'group' ? { ...l, id, children: l.children.map(copy) } : { ...l, id };
     };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}) }));
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}) }));
     return this.describeLayer(dup);
   }
 
@@ -1040,7 +1069,7 @@ export class PaintEditorController {
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]) }));
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]) }));
     return this.describeLayer(merged);
   }
 
@@ -1053,7 +1082,7 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
+    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}) }, { kind: 'clear', layerId: l.id }));
     return { layerId: l.id, bounds };
   }
 
@@ -1065,6 +1094,7 @@ export class PaintEditorController {
     this.requireIdle('filling');
     const fillTarget = this.paintTarget(options.layerId, 'fill');
     if (this.doc.stickers?.[fillTarget.id]?.length) throw new PaintEditorError(`Layer "${fillTarget.name}" is a sticker layer; fill another layer (add_layer).`);
+    if (this.doc.liveStrokes?.[fillTarget.id]) throw new PaintEditorError(`Layer "${fillTarget.name}" is a stroke layer (its pixels are drawn from its strokes); fill another layer (add_layer), or rasterize it first (rasterize_stroke_layer).`);
     this.dryLayersFirst([options.layerId ?? this.doc.activeLayerId ?? '']);
     const l = this.paintTarget(options.layerId, 'fill');
     const color = options.color === undefined ? this.color : parseColor(options.color);
@@ -1193,6 +1223,7 @@ export class PaintEditorController {
   private effectTarget(layerId: string | undefined, what: string): PaintPixelLayer {
     const l = this.paintTarget(layerId, what);
     if (this.doc.stickers?.[l.id]?.length) throw new PaintEditorError(`Layer "${l.name}" is a sticker layer; ${what} another layer (add_layer).`);
+    if (this.doc.liveStrokes?.[l.id]) throw new PaintEditorError(`Layer "${l.name}" is a stroke layer (its pixels are drawn from its strokes); ${what} another layer (add_layer), or rasterize it first (rasterize_stroke_layer).`);
     if (this.wet.wetLayerIds().includes(l.id)) throw new PaintEditorError(`Layer "${l.name}" holds wet paint; effects go on dried paint, so dry it first (dry_paint) and try again.`);
     return l;
   }
@@ -1818,6 +1849,10 @@ export class PaintEditorController {
     })();
     const brush = this.strokeBrush(init);
     const effect = this.strokeEffect(init, brush);
+    if (doc.liveStrokes?.[layer.id]) {
+      const why = liveStrokeRefusal(brush);
+      if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
+    }
     const stickerLayer = Boolean(doc.stickers?.[layer.id]?.length);
     if (brush.engine === 'sticker') {
       if (!stickerLayer && contentBounds(layer.surface)) throw new PaintEditorError(`Layer "${layer.name}" already has paint; spray stickers onto an empty layer (add_layer) so they stay editable.`);
@@ -1979,6 +2014,7 @@ export class PaintEditorController {
         }
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
+        this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         if (wetStroke && this.wet.instantDry) {
           this.wet.dry(s.layerId);
           this.logWet({ kind: 'dry', layerId: s.layerId, at: this.doc.strokes.length + 1 });
@@ -1990,7 +2026,7 @@ export class PaintEditorController {
         const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
         const sprayed = s.stickers();
         const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
-        this.commit(`${brush.name} stroke`, this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}) }), wetStroke ? before : this.doc);
+        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}) }, stroke)), wetStroke ? before : this.doc);
       },
     };
     let session: PaintStrokeSession;
@@ -2019,17 +2055,18 @@ export class PaintEditorController {
         if (cancelled || !surface) return;
         const stroke = this.record(s);
         s.result!.strokeId = stroke.id;
+        this.paintedBounds.set(stroke, s.result?.bounds ?? null);
         const l = findLayer(out.layers, s.layerId)!.layer as PaintPixelLayer;
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
         const ch = s.thickChannels();
         const sprayed = s.stickers();
-        out = {
+        out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
           strokes: [...out.strokes, stroke],
           ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
-        };
+        }, stroke);
       },
     };
     const session = this.sessionFor(doc, init, host);
@@ -2631,6 +2668,10 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.stickers ?? {})) if (list.length && findLayer(this.doc.layers, id)) stickers[id] = list.map((x) => ({ ...x }));
     if (Object.keys(stickers).length) ext.stickers = stickers;
     else delete ext.stickers;
+    const liveStrokes: Record<string, RecordedStroke[]> = {};
+    for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map((x) => JSON.parse(JSON.stringify(x)));
+    if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
+    else delete ext.liveStrokes;
     const effectLayers = effectLayersToJSON(this.doc.effectLayers ?? {}, (id) => isPixelLayer(findLayer(this.doc.layers, id)?.layer));
     if (effectLayers) ext.effectLayers = effectLayers;
     else delete ext.effectLayers;
@@ -2654,6 +2695,16 @@ export class PaintEditorController {
         stickers[id] = ok.map((x) => ({ ...x }));
       }
       if (Object.keys(stickers).length) state = { ...state, stickers };
+    }
+    if (ext.liveStrokes && typeof ext.liveStrokes === 'object') {
+      const liveStrokes: Record<string, RecordedStroke[]> = {};
+      for (const [id, list] of Object.entries(ext.liveStrokes as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer) || !Array.isArray(list)) continue;
+        const ok = list.map(normalizeBrushStroke).filter((x): x is RecordedStroke => x !== null).map((x) => ({ ...x, layerId: id }));
+        if (ok.length !== list.length) problems.push(`Some strokes of stroke layer "${id}" could not be read; they were dropped (the layer's pixels are kept until a stroke is edited).`);
+        liveStrokes[id] = ok;
+      }
+      if (Object.keys(liveStrokes).length) state = { ...state, liveStrokes };
     }
     if (ext.effectLayers && typeof ext.effectLayers === 'object') {
       const effectLayers: Record<string, PaintEffectSource> = {};
@@ -2708,10 +2759,17 @@ export class PaintEditorController {
     this.undoStack = [];
     this.redoStack = [];
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
+    for (const list of Object.values(this.doc.liveStrokes ?? {})) {
+      for (const s of list) {
+        const n = Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0);
+        if (n >= this.strokeCounter) this.strokeCounter = n + 1;
+      }
+    }
     this.docRevision++;
     delete this.extensions.layerChannels;
     delete this.extensions.lighting;
     delete this.extensions.stickers;
+    delete this.extensions.liveStrokes;
     delete this.extensions.effectLayers;
     delete this.extensions.paperEffect;
     this.viewCompositor.clear();
@@ -3219,6 +3277,306 @@ export class PaintEditorController {
     this.commitStickers('Stickers', l, stickers.map((s) => ({ ...s })));
   }
 
+  // --- Live stroke layers ---------------------------------------------------------
+
+  /** The document's `liveStrokes` without these layers (as a spread: `{}` when unchanged). */
+  private liveStrokesWithout(ids: readonly string[]): { liveStrokes?: Record<string, RecordedStroke[]> } {
+    const t = this.doc.liveStrokes;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { liveStrokes: out };
+  }
+
+  private liveStrokeLayer(layerId: string | undefined, what: string): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[] } {
+    const l = this.wetLayer(layerId, what);
+    const strokes = this.doc.liveStrokes?.[l.id];
+    if (!strokes) throw new PaintEditorError(`Layer "${l.name}" is not a stroke layer; add one with add_layer {type: "strokes"} (or convert_to_stroke_layer on an empty layer), then paint on it.`);
+    return { layer: l, strokes };
+  }
+
+  /** Whether a layer is a live stroke layer. */
+  isLiveStrokeLayer(layerId: string): boolean {
+    return Boolean(this.doc.liveStrokes?.[layerId]);
+  }
+
+  /** Makes an empty pixel layer a live stroke layer (one undo step). */
+  convertToLiveStrokes(layerId?: string): PaintLayerInfo {
+    this.requireIdle('converting a layer');
+    const l = this.paintTarget(layerId, 'convert');
+    if (this.doc.liveStrokes?.[l.id]) return this.describeLayer(l);
+    if (this.doc.stickers?.[l.id]?.length) throw new PaintEditorError(`Layer "${l.name}" is a sticker layer; add a stroke layer instead (add_layer {type: "strokes"}).`);
+    if (contentBounds(l.surface) || this.wet.wetLayerIds().includes(l.id)) throw new PaintEditorError(`Layer "${l.name}" already has paint, which isn't kept as strokes; convert an empty layer or add a stroke layer (add_layer {type: "strokes"}).`);
+    this.commit('Convert to stroke layer', { ...this.doc, liveStrokes: { ...(this.doc.liveStrokes ?? {}), [l.id]: [] } });
+    return this.describeLayer(this.getLayer(l.id)!);
+  }
+
+  /** A stroke layer's strokes, bottom first. */
+  listLiveStrokes(layerId?: string): RecordedStroke[] {
+    return this.liveStrokeLayer(layerId, 'list the strokes of').strokes.map((x) => ({ ...x }));
+  }
+
+  /** The stroke layer holding a live stroke, and where. */
+  private findLiveStroke(id: string): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[]; index: number } {
+    for (const [layerId, strokes] of Object.entries(this.doc.liveStrokes ?? {})) {
+      const index = strokes.findIndex((x) => x.id === id);
+      const layer = findLayer(this.doc.layers, layerId)?.layer;
+      if (index >= 0 && isPixelLayer(layer)) return { layer, strokes, index };
+    }
+    const baked = this.doc.strokes.some((x) => x.id === id);
+    throw new PaintEditorError(
+      baked
+        ? `Stroke "${id}" was painted on a pixel layer, so its pixels are baked; only strokes on a stroke layer can be edited (list_strokes {live: true}). Replay it onto a stroke layer (replay_strokes layerId) to edit the copy.`
+        : `Unknown stroke "${id}". Call list_strokes {live: true} for the ids of editable strokes.`
+    );
+  }
+
+  /**
+   * Changes a live stroke's brush (a preset by `brushId`, keeping the stroke's size, and/or brush
+   * settings), colour, paint or seed, and redraws its layer (one undo step). A new colour replaces
+   * gradient or effect paint. Returns the stroke and the area that changed.
+   */
+  updateStroke(id: string, update: LiveStrokeUpdate): { stroke: RecordedStroke; bounds: RasterRect } {
+    this.requireIdle('editing a stroke');
+    const { layer, strokes, index } = this.findLiveStroke(id);
+    const was = strokes[index];
+    let brush = was.brush;
+    if (update.brushId !== undefined) {
+      const b = this.requireBrush(update.brushId);
+      brush = normalizePaintBrush({ tip: { ...b.tip, size: was.brush.tip.size } }, b);
+    }
+    if (update.brush !== undefined) {
+      if (!update.brush || typeof update.brush !== 'object') throw new PaintEditorError('brush must be an object of brush settings (as set_brush takes).');
+      brush = normalizePaintBrush({ ...update.brush, id: brush.id }, brush);
+    }
+    const why = liveStrokeRefusal(brush);
+    if (why) throw new PaintEditorError(why);
+    const next: RecordedStroke = { ...was, brush: brushToJSON(brush) as PaintBrush };
+    if (update.seed !== undefined) {
+      if (!Number.isInteger(update.seed) || update.seed < 0) throw new PaintEditorError(`seed ${update.seed} must be a whole number of 0 or more.`);
+      next.seed = update.seed;
+    }
+    if (update.color !== undefined) {
+      next.color = parseColor(update.color);
+      delete next.paint;
+    }
+    if (update.paint !== undefined) {
+      if (update.paint === null) delete next.paint;
+      else if (isPaintEffectPaint(update.paint)) {
+        if (!this.effectPaintImage(update.paint)) throw new PaintEditorError(`The effect "${update.paint.effect}" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).`);
+        next.paint = JSON.parse(JSON.stringify(update.paint));
+      } else {
+        const p = this.readStrokePaint(update.paint);
+        if (p.type === 'color') {
+          next.color = p.color;
+          delete next.paint;
+        } else next.paint = JSON.parse(JSON.stringify(p));
+      }
+    }
+    // A Mixer Brush replays from its load: give it one that follows the stroke's own colour.
+    const rgb = hexToRgb8(next.color).map((v) => v / 255) as [number, number, number];
+    const load = brushLoadForStroke(brush, EMPTY_MIXER_LOAD, rgb);
+    if (load.reservoir || load.pickup) next.load = load;
+    else delete next.load;
+    const list = strokes.map((x, i) => (i === index ? next : x));
+    this.commitLiveStrokes('Edit stroke', layer, list, this.strokeAreas([was]));
+    return { stroke: { ...next }, bounds: unionRect(this.strokeArea(was), this.strokeArea(next)) ?? { x: 0, y: 0, width: 0, height: 0 } };
+  }
+
+  /**
+   * Replaces a live stroke's points, or moves, scales, rotates or flips them (`transform`, about
+   * the stroke's centre unless an origin is given; the brush size scales too), and redraws its
+   * layer (one undo step). Returns the stroke and the area that changed.
+   */
+  editStrokePoints(id: string, edit: { points?: readonly PenPoint[]; transform?: StrokeVariation }): { stroke: RecordedStroke; bounds: RasterRect } {
+    this.requireIdle('editing a stroke');
+    if ((edit.points === undefined) === (edit.transform === undefined)) throw new PaintEditorError('Pass either points (the new pen samples) or transform (dx, dy, scale, rotate, flipX), not both.');
+    const { layer, strokes, index } = this.findLiveStroke(id);
+    const was = strokes[index];
+    let next: RecordedStroke;
+    if (edit.points !== undefined) {
+      const points = this.checkPoints(edit.points);
+      // Wet strokes keep a clock per point; stroke layers hold none, so the points are free to change in number.
+      next = { ...was, points: points.map((p) => ({ ...p })) };
+    } else {
+      const t = edit.transform!;
+      if (t.scale !== undefined && !(t.scale > 0 && t.scale <= 20)) throw new PaintEditorError(`scale ${t.scale} is out of range; use above 0 up to 20.`);
+      for (const k of ['dx', 'dy', 'rotate'] as const) if (t[k] !== undefined && !Number.isFinite(t[k])) throw new PaintEditorError(`${k} must be a number.`);
+      const b = strokeBounds(was.points);
+      const m = variationAffine(t, t.origin ?? { x: b.x + b.width / 2, y: b.y + b.height / 2 });
+      next = varyStroke(was, m, {});
+      if (was.stencils) next.stencils = was.stencils;
+    }
+    const list = strokes.map((x, i) => (i === index ? next : x));
+    this.commitLiveStrokes('Edit stroke points', layer, list, this.strokeAreas([was]));
+    return { stroke: { ...next }, bounds: unionRect(this.strokeArea(was), this.strokeArea(next)) ?? { x: 0, y: 0, width: 0, height: 0 } };
+  }
+
+  /** Deletes live strokes (one undo step). Returns the ids removed and the area that changed. */
+  removeStrokes(ids: readonly string[]): { removed: string[]; bounds: RasterRect | null } {
+    this.requireIdle('removing strokes');
+    if (!ids.length) throw new PaintEditorError('Pass at least one stroke id (list_strokes {live: true}).');
+    const found = ids.map((id) => this.findLiveStroke(id));
+    let doc = this.doc;
+    let bounds: RasterRect | null = null;
+    const layers = new Map<string, PaintPixelLayer>();
+    for (const f of found) layers.set(f.layer.id, f.layer);
+    for (const [layerId, layer] of layers) {
+      const gone = (doc.liveStrokes?.[layerId] ?? []).filter((x) => ids.includes(x.id));
+      for (const x of gone) bounds = unionRect(bounds, this.strokeArea(x));
+      doc = this.withLiveStrokes(doc, layer, (doc.liveStrokes?.[layerId] ?? []).filter((x) => !ids.includes(x.id)), this.strokeAreas(gone));
+    }
+    this.commit(ids.length === 1 ? 'Remove stroke' : 'Remove strokes', doc);
+    return { removed: [...ids], bounds };
+  }
+
+  /** Moves a live stroke to `index` in its layer (0 = bottom) and redraws (one undo step). Returns the new order. */
+  reorderStroke(id: string, index: number): string[] {
+    this.requireIdle('reordering strokes');
+    const { layer, strokes, index: from } = this.findLiveStroke(id);
+    if (!Number.isInteger(index) || index < 0 || index >= strokes.length) throw new PaintEditorError(`index ${index} is out of range; the layer has ${strokes.length} strokes, so use 0..${strokes.length - 1} (0 = bottom).`);
+    const list = [...strokes];
+    const [moved] = list.splice(from, 1);
+    list.splice(index, 0, moved);
+    if (from !== index) this.commitLiveStrokes('Reorder stroke', layer, list, this.strokeAreas([moved]));
+    return list.map((x) => x.id);
+  }
+
+  /** Turns a stroke layer into a plain pixel layer with the same pixels (one undo step). */
+  rasterizeLiveStrokes(layerId?: string): PaintLayerInfo {
+    this.requireIdle('rasterizing');
+    const { layer } = this.liveStrokeLayer(layerId, 'rasterize');
+    this.commit('Rasterize stroke layer', this.withPaintEvent({ ...this.doc, ...this.liveStrokesWithout([layer.id]) }, { kind: 'live-strokes', layerId: layer.id, data: { rasterized: true } }));
+    return this.describeLayer(this.getLayer(layer.id)!);
+  }
+
+  /** Sets a layer's live strokes and redraws it (replays). `null` makes it a plain pixel layer. */
+  replaceLiveStrokes(layerId: string, strokes: readonly RecordedStroke[] | null): void {
+    const l = this.wetLayer(layerId, 'set the strokes of');
+    if (strokes === null) {
+      this.commit('Rasterize stroke layer', { ...this.doc, ...this.liveStrokesWithout([l.id]) });
+      return;
+    }
+    this.commitLiveStrokes('Strokes', l, strokes.map((x) => ({ ...x, layerId: l.id })));
+  }
+
+  /**
+   * The top-most stroke of a stroke layer (default the active layer) that painted the pixel at
+   * (x, y) document pixels, or `null`. Strokes whose area holds the point are drawn alone, top
+   * first, until one covers it.
+   */
+  liveStrokeAt(layerId: string | undefined, x: number, y: number): RecordedStroke | null {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new PaintEditorError('x and y must be numbers of document pixels.');
+    const { layer, strokes } = this.liveStrokeLayer(layerId, 'pick a stroke on');
+    const plain: PaintPixelLayer = { ...layer, visible: true, locks: undefined, offset: { x: 0, y: 0 } };
+    const doc: PaintDocumentState = { ...this.doc, liveStrokes: undefined, stickers: undefined };
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const area = this.strokeArea(strokes[i]);
+      if (!area || px < area.x || py < area.y || px >= area.x + area.width || py >= area.y + area.height) continue;
+      const drawn = this.drawLiveStroke(doc, plain, emptySurface(4), strokes[i]).surface;
+      if (readPixel(drawn, px, py)[3] > 24) return { ...strokes[i] };
+    }
+    return null;
+  }
+
+  /** Picks a stroke for the stroke panel and canvas (`null` for none). Editor state, not an undo step. */
+  selectStroke(id: string | null): void {
+    if (id === this.selectedStroke) return;
+    this.selectedStroke = id;
+    this.emit([]);
+  }
+
+  /** Where a live stroke painted (document pixels), or `null`. */
+  liveStrokeArea(id: string): RasterRect | null {
+    return this.strokeArea(this.findLiveStroke(id).strokes.find((s) => s.id === id)!);
+  }
+
+  /** Commits a layer's new stroke list with its redrawn pixels, recorded for replays (one undo step). */
+  private commitLiveStrokes(label: string, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): void {
+    this.commit(label, this.withLiveStrokes(this.doc, layer, list, dirty));
+  }
+
+  private withLiveStrokes(doc: PaintDocumentState, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): PaintDocumentState {
+    if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
+    const current = findLayer(doc.layers, layer.id)?.layer as PaintPixelLayer | undefined;
+    const surface = this.drawLiveStrokes(current ?? layer, list, dirty);
+    const next = { ...doc, layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface, offset: { x: 0, y: 0 } })), liveStrokes: { ...(doc.liveStrokes ?? {}), [layer.id]: [...list] } };
+    return this.withPaintEvent(next, { kind: 'live-strokes', layerId: layer.id, data: { strokes: list.map((x) => JSON.parse(JSON.stringify(x))) } });
+  }
+
+  /** Where a stroke painted (document pixels): as learnt when it was painted or drawn, else an estimate from its points and brush. */
+  private strokeArea(s: RecordedStroke): RasterRect | null {
+    return this.paintedBounds.has(s) ? this.paintedBounds.get(s)! : liveStrokeBounds(s);
+  }
+
+  /** The areas strokes painted, or `null` when one is not known (a full redraw then). */
+  private strokeAreas(strokes: readonly RecordedStroke[]): RasterRect[] | null {
+    const out: RasterRect[] = [];
+    for (const s of strokes) {
+      if (!this.paintedBounds.has(s)) return null;
+      const b = this.paintedBounds.get(s);
+      if (b) out.push(b);
+    }
+    return out;
+  }
+
+  /** Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted. */
+  private drawLiveStroke(doc: PaintDocumentState, plain: PaintPixelLayer, surface: TiledSurface, st: RecordedStroke): { surface: TiledSurface; bounds: RasterRect | null } {
+    let out = surface;
+    const host: StrokeSessionHost = {
+      update: () => {},
+      commit: (_s, drawn, cancelled) => {
+        if (!cancelled && drawn) out = drawn;
+      },
+    };
+    const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
+    const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })) }, init, host);
+    session.push(st.points);
+    const result = session.end();
+    this.paintedBounds.set(st, result.bounds);
+    return { surface: out, bounds: result.bounds };
+  }
+
+  /**
+   * A stroke layer's pixels drawn from its strokes, bottom first. With `dirty` (the areas the old
+   * strokes that changed had painted), only the tiles there and under any stroke whose area isn't
+   * known yet are drawn again, from the strokes that reach them (a pixel depends only on the
+   * strokes over it); the other tiles are kept. Without it, or with `null`, every stroke is drawn.
+   */
+  private drawLiveStrokes(layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): TiledSurface {
+    // Drawn on a copy of the layer as a visible, unlocked, plain layer at offset 0.
+    const plain: PaintPixelLayer = { ...layer, visible: true, locks: undefined, offset: { x: 0, y: 0 } };
+    const doc: PaintDocumentState = { ...this.doc, liveStrokes: undefined, stickers: undefined };
+    const unknown = list.filter((s) => !this.paintedBounds.has(s));
+    const partial = dirty && !layer.offset.x && !layer.offset.y && unknown.length <= 4;
+    if (!partial) {
+      let surface = emptySurface(4);
+      for (const st of list) surface = this.drawLiveStroke(doc, plain, surface, st).surface;
+      return surface;
+    }
+    // A stroke that is new here is drawn once alone to learn where it paints.
+    const areas = [...dirty];
+    for (const st of unknown) {
+      const b = this.drawLiveStroke(doc, plain, emptySurface(4), st).bounds;
+      if (b) areas.push(b);
+    }
+    const { width, height } = this.doc.canvas;
+    const rects = areas.map((r) => clipRect(r, width, height)).filter((r): r is RasterRect => r !== null);
+    if (!rects.length) return layer.surface;
+    const overlaps = (a: RasterRect, b: RasterRect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    let drawn = emptySurface(4);
+    for (const st of list) {
+      const b = this.paintedBounds.get(st);
+      if (b && rects.some((r) => overlaps(r, b))) drawn = this.drawLiveStroke(doc, plain, drawn, st).surface;
+    }
+    // Only the changed areas are copied in; every other pixel is kept.
+    let surface = layer.surface;
+    for (const r of rects) surface = writeRegion(surface, r, readRegion(drawn, r));
+    return surface;
+  }
+
   // --- Stencils --------------------------------------------------------------------
 
   private stencilCache: { key: unknown; size: string; mask: { width: number; height: number; data: Uint8Array } | null } | null = null;
@@ -3471,6 +3829,21 @@ export const MAX_IMAGE_SIDE = 8192;
 const movePoint = (p: { x: number; y: number }, dx: number, dy: number) => ({ x: p.x + dx, y: p.y + dy });
 const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: number): R => ({ ...r, x: r.x + dx, y: r.y + dy });
 
+/** `r` cut to the canvas, or `null` when nothing of it is on the canvas. */
+function clipRect(r: RasterRect, width: number, height: number): RasterRect | null {
+  const x0 = Math.max(0, Math.floor(r.x));
+  const y0 = Math.max(0, Math.floor(r.y));
+  const x1 = Math.min(width, Math.ceil(r.x + r.width));
+  const y1 = Math.min(height, Math.ceil(r.y + r.height));
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+}
+
+/** The document with `stroke` added to its layer's live strokes, when that is a live stroke layer. */
+function withLiveStroke(doc: PaintDocumentState, stroke: RecordedStroke): PaintDocumentState {
+  const list = doc.liveStrokes?.[stroke.layerId];
+  return list ? { ...doc, liveStrokes: { ...doc.liveStrokes, [stroke.layerId]: [...list, stroke] } } : doc;
+}
+
 /**
  * The document with its content moved by (dx, dy) document pixels (`extendCanvas`): layer offsets
  * (masks and relief are in layer space and follow), sticker positions, the paper grain, the effect
@@ -3493,11 +3866,18 @@ function shiftDocument(doc: PaintDocumentState, dx: number, dy: number): PaintDo
       return s.stencils ? { ...moved, stencils: s.stencils.map((x) => translateStencil(x, dx, dy)) } : moved;
     }),
   };
+  const moveStroke = (s: RecordedStroke) => {
+    const moved = varyStroke(s, m, {});
+    return s.stencils ? { ...moved, stencils: s.stencils.map((x) => translateStencil(x, dx, dy)) } : moved;
+  };
   if (doc.stickers) out.stickers = Object.fromEntries(Object.entries(doc.stickers).map(([id, list]) => [id, moveStickers(list)]));
+  if (doc.liveStrokes) out.liveStrokes = Object.fromEntries(Object.entries(doc.liveStrokes).map(([id, list]) => [id, list.map(moveStroke)]));
   if (doc.paintEvents) {
     out.paintEvents = doc.paintEvents.map((e) => {
       const list = e.kind === 'stickers' ? (e.data as { stickers?: Sticker[] } | undefined)?.stickers : undefined;
-      return list ? { ...e, data: { ...e.data, stickers: moveStickers(list) } } : e;
+      if (list) return { ...e, data: { ...e.data, stickers: moveStickers(list) } };
+      const strokes = e.kind === 'live-strokes' ? (e.data as { strokes?: RecordedStroke[] } | undefined)?.strokes : undefined;
+      return strokes ? { ...e, data: { ...e.data, strokes: strokes.map(moveStroke) } } : e;
     });
   }
   if (doc.wetEvents) {

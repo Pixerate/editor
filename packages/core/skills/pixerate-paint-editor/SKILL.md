@@ -40,6 +40,8 @@ is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y do
 - **Strokes are data.** Every stroke is recorded (brush, colour, raw points, seed, symmetry
   copies) and gets a `strokeId`. `replay_strokes` paints recorded strokes again, exactly or
   varied. That is the main way an agent should make many similar marks.
+- **Stroke layers keep strokes editable** (`add_layer {type: "strokes"}`): tune a stroke's brush,
+  colour, seed or points after painting it instead of repainting. See "Stroke layers" below.
 - **Guides** are editor state saved with the document: a symmetry guide makes every stroke paint
   its mirror or kaleidoscope copies (one stroke), a perspective guide snaps strokes to lines
   towards one to three vanishing points, a tracing image sits under the paint (never exported)
@@ -196,11 +198,13 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
   bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles
   bend into curves at turns; a low `bristle.load` runs dry into broken streaks.
 - **Sticker spray** (category `sticker`): stamps (`star`, `leaf`, `confetti`, `flower`, `heart`,
-  `splat`, `sparkle`, `ring`, `dot`) sprayed along the stroke onto an **empty layer**, where each
-  stays an object: `add_stickers` (place them exactly), `sticker_at` (pick one by point), `list_stickers`, `update_sticker` (move, turn, resize, recolour, restamp),
-  `arrange_stickers`, `remove_stickers`. A sticker layer takes no other paint. Stickers are drawn
-  whole, so a spray is refused while a mask stencil is on: hide it (`update_stencil` `enabled`
-  false) first, then remove the stickers you don't want.
+  `splat`, `sparkle`, `ring`, `dot`) sprayed onto an **empty layer**, each staying an object:
+  `add_stickers` (exact places), `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`,
+  `remove_stickers`. A sticker layer takes no other paint; sprays are refused under an enabled
+  mask stencil (hide it with `update_stencil` `enabled` false, then remove unwanted stickers).
+- **Stroke layers**: pixels drawn from the layer's strokes; they take `dab`, `particle`, `bristle`
+  and Mixer Brush strokes that pick up no paint. `list_strokes {live: true}` → `update_stroke` /
+  `edit_stroke_points` / `reorder_stroke` / `remove_strokes`; `rasterize_stroke_layer` once settled.
 - **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
@@ -281,7 +285,7 @@ view), so work with the tools you are given.
 | Tool | Use |
 | --- | --- |
 | `list_layers` | Read the layers top first: id, name, type (`pixel` / `group`), visible, opacity, blend, clipped, locks, `active`, painted `bounds` (null when empty), parent and depth. |
-| `add_layer` | Add an empty pixel layer (or `type: "group"`) above the active layer, above `aboveId`, or at the top of group `parentId`; it becomes active. Returns the layer. Put each pass of a painting on its own layer. |
+| `add_layer` | Add an empty pixel layer (or `type: "group"`, or `type: "strokes"` for a stroke layer whose strokes stay editable) above the active layer, above `aboveId`, or at the top of group `parentId`; it becomes active. Returns the layer. Put each pass of a painting on its own layer. |
 | `update_layer` | Change `name`, `visible`, `opacity` (0..1), `blend`, `clipped` (clip to the layer below) or `locks` (`pixels`, `transparency`: paint only where there is paint, `position`, `all`). Returns the layer. |
 | `list_blend_modes` | Read every blend mode: id, label, group (`standard`, `pigment`, `painterly`), what the pigment and painterly modes do, and the `psd` mode export writes instead. Read before choosing a painterly mode. Changes nothing. |
 | `set_active_layer` | Make a layer the default target of strokes, fills and clears. Editor state. |
@@ -335,7 +339,14 @@ view), so work with the tools you are given.
 | Tool | Use |
 | --- | --- |
 | `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color` or `paint` (a gradient for this stroke), `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
-| `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds. With `ids`, their points too. |
+| `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds, `live`. With `ids`, their points too; with `layerId`, one layer's. With `live: true`, the editable strokes of stroke layers as they are now, bottom first: the ids for the stroke layer tools. |
+| `stroke_at` | Read the top-most stroke of a stroke layer that painted the pixel at `x`, `y`, or null. Use it to pick one stroke among overlapping ones. |
+| `update_stroke` | Change a stroke on a stroke layer: `brushId` (keeps its size), `brush` settings, `color`, `paint` (null drops a gradient), `seed`. Redraws exactly. One undo step. Returns the stroke and the changed `bounds`. |
+| `edit_stroke_points` | Replace a stroke's `points`, or `transform` it (`dx`, `dy`, `scale`, `rotate`, `flipX`, about its centre or `origin`). One undo step. Returns the stroke with its points and the changed `bounds`. |
+| `reorder_stroke` | Move a stroke to `index` in its stroke layer (0 = bottom). One undo step. Returns the order. |
+| `remove_strokes` | Delete strokes from stroke layers (their eraser). One undo step. Returns the ids and `bounds`. |
+| `convert_to_stroke_layer` | Make an empty pixel layer a stroke layer. Returns the layer. |
+| `rasterize_stroke_layer` | Turn a stroke layer into a plain pixel layer with the same pixels (strokes no longer editable). Do it before erasing, smudging or filling on it. |
 | `replay_strokes` | Paint recorded `strokeIds` again: exactly, or varied by `dx` / `dy` (px), `rotate` (degrees clockwise), `scale` (brush size follows), `flipX`, `origin`, `pressureScale`, `color`, `brushId`, `layerId`, `repeat` (each copy applies the variation again). One undo step. Returns the new stroke ids, bounds and layers. |
 | `undo_paint` | Undo the last step (a wet stroke's undo puts the wet paint back as it was before it). Returns what was undone and what is next. |
 | `redo_paint` | Redo the step just undone. |
