@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from "react";
+import React, { useMemo, useEffect, useRef } from "react";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -16,6 +16,7 @@ import {
   FileImport,
   type FileImportOptions,
 } from "@pixerate/editor";
+import { createReactLoadingNodeView, type LoadingIndicatorProps } from "../loading-node";
 
 export interface UsePromptEditorProps {
   /**
@@ -70,6 +71,14 @@ export interface UsePromptEditorProps {
    * plain-text paste handler, so pasted files are not imported.
    */
   fileImport?: Omit<FileImportOptions, "asPlainText"> | boolean;
+  /**
+   * Component drawn inside each `loadingNode` placeholder instead of the default SVG spinner,
+   * e.g. your design system's loader. It receives `state` (`id`, `label`). Read when a
+   * placeholder renders, so changing it does not recreate the editor.
+   */
+  loadingIndicator?: React.ComponentType<LoadingIndicatorProps>;
+  /** Accessible label of loading placeholders, announced by screen readers (default `"Loading…"`). */
+  loadingLabel?: string;
 }
 
 const DEFAULT_TEMPLATES: Template[] = [];
@@ -100,10 +109,27 @@ export function usePromptEditor({
   jsonVariables,
   speed = 2,
   fileImport,
+  loadingIndicator,
+  loadingLabel,
 }: UsePromptEditorProps) {
   const fileImportRef = useRef(fileImport);
   fileImportRef.current = fileImport;
   const fileImportEnabled = !!fileImport;
+
+  const loadingIndicatorRef = useRef(loadingIndicator);
+  loadingIndicatorRef.current = loadingIndicator;
+  const hasLoadingIndicator = !!loadingIndicator;
+  // One node view for the editor's lifetime: swapping components does not recreate the editor.
+  const loadingNodeView = useMemo(
+    () =>
+      hasLoadingIndicator
+        ? createReactLoadingNodeView((props: LoadingIndicatorProps) => {
+            const Indicator = loadingIndicatorRef.current;
+            return Indicator ? React.createElement(Indicator, props) : null;
+          })
+        : null,
+    [hasLoadingIndicator],
+  );
 
   const slashCommandActiveRef = useRef(slashCommandActive);
   slashCommandActiveRef.current = slashCommandActive;
@@ -191,7 +217,10 @@ export function usePromptEditor({
         TemplateSuggestions.configure({
           templates,
         }),
-        LoadingNode,
+        LoadingNode.configure({
+          nodeView: loadingNodeView,
+          ...(loadingLabel ? { label: loadingLabel } : {}),
+        }),
         ...(fileImportEnabled
           ? [
               FileImport.configure({
@@ -324,7 +353,7 @@ export function usePromptEditor({
     },
     // Only options baked into extensions recreate the editor; editable state,
     // placeholder, class names and content are applied to the live instance.
-    [resolvedColorMap, templateKey, speed, jsonVariablesKey, fileImportEnabled],
+    [resolvedColorMap, templateKey, speed, jsonVariablesKey, fileImportEnabled, loadingNodeView, loadingLabel],
   );
 
   useEffect(() => {

@@ -173,7 +173,7 @@ Open http://localhost:3000. The demo has a tab per area: **Prompt Studio**, **Do
 Every feature is available from core and from both framework packages, except where a footnote says otherwise. "Via core" means the framework package uses the core API directly, with no extra wrapper. Expand an area for the details.
 
 <details>
-<summary><strong>Prompt engine</strong> (17)</summary>
+<summary><strong>Prompt engine</strong> (18)</summary>
 
 | Feature | Core | React | Svelte |
 | :--- | :---: | :---: | :---: |
@@ -193,6 +193,7 @@ Every feature is available from core and from both framework packages, except wh
 | Live Animated Gradient Text | ✅ | ✅ | Via core¹ |
 | Slash Command Trigger (`/command`) | ✅ | ✅ | Via core¹ |
 | Template Autocomplete (`{{`) | ✅ | ✅ | Via core¹ |
+| Loading Placeholder (`loadingNode`: SVG spinner in `currentColor`, `role="status"` with a label, custom indicator or component) | `LoadingNode.configure({ label, renderIndicator, nodeView })` | `usePromptEditor({ loadingIndicator, loadingLabel })` & `createReactLoadingNodeView` | `createSvelteLoadingNodeView` |
 | Read-Only Token Renderer (`<TemplateRenderer />`) | AST Only | Component | Component |
 
 </details>
