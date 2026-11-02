@@ -46,7 +46,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
   };
   const paintInfo = (): AppliedEffectInfo[] => {
     const p = controller.getEffectPaint();
-    return p ? [{ id: PAINT_TARGET, effect: p.effect, provider: p.provider, role: controller.getState().effectPaintRendering ? 'effect paint (rendering)' : 'effect paint', enabled: true, values: p.values, ...(p.time ? { time: p.time } : {}) } as AppliedEffectInfo] : [];
+    return p ? [{ id: PAINT_TARGET, effect: p.effect, provider: p.provider, role: controller.getState().effectPaintRendering ? 'effect paint (rendering)' : 'effect paint', enabled: true, values: p.values, ...(p.time ? { time: p.time } : {}), ...(p.map ? { map: p.map } : {}), ...(p.live ? { live: true } : {}) } as AppliedEffectInfo] : [];
   };
   const layerInfo = (layerId: string): AppliedEffectInfo[] => {
     const s = controller.getEffectLayer(layerId);
@@ -117,7 +117,7 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
       if (target === PAINT_TARGET) {
         if (changes.opacity !== undefined) throw new Error('opacity does not apply to the effect paint: change the brush opacity (set_brush tip.opacity).');
         const p = controller.getEffectPaint()!;
-        await controller.setEffectPaint({ effect: p.effect, values: { ...p.values, ...((changes.values ?? {}) as Record<string, EffectValue | null>) }, time: p.time });
+        await controller.setEffectPaint({ effect: p.effect, values: { ...p.values, ...((changes.values ?? {}) as Record<string, EffectValue | null>) }, time: p.time, map: p.map, live: p.live });
         const effects = paintInfo();
         return { target, effect: effects[0], effects };
       }
@@ -185,6 +185,18 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
             effect: ctx.effectIdSchema(['generator', 'overlay', 'title']),
             values: ctx.valuesSchema("Control values over the effect's defaults"),
             time: { type: 'number', minimum: 0, description: 'Which moment of an animated effect to paint with, in ms (default 0).' },
+            map: {
+              type: 'object',
+              description: 'How the effect lies on the paint: by canvas (default: fixed to the canvas, painting reveals a hidden picture) or by stroke (along each stroke: the effect is rendered as a strip length px long, and each pixel takes the colour at its distance along the stroke and its place across the tip).',
+              properties: {
+                by: { type: 'string', enum: ['canvas', 'stroke'], description: 'canvas (default) or stroke.' },
+                length: { type: 'number', minimum: 16, maximum: 4096, description: 'by stroke: px of stroke per repeat of the effect (default 300).' },
+                repeat: { type: 'string', enum: ['repeat', 'mirror', 'clamp'], description: 'by stroke: past the strip end start again (default), run back, or hold the last colour.' },
+              },
+              required: ['by'],
+              additionalProperties: false,
+            },
+            live: { type: 'boolean', description: 'Live effect paint (default false): strokes on a stroke layer (add_layer type strokes) keep playing the effect, so the paint moves (set_effect_playback); elsewhere strokes bake the frame at time.' },
           },
           required: ['effect'],
           additionalProperties: false,
@@ -192,8 +204,24 @@ export function createPaintEffectsToolProvider(controller: PaintEditorController
         annotations: { title: 'Paint with an effect', ...ctx.annotations.writeIdempotent },
         handler: async (args) => {
           ctx.requireProvider();
-          return { effectPaint: await controller.setEffectPaint({ effect: args.effect, values: values(args.values), time: args.time }) };
+          return { effectPaint: await controller.setEffectPaint({ effect: args.effect, values: values(args.values), time: args.time, map: args.map, live: args.live }) };
         },
+      },
+      {
+        name: 'set_effect_playback',
+        title: 'Play or pause live effect paint',
+        description:
+          'Plays or pauses live effect paint (strokes painted on stroke layers with set_effect_paint live true) in the editor view, and caps its frame rate. Exports draw it at a chosen time with export_image / export_psd time. Editor state, not an undo step. Returns playing, fps, the time the view shows (ms) and what plays (animation: layer ids, live strokes, sources; null when nothing does).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            playing: { type: 'boolean', description: 'Play (true, the default state) or pause at the current frame.' },
+            fps: { type: 'integer', minimum: 1, maximum: 60, description: 'Frame rate cap, frames a second (default 30); lower it on large canvases.' },
+          },
+          additionalProperties: false,
+        },
+        annotations: { title: 'Play or pause live effect paint', ...ctx.annotations.writeIdempotent },
+        handler: async (args) => ({ ...controller.setEffectPlayback({ playing: args.playing, fps: args.fps }), animation: controller.getAnimation() }),
       },
       {
         name: 'add_effect_layer',

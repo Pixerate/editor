@@ -258,7 +258,7 @@ export class WetStrokeDriver {
         const effect = this.init.effect;
         if (effect) {
           // Effect paint: the brush is loaded with the effect's colour at the dab's centre; each pixel takes its own.
-          sampleEffectAt(effect, d.x, d.y, this.centre);
+          sampleEffectAt(effect, d.x, d.y, this.centre, d);
           ex.setReservoirColor(this.centre[0], this.centre[1], this.centre[2]);
         } else if (this.sampler) {
           // Gradient paint: this dab's pigment.
@@ -271,7 +271,7 @@ export class WetStrokeDriver {
         if (total > 0 && flow > 0 && effect) {
           const ec = cov.slice();
           const field = new Float32Array(ec.length * 3);
-          effectDabField(effect, rect, ec, this.centre, this.paint, field, COVERAGE_STEPS);
+          effectDabField(effect, rect, ec, this.centre, this.paint, field, COVERAGE_STEPS, d);
           this.medium.deposit(rect, ec, Math.min(1, total) * k, this.paint, null, field);
         } else if (total > 0 && flow > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
         else world.paint(laneId, rect, cov, this.medium.options.water * k, null);

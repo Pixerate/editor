@@ -102,6 +102,13 @@
     });
   });
 
+  // Live effect paint plays while the canvas is mounted (idle when nothing is live or it is paused).
+  $effect(() => {
+    const c = controller;
+    const player = untrack(() => c.playEffects());
+    return () => player.stop();
+  });
+
   // Wheel needs a non-passive listener to prevent page scroll (see GOTCHAS).
   $effect(() => {
     const el = viewport;

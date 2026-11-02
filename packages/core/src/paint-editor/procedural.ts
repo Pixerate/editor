@@ -99,10 +99,9 @@ abstract class MarkStroke implements CoverageStroke {
   }
 
   private step(copy: number, d: PenDab, rects: RasterRect[]): void {
-    if (this.sampler) {
-      this.pen = d;
-      if (!this.tipTable) this.sampler.dab(d, this.penColor);
-    }
+    // Marks take their place along the stroke (gradient paint across the tip, stroke-mapped effects) from their pen dab.
+    this.pen = d;
+    if (this.sampler && !this.tipTable) this.sampler.dab(d, this.penColor);
     this.advance(copy, d, rects);
   }
 
@@ -151,7 +150,7 @@ abstract class MarkStroke implements CoverageStroke {
     if (this.options.effect) {
       if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
       const field = this.field.subarray(0, n * 3);
-      sampleEffectField(this.options.effect, rect, vals, field);
+      sampleEffectField(this.options.effect, rect, vals, field, this.pen);
       this.coverage.accumulate(rect, vals, dab.opacity, null, field);
     } else {
       const color = this.markColor(x, y);

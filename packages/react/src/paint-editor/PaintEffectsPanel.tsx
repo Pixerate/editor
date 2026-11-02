@@ -81,6 +81,13 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
   const layerEffect = activeId ? controller.getEffectLayer(activeId) : undefined;
   const active = activeId ? controller.getLayer(activeId) : undefined;
   const effectPaint = state.effectPaint;
+  const animation = controller.getAnimation();
+  const playback = state.effectPlayback;
+  /** Paints with the effect paint again with some of it changed (the other settings kept). */
+  const repaint = (patch: { values?: Record<string, unknown>; map?: unknown; live?: boolean }) => {
+    if (!effectPaint) return;
+    run(() => controller.setEffectPaint({ effect: effectPaint.effect, values: effectPaint.values as never, time: effectPaint.time, map: effectPaint.map, live: effectPaint.live, ...(patch as object) }));
+  };
   const thumbnail = useMemo(() => (effectPaint && !state.effectPaintRendering ? controller.effectPaintThumbnail(48) : null), [controller, effectPaint, state.effectPaintRendering]);
   const run = (work: () => Promise<unknown>) =>
     attempt(() => {
@@ -177,7 +184,53 @@ export const PaintEffectsPanel: React.FC<PaintEffectsPanelProps> = ({ controller
               ✕
             </button>
           </div>
-          <Controls provider={provider} effect={effectPaint.effect} values={effectPaint.values} apply={(values) => run(() => controller.setEffectPaint({ effect: effectPaint.effect, values: { ...effectPaint.values, ...values } as never, time: effectPaint.time }))} />
+          <div className="flex flex-wrap items-center gap-2" data-testid="effect-paint-placement">
+            <label className="flex items-center gap-1" title="Lay the effect along each stroke instead of fixing it to the canvas">
+              <input type="checkbox" checked={Boolean(effectPaint.map)} onChange={(e) => repaint({ map: e.target.checked ? { by: 'stroke', length: 300, repeat: 'repeat' } : { by: 'canvas' } })} />
+              Along the stroke
+            </label>
+            <label className="flex items-center gap-1" title="Strokes on a stroke layer keep playing the effect">
+              <input type="checkbox" checked={Boolean(effectPaint.live)} onChange={(e) => repaint({ live: e.target.checked })} />
+              Live
+            </label>
+          </div>
+          {effectPaint.map && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1">
+                <span className="text-slate-400">Length</span>
+                <input
+                  key={effectPaint.map.length}
+                  type="number"
+                  aria-label="Effect length along the stroke"
+                  min={16}
+                  max={4096}
+                  defaultValue={effectPaint.map.length}
+                  onBlur={(e) => Number(e.target.value) !== effectPaint.map!.length && repaint({ map: { ...effectPaint.map!, length: Number(e.target.value) } })}
+                  className="w-16 rounded bg-slate-800 px-1 py-0.5"
+                />
+              </label>
+              <select aria-label="Effect repeat" value={effectPaint.map.repeat} onChange={(e) => repaint({ map: { ...effectPaint.map!, repeat: e.target.value as 'repeat' } })} className="rounded bg-slate-800 px-1 py-0.5">
+                <option value="repeat">Repeat</option>
+                <option value="mirror">Mirror</option>
+                <option value="clamp">Clamp</option>
+              </select>
+            </div>
+          )}
+          <Controls provider={provider} effect={effectPaint.effect} values={effectPaint.values} apply={(values) => repaint({ values: { ...effectPaint.values, ...values } })} />
+        </div>
+      )}
+      {animation && (
+        <div className="flex items-center gap-2 rounded border border-slate-700 p-1" data-effect-part="playback">
+          <span className="flex-1 truncate">
+            Live paint: {animation.strokes} {animation.strokes === 1 ? 'stroke' : 'strokes'}
+          </span>
+          <button type="button" className={button} aria-pressed={playback.playing} onClick={() => attempt(() => controller.setEffectPlayback({ playing: !playback.playing }))}>
+            {playback.playing ? 'Pause' : 'Play'}
+          </button>
+          <label className="flex items-center gap-1">
+            <span className="text-slate-400">fps</span>
+            <input type="number" aria-label="Live paint frame rate" min={1} max={60} value={playback.fps} onChange={(e) => attempt(() => controller.setEffectPlayback({ fps: Math.round(Number(e.target.value)) }))} className="w-12 rounded bg-slate-800 px-1 py-0.5" />
+          </label>
         </div>
       )}
       {layerEffect && activeId && (

@@ -1104,6 +1104,36 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-live-effect-flair",
+    prompt: "Paint a ribbon of Flair aurora that flows along it and keeps moving",
+    steps: [
+      { say: "A stroke layer, so the strokes can keep playing an effect.", tool: "paint__add_layer", args: { name: "Live ribbon", type: "strokes" }, as: "ribbon" },
+      {
+        say: "Flair's aurora as effect paint, laid along each stroke and live.",
+        tool: "paintfx__set_effect_paint",
+        args: { effect: "aurora", map: { by: "stroke", length: 400, repeat: "mirror" }, live: true },
+      },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbon.id, brushId: "bristle-flat", brush: { tip: { size: 70 } }, points: wave(300, 60) }) },
+      { say: "Play it at 24 frames a second.", tool: "paintfx__set_effect_playback", args: { playing: true, fps: 24 } },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-live-effect",
+    prompt: "Paint a ribbon whose colours flow along it and keep moving",
+    steps: [
+      { say: "A stroke layer, so the strokes can keep playing an effect.", tool: "paint__add_layer", args: { name: "Live ribbon", type: "strokes" }, as: "ribbon" },
+      {
+        say: "Effect paint laid along each stroke, live: the gradient turns as it plays.",
+        tool: "paintfx__set_effect_paint",
+        args: { effect: "fake.gradient", values: { from: "#f97316", to: "#7c3aed", angle: 0, spin: 360 }, map: { by: "stroke", length: 400, repeat: "mirror" }, live: true },
+      },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbon.id, brushId: "bristle-flat", brush: { tip: { size: 70 } }, points: wave(300, 60) }) },
+      { say: "Play it at 24 frames a second.", tool: "paintfx__set_effect_playback", args: { playing: true, fps: 24 } },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-effects",
     prompt: "Print the sheet with a gradient, glaze the hills with warm light and add a caption",
     steps: [

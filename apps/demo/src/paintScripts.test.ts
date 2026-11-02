@@ -18,7 +18,7 @@ function setup() {
 
 describe("paint agent scripts", () => {
   // Flair renders on a GPU canvas, which Node does not have: its script is left to the browser.
-  it.each(PAINT_SCRIPTS.filter((s) => s.id !== "paint-effects-flair").map((s) => [s.id, s] as const))("%s runs to the end", async (_id, script) => {
+  it.each(PAINT_SCRIPTS.filter((s) => !s.id.endsWith("-flair")).map((s) => [s.id, s] as const))("%s runs to the end", async (_id, script) => {
     const { registry } = setup();
     const errors: string[] = [];
     const { ok } = await runAgentScript(registry, script, { control: { speed: Infinity, stopped: false }, onEvent: (e) => e.type === "error" && errors.push(e.message) });
@@ -78,5 +78,13 @@ describe("paint agent scripts", () => {
     expect(stroke).toMatchObject({ color: "#f59e0b" });
     expect(stroke.brush.id).toBe("orbit-curls");
     expect(stroke.brush.tip.size).toBe(40);
+  }, 120_000);
+
+  it("paints a live ribbon whose effect is laid along the stroke and plays", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-live-effect")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.getAnimation()).toMatchObject({ strokes: 1, sources: 1 });
+    expect(controller.getStrokes().at(-1)!.paint).toMatchObject({ type: "effect", live: true, map: { by: "stroke", length: 400 } });
+    expect(controller.getState().effectPlayback).toMatchObject({ playing: true, fps: 24 });
   }, 120_000);
 });

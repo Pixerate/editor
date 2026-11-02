@@ -127,4 +127,34 @@ describe('Svelte paint effects', () => {
       colors.remove();
     }
   });
+
+  it('lays the effect along the stroke, makes it live, and plays or pauses live paint', async () => {
+    const c = new PaintEditorController({ width: 32, height: 16 });
+    c.setEffectsProvider(createFakeEffectProvider());
+    c.addLayer({ type: 'strokes' });
+    show(PaintEffectsPanel, { controller: c });
+    await click(button('Paint…'));
+    await pickEffect('fake.gradient');
+    await settle();
+    const boxes = () => target.querySelectorAll<HTMLInputElement>('[data-testid="effect-paint-placement"] input[type="checkbox"]');
+    await click(boxes()[0]);
+    await settle();
+    expect(c.getEffectPaint()?.map).toEqual({ by: 'stroke', length: 300, repeat: 'repeat' });
+    const repeat = target.querySelector<HTMLSelectElement>('select[aria-label="Effect repeat"]')!;
+    repeat.value = 'mirror';
+    repeat.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(c.getEffectPaint()?.map?.repeat).toBe('mirror');
+    await click(boxes()[1]);
+    await settle();
+    expect(c.getEffectPaint()).toMatchObject({ live: true, map: { repeat: 'mirror' } });
+    expect(target.querySelector('[data-effect-part="playback"]')).toBeNull();
+    c.paintStroke({ brushId: 'ink-pen', points: [{ x: 2, y: 8 }, { x: 30, y: 8 }] });
+    flushSync();
+    expect(target.querySelector('[data-effect-part="playback"]')!.textContent).toContain('1 stroke');
+    await click(button('Pause'));
+    expect(c.getState().effectPlayback.playing).toBe(false);
+    await click(button('Play'));
+    expect(c.getState().effectPlayback.playing).toBe(true);
+  });
 });

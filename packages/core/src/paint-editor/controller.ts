@@ -95,7 +95,7 @@ import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type Tim
 import { EffectsSlot } from '../effects/helpers.js';
 import { resolveEffectValues } from '../effects/helpers.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
-import { effectPaintKey, isPaintEffectPaint, readPaintEffectPaint, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
+import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
 
@@ -174,6 +174,8 @@ export interface PaintEditorState {
   mixerLoad: MixerLoad;
   view: PaintView;
   hand: Hand;
+  /** Live effect paint: whether strokes on stroke layers play their effect, the frame rate cap and the time (ms) the view shows. Editor state. */
+  effectPlayback: { playing: boolean; fps: number; time: number };
   /** The stroke picked on a stroke layer, on the canvas or in the stroke panel (editor state, not an undo step). */
   selectedStroke: string | null;
   /** The sticker picked on the canvas or in the sticker panel (editor state, not an undo step). */
@@ -419,6 +421,15 @@ export class PaintEditorController {
   private dirty: RasterRect[] | 'all' = 'all';
   private seedCounter = 1;
   private strokeCounter = 1;
+  /** Live effect paint: playing and the frame rate cap (editor state), and the time the view shows. */
+  private effectPlaybackState = { playing: true, fps: 30 };
+  private effectTime = 0;
+  /** While a frame is drawn: the time live effect strokes are drawn at (else their own time). */
+  private liveEffectAt: number | null = null;
+  /** The view's stroke layers at `effectTime`, each with the document surface it was drawn from (stale once that changes). */
+  private animatedLayers = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+  /** `renderAnimationFrame` / `withEffectTime`: layer surfaces at another time, for one render. */
+  private frameOverride: Map<string, TiledSurface> | null = null;
   /** The area each stroke painted (document pixels; `null`: nothing), learnt as it is painted or drawn, so a stroke layer edit redraws only where it changes (see `drawLiveStrokes`). */
   private paintedBounds = new WeakMap<RecordedStroke, RasterRect | null>();
   private guides: PaintGuides;
@@ -512,6 +523,7 @@ export class PaintEditorController {
       mixerLoad: this.mixerLoad,
       view: this.view,
       hand: this.hand,
+      effectPlayback: { ...this.effectPlaybackState, time: this.effectTime },
       selectedStroke: this.selectedStroke,
       selectedSticker: this.selectedSticker,
       canUndo: this.undoStack.length > 0 && !this.session,
@@ -1399,16 +1411,25 @@ export class PaintEditorController {
    * size, and brushes then take each pixel's colour (and alpha) from it, fixed to the canvas, as if
    * painting a hidden picture into view. `setColor` and `setPaint` go back to colour. Editor state,
    * not an undo step. Strokes that would paint with it throw while it renders. Returns the paint.
+   * With `map: { by: 'stroke' }` the effect lies along each stroke instead of the canvas; with
+   * `live`, strokes on a stroke layer keep playing it (see `setEffectPlayback`).
    */
-  async setEffectPaint(source: { effect: string; values?: Record<string, EffectValue | null>; time?: number }): Promise<PaintEffectPaint> {
+  async setEffectPaint(source: { effect: string; values?: Record<string, EffectValue | null>; time?: number; map?: unknown; live?: boolean }): Promise<PaintEffectPaint> {
     if (!source || typeof source.effect !== 'string' || !source.effect) throw new PaintEditorError('effect is missing; pass an effect id from search_effects (use generator, overlay or title).');
     this.checkTime(source.time);
+    let map: PaintEffectPaint['map'];
+    try {
+      map = readEffectStrokeMap(source.map);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    if (source.live !== undefined && typeof source.live !== 'boolean') throw new PaintEditorError('live must be true or false.');
     const epoch = ++this.paintEpoch;
     const changed = (name: string) => new PaintEditorError(`The paint changed while "${name}" rendered (set_color, set_paint or another set_effect_paint); call set_effect_paint again to paint with it.`);
     const d = await this.describeEffect(source.effect, 'paint');
     const values = this.effectValues(d, { ...d.defaults } as Record<string, EffectValue>, source.values);
     if (epoch !== this.paintEpoch) throw changed(d.name);
-    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.effects.require().id, values, time: source.time ?? 0 };
+    const paint: PaintEffectPaint = { type: 'effect', effect: d.id, provider: this.effects.require().id, values, time: source.time ?? 0, ...(map ? { map } : {}), ...(source.live ? { live: true } : {}) };
     this.effectPaintPending = paint;
     this.emit([]);
     try {
@@ -1432,7 +1453,8 @@ export class PaintEditorController {
   private effectPaintImage(p: PaintEffectPaint): EffectPaintPixels | null {
     const key = effectPaintKey(p);
     const img = this.effectPaintPixels.get(key);
-    if (!img || img.width !== this.doc.canvas.width || img.height !== this.doc.canvas.height) return null;
+    const size = effectPaintSize(p, this.doc.canvas);
+    if (!img || img.width !== size.width || img.height !== size.height) return null;
     this.effectPaintPixels.delete(key);
     this.effectPaintPixels.set(key, img);
     return img;
@@ -1446,14 +1468,14 @@ export class PaintEditorController {
     const what = `the effect "${p.effect}"${p.provider ? ` from provider "${p.provider}"` : ''}`;
     if (!provider) throw new PaintEditorError(`Effect paint needs ${what}, but no effects provider is registered; register it (setEffectsProvider) and try again.`);
     if (p.provider && provider.id !== p.provider) throw new PaintEditorError(`Effect paint needs ${what}, but the registered provider is "${provider.id}"; register "${p.provider}" (setEffectsProvider) and try again.`);
-    const { width, height } = this.doc.canvas;
+    const { width, height } = effectPaintSize(p, this.doc.canvas);
     let pixels: EffectPixels;
     try {
       pixels = await this.effectsRenderer.render(provider, p.effect, { width, height }, { time: p.time, values: p.values });
     } catch (e) {
       throw new PaintEditorError(`Effect paint could not render ${what}: ${e instanceof Error ? e.message : String(e)}`);
     }
-    const img: EffectPaintPixels = { width, height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>) };
+    const img: EffectPaintPixels = { width, height, data: new Uint8ClampedArray(pixels.data as ArrayLike<number>), ...(p.map ? { map: p.map } : {}) };
     this.effectPaintPixels.set(effectPaintKey(p), img);
     while (this.effectPaintPixels.size > PaintEditorController.EFFECT_PAINT_CACHE) this.effectPaintPixels.delete(this.effectPaintPixels.keys().next().value!);
     return img;
@@ -1847,6 +1869,14 @@ export class PaintEditorController {
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
+    }
+    if (doc.liveStrokes?.[layer.id] && effect?.source.live) {
+      // Each live source needs a renderer every frame.
+      const key = effectPaintKey(effect.source);
+      const { sources } = this.liveEffects(doc);
+      if (!sources.some((p) => effectPaintKey(p) === key) && sources.length >= MAX_LIVE_EFFECT_SOURCES) {
+        throw new PaintEditorError(`The painting already plays ${MAX_LIVE_EFFECT_SOURCES} live effects, the most it can; paint with one of them, or set_effect_paint with live false to bake this one.`);
+      }
     }
     const stickerLayer = Boolean(doc.stickers?.[layer.id]?.length);
     if (brush.engine === 'sticker') {
@@ -2504,8 +2534,10 @@ export class PaintEditorController {
 
   /** The layers with the live stroke's surface in place. */
   private currentLayers(): PaintLayer[] {
+    const override = this.frameOverride;
+    if (override) return Array.from(override).reduce((ls, [id, surface]) => mapLayer(ls, id, (l) => ({ ...(l as PaintPixelLayer), surface })), this.doc.layers);
     const live = this.live;
-    if (!live) return this.doc.layers;
+    if (!live) return this.animatedView();
     if (this.liveLayers?.key === live.surface) return this.liveLayers.layers;
     const layers = mapLayer(this.doc.layers, live.layerId, (l) => ({ ...(l as PaintPixelLayer), surface: live.surface }));
     this.liveLayers = { key: live.surface, layers };
@@ -3527,11 +3559,14 @@ export class PaintEditorController {
         if (!cancelled && drawn) out = drawn;
       },
     };
-    const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(st.paint ? { paint: st.paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
+    const paint = st.paint && this.liveEffectAt !== null && isLiveEffect(st) ? framePaint(st.paint as PaintEffectPaint, this.liveEffectAt) : st.paint;
+    const init: PaintStrokeInit = { layerId: plain.id, color: st.color, brush: st.brush, seed: st.seed, copies: (st.copies ?? []) as Affine[], ...(st.load ? { load: st.load } : {}), ...(paint ? { paint } : {}), snapToPerspective: false, stencils: false, maskStencils: st.stencils ?? [] };
     const session = this.sessionFor({ ...doc, layers: mapLayer(doc.layers, plain.id, () => ({ ...plain, surface })) }, init, host);
     session.push(st.points);
     const result = session.end();
-    this.paintedBounds.set(st, result.bounds);
+    // Only ever grown: a live effect's frames can paint more or less of a stroke (its alpha moves).
+    const had = this.paintedBounds.get(st);
+    this.paintedBounds.set(st, had && result.bounds ? unionRect(had, result.bounds) : (result.bounds ?? had ?? null));
     return { surface: out, bounds: result.bounds };
   }
 
@@ -3571,6 +3606,157 @@ export class PaintEditorController {
     let surface = layer.surface;
     for (const r of rects) surface = writeRegion(surface, r, readRegion(drawn, r));
     return surface;
+  }
+
+  // --- Live effect paint ------------------------------------------------------------
+
+  /** The view's layers: stroke layers playing live effects at `effectTime`, the rest as they are. */
+  private animatedView(): PaintLayer[] {
+    if (!this.animatedLayers.size) return this.doc.layers;
+    let layers = this.doc.layers;
+    for (const [id, a] of this.animatedLayers) {
+      const l = findLayer(layers, id)?.layer;
+      if (isPixelLayer(l) && l.surface === a.base) layers = mapLayer(layers, id, () => ({ ...l, surface: a.surface }));
+    }
+    return layers;
+  }
+
+  /** Stroke layers with live effect strokes, and the distinct live sources (frame 0). */
+  private liveEffects(doc: PaintDocumentState = this.doc): { layers: Array<{ layer: PaintPixelLayer; strokes: readonly RecordedStroke[] }>; sources: PaintEffectPaint[] } {
+    const layers: Array<{ layer: PaintPixelLayer; strokes: readonly RecordedStroke[] }> = [];
+    const sources = new Map<string, PaintEffectPaint>();
+    for (const [id, strokes] of Object.entries(doc.liveStrokes ?? {})) {
+      const layer = findLayer(doc.layers, id)?.layer;
+      const live = strokes.filter(isLiveEffect);
+      if (!isPixelLayer(layer) || !live.length) continue;
+      layers.push({ layer, strokes });
+      for (const st of live) sources.set(effectPaintKey(st.paint as PaintEffectPaint), st.paint as PaintEffectPaint);
+    }
+    return { layers, sources: [...sources.values()] };
+  }
+
+  /** What plays: the live effect strokes and their layers, or `null` when nothing does. */
+  getAnimation(): { layerIds: string[]; strokes: number; sources: number } | null {
+    const { layers, sources } = this.liveEffects();
+    if (!layers.length) return null;
+    return { layerIds: layers.map((x) => x.layer.id), strokes: layers.reduce((n, x) => n + x.strokes.filter(isLiveEffect).length, 0), sources: sources.length };
+  }
+
+  /** Plays or pauses live effect paint, and caps its frame rate (1..60). Editor state, not an undo step. */
+  setEffectPlayback(update: { playing?: boolean; fps?: number }): { playing: boolean; fps: number; time: number } {
+    if (update.playing !== undefined && typeof update.playing !== 'boolean') throw new PaintEditorError('playing must be true or false.');
+    if (update.fps !== undefined && !(Number.isInteger(update.fps) && update.fps >= 1 && update.fps <= 60)) throw new PaintEditorError(`fps ${update.fps} is out of range; use a whole number 1..60.`);
+    this.effectPlaybackState = { ...this.effectPlaybackState, ...update };
+    this.emit([]);
+    return { ...this.effectPlaybackState, time: this.effectTime };
+  }
+
+  /** The surfaces of every stroke layer with live effects at `time` ms, drawn in full (frames rendered first). */
+  private async liveSurfacesAt(time: number): Promise<Map<string, TiledSurface>> {
+    const { layers, sources } = this.liveEffects();
+    await this.prepareEffectPaints(sources.map((p) => framePaint(p, time)));
+    const out = new Map<string, TiledSurface>();
+    this.liveEffectAt = time;
+    try {
+      for (const { layer, strokes } of layers) out.set(layer.id, this.drawLiveStrokes({ ...layer, offset: { x: 0, y: 0 } }, strokes));
+    } finally {
+      this.liveEffectAt = null;
+    }
+    return out;
+  }
+
+  /**
+   * Shows the live effects at `time` ms (each live stroke's effect at its own time plus `time`):
+   * renders their frames, then redraws only where live effect strokes paint. Nothing in the
+   * document changes. Resolves `false` when the document changed while frames rendered (the next
+   * frame catches up).
+   */
+  async showEffectTime(time: number): Promise<boolean> {
+    this.checkTime(time);
+    const { layers, sources } = this.liveEffects();
+    const revision = this.docRevision;
+    await this.prepareEffectPaints(sources.map((p) => framePaint(p, time)));
+    if (revision !== this.docRevision || this.session) return false;
+    const next = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+    const dirty: RasterRect[] = [];
+    this.liveEffectAt = time;
+    try {
+      for (const { layer, strokes } of layers) {
+        const shown = this.animatedLayers.get(layer.id);
+        const from = shown && shown.base === layer.surface ? shown.surface : layer.surface;
+        // Where live strokes may paint at any frame: what they painted, and their reach.
+        const areas = strokes.filter(isLiveEffect).flatMap((st) => [liveStrokeBounds(st), ...(this.paintedBounds.get(st) ? [this.paintedBounds.get(st)!] : [])]);
+        const surface = this.drawLiveStrokes({ ...layer, surface: from, offset: { x: 0, y: 0 } }, strokes, layer.offset.x || layer.offset.y ? null : areas);
+        next.set(layer.id, { base: layer.surface, surface });
+        dirty.push(...areas);
+      }
+    } finally {
+      this.liveEffectAt = null;
+    }
+    this.animatedLayers = next;
+    this.effectTime = time;
+    this.emit(dirty);
+    return true;
+  }
+
+  /**
+   * Plays live effect paint in the view until `stop`: a frame per tick of `clock` (default
+   * animation frames) at most `fps` a second, one render in flight. Idle while paused, while a
+   * stroke is painted, or when nothing is live. The bindings start it while the editor is shown.
+   */
+  playEffects(clock: { now(): number; frame(cb: () => void): () => void } = defaultEffectClock): { stop(): void } {
+    let stopped = false;
+    let cancel = () => {};
+    let last = -Infinity;
+    let started = clock.now() - this.effectTime;
+    const tick = () => {
+      if (stopped) return;
+      const now = clock.now();
+      const { playing, fps } = this.effectPlaybackState;
+      if (!playing) started = now - this.effectTime;
+      if (!playing || this.session || now - last < 1000 / fps - 1 || !this.liveEffects().layers.length) {
+        cancel = clock.frame(tick);
+        return;
+      }
+      last = now;
+      this.showEffectTime(Math.max(0, now - started)).then(
+        () => {
+          if (!stopped) cancel = clock.frame(tick);
+        },
+        () => {
+          // A frame that could not render (no provider): try again on the next tick.
+          if (!stopped) cancel = clock.frame(tick);
+        }
+      );
+    };
+    cancel = clock.frame(tick);
+    return {
+      stop() {
+        stopped = true;
+        cancel();
+      },
+    };
+  }
+
+  /**
+   * Runs `fn` with the painting as it is `time` ms into its live effects (see `getAnimation`): for
+   * exports at a moment. Nothing in the document changes.
+   */
+  async withEffectTime<T>(time: number, fn: () => T | Promise<T>): Promise<T> {
+    this.checkTime(time);
+    const surfaces = await this.liveSurfacesAt(time);
+    const was = this.frameOverride;
+    this.frameOverride = surfaces;
+    try {
+      return await fn();
+    } finally {
+      this.frameOverride = was;
+    }
+  }
+
+  /** The painting composited `time` ms into its live effects, like `compositePixels`. Nothing in the document changes. */
+  async renderAnimationFrame(time: number, options: RenderOptions = {}): Promise<PixelImage> {
+    return this.withEffectTime(time, () => this.compositePixels(options));
   }
 
   // --- Stencils --------------------------------------------------------------------
@@ -3824,6 +4010,31 @@ export const MAX_IMAGE_SIDE = 8192;
 
 const movePoint = (p: { x: number; y: number }, dx: number, dy: number) => ({ x: p.x + dx, y: p.y + dy });
 const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: number): R => ({ ...r, x: r.x + dx, y: r.y + dy });
+
+/** Whether a stroke plays a live effect (its paint is effect paint with `live`). */
+function isLiveEffect(s: RecordedStroke): boolean {
+  return s.paint?.type === 'effect' && (s.paint as PaintEffectPaint).live === true;
+}
+
+/** An effect paint's frame `t` ms on from its own time. */
+function framePaint(p: PaintEffectPaint, t: number): PaintEffectPaint {
+  return { ...p, time: p.time + t };
+}
+
+/** The most live effects (distinct sources) a document plays at once: each needs a renderer. */
+export const MAX_LIVE_EFFECT_SOURCES = 8;
+
+const defaultEffectClock = {
+  now: () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+  frame: (cb: () => void): (() => void) => {
+    if (typeof requestAnimationFrame === 'undefined') {
+      const t = setTimeout(cb, 16);
+      return () => clearTimeout(t);
+    }
+    const id = requestAnimationFrame(cb);
+    return () => cancelAnimationFrame(id);
+  },
+};
 
 /** `r` cut to the canvas, or `null` when nothing of it is on the canvas. */
 function clipRect(r: RasterRect, width: number, height: number): RasterRect | null {

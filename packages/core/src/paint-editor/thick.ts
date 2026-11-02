@@ -386,7 +386,7 @@ export class ThickStrokeDriver {
     let flow = 1;
     const effect = this.init.effect;
     if (effect) {
-      sampleEffectAt(effect, d.x, d.y, this.centre);
+      sampleEffectAt(effect, d.x, d.y, this.centre, d);
       ex.setReservoirColor(this.centre[0], this.centre[1], this.centre[2]);
     } else if (this.sampler) {
       const g = this.sampler.dab(d, this.sample);
@@ -403,7 +403,7 @@ export class ThickStrokeDriver {
       let field: Float32Array | null = null;
       if (effect) {
         field = new Float32Array(n * 3);
-        effectDabField(effect, rect, cov, this.centre, this.paint, field);
+        effectDabField(effect, rect, cov, this.centre, this.paint, field, 0, d);
       }
       this.medium.deposit(rect, cov, dep, this.paint, ex.paintPigment, field);
     }

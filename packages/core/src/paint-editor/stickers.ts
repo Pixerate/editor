@@ -317,7 +317,7 @@ export class StickerSpray {
     const effect = this.init.effect;
     if (effect) {
       const rgb: [number, number, number] = [0, 0, 0];
-      const alpha = sampleEffectAt(effect, d.x + dx, d.y + dy, rgb);
+      const alpha = sampleEffectAt(effect, d.x + dx, d.y + dy, rgb, d);
       return { color: '#' + rgb.map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join(''), alpha };
     }
     const g = this.init.paint;

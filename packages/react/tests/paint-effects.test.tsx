@@ -116,4 +116,37 @@ describe('paint effects (React)', () => {
     expect(container.querySelector('[data-effect-part="paint"]')).toBeNull();
     expect(container.querySelector('[data-testid="paint-well"]')!.getAttribute('data-effect-paint')).toBeNull();
   });
+
+  it('lays the effect along the stroke, makes it live, and plays or pauses live paint', async () => {
+    const c = new PaintEditorController({ width: 32, height: 16 });
+    c.setEffectsProvider(createFakeEffectProvider());
+    c.addLayer({ type: 'strokes' });
+    act(() => root.render(<PaintEffectsPanel controller={c} />));
+    await click(button('Paint…'));
+    await pickEffect('fake.gradient');
+    for (let i = 0; i < 4; i++) await settle();
+    const along = () => container.querySelector<HTMLInputElement>('[data-testid="effect-paint-placement"] input[type="checkbox"]')!;
+    await click(along());
+    for (let i = 0; i < 4; i++) await settle();
+    expect(c.getEffectPaint()?.map).toEqual({ by: 'stroke', length: 300, repeat: 'repeat' });
+    const repeat = container.querySelector<HTMLSelectElement>('select[aria-label="Effect repeat"]')!;
+    await act(async () => {
+      repeat.value = 'mirror';
+      repeat.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    for (let i = 0; i < 4; i++) await settle();
+    expect(c.getEffectPaint()?.map?.repeat).toBe('mirror');
+    const live = container.querySelectorAll<HTMLInputElement>('[data-testid="effect-paint-placement"] input[type="checkbox"]')[1];
+    await click(live);
+    for (let i = 0; i < 4; i++) await settle();
+    expect(c.getEffectPaint()).toMatchObject({ live: true, map: { repeat: 'mirror' } });
+    expect(container.querySelector('[data-effect-part="playback"]')).toBeNull();
+    act(() => void c.paintStroke({ brushId: 'ink-pen', points: [{ x: 2, y: 8 }, { x: 30, y: 8 }] }));
+    const playback = container.querySelector('[data-effect-part="playback"]')!;
+    expect(playback.textContent).toContain('1 stroke');
+    await click(button('Pause'));
+    expect(c.getState().effectPlayback.playing).toBe(false);
+    await click(button('Play'));
+    expect(c.getState().effectPlayback.playing).toBe(true);
+  });
 });
