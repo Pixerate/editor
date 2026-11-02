@@ -10,7 +10,7 @@ import {
   type VideoEffectValues,
 } from '@pixerate/editor/video-editor';
 import type { EffectProvider } from '@pixerate/editor/effects';
-import { EffectAuthoringEditor, EffectParameters, EffectsBrowser, useEffectDescription } from '../effects';
+import { EffectAuthoringEditor, EffectParameters, EffectsBrowser, EffectTemplates, useEffectDescription } from '../effects';
 import { useVideoEditorState } from './useVideoEditor';
 
 export interface VideoEffectsPanelProps {
@@ -85,6 +85,7 @@ export function VideoEffectsPanel({ controller, className = '' }: VideoEffectsPa
       {browse === 'generator' && (
         <EffectsBrowser provider={provider} uses={['generator', 'title', 'overlay']} title="Generators and titles" onPick={(e) => (setBrowse(null), addEffectClip(e.id))} />
       )}
+      <EffectTemplates provider={provider} disabled={disabled} fillLabel="Insert template" onFill={(t, v) => controller.fillTemplate(t, v, { at: Math.round(state.time) }).then((r) => (r.ok && r.notes.length && setMessage(r.notes.join(' ')), r))} />
       {!clip && <p className="text-[11px] text-muted-foreground">Select a clip to see its effects.</p>}
       {clip && (
         <>

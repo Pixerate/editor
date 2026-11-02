@@ -43,3 +43,4 @@ export * from './effect-authoring.js';
 export * from './ui.js';
 export * from './playback.js';
 export * from './editorDocument.js';
+export * from './sequence.js';

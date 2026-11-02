@@ -1,6 +1,7 @@
 <script lang="ts">
   import { indexMotionNodes, type AnimationEditorController, type MotionEffectResult } from '@pixerate/editor/animation-editor';
   import EffectsBrowser from '../effects/EffectsBrowser.svelte';
+  import EffectTemplates from '../effects/EffectTemplates.svelte';
   import AnimationEffectControls from './AnimationEffectControls.svelte';
   import { animationEditorStateOf } from './createAnimationEditor.svelte.js';
 
@@ -50,6 +51,7 @@
   {#if browse === 'motion'}
     <EffectsBrowser {provider} uses={['motion']} kinds={['motion']} title="Motion for {target}" onpick={(e) => ((browse = null), report(controller.applyMotionEffect(e.id, [target])))} />
   {/if}
+  <EffectTemplates {provider} disabled={ed.readOnly} fillLabel="New scene from template" onfill={(t, v) => controller.fillTemplate(t, v).then((r) => (r.ok && r.notes.length && (message = r.notes.join(' ')), r))} />
   {#if browse === 'vector'}
     <EffectsBrowser {provider} kinds={['vector']} title="Vector effects" onpick={(e) => ((browse = null), report(controller.addVectorEffect(e.id)))} />
   {/if}

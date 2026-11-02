@@ -103,10 +103,10 @@ describe('animation editor: provider effect tools', () => {
 	const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
 	it('lists its tools; read-only hides the writes', () => {
-		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'list_camera_moves', 'set_shot_camera_move', 'clear_shot_camera_move', 'list_shot_layers', 'add_shot_layer', 'update_shot_layer', 'move_shot_layer', 'remove_shot_layer', 'set_shot_transition', 'clear_shot_transition', 'add_vector_effect']);
+		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'list_camera_moves', 'set_shot_camera_move', 'clear_shot_camera_move', 'list_shot_layers', 'add_shot_layer', 'update_shot_layer', 'move_shot_layer', 'remove_shot_layer', 'set_shot_transition', 'clear_shot_transition', 'list_templates', 'describe_template', 'fill_template', 'add_vector_effect']);
 		const r = new ToolRegistry();
 		r.register(createAnimationEffectsToolProvider(editor(), { readOnly: true }));
-		expect(r.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_camera_moves', 'list_shot_layers']);
+		expect(r.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_camera_moves', 'list_shot_layers', 'list_templates', 'describe_template']);
 	});
 
 	it('applies, updates, lists and removes through the registry', async () => {

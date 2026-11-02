@@ -6,6 +6,7 @@
  * `set_clip_camera_move`, `clear_clip_camera_move`).
  */
 
+import { effectTemplateTools } from '../effects/template-tools.js';
 import { videoCameraMoveTools } from './camera-tools.js';
 import { createEffectToolProvider, type AppliedEffectInfo, type EffectChangeResult, type EffectTargetEffects } from '../effects/tools.js';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
@@ -128,6 +129,21 @@ export function createVideoEffectsToolProvider(controller: VideoEditorController
 		subscribe: (notify) => controller.subscribe(() => notify()),
 		extraTools: (ctx): AgentTool[] => [
 			...videoCameraMoveTools(controller, ctx),
+			...effectTemplateTools(
+				{
+					provider: () => controller.effectsProvider,
+					fillDetails:
+						'It goes on the timeline at "at" (default the end of the project), on new tracks above the others: each shot\'s bottom layer on a base track (with the shot\'s transition), other layers as effect, picture and text clips on tracks by role, titles and captions as text clips; an open subject slot becomes a grey placeholder clip named after it. Camera moves are not carried over. Returns { template, tracks, clips, assets, start, end (ms), placeholders (clip ids by open slot), openSlots, notes }. To fill an open slot, add the picture with add_video_asset and put it on the placeholder\'s track at its start with add_video_clip in overwrite mode.',
+					fillOptions: { at: { type: 'number', minimum: 0, description: 'Where on the timeline it starts, ms (default the end of the project).' } },
+					fill: async (template, values, options) => {
+						const r = await controller.fillTemplate(template, values, { name: options.name as string | undefined, at: options.at as number | undefined });
+						if (!r.ok) throw new Error(r.error);
+						const { ok: _ok, ...rest } = r;
+						return rest;
+					}
+				},
+				ctx
+			),
 			{
 				name: 'add_video_effect_clip',
 				title: 'Add an effect clip',

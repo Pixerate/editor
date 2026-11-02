@@ -313,7 +313,11 @@ export class MotionLayersEngine implements MotionLayerPictures {
 		this.listeners.clear();
 	}
 
+	/** Goes up each time pictures come in or are cleared, so a view that caches frames knows to draw again. */
+	revision = 0;
+
 	private notify() {
+		this.revision++;
 		this.listeners.forEach((l) => l());
 	}
 

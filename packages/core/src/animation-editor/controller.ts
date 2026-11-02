@@ -20,6 +20,8 @@ import type { CameraMoveRole, CameraMoveSpec, EffectDescription, EffectProvider,
 import { motionClientToDocument, motionNodePose, motionTakeProblems, motionTakeShot, type MotionNodePose, type MotionTake, type MotionTakeOptions, type MotionTakeResult, type MotionTakeSample } from './record.js';
 import { browserMotionLayerHost, MotionLayersEngine, type MotionLayerHost } from './layers.js';
 import { findMotionShotLayer, freshMotionLayerId, motionShotLayersInfo, resolveMotionShotLayer, resolveMotionShotTransition, type MotionShotLayerInfo, type MotionShotLayersInfo } from './layer-edit.js';
+import { motionSceneFromSequence, motionShotsFromSequence } from './sequence.js';
+import { fillEffectTemplate } from '../effects/templates.js';
 import { motionArtworkSvg, motionCommandsFromEffect, motionPartsFromVectorEffect, motionSceneEffects, nextMotionEffectInstance, withoutMotionEffect, type AppliedMotionEffect } from './effects.js';
 
 export interface AnimationEditorOptions {
@@ -54,6 +56,9 @@ export type MotionCameraMoveResult = { ok: true; shot: string; camera: MotionCam
 
 /** What a shot layer or transition edit did: the layer it added or changed (when there is one) and the shot's layers and transition afterwards. */
 export type MotionShotLayerResult = ({ ok: true; layer?: MotionShotLayerInfo; notes: string[] } & MotionShotLayersInfo) | { ok: false; error: string };
+
+/** What filling a template did: the shots and layers it made, slots left open, and notes. */
+export type MotionTemplateResult = { ok: true; template: string; mode: 'replace' | 'append'; shots: string[]; layers: string[]; openSlots: string[]; notes: string[] } | { ok: false; error: string };
 
 /** A layer as `addShotLayer` takes it: its id is made when left out. */
 export type MotionShotLayerInput = Omit<MotionShotLayer, 'id' | 'provider' | 'name'> & { id?: string };
@@ -120,6 +125,8 @@ export interface AnimationEditorState {
 	revision: number;
 	/** The registered effects provider, or `null`. */
 	effectsProvider: EffectProvider | null;
+	/** Goes up each time shot layer or transition pictures come in, so a stage that caches its frame draws again. */
+	layerPictures: number;
 	/** The take being recorded, or `null`. While recording, frames show the take so far. */
 	recording: AnimationEditorRecording | null;
 }
@@ -238,6 +245,7 @@ export class AnimationEditorController {
 			redoLabel: h.redoName,
 			revision: this.revision,
 			effectsProvider: this.effects.provider,
+			layerPictures: this.layers.revision,
 			recording: this.recording
 				? {
 						shot: this.recording.options.id,
@@ -800,6 +808,43 @@ export class AnimationEditorController {
 		const r = this.apply({ op: 'update_shot', shot, remove: ['transition'] }, 'Clear transition');
 		if (!r.ok) return r;
 		return this.layerResult(shot, undefined);
+	}
+
+	/**
+	 * Fills a provider sequence template and loads it: `replace` (default) makes a new scene the
+	 * size of the template's stage from its shots; `append` adds its shots after the current ones,
+	 * scaled to the artwork. Values are checked first and every problem is refused at once. One
+	 * undo step. Returns the new shot and layer ids, slots left open and notes.
+	 */
+	async fillTemplate(template: string, values: Record<string, unknown> = {}, options: { name?: string; mode?: 'replace' | 'append' } = {}): Promise<MotionTemplateResult> {
+		const reason = this.readOnlyReason();
+		if (reason) return this.refuse(reason) as { ok: false; error: string };
+		const mode = options.mode ?? 'replace';
+		let filled;
+		try {
+			filled = await fillEffectTemplate(this.effects.provider, template, values, options.name ? { name: options.name } : {});
+		} catch (error) {
+			if (isEffectError(error) || error instanceof Error) return this.refuse((error as Error).message) as { ok: false; error: string };
+			throw error;
+		}
+		const provider = this.effects.provider!.id;
+		const label = `Template ${filled.template.name}`;
+		let shots;
+		let notes: string[];
+		let r: MotionEditResult;
+		if (mode === 'replace') {
+			const made = motionSceneFromSequence(filled.sequence, { provider });
+			shots = made.scene.shots;
+			notes = made.notes;
+			r = this.apply({ op: 'replace_scene', scene: made.scene }, label);
+		} else {
+			const made = motionShotsFromSequence(filled.sequence, { provider, width: this.scene.artwork.width, height: this.scene.artwork.height, shotIds: this.scene.shots.map((s) => s.id), layerIds: this.scene.shots.flatMap((s) => (s.layers ?? []).map((l) => l.id)) });
+			shots = made.shots;
+			notes = made.notes;
+			r = this.apply({ op: 'insert_shots', shots: made.shots }, label);
+		}
+		if (!r.ok) return r;
+		return { ok: true, template, mode, shots: shots.map((s) => s.id), layers: shots.flatMap((s) => (s.layers ?? []).map((l) => l.id)), openSlots: filled.openSlots, notes: [...filled.notes, ...notes] };
 	}
 
 	// ---------------------------------------------------------------------------------------

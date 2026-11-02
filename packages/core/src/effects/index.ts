@@ -11,6 +11,7 @@ export * from './templates.js';
 export * from './conformance.js';
 export * from './fake.js';
 export * from './tools.js';
+export * from './template-tools.js';
 export * from './ui.js';
 export * from './pool.js';
 export * from './authoring.js';
