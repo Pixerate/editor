@@ -69,4 +69,14 @@ describe("paint agent scripts", () => {
     expect(controller.listStickers(stars.id)[0].size).toBe(70);
     expect(controller.listStencils()).toHaveLength(0);
   }, 120_000);
+
+  it("paints a particle stroke on a stroke layer, then restyles and moves it", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-stroke-layer")!, { control: { speed: Infinity, stopped: false } });
+    const wisps = controller.listLayers().find((l) => l.name === "Wisps")!;
+    const [stroke] = controller.listLiveStrokes(wisps.id);
+    expect(stroke).toMatchObject({ color: "#f59e0b" });
+    expect(stroke.brush.id).toBe("orbit-curls");
+    expect(stroke.brush.tip.size).toBe(40);
+  }, 120_000);
 });

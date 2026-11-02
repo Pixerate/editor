@@ -1327,4 +1327,16 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
+  {
+    id: "paint-stroke-layer",
+    prompt: "Paint a particle stroke, then restyle it",
+    steps: [
+      { say: "A stroke layer keeps each stroke editable after it is painted.", tool: "paint__add_layer", args: { name: "Wisps", type: "strokes" }, as: "wisps" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.wisps.id, brushId: "hair-strands", color: "#94a3b8", points: wave(300, 50) }), as: "wisp" },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+      { say: "Restyle the same stroke: orbit curls, warmer, bigger. The layer redraws exactly.", tool: "paint__update_stroke", args: (ctx) => ({ id: ctx.results.wisp.strokeId, brushId: "orbit-curls", color: "#f59e0b", brush: { tip: { size: 40 } } }) },
+      { say: "And lift it a little.", tool: "paint__edit_stroke_points", args: (ctx) => ({ id: ctx.results.wisp.strokeId, transform: { dy: -60, rotate: -6 } }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
 ];

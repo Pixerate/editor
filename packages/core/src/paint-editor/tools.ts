@@ -20,6 +20,7 @@ import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAIN
 import { MAX_CANVAS_SIDE } from './document';
 import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
+import type { RecordedStroke } from './strokes';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
@@ -528,12 +529,12 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'add_layer',
     title: 'Add a layer',
-    description: 'Adds an empty pixel layer (or a group) above the active layer, or above aboveId, or at the top of parentId; it becomes the active layer. One undo step. Returns the layer.',
+    description: 'Adds an empty pixel layer, a group, or a stroke layer (type strokes: its strokes stay editable with update_stroke and edit_stroke_points) above the active layer, or above aboveId, or at the top of parentId; it becomes the active layer. One undo step. Returns the layer (liveStrokes: its stroke count, for a stroke layer).',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', minLength: 1, description: 'Layer name (default "Layer n").' },
-        type: { type: 'string', enum: ['pixel', 'group'], description: 'pixel (default) or group.' },
+        type: { type: 'string', enum: ['pixel', 'group', 'strokes'], description: 'pixel (default), group, or strokes: a live stroke layer whose pixels are drawn from its strokes, so each stays editable. It takes dab, particle, bristle and Mixer Brush strokes that pick up no paint.' },
         aboveId: { type: 'string', description: 'Put it directly above this layer (default the active layer).' },
         parentId: { type: 'string', description: 'Put it at the top of this group instead.' },
       },
@@ -936,41 +937,162 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_strokes',
     title: 'List recorded strokes',
     description:
-      'Lists the recorded strokes, oldest first (every stroke is kept as data): id, layer, brush id and name, colour, point count, bounds and seed. With ids, also the points. Use the ids with replay_strokes.',
+      'Lists the recorded strokes, oldest first (every stroke is kept as data): id, layer, brush id and name, colour, point count, bounds, seed and whether it is live. With ids, also the points. Use the ids with replay_strokes. With live true, lists the strokes of stroke layers as they are now, bottom first: the ones update_stroke, edit_stroke_points, reorder_stroke and remove_strokes change.',
     inputSchema: {
       type: 'object',
       properties: {
         ids: { type: 'array', items: { type: 'string', description: 'Stroke id.' }, description: 'Only these strokes, with their points.' },
         last: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only the most recent n strokes (default 100).' },
+        live: { type: 'boolean', description: 'Only the editable strokes of stroke layers, as they are now, bottom first (default false: the whole recorded history).' },
+        layerId: { type: 'string', description: 'Only strokes of this layer.' },
       },
       additionalProperties: false,
     },
     annotations: { title: 'List recorded strokes', ...READ },
     coordinates: { out: ['strokes[].bounds', 'strokes[].points[]'] },
-    handler: ({ ids, last }) => {
-      const all = c.getStrokes();
+    handler: ({ ids, last, live, layerId }) => {
+      if (layerId !== undefined && !c.getLayer(layerId)) throw new Error(`Unknown layer "${layerId}". Call list_layers for the ids.`);
+      const liveAll = Object.values(c.document.liveStrokes ?? {}).flat();
+      const liveIds = new Set(liveAll.map((s) => s.id));
+      let all: readonly RecordedStroke[] = live ? liveAll : c.getStrokes();
+      if (layerId !== undefined) all = all.filter((s) => s.layerId === layerId);
       const picked = ids ? all.filter((s) => ids.includes(s.id)) : all.slice(-(last ?? 100));
       if (ids) for (const id of ids) if (!all.some((s) => s.id === id)) throw new Error(`Unknown stroke "${id}". Call list_strokes without ids for the ids.`);
-      return {
-        total: all.length,
-        strokes: picked.map((s) => {
-          const xs = s.points.map((p) => p.x);
-          const ys = s.points.map((p) => p.y);
-          const pad = s.brush.tip.size / 2;
-          return {
-            id: s.id,
-            layerId: s.layerId,
-            brushId: s.brush.id,
-            brushName: s.brush.name,
-            color: s.color,
-            points: ids ? s.points : s.points.length,
-            seed: s.seed,
-            copies: s.copies?.length ?? 0,
-            bounds: { x: Math.floor(Math.min(...xs) - pad), y: Math.floor(Math.min(...ys) - pad), width: Math.ceil(Math.max(...xs) - Math.min(...xs) + 2 * pad), height: Math.ceil(Math.max(...ys) - Math.min(...ys) + 2 * pad) },
-          };
-        }),
-      };
+      return { total: all.length, strokes: picked.map((s) => strokeSummary(s, Boolean(ids), live ? true : liveIds.has(s.id) && c.document.liveStrokes?.[s.layerId]?.includes(s) === true)) };
     },
+  });
+
+  add({
+    name: 'stroke_at',
+    title: 'Find the stroke at a point',
+    description: 'Returns the top-most stroke of a stroke layer that painted the pixel at a point (document pixels), or stroke null when none did, so you can pick one stroke among overlapping ones before update_stroke, edit_stroke_points or remove_strokes. Changes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: { type: 'string', description: 'Stroke layer id from list_layers (default the active layer).' },
+        x: { type: 'number', description: 'Point x in document pixels.' },
+        y: { type: 'number', description: 'Point y in document pixels.' },
+      },
+      required: ['x', 'y'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Find the stroke at a point', ...READ },
+    coordinates: { in: [''], out: ['stroke.bounds'] },
+    handler: ({ layerId, x, y }) => {
+      const s = c.liveStrokeAt(layerId, x, y);
+      return { stroke: s ? strokeSummary(s, false, true) : null };
+    },
+  });
+
+  add({
+    name: 'update_stroke',
+    title: 'Change a stroke',
+    description:
+      'Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, eraser, smudge, blender, pick-up). One undo step. Returns the stroke and the area that changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Stroke id from list_strokes {live: true}.' },
+        brushId: { type: 'string', description: 'Brush preset id from list_brushes; the stroke keeps its size.' },
+        brush: { type: 'object', properties: BRUSH_FIELDS, additionalProperties: false, description: 'Brush settings to change on top of brushId or the stroke’s brush; missing fields keep their values.' },
+        color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'New colour #rrggbb (replaces gradient paint).' },
+        paint: { anyOf: [PAINT_SOURCE_JSON_SCHEMA, { type: 'null', description: 'Back to the stroke’s plain colour.' }], description: 'A colour or gradient paint for the stroke; null drops its gradient.' },
+        seed: { type: 'integer', minimum: 0, description: 'Another jitter seed: particles, scatter and texture fall differently.' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Change a stroke', ...WRITE },
+    coordinates: { out: ['bounds', 'stroke.bounds'] },
+    handler: ({ id, ...update }) => {
+      if (!Object.keys(update).length) throw new Error('Pass at least one change: brushId, brush, color, paint or seed.');
+      const r = c.updateStroke(id, update);
+      return { stroke: strokeSummary(r.stroke, false, true), bounds: r.bounds };
+    },
+  });
+
+  add({
+    name: 'edit_stroke_points',
+    title: 'Move or reshape a stroke',
+    description:
+      'Replaces a stroke’s points (points, document pixels), or moves, scales, rotates or flips it (transform, about its centre unless origin is given; the brush size scales with it), then redraws its stroke layer exactly. Pass one of points or transform. One undo step. Returns the stroke with its points and the area that changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Stroke id from list_strokes {live: true}.' },
+        points: POINTS,
+        transform: {
+          type: 'object',
+          description: 'A move, scale, rotation or flip of the whole stroke.',
+          properties: {
+            dx: { type: 'number', description: 'Move right by this many pixels (default 0).' },
+            dy: { type: 'number', description: 'Move down by this many pixels (default 0).' },
+            scale: { type: 'number', exclusiveMinimum: 0, maximum: 20, description: 'Scale about the origin; brush size scales too (default 1).' },
+            rotate: { type: 'number', minimum: -360, maximum: 360, description: 'Rotate about the origin, degrees clockwise (default 0).' },
+            flipX: { type: 'boolean', description: 'Mirror left to right about the origin (default false).' },
+            origin: { type: 'object', description: 'Centre for scale, rotate and flip (default the centre of the stroke).', properties: { x: { type: 'number', description: 'Document x.' }, y: { type: 'number', description: 'Document y.' } }, required: ['x', 'y'], additionalProperties: false },
+          },
+          additionalProperties: false,
+        },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Move or reshape a stroke', ...WRITE },
+    coordinates: { in: ['points[]', 'transform.origin'], out: ['bounds', 'stroke.bounds', 'stroke.points[]'] },
+    handler: ({ id, points, transform }) => {
+      const r = c.editStrokePoints(id, { points, transform });
+      return { stroke: strokeSummary(r.stroke, true, true), bounds: r.bounds };
+    },
+  });
+
+  add({
+    name: 'reorder_stroke',
+    title: 'Move a stroke up or down',
+    description: 'Moves a stroke to index in its stroke layer (0 = bottom, drawn first) and redraws the layer. One undo step. Returns the new order of ids, bottom first.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Stroke id from list_strokes {live: true}.' }, index: { type: 'integer', minimum: 0, description: 'New position, 0 = bottom.' } },
+      required: ['id', 'index'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Move a stroke up or down', ...WRITE },
+    handler: ({ id, index }) => ({ order: c.reorderStroke(id, index) }),
+  });
+
+  add({
+    name: 'remove_strokes',
+    title: 'Delete strokes',
+    description: 'Deletes strokes from their stroke layers (the eraser of a stroke layer) and redraws them. All checked first; one undo step. Returns the ids removed and the area that changed.',
+    inputSchema: {
+      type: 'object',
+      properties: { ids: { type: 'array', minItems: 1, items: { type: 'string', description: 'Stroke id.' }, description: 'Stroke ids from list_strokes {live: true}.' } },
+      required: ['ids'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Delete strokes', ...DESTRUCTIVE },
+    coordinates: { out: ['bounds'] },
+    handler: ({ ids }) => c.removeStrokes(ids),
+  });
+
+  add({
+    name: 'convert_to_stroke_layer',
+    title: 'Make a layer a stroke layer',
+    description: 'Makes an empty pixel layer a stroke layer, so strokes painted on it stay editable. Refuses a layer with paint (add_layer {type: "strokes"} instead). One undo step. Returns the layer.',
+    inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Layer id from list_layers (default the active layer).' } }, additionalProperties: false },
+    annotations: { title: 'Make a layer a stroke layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
+    handler: ({ layerId }) => c.convertToLiveStrokes(layerId),
+  });
+
+  add({
+    name: 'rasterize_stroke_layer',
+    title: 'Rasterize a stroke layer',
+    description: 'Turns a stroke layer into a plain pixel layer with the same pixels: its strokes stop being editable, and erasers, smudges and fills work on it. One undo step. Returns the layer.',
+    inputSchema: { type: 'object', properties: { layerId: { type: 'string', description: 'Stroke layer id from list_layers (default the active layer).' } }, additionalProperties: false },
+    annotations: { title: 'Rasterize a stroke layer', ...DESTRUCTIVE },
+    coordinates: { out: ['bounds'] },
+    handler: ({ layerId }) => c.rasterizeLiveStrokes(layerId),
   });
 
   add({
@@ -1162,5 +1284,24 @@ function hostTool({ coordinates, ...tool }: PaintAgentTool, { origin, onChange }
       const r = tool.handler(origin && coordinates?.in ? toDocument(args, coordinates.in, origin) : args, context);
       return r instanceof Promise ? r.then(done) : done(r);
     },
+  };
+}
+
+/** A stroke as tools return it: its points (or how many), bounds and whether it is live (editable). */
+function strokeSummary(s: RecordedStroke, withPoints: boolean, live: boolean) {
+  const xs = s.points.map((p) => p.x);
+  const ys = s.points.map((p) => p.y);
+  const pad = s.brush.tip.size / 2;
+  return {
+    id: s.id,
+    layerId: s.layerId,
+    brushId: s.brush.id,
+    brushName: s.brush.name,
+    color: s.color,
+    points: withPoints ? s.points : s.points.length,
+    seed: s.seed,
+    copies: s.copies?.length ?? 0,
+    live,
+    bounds: { x: Math.floor(Math.min(...xs) - pad), y: Math.floor(Math.min(...ys) - pad), width: Math.ceil(Math.max(...xs) - Math.min(...xs) + 2 * pad), height: Math.ceil(Math.max(...ys) - Math.min(...ys) + 2 * pad) },
   };
 }

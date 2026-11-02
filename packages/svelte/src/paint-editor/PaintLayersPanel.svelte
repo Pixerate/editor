@@ -31,6 +31,7 @@
   <div class="flex flex-wrap gap-1">
     <button type="button" class={button} onclick={() => run(() => controller.addLayer())}>New layer</button>
     <button type="button" class={button} onclick={() => run(() => controller.addLayer({ type: 'group' }))}>New group</button>
+    <button type="button" class={button} title="A layer whose strokes stay editable" onclick={() => run(() => controller.addLayer({ type: 'strokes' }))}>New stroke layer</button>
     <button type="button" class={button} disabled={!active} onclick={() => active && run(() => controller.duplicateLayer(active.id))}>Duplicate</button>
     <button type="button" class={button} disabled={!active} aria-label="Move layer up" onclick={() => move(1)}>↑</button>
     <button type="button" class={button} disabled={!active} aria-label="Move layer down" onclick={() => move(-1)}>↓</button>
@@ -75,7 +76,7 @@
             }}
           />
         {:else}
-          <span class="flex-1 truncate" role="presentation" ondblclick={() => (renaming = l.id)}>{l.type === 'group' ? '▸ ' : ''}{l.name}</span>
+          <span class="flex-1 truncate" role="presentation" ondblclick={() => (renaming = l.id)}>{l.type === 'group' ? '▸ ' : ''}{#if l.liveStrokes !== undefined}<span aria-label="Stroke layer" title={`Stroke layer: ${l.liveStrokes} editable strokes`}>✎ </span>{/if}{l.name}</span>
         {/if}
         {#if l.locks.pixels || l.locks.all}<span title="Locked">🔒</span>{/if}
       </li>

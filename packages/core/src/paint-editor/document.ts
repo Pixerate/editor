@@ -49,6 +49,11 @@ export interface PaintDocumentState {
   paintEvents?: PaintEvent[];
   /** Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them). */
   stickers?: Readonly<Record<string, Sticker[]>>;
+  /**
+   * Live stroke layers: each layer's strokes, bottom first. Its pixels are drawn from them, so each
+   * stroke's brush, colour and points stay editable (`updateStroke`).
+   */
+  liveStrokes?: Readonly<Record<string, RecordedStroke[]>>;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */
@@ -65,9 +70,9 @@ export interface PaintDocumentState {
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */
 export interface PaintEvent {
   at: number;
-  kind: 'fill' | 'clear' | 'flatten' | 'stickers';
+  kind: 'fill' | 'clear' | 'flatten' | 'stickers' | 'live-strokes';
   layerId: string;
-  /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers after an edit. */
+  /** The fill's options (colour, opacity, grain, pressure, blend), or the layer's stickers or live strokes after an edit. */
   data?: Record<string, unknown>;
 }
 

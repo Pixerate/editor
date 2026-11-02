@@ -46,6 +46,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
   const [size, setSize] = useState({ width: 800, height: 600 });
   const measured = useRef(false);
   const [predicted, setPredicted] = useState<Array<{ x: number; y: number }>>([]);
+  const [strokeDrag, setStrokeDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const presenter = useMemo(() => new PaintCanvasPresenter(controller), [controller]);
   const gesture = useMemo(
     () =>
@@ -112,7 +113,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
 
   const report = () => onError?.(gesture.error);
   const transform = viewCssTransform(state.view, doc, size);
-  const lines = showGuides ? guideOverlay(controller) : [];
+  const lines = showGuides ? guideOverlay(controller, strokeDrag) : [];
 
   return (
     <div
@@ -122,7 +123,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
       aria-label="Paint canvas"
       data-testid="paint-canvas"
       className={`relative overflow-hidden bg-slate-950 outline-none touch-none select-none ${className ?? ''}`}
-      style={{ cursor: tool === 'pan' ? 'grab' : tool === 'eyedropper' ? 'copy' : 'crosshair' }}
+      style={{ cursor: tool === 'pan' ? 'grab' : tool === 'eyedropper' ? 'copy' : tool === 'stroke' ? 'default' : 'crosshair' }}
       onPointerDown={(e) => {
         viewport.current?.focus();
         if (gesture.down(e.nativeEvent)) (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -131,14 +132,18 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
       onPointerMove={(e) => {
         gesture.move(e.nativeEvent);
         if (gesture.predicted.length || predicted.length) setPredicted(gesture.predicted.map((p) => ({ x: p.x, y: p.y })));
+        if (gesture.strokeDrag || strokeDrag) setStrokeDrag(gesture.strokeDrag);
       }}
       onPointerUp={(e) => {
         gesture.up(e.nativeEvent);
         setPredicted([]);
+        setStrokeDrag(null);
+        report();
       }}
       onPointerCancel={() => {
         gesture.cancel();
         setPredicted([]);
+        setStrokeDrag(null);
       }}
       onKeyDown={(e) => {
         if (handlePaintShortcut(controller, gesture, e)) e.preventDefault();
@@ -169,8 +174,8 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
             y1={l.from.y}
             x2={l.to.x}
             y2={l.to.y}
-            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : '#f472b6'}
-            strokeOpacity={l.kind === 'symmetry' || l.kind === 'stencil' ? 0.8 : 0.35}
+            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' ? '#818cf8' : '#f472b6'}
+            strokeOpacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' ? 0.8 : 0.35}
             strokeWidth={1 / state.view.zoom}
             strokeDasharray={l.kind === 'symmetry' ? `${6 / state.view.zoom} ${4 / state.view.zoom}` : undefined}
           />

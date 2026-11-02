@@ -132,7 +132,15 @@ export async function replayPainting(
       if (!target.getLayer(e.layerId)) continue;
       if (e.kind === 'fill') target.fillLayer({ layerId: e.layerId, ...(e.data as object) });
       else if (e.kind === 'clear') target.clearLayer(e.layerId);
-      else if (e.kind === 'stickers') {
+      else if (e.kind === 'live-strokes') {
+        const d = e.data as { strokes?: RecordedStroke[]; rasterized?: boolean } | undefined;
+        if (d?.rasterized) target.replaceLiveStrokes(e.layerId, null);
+        else {
+          const list = (d?.strokes ?? []).map((st) => (s === 1 ? st : { ...varyStroke(st, scaleM, { scale: s }), ...(st.stencils ? { stencils: st.stencils.map((x) => scaleStencil(x, s)) } : {}) }));
+          await target.prepareEffectPaints(list.flatMap((st) => (st.paint?.type === 'effect' ? [st.paint] : [])));
+          target.replaceLiveStrokes(e.layerId, list);
+        }
+      } else if (e.kind === 'stickers') {
         const list = ((e.data as { stickers?: Sticker[] })?.stickers ?? []).map((x) => (s === 1 ? x : { ...x, x: x.x * s, y: x.y * s, size: x.size * s }));
         target.replaceStickers(e.layerId, list);
       } else target.flattenRelief(e.layerId);

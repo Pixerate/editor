@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
@@ -504,5 +504,47 @@ describe('React paint editor', () => {
     click(list[0]);
     click(byText('Delete'));
     expect(c.listStickers().length).toBe(list.length - 1);
+  });
+});
+
+describe('stroke layers', () => {
+  it('adds a stroke layer, picks and edits strokes in the stroke panel, outlines the pick and rasterizes', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    const tools: string[] = [];
+    render(
+      <>
+        <PaintToolbar controller={c} tool="brush" onToolChange={(t) => tools.push(t)} />
+        <PaintLayersPanel controller={c} />
+        <PaintCanvas controller={c} fitOnMount={false} />
+        <StrokePanel controller={c} />
+      </>
+    );
+    expect(container.querySelector('[data-testid="stroke-panel"]')).toBeNull();
+    click(byText('New stroke layer'));
+    expect(container.querySelector('[aria-label="Stroke layer"]')).not.toBeNull();
+    click(byText('Select stroke'));
+    expect(tools).toEqual(['stroke']);
+    act(() => {
+      c.paintStroke({ points: [{ x: 20, y: 60 }, { x: 260, y: 60 }], brushId: 'ink-pen', color: '#2563eb' });
+      c.paintStroke({ points: [{ x: 20, y: 120 }, { x: 260, y: 120 }], brushId: 'ink-pen', color: '#dc2626' });
+    });
+    const options = container.querySelectorAll('[data-testid="stroke-panel"] [role="option"]');
+    expect(options).toHaveLength(2);
+    click(options[0]);
+    const [a, b] = c.listLiveStrokes();
+    expect(c.getState().selectedStroke).toBe(a.id);
+    expect(container.querySelectorAll('svg line[stroke="#818cf8"]').length).toBe(4);
+    setValue(container.querySelector('select[aria-label="Stroke brush"]') as HTMLSelectElement, 'pencil-hb');
+    expect(c.listLiveStrokes()[0].brush.id).toBe('pencil-hb');
+    expect(container.querySelector('select[aria-label="Stroke brush"] option[value="eraser-soft"]')).toBeNull();
+    click(byText('New seed'));
+    expect(c.listLiveStrokes()[0].seed).toBe(a.seed + 1);
+    click(container.querySelector('[aria-label="Move stroke up"]')!);
+    expect(c.listLiveStrokes().map((s) => s.id)).toEqual([b.id, a.id]);
+    click(Array.from(container.querySelectorAll('[data-testid="stroke-edit"] button')).find((x) => x.textContent?.trim() === 'Delete')!);
+    expect(c.listLiveStrokes().map((s) => s.id)).toEqual([b.id]);
+    click(byText('Rasterize'));
+    expect(container.querySelector('[data-testid="stroke-panel"]')).toBeNull();
+    expect(c.getState().undoLabel).toBe('Rasterize stroke layer');
   });
 });

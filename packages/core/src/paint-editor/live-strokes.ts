@@ -1,0 +1,56 @@
+/**
+ * Live stroke layers: a paint layer whose pixels are always drawn from its recorded strokes, so a
+ * stroke's brush, colour, paint, seed and points can be changed after it is painted
+ * (`PaintEditorController.updateStroke` and the rest). The document keeps the strokes
+ * (`liveStrokes`), and the layer's surface is a cache of them drawn bottom first.
+ *
+ * Only brushes whose result depends on the stroke itself can be redrawn exactly: dab, particle and
+ * bristle brushes, and the Mixer Brush, none of them picking up paint. Wet paint needs the
+ * simulation's history, thick paint has relief channels, stickers are their own objects, and
+ * smudges, blenders, pick-up brushes and erasers read the paint under them.
+ */
+
+import type { PaintBrush, PaintBrushEngine } from './brushes';
+import { applyAffine, type RecordedStroke } from './strokes';
+
+/** The engines a live stroke layer takes. */
+export const LIVE_STROKE_ENGINES: readonly PaintBrushEngine[] = ['dab', 'particle', 'bristle', 'mixer'];
+
+/** Why a brush can't paint on a live stroke layer, or `null` when it can. */
+export function liveStrokeRefusal(brush: PaintBrush): string | null {
+  switch (brush.engine) {
+    case 'wet':
+      return `The ${brush.name} brush paints wet media, which a stroke layer can't redraw (the paint depends on the simulation's history); paint it on a pixel layer (add_layer).`;
+    case 'impasto':
+      return `The ${brush.name} brush paints thick paint with relief, which a stroke layer doesn't keep; paint it on a pixel layer (add_layer).`;
+    case 'sticker':
+      return `The ${brush.name} brush sprays stickers, which are their own objects; spray them on an empty pixel layer (add_layer).`;
+    case 'eraser':
+      return `Erasers don't paint on a stroke layer; delete strokes instead (remove_strokes), or rasterize the layer first (rasterize_stroke_layer).`;
+    case 'blender':
+    case 'smudge':
+      return `The ${brush.name} brush moves the paint under it, so it can't be redrawn on its own; rasterize the layer first (rasterize_stroke_layer) or blend on a pixel layer.`;
+  }
+  if (brush.behavior.pickup > 0) return `The ${brush.name} brush picks up the paint under it (pickup ${brush.behavior.pickup}), so it can't be redrawn on its own; set behavior.pickup to 0 (set_brush) or paint on a pixel layer.`;
+  return null;
+}
+
+/** A stroke's extent in document pixels: its points and symmetry copies, padded by the brush. */
+export function liveStrokeBounds(stroke: RecordedStroke): { x: number; y: number; width: number; height: number } {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const m of [null, ...(stroke.copies ?? [])]) {
+    for (const p of stroke.points) {
+      const q = m ? applyAffine(m, p.x, p.y) : p;
+      if (q.x < x0) x0 = q.x;
+      if (q.y < y0) y0 = q.y;
+      if (q.x > x1) x1 = q.x;
+      if (q.y > y1) y1 = q.y;
+    }
+  }
+  // Particles and bristles reach past the tip; give them room.
+  const pad = stroke.brush.tip.size * (stroke.brush.engine === 'particle' ? 2 : 1) + 2;
+  return { x: Math.floor(x0 - pad), y: Math.floor(y0 - pad), width: Math.ceil(x1 - x0 + 2 * pad), height: Math.ceil(y1 - y0 + 2 * pad) };
+}

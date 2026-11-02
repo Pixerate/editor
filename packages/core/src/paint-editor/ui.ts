@@ -39,11 +39,12 @@ export interface PaintPointerEvent extends PointerSample {
   getPredictedEvents?(): PaintPointerEvent[];
 }
 
-export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate';
+export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate' | 'stroke';
 
 export const PAINT_TOOLS: ReadonlyArray<{ id: PaintTool; label: string; key: string }> = [
   { id: 'brush', label: 'Brush', key: 'b' },
   { id: 'eyedropper', label: 'Eyedropper', key: 'i' },
+  { id: 'stroke', label: 'Select stroke', key: 'v' },
   { id: 'pan', label: 'Pan', key: 'h' },
   { id: 'rotate', label: 'Rotate view', key: 'r' },
 ];
@@ -56,7 +57,11 @@ export interface ViewportBox {
   height: number;
 }
 
-type Mode = { kind: 'stroke'; pointerId: number } | { kind: 'pan'; pointerId: number; x: number; y: number; pan: Point2 } | { kind: 'rotate'; pointerId: number; angle: number; rotation: number } | null;
+type Mode =
+  | { kind: 'stroke'; pointerId: number }
+  /** Dragging a stroke of a stroke layer: where the pointer went down and where it is now. */
+  | { kind: 'move-stroke'; pointerId: number; id: string; from: Point2; to: Point2 }
+  | { kind: 'pan'; pointerId: number; x: number; y: number; pan: Point2 } | { kind: 'rotate'; pointerId: number; angle: number; rotation: number } | null;
 
 export class PaintGesture {
   tool: PaintTool = 'brush';
@@ -105,6 +110,7 @@ export class PaintGesture {
       this.mode = { kind: 'rotate', pointerId: e.pointerId, angle: Math.atan2(e.clientY - b.top - b.height / 2, e.clientX - b.left - b.width / 2), rotation: this.controller.getState().view.rotation };
       return true;
     }
+    if (tool === 'stroke') return this.strokeDown(e);
     if (tool === 'eyedropper' || e.altKey) {
       this.pick(e);
       return false;
@@ -119,6 +125,36 @@ export class PaintGesture {
       this.error = err instanceof Error ? err.message : String(err);
       return false;
     }
+  }
+
+  /**
+   * The Select stroke tool, on a stroke layer: pressing a stroke picks it and dragging moves it
+   * (one undo step at the drop); pressing where no stroke painted clears the pick.
+   */
+  private strokeDown(e: PaintPointerEvent): boolean {
+    const p = this.doc(e);
+    const s = this.controller.getState();
+    const layerId = s.document.activeLayerId;
+    if (!layerId || !s.document.liveStrokes?.[layerId]) {
+      this.error = 'Pick a stroke layer in the Layers panel (or add one) to select its strokes.';
+      return false;
+    }
+    try {
+      const hit = this.controller.liveStrokeAt(layerId, p.x, p.y);
+      this.controller.selectStroke(hit?.id ?? null);
+      if (!hit) return false;
+      this.mode = { kind: 'move-stroke', pointerId: e.pointerId, id: hit.id, from: p, to: p };
+      return true;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  /** While a stroke is dragged: how far it has moved (document pixels), to draw its outline there. */
+  get strokeDrag(): { id: string; dx: number; dy: number } | null {
+    const m = this.mode;
+    return m?.kind === 'move-stroke' ? { id: m.id, dx: m.to.x - m.from.x, dy: m.to.y - m.from.y } : null;
   }
 
   private pick(e: PaintPointerEvent): void {
@@ -144,6 +180,10 @@ export class PaintGesture {
       this.controller.setView({ rotation: r });
       return;
     }
+    if (m.kind === 'move-stroke') {
+      m.to = this.doc(e);
+      return;
+    }
     const session = this.controller.activeStroke;
     if (!session) return;
     const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
@@ -159,6 +199,17 @@ export class PaintGesture {
     this.mode = null;
     this.predicted = [];
     if (m.kind === 'stroke') this.controller.activeStroke?.end();
+    if (m.kind === 'move-stroke') {
+      const dx = Math.round((this.doc(e).x - m.from.x) * 100) / 100;
+      const dy = Math.round((this.doc(e).y - m.from.y) * 100) / 100;
+      if (dx || dy) {
+        try {
+          this.controller.editStrokePoints(m.id, { transform: { dx, dy } });
+        } catch (err) {
+          this.error = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
   }
 
   cancel(): void {
@@ -276,10 +327,30 @@ export class PaintCanvasPresenter {
 }
 
 /** Lines to draw over the canvas for the guides, in document pixels, with a style key. */
-export function guideOverlay(controller: PaintEditorController): Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' | 'stencil' }> {
+export type GuideOverlayKind = 'symmetry' | 'perspective' | 'snap' | 'stencil' | 'stroke';
+
+/**
+ * Lines to draw over the canvas for the guides and the picked stroke of a stroke layer (moved by
+ * `drag` while it is dragged), in document pixels, with a style key.
+ */
+export function guideOverlay(controller: PaintEditorController, drag?: { id: string; dx: number; dy: number } | null): Array<{ from: Point2; to: Point2; kind: GuideOverlayKind }> {
   const s = controller.getState();
   const size = s.document.canvas;
-  const out: Array<{ from: Point2; to: Point2; kind: 'symmetry' | 'perspective' | 'snap' | 'stencil' }> = [];
+  const out: Array<{ from: Point2; to: Point2; kind: GuideOverlayKind }> = [];
+  const layerId = s.document.activeLayerId;
+  const picked = layerId && s.selectedStroke ? s.document.liveStrokes?.[layerId]?.some((x) => x.id === s.selectedStroke) : false;
+  const area = picked ? controller.liveStrokeArea(s.selectedStroke!) : null;
+  if (area) {
+    const dx = drag && drag.id === s.selectedStroke ? drag.dx : 0;
+    const dy = drag && drag.id === s.selectedStroke ? drag.dy : 0;
+    const box = [
+      { x: area.x + dx, y: area.y + dy },
+      { x: area.x + area.width + dx, y: area.y + dy },
+      { x: area.x + area.width + dx, y: area.y + area.height + dy },
+      { x: area.x + dx, y: area.y + area.height + dy },
+    ];
+    for (let i = 0; i < 4; i++) out.push({ from: box[i], to: box[(i + 1) % 4], kind: 'stroke' });
+  }
   for (const st of s.guides.stencils) {
     if (!st.enabled) continue;
     const line = stencilOutline(st);
@@ -726,6 +797,13 @@ export function toggleStamp(stamps: readonly StampKind[], stamp: StampKind): Sta
 }
 
 /** The sticker panel's sliders for the selected sticker. */
+/** The brush sliders of a picked stroke on a stroke layer (paths into its brush; see `updateStroke`). */
+export const STROKE_SLIDERS: readonly SliderControl[] = [
+  { path: 'tip.size', label: 'Size', min: 1, max: 400, step: 1 },
+  { path: 'tip.opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
+  { path: 'tip.flow', label: 'Flow', min: 0, max: 1, step: 0.01 },
+];
+
 export const STICKER_SLIDERS: readonly SliderControl[] = [
   { path: 'size', label: 'Size', min: 2, max: 400, step: 1 },
   { path: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },

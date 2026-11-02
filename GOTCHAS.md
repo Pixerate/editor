@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] A Stroke Layer Redraws Only Where an Edit Changes, From the Strokes' Painted Areas
+
+- **Issue / Symptom**: Redrawing a stroke layer from all of its strokes after every edit took over a second with a few dozen particle strokes, and a prefix cache (redraw from the edited stroke up) was just as slow for edits near the bottom.
+- **Root Cause**: A full redraw repaints every stroke, and particle strokes cost tens of milliseconds each. But with the engines a stroke layer allows (no pick-up, smudge, blender, eraser, wet or impasto), a pixel depends only on the strokes that painted it, in order.
+- **Solution / Workaround**: `drawLiveStrokes(layer, list, dirty)` keeps the layer's pixels outside `dirty` (the area the old stroke painted), draws any stroke whose area isn't known yet alone once to learn it, then redraws only the strokes whose painted area overlaps, and copies just those rectangles in. Painted areas come from each stroke's `PaintStrokeResult.bounds`, kept in a `WeakMap` keyed by the stroke object (edits make new objects; a load, canvas move or replay starts with none, so the first edit after them redraws everything). This is only exact because of the engine rule: if a new engine is allowed on stroke layers, it must not read paint it did not lay. Measured: about 20 ms per edit on a 4K canvas with 200 spread-out particle strokes; overlapping strokes add their own cost.
+
+### [core/paint-editor] A Rotation's Determinant Isn't Exactly 1
+
+- **Issue / Symptom**: Rotating a stroke (`edit_stroke_points` transform, `replay_strokes` rotate) changed its brush size from 40 to 39.999….
+- **Root Cause**: `varyStroke` scales the brush by √|det| of the affine map, which for cos/sin rotations is 1 only up to rounding.
+- **Solution / Workaround**: Treat |√det − 1| < 1e-9 as 1 in `varyStroke`.
+
 ### [core|react|svelte/extensions] `addNodeView` Must Always Return a Factory, and SVG in a `DOMOutputSpec` Needs the Namespace
 
 - **Issue / Symptom**: Making `LoadingNode`'s framework node view optional by returning `null` from `addNodeView()` when no `nodeView` option is set crashes the editor on the first placeholder (`addNodeView(...) is not a function`). Separately, an SVG spinner written as `["svg", …]` in `renderHTML` renders as an unknown HTML element and draws nothing.

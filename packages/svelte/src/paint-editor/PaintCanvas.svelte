@@ -40,6 +40,7 @@
   let water = $state<HTMLCanvasElement | null>(null);
   let size = $state({ width: 800, height: 600 });
   let predicted = $state<Array<{ x: number; y: number }>>([]);
+  let strokeDrag = $state<{ id: string; dx: number; dy: number } | null>(null);
   const presenter = $derived(new PaintCanvasPresenter(controller));
   const gesture = $derived(
     new PaintGesture(controller, () => {
@@ -117,7 +118,7 @@
   const transform = $derived(viewCssTransform(snap.view, doc, size));
   const lines = $derived.by(() => {
     void snap;
-    return showGuides ? guideOverlay(controller) : [];
+    return showGuides ? guideOverlay(controller, strokeDrag) : [];
   });
 </script>
 
@@ -130,7 +131,7 @@
   aria-label="Paint canvas"
   data-testid="paint-canvas"
   class={`relative overflow-hidden bg-slate-950 outline-none touch-none select-none ${className}`}
-  style={`cursor: ${tool === 'pan' ? 'grab' : tool === 'eyedropper' ? 'copy' : 'crosshair'}`}
+  style={`cursor: ${tool === 'pan' ? 'grab' : tool === 'eyedropper' ? 'copy' : tool === 'stroke' ? 'default' : 'crosshair'}`}
   onpointerdown={(e) => {
     viewport?.focus();
     if (gesture.down(e)) (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -139,14 +140,18 @@
   onpointermove={(e) => {
     gesture.move(e);
     if (gesture.predicted.length || predicted.length) predicted = gesture.predicted.map((p) => ({ x: p.x, y: p.y }));
+    if (gesture.strokeDrag || strokeDrag) strokeDrag = gesture.strokeDrag;
   }}
   onpointerup={(e) => {
     gesture.up(e);
     predicted = [];
+    strokeDrag = null;
+    onerror?.(gesture.error);
   }}
   onpointercancel={() => {
     gesture.cancel();
     predicted = [];
+    strokeDrag = null;
   }}
   onkeydown={(e) => {
     if (handlePaintShortcut(controller, gesture, e)) e.preventDefault();
@@ -176,8 +181,8 @@
         y1={l.from.y}
         x2={l.to.x}
         y2={l.to.y}
-        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : '#f472b6'}
-        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' ? 0.8 : 0.35}
+        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' ? '#818cf8' : '#f472b6'}
+        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' ? 0.8 : 0.35}
         stroke-width={1 / snap.view.zoom}
         stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
       />
