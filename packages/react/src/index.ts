@@ -72,5 +72,6 @@ export * from "./generation";
 export * from "./find-replace";
 export * from "./tables";
 export * from "./chart-node";
+export * from "./loading-node";
 
 export * from "./style";

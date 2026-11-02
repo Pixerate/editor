@@ -158,4 +158,50 @@ describe("usePromptEditor", () => {
       "used_variable",
     ]);
   });
+
+  describe("loading placeholders", () => {
+    const insertPlaceholder = async (editor: Editor) => {
+      await act(async () => {
+        editor.commands.insertContent({ type: "loadingNode", attrs: { id: "job-1" } });
+      });
+      // React node views render in a microtask.
+      await act(async () => {});
+      return editor.view.dom.querySelector('span[data-type="loading"]') as HTMLElement;
+    };
+
+    it("draws an accessible SVG spinner by default", async () => {
+      let editor: Editor | null = null;
+      await render({ onEditor: (e) => (editor = e) });
+      const placeholder = await insertPlaceholder(editor!);
+      expect(placeholder.getAttribute("role")).toBe("status");
+      expect(placeholder.getAttribute("aria-label")).toBe("Loading…");
+      expect(placeholder.querySelector("svg")).not.toBeNull();
+      expect(placeholder.textContent).not.toContain("⏳");
+    });
+
+    it("draws a custom loader with the label, and swaps it without recreating the editor", async () => {
+      const editors = new Set<Editor>();
+      const Dots = ({ state }: { state: { id: string | null; label: string } }) => (
+        <span className="dots" data-job={state.id ?? ""}>
+          {state.label}
+        </span>
+      );
+      const Bar = () => <span className="bar" />;
+      let editor: Editor | null = null;
+      const onEditor = (e: Editor | null) => {
+        editor = e;
+        if (e) editors.add(e);
+      };
+      await render({ onEditor, loadingIndicator: Dots, loadingLabel: "Generating" });
+      const placeholder = await insertPlaceholder(editor!);
+      expect(placeholder.getAttribute("aria-label")).toBe("Generating");
+      expect(placeholder.querySelector("svg")).toBeNull();
+      const dots = placeholder.querySelector(".dots") as HTMLElement;
+      expect(dots.dataset.job).toBe("job-1");
+      expect(dots.textContent).toBe("Generating");
+
+      await render({ onEditor, loadingIndicator: Bar, loadingLabel: "Generating" });
+      expect(editors.size).toBe(1);
+    });
+  });
 });

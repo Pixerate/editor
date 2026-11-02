@@ -97,5 +97,6 @@ export * from "./find-replace/index.js";
 export * from "./tables/index.js";
 
 export * from "./chart-node/index.js";
+export * from "./loading-node/index.js";
 
 export * from "./style/index.js";

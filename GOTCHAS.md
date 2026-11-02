@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|react|svelte/extensions] `addNodeView` Must Always Return a Factory, and SVG in a `DOMOutputSpec` Needs the Namespace
+
+- **Issue / Symptom**: Making `LoadingNode`'s framework node view optional by returning `null` from `addNodeView()` when no `nodeView` option is set crashes the editor on the first placeholder (`addNodeView(...) is not a function`). Separately, an SVG spinner written as `["svg", …]` in `renderHTML` renders as an unknown HTML element and draws nothing.
+- **Root Cause**: TipTap 2 checks only that the extension *defines* `addNodeView`, then calls `addNodeView()` for every node and invokes the result, so a `null` result is called. ProseMirror's `DOMSerializer` creates HTML elements unless the tag is prefixed with a namespace URL; children inherit the parent's namespace.
+- **Solution / Workaround**: Always return a node view factory, and draw the static `renderHTML` output inside it when no framework mount is configured (see `LoadingNode.addNodeView`, and `createChartNodeView`'s static fallback). Write SVG specs as `["http://www.w3.org/2000/svg svg", attrs, ["circle", …]]` (`loadingSpinnerSpec()`).
+
 ### [core/persistence] `migrations` Never Run on Documents Stored Without the File Envelope
 
 - **Issue / Symptom**: A host stored a canvas as the raw `{ nodes, edges }` from `getDocument()` (e.g. in a database column), added `migrations` for an older shape, and found they never ran: the old shape reached the load checks and was refused.

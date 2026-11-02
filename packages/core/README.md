@@ -90,7 +90,7 @@ controller.insertText("__award_winning__ "); // at the selection; literal text, 
 controller.isDirty(); // true
 ```
 
-Extensions (`@pixerate/editor/extensions`): `createRichTextPreset`, `GradientText`, `TemplateSuggestions`, `SlashCommands`, `LoadingNode`, `Mention` / `createMentionExtension`, `Image`, `Markdown`, `SmilieReplacer`, `ColorHighlighter`, `FontSize`.
+Extensions (`@pixerate/editor/extensions`): `createRichTextPreset`, `GradientText`, `TemplateSuggestions`, `SlashCommands`, `LoadingNode` (accessible SVG spinner placeholder; `label`, `renderIndicator`, `nodeView`), `Mention` / `createMentionExtension`, `Image`, `Markdown`, `SmilieReplacer`, `ColorHighlighter`, `FontSize`.
 
 ## Comments and tracked changes
 
