@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.173.0
+
+### Minor Changes
+
+- ce4b889: The canvas editor document takes new options. `getViewport` / `setViewport` save and restore the view with the document; panning doesn't count as a change. `omitNodeKeys` / `omitEdgeKeys` leave the host's own fields out. `validateNode` adds host checks to loads. `normalize`, `formatVersion` and `migrations` upgrade older host shapes. `assets` keeps inline images in node data out of the JSON. `canvasDocumentContentKey` is exported, and `useCanvasEditorDocument` and `createCanvasDocument` accept the same options.
+
+### Patch Changes
+
+- Updated dependencies [ce4b889]
+  - @pixerate/editor@0.234.0
+
 ## 0.172.0
 
 ### Minor Changes
