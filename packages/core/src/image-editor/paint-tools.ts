@@ -5,6 +5,8 @@ import { MAX_BRUSH_SIZE, MIXING_MODELS, PAINT_SOURCE_JSON_SCHEMA, type BrushSett
 import type { LayerTarget } from './layers/model';
 import { rgbUnitToHex } from './layers/paint-ui';
 import { LayerOperationError } from './layers/ops';
+import { gradientToCss } from '../gradient/model.js';
+import { sampleGradientFromLine } from '../gradient/sample.js';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -269,5 +271,49 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
       return { color, foreground: controller.getState().paint.foreground };
     },
   };
-  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor];
+  const sampleGradient: AgentTool = {
+    name: 'sample_gradient',
+    title: 'Sample a gradient along a line',
+    description:
+      'Reads the composite colours along a line from start to end (document pixels), smooths away grain and fits the fewest gradient stops that reproduce them within tolerance. Changes nothing. Returns a linear gradient (CSS angle of the line, oklab interpolation, stops with offsets along the line), its CSS, and how many points could be read. Pass the gradient to a gradient tool (set_gradient) or its stops as paint (set_paint).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start: { type: 'object', properties: { x: { type: 'number', description: 'Document x in pixels.' }, y: { type: 'number', description: 'Document y in pixels.' } }, required: ['x', 'y'], additionalProperties: false, description: 'Where the gradient starts (offset 0).' },
+        end: { type: 'object', properties: { x: { type: 'number', description: 'Document x in pixels.' }, y: { type: 'number', description: 'Document y in pixels.' } }, required: ['x', 'y'], additionalProperties: false, description: 'Where it ends (offset 1).' },
+        sampleCount: { type: 'integer', minimum: 2, maximum: 1024, description: 'Points read along the line, ends included (default 32).' },
+        sampleSize: { type: 'integer', minimum: 1, maximum: 101, description: 'Square averaged at each point, in pixels (default 3).' },
+        tolerance: { type: 'number', exclusiveMinimum: 0, maximum: 1, description: 'Largest error left, OKLab ΔE (default 0.06; 0.02 is a just-noticeable step).' },
+        maxStops: { type: 'integer', minimum: 2, maximum: 64, description: 'Most stops (default 5).' },
+        snapStep: { type: 'number', exclusiveMinimum: 0, maximum: 180, description: 'Snap the line to multiples of this many degrees, keeping its length (default no snapping).' },
+      },
+      required: ['start', 'end'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Sample a gradient along a line', ...READ },
+    handler: (args) => {
+      const start = args.start as { x: number; y: number };
+      const end = args.end as { x: number; y: number };
+      const size = (args.sampleSize as number | undefined) ?? 3;
+      let read = 0;
+      let gradient;
+      try {
+        gradient = sampleGradientFromLine(
+          (p) => {
+            const c = controller.sampleColor(p, { size, setForeground: false });
+            if (c) read++;
+            return c;
+          },
+          start,
+          end,
+          { sampleCount: args.sampleCount as number | undefined, tolerance: args.tolerance as number | undefined, maxStops: args.maxStops as number | undefined, snapStep: args.snapStep as number | undefined }
+        );
+      } catch (e) {
+        throw new LayerOperationError((e as Error).message);
+      }
+      if (!gradient) throw new LayerOperationError(`Fewer than two points along the line could be read: it runs outside the canvas or over transparent pixels. Read the canvas size with get_image_info and draw the line across visible pixels.`);
+      return { gradient, css: gradientToCss(gradient), pointsRead: read };
+    },
+  };
+  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor, sampleGradient];
 }

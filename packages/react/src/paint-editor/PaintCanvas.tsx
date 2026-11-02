@@ -174,8 +174,8 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
             y1={l.from.y}
             x2={l.to.x}
             y2={l.to.y}
-            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' ? '#818cf8' : '#f472b6'}
-            strokeOpacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' ? 0.8 : 0.35}
+            stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : '#f472b6'}
+            strokeOpacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : 0.35}
             strokeWidth={1 / state.view.zoom}
             strokeDasharray={l.kind === 'symmetry' ? `${6 / state.view.zoom} ${4 / state.view.zoom}` : undefined}
           />

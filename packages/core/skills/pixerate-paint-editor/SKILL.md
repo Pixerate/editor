@@ -198,14 +198,13 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
   bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles
   bend into curves at turns; a low `bristle.load` runs dry into broken streaks.
 - **Sticker spray** (category `sticker`): stamps (`star`, `leaf`, `confetti`, `flower`, `heart`,
-  `splat`, `sparkle`, `ring`, `dot`) sprayed along the stroke onto an **empty layer**, where each
-  stays an object: `list_stickers`, `update_sticker` (move, turn, resize, recolour, restamp),
-  `arrange_stickers`, `remove_stickers`. A sticker layer takes no other paint.
-- **Stroke layers**: pixels drawn from the layer's strokes. They take `dab`, `particle`, `bristle`
-  and Mixer Brush strokes that pick up no paint (wet, impasto, sticker, eraser, smudge, blender
-  and pick-up brushes are refused). `list_strokes {live: true}` → `update_stroke` /
-  `edit_stroke_points` / `reorder_stroke` / `remove_strokes` (instead of an eraser). When the look
-  is settled, `rasterize_stroke_layer` to erase, smudge, fill or apply effects on it.
+  `splat`, `sparkle`, `ring`, `dot`) sprayed onto an **empty layer**, each staying an object:
+  `add_stickers` (exact places), `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`,
+  `remove_stickers`. A sticker layer takes no other paint; sprays are refused under an enabled
+  mask stencil (hide it with `update_stencil` `enabled` false, then remove unwanted stickers).
+- **Stroke layers**: pixels drawn from the layer's strokes; they take `dab`, `particle`, `bristle`
+  and Mixer Brush strokes that pick up no paint. `list_strokes {live: true}` → `update_stroke` /
+  `edit_stroke_points` / `reorder_stroke` / `remove_strokes`; `rasterize_stroke_layer` once settled.
 - **Stencils**: `add_stencil` lays a `ruler` or `arc` (strokes that start within `snap` px follow
   it exactly: straight lines, circles, rainbows) or a `line` / `shape` mask (paint lands only on
   one side or inside a rect, ellipse or polygon; `invert` for outside). Stencils stay until
@@ -381,6 +380,8 @@ view), so work with the tools you are given.
 | Tool | Use |
 | --- | --- |
 | `list_stickers` | Read a layer's stickers bottom first: id, stamp, x, y, size, rotation, color, opacity. |
+| `add_stickers` | Place stickers exactly (`stamp`, `x`, `y`, optional `size`, `rotation`, `color`, `opacity`, `seed`) on a sticker layer or an empty layer. Use it for deliberate placement, a sticker brush for a scatter. One undo step. Returns the new stickers with ids. |
+| `sticker_at` | Read the top-most sticker under a point (`x`, `y`), or null. Use it to pick one sticker among many similar ones before `update_sticker`, `arrange_stickers` or `remove_stickers`. |
 | `update_sticker` | Change one sticker by `id`: `stamp`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
 | `arrange_stickers` | Move stickers (`ids`) to the `front` or `back` of their layer. One undo step. |
 | `remove_stickers` | Delete stickers by `ids`, or all on the layer. One undo step. |

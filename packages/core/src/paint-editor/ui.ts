@@ -39,11 +39,12 @@ export interface PaintPointerEvent extends PointerSample {
   getPredictedEvents?(): PaintPointerEvent[];
 }
 
-export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate' | 'stroke';
+export type PaintTool = 'brush' | 'eyedropper' | 'pan' | 'rotate' | 'sticker' | 'stroke';
 
 export const PAINT_TOOLS: ReadonlyArray<{ id: PaintTool; label: string; key: string }> = [
   { id: 'brush', label: 'Brush', key: 'b' },
   { id: 'eyedropper', label: 'Eyedropper', key: 'i' },
+  { id: 'sticker', label: 'Stickers', key: 's' },
   { id: 'stroke', label: 'Select stroke', key: 'v' },
   { id: 'pan', label: 'Pan', key: 'h' },
   { id: 'rotate', label: 'Rotate view', key: 'r' },
@@ -61,6 +62,8 @@ type Mode =
   | { kind: 'stroke'; pointerId: number }
   /** Dragging a stroke of a stroke layer: where the pointer went down and where it is now. */
   | { kind: 'move-stroke'; pointerId: number; id: string; from: Point2; to: Point2 }
+  /** Dragging a sticker: (dx, dy) from the pointer to its centre, and where it was last shown. */
+  | { kind: 'sticker'; pointerId: number; id: string; dx: number; dy: number; at: Point2 | null }
   | { kind: 'pan'; pointerId: number; x: number; y: number; pan: Point2 } | { kind: 'rotate'; pointerId: number; angle: number; rotation: number } | null;
 
 export class PaintGesture {
@@ -115,6 +118,7 @@ export class PaintGesture {
       this.pick(e);
       return false;
     }
+    if (tool === 'sticker') return this.stickerDown(e);
     try {
       const p = this.pen(e);
       const session = this.controller.beginStroke({ start: p });
@@ -157,6 +161,30 @@ export class PaintGesture {
     return m?.kind === 'move-stroke' ? { id: m.id, dx: m.to.x - m.from.x, dy: m.to.y - m.from.y } : null;
   }
 
+  /**
+   * The Stickers tool: pressing a sticker picks it and dragging moves it (one undo step at the
+   * drop); pressing anywhere else places the active brush's first stamp there, at its tip size and
+   * the paint colour, and picks it.
+   */
+  private stickerDown(e: PaintPointerEvent): boolean {
+    const p = this.doc(e);
+    try {
+      const hit = this.controller.stickerAt(undefined, p.x, p.y);
+      if (hit) {
+        this.controller.selectSticker(hit.id);
+        this.mode = { kind: 'sticker', pointerId: e.pointerId, id: hit.id, dx: hit.x - p.x, dy: hit.y - p.y, at: null };
+        return true;
+      }
+      const brush = this.controller.getState().brush;
+      const size = Math.min(2048, Math.max(2, Math.round(brush.tip.size)));
+      const [added] = this.controller.addStickers(undefined, [{ stamp: brush.sticker.stamps[0] ?? 'star', x: round2(p.x), y: round2(p.y), size }]);
+      this.controller.selectSticker(added.id);
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    }
+    return false;
+  }
+
   private pick(e: PaintPointerEvent): void {
     const p = this.doc(e);
     const { width, height } = this.controller.document.canvas;
@@ -182,6 +210,16 @@ export class PaintGesture {
     }
     if (m.kind === 'move-stroke') {
       m.to = this.doc(e);
+      return;
+    }
+    if (m.kind === 'sticker') {
+      const p = this.doc(e);
+      m.at = { x: round2(p.x + m.dx), y: round2(p.y + m.dy) };
+      try {
+        this.controller.previewSticker(undefined, m.id, m.at);
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : String(err);
+      }
       return;
     }
     const session = this.controller.activeStroke;
@@ -210,12 +248,21 @@ export class PaintGesture {
         }
       }
     }
+    if (m.kind === 'sticker' && m.at) {
+      try {
+        this.controller.updateSticker(undefined, m.id, m.at);
+      } catch (err) {
+        this.controller.cancelStickerPreview();
+        this.error = err instanceof Error ? err.message : String(err);
+      }
+    }
   }
 
   cancel(): void {
     this.penDown = false;
     this.predicted = [];
     if (this.mode?.kind === 'stroke') this.controller.activeStroke?.cancel();
+    if (this.mode?.kind === 'sticker') this.controller.cancelStickerPreview();
     this.mode = null;
   }
 
@@ -239,6 +286,8 @@ export class PaintGesture {
     this.controller.setView({ zoom, pan: { x: px - (px - s.view.pan.x) * k, y: py - (py - s.view.pan.y) * k } });
   }
 }
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Keyboard shortcuts shared by both editors; returns true when it handled the key. */
 export function handlePaintShortcut(
@@ -326,11 +375,10 @@ export class PaintCanvasPresenter {
   }
 }
 
-/** Lines to draw over the canvas for the guides, in document pixels, with a style key. */
-export type GuideOverlayKind = 'symmetry' | 'perspective' | 'snap' | 'stencil' | 'stroke';
+export type GuideOverlayKind = 'symmetry' | 'perspective' | 'snap' | 'stencil' | 'sticker' | 'stroke';
 
 /**
- * Lines to draw over the canvas for the guides and the picked stroke of a stroke layer (moved by
+ * Lines to draw over the canvas for the guides, the picked sticker and the picked stroke of a stroke layer (moved by
  * `drag` while it is dragged), in document pixels, with a style key.
  */
 export function guideOverlay(controller: PaintEditorController, drag?: { id: string; dx: number; dy: number } | null): Array<{ from: Point2; to: Point2; kind: GuideOverlayKind }> {
@@ -338,8 +386,8 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
   const size = s.document.canvas;
   const out: Array<{ from: Point2; to: Point2; kind: GuideOverlayKind }> = [];
   const layerId = s.document.activeLayerId;
-  const picked = layerId && s.selectedStroke ? s.document.liveStrokes?.[layerId]?.some((x) => x.id === s.selectedStroke) : false;
-  const area = picked ? controller.liveStrokeArea(s.selectedStroke!) : null;
+  const strokePicked = layerId && s.selectedStroke ? s.document.liveStrokes?.[layerId]?.some((x) => x.id === s.selectedStroke) : false;
+  const area = strokePicked ? controller.liveStrokeArea(s.selectedStroke!) : null;
   if (area) {
     const dx = drag && drag.id === s.selectedStroke ? drag.dx : 0;
     const dy = drag && drag.id === s.selectedStroke ? drag.dy : 0;
@@ -350,6 +398,15 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
       { x: area.x + dx, y: area.y + area.height + dy },
     ];
     for (let i = 0; i < 4; i++) out.push({ from: box[i], to: box[(i + 1) % 4], kind: 'stroke' });
+  }
+  const picked = layerId && s.selectedSticker ? s.document.stickers?.[layerId]?.find((x) => x.id === s.selectedSticker) : undefined;
+  if (picked) {
+    // Its box, turned with it.
+    const r = picked.size / 2 + 2;
+    const a = (picked.rotation * Math.PI) / 180;
+    const corner = (u: number, v: number) => ({ x: picked.x + (u * Math.cos(a) - v * Math.sin(a)) * r, y: picked.y + (u * Math.sin(a) + v * Math.cos(a)) * r });
+    const box = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+    for (let i = 0; i < 4; i++) out.push({ from: box[i], to: box[(i + 1) % 4], kind: 'sticker' });
   }
   for (const st of s.guides.stencils) {
     if (!st.enabled) continue;

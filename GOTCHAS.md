@@ -33,6 +33,18 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `varyStroke` scales the brush by √|det| of the affine map, which for cos/sin rotations is 1 only up to rounding.
 - **Solution / Workaround**: Treat |√det − 1| < 1e-9 as 1 in `varyStroke`.
 
+### [core/paint-editor] A Sticker Drag Changes the Document Before It Is an Undo Step
+
+- **Issue / Symptom**: Dragging a sticker previews by replacing the document without a history entry. If the drop then committed with the current document as "before", undo would return to the last preview position, not to where the drag started. A preview base kept across other edits would undo those edits as well.
+- **Root Cause**: `commit(label, next, before = this.doc)` takes the document on screen as the undo point, and the preview put an uncommitted document there.
+- **Solution / Workaround**: `previewSticker` records `{ base, shown }`, and `commitStickers` uses `base` only while `this.doc === shown` (`previewBase()`). Any other change to the document invalidates it without needing hooks in undo, load or other commits. Partial redraws (`stickerSurface(list, base, dirty)`) are only used when the layer's offset is 0, because the tiles are addressed in layer space.
+
+### [core/paint-editor] Sticker Layers Are Redrawn From Their List, so Nothing May Clip a Sticker While It Is Sprayed
+
+- **Issue / Symptom**: Stickers sprayed under a mask stencil came out clipped, then lost the clipping as soon as any sticker on the layer was edited (even a recolour of another one), and a replay drew them unclipped.
+- **Root Cause**: The spray's tile target carried the stencil selection, but every later redraw (`stickerSurface`, used by `commitStickers` and the `stickers` replay event) draws the list with `selection: null`. The clip was never part of the stickers, only of the first drawing.
+- **Solution / Workaround**: A sticker stroke never takes a selection (`runStroke` passes `null`), and a live spray under an enabled mask stencil is refused with the stencil ids and how to hide them. Replays of older strokes that recorded mask stencils draw unclipped, matching the redraw. Anything new that draws stickers must go through the sticker list, not through the stroke's target.
+
 ### [core|react|svelte/extensions] `addNodeView` Must Always Return a Factory, and SVG in a `DOMOutputSpec` Needs the Namespace
 
 - **Issue / Symptom**: Making `LoadingNode`'s framework node view optional by returning `null` from `addNodeView()` when no `nodeView` option is set crashes the editor on the first placeholder (`addNodeView(...) is not a function`). Separately, an SVG spinner written as `["svg", …]` in `renderHTML` renders as an unknown HTML element and draws nothing.

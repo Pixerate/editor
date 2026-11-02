@@ -181,8 +181,8 @@
         y1={l.from.y}
         x2={l.to.x}
         y2={l.to.y}
-        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' ? '#818cf8' : '#f472b6'}
-        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' ? 0.8 : 0.35}
+        stroke={l.kind === 'symmetry' ? '#22d3ee' : l.kind === 'stencil' ? '#fbbf24' : l.kind === 'stroke' || l.kind === 'sticker' ? '#818cf8' : '#f472b6'}
+        stroke-opacity={l.kind === 'symmetry' || l.kind === 'stencil' || l.kind === 'stroke' || l.kind === 'sticker' ? 0.8 : 0.35}
         stroke-width={1 / snap.view.zoom}
         stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
       />

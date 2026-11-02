@@ -258,11 +258,11 @@ const STICKER_BRUSH = {
   description: 'Sticker engine settings: stamps sprayed along the stroke as editable stickers. Missing fields keep their current values.',
   properties: {
     stamps: { type: 'array', minItems: 1, maxItems: 9, items: { type: 'string', enum: [...STAMP_KINDS], description: 'A stamp.' }, description: 'The stamps to spray (one picked at random per sticker).' },
-    density: { type: 'number', minimum: 0, maximum: 1, description: 'Stickers per distance travelled.' },
+    density: { type: 'number', minimum: 0, maximum: 1, description: 'How closely stickers follow each other: about density × 4 stickers per tip diameter of travel (0.25 ≈ one per diameter, 1 ≈ four). Default 0.4.' },
     sizeJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random size change.' },
     rotationJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random turn as a fraction of ±180°.' },
     scatter: { type: 'number', minimum: 0, maximum: 2, description: 'How far from the path stickers land, in tip diameters.' },
-    colorJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random colour change around the paint colour.' },
+    colorJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random colour change around the paint colour: at 1, up to ±40° of hue and ±0.15 OKLab lightness, kept in gamut. Default 0.2.' },
   },
   additionalProperties: false,
 } as const;

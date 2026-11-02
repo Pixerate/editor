@@ -7,6 +7,8 @@ import {
 	gradientToSvgDef,
 	isDualGradient
 } from './model.js';
+import { fitGradientStops, type RawGradientSample } from './sample.js';
+import { isColor } from '../color/index.js';
 import type {
 	GradientCheckOptions,
 	GradientInterpolation,
@@ -383,6 +385,58 @@ export function createGradientToolProvider(
 						gradient: controller.getGradient(),
 						css: gradientToCss(controller.getGradient())
 					};
+				}
+			},
+			{
+				name: 'set_gradient_from_samples',
+				title: 'Set Gradient From Sampled Colours',
+				description:
+					'Fits the fewest stops that reproduce colours sampled along a line (from a photo, painting or shape, e.g. image sample_gradient or your own picks) and makes them the gradient\'s stops, keeping its type, angle and centre and switching interpolation to oklab. Noise is smoothed first; stops are added where the colour turns most until every sample is within tolerance. One undo step. Returns the gradient, its CSS, the stop count and the largest error left (OKLab ΔE).',
+				inputSchema: {
+					type: 'object',
+					properties: {
+						samples: {
+							type: 'array',
+							minItems: 2,
+							maxItems: 1024,
+							description: 'Colours in order along the line.',
+							items: {
+								type: 'object',
+								properties: {
+									offset: { type: 'number', minimum: 0, maximum: 1, description: 'Position along the line, 0..1.' },
+									color: { type: 'string', description: 'Any CSS colour (hex, rgb(), oklch(), named…).' }
+								},
+								required: ['offset', 'color'],
+								additionalProperties: false
+							}
+						},
+						tolerance: { type: 'number', exclusiveMinimum: 0, maximum: 1, description: 'Largest error left, OKLab ΔE (default 0.06; 0.02 is a just-noticeable step, lower keeps more stops).' },
+						minStops: { type: 'integer', minimum: 2, maximum: 64, description: 'Fewest stops (default 2).' },
+						maxStops: { type: 'integer', minimum: 2, maximum: 64, description: 'Most stops (default 5).' },
+						smoothing: { type: 'integer', minimum: 0, maximum: 16, description: 'Samples on each side averaged into each one to ignore grain and texture (default 2; 0 fits the raw colours).' }
+					},
+					required: ['samples'],
+					additionalProperties: false
+				},
+				annotations: writeIdempotentTool('Set Gradient From Sampled Colours'),
+				handler: async (args) => {
+					const unreadable = (args.samples as Array<{ color: string }>).findIndex((x) => !isColor(x.color));
+					if (unreadable >= 0) fail(`samples[${unreadable}].color ${JSON.stringify((args.samples as Array<{ color: string }>)[unreadable].color)} is not a CSS colour.`);
+					let fit: ReturnType<typeof fitGradientStops>;
+					try {
+						fit = fitGradientStops(args.samples as RawGradientSample[], {
+							tolerance: args.tolerance as number | undefined,
+							minStops: args.minStops as number | undefined,
+							maxStops: args.maxStops as number | undefined,
+							smoothing: args.smoothing as number | undefined
+						});
+					} catch (e) {
+						return fail((e as Error).message);
+					}
+					const res = controller.setGradient({ ...controller.getGradient(), stops: fit.stops, interpolation: 'oklab' }, 'Gradient From Samples');
+					if (!res.ok) fail(res.message);
+					const gradient = controller.getGradient();
+					return { gradient, css: gradientToCss(gradient), stopCount: gradient.stops.length, maxError: fit.maxError };
 				}
 			},
 			{
