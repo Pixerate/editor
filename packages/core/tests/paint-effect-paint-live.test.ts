@@ -67,6 +67,16 @@ describe('effect paint along the stroke', () => {
     expect(Math.abs(redness(px(d, 20, 8)) - redness(px(d, 20, 56)))).toBeLessThan(6);
   });
 
+  it('lays the effect along the stroke for impasto and wet brushes too', async () => {
+    for (const brushId of ['impasto-brush', 'watercolor-round']) {
+      const c = editor();
+      await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE, map: { by: 'stroke', length: 96, repeat: 'clamp' } });
+      c.paintStroke({ brushId, brush: { tip: { size: 12 } }, points: DOWN, seed: 1 });
+      if (brushId === 'watercolor-round') c.dryPaint();
+      expect(redness(px(c, 20, 10)), brushId).toBeGreaterThan(redness(px(c, 20, 54)));
+    }
+  });
+
   it('works for particle, bristle and mixer brushes too, and refuses bad maps with the fix', async () => {
     const c = editor();
     await c.setEffectPaint({ effect: 'fake.gradient', values: RED_TO_BLUE, map: { by: 'stroke', length: 60 } });

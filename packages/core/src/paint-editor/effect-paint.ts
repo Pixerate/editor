@@ -206,3 +206,36 @@ export function sampleEffectAt(img: EffectPaintPixels, x: number, y: number, out
   out[2] = img.data[i + 2] / 255;
   return img.data[i + 3] / 255;
 }
+
+/**
+ * Effect colours for one dab of a brush that mixes paint (wet and impasto brushes): fills `field`
+ * (sRGB 0..1, 3 per pixel of `rect`) with the effect's colour at each pixel, shifted by how far the
+ * brush's mixed paint (`mixed`) moved from the effect's colour at the dab's centre (`centre`, which
+ * the brush was loaded with), so paint the brush picked up still drags through the pattern. A clean
+ * brush paints the effect's colours exactly. `cov` is multiplied by the effect's alpha, rounded to
+ * `steps` levels when given (wet paint keeps its coverage on fixed steps so replays are exact).
+ * `dab` places it on its stroke, for effect paint laid along the stroke.
+ */
+export function effectDabField(
+  img: EffectPaintPixels,
+  rect: RasterRect,
+  cov: Float32Array,
+  centre: readonly [number, number, number],
+  mixed: readonly [number, number, number],
+  field: Float32Array,
+  steps = 0,
+  dab: EffectDabPlace | null = null
+): void {
+  sampleEffectField(img, rect, cov, field, dab);
+  const d0 = mixed[0] - centre[0];
+  const d1 = mixed[1] - centre[1];
+  const d2 = mixed[2] - centre[2];
+  const n = rect.width * rect.height;
+  for (let k = 0; k < n; k++) {
+    if (steps) cov[k] = Math.round(cov[k] * steps) / steps;
+    const f = k * 3;
+    field[f] = Math.min(1, Math.max(0, field[f] + d0));
+    field[f + 1] = Math.min(1, Math.max(0, field[f + 1] + d1));
+    field[f + 2] = Math.min(1, Math.max(0, field[f + 2] + d2));
+  }
+}

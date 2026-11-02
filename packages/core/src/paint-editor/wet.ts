@@ -28,6 +28,7 @@ import { pigmentOf, PIGMENT_UNIT } from '../paint/wet/film';
 import { DEFAULT_FLOW, flowField, normalizeFlow, type WetFlowSpec } from '../paint/wet/flow';
 import { WetMedium } from '../paint/wet/medium';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
+import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { DEFAULT_WET_PARAMS, FLAT, WET_TILE, normalizeTilt, normalizeWetParams, type WetParams, type WetTilt } from '../paint/wet/model';
 import { createWetGpuEngine, findWebGpu, type WetGpuEngine, type WetGpuProvider, type WetGpuSupport } from '../paint/wet/gpu';
 import { moveWetSnapshot, WetWorld, type WetBackendInfo, type WetLaneStats, type WetPaperInput, type WetSnapshot, type WetWorldOptions } from '../paint/wet/world';
@@ -79,6 +80,12 @@ export interface WetStrokeInit {
   mask?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Gradient paint (resolved): each dab's pigment comes from it. */
   paint?: PaintGradientSource | null;
+  /**
+   * Effect paint: each pixel's pigment is the effect's colour there (its alpha scales the
+   * coverage), shifted by the paint the brush picks up. It then flows, blooms and granulates with
+   * the water like any pigment.
+   */
+  effect?: EffectPaintPixels | null;
 }
 
 interface CopyState {
@@ -107,6 +114,7 @@ export class WetStrokeDriver {
   private tip = new Float32Array(0);
   private cov = new Float32Array(0);
   private readonly paint: RgbTriple = [0, 0, 0];
+  private readonly centre: RgbTriple = [0, 0, 0];
   private readonly depth: number;
 
   constructor(readonly init: WetStrokeInit) {
@@ -247,7 +255,12 @@ export class WetStrokeDriver {
       case 'paint': {
         const ex = st.exchange!;
         let flow = 1;
-        if (this.sampler) {
+        const effect = this.init.effect;
+        if (effect) {
+          // Effect paint: the brush is loaded with the effect's colour at the dab's centre; each pixel takes its own.
+          sampleEffectAt(effect, d.x, d.y, this.centre, d);
+          ex.setReservoirColor(this.centre[0], this.centre[1], this.centre[2]);
+        } else if (this.sampler) {
           // Gradient paint: this dab's pigment.
           const g = this.sampler.dab(d, this.sample);
           ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2]);
@@ -255,7 +268,12 @@ export class WetStrokeDriver {
         }
         ex.pickUp(this.medium.sample(rect, tip));
         const total = ex.paint(this.paint);
-        if (total > 0 && flow > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
+        if (total > 0 && flow > 0 && effect) {
+          const ec = cov.slice();
+          const field = new Float32Array(ec.length * 3);
+          effectDabField(effect, rect, ec, this.centre, this.paint, field, COVERAGE_STEPS, d);
+          this.medium.deposit(rect, ec, Math.min(1, total) * k, this.paint, null, field);
+        } else if (total > 0 && flow > 0) this.medium.deposit(rect, cov, Math.min(1, total) * k * flow, this.paint, null);
         else world.paint(laneId, rect, cov, this.medium.options.water * k, null);
         ex.drain();
         if (wet.rewet > 0) world.rewet(laneId, rect, cov, wet.rewet * k * 0.15, this.init.paperColor);

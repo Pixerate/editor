@@ -16,6 +16,7 @@ import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradien
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2, rand01 } from './noise';
+import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
 
 export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
@@ -221,6 +222,11 @@ export interface StickerSprayInit {
   nextId: number;
   /** Gradient paint (resolved): each sticker takes its dab's colour (across the tip: by its offset). */
   paint?: PaintGradientSource | null;
+  /**
+   * Effect paint: each sticker takes the effect's colour at its centre (it keeps one colour, so it
+   * stays recolourable); none lands where the effect is transparent.
+   */
+  effect?: EffectPaintPixels | null;
 }
 
 /** A sticker-spray stroke: drops stickers along the path and draws them as it goes. */
@@ -284,6 +290,10 @@ export class StickerSpray {
     const a = rand01(seed, i, 53) * Math.PI * 2;
     const dist = rand01(seed, i, 55) * off;
     const base = this.colorAt(d, Math.cos(a) * dist, Math.sin(a) * dist);
+    if (!(base.alpha > 0)) {
+      this.next++;
+      return;
+    }
     const sticker: Sticker = {
       id: `st${this.next++}`,
       stamp: st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'dot',
@@ -304,6 +314,12 @@ export class StickerSpray {
 
   /** A sticker's colour: the paint colour, or gradient paint at its dab (`dx`, `dy` from the dab's centre). */
   private colorAt(d: PenDab, dx: number, dy: number): { color: string; alpha: number } {
+    const effect = this.init.effect;
+    if (effect) {
+      const rgb: [number, number, number] = [0, 0, 0];
+      const alpha = sampleEffectAt(effect, d.x + dx, d.y + dy, rgb, d);
+      return { color: '#' + rgb.map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join(''), alpha };
+    }
     const g = this.init.paint;
     if (!g) return { color: this.init.color, alpha: 1 };
     this.sampler ??= new PaintGradientSampler(g, this.init.seed);

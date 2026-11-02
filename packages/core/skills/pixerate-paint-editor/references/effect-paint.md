@@ -6,7 +6,9 @@
   the stroke's turns instead of staying fixed to the canvas. `repeat` starts the strip again
   (default), `mirror` runs it back, `clamp` holds the last colour. Use it for ribbons, ropes,
   flames and textures that should flow with the mark; use the default canvas mapping to reveal one
-  hidden picture across many strokes. Particle and bristle marks take the place of their pen dab.
+  hidden picture across many strokes. Every colour-laying brush takes it (watercolour, gouache, oil
+  and impasto too; sprayed stickers at their centre); particle and bristle marks take the place of
+  their pen dab.
   Scaled replays (`export_high_res`) scale `length` with the canvas.
 - **Live** (`live: true`): on a stroke layer (`add_layer {type: "strokes"}`) each stroke keeps
   playing the effect, so the paint moves. Paint the strokes, then `set_effect_playback`
