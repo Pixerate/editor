@@ -22,6 +22,7 @@ import {
 	createSpreadsheetToolProvider,
 	createEditorMcpToolProvider,
 	createCanvasComponentToolProvider,
+	createReviewToolProvider,
 	type AgentToolProvider
 } from '../src/agent';
 import {
@@ -114,6 +115,7 @@ function expectedBySkill(): Record<string, string[]> {
 		],
 		'pixerate-rich-text': [
 			...toolNames(createRichTextToolProvider(doc, { id: 'doc' })),
+			...toolNames(createReviewToolProvider(new Editor({ extensions: createRichTextPreset({ comments: true, trackChanges: true }), content: '<p>x</p>' }), { id: 'review' })),
 			...toolNames(editorMcp, (n) => n.startsWith('prompt_') || shared.includes(n)),
 			...commandIds(createFindReplaceCommands(doc)),
 			...commandIds(createTableCommands(doc)),
@@ -242,6 +244,7 @@ const FACTORIES: Record<string, string> = {
 	createHistoryCommands: 'pixerate-agent-tools',
 	createPlaybackToolProvider: 'pixerate-agent-tools',
 	createRichTextToolProvider: 'pixerate-rich-text',
+	createReviewToolProvider: 'pixerate-rich-text',
 	createEditorMcpToolProvider: 'pixerate-rich-text, pixerate-canvas',
 	createFindReplaceCommands: 'pixerate-rich-text',
 	createTableCommands: 'pixerate-rich-text',

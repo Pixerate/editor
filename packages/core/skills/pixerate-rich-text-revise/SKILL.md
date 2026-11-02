@@ -29,6 +29,9 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
 
 - **Scope:** spelling only, grammar and style, or a rewrite of named passages.
 - **Exceptions:** text that must stay as written (quotes, legal text, product names, titles).
+- **Edit or suggest:** when the user wants to review your changes, turn on `set_track_changes`
+  first so each fix is a suggestion, and flag doubtful points with `add_comment` instead of
+  changing them.
 - **House style:** spelling variant (UK or US), how numbers and dates are written.
 
 ## Working method
@@ -47,7 +50,8 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
    **Check:** `get_text` `blocks`: the other blocks' text is unchanged.
 5. **Consistency.** Terms, numbers and dates one way: `find_text` with a `regex` for the
    variants, then `replace_text`.
-6. **Report** the fixes made, the matches you left and why.
+6. **Report** the fixes made, the matches you left and why. When tracking is on, `list_changes`
+   shows the suggestions you made; leave accepting them to the user.
 
 ## Decision table
 
@@ -58,6 +62,7 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
 | A family of variants (e-mail, email, E-mail) | `find_text` / `replace_text` with `regex: true` |
 | Rewrite a sentence or paragraph | `replace_range` over its exact range |
 | Insert a missing word | `insert_text` at the position from `find_text` |
+| A point only the author can decide | `add_comment` on the passage, saying what you suggest |
 | Formatting only | `format_text` on the range; leave the words |
 
 ## Recipes
@@ -90,3 +95,5 @@ blocks[0].to, text }` with one sentence.
 - `replace_range`, `insert_text`: rewrite or insert at exact positions
 - `format_text`: formatting fixes without touching words
 - `undo_rich_text`: take back a step
+- `set_track_changes`, `list_changes`: suggest fixes as tracked changes and list them
+- `add_comment`: flag what the author should decide

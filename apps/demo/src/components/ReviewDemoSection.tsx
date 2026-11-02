@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Comments, CommentStore, TrackChanges, getEditorText } from "@pixerate/editor";
+import { createReviewToolProvider, createRichTextToolProvider } from "@pixerate/editor/agent";
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import {
@@ -11,8 +12,13 @@ import {
   ReviewToolbar,
   TrackedChangesList,
   useDocumentCompare,
+  useAgentToolProvider,
   useTrackChanges,
 } from "@pixerate/editor-react";
+import { demoToolRegistry } from "../agentTools";
+import { demoTextPresence } from "../agentScript";
+import { REVIEW_SCRIPTS } from "../agentScripts";
+import { AgentScriptPanel } from "./AgentScriptPanel";
 import { EditorPanel } from "./EditorPage";
 
 const reviewer = { id: "demo-user", name: "You" };
@@ -83,6 +89,14 @@ export const ReviewDemoSection: React.FC = () => {
     author: { id: "compare", name: "Compare" },
     detectMoves: true,
   });
+  // Agents read and edit the text (review__find_text, …) and review it (review__list_changes, …).
+  const textTools = useMemo(
+    () => (editor ? createRichTextToolProvider(editor, { id: "review-text", namespace: "review", presence: demoTextPresence() }) : null),
+    [editor],
+  );
+  const reviewTools = useMemo(() => (editor ? createReviewToolProvider(editor, { id: "review", namespace: "review" }) : null), [editor]);
+  useAgentToolProvider(demoToolRegistry, textTools);
+  useAgentToolProvider(demoToolRegistry, reviewTools);
   const [comparing, setComparing] = useState(false);
   const [original, setOriginal] = useState(ORIGINAL_VERSION);
   const [revised, setRevised] = useState(REVISED_VERSION);
@@ -179,6 +193,7 @@ export const ReviewDemoSection: React.FC = () => {
           />
         </div>
       </div>
+      <AgentScriptPanel scripts={REVIEW_SCRIPTS} hint="Plays a scripted agent turn with the review__* tools: it suggests an edit with tracking on, comments on a sentence, then accepts the suggestion and resolves the comment by id." />
       <EditorPanel id="tips" label="Tips">
         <ul className="space-y-1.5 text-xs leading-relaxed text-slate-400">
           <li>Select text and use the bubble menu to add a comment.</li>

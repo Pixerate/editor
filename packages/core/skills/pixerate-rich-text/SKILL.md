@@ -1,6 +1,6 @@
 ---
 name: pixerate-rich-text
-description: How to read and edit Pixerate rich text documents and prompt editors through agent tools - reading text with document positions (get_text, find_text), minimal-diff edits (replace_range, replace_text, insert_text), formatting (format_text for bold, italic, links and colour; set_block_type for headings, lists and quotes; set_text_align), selections, tables (edit_table and table.* commands), charts and sparklines embedded in a document, find and replace commands, and prompt editing with templates, variables and instructions (prompt_insert_text, prompt_replace_range, prompt_set_variable, get_editor_state, view_editor). Use when asked to write, rewrite, proofread, restructure or format a document, report, note, heading, paragraph or table, to insert a chart or sparkline into text, or to edit an image-generation or LLM prompt with {{template}}, {variable} and __instruction__ tokens.
+description: How to read and edit Pixerate rich text documents and prompt editors through agent tools - reading text with document positions (get_text, find_text), minimal-diff edits (replace_range, replace_text, insert_text), formatting (format_text for bold, italic, links and colour; set_block_type for headings, lists and quotes; set_text_align), selections, tables (edit_table and table.* commands), charts and sparklines embedded in a document, comments and tracked changes (add_comment, list_changes, accept_change), find and replace commands, and prompt editing with templates, variables and instructions (prompt_insert_text, prompt_replace_range, prompt_set_variable, get_editor_state, view_editor). Use when asked to write, rewrite, proofread, restructure or format a document, report, note, heading, paragraph or table, to insert a chart or sparkline into text, to comment, suggest edits or accept changes, or to edit an image-generation or LLM prompt with {{template}}, {variable} and __instruction__ tokens.
 ---
 
 # Editing rich text documents and prompts
@@ -72,6 +72,13 @@ the pitfalls, and uses the tools below.
 - **Charts in text.** Introduce a chart in the sentence before it and state the takeaway in
   its title ("Revenue doubled in Q3", not "Revenue"). Use a sparkline for a trend inside a
   sentence or table cell and give it a `label` that says what it shows.
+- **Review.** When the user asks you to suggest edits rather than make them, call
+  `set_track_changes {enabled: true}` first so every write shows as a suggestion they can
+  accept or reject, and turn it back off only if it was off before. Comment (`add_comment`)
+  when a point needs the author's decision instead of a fix; keep each comment to one point and
+  say what you suggest. Resolve threads you have addressed rather than deleting them. Read
+  `list_changes` before accepting or rejecting, and act on ids one at a time unless the user
+  asked for all.
 - **Prompt hygiene.** Put everything that changes between runs in a `{variable}` and set it
   with `prompt_set_variable` rather than editing the text. Give variables descriptive
   snake_case names and, where useful, a default and a description:
@@ -113,6 +120,26 @@ the pitfalls, and uses the tools below.
 | `prompt_replace_range` | Replace prompt text between `from` and `to` (from `get_editor_state`); empty `text` deletes. `from` must not be after `to`. |
 | `prompt_set_variable` | Set the value of a template variable (`name` without braces, `value` any JSON value). Prefer this over editing the prompt text when only a slot's value changes. |
 | `prompt_select` | Select prompt text between two positions (`from === to` places the cursor), e.g. to show the user what you changed. |
+
+### Review
+
+Present when the editor has the `Comments` and / or `TrackChanges` extensions (the host may give
+them their own namespace, e.g. `review__list_comments`). Positions are document positions, as
+above. The write tools are hidden while the document is read-only.
+
+| Tool | Use it to |
+| --- | --- |
+| `list_comments` | List comment threads in document order: `id`, the commented `from` / `to` and `quote`, `author`, `body`, `replies` (`id`, `author`, `body`), `resolved`, `orphaned` (its text was deleted; `from` / `to` are null). `includeResolved` default true. Call before replying, resolving or deleting. |
+| `add_comment` | Comment on `from`..`to` (from `find_text`) with a `body`. One undo step; the selection moves to the commented text. Returns the new thread with its `id`. Fails on an empty or out-of-range span. |
+| `reply_to_comment` | Reply to a thread by `commentId` with a `body`. Re-opens a resolved thread. Returns `replyId` and the thread. |
+| `resolve_comment` | Resolve a thread by `commentId` (`resolved: false` re-opens it). Keeps the thread and its text. Returns the thread. Prefer this over deleting once a point is addressed. |
+| `delete_comment` | Delete a thread and its replies and remove its highlight (one undo step). Returns `deleted` and how many remain. Only when the user asks, or for a comment you added by mistake. |
+| `list_changes` | List tracked changes in document order: `id`, `type` (`insertion`, `deletion`, `format`, `block`, `move`), `author`, `from` / `to`, `text`, a plain-language `description` (moves add `movedFrom` / `movedTo`), and `trackingEnabled`. `type` filters. Call before accepting or rejecting. |
+| `accept_change` | Accept one change by `changeId` (one undo step): inserted text stays, deleted text goes, a move keeps its destination. Returns the change and how many `remaining`. Ids of other changes stay valid. |
+| `reject_change` | Reject one change by `changeId` (one undo step): inserted text goes, deleted text and old formatting come back, a move returns to its source. Returns the change and `remaining`. |
+| `accept_all_changes` | Accept every tracked change in one undo step. Returns how many. Only when the user asks for all; otherwise go one by one. |
+| `reject_all_changes` | Reject every tracked change in one undo step. Returns how many. |
+| `set_track_changes` | Turn tracking on (`enabled: true`: every later edit, yours included, becomes a suggestion) or off. Returns `trackingEnabled`. Turn it on before suggesting edits. |
 
 ### Save and open
 

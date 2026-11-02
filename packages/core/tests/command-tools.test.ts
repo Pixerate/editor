@@ -9,6 +9,7 @@ import {
 	createSpreadsheetToolProvider,
 	createEditorMcpToolProvider,
 	createCanvasComponentToolProvider,
+	createReviewToolProvider,
 	type AgentToolProvider
 } from '../src/agent';
 import { CommandRegistry, createCommandToolProvider, createDrawCommands, createHistoryCommands } from '../src/commands';
@@ -254,6 +255,8 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		registry.register(createOfficeChartToolProvider({ id: 'office-data', namespace: 'officedata' }));
 		const chartDoc = new Editor({ extensions: createRichTextPreset({ chart: true }), content: '<p>x</p>' });
 		registry.register(createRichTextToolProvider(chartDoc, { id: 'chart-doc', namespace: 'chartdoc' }));
+		const reviewDoc = new Editor({ extensions: createRichTextPreset({ comments: true, trackChanges: true }), content: '<p>x</p>' });
+		registry.register(createReviewToolProvider(reviewDoc, { id: 'review', namespace: 'review' }));
 		registry.register(
 			createGenerationToolProvider({ namespace: 'gen', models: [], generate: () => ({}), estimate: () => ({}) })
 		);

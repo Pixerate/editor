@@ -5,3 +5,4 @@ export * from './providers.js';
 export * from './documentChartTools.js';
 export * from './componentTools.js';
 export * from './canvasPlayback.js';
+export * from './reviewTools.js';
