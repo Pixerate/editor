@@ -29,7 +29,7 @@ import {
   toggleDotTexture,
   STAMP_KINDS,
   STAMP_LABELS,
-  toggleStamp,
+  toggleStickerRef,
   type ParticleKind,
   type ParticleRender,
   type RibbonPairs,
@@ -44,6 +44,7 @@ import {
 } from '@pixerate/editor/paint-editor';
 import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/paint-editor';
 import { PaintGradientEditor } from './PaintGradientEditor';
+import { StickerPicker } from './StickerPicker';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, PaintSlider, PixelCanvas, button, chip, panel, useAttempt } from './shared';
 
@@ -239,21 +240,7 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
               )}
             </>
           )}
-          {engine.stickerStamps && (
-            <div className="flex flex-wrap gap-1" role="group" aria-label="Sticker stamps">
-              {STAMP_KINDS.map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={brush.sticker.stamps.includes(k)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] ${brush.sticker.stamps.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-                  onClick={() => controller.setBrush({ sticker: { stamps: toggleStamp(brush.sticker.stamps, k) } })}
-                >
-                  {STAMP_LABELS[k]}
-                </button>
-              ))}
-            </div>
-          )}
+          {engine.stickerStamps && <StickerPicker controller={controller} label="Sticker stamps" selected={brush.sticker.stamps} onPick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />}
           {engine.impastoTool && (
             <label className="flex items-center justify-between gap-2">
               <span className="text-slate-400">Tool</span>

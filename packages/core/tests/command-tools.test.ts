@@ -31,6 +31,7 @@ import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSur
 import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider, createCanvasProposalToolProvider, createCanvasProposals } from '../src/canvas';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
+import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
 import { chartStyleDomain, createChartStyleToolProvider } from '../src/chart';
 import { createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
@@ -279,6 +280,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		}
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));
 		registry.register(createTypographyToolProvider({ id: 'typography', namespace: 'typography' }));
+		registry.register(createStickerToolProvider({ id: 'stickers', namespace: 'stickers', provider: () => editorStickers() }));
 		registry.register(createFontPickerToolProvider(new FontPickerModel(), { id: 'font-picker', namespace: 'fontpicker' }));
 		{
 			const authoringSession = createFakeEffectProvider().openAuthoring!({ effectId: 'fake.invert' }) as any;

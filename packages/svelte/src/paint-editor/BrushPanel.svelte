@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StickerPicker from './StickerPicker.svelte';
   import {
     BLEND_MENU_GROUPS,
     BRUSH_ROTATIONS,
@@ -29,7 +30,7 @@
     toggleDotTexture,
     STAMP_KINDS,
     STAMP_LABELS,
-    toggleStamp,
+    toggleStickerRef,
     type ParticleKind,
     type ParticleRender,
     type RibbonPairs,
@@ -198,15 +199,7 @@
         {/if}
       {/if}
       {#if engine.stickerStamps}
-        <div class="flex flex-wrap gap-1" role="group" aria-label="Sticker stamps">
-          {#each STAMP_KINDS as k (k)}
-            <button
-              type="button"
-              aria-pressed={brush.sticker.stamps.includes(k)}
-              class={`px-1.5 py-0.5 rounded text-[10px] ${brush.sticker.stamps.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-              onclick={() => controller.setBrush({ sticker: { stamps: toggleStamp(brush.sticker.stamps, k) } })}>{STAMP_LABELS[k]}</button>
-          {/each}
-        </div>
+        <StickerPicker {controller} label="Sticker stamps" selected={brush.sticker.stamps} onpick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />
       {/if}
       {#if engine.impastoTool}
         <label class="flex items-center justify-between gap-2">

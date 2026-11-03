@@ -52,3 +52,7 @@ export type { WetBackendInfo } from '../paint/wet/world';
 export * from '../paint/gradient-paint';
 export * from './playback';
 export * from './editorDocument';
+// The sticker library, for the paint editor's pickers (the full contract is `@pixerate/editor/stickers`).
+export { StickerBrowser, type StickerBrowserItem, type StickerBrowserState } from '../stickers/browser';
+export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/types';
+export * from './sticker-art';

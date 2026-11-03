@@ -38,6 +38,7 @@ import {
 	type CommandSpec
 } from '../src/commands';
 import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider, createImageSegmentationToolProvider } from '../src/image-editor';
+import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
@@ -233,7 +234,8 @@ function expectedBySkill(): Record<string, string[]> {
 			return toolNames(authoringProvider);
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
-		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))]
+		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
+		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers() }))
 	};
 	doc.destroy();
 	return result;
@@ -287,6 +289,7 @@ const FACTORIES: Record<string, string> = {
 	createGenerationToolProvider: 'pixerate-generation',
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
+	createStickerToolProvider: 'pixerate-stickers',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',

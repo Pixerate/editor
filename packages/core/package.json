@@ -334,6 +334,16 @@
         "default": "./dist/effects/index.cjs"
       }
     },
+    "./stickers": {
+      "import": {
+        "types": "./dist/stickers/index.d.ts",
+        "default": "./dist/stickers/index.js"
+      },
+      "require": {
+        "types": "./dist/stickers/index.d.cts",
+        "default": "./dist/stickers/index.cjs"
+      }
+    },
     "./diagram": {
       "import": {
         "types": "./dist/diagram/index.d.ts",

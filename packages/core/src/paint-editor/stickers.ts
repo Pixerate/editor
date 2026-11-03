@@ -16,16 +16,22 @@ import { PaintGradientSampler, type PaintGradientSource } from '../paint/gradien
 import type { PaintBrush } from './brushes';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { hash2, rand01 } from './noise';
+import { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
+import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
+import type { StickerRef } from '../stickers/types';
+import { sampleArt, type StickerArt, type StickerArtLookup } from './sticker-art';
+
+export { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
 import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
-
-export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
-export const STAMP_KINDS: readonly StampKind[] = ['dot', 'star', 'heart', 'leaf', 'flower', 'confetti', 'splat', 'sparkle', 'ring'];
 
 /** One sticker (document pixels). */
 export interface Sticker {
   id: string;
-  stamp: StampKind;
+  /** What it shows: a sticker ref (`provider:id`), e.g. `editor:star` or a host library's sticker. */
+  ref: StickerRef;
+  /** The editor stamp, when `ref` is one (`editor:star` → `star`); kept for documents and code that read it. */
+  stamp?: StampKind;
   x: number;
   y: number;
   /** Diameter in pixels. */
@@ -42,8 +48,11 @@ export interface Sticker {
 
 /** Sticker spray settings (each 0..1 unless noted). */
 export interface StickerSettings {
-  /** The stamps to spray (picked at random per sticker). */
-  stamps: StampKind[];
+  /**
+   * The stickers to spray (one picked at random per sticker): refs `provider:id`. A bare editor
+   * stamp (`"star"`) is read as `editor:star`.
+   */
+  stamps: StickerRef[];
   /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
   density: number;
   /** Random size change. */
@@ -56,83 +65,31 @@ export interface StickerSettings {
   colorJitter: number;
 }
 
-export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
+/** At most this many stickers in a sticker brush. */
+export const MAX_STICKER_STAMPS = 16;
+
+export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['editor:star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
 
 const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
 
 export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, base: StickerSettings = DEFAULT_STICKER): StickerSettings {
-  const stamps = Array.isArray(raw.stamps) ? raw.stamps.filter((s): s is StampKind => STAMP_KINDS.includes(s as StampKind)) : base.stamps;
+  const refs = (list: readonly unknown[]) =>
+    list.flatMap((s) => {
+      try {
+        return [normalizeStickerRef(s as string)];
+      } catch {
+        return [];
+      }
+    });
+  const stamps = Array.isArray(raw.stamps) ? refs(raw.stamps) : refs(base.stamps);
   return {
-    stamps: stamps.length ? [...new Set(stamps)] : [...base.stamps],
+    stamps: stamps.length ? [...new Set(stamps)].slice(0, MAX_STICKER_STAMPS) : refs(base.stamps.length ? base.stamps : DEFAULT_STICKER.stamps),
     density: unit(raw.density, base.density),
     sizeJitter: unit(raw.sizeJitter, base.sizeJitter),
     rotationJitter: unit(raw.rotationJitter, base.rotationJitter),
     scatter: typeof raw.scatter === 'number' && Number.isFinite(raw.scatter) ? Math.min(2, Math.max(0, raw.scatter)) : base.scatter,
     colorJitter: unit(raw.colorJitter, base.colorJitter),
   };
-}
-
-/**
- * Coverage of a stamp at a point (u, v) of its unit square (−1..1, y down), 0..1, before shading.
- * `t` is the sticker's seed for shapes with random parts (splat, confetti).
- */
-export function stampCoverage(kind: StampKind, u: number, v: number, t: number): number {
-  const r = Math.hypot(u, v);
-  const a = Math.atan2(v, u);
-  const edge = (d: number) => Math.min(1, Math.max(0, d * 24 + 0.5));
-  switch (kind) {
-    case 'dot':
-      return edge(0.95 - r);
-    case 'ring':
-      return edge(Math.min(0.95 - r, r - 0.6));
-    case 'star': {
-      // Five points, one straight up: the outline radius falls from the points to the notches.
-      const f = (((a + Math.PI / 2) * 5) / (2 * Math.PI)) % 1;
-      const notch = Math.min(f < 0 ? f + 1 : f, 1 - (f < 0 ? f + 1 : f)) * 2;
-      return edge(0.95 - 0.55 * notch - r);
-    }
-    case 'sparkle': {
-      // A four-pointed twinkle (an astroid): |u|^0.6 + |v|^0.6 ≤ 1.
-      const q = Math.pow(Math.abs(u) / 0.95, 0.6) + Math.pow(Math.abs(v) / 0.95, 0.6);
-      return edge((1 - q) * 0.4);
-    }
-    case 'heart': {
-      const x = u * 1.1;
-      const y = -v * 1.1 + 0.15;
-      const q = x * x + y * y - 0.55;
-      return edge(-(q * q * q - x * x * y * y * y) * 3);
-    }
-    case 'leaf': {
-      // A pointed oval with a midrib.
-      const w = 0.42 * Math.sqrt(Math.max(0, 1 - u * u));
-      const inside = edge(w - Math.abs(v + 0.15 * u * u));
-      const rib = Math.abs(v + 0.15 * u * u) < 0.03 && Math.abs(u) < 0.85 ? 0.65 : 1;
-      return inside * rib;
-    }
-    case 'flower': {
-      const petals = 0.6 + 0.35 * Math.abs(Math.cos(2.5 * a));
-      const body = edge(petals - r);
-      return r < 0.22 ? Math.max(body, 1) * 0.85 : body;
-    }
-    case 'confetti': {
-      // A small turned rectangle.
-      return edge(Math.min(0.9 - Math.abs(u), 0.35 - Math.abs(v)));
-    }
-    case 'splat': {
-      // A blob with drops: a bumpy outline plus a few satellites.
-      let rr = 0.55;
-      for (let k = 1; k <= 3; k++) rr += 0.08 * Math.sin(a * (k + 2) + hash2(k, 1, t) * 6.28) / k;
-      let c = edge(rr - r);
-      for (let k = 0; k < 4; k++) {
-        const ang = hash2(k, 7, t) * Math.PI * 2;
-        const dist = 0.72 + 0.2 * hash2(k, 9, t);
-        const dx = u - Math.cos(ang) * dist;
-        const dy = v - Math.sin(ang) * dist;
-        c = Math.max(c, edge(0.08 + 0.06 * hash2(k, 11, t) - Math.hypot(dx, dy)));
-      }
-      return c;
-    }
-  }
 }
 
 function hexRgb(hex: string): [number, number, number] {
@@ -148,11 +105,30 @@ export function stickerRect(s: Sticker): RasterRect {
   return { x: x0, y: y0, width: Math.ceil(s.x + r) - x0, height: Math.ceil(s.y + r) - y0 };
 }
 
+/** The editor stamp a sticker shows, or `null` for a provider's sticker. */
+export function stickerStamp(s: Pick<Sticker, 'ref' | 'stamp'>): StampKind | null {
+  if (s.ref) {
+    try {
+      return editorStampOf(s.ref);
+    } catch {
+      return null;
+    }
+  }
+  return s.stamp && STAMP_KINDS.includes(s.stamp) ? s.stamp : null;
+}
+
 /**
- * Draws one sticker through a `TileMedium` (straight source-over): the stamp's coverage, lit a
- * little from the top left and given a fine seeded texture, in its colour and opacity.
+ * Draws one sticker through a `TileMedium` (straight source-over). An editor stamp: its coverage,
+ * lit a little from the top left and given a fine seeded texture, in its colour and opacity. A
+ * provider's sticker: its loaded art (`art`), fitted into the sticker's size and turned, in its
+ * own colours or, when tintable, in the sticker's colour; nothing until the art has loaded.
  */
-export function drawSticker(medium: TileMedium, s: Sticker): RasterRect {
+export function drawSticker(medium: TileMedium, s: Sticker, art?: StickerArtLookup): RasterRect {
+  const kind = stickerStamp(s);
+  if (!kind) {
+    const a = art?.(s.ref);
+    return a ? drawArtSticker(medium, s, a) : stickerRect(s);
+  }
   const rect = stickerRect(s);
   const n = rect.width * rect.height;
   const cov = new Float32Array(n);
@@ -171,7 +147,7 @@ export function drawSticker(medium: TileMedium, s: Sticker): RasterRect {
       if (u < -1.05 || u > 1.05 || v < -1.05 || v > 1.05) continue;
       // Supersample the edge 2 × 2.
       let c = 0;
-      for (let k = 0; k < 4; k++) c += stampCoverage(s.stamp, u + ((k & 1) - 0.5) / rad / 2, v + ((k >> 1) - 0.5) / rad / 2, s.seed);
+      for (let k = 0; k < 4; k++) c += stampCoverage(kind, u + ((k & 1) - 0.5) / rad / 2, v + ((k >> 1) - 0.5) / rad / 2, s.seed);
       c /= 4;
       if (c <= 0) continue;
       cov[p] = c;
@@ -180,6 +156,38 @@ export function drawSticker(medium: TileMedium, s: Sticker): RasterRect {
       field[p * 3] = Math.min(1, Math.max(0, r * shade));
       field[p * 3 + 1] = Math.min(1, Math.max(0, g * shade));
       field[p * 3 + 2] = Math.min(1, Math.max(0, b * shade));
+    }
+  }
+  medium.deposit(rect, cov, s.opacity, [r, g, b], null, field);
+  return rect;
+}
+
+/** Draws a provider sticker from its art: the longest side spans the sticker's size. */
+function drawArtSticker(medium: TileMedium, s: Sticker, art: StickerArt): RasterRect {
+  const rect = stickerRect(s);
+  const n = rect.width * rect.height;
+  const cov = new Float32Array(n);
+  const field = new Float32Array(n * 3);
+  const a = (s.rotation * Math.PI) / 180;
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const scale = Math.max(art.width, art.height) / s.size;
+  const [r, g, b] = hexRgb(s.color);
+  const px: number[] = [0, 0, 0, 0];
+  for (let yy = 0, p = 0; yy < rect.height; yy++) {
+    for (let xx = 0; xx < rect.width; xx++, p++) {
+      const dx = rect.x + xx + 0.5 - s.x;
+      const dy = rect.y + yy + 0.5 - s.y;
+      // Into the art: undo the turn, then from the centre in art pixels.
+      const ax = (dx * ca + dy * sa) * scale + art.width / 2;
+      const ay = (-dx * sa + dy * ca) * scale + art.height / 2;
+      if (ax < -1 || ay < -1 || ax > art.width + 1 || ay > art.height + 1) continue;
+      sampleArt(art, ax, ay, px);
+      if (!(px[3] > 0)) continue;
+      cov[p] = px[3];
+      field[p * 3] = art.tintable ? r : px[0];
+      field[p * 3 + 1] = art.tintable ? g : px[1];
+      field[p * 3 + 2] = art.tintable ? b : px[2];
     }
   }
   medium.deposit(rect, cov, s.opacity, [r, g, b], null, field);
@@ -227,12 +235,16 @@ export interface StickerSprayInit {
    * stays recolourable); none lands where the effect is transparent.
    */
   effect?: EffectPaintPixels | null;
+  /** Loaded art for provider stickers; stickers without art yet are skipped (see `skipped`). */
+  art?: StickerArtLookup;
 }
 
 /** A sticker-spray stroke: drops stickers along the path and draws them as it goes. */
 export class StickerSpray {
   dabCount = 0;
   readonly stickers: Sticker[] = [];
+  /** Refs the spray picked but could not draw because their art had not loaded. */
+  readonly skipped = new Set<StickerRef>();
   private readonly smoother: PenSmoother;
   private readonly walkers: PenDabWalker[];
   private readonly copies: readonly StrokeCopy[];
@@ -294,9 +306,17 @@ export class StickerSpray {
       this.next++;
       return;
     }
+    const ref = st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'editor:dot';
+    const stamp = stickerStamp({ ref });
+    if (!stamp && !this.init.art?.(ref)) {
+      this.skipped.add(ref);
+      this.next++;
+      return;
+    }
     const sticker: Sticker = {
       id: `st${this.next++}`,
-      stamp: st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'dot',
+      ref,
+      ...(stamp ? { stamp } : {}),
       x: Math.round((d.x + Math.cos(a) * dist) * 100) / 100,
       y: Math.round((d.y + Math.sin(a) * dist) * 100) / 100,
       size: Math.max(2, Math.round(size * 10) / 10),
@@ -306,7 +326,7 @@ export class StickerSpray {
       seed: Math.floor(rand01(seed, i, 65) * 1e9),
     };
     this.stickers.push(sticker);
-    rects.push(drawSticker(this.medium, sticker));
+    rects.push(drawSticker(this.medium, sticker, this.init.art));
     this.dabCount++;
   }
 
@@ -332,17 +352,25 @@ export class StickerSpray {
 }
 
 /** A sticker list rendered over a transparent layer, through a tile target. */
-export function renderStickers(stickers: readonly Sticker[], target: PaintTileTarget): void {
+export function renderStickers(stickers: readonly Sticker[], target: PaintTileTarget, art?: StickerArtLookup): void {
   const medium = new TileMedium(target, {});
-  for (const s of stickers) drawSticker(medium, s);
+  for (const s of stickers) drawSticker(medium, s, art);
 }
 
 /** Checks and rounds a sticker change; throws a sentence naming the bad field. */
 export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial<Omit<Sticker, 'id'>> {
   const out: Partial<Omit<Sticker, 'id'>> = {};
+  if (u.ref !== undefined && u.stamp !== undefined) throw new Error('Give ref or stamp, not both (stamp is the older name for an editor stamp).');
   if (u.stamp !== undefined) {
-    if (!STAMP_KINDS.includes(u.stamp)) throw new Error(`stamp ${JSON.stringify(u.stamp)} is not a stamp; use ${STAMP_KINDS.join(', ')}.`);
+    if (!STAMP_KINDS.includes(u.stamp)) throw new Error(`stamp ${JSON.stringify(u.stamp)} is not a stamp; use ${STAMP_KINDS.join(', ')}, or ref for any sticker (find_stickers).`);
+    out.ref = `editor:${u.stamp}`;
     out.stamp = u.stamp;
+  }
+  if (u.ref !== undefined) {
+    out.ref = normalizeStickerRef(u.ref);
+    const stamp = stickerStamp({ ref: out.ref });
+    if (stamp) out.stamp = stamp;
+    else out.stamp = undefined;
   }
   for (const k of ['x', 'y'] as const) if (u[k] !== undefined) {
     if (!Number.isFinite(u[k])) throw new Error(`${k} must be a number of pixels.`);
@@ -373,7 +401,7 @@ export function normalizeStickerUpdate(u: Partial<Omit<Sticker, 'id'>>): Partial
  * drawn again, from the stickers that reach them; the rest are kept. The pixels are the same as a
  * full redraw, since a tile depends only on the stickers over it.
  */
-export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface, dirty?: readonly RasterRect[]): TiledSurface {
+export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface, dirty?: readonly RasterRect[], art?: StickerArtLookup): TiledSurface {
   const only = base && dirty ? new Set(dirty.flatMap((r) => tilesInRect(r).map(({ tx, ty }) => tileKey(tx, ty)))) : null;
   const live = new Map<TileKey, Uint8ClampedArray>();
   let scratch: Uint8ClampedArray | null = null;
@@ -392,7 +420,7 @@ export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface
     },
   };
   const reaches = (s: Sticker) => !only || tilesInRect(stickerRect(s)).some(({ tx, ty }) => only.has(tileKey(tx, ty)));
-  renderStickers(stickers.filter(reaches), target);
+  renderStickers(stickers.filter(reaches), target, art);
   const tiles = new Map<TileKey, Tile>();
   if (only && base) for (const [k, t] of base.tiles) if (!only.has(k)) tiles.set(k, t);
   for (const [k, d] of live) {
@@ -402,8 +430,8 @@ export function stickerSurface(stickers: readonly Sticker[], base?: TiledSurface
   return new TiledSurface(4, tiles, 0);
 }
 
-/** The top-most sticker under a point (document pixels), by its stamp's shape, or `null`. */
-export function stickerAt(stickers: readonly Sticker[], x: number, y: number): Sticker | null {
+/** The top-most sticker under a point (document pixels), by its stamp's shape (or its art's alpha), or `null`. */
+export function stickerAt(stickers: readonly Sticker[], x: number, y: number, art?: StickerArtLookup): Sticker | null {
   for (let i = stickers.length - 1; i >= 0; i--) {
     const s = stickers[i];
     const rad = s.size / 2;
@@ -414,7 +442,16 @@ export function stickerAt(stickers: readonly Sticker[], x: number, y: number): S
     const v = (-dx * Math.sin(a) + dy * Math.cos(a)) / rad;
     if (Math.abs(u) > 1.05 || Math.abs(v) > 1.05) continue;
     // Small stickers are hard to hit exactly: their whole box counts.
-    if (s.size < 16 || stampCoverage(s.stamp, u, v, s.seed) > 0.25) return s;
+    if (s.size < 16) return s;
+    const kind = stickerStamp(s);
+    if (kind) {
+      if (stampCoverage(kind, u, v, s.seed) > 0.25) return s;
+      continue;
+    }
+    const pic = art?.(s.ref);
+    if (!pic) return s;
+    const scale = Math.max(pic.width, pic.height) / 2;
+    if (sampleArt(pic, u * scale + pic.width / 2, v * scale + pic.height / 2, [0, 0, 0, 0])[3] > 0.25) return s;
   }
   return null;
 }

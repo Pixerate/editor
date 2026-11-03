@@ -7,6 +7,7 @@ export * from './ColorPanel';
 export * from './PaintLayersPanel';
 export * from './WetPanel';
 export * from './StickerPanel';
+export * from './StickerPicker';
 export * from './StrokePanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';

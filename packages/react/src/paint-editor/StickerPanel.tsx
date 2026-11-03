@@ -1,5 +1,6 @@
 import React from 'react';
-import { STAMP_KINDS, STAMP_LABELS, STICKER_SLIDERS, readPath, type PaintEditorController, type StampKind } from '@pixerate/editor/paint-editor';
+import { STICKER_SLIDERS, readPath, stickerRefLabel, type PaintEditorController } from '@pixerate/editor/paint-editor';
+import { StickerPicker } from './StickerPicker';
 import { usePaintEditorState } from './usePaintEditor';
 import { CommitColorInput, ErrorLine, PaintSlider, button, panel, useAttempt } from './shared';
 
@@ -10,7 +11,7 @@ export interface StickerPanelProps {
 
 /**
  * The active layer's stickers: pick one (here, or with the Stickers tool on the canvas) to change
- * its stamp, place, size, rotation, opacity and colour, bring it to the front or back, or delete it
+ * its sticker (from the sticker library), place, size, rotation, opacity and colour, bring it to the front or back, or delete it
  * (each change one undo step). Shows nothing for a layer without stickers.
  */
 export const StickerPanel: React.FC<StickerPanelProps> = ({ controller, className }) => {
@@ -27,21 +28,24 @@ export const StickerPanel: React.FC<StickerPanelProps> = ({ controller, classNam
       <span className="font-medium text-slate-300">Stickers ({stickers.length})</span>
       <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto" role="listbox" aria-label="Stickers">
         {stickers.map((s) => (
-          <button key={s.id} type="button" role="option" aria-selected={s.id === picked} title={`${STAMP_LABELS[s.stamp]} ${s.id}`} className={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={{ background: s.color }} onClick={() => setPicked(s.id)} />
+          <button key={s.id} type="button" role="option" aria-selected={s.id === picked} title={`${stickerRefLabel(s.ref)} ${s.id}`} className={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={{ background: s.color }} onClick={() => setPicked(s.id)} />
         ))}
       </div>
       {sel && (
         <div className="flex flex-col gap-1.5" data-testid="sticker-edit">
-          <label className="flex items-center justify-between gap-2">
-            <span className="text-slate-400">Stamp</span>
-            <select aria-label="Sticker stamp" value={sel.stamp} onChange={(e) => attempt(() => controller.updateSticker(layerId!, sel.id, { stamp: e.target.value as StampKind }))} className="rounded bg-slate-800 px-1 py-0.5">
-              {STAMP_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {STAMP_LABELS[k]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <span className="text-slate-400">Sticker</span>
+          <StickerPicker
+            controller={controller}
+            label="Sticker art"
+            selected={[sel.ref]}
+            onPick={(ref) =>
+              // The layer is redrawn, so the new sticker's art (and every other's) loads first.
+              void controller
+                .prepareStickers([ref, ...stickers.map((x) => x.ref)])
+                .then(() => attempt(() => controller.updateSticker(layerId!, sel.id, { ref })))
+                .catch((e: unknown) => attempt(() => { throw e; }))
+            }
+          />
           <div className="flex items-center justify-between gap-2">
             <span className="text-slate-400">Position</span>
             <span className="flex gap-1">

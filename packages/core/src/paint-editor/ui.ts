@@ -18,7 +18,8 @@ import type { PenPoint } from './engine';
 import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guides';
 import { stencilOutline, type StencilInput } from './stencils';
 import { MAX_DOT_TEXTURES, type DotRotation, type DotTextureOrder, type ParticleKind, type ParticleRender, type RibbonPairs } from './procedural';
-import type { StampKind } from './stickers';
+import { MAX_STICKER_STAMPS, type StampKind } from './stickers';
+import type { StickerRef } from '../stickers/types';
 import type { WetEngineInfo, WetGpuMode } from './wet';
 import { isPalmTouch, pointerToPenPoint, type PointerSample } from './input';
 import { MAX_ZOOM, MIN_ZOOM, screenToDocument } from './view';
@@ -177,7 +178,7 @@ export class PaintGesture {
       }
       const brush = this.controller.getState().brush;
       const size = Math.min(2048, Math.max(2, Math.round(brush.tip.size)));
-      const [added] = this.controller.addStickers(undefined, [{ stamp: brush.sticker.stamps[0] ?? 'star', x: round2(p.x), y: round2(p.y), size }]);
+      const [added] = this.controller.addStickers(undefined, [{ ref: brush.sticker.stamps[0] ?? 'editor:star', x: round2(p.x), y: round2(p.y), size }]);
       this.controller.selectSticker(added.id);
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -553,7 +554,7 @@ export interface BrushEngineControls {
    * (`particle.dotTextures` up to `MAX_DOT_TEXTURES` of `STAMP_KINDS`, `dotTextureOrder`, `dotRotation`).
    */
   particleMenus?: boolean;
-  /** The sticker stamp toggles (`sticker.stamps`, `STAMP_KINDS`). */
+  /** The sticker picker for the brush's stickers (`sticker.stamps`, refs from the sticker library; `toggleStickerRef`). */
   stickerStamps?: boolean;
   /** Light paint: the "light follows pressure" toggle (`light.pressure`); the Light slider is in `sliders`. */
   light?: boolean;
@@ -876,6 +877,22 @@ export const DOT_ROTATION_LABELS: Readonly<Record<DotRotation, string>> = { foll
 export const STAMP_LABELS: Readonly<Record<StampKind, string>> = { dot: 'Dot', star: 'Star', heart: 'Heart', leaf: 'Leaf', flower: 'Flower', confetti: 'Confetti', splat: 'Splat', sparkle: 'Sparkle', ring: 'Ring' };
 
 /** Toggles one stamp in a sticker brush's set (never leaving it empty). */
+/**
+ * Toggles a sticker ref in a sticker brush's list (`sticker.stamps`): removes it when present (a
+ * brush keeps at least one), else adds it while there are fewer than `MAX_STICKER_STAMPS`.
+ */
+export function toggleStickerRef(refs: readonly StickerRef[], ref: StickerRef): StickerRef[] {
+  if (refs.includes(ref)) return refs.length > 1 ? refs.filter((r) => r !== ref) : [...refs];
+  return refs.length < MAX_STICKER_STAMPS ? [...refs, ref] : [...refs];
+}
+
+/** A short label for a sticker ref: the editor stamp's name, else the id after the provider. */
+export function stickerRefLabel(ref: StickerRef): string {
+  const stamp = ref.startsWith('editor:') ? (ref.slice(7) as StampKind) : null;
+  if (stamp && STAMP_LABELS[stamp]) return STAMP_LABELS[stamp];
+  return ref.slice(ref.indexOf(':') + 1);
+}
+
 export function toggleStamp(stamps: readonly StampKind[], stamp: StampKind): StampKind[] {
   const next = stamps.includes(stamp) ? stamps.filter((s) => s !== stamp) : [...stamps, stamp];
   return next.length ? next : [stamp];
