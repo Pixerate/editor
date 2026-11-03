@@ -189,11 +189,10 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 
 ## Procedural brushes, bristles, stickers and stencils
 
-- **Particle brushes** (category `procedural`): `hair-strands` (strings of masses dragged behind
-  the pen: hair, fur, grass), `spring-ink` (springs that overshoot: lively ink lines),
-  `orbit-curls` (particles circling the pen: curls and spirals), `flow-fur` and `sparkle-dust`
-  (particles thrown into a swirling flow), `bead-trail` (beads along a springy path). Tune with
-  `particle` (kind, render dot / line / sequence, count, stiffness, damping, speed, gravity).
+- **Particle brushes** (category `procedural`; ribbons, flames and bokeh are in `light`):
+  `hair-strands`, `spring-ink`, `orbit-curls`, `flow-fur`, `sparkle-dust`, `bead-trail`. Tune
+  with `particle`: kind (string, spring, orbit, flow, elastic, fuzzy), render (dot, line,
+  sequence, ribbon), waves and textured dots; read [references/particle-brushes.md](references/particle-brushes.md).
   Draw slowly and with varying direction: the particles react to movement.
 - **Bristle brushes** (category `bristle`): `bristle-round`, `bristle-flat`, `dry-brush`. Every
   bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles

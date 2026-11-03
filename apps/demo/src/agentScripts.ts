@@ -1143,6 +1143,22 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-light-ribbons",
+    prompt: "Paint glowing light ribbons on dark paper",
+    steps: [
+      { say: "Dark paper, so the light reads.", tool: "paint__set_paper", args: { preset: "smooth", color: "#0b1020" } },
+      { say: "Light ribbon: strands dragged behind the pen on slow waves, the bands between them filled with light.", tool: "paint__add_layer", args: { name: "Ribbons" }, as: "ribbons" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbons.id, brushId: "light-ribbon", color: "#22d3ee", points: wave(300, 110, 96) }) },
+      { say: "A second ribbon crossing it, waving faster and out of step.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbons.id, brushId: "light-ribbon", brush: { particle: { waveLength: 120, waveSpeed: 0.6, wavePhaseJitter: 0.8 } }, color: "#e879f9", points: wave(360, -90, 96) }) },
+      { say: "Flames rise off a line along the bottom: short-lived ribbons thrown into the flow.", tool: "paint__add_layer", args: { name: "Flames" }, as: "flames" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flames.id, brushId: "flame-ribbon", brush: { tip: { size: 60 } }, color: "#f97316", points: wave(640, 20, 96, 120, 1080) }) },
+      { say: "Bokeh accents last, with a wider, softer spill.", tool: "paint__add_layer", args: { name: "Bokeh" }, as: "bokeh" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.bokeh.id, brushId: "bokeh-dots", color: "#fde047", points: wave(140, 40, 48, 200, 1000) }) },
+      { tool: "paint__set_light_spill", args: (ctx) => ({ layerId: ctx.results.bokeh.id, radius: 40, strength: 1.2 }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-stained-glass",
     prompt: "Paint a stained-glass window on backlit paper",
     steps: [

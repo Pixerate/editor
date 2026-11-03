@@ -425,6 +425,21 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.particle.kind).toBe('orbit');
     setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
     expect(c.getState().brush.particle.render).toBe('sequence');
+    // Textured dots (sequence beads), then ribbons and waves.
+    flushSync();
+    click(target.querySelector('[aria-label="Dot textures"] button[aria-pressed="false"]'));
+    expect(c.getState().brush.particle.dotTextures).toHaveLength(1);
+    flushSync();
+    setValue(target.querySelector('select[aria-label="Dot texture order"]') as HTMLSelectElement, 'random');
+    setValue(target.querySelector('select[aria-label="Dot rotation"]') as HTMLSelectElement, 'follow');
+    expect(c.getState().brush.particle).toMatchObject({ dotTextureOrder: 'random', dotRotation: 'follow' });
+    setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'ribbon');
+    flushSync();
+    expect(target.querySelector('[aria-label="Dot textures"]')).toBeNull();
+    setValue(target.querySelector('select[aria-label="Ribbon pairs"]') as HTMLSelectElement, 'first-last');
+    expect(c.getState().brush.particle.ribbonPairs).toBe('first-last');
+    expect(target.querySelector('input[aria-label="Wave"]')).not.toBeNull();
+    expect(target.querySelector('input[aria-label="Ribbon fill"]')).not.toBeNull();
     c.setBrush({ id: 'bristle-round' });
     flushSync();
     expect(target.querySelector('input[aria-label="Splay"]')).not.toBeNull();

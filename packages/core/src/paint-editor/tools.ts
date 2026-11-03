@@ -13,7 +13,7 @@ import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
 import { PAINT_GRADIENT_JSON_SCHEMA, PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
-import { PARTICLE_KINDS, PARTICLE_RENDERS } from './procedural';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS } from './procedural';
 import { STAMP_KINDS } from './stickers';
 import { createPaintStickerTools } from './sticker-tools';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
@@ -236,17 +236,40 @@ const PARTICLE_BRUSH = {
   type: 'object',
   description: 'Particle engine settings (procedural brushes). Missing fields keep their current values.',
   properties: {
-    kind: { type: 'string', enum: [...PARTICLE_KINDS], description: 'string: strands of masses on springs dragged behind the pen (hair, fur, wet string); spring: particles on springs to the pen, overshooting and wobbling; orbit: particles circling the pen (curls); flow: particles thrown off the pen into a swirling flow until they fade.' },
-    render: { type: 'string', enum: [...PARTICLE_RENDERS], description: 'dot: a mark at each step; line: each particle draws a continuous line; sequence: beads spaced along each path.' },
+    kind: {
+      type: 'string',
+      enum: [...PARTICLE_KINDS],
+      description:
+        'string: strands of masses on springs dragged behind the pen (hair, fur, wet string); spring: particles on springs to the pen, overshooting and wobbling; orbit: particles circling the pen (curls); flow: particles thrown off the pen into a swirling flow until they fade; elastic: strands whose links keep a rest length, stretching when the pen is fast and snapping back; fuzzy: winding strings, each strand waving out of step with the others (always waves by at least 0.12 of the tip size).',
+    },
+    render: {
+      type: 'string',
+      enum: [...PARTICLE_RENDERS],
+      description: 'dot: a mark at each step (round, or dotTextures); line: each particle draws a continuous line; sequence: beads spaced along each path (round, or dotTextures); ribbon: the band between neighbouring particles\' paths filled (ribbonFill), with the paths drawn as its edges at the mark size (flame, silk, smoke).',
+    },
     count: { type: 'integer', minimum: 1, maximum: 64, description: 'Particles (flow: how many are thrown per tip of travel).' },
-    size: { type: 'number', minimum: 0, maximum: 1, description: 'Mark size as a fraction of the tip size.' },
-    spread: { type: 'number', minimum: 0, maximum: 1, description: 'How far apart the particles start, as a fraction of the tip size.' },
-    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Spring and string stiffness: stiff follows closely, soft swings wide.' },
+    size: { type: 'number', minimum: 0, maximum: 1, description: 'Mark size as a fraction of the tip size (ribbon: the width of its edges).' },
+    spread: { type: 'number', minimum: 0, maximum: 1, description: 'How far apart the particles start, as a fraction of the tip size (ribbon: how wide it is).' },
+    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Spring, string and elastic stiffness: stiff follows closely (elastic: snaps back faster), soft swings wide.' },
     damping: { type: 'number', minimum: 0, maximum: 1, description: 'How quickly motion dies down.' },
     speed: { type: 'number', minimum: 0, maximum: 1, description: 'Orbit and flow speed.' },
     gravity: { type: 'number', minimum: -1, maximum: 1, description: 'Pull downwards (negative: upwards).' },
     life: { type: 'number', minimum: 0, maximum: 1, description: 'Flow particles: how long they live.' },
     interval: { type: 'number', minimum: 0, maximum: 1, description: 'Sequence: spacing of the beads.' },
+    ribbonFill: { type: 'number', minimum: 0, maximum: 1, description: 'Ribbon: opacity of the fill between the paths, relative to their edges (default 0.5; 0 draws only the edges).' },
+    ribbonPairs: { type: 'string', enum: [...RIBBON_PAIRS], description: 'Ribbon: adjacent (default) joins each particle to its neighbour around the pen; first-last makes one band between the outermost two.' },
+    waveAmplitude: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how far each particle\'s drawn place swings sideways to the stroke, as a fraction of the tip size (default 0: no wave). Works with every kind and render.' },
+    waveLength: { type: 'number', minimum: 4, maximum: 2000, description: 'Wave: wavelength in px of pen travel (default 60).' },
+    waveSpeed: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how fast the waves run, by stroke time (0 default: they stand still on the path; 1: about four a second, so slow strokes wave more). Strokes without times run at a nominal 0.5 px/ms.' },
+    wavePhaseJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how far out of step the particles\' waves are (default 0: all in step, a wavy band; 1: random phases, tangled strands).' },
+    dotTextures: {
+      type: 'array',
+      maxItems: MAX_DOT_TEXTURES,
+      items: { type: 'string', enum: [...STAMP_KINDS], description: 'A stamp.' },
+      description: `Dot and sequence renders: up to ${MAX_DOT_TEXTURES} sticker stamps (list_stickers) drawn instead of round marks; repeats are allowed (they weight the order). Empty (default): round marks.`,
+    },
+    dotTextureOrder: { type: 'string', enum: [...DOT_TEXTURE_ORDERS], description: 'Textured dots: sequence (default) uses the stamps in turn; random picks one per dot (seeded, so replays are exact).' },
+    dotRotation: { type: 'string', enum: [...DOT_ROTATIONS], description: 'Textured dots: follow turns each with its particle\'s motion; random (default) turns each at random; fixed uses the tip angle.' },
   },
   additionalProperties: false,
 } as const;
@@ -718,7 +741,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_brushes',
     title: 'List brushes',
     description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail, glow wash, highlighter; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
+      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks, glow wash, highlighter; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
     inputSchema: EMPTY,
     annotations: { title: 'List brushes', ...READ },
     handler: () => {

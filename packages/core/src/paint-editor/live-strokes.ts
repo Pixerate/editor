@@ -51,7 +51,9 @@ export function liveStrokeBounds(stroke: RecordedStroke): { x: number; y: number
       if (q.y > y1) y1 = q.y;
     }
   }
-  // Particles and bristles reach past the tip; give them room.
-  const pad = stroke.brush.tip.size * (stroke.brush.engine === 'particle' ? 2 : 1) + 2;
+  // Particles and bristles reach past the tip (waving particles further); give them room.
+  const particle = stroke.brush.engine === 'particle' ? stroke.brush.particle : null;
+  const wave = particle ? Math.max(particle.waveAmplitude ?? 0, particle.kind === 'fuzzy' ? 0.12 : 0) : 0;
+  const pad = stroke.brush.tip.size * (particle ? 2 + wave : 1) + 2;
   return { x: Math.floor(x0 - pad), y: Math.floor(y0 - pad), width: Math.ceil(x1 - x0 + 2 * pad), height: Math.ceil(y1 - y0 + 2 * pad) };
 }
