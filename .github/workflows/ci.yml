@@ -10,9 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# `build` builds once and hands the packages' dist/ to the jobs after it: the checks, and the
+# unit tests split into shards that run in parallel. `ci` is the one check that says whether
+# all of them passed.
 jobs:
-  test-and-build:
-    name: Test & Build (Node 24)
+  build:
+    name: Build (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -56,11 +59,107 @@ jobs:
           echo "Peak build memory (largest process): $peak"
           echo "Peak build memory (largest process of \`pnpm build\`): $peak" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload the built packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          # The paths' common parent, packages/, is the artifact's root: download it there.
+          path: |
+            packages/core/dist
+            packages/react/dist
+            packages/svelte/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  checks:
+    name: Package checks & typecheck
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the built packages
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: packages
+
       - name: Check the packed packages (types for every subpath, Node import and require)
         run: pnpm check:packages
 
       - name: Typecheck
         run: pnpm typecheck
 
+  test:
+    name: Unit tests (${{ matrix.shard }}/4)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # A pull request runs only the tests its changes can affect, found from the base commit.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the built packages
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: packages
+
       - name: Run unit tests
-        run: pnpm test
+        # Every test on main. On a pull request, the tests its changes can affect (see the script).
+        run: node scripts/ci-test.mjs --shard=${{ matrix.shard }}/4
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+  ci:
+    name: CI
+    needs: [build, checks, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check that every job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "::error::A CI job did not pass: build ${{ needs.build.result }}, checks ${{ needs.checks.result }}, test ${{ needs.test.result }}."
+          exit 1
