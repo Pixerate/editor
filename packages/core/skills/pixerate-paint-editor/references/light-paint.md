@@ -1,9 +1,10 @@
 # Light paint
 
 Light paint is paint that gives off light: neon, light painting, glow-in-the-dark, glowing glassy
-tubes. Any dab, particle, bristle, Mixer Brush or impasto brush lays it with `light.amount` above 0
-(`set_brush`); the Light category presets are ready-made (`glow-gel`, `neon-marker`,
-`light-airbrush`, `spark-trail`, `highlighter`).
+tubes, glowing watercolour. Any dab, particle, bristle, Mixer Brush, impasto or wet paint brush
+lays it with `light.amount` above 0 (`set_brush`); the Light category presets are ready-made
+(`glow-gel`, `neon-marker`, `light-airbrush`, `spark-trail`, `glow-wash`,
+`highlighter`).
 
 - **What it does.** Each layer keeps a light channel next to its colour. The light's colour is the
   paint's colour at that pixel, so recolouring paint recolours its light. It glows (the paint
@@ -29,8 +30,25 @@ tubes. Any dab, particle, bristle, Mixer Brush or impasto brush lays it with `li
   wash the text out.
 - **Spill vs a glow layer style.** Spill takes each stroke's colour and strength. For a one-colour
   halo around everything on a layer, use a blend or an effect layer instead.
-- **Not yet:** wet brushes (glowing watercolour is planned, #494), sticker sprays and stroke layers
-  refuse light above 0, with the alternatives.
+- **Glowing watercolour** (wet paint brushes with `light.amount`, e.g. `glow-wash`): the light is
+  part of the wet paint. It flows, bleeds, pools at the wash's edges, granulates and blooms with
+  the pigment (`advance_wet_paint`), blot lifts it, wet blend and wet smudge move it, and
+  re-wetting lifts dried light back into the water. While wet, `get_light` shows it as it is now;
+  when the paint dries (`dry_paint`, or saving) it settles into the layer's light and is ordinary
+  light paint. Glowing paint shows its own hue whatever is under it, so a glowing glaze on dark
+  paper reads as its colour, glowing; a plain glaze there only darkens. Plain wet paint over
+  glowing paint dims it by how much light the new film lets through. Add water and the other
+  wet tools lay no light. Paint glowing washes on dark paper (`set_paper` `color`).
+- **Not yet:** sticker sprays and stroke layers refuse light above 0, with the alternatives.
+- **Backlit paper** (`set_paper` `backlight` 0..1 and `backlightColor`, or the `stained-glass`
+  preset): light from behind the paper, like a lightbox. It is a paper setting, not light paint:
+  nothing is repainted, and each pixel lets the light through by how transparent its paint is.
+  Transparent glazes (watercolour, airbrush, a marker below full opacity) glow in their own
+  colour; opaque paint (gouache, oil, solid ink) and thick paint block it, and impasto
+  clarity lets some through. The light through paint spills softly around it. Bare paper
+  glows towards white. Exact for watercolour straight on the paper; layers over other layers
+  and blend modes are approximated (every layer is read as a film over the paper). For stained
+  glass: strong transparent glazes for the panes, then opaque black lines on a layer above.
 - **PSD.** `export_psd` writes each layer's pixels with their glow, and its spill as a
-  "‹layer› light" Linear Dodge (Add) layer directly above it. Re-importing gives plain pixel
-  layers, not editable light.
+  "‹layer› light" Linear Dodge (Add) layer directly above it; backlit paper adds a "Backlight"
+  Linear Dodge (Add) layer at the top. Re-importing gives plain pixel layers, not editable light.

@@ -46,6 +46,13 @@ export interface PaperSettings {
   /** Metallic paper (gold or silver leaf, pearlescent card): the grain catches the light, 0..1 (default 0). */
   metallic?: number;
   /**
+   * Backlit paper (a lightbox, stained glass): light from behind the paper, 0..1 (default 0: none).
+   * Transparent glazes glow in their own colour; opaque and thick paint block it (`backlight.ts`).
+   */
+  backlight?: number;
+  /** The backlight's colour #rrggbb (default warm white, `#fff1d6`). */
+  backlightColor?: string;
+  /**
    * Where the grain's (0, 0) sits in document pixels (missing = the top-left). `extendCanvas` moves
    * it with the paint, so the texture stays under what was painted on it.
    */
@@ -66,7 +73,7 @@ function preset(
   family: PaperFamily,
   pattern: GrainPattern,
   color: string,
-  o: { depth: number; absorption: number; permeability: number; roughness: number; scale?: number; seed?: number; shading?: number; contrast?: number }
+  o: { depth: number; absorption: number; permeability: number; roughness: number; scale?: number; seed?: number; shading?: number; contrast?: number; backlight?: number; backlightColor?: string }
 ): PaperPreset {
   return {
     preset: id,
@@ -84,6 +91,7 @@ function preset(
     absorption: o.absorption,
     permeability: o.permeability,
     roughness: o.roughness,
+    ...(o.backlight ? { backlight: o.backlight, backlightColor: o.backlightColor ?? '#fff1d6' } : {}),
   };
 }
 
@@ -101,6 +109,8 @@ export const PAPER_LIBRARY: readonly PaperPreset[] = [
   preset('fine-linen', 'Fine linen', 'canvas', 'linen', '#e9e2d2', { depth: 0.45, absorption: 0.3, permeability: 0.25, roughness: 0.5 }),
   preset('gesso', 'Gesso panel', 'panel', 'gesso', '#f6f4ef', { depth: 0.35, absorption: 0.2, permeability: 0.15, roughness: 0.4 }),
   preset('smooth', 'Smooth bristol', 'smooth', 'smooth', '#ffffff', { depth: 0, absorption: 0.3, permeability: 0.2, roughness: 0.05, shading: 0 }),
+  // Backlit: smooth paper on a lightbox, for glazes that glow like stained glass.
+  preset('stained-glass', 'Stained glass (backlit)', 'smooth', 'smooth', '#ffffff', { depth: 0, absorption: 0.35, permeability: 0.25, roughness: 0.05, shading: 0, backlight: 0.8, backlightColor: '#fff1d6' }),
 ];
 
 export const DEFAULT_PAPER: Readonly<PaperSettings> = PAPER_LIBRARY[0];
@@ -151,6 +161,8 @@ export function normalizePaper(raw: Partial<PaperSettings> | Record<string, unkn
     permeability: unit(r.permeability, b.permeability),
     roughness: unit(r.roughness, b.roughness),
     ...(unit(r.metallic, b.metallic ?? 0) > 0 ? { metallic: unit(r.metallic, b.metallic ?? 0) } : {}),
+    ...(unit(r.backlight, b.backlight ?? 0) > 0 ? { backlight: unit(r.backlight, b.backlight ?? 0) } : {}),
+    ...(typeof r.backlightColor === 'string' && HEX.test(r.backlightColor) ? { backlightColor: r.backlightColor.toLowerCase() } : b.backlightColor ? { backlightColor: b.backlightColor } : {}),
     ...readOffset(r.offset, b.offset),
   };
 }

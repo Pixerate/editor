@@ -83,6 +83,7 @@ import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad'
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, STAMP_KINDS, stickerAt as hitSticker, stickerRect, stickerSurface, type Sticker } from './stickers';
 import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
+import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
@@ -425,6 +426,9 @@ export class PaintEditorController {
   /** Light paint: each layer's spill settings (saved with the document, not undo steps; missing = the defaults). */
   private lightSpills: Record<string, LightSpill> = {};
   private readonly lightCaches = new Map<string, LightCache>();
+  /** Backlit paper: the light through the paint as drawn (live strokes too), and as committed (its spill). */
+  private readonly backlightView = new BacklightCache();
+  private readonly backlightCommitted = new BacklightCache();
   /** Live effect paint: playing and the frame rate cap (editor state), and the time the view shows. */
   private effectPlaybackState = { playing: true, fps: 30 };
   private effectTime = 0;
@@ -487,6 +491,13 @@ export class PaintEditorController {
           // Wet paint moving is not an undo step: keep the history's documents.
           this.doc = { ...this.doc, layers };
           this.emit(rects.length ? rects : 'all');
+        },
+        layerLight: (id) => this.doc.light?.[id] ?? null,
+        updateLights: (lights) => {
+          let light = this.doc.light;
+          for (const [id, surface] of lights) if (findLayer(this.doc.layers, id)) light = withLayerLight(light, id, surface);
+          // Wet light moving is not an undo step either.
+          this.doc = { ...this.doc, ...(light ? { light } : {}) };
         },
         changed: () => {},
       },
@@ -1882,7 +1893,6 @@ export class PaintEditorController {
     const brush = this.strokeBrush(init);
     const effect = this.strokeEffect(init, brush);
     if (brush.light.amount > 0) {
-      if (brush.engine === 'wet') throw new PaintEditorError(`The ${brush.name} brush paints wet media, which doesn't take light yet (glowing watercolour is planned in #494); paint light with a dab or impasto light brush (list_brushes category light), or set light.amount to 0 (set_brush).`);
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (list_brushes category light), or set light.amount to 0 (set_brush).`);
     }
     if (doc.liveStrokes?.[layer.id]) {
@@ -2073,7 +2083,9 @@ export class PaintEditorController {
         const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
         const sprayed = s.stickers();
         const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
-        const light = withLayerLight(this.doc.light, l.id, s.lightChannel());
+        // Wet light is shaded from the simulation (it keeps flowing after the stroke, as the paint does).
+        const wetLight = wetStroke && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null;
+        const light = withLayerLight(this.doc.light, l.id, s.lightChannel() ?? wetLight);
         this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), wetStroke ? before : this.doc);
       },
     };
@@ -2108,13 +2120,14 @@ export class PaintEditorController {
         const offset = s.init.wet ? { x: 0, y: 0 } : l.offset;
         const ch = s.thickChannels();
         const sprayed = s.stickers();
+        const lit = s.lightChannel() ?? (s.init.wet && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null);
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
           strokes: [...out.strokes, stroke],
           ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
-          ...(s.lightChannel() ? { light: withLayerLight(out.light, l.id, s.lightChannel()) } : {}),
+          ...(lit ? { light: withLayerLight(out.light, l.id, lit) } : {}),
         }, stroke);
       },
     };
@@ -2275,6 +2288,8 @@ export class PaintEditorController {
   clearLight(layerId?: string): { layerId: string; cleared: boolean } {
     this.requireIdle('clearing light');
     const l = this.paintTarget(layerId, 'clear the light of');
+    // Wet light lives in the simulation: the paint dries first (in the same undo step).
+    if (this.wet.bakedLight(l.id)) this.dryLayersFirst([l.id]);
     const t = this.lightWithout([l.id]);
     if (!t.light) return { layerId: l.id, cleared: false };
     this.commit('Clear light', { ...this.doc, light: t.light });
@@ -2696,8 +2711,41 @@ export class PaintEditorController {
     return out;
   }
 
+  /** Visible pixel layers bottom first, as the backlight reads them (group opacities multiplied in). */
+  private backlitLayers(layers: readonly PaintLayer[], committed: boolean, opacity = 1, out: BacklitLayer[] = []): BacklitLayer[] {
+    for (const l of layers) {
+      if (!l.visible) continue;
+      if (l.type === 'group') this.backlitLayers(l.children, committed, opacity * l.opacity, out);
+      else if (isPixelLayer(l)) {
+        const thick = !committed && this.liveThick?.layerId === l.id ? this.liveThick.channels : this.doc.thick?.[l.id];
+        out.push({ surface: l.surface, offset: l.offset, opacity: opacity * l.opacity, ...(thick ? { thick } : {}) });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Backlit paper: the light that makes it through `base` (the layers as drawn), with the spill of
+   * the light through the committed painting, as a Linear Dodge (Add) layer for the top of the
+   * stack; `null` when the paper has no backlight.
+   */
+  private backlightLayer(base: PaintLayer[]): PaintPixelLayer | null {
+    const paper = this.doc.paper;
+    const amount = backlightOf(paper);
+    if (!(amount > 0)) return null;
+    const { width, height } = this.doc.canvas;
+    const grain = paperGrain(paper);
+    const current = this.backlightView.surface(paper, grain, width, height, this.backlitLayers(base, false), null)!;
+    const committed = base === this.doc.layers ? current : this.backlightCommitted.surface(paper, grain, width, height, this.backlitLayers(this.doc.layers, true), null);
+    const surface = this.backlightView.layer(current, committed, amount);
+    return { type: 'pixel', id: BACKLIGHT_LAYER_ID, name: 'Backlight', visible: true, opacity: 1, blend: 'linear-dodge', surface, offset: { x: 0, y: 0 } } as PaintPixelLayer;
+  }
+
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    let layers: PaintLayer[] = this.lightLayers(this.litLayers((options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers()));
+    const base = (options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers();
+    let layers: PaintLayer[] = this.lightLayers(this.litLayers(base));
+    const backlight = options.paper !== false && !options.layerIds ? this.backlightLayer(base) : null;
+    if (backlight) layers = [...layers, backlight];
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
@@ -2795,7 +2843,8 @@ export class PaintEditorController {
     const light: Record<string, unknown> = {};
     for (const [id, t] of Object.entries(this.doc.light ?? {})) {
       if (!findLayer(this.doc.layers, id)) continue;
-      const saved = lightToJSON(t);
+      // Wet light is saved dried where it is, as the paint is.
+      const saved = lightToJSON(this.wet.bakedLight(id) ?? t);
       if (saved) light[id] = saved;
     }
     if (Object.keys(light).length) ext.light = light;
@@ -2992,7 +3041,9 @@ export class PaintEditorController {
    */
   exportPsd(): PsdExportResult {
     // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
-    const dried = this.lightLayers(this.litLayers(this.driedLayers(this.doc.layers)));
+    const driedBase = this.driedLayers(this.doc.layers);
+    const backlight = this.backlightLayer(driedBase);
+    const dried = [...this.lightLayers(this.litLayers(driedBase)), ...(backlight ? [backlight] : [])];
     const { width, height, dpi } = this.doc.canvas;
     const paperPixels = this.compositePixels({ layerIds: [], paper: true });
     const paperLayer: PaintPixelLayer = {
@@ -3024,6 +3075,9 @@ export class PaintEditorController {
       const list = names.map((n) => `"${n}"`).join(', ');
       const one = names.length === 1;
       result.warnings.push(`${label} blending has no PSD equivalent; ${list} ${one ? 'was' : 'were'} written as ${std}, the nearest Photoshop mode, so ${one ? 'it looks' : 'they look'} different in Photoshop (the merged image is exact).`);
+    }
+    if (backlight) {
+      result.warnings.push('Backlit paper is written as pixels: the light that comes through the paint is a "Backlight" Linear Dodge (Add) layer at the top. Opening the PSD again gives a plain pixel layer, not a backlight.');
     }
     if (Object.values(this.doc.light ?? {}).some((l) => l.tiles.size)) {
       result.warnings.push('Light paint is written as pixels: each layer with its glow, and its spill as a "‹layer› light" Linear Dodge (Add) layer above it. Opening the PSD again gives plain pixel layers, not editable light.');
@@ -4154,6 +4208,9 @@ function withLayerLight(light: PaintDocumentState['light'], layerId: string, nex
   else delete out[layerId];
   return out;
 }
+
+/** The id of backlit paper's light layer in renders and PSD exports (never a document layer). */
+const BACKLIGHT_LAYER_ID = '__backlight';
 
 /** `layers` with `node` inserted directly above layer `id`, in the same group. */
 function insertAfter(layers: PaintLayer[], id: string, node: PaintLayer): PaintLayer[] {

@@ -808,6 +808,14 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     light: { amount: 1 },
   }),
   builtin({
+    id: 'glow-wash', name: 'Glow wash', category: 'light', engine: 'wet',
+    tip: { size: 40, hardness: 0.55, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: true },
+    dynamics: { minSize: 0.35 },
+    behavior: { pickup: 0.4, mix: 0.5, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.65, pigment: 0.75, body: 0, rewet: 0.1 },
+    light: { amount: 0.7 },
+  }),
+  builtin({
     // Fluorescent ink: a transparent chisel marker that multiplies (text under it stays dark) and
     // glows a little brighter than the paper. Turn the layer's spill off (set_light_spill radius 0).
     id: 'highlighter', name: 'Highlighter', category: 'light',

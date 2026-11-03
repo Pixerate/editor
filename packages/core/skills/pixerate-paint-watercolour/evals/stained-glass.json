@@ -1,0 +1,16 @@
+{
+	"prompt": "Set this sheet up as a lightbox for stained glass, then glaze a transparent red pane across the middle and let it dry.",
+	"fixture": { "editor": "paint", "width": 64, "height": 64, "setup": [] },
+	"checks": [
+		{ "why": "the paper is backlit", "tool": "get_paper", "expect": { "backlight": { "$expr": "v > 0" } } },
+		{ "why": "the pane is a transparent watercolour glaze, not gouache", "tool": "list_strokes", "expect": { "strokes": { "$some": { "brushId": { "$in": ["watercolor-round", "watercolor-wash", "gradient-wash", "watercolor-detail", "glow-wash"] } } } } },
+		{ "why": "it is dry", "tool": "get_wet_paint", "expect": { "wet": false } }
+	],
+	"solution": [
+		{ "tool": "set_paper", "args": { "preset": "stained-glass" } },
+		{ "tool": "set_brush", "args": { "id": "watercolor-wash" } },
+		{ "tool": "set_color", "args": { "color": "#dc2626" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 4, "y": 24 }, { "x": 60, "y": 24 }, { "x": 60, "y": 40 }, { "x": 4, "y": 40 }] } },
+		{ "tool": "dry_paint" }
+	]
+}

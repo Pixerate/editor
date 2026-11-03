@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { createWetGpuEngine, flowField, normalizeFlow, pigmentOf, wetGpuSupport, WetWorld, type WetGpuJob, type WetGpuProvider, type WetPaperInput } from '../src/paint';
-import { P_D0, P_P0, P_RHO, P_SW, PLANE, SET_PLANES, SLOT_PLANES, WET_TILE } from '../src/paint/wet/model';
+import { MASS_CHANNELS, P_D0, P_P0, P_RHO, P_SW, PLANE, SET_PLANES, SLOT_PLANES, WET_TILE } from '../src/paint/wet/model';
 import { shadeTile } from '../src/paint/wet/film';
 
 /**
@@ -124,7 +124,8 @@ describe('Engine B on a GPU (WET_GPU)', () => {
           const c = y * 258 + x;
           const set = p * SET_PLANES * PLANE;
           maxWater = Math.max(maxWater, Math.abs(gpuSlot[set + P_RHO * PLANE + c] - cpu[set + P_RHO * PLANE + c]));
-          for (let q = 0; q < 4; q++) {
+          // Pigment (4 channels) and light (the fifth).
+          for (let q = 0; q < MASS_CHANNELS; q++) {
             maxPigment = Math.max(maxPigment, Math.abs(gpuSlot[set + (P_P0 + q) * PLANE + c] - cpu[set + (P_P0 + q) * PLANE + c]));
             maxDeposit = Math.max(maxDeposit, Math.abs(gpuSlot[(P_D0 + q) * PLANE + c] - cpu[(P_D0 + q) * PLANE + c]));
           }

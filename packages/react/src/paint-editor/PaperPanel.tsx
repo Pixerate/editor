@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { CommitColorInput, ErrorLine, PaintSlider, PixelCanvas, panel, useAttempt } from './shared';
 
@@ -12,8 +12,8 @@ const SWATCH = { x: 0, y: 0, width: 64, height: 40 };
 
 /**
  * The paper library by family (each a generated grain preview) and the current paper's colour,
- * grain depth, scale, shading and contrast, the wet-media properties and metallic sheen (each
- * change one undo step; sliders commit on release); then the light for thick paint and metallic
+ * grain depth, scale, shading and contrast, the wet-media properties, metallic sheen and backlight
+ * with its colour (each change one undo step; sliders commit on release); then the light for thick paint and metallic
  * paper (not an undo step) and Flatten relief for the active layer.
  */
 export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className }) => {
@@ -52,6 +52,10 @@ export const PaperPanel: React.FC<PaperPanelProps> = ({ controller, className })
       {PAPER_SLIDERS.map((c) => (
         <PaintSlider key={c.path} control={c} value={readPath(paper, c.path)} onCommit={(v) => attempt(() => controller.setPaper(patchPath(paper as never, c.path, v) as never))} />
       ))}
+      <label className="flex items-center justify-between">
+        <span className="text-slate-400">Backlight colour</span>
+        <CommitColorInput label="Backlight colour" value={paper.backlightColor ?? DEFAULT_BACKLIGHT_COLOR} onCommit={(v) => attempt(() => controller.setPaper({ backlightColor: v }))} className="h-6 w-10 rounded bg-transparent" />
+      </label>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={paper.tiling === 'mirror'} onChange={(e) => attempt(() => controller.setPaper({ tiling: e.target.checked ? 'mirror' : 'repeat' }))} /> Mirror tiling
       </label>
