@@ -3,7 +3,8 @@
 Light paint is paint that gives off light: neon, light painting, glow-in-the-dark, glowing glassy
 tubes, glowing watercolour. Any dab, particle, bristle, Mixer Brush, impasto or wet paint brush
 lays it with `light.amount` above 0 (`set_brush`); the Light category presets are ready-made
-(`glow-gel`, `neon-marker`, `light-airbrush`, `spark-trail`, `glow-wash`).
+(`glow-gel`, `neon-marker`, `light-airbrush`, `spark-trail`, `glow-wash`,
+`highlighter`).
 
 - **What it does.** Each layer keeps a light channel next to its colour. The light's colour is the
   paint's colour at that pixel, so recolouring paint recolours its light. It glows (the paint
@@ -22,6 +23,11 @@ lays it with `light.amount` above 0 (`set_brush`); the Light category presets ar
   gradient (`set_paint`) for glowing glass tubes.
 - **Crossings.** Beads on one layer fuse where they cross (their heights combine by maximum), so
   clarity only shows other layers: paint one loop per layer for glassy crossings.
+- **Highlighter** (`highlighter`): fluorescent ink. A transparent chisel marker that multiplies,
+  so it glows a little brighter than the paper and text under it stays dark. Paint it on the
+  layer that holds the text (a tip blend works within its layer), and turn that layer's spill off
+  (`set_light_spill` `radius` 0): fluorescent ink does not light its surroundings, and spill would
+  wash the text out.
 - **Spill vs a glow layer style.** Spill takes each stroke's colour and strength. For a one-colour
   halo around everything on a layer, use a blend or an effect layer instead.
 - **Glowing watercolour** (wet paint brushes with `light.amount`, e.g. `glow-wash`): the light is

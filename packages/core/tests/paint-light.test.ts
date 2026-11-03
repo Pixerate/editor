@@ -151,6 +151,20 @@ describe('light paint', () => {
     expect(c.lightOf(id).peak).toBe(255);
   });
 
+  it('the highlighter keeps text under it dark and glows brighter than a plain marker (with the layer\'s spill off)', () => {
+    const band = (brushId: string) => {
+      const c = new PaintEditorController({ width: W, height: H, paper: 'smooth' });
+      c.paintStroke({ brushId: 'ink-pen', brush: { tip: { size: 3 } }, points: LINE, color: '#111111' });
+      c.paintStroke({ brushId, points: LINE, color: '#f5f53a' });
+      c.setLightSpill(undefined, { radius: 0 });
+      return { ink: comp(c, 80, 50), band: comp(c, 80, 44) };
+    };
+    const marker = band('marker');
+    const hl = band('highlighter');
+    expect(sum(hl.ink)).toBeLessThan(90);
+    expect(sum(hl.band)).toBeGreaterThan(sum(marker.band) + 12);
+  });
+
   it('writes spill to PSD as a Linear Dodge layer above its layer, and says light becomes pixels', () => {
     const c = editor();
     c.paintStroke({ brushId: 'neon-marker', brush: HARD, points: LINE, color: '#22d3ee' });
@@ -188,6 +202,6 @@ describe('light paint', () => {
     r = await call('clear_light', {});
     expect(r.data.cleared).toBe(false);
     r = await call('list_brushes', {});
-    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['glow-wash', 0.7]]);
+    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['glow-wash', 0.7], ['highlighter', 0.5]]);
   });
 });
