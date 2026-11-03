@@ -808,6 +808,14 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     light: { amount: 1 },
   }),
   builtin({
+    // Fluorescent ink: a transparent chisel marker that multiplies (text under it stays dark) and
+    // glows a little brighter than the paper. Turn the layer's spill off (set_light_spill radius 0).
+    id: 'highlighter', name: 'Highlighter', category: 'light',
+    tip: { size: 30, hardness: 0.85, spacing: 0.04, angle: 45, roundness: 0.35, opacity: 0.6, flow: 1, smoothing: 0.3, pressureSize: false, pressureOpacity: false, blend: 'multiply' },
+    grain: 0.05,
+    light: { amount: 0.5 },
+  }),
+  builtin({
     id: 'sticker-stars', name: 'Star stickers', category: 'sticker', engine: 'sticker',
     tip: { size: 36, opacity: 1, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
     dynamics: { minSize: 0.5 },

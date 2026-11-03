@@ -716,7 +716,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_brushes',
     title: 'List brushes',
     description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
+      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail, highlighter; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
     inputSchema: EMPTY,
     annotations: { title: 'List brushes', ...READ },
     handler: () => {
