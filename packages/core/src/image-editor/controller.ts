@@ -386,6 +386,9 @@ import {
 import { applyMatrix, multiplyMatrices, rotateMatrix, translateMatrix } from '../geom/affine';
 import type { EffectPattern } from '../raster/effects/patterns';
 import { DEFAULT_GLOBAL_LIGHT, effectsMargin, type GlobalLight, type LayerEffect, type LayerEffectKind, type LayerEffects } from '../raster/effects/model';
+import { closest, createBrushLibrary, type BrushLibrary, type BrushLibraryEntry } from '../brushes/library';
+import { IMAGE_PROFILE } from '../brushes/profiles';
+import { imageBrushPreset, type ImageBrushPreset } from './brush-presets';
 
 /** What `getSmartObject` reports. */
 export interface SmartObjectInfo {
@@ -625,6 +628,8 @@ export interface PaintOptions {
   cloneSource: CloneSource | null;
   /** Clone Source panel: how cloned pixels are scaled, flipped and rotated (identity by default). */
   cloneTransform: CloneTransform;
+  /** The brush preset the brush settings came from (`setBrushPreset`), until they are changed by hand; `null` for none. */
+  brushPreset?: string | null;
 }
 
 /** Where the Clone Stamp and Healing Brush sample from. */
@@ -1598,6 +1603,7 @@ export class ImageEditorController {
   private effectRefresh: 'none' | 'incomplete' | 'all' = 'none';
 
   constructor(options: ImageEditorOptions = {}) {
+    this.brushLibrary = options.brushLibrary ?? createBrushLibrary();
     // A new provider redraws every effect filter (after construction, for one given here); a
     // finished render redraws the surfaces waiting for it.
     this.effects.subscribe(() => this.queueEffectRefresh('all'));
@@ -4701,6 +4707,37 @@ export class ImageEditorController {
 
   // --- Painting ---
 
+  /** The brush library the brush presets come from (shared with other editors when the host passes one). */
+  public readonly brushLibrary: BrushLibrary;
+
+  /** The brushes this editor can paint with (`IMAGE_PROFILE`): built-in presets, then saved brushes. */
+  public async listBrushPresets(): Promise<BrushLibraryEntry[]> {
+    return this.brushLibrary.list({ profile: IMAGE_PROFILE });
+  }
+
+  /**
+   * Paints with a brush from the brush library: sets the paint tool it needs (brush, Mixer Brush
+   * or eraser), its brush and mixer settings and, for a brush with its own gradient, the paint.
+   * View state, no undo. Throws for an unknown id (with the closest ones) or a brush the image
+   * editor can't paint (wet, thick, particles, stickers, light), saying why.
+   */
+  public async setBrushPreset(id: string): Promise<ImageBrushPreset> {
+    const entry = await this.brushLibrary.get(id);
+    const ids = (await this.listBrushPresets()).map((e) => e.brush.id);
+    if (!entry) throw new LayerOperationError(`Unknown brush "${id}". ${closest(id, ids)}list_brush_presets lists the brushes the image editor can paint with.`);
+    let preset: ImageBrushPreset;
+    try {
+      preset = imageBrushPreset(entry.brush, ids);
+    } catch (e) {
+      throw new LayerOperationError((e as Error).message);
+    }
+    this.setPaintOptions({ brush: preset.brush, ...(preset.mixer ? { mixer: preset.mixer } : {}), ...(preset.paint ? { paint: preset.paint } : {}) });
+    this.state.paint = { ...this.state.paint, brushPreset: preset.id };
+    if (this.state.activeTool !== preset.tool) this.setTool(preset.tool);
+    else this.notify();
+    return preset;
+  }
+
   /** Brush settings, colours and tool options of the paint tools (view state, no undo). */
   public setPaintOptions(
     options: Partial<Omit<PaintOptions, 'brush' | 'mixer' | 'mixerLoad' | 'retouch' | 'cloneSource' | 'cloneTransform'>> & {
@@ -4722,6 +4759,8 @@ export class ImageEditorController {
     }
     if (source.type === 'color' || options.foreground !== undefined) source = { type: 'color', color: foreground };
     const next: PaintOptions = {
+      // Brush settings changed by hand are no longer the preset's.
+      brushPreset: options.brush || options.mixer ? null : (cur.brushPreset ?? null),
       brush: options.brush ? normalizeBrush({ ...cur.brush, ...options.brush }) : cur.brush,
       foreground,
       background: options.background !== undefined ? toHex(parseColor(options.background)) : cur.background,

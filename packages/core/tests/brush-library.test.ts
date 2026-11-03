@@ -28,12 +28,20 @@ const ids = (brushes: readonly { id: string }[]) => brushes.map((b) => b.id);
 const preset = (id: string) => BRUSH_PRESETS.find((b) => b.id === id)!;
 
 describe('host profiles', () => {
-  it('lets canvas use exactly the brushes its hand-written filter allows', () => {
-    expect(ids(listPresets(CANVAS_PROFILE))).toEqual(ids(listCanvasBrushes()));
+  // The brushes canvas and vector strokes used before their hand-written filters were replaced by
+  // these profiles (canvas: dry dab brushes without light; vector: dry dab brushes). The profiles
+  // must keep listing exactly these presets.
+  const CANVAS_BEFORE = ['pencil-hb', 'pencil-6b', 'soft-pastel', 'oil-pastel', 'charcoal-stick', 'vine-charcoal', 'airbrush', 'marker', 'ink-pen', 'brush-pen', 'dirty-round', 'multicolor-flat', 'palette-dabber', 'gradient-round', 'pressure-ombre', 'rainbow-marker'];
+  const VECTOR_BEFORE = [...CANVAS_BEFORE, 'neon-marker', 'light-airbrush', 'highlighter'];
+
+  it('lets canvas use exactly the brushes its hand-written filter allowed', () => {
+    expect(ids(listPresets(CANVAS_PROFILE))).toEqual(CANVAS_BEFORE);
+    expect(ids(listCanvasBrushes())).toEqual(CANVAS_BEFORE);
   });
 
-  it('lets vector use exactly the brushes its hand-written filter allows', () => {
-    expect(ids(listPresets(VECTOR_PROFILE))).toEqual(ids(vectorBrushstrokeBrushes()));
+  it('lets vector use exactly the brushes its hand-written filter allowed', () => {
+    expect(ids(listPresets(VECTOR_PROFILE))).toEqual(VECTOR_BEFORE);
+    expect(ids(vectorBrushstrokeBrushes())).toEqual(VECTOR_BEFORE);
   });
 
   it('lets the paint editor use every preset', () => {

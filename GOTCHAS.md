@@ -3545,6 +3545,24 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `migrateBrushV1` builds facets from what the engine reads. Medium, variety, description, tags, suggested colours, light spill and glow, and motion hints aren't in the engine brush.
 - **Solution / Workaround**: `brushSpecOf(next, from)` migrates the edited brush and carries the hints over from the facets it was edited from. It keeps them only if the brush still resolves to the same engine brush (a wet variety on a dab brush would change it). The controller keeps the active brush's facets next to its engine form, and uses them for `getBrushSpec()` and saving.
 
+### [core/canvas] Canvas and Vector Strokes Copy a Saved Brush Into the Stroke
+
+- **Issue / Symptom**: A canvas stroke or vector brushstroke drawn with a saved brush (`my-pencil`) stored only the id. A document opened without that library, or after the brush was removed, couldn't render it. The canvas renderer is a lazy chunk with no access to the host's library anyway.
+- **Root Cause**: Presets are in the code, but saved brushes live in an async `BrushLibrary` the host passes in. Rendering is synchronous (`renderShapeBrushstrokeNow`, `vectorBrushstrokeImages`) and also runs where there is no library (SVG export, a document opened elsewhere).
+- **Solution / Workaround**: Strokes embed the saved brush's facets: `CanvasBrushstroke.spec` and `VectorBrushstroke.spec`. Presets are never embedded. Resolution prefers the spec, and the spec is checked against `CANVAS_PROFILE` / `VECTOR_PROFILE` on every read. `drawStroke` and `addBrushstroke` look the brush up in the library. Hand-drawn strokes, which finish synchronously, take `style.brushSpec`, set by the brush picker alongside `brush` (`useCanvasBrushes({ library })` lists saved brushes with their `spec`). Changing a brush in the library later doesn't change strokes already drawn.
+
+### [react/brushes] `BrushLibraryBrowser` Lives in Its Own Subpath
+
+- **Issue / Symptom**: Using the paint editor's `BrushLibraryBrowser` in the canvas, vector or image editor would make those entries import `@pixerate/editor-react/paint-editor`, and its whole bundle with it.
+- **Root Cause**: Subpath entries are bundled apart. `entry-isolation.test.ts` allows each one only its own core subpaths.
+- **Solution / Workaround**: The browser and `useBrushLibrary` / `brushLibraryState` are in `@pixerate/editor-react/brushes` and `@pixerate/editor-svelte/brushes`. The paint editor re-exports the browser. Entries that draw a brush picker list `brushes` among their allowed core subpaths. Its thumbnails are pixels or an image URL, so canvas swatch data URLs work as they are.
+
+### [core/vector] A Controller That Follows a Shared Library Must Survive `destroy()`
+
+- **Issue / Symptom**: Unsubscribing from the brush library in `VectorEditorController.destroy()` left a controller that React StrictMode reuses (mount, unmount, mount) without saved brushes.
+- **Root Cause**: `destroy()` is documented as reversible: a later `subscribe` reconnects. A library subscription made in the constructor isn't remade.
+- **Solution / Workaround**: The library snapshot (`snapshotBrushLibrary`) stays subscribed for the controller's life. It only re-reads the library, so it is cheap. Read saved brushes synchronously from the snapshot, and await `whenBrushesLoaded()` before using a brush saved elsewhere.
+
 ### [core/brushes] `normalizeBrushSpec` Reads Gradients Leniently; Tools Must Check Them Strictly
 
 - **Issue / Symptom**: `set_brush { colour: { default: <gradient with unsorted stops> } }` was accepted, and the stops were sorted silently. The old `set_brush { paint }` refused it with "sorted by offset".

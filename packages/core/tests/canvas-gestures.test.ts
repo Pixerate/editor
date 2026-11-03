@@ -272,7 +272,7 @@ describe('gesture commands', () => {
 		expect(await message('canvas.bracket', { around: [card], side: 'middle' })).toMatch(/left/);
 		expect(await message('canvas.arrow', { from: { nodeId: 'card' }, to: { nodeId: 'card' } })).toMatch(/too close/);
 		expect(await message('canvas.circle', { around: [] })).toMatch(/at least 1/);
-		expect(await message('canvas.check', { at: card, brush: 'watercolor-round' })).toMatch(/not a dry brush/);
+		expect(await message('canvas.check', { at: card, brush: 'watercolor-round' })).toMatch(/can't brush a canvas stroke: Canvas has no wet surface/);
 		expect(await message('canvas.circle', { around: [card], extra: 1 })).toMatch(/extra/);
 		expect(strokes(nodes())).toHaveLength(0);
 	});

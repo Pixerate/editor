@@ -8,9 +8,12 @@
 import { brushstrokeScaleBucket } from '../paint/brushstroke-scale.js';
 import { parseSvgPath, type PathShape, type ShapeDescription, type ShapeSize } from './shapeGeometry.js';
 import type { Point } from './types.js';
-import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushstroke } from './brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushSpec, CanvasBrushstroke } from './brushTypes.js';
+// Types only: the brush library is passed in, and the brush model loads with the renderer.
+import type { BrushLibrary } from '../brushes/library.js';
+import type { BrushPreviewRenderer } from '../brushes/tools.js';
 
-export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPaper, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushstroke } from './brushTypes.js';
+export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPaper, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushSpec, CanvasBrushstroke } from './brushTypes.js';
 
 export { brushstrokeScaleBucket };
 
@@ -118,13 +121,16 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
 /** The renderer chunk (`./brushstrokeRender.ts`). */
 export interface CanvasBrushstrokeRenderer {
-	listCanvasBrushes(): CanvasBrushPreset[];
-	/** Throws for an unknown or non-dry brush; the result is the paint engine's brush. */
-	resolveCanvasBrush(brush: CanvasBrush, width: number): unknown;
+	/** The presets, then the saved brushes given (facet brushes) the canvas profile admits. */
+	listCanvasBrushes(user?: readonly unknown[]): CanvasBrushPreset[];
+	/** Throws for an unknown brush or one the canvas profile refuses; the result is the paint engine's brush. */
+	resolveCanvasBrush(brush: CanvasBrush, width: number | undefined, spec?: unknown): unknown;
+	/** A saved brush checked against the canvas profile (throws with the reason and fix). */
+	readCanvasBrushSpec(spec: unknown): unknown;
 	/** Throws for paint that is not a colour or gradient paint a canvas stroke can use; the result is the paint engine's `PaintSource`. */
 	resolveCanvasPaint(paint: unknown): unknown;
 	renderShapeBrushstrokeNow(shape: BrushedPathShape, scale: number, place?: { origin?: { x: number; y: number }; unit?: number }): CanvasBrushstrokeImage | null;
-	brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOptions): string;
+	brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOptions, spec?: CanvasBrushSpec): string;
 	brushedShapeSvgNow(shape: BrushedPathShape, size: ShapeSize, scale: number, place?: { origin?: { x: number; y: number }; unit?: number }): string;
 }
 
@@ -142,17 +148,36 @@ export function loadCanvasBrushstrokeRenderer(): Promise<CanvasBrushstrokeRender
 	return loading;
 }
 
-/** The dry paint presets a freehand stroke can use (wet, mixer, blender, smudge and eraser presets are left out). */
-export async function listCanvasBrushes(): Promise<CanvasBrushPreset[]> {
-	return (await loadCanvasBrushstrokeRenderer()).listCanvasBrushes();
+/**
+ * The brushes a freehand stroke can use: the presets `CANVAS_PROFILE` admits (dry dab brushes; wet,
+ * mixer, blender, smudge, eraser and light presets are left out), then the saved brushes of
+ * `library` it admits.
+ */
+export async function listCanvasBrushes(library?: Pick<BrushLibrary, 'list'>): Promise<CanvasBrushPreset[]> {
+	const user = library ? (await library.list({ source: 'user' })).map((e) => e.brush) : [];
+	return (await loadCanvasBrushstrokeRenderer()).listCanvasBrushes(user);
 }
 
 /**
- * Checks a brush: an unknown preset id, a wet (or other non-dry) preset, or settings that are not
- * an object throw an error saying which presets can be used.
+ * The saved brush a stroke should embed for `brush`: the library's brush when `brush` names a saved
+ * one (checked against the canvas profile), else undefined (a preset or tip settings). Throws
+ * saying why a saved brush can't brush a stroke.
  */
-export async function validateCanvasBrush(brush: CanvasBrush): Promise<void> {
-	(await loadCanvasBrushstrokeRenderer()).resolveCanvasBrush(brush, 1);
+export async function resolveCanvasBrushSpec(brush: CanvasBrush, library?: Pick<BrushLibrary, 'get' | 'isBuiltin'>): Promise<CanvasBrushSpec | undefined> {
+	if (typeof brush !== 'string' || !library || library.isBuiltin(brush)) return undefined;
+	const entry = await library.get(brush);
+	if (!entry) return undefined;
+	(await loadCanvasBrushstrokeRenderer()).readCanvasBrushSpec(entry.brush);
+	return entry.brush as unknown as CanvasBrushSpec;
+}
+
+/**
+ * Checks a brush: an unknown id, a brush the canvas profile refuses (wet, a tool, light…), or
+ * settings that are not an object throw an error saying why and which brushes can be used.
+ * `spec` is the saved brush `brush` names (`resolveCanvasBrushSpec`).
+ */
+export async function validateCanvasBrush(brush: CanvasBrush, spec?: CanvasBrushSpec): Promise<void> {
+	(await loadCanvasBrushstrokeRenderer()).resolveCanvasBrush(brush, 1, spec);
 }
 
 /**
@@ -219,6 +244,16 @@ export interface CanvasBrushSwatchOptions {
  * and grain), its size capped to fit, as a PNG data URL ('' when nothing renders). Throws for an
  * unknown or non-dry brush.
  */
-export async function renderCanvasBrushSwatch(brush: CanvasBrush, options: CanvasBrushSwatchOptions = {}): Promise<string> {
-	return (await loadCanvasBrushstrokeRenderer()).brushSwatchNow(brush, options);
+export async function renderCanvasBrushSwatch(brush: CanvasBrush, options: CanvasBrushSwatchOptions = {}, spec?: CanvasBrushSpec): Promise<string> {
+	return (await loadCanvasBrushstrokeRenderer()).brushSwatchNow(brush, options, spec);
 }
+
+/**
+ * `preview_brush` for brushed strokes (canvas and vector): the brush library tools' renderer
+ * (`createBrushLibraryToolProvider(library, { profile: CANVAS_PROFILE, renderPreview: renderCanvasBrushPreview })`),
+ * a swatch of the brush as a canvas stroke paints it. Loads the renderer on first use.
+ */
+export const renderCanvasBrushPreview: BrushPreviewRenderer = async (brush, { width, height, color }) => {
+	const url = await renderCanvasBrushSwatch(brush.id, { width, height, color, scale: 1 }, brush as unknown as CanvasBrushSpec);
+	return { data: url.replace(/^data:image\/png;base64,/, ''), mimeType: 'image/png' };
+};
