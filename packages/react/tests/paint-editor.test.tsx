@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vite
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
+import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
@@ -465,7 +466,7 @@ describe('React paint editor', () => {
     win.HTMLAnchorElement.prototype.click = click;
   });
 
-  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', async () => {
     const c = new PaintEditorController({ width: 300, height: 200 });
     render(
       <>
@@ -501,8 +502,15 @@ describe('React paint editor', () => {
     act(() => {
       c.setBrush({ id: 'sticker-stars' });
     });
+    // The picker lists the sticker library (the editor's own stamps here) once its first page lands.
+    await act(async () => {});
     click(container.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]')!);
     expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    expect(c.getState().brush.sticker.stamps.every((r) => r.startsWith('editor:'))).toBe(true);
+    // Searching narrows the list.
+    await act(async () => setValue(container.querySelector('input[aria-label="Search sticker stamps"]') as HTMLInputElement, 'heart'));
+    await act(async () => {});
+    expect([...container.querySelectorAll('[aria-label="Sticker stamps"] button')].map((b) => b.textContent)).toEqual(['Heart']);
     click(byText('Ruler'));
     expect(c.listStencils()[0].kind).toBe('ruler');
     expect(container.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);
@@ -516,6 +524,34 @@ describe('React paint editor', () => {
     click(list[0]);
     click(byText('Delete'));
     expect(c.listStickers().length).toBe(list.length - 1);
+  });
+
+  it('picks stickers from a host library: brush stamps by category, and restickering a placed sticker', async () => {
+    const c = new PaintEditorController({ width: 300, height: 200, stickers: createFakeStickerProvider() });
+    render(
+      <>
+        <BrushPanel controller={c} />
+        <StickerPanel controller={c} />
+      </>
+    );
+    act(() => void c.setBrush({ id: 'sticker-stars' }));
+    await act(async () => {});
+    setValue(container.querySelector('select[aria-label="Sticker category"]') as HTMLSelectElement, 'food');
+    await act(async () => {});
+    const names = [...container.querySelectorAll('[aria-label="Sticker stamps"] button')].map((b) => b.textContent);
+    expect(names).toEqual(['Apple', 'Pear', 'Cherry', 'Lemon', 'Grape']);
+    click(byText('Apple'));
+    expect(c.getState().brush.sticker.stamps).toContain('fake:fruit-apple');
+    await act(async () => void (await c.prepareStickers(['fake:fruit-apple'])));
+    act(() => void c.addLayer());
+    const [placed] = c.addStickers(undefined, [{ ref: 'fake:fruit-apple', x: 60, y: 60, size: 40 }]);
+    act(() => c.selectSticker(placed.id));
+    await act(async () => {});
+    const art = container.querySelector('[aria-label="Sticker art"]')!;
+    const pear = [...art.querySelectorAll('button')].find((b) => b.textContent === 'Pear')!;
+    await act(async () => click(pear));
+    await act(async () => {});
+    expect(c.listStickers()[0].ref).toBe('fake:fruit-pear');
   });
 
   it('the sticker panel follows the canvas pick, moves a sticker by X/Y, and the canvas outlines it', () => {

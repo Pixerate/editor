@@ -277,6 +277,18 @@ describe('normalizeBrushSpec', () => {
     expect(normalizeBrushSpec({ id: 'w', name: 'W', tool: 'water', tip: { shape: 'round' }, behaviour: { wet: { water: 0.6 }, strength: 0.4, exchange: { pickup: 0.1 } } }).behaviour).toEqual({ wet: { water: 0.6 }, strength: 0.4, exchange: { pickup: 0.1 } });
   });
 
+  it('reads stamps as sticker refs, and lays only editor stamps as particles', () => {
+    const problems: string[] = [];
+    const objects = normalizeBrushSpec({ id: 'o', name: 'O', kind: 'mark', tip: { shape: 'stamp', stamps: ['star', 'host:cat'] }, marks: { kind: 'objects' } }, problems);
+    expect(objects.tip.stamps).toEqual(['editor:star', 'host:cat']);
+    expect(resolveBrush(objects).sticker.stamps).toEqual(['editor:star', 'host:cat']);
+    expect(problems).toEqual([]);
+    const particles = normalizeBrushSpec({ id: 'p', name: 'P', kind: 'mark', tip: { shape: 'stamp', stamps: ['ring', 'host:cat'] }, marks: { kind: 'particles' } }, problems);
+    expect(particles.tip.stamps).toEqual(['editor:ring']);
+    expect(resolveBrush(particles).particle.dotTextures).toEqual(['ring']);
+    expect(problems).toEqual([expect.stringMatching(/"host:cat" dropped: particle marks lay only the editor's stamps/)]);
+  });
+
   it('infers the kind from the tool and fills a missing tip', () => {
     const problems: string[] = [];
     expect(normalizeBrushSpec({ id: 'e', name: 'E', tool: 'eraser' }, problems)).toEqual({ id: 'e', name: 'E', kind: 'tool', tool: 'eraser', tip: { shape: 'round' } });

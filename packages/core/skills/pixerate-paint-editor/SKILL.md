@@ -184,8 +184,9 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
 - **Bristle brushes** (category `bristle`): `bristle-round`, `bristle-flat`, `dry-brush`. Every
   bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles
   bend into curves at turns; a low `bristle.load` runs dry into broken streaks.
-- **Sticker spray** (category `sticker`): stamps (`star`, `leaf`, `confetti`, `flower`, `heart`,
-  `splat`, `sparkle`, `ring`, `dot`) sprayed onto an **empty layer**, each staying an object:
+- **Sticker spray** (category `sticker`): stickers by ref (`editor:star`, `editor:leaf`… or any
+  from the host's library: `find_stickers`; tintable ones take the paint colour) sprayed onto an
+  **empty layer**, each staying an object:
   `add_stickers` (exact places), `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`,
   `remove_stickers`. A sticker layer takes no other paint; sprays are refused under an enabled
   mask stencil (hide it with `update_stencil` `enabled` false, then remove unwanted stickers).
@@ -372,10 +373,12 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 
 | Tool | Use |
 | --- | --- |
-| `list_stickers` | Read a layer's stickers bottom first: id, stamp, x, y, size, rotation, color, opacity. |
-| `add_stickers` | Place stickers exactly (`stamp`, `x`, `y`, optional `size`, `rotation`, `color`, `opacity`, `seed`) on a sticker layer or an empty layer. Use it for deliberate placement, a sticker brush for a scatter. One undo step. Returns the new stickers with ids. |
+| `list_stickers` | Read a layer's stickers bottom first: id, `ref` (and `stamp` for the editor's own), x, y, size, rotation, color, opacity. |
+| `add_stickers` | Place stickers exactly (`ref` from `find_stickers`, `x`, `y`, optional `size`, `rotation`, `color`, `opacity`, `seed`) on a sticker layer or an empty layer; a provider's art loads first. Use it for deliberate placement, a sticker brush for a scatter. One undo step. Returns the new stickers with ids. |
 | `sticker_at` | Read the top-most sticker under a point (`x`, `y`), or null. Use it to pick one sticker among many similar ones before `update_sticker`, `arrange_stickers` or `remove_stickers`. |
-| `update_sticker` | Change one sticker by `id`: `stamp`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
+| `update_sticker` | Change one sticker by `id`: `ref`, `x`, `y`, `size`, `rotation`, `color`, `opacity`. One undo step. Returns it. |
+| `find_stickers` | Search the sticker library (the editor's stamps unless the host plugged in its own) by words, category, tags and commercial licence, a page at a time. Returns refs (`provider:id`) for sticker brushes (`set_brush` `sticker.stamps`) and `add_stickers`, with tintable and licence. |
+| `describe_sticker` | One sticker by `ref`: licence and attribution, colours, outline. Unknown refs are refused with the closest ones. |
 | `arrange_stickers` | Move stickers (`ids`) to the `front` or `back` of their layer. One undo step. |
 | `remove_stickers` | Delete stickers by `ids`, or all on the layer. One undo step. |
 

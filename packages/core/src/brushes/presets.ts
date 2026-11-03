@@ -338,7 +338,7 @@ export const BRUSH_PRESETS: readonly Brush[] = [
   // Out-of-focus lights: soft discs and rings spaced along springy paths.
   {
     id: 'bokeh-dots', name: 'Bokeh dots', kind: 'mark', medium: 'paint', variety: 'bokeh',
-    tip: { shape: 'stamp', size: 80, hardness: 0.7, opacity: 0.6, stamps: ['dot', 'dot', 'ring'] },
+    tip: { shape: 'stamp', size: 80, hardness: 0.7, opacity: 0.6, stamps: ['editor:dot', 'editor:dot', 'editor:ring'] },
     marks: { kind: 'particles', render: 'sequence', count: 3, size: 0.3, spread: 1, stiffness: 0.15, damping: 0.4, interval: 1, stampOrder: 'random' },
     dynamics: { smoothing: 0.3 },
     light: { amount: 0.9 },
@@ -346,7 +346,7 @@ export const BRUSH_PRESETS: readonly Brush[] = [
   // Sparks: twinkles and stars thrown into the flow, spaced along it.
   {
     id: 'twinkle-sparks', name: 'Twinkle sparks', kind: 'mark', medium: 'paint', variety: 'sparks',
-    tip: { shape: 'stamp', size: 50, hardness: 0.8, stamps: ['sparkle', 'sparkle', 'star'] },
+    tip: { shape: 'stamp', size: 50, hardness: 0.8, stamps: ['editor:sparkle', 'editor:sparkle', 'editor:star'] },
     marks: { kind: 'particles', physics: 'flow', render: 'sequence', count: 3, size: 0.25, spread: 0.8, speed: 0.9, life: 0.35, interval: 0.6, stampOrder: 'random' },
     dynamics: { smoothing: 0.1 },
     light: { amount: 1 },
@@ -370,31 +370,31 @@ export const BRUSH_PRESETS: readonly Brush[] = [
   },
   {
     id: 'sticker-stars', name: 'Star stickers', kind: 'mark', variety: 'stars',
-    tip: { shape: 'stamp', size: 36, stamps: ['star', 'sparkle'] },
+    tip: { shape: 'stamp', size: 36, stamps: ['editor:star', 'editor:sparkle'] },
     marks: { kind: 'objects', density: 0.35, sizeJitter: 0.5, scatter: 0.6, colourJitter: 0.3 },
     dynamics: { smoothing: 0.2, minSize: 0.5 },
   },
   {
     id: 'sticker-leaves', name: 'Leaf stickers', kind: 'mark', variety: 'leaves',
-    tip: { shape: 'stamp', size: 40, stamps: ['leaf'] },
+    tip: { shape: 'stamp', size: 40, stamps: ['editor:leaf'] },
     marks: { kind: 'objects', density: 0.5, rotationJitter: 0.35, scatter: 0.4, colourJitter: 0.35 },
     dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
   },
   {
     id: 'sticker-confetti', name: 'Confetti', kind: 'mark', variety: 'confetti',
-    tip: { shape: 'stamp', size: 22, stamps: ['confetti', 'dot', 'ring'] },
+    tip: { shape: 'stamp', size: 22, stamps: ['editor:confetti', 'editor:dot', 'editor:ring'] },
     marks: { kind: 'objects', density: 0.7, sizeJitter: 0.5, scatter: 1.5, colourJitter: 1 },
     dynamics: { smoothing: 0.1, pressureSize: false },
   },
   {
     id: 'sticker-flowers', name: 'Flower stickers', kind: 'mark', variety: 'flowers',
-    tip: { shape: 'stamp', size: 44, stamps: ['flower', 'heart'] },
+    tip: { shape: 'stamp', size: 44, stamps: ['editor:flower', 'editor:heart'] },
     marks: { kind: 'objects', density: 0.3, sizeJitter: 0.5, scatter: 0.7, colourJitter: 0.4 },
     dynamics: { smoothing: 0.2 },
   },
   {
     id: 'sticker-splats', name: 'Paint splats', kind: 'mark', variety: 'splats',
-    tip: { shape: 'stamp', size: 50, opacity: 0.95, stamps: ['splat'] },
+    tip: { shape: 'stamp', size: 50, opacity: 0.95, stamps: ['editor:splat'] },
     marks: { kind: 'objects', density: 0.25, sizeJitter: 0.6, scatter: 0.8, colourJitter: 0.15 },
     dynamics: { smoothing: 0.1 },
   },

@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/editor",
-  "version": "0.248.0",
+  "version": "0.249.0",
   "description": "UI-agnostic rich text and media editing core library",
   "author": "Pixerate",
   "license": "MIT",
@@ -342,6 +342,16 @@
       "require": {
         "types": "./dist/effects/index.d.cts",
         "default": "./dist/effects/index.cjs"
+      }
+    },
+    "./stickers": {
+      "import": {
+        "types": "./dist/stickers/index.d.ts",
+        "default": "./dist/stickers/index.js"
+      },
+      "require": {
+        "types": "./dist/stickers/index.d.cts",
+        "default": "./dist/stickers/index.cjs"
       }
     },
     "./diagram": {

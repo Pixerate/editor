@@ -18,7 +18,7 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
     {
       name: 'list_stickers',
       title: 'List stickers',
-      description: 'Lists a layer’s stickers bottom first: id, stamp, x, y (centre, document pixels), size (diameter px), rotation (degrees clockwise), color, opacity. Empty for a layer without stickers. Changes nothing.',
+      description: 'Lists a layer’s stickers bottom first: id, ref (provider:id; stamp too for the editor’s own), x, y (centre, document pixels), size (diameter px), rotation (degrees clockwise), color, opacity. Empty for a layer without stickers. Changes nothing.',
       inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
       annotations: { title: 'List stickers', ...READ },
       coordinates: { out: ['stickers[]'] },
@@ -45,7 +45,7 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
     {
       name: 'add_stickers',
       title: 'Place stickers',
-      description: 'Places stickers exactly where you say, on top of a sticker layer or onto an empty layer (which becomes a sticker layer). Use it for deliberate placement; spray with paint_stroke and a sticker brush for a random scatter. One undo step. Returns the new stickers with their ids, for update_sticker, arrange_stickers and remove_stickers.',
+      description: 'Places stickers exactly where you say, on top of a sticker layer or onto an empty layer (which becomes a sticker layer): any sticker from the sticker library by ref (find_stickers), its art loaded first; tintable ones take color. Use it for deliberate placement; spray with paint_stroke and a sticker brush for a random scatter. An unknown ref is refused with the closest ones. One undo step. Returns the new stickers with their ids, for update_sticker, arrange_stickers and remove_stickers.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -58,7 +58,8 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
             items: {
               type: 'object',
               properties: {
-                stamp: { type: 'string', enum: [...STAMP_KINDS], description: 'The stamp.' },
+                ref: { type: 'string', minLength: 1, description: 'The sticker: a ref provider:id from find_stickers (e.g. editor:star). Give ref or stamp.' },
+                stamp: { type: 'string', enum: [...STAMP_KINDS], description: 'Older form: an editor stamp (same as ref editor:<stamp>).' },
                 x: { type: 'number', description: 'Centre x in document pixels.' },
                 y: { type: 'number', description: 'Centre y in document pixels.' },
                 size: { type: 'number', minimum: 2, maximum: 2048, description: 'Diameter in pixels (default 48).' },
@@ -67,7 +68,7 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
                 opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Opacity 0..1 (default 1).' },
                 seed: { type: 'integer', minimum: 0, description: 'Texture seed (default from the new id); splat and confetti shapes vary with it.' },
               },
-              required: ['stamp', 'x', 'y'],
+              required: ['x', 'y'],
               additionalProperties: false,
             },
           },
@@ -77,7 +78,14 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
       },
       annotations: { title: 'Place stickers', ...WRITE },
       coordinates: { in: ['stickers[]'], out: ['stickers[]'] },
-      handler: ({ layerId, stickers }) => ({ layerId: layerId ?? c.document.activeLayerId, stickers: c.addStickers(layerId, stickers) }),
+      handler: async ({ layerId, stickers }) => {
+        const list = stickers as Array<{ ref?: string; stamp?: string }>;
+        list.forEach((x, i) => {
+          if (x.ref === undefined && x.stamp === undefined) throw new Error(`Sticker ${i} needs ref (a sticker ref from find_stickers, e.g. "editor:star").`);
+        });
+        await c.prepareStickers(list.map((x) => x.ref ?? `editor:${x.stamp}`));
+        return { layerId: layerId ?? c.document.activeLayerId, stickers: c.addStickers(layerId, list as never) };
+      },
     },
     {
       name: 'update_sticker',
@@ -88,7 +96,8 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
         properties: {
           layerId: LAYER_ID,
           id: { type: 'string', description: 'Sticker id from list_stickers.' },
-          stamp: { type: 'string', enum: [...STAMP_KINDS], description: 'Another stamp.' },
+          ref: { type: 'string', minLength: 1, description: 'Another sticker: a ref provider:id from find_stickers.' },
+          stamp: { type: 'string', enum: [...STAMP_KINDS], description: 'Older form: another editor stamp (same as ref editor:<stamp>).' },
           x: { type: 'number', description: 'Centre x in document pixels.' },
           y: { type: 'number', description: 'Centre y in document pixels.' },
           size: { type: 'number', minimum: 2, maximum: 2048, description: 'Diameter in pixels.' },
@@ -101,7 +110,12 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
       },
       annotations: { title: 'Change a sticker', ...WRITE },
       coordinates: { in: [''], out: [''] },
-      handler: ({ layerId, id, ...update }) => c.updateSticker(layerId, id, update),
+      handler: async ({ layerId, id, ...update }) => {
+        // The layer's stickers are redrawn, so every one needs its art (and a new ref too).
+        const refs = c.listStickers(layerId as string | undefined).map((s) => s.ref);
+        await c.prepareStickers(update.ref ? [...refs, update.ref as string] : refs);
+        return c.updateSticker(layerId as string | undefined, id as string, update);
+      },
     },
     {
       name: 'arrange_stickers',
@@ -118,7 +132,10 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
         additionalProperties: false,
       },
       annotations: { title: 'Bring stickers forward or back', ...WRITE },
-      handler: ({ layerId, ids, to }) => ({ order: c.arrangeStickers(layerId, ids, to) }),
+      handler: async ({ layerId, ids, to }) => {
+        await c.prepareStickers(c.listStickers(layerId as string | undefined).map((s) => s.ref));
+        return { order: c.arrangeStickers(layerId as string | undefined, ids as string[], to as 'front' | 'back') };
+      },
     },
     {
       name: 'remove_stickers',
@@ -126,7 +143,10 @@ export function createPaintStickerTools(c: PaintEditorController): PaintAgentToo
       description: 'Deletes stickers by id, or every sticker on the layer when ids is missing. One undo step. Returns the ids removed.',
       inputSchema: { type: 'object', properties: { layerId: LAYER_ID, ids: { type: 'array', items: { type: 'string', description: 'Sticker id.' }, description: 'Sticker ids (default all).' } }, additionalProperties: false },
       annotations: { title: 'Delete stickers', ...DESTRUCTIVE },
-      handler: ({ layerId, ids }) => ({ removed: c.removeStickers(layerId, ids) }),
+      handler: async ({ layerId, ids }) => {
+        await c.prepareStickers(c.listStickers(layerId as string | undefined).map((s) => s.ref));
+        return { removed: c.removeStickers(layerId as string | undefined, ids as string[] | undefined) };
+      },
     },
   ];
 }

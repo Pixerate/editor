@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
 import { createPaintEditorToolProvider, createPaintEffectsToolProvider, PaintEditorController } from "@pixerate/editor/paint-editor";
+import { combineStickerProviders, createFakeStickerProvider, editorStickers } from "@pixerate/editor/stickers";
 import { runAgentScript } from "./agentScript";
 import { PAINT_SCRIPTS } from "./agentScripts";
 
 // The Paint tab's scripts, replayed against the tab's canvas through the real tools.
 function setup() {
-  const controller = new PaintEditorController({ width: 1200, height: 800, paper: "cold-pressed" });
+  const controller = new PaintEditorController({ width: 1200, height: 800, paper: "cold-pressed", stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()]) });
   // The tab's effects provider: the built-in test effects (Flair needs a page to render; its script is checked in the browser).
   controller.setEffectsProvider(createFakeEffectProvider());
   const registry = new ToolRegistry();
@@ -124,6 +125,16 @@ describe("paint agent scripts", () => {
     expect(fx.map((e) => e.kind)).toEqual(["outer-glow", "inner-glow"]);
     expect(fx[0]).toMatchObject({ size: 64, blend: "linear-dodge", fill: { type: "color", color: "#22d3ee" } });
     expect(neon.effects).toBe(2);
+  }, 120_000);
+
+  it("sprays stickers from the host's library and places a tinted badge", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-library-stickers")!, { control: { speed: Infinity, stopped: false } });
+    const layer = controller.listLayers().find((l) => l.name === "Weather")!;
+    const refs = new Set(controller.listStickers(layer.id).map((s) => s.ref));
+    expect([...refs].every((r) => r.startsWith("fake:weather-") || r === "fake:badge-new")).toBe(true);
+    expect(refs.size).toBeGreaterThan(2);
+    expect(controller.listStickers(layer.id).at(-1)).toMatchObject({ ref: "fake:badge-new", color: "#16a34a" });
   }, 120_000);
 
   it("paints stained glass on backlit paper: glazes and lead lines", async () => {

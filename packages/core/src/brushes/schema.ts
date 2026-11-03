@@ -8,7 +8,7 @@ import type { JsonSchema } from '../tools/schema';
 import { PAINT_GRADIENT_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ID, BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
+import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_SURFACES, BRUSH_TIP_SHAPES, BRUSH_TOOLS } from './types';
 
 /** Most colours in a brush's palette. */
@@ -32,7 +32,14 @@ const object = (description: string, properties: Record<string, JsonSchema>, req
 
 const MIXING = oneOf(['pigment', 'rgb'], 'How colours mix: pigment (Kubelka-Munk, blue and yellow make green) or rgb (straight averages). Default pigment; a Mixer Brush and the smudge tool default to rgb.');
 
-const STAMP = oneOf(STAMP_KINDS, 'A built-in stamp.');
+/** A sticker ref `provider:id`, or a bare editor stamp (read as `editor:<stamp>`). */
+export const BRUSH_STAMP_PATTERN = `^(?:[^:\\s]+:\\S+|${STAMP_KINDS.join('|')})$`;
+
+const STAMP: JsonSchema = {
+  type: 'string',
+  pattern: BRUSH_STAMP_PATTERN,
+  description: `A sticker ref provider:id (find_stickers lists them; the editor's own are ${STAMP_KINDS.map((k) => `editor:${k}`).join(', ')}). A bare editor stamp (star) means editor:star.`,
+};
 
 const BRISTLES = object('Bristle tips: the tuft. Missing fields take their defaults.', {
   count: int(3, 128, 'Bristles in the tuft (default 32).'),
@@ -62,9 +69,9 @@ const TIP = object(
     stamps: {
       type: 'array',
       minItems: 1,
-      maxItems: STAMP_KINDS.length,
+      maxItems: MAX_STICKER_STAMPS,
       items: STAMP,
-      description: `Stamp tips: the stamps. Objects pick one at random per mark (default star; repeats count once); particles use the first ${MAX_DOT_TEXTURES} in marks.stampOrder, and repeats weight the order.`,
+      description: `Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first ${MAX_DOT_TEXTURES} in marks.stampOrder, and repeats weight the order.`,
     },
   },
   ['shape'],

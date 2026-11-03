@@ -8,6 +8,7 @@
 
 import { readPaintSource } from '../paint/gradient-paint';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema';
+import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
 import { BRUSH_ID } from '../paint-editor/brushes';
 import { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA, MAX_BRUSH_PALETTE } from './schema';
 import { BRUSH_TOOLS, type Brush, type BrushKind, type BrushPaint, type BrushTool } from './types';
@@ -198,6 +199,23 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (brush.tip.stamps && brush.tip.shape !== 'stamp') {
     drop('tip.stamps', 'only stamp tips lay stamps');
     delete brush.tip.stamps;
+  }
+  if (brush.tip.stamps) {
+    // Stamps are sticker refs: a bare editor stamp becomes `editor:<stamp>`; particles lay only the editor's own.
+    const particles = brush.marks?.kind === 'particles';
+    const stamps = brush.tip.stamps.flatMap((s) => {
+      const ref = normalizeStickerRef(s);
+      if (particles && !editorStampOf(ref)) {
+        problems.push(`brush.tip.stamps "${ref}" dropped: particle marks lay only the editor's stamps (editor:star, editor:dot…).`);
+        return [];
+      }
+      return [ref];
+    });
+    if (stamps.length) brush.tip.stamps = stamps;
+    else {
+      drop('tip.stamps', 'none of the stamps can be laid');
+      delete brush.tip.stamps;
+    }
   }
   const b = brush.behaviour;
   if (b) {

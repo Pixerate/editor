@@ -1172,6 +1172,18 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-library-stickers",
+    prompt: "Spray stickers from the host's sticker library",
+    steps: [
+      { say: "The sticker library has the editor's stamps and the host's own; find some weather.", tool: "paint__find_stickers", args: { query: "weather", limit: 6 }, as: "found" },
+      { say: "A sticker brush with three of them; their art loads first.", tool: "paint__set_brush", args: (ctx) => ({ id: "sticker-stars", sticker: { stamps: (ctx.results.found as unknown as { items: { ref: string }[] }).items.slice(0, 3).map((s) => s.ref), colorJitter: 0.1 } }) },
+      { tool: "paint__add_layer", args: { name: "Weather" }, as: "weather" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.weather.id, color: "#0ea5e9", points: wave(400, 120, 64) }) },
+      { say: "One badge placed exactly; tintable, so it takes the colour given.", tool: "paint__add_stickers", args: (ctx) => ({ layerId: ctx.results.weather.id, stickers: [{ ref: "fake:badge-new", x: 1040, y: 150, size: 120, color: "#16a34a" }] }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-stained-glass",
     prompt: "Paint a stained-glass window on backlit paper",
     steps: [

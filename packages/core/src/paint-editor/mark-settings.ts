@@ -1,8 +1,13 @@
 /**
  * The settings of the sticker, particle and bristle engines: types, defaults and normalisers, with
- * no rendering code, so the brush model (`@pixerate/editor/brushes`) can read and check them
- * without bundling the renderers. `stickers.ts` and `procedural.ts` re-export them.
+ * no rendering code (sticker refs and the stamp list come from the renderer-free `stickers/`), so
+ * the brush model (`@pixerate/editor/brushes`) can read and check them without bundling the
+ * renderers. `stickers.ts` and `procedural.ts` re-export them.
  */
+
+import { normalizeStickerRef } from '../stickers/helpers';
+import { STAMP_KINDS, type StampKind } from '../stickers/stamps';
+import type { StickerRef } from '../stickers/types';
 
 const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
 const oneOf = <T extends string>(v: unknown, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
@@ -11,13 +16,15 @@ const oneOf = <T extends string>(v: unknown, all: readonly T[], d: T): T => (all
 // Stickers
 // ---------------------------------------------------------------------------
 
-export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
-export const STAMP_KINDS: readonly StampKind[] = ['dot', 'star', 'heart', 'leaf', 'flower', 'confetti', 'splat', 'sparkle', 'ring'];
+export { STAMP_KINDS, type StampKind } from '../stickers/stamps';
 
 /** Sticker spray settings (each 0..1 unless noted). */
 export interface StickerSettings {
-  /** The stamps to spray (picked at random per sticker). */
-  stamps: StampKind[];
+  /**
+   * The stickers to spray (one picked at random per sticker): refs `provider:id`. A bare editor
+   * stamp (`"star"`) is read as `editor:star`.
+   */
+  stamps: StickerRef[];
   /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
   density: number;
   /** Random size change. */
@@ -30,13 +37,23 @@ export interface StickerSettings {
   colorJitter: number;
 }
 
-export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
+/** At most this many stickers in a sticker brush. */
+export const MAX_STICKER_STAMPS = 16;
 
+export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['editor:star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
 
 export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, base: StickerSettings = DEFAULT_STICKER): StickerSettings {
-  const stamps = Array.isArray(raw.stamps) ? raw.stamps.filter((s): s is StampKind => STAMP_KINDS.includes(s as StampKind)) : base.stamps;
+  const refs = (list: readonly unknown[]) =>
+    list.flatMap((s) => {
+      try {
+        return [normalizeStickerRef(s as string)];
+      } catch {
+        return [];
+      }
+    });
+  const stamps = Array.isArray(raw.stamps) ? refs(raw.stamps) : refs(base.stamps);
   return {
-    stamps: stamps.length ? [...new Set(stamps)] : [...base.stamps],
+    stamps: stamps.length ? [...new Set(stamps)].slice(0, MAX_STICKER_STAMPS) : refs(base.stamps.length ? base.stamps : DEFAULT_STICKER.stamps),
     density: unit(raw.density, base.density),
     sizeJitter: unit(raw.sizeJitter, base.sizeJitter),
     rotationJitter: unit(raw.rotationJitter, base.rotationJitter),

@@ -8,6 +8,7 @@
  */
 
 import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brushes';
+import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 
 const ALL: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
@@ -22,11 +23,26 @@ export interface BrushField {
   engine: string;
   /** The engines that read it. */
   engines: readonly PaintBrushEngine[];
-  /** Facet value → engine value (and back: every map is its own inverse). */
-  invert?: true;
+  /** When the two forms differ: facet value → engine value, and back. */
+  map?: { toEngine(v: unknown): unknown; toFacet(v: unknown): unknown };
   /** Read only on these tip shapes. */
   shapes?: readonly string[];
 }
+
+/** `dirty` is the Mixer Brush's `!cleanEachStroke`. */
+const NOT = { toEngine: (v: unknown) => !v, toFacet: (v: unknown) => !v };
+/** Particles lay the editor's own stamps: refs (`editor:star`) in the facet, bare stamps (`star`) in the engine. */
+const EDITOR_STAMPS = {
+  toEngine: (v: unknown) => (v as string[]).flatMap((ref) => {
+    try {
+      const stamp = editorStampOf(ref);
+      return stamp ? [stamp] : [];
+    } catch {
+      return [];
+    }
+  }),
+  toFacet: (v: unknown) => (v as string[]).map((stamp) => `editor:${stamp}`),
+};
 
 const f = (facet: string, engine: string, engines: readonly PaintBrushEngine[] = ALL, extra: Partial<BrushField> = {}): BrushField => ({ facet, engine, engines, ...extra });
 const each = (facetPrefix: string, enginePrefix: string, keys: readonly string[], engines?: readonly PaintBrushEngine[]) => keys.map((k) => f(`${facetPrefix}.${k}`, `${enginePrefix}.${k}`, engines));
@@ -47,7 +63,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('behaviour.mixing', 'behavior.mixing', EXCHANGE),
   f('behaviour.exchange.pickup', 'mixer.wet', ['mixer']),
   f('behaviour.exchange.mix', 'mixer.mix', ['mixer']),
-  f('behaviour.exchange.dirty', 'mixer.cleanEachStroke', ['mixer'], { invert: true }),
+  f('behaviour.exchange.dirty', 'mixer.cleanEachStroke', ['mixer'], { map: NOT }),
   f('behaviour.mixing', 'mixer.mixing', ['mixer']),
   f('behaviour.exchange.reservoir.load', 'mixer.load', ['mixer']),
   f('behaviour.exchange.reservoir.refill', 'mixer.loadEachStroke', ['mixer']),
@@ -69,7 +85,7 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   ...each('marks', 'particle', ['render', 'count', 'size', 'spread', 'stiffness', 'damping', 'speed', 'gravity', 'life', 'interval', 'ribbonFill', 'ribbonPairs', 'waveAmplitude', 'waveLength', 'wavePhaseJitter'], ['particle']),
   f('marks.stampOrder', 'particle.dotTextureOrder', ['particle']),
   f('marks.stampRotation', 'particle.dotRotation', ['particle']),
-  f('tip.stamps', 'particle.dotTextures', ['particle'], { shapes: ['stamp'] }),
+  f('tip.stamps', 'particle.dotTextures', ['particle'], { shapes: ['stamp'], map: EDITOR_STAMPS }),
   f('motion.waveSpeed', 'particle.waveSpeed', ['particle']),
   f('tip.stamps', 'sticker.stamps', ['sticker'], { shapes: ['stamp'] }),
   ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
@@ -178,7 +194,7 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   for (const field of BRUSH_FIELDS) {
     if (!field.engines.includes(engine) || (field.shapes && !field.shapes.includes(brush.tip.shape))) continue;
     const v = getPath(brush, field.facet);
-    if (v !== undefined) setPath(input, field.engine, field.invert ? !v : copy(v));
+    if (v !== undefined) setPath(input, field.engine, field.map ? field.map.toEngine(v) : copy(v));
   }
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');

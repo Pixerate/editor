@@ -17,7 +17,8 @@ import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
 import type { BrushRotation, ImpastoTool, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
-import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs, StampKind } from '../paint-editor/mark-settings';
+import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
+import type { StickerRef } from '../stickers/types';
 
 /** `mark`: lays a material; `tool`: works on paint already down (erases, blends, smudges, wets…). */
 export type BrushKind = 'mark' | 'tool';
@@ -47,8 +48,11 @@ export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'part
 export type BrushSurface = 'dry' | 'wet' | 'thick';
 export const BRUSH_SURFACES: readonly BrushSurface[] = ['dry', 'wet', 'thick'];
 
-/** Built-in stamps a `stamp` tip can lay. */
-export type BrushStamp = StampKind;
+/**
+ * A sticker a `stamp` tip lays: a sticker ref `provider:id` (`editor:star`, or a host library's
+ * sticker). Objects marks take any sticker; particle marks only the editor's own stamps.
+ */
+export type BrushStamp = StickerRef;
 
 /** The tuft of a `bristle` tip (each 0..1 unless noted). */
 export interface BrushBristles {
@@ -87,7 +91,7 @@ export interface BrushTip {
   blend?: BlendMode;
   /** `bristle` tips: the tuft. */
   bristle?: BrushBristles;
-  /** `stamp` tips: the stamps (objects: one picked at random per mark; particles: up to 4, in `marks.stampOrder`). */
+  /** `stamp` tips: sticker refs (objects: any sticker, one picked at random per mark; particles: up to 4 editor stamps, in `marks.stampOrder`). */
   stamps?: BrushStamp[];
 }
 

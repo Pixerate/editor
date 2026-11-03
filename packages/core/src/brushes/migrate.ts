@@ -76,7 +76,7 @@ export function migrateBrushV1(raw: PaintBrushInput): Brush {
   for (const field of BRUSH_FIELDS) {
     if (!field.engines.includes(b.engine) || (field.shapes && !field.shapes.includes((brush.tip as Brush['tip']).shape))) continue;
     const v = getPath(b, field.engine);
-    if (!equal(v, getPath(defaults, field.engine))) setPath(brush, field.facet, field.invert ? !v : copy(v));
+    if (!equal(v, getPath(defaults, field.engine))) setPath(brush, field.facet, field.map ? field.map.toFacet(v) : copy(v));
   }
   if (b.paint) setPath(brush, 'colour.default', copy(b.paint));
   return Object.fromEntries(ORDER.filter((k) => brush[k] !== undefined).map((k) => [k, brush[k]])) as unknown as Brush;

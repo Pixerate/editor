@@ -36,6 +36,7 @@ export default defineConfig({
     "chart-maps/index": "src/chart-maps/index.ts",
     "diagram/index": "src/diagram/index.ts",
     "effects/index": "src/effects/index.ts",
+    "stickers/index": "src/stickers/index.ts",
     "bridge/index": "src/bridge/index.ts",
     "bridge/cli": "src/bridge/cli.ts",
   },
