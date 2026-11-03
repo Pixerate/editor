@@ -18,9 +18,9 @@ import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, t
 import { hash2, rand01 } from './noise';
 import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
+import { STAMP_KINDS, type StampKind } from './mark-settings';
 
-export type StampKind = 'dot' | 'star' | 'heart' | 'leaf' | 'flower' | 'confetti' | 'splat' | 'sparkle' | 'ring';
-export const STAMP_KINDS: readonly StampKind[] = ['dot', 'star', 'heart', 'leaf', 'flower', 'confetti', 'splat', 'sparkle', 'ring'];
+export { DEFAULT_STICKER, normalizeStickerSettings, STAMP_KINDS, type StampKind, type StickerSettings } from './mark-settings';
 
 /** One sticker (document pixels). */
 export interface Sticker {
@@ -40,37 +40,6 @@ export interface Sticker {
   seed: number;
 }
 
-/** Sticker spray settings (each 0..1 unless noted). */
-export interface StickerSettings {
-  /** The stamps to spray (picked at random per sticker). */
-  stamps: StampKind[];
-  /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
-  density: number;
-  /** Random size change. */
-  sizeJitter: number;
-  /** Random turn, as a fraction of ±180°. */
-  rotationJitter: number;
-  /** How far from the path stickers land, in tip diameters (0..2). */
-  scatter: number;
-  /** Random colour change (hue and lightness). */
-  colorJitter: number;
-}
-
-export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
-
-const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
-
-export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, base: StickerSettings = DEFAULT_STICKER): StickerSettings {
-  const stamps = Array.isArray(raw.stamps) ? raw.stamps.filter((s): s is StampKind => STAMP_KINDS.includes(s as StampKind)) : base.stamps;
-  return {
-    stamps: stamps.length ? [...new Set(stamps)] : [...base.stamps],
-    density: unit(raw.density, base.density),
-    sizeJitter: unit(raw.sizeJitter, base.sizeJitter),
-    rotationJitter: unit(raw.rotationJitter, base.rotationJitter),
-    scatter: typeof raw.scatter === 'number' && Number.isFinite(raw.scatter) ? Math.min(2, Math.max(0, raw.scatter)) : base.scatter,
-    colorJitter: unit(raw.colorJitter, base.colorJitter),
-  };
-}
 
 /**
  * Coverage of a stamp at a point (u, v) of its unit square (−1..1, y down), 0..1, before shading.
