@@ -194,6 +194,16 @@
         "default": "./dist/paint-editor/index.cjs"
       }
     },
+    "./brushes": {
+      "import": {
+        "types": "./dist/brushes/index.d.ts",
+        "default": "./dist/brushes/index.js"
+      },
+      "require": {
+        "types": "./dist/brushes/index.d.cts",
+        "default": "./dist/brushes/index.cjs"
+      }
+    },
     "./commands": {
       "import": {
         "types": "./dist/commands/index.d.ts",
