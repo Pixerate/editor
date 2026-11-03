@@ -1,7 +1,7 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-  import { PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+  import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
   import BrushEditor from './BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
@@ -49,6 +49,8 @@
     return untrack(() => controller.brushThumbnail(brush.id, { width: 240, height: 64, color }));
   });
   const carried = $derived(brushLoadColor(snap.mixerLoad));
+  // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
+  const palette = $derived((spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, snap.colorScheme) ?? []));
   const loads = $derived(['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint'));
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 </script>
@@ -65,7 +67,18 @@
       {/if}
       <button type="button" class={button} onclick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>Clean</button>
     </div>
-  {:else if section === 'colour' && brushTakesPaint(brush)}
+  {:else if section === 'colour'}
+    {#if palette.length}
+      <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Paint with a palette colour">
+        {#each palette as hex, i (`${hex}-${i}`)}
+          <button type="button" aria-label={`Paint with ${hex}`} title={hex} aria-pressed={snap.color === hex} class={`h-5 w-5 rounded ring-1 ${snap.color === hex ? 'ring-white' : 'ring-slate-700'}`} style={`background: ${hex}`} onclick={() => controller.setColor(hex)}></button>
+        {/each}
+      </div>
+    {/if}
+    <label class="flex items-center gap-2" title="Choosing a brush with a default colour (the highlighter's yellow) makes it your colour unless this is on">
+      <input type="checkbox" aria-label="Keep my colour" checked={snap.colorLocked} onchange={(e) => controller.setColorLocked(e.currentTarget.checked)} /> Keep my colour when choosing a brush
+    </label>
+    {#if brushTakesPaint(brush)}
     <div class="flex flex-col gap-1.5" data-testid="brush-gradient">
       <div class="flex items-center justify-between gap-2">
         <span class="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">Brush gradient</span>
@@ -75,6 +88,7 @@
         <PaintGradientEditor value={brush.paint} colors={{ paint: snap.color, secondary: snap.secondaryColor }} onchange={(g) => run(() => controller.setBrush({ paint: g }))} />
       {/if}
     </div>
+    {/if}
   {/if}
 {/snippet}
 
