@@ -15,6 +15,9 @@ import { EditorPage, EditorPanel } from "./EditorPage";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { VECTOR_SCRIPTS } from "../agentScripts";
+import { createBrushLibraryToolProvider, VECTOR_PROFILE } from '@pixerate/editor/brushes';
+import { renderCanvasBrushPreview } from '@pixerate/editor/canvas';
+import { demoBrushLibrary } from '../demoBrushes';
 
 /** A live path effect for the sample document (defaults filled in). */
 const effect = (type: VectorEffect["type"], id: string, params: Record<string, unknown>) => createVectorEffect(type, id, params)!;
@@ -320,8 +323,12 @@ const STARTER: VectorDocument = {
 };
 
 function VectorDemo() {
-  const controller = useVectorEditorController({ document: STARTER });
+  // Brushstrokes may use the demo's shared brush library: a brush saved in the Paint tab paints here.
+  const controller = useVectorEditorController({ document: STARTER, brushLibrary: demoBrushLibrary });
   const state = useVectorEditorState(controller);
+  // The library's tools for the vector profile (vectorbrushes__*), with previews as brushstrokes paint them.
+  const vectorBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: VECTOR_PROFILE, renderPreview: renderCanvasBrushPreview, id: 'vector-brushes', namespace: 'vectorbrushes' }), []);
+  useAgentToolProvider(demoToolRegistry, vectorBrushTools);
   useVectorCommands(demoCommandRegistry, controller);
   // The demo-wide effects provider (built-in test effects, or Flair).
   const { provider: effects } = useDemoEffects();
