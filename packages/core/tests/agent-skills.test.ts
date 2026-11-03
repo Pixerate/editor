@@ -41,7 +41,7 @@ import { ImageEditorController, createImageEditorDocument, createImageEditorTool
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { createCanvasStickerHost } from '../src/canvas';
-import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { TokenStore, createTokensEditorDocument, createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
@@ -296,6 +296,7 @@ const FACTORIES: Record<string, string> = {
 	createParameterCommands: 'pixerate-parameters',
 	createStickerToolProvider: 'pixerate-stickers',
 	createBrushLibraryToolProvider: 'pixerate-brushes',
+	createPaintBrushLibraryToolProvider: 'pixerate-brushes',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',

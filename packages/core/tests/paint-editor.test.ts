@@ -7,6 +7,7 @@ import { decodePng } from '../src/raster/png';
 import { contentBounds, readPixel, readRegion } from '../src/raster/surface';
 import { importPsd } from '../src/image-editor/psd/import';
 import {
+  createPaintBrushLibraryToolProvider,
   BUILTIN_BRUSHES,
   DryStroke,
   GRAIN_PATTERNS,
@@ -429,7 +430,9 @@ describe('PaintEditorController', () => {
     c.fillLayer({ color: '#ff00ff', opacity: 0.25 });
     const json = c.toJSON();
     expect(json.format).toBe('pixerate-paint');
-    expect(json.version).toBe(1);
+    expect(json.version).toBe(2);
+    // Strokes keep facet brushes (version 2 documents).
+    expect(json.strokes![0].brush).toMatchObject({ id: 'pencil-6b', kind: 'mark', medium: 'dry', tip: { shape: 'round' } });
     expect(Object.keys(json.assets).length).toBe(2);
     const text = JSON.stringify({ ...json, futureField: { future: true } });
     const d = new PaintEditorController();
@@ -526,26 +529,31 @@ describe('PaintEditorController', () => {
     expect(Array.from(painted[0].slice(0, 4))).toEqual([0, 255, 0, 255]);
   });
 
-  it('brush library: set, save, import, export, thumbnails', () => {
+  it('brush library: set, save, import, export, thumbnails', async () => {
     const c = new PaintEditorController({ width: 16, height: 16 });
     const b = c.setBrush({ id: 'soft-pastel', tip: { size: 50 } });
     expect(b.tip.size).toBe(50);
     expect(b.builtin).toBeUndefined();
     expect(c.setBrush({ id: 'airbrush' }).builtin).toBe(true);
     c.setBrush({ id: 'soft-pastel', grain: 0.2 });
-    const saved = c.saveBrush({ id: 'my-pastel', name: 'My pastel' });
+    const saved = await c.saveBrush({ id: 'my-pastel', name: 'My pastel' });
     expect(saved.grain).toBe(0.2);
-    expect(() => c.saveBrush({ id: 'airbrush' })).toThrow(/built-in/);
-    expect(() => c.saveBrush({ id: 'Bad Id' })).toThrow(/invalid/);
-    const file = c.exportBrushes();
+    await expect(c.saveBrush({ id: 'airbrush' })).rejects.toThrow(/built-in/);
+    await expect(c.saveBrush({ id: 'Bad Id' })).rejects.toThrow(/invalid/);
+    // Saved into the library as facets, keeping the preset's medium and variety.
+    expect(await c.brushLibrary.get('my-pastel')).toMatchObject({ builtin: false, brush: { id: 'my-pastel', name: 'My pastel', medium: 'dry', variety: 'soft-pastel', behaviour: { grain: 0.2 } } });
+    const file = await c.exportBrushes();
+    expect(file).toMatchObject({ format: 'pixerate-brushes', version: 2 });
     expect(file.brushes.map((x) => x.id)).toEqual(['my-pastel']);
     const d = new PaintEditorController();
-    expect(d.importBrushes(JSON.parse(JSON.stringify(file)))).toEqual({ added: ['my-pastel'], skipped: [], problems: [] });
-    expect(d.importBrushes(file).skipped).toEqual(['my-pastel']);
-    expect(d.importBrushes({ brushes: [{ id: 'airbrush', name: 'x' }, { name: 'no id' }] }).problems).toHaveLength(2);
-    expect(() => d.importBrushes('nonsense')).toThrow(/Not a brush library/);
-    d.removeBrush('my-pastel');
-    expect(() => d.removeBrush('pencil-hb')).toThrow(/cannot be removed/);
+    expect(await d.importBrushes(JSON.parse(JSON.stringify(file)))).toEqual({ added: ['my-pastel'], skipped: [], problems: [] });
+    expect(d.getBrush('my-pastel')!.grain).toBe(0.2);
+    expect((await d.importBrushes(file)).skipped).toEqual(['my-pastel']);
+    expect((await d.importBrushes({ brushes: [{ id: 'airbrush', name: 'x' }, { name: 'no id' }] })).problems).toHaveLength(2);
+    await expect(d.importBrushes('nonsense')).rejects.toThrow(/Not a brush library/);
+    await d.removeBrush('my-pastel');
+    expect(d.getBrush('my-pastel')).toBeUndefined();
+    await expect(d.removeBrush('pencil-hb')).rejects.toThrow(/cannot be removed/);
     // Every built-in brush's thumbnail is checked in paint-blending.test.ts; here, the controller's.
     const thumb = c.brushThumbnail('my-pastel', { color: '#202020' });
     expect([thumb.width, thumb.height, thumb.data.length]).toEqual([160, 48, 160 * 48 * 4]);
@@ -570,6 +578,7 @@ describe('paint editor agent tools', () => {
     const c = new PaintEditorController({ width: 128, height: 96, paper: 'cold-pressed' });
     const r = new ToolRegistry();
     r.register(createPaintEditorToolProvider(c));
+    r.register(createPaintBrushLibraryToolProvider(c));
     return { c, r };
   };
   const ok = (res: { isError?: boolean; structuredContent?: unknown; content: unknown[] }) => {
@@ -595,10 +604,10 @@ describe('paint editor agent tools', () => {
     expect((await r.callTool('update_layer', { layerId, blend: 'watercolour' })).isError).toBe(true);
     const papers = ok(await r.callTool('list_papers', {}));
     expect(papers.papers.map((p: { id: string }) => p.id)).toContain('sanded-pastel');
-    const brushes = ok(await r.callTool('list_brushes', {}));
+    const brushes = ok(await r.callTool('list_brush_presets', {}));
     expect(brushes.brushes.map((b: { category: string }) => b.category)).toEqual(expect.arrayContaining(['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'eraser', 'blender', 'smudge', 'mixer']));
     const brush = ok(await r.callTool('get_brush', { id: 'airbrush' }));
-    expect(brush.tip.hardness).toBe(0);
+    expect(brush).toMatchObject({ engine: 'dab', category: 'airbrush', builtin: true, brush: { id: 'airbrush', medium: 'spray', tip: { hardness: 0 } } });
     const bad = await r.callTool('get_brush', { id: 'nope' });
     expect(bad.isError).toBe(true);
     expect((bad.content[0] as { text: string }).text).toMatch(/Unknown brush "nope"/);
@@ -626,14 +635,22 @@ describe('paint editor agent tools', () => {
 
   it('sets the brush and paper, fills, manages layers and the Mixer Brush', async () => {
     const { c, r } = setup();
-    const b = ok(await r.callTool('set_brush', { id: 'charcoal-stick', tip: { size: 40 }, rotation: 'fixed' }));
-    expect(b).toMatchObject({ id: 'charcoal-stick', rotation: 'fixed' });
-    expect(b.tip.size).toBe(40);
-    const saved = ok(await r.callTool('save_brush', { id: 'broad-charcoal', name: 'Broad charcoal' }));
+    const b = ok(await r.callTool('set_brush', { id: 'charcoal-stick', tip: { size: 40 }, dynamics: { rotation: 'fixed' } }));
+    expect(b).toMatchObject({ engine: 'dab', problems: [], brush: { id: 'charcoal-stick', variety: 'charcoal', tip: { size: 40 }, dynamics: { rotation: 'fixed' } } });
+    expect(c.getState().brush).toMatchObject({ id: 'charcoal-stick', rotation: 'fixed', tip: { size: 40 } });
+    // The edited brush is saved through the library's tools, from its facets.
+    const active = ok(await r.callTool('get_brush', {}));
+    expect(active.builtin).toBe(false);
+    const saved = ok(await r.callTool('create_brush', { ...active.brush, id: 'broad-charcoal', name: 'Broad charcoal' }));
     expect(saved.id).toBe('broad-charcoal');
+    await c.whenBrushesLoaded();
+    expect(c.getBrush('broad-charcoal')).toMatchObject({ rotation: 'fixed', tip: { size: 40 } });
+    expect(ok(await r.callTool('set_brush', { id: 'broad-charcoal' })).brush.tip.size).toBe(40);
     const lib = ok(await r.callTool('export_brushes', {}));
     expect(ok(await r.callTool('remove_brush', { id: 'broad-charcoal' }))).toEqual({ removed: 'broad-charcoal' });
-    expect(ok(await r.callTool('import_brushes', { library: lib })).added).toEqual(['broad-charcoal']);
+    expect(ok(await r.callTool('import_brushes', { file: lib.file })).added).toEqual(['broad-charcoal']);
+    const refused = await r.callTool('set_brush', { tip: { size: 99999 } });
+    expect(refused.isError).toBe(true);
     const paper = ok(await r.callTool('set_paper', { preset: 'sanded-pastel', depth: 0.9 }));
     expect(paper).toMatchObject({ preset: 'sanded-pastel', depth: 0.9 });
     expect(ok(await r.callTool('get_paper', {})).pattern).toBe('sanded');
@@ -666,7 +683,7 @@ describe('paint editor agent tools', () => {
     expect(prev.content[0]).toMatchObject({ type: 'image', mimeType: 'image/png' });
     expect((prev.content[1] as { text: string }).text).toBe('Preview 64×48');
     expect((await r.callTool('render_preview', { layerIds: ['zz'] })).isError).toBe(true);
-    const thumb = await r.callTool('render_brush_thumbnail', { id: 'pencil-hb' });
+    const thumb = await r.callTool('preview_brush', { id: 'pencil-hb' });
     expect(thumb.content[0]).toMatchObject({ type: 'image' });
     const png = ok(await r.callTool('export_image', {}));
     expect(png.mimeType).toBe('image/png');

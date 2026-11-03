@@ -3520,3 +3520,33 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `update_brush { id, tip: { size: 20 } }` was refused with "Missing required property shape".
 - **Root Cause**: `BRUSH_JSON_SCHEMA` requires `tip.shape`, which is right for a stored brush. The tools reused its facet schemas, and the registry validates arguments against the input schema before the handler runs.
 - **Solution / Workaround**: `brushes/tools.ts` uses a copy of the facet schemas with `tip.required` removed. A patch keeps the brush's shape, and a new brush without one gets a round tip (reported in `problems`). Keep the stored-brush schema strict; relax only the tool inputs that merge.
+
+### [core/paint-editor] Recorded Strokes Keep Facet Brushes on Disk but Engine Brushes in Memory (v1 Documents Still Replay)
+
+- **Issue / Symptom**: Paint documents of version 1 store every stroke's brush flat, as the engine painted it (`brushToJSON`). Version 2 stores facet brushes. Converting the strokes in memory to facets would make every replay, time-lapse and `update_stroke` resolve brushes again, and any drift would change pixels.
+- **Root Cause**: The engine needs the flat brush. `resolveBrush(migrateBrushV1(b))` paints exactly as `b`, but it is not deep-equal to `b`: the library category is derived again, and engine blocks the brush's engine never reads go back to their defaults.
+- **Solution / Workaround**: `RecordedStroke.brush` stays the engine brush. Only `strokeToJSON` (strokes and `liveStrokes` in `toJSON`) writes facets, and `normalizeBrushStroke` reads either form per stroke: a brush with `kind` and no `engine` is a facet brush. `PAINT_SCHEMA_VERSION` is 2, so an older editor refuses a new document instead of misreading it. `tests/fixtures/paint-document-v1.json` is a version 1 document that must replay to its saved pixels, before and after re-saving it as version 2. When comparing brushes across the two forms, leave out `category` and `builtin`.
+
+### [core/paint-editor] The Brush Library Is Async but the Paint Controller Is Not
+
+- **Issue / Symptom**: A `brushId` for a saved brush, passed with a library on persistent storage, came up as the default pencil. `saveBrush` and `importBrushes` now return promises. `list_brush_presets` showed a brush that `set_brush` didn't know yet.
+- **Root Cause**: `BrushLibrary` reads its storage asynchronously. The controller's state, `setBrush` and the strokes are synchronous, so it keeps a copy of the library (each brush as facets and as the engine paints it) and refreshes it when the library notifies.
+- **Solution / Workaround**: The built-in presets (and the `brushes` option) are in the copy from the start. A `brushId` the library hasn't listed yet is chosen once it has. Await `controller.whenBrushesLoaded()` after writing to a shared library from somewhere else (another editor, the brushes__* tools) before using the new id. The controller's own `saveBrush` / `removeBrush` / `importBrushes` refresh before they resolve.
+
+### [core/paint-editor] A Facet Patch Can't Remove Anything, and the Editor Must Replace, Not Merge
+
+- **Issue / Symptom**: Two problems. `set_brush { paint: null }` used to drop a brush's own gradient, but facet patches only merge. And after the brush editor changed a stamp tip back to round, the old `tip.stamps` came back.
+- **Root Cause**: `mergeBrushPatch` lays objects over objects; leaving a key out keeps its value. The editor sends the whole brush, and merging it over the active brush keeps every key the new brush no longer has.
+- **Solution / Workaround**: `set_brush` takes `unset` (as `update_brush` does): `unset: ['colour']` drops the gradient. The brush editor calls `setBrushSpec` (a whole brush, replaced) instead of `setBrushFacets` (a patch). `setBrushEditorValue` starts a facet afresh when its kind changes (marks kind, tip shape, mark or tool).
+
+### [core/paint-editor] Engine Edits Lose the Brush's Hints Unless They Are Carried Over
+
+- **Issue / Symptom**: Editing a highlighter's size with a slider (`setBrush({ tip: { size } })`, the engine form) and saving it lost its variety, palette and `light.spill` radius of 0. A saved highlighter then spilled light again in hosts that apply the hint.
+- **Root Cause**: `migrateBrushV1` builds facets from what the engine reads. Medium, variety, description, tags, suggested colours, light spill and glow, and motion hints aren't in the engine brush.
+- **Solution / Workaround**: `brushSpecOf(next, from)` migrates the edited brush and carries the hints over from the facets it was edited from. It keeps them only if the brush still resolves to the same engine brush (a wet variety on a dab brush would change it). The controller keeps the active brush's facets next to its engine form, and uses them for `getBrushSpec()` and saving.
+
+### [core/brushes] `normalizeBrushSpec` Reads Gradients Leniently; Tools Must Check Them Strictly
+
+- **Issue / Symptom**: `set_brush { colour: { default: <gradient with unsorted stops> } }` was accepted, and the stops were sorted silently. The old `set_brush { paint }` refused it with "sorted by offset".
+- **Root Cause**: The normaliser reads documents, presets and libraries, where a fix-and-report is right. A tool argument should be refused.
+- **Solution / Workaround**: The paint controller runs `readStrokePaint` (strict) on a gradient `colour.default` in `setBrushFacets`, `setBrushSpec` and `brushChanges` before normalising.

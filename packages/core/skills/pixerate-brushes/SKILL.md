@@ -80,8 +80,10 @@ paints without (warnings), each with a fix; lists and writes use the current hos
   marks take any sticker ref from `find_stickers`.
 - **Out-of-range values** are refused by the schema (`tip.size` is 1..2500 px); a stored brush
   is clamped on import and reported in `problems`.
-- **The paint editor's own brush tools** (`set_brush`, `save_brush`, its `export_brushes`)
-  still work on its brushes; this library's tools are namespaced apart.
+- **The paint editor paints from this library.** Its `set_brush` picks a brush by id here and
+  lays facets over it without saving; `create_brush` / `update_brush` store one. A paint host
+  registers these tools with its own preview (`createPaintBrushLibraryToolProvider`), so the
+  paint editor has no list, save, export, import or thumbnail tools of its own.
 
 ## Workflow skills
 
@@ -94,7 +96,7 @@ paints without (warnings), each with a fix; lists and writes use the current hos
 | --- | --- |
 | `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, engine, tip, size, marks, surface, light) and `total`. Call first. |
 | `describe_brush` | One brush by `id`: its full facet `brush`, `builtin`, `engine`, `category` and `check` for this host. Unknown ids are refused with the closest ones. |
-| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets. Normalised and checked for this host; refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
+| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host; refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
 | `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes the host can't render. Returns `brush`, `changed` paths, `problems`, `warnings`. |
 | `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |
 | `remove_brush` | Delete a saved brush for good (export it first to keep a copy). Built-ins are refused. Returns `removed`. |

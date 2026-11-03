@@ -18,8 +18,8 @@ particle ones are tuned in [particle-brushes.md](particle-brushes.md)).
   `strength` 0..2 (default 1). It is not an undo step and repaints nothing; it shows the
   painting as committed, so a stroke's spill appears when the stroke ends. It spills onto
   everything below, paper included, so it reads best on dark paper (`set_paper` colour).
-- **Glassy beads** (impasto): `impasto.rim` makes a bead's light stronger at its edges, where its
-  surface turns away (backlit glass); `impasto.clarity` lets the middle of a bead show the layers
+- **Glassy beads** (impasto): `behaviour.thick.rim` (engine `impasto.rim`) makes a bead's light stronger at its edges, where its
+  surface turns away (backlit glass); `behaviour.thick.clarity` lets the middle of a bead show the layers
   below while its edges stay solid. `glow-gel` uses both: paint loops with a distance-mapped
   gradient (`set_paint`) for glowing glass tubes.
 - **Crossings.** Beads on one layer fuse where they cross (their heights combine by maximum), so

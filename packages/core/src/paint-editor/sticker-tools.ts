@@ -1,5 +1,5 @@
 /**
- * Agent tools for stickers: stamps sprayed with a sticker brush (`paint_stroke`, list_brushes
+ * Agent tools for stickers: stamps sprayed with a sticker brush (`paint_stroke`, list_brush_presets
  * category sticker) stay objects on their layer, which these tools list, move, turn, resize,
  * recolour, reorder and delete, find by point (`sticker_at`), and places new ones exactly (`add_stickers`). Each change is one undo step and redraws the layer.
  */

@@ -232,7 +232,7 @@ describe('stickers in the paint editor', () => {
       const found = ok(await r.callTool('find_stickers', { query: 'sun' }));
       const ref = found.items[0].ref;
       expect(ref).toBe('fake:weather-sun');
-      ok(await r.callTool('set_brush', { id: 'sticker-stars', sticker: { stamps: [ref, 'editor:star'] } }));
+      ok(await r.callTool('set_brush', { id: 'sticker-stars', tip: { stamps: [ref, 'editor:star'] } }));
       ok(await r.callTool('add_layer', {}));
       const stroke = ok(await r.callTool('paint_stroke', { points: line, color: '#0ea5e9', seed: 3 }));
       expect(stroke.skippedStickers).toBeUndefined();
@@ -249,7 +249,7 @@ describe('stickers in the paint editor', () => {
     it('refuses unknown refs with the closest ones, and changes nothing', async () => {
       const { c, r } = setup();
       const before = c.getState().brush;
-      const res = await r.callTool('set_brush', { id: 'sticker-stars', sticker: { stamps: ['fake:weather-snu'] } });
+      const res = await r.callTool('set_brush', { id: 'sticker-stars', tip: { stamps: ['fake:weather-snu'] } });
       expect(res.isError).toBe(true);
       expect(text(res)).toMatch(/No sticker "fake:weather-snu".*Closest: .*fake:weather-sun/);
       expect(c.getState().brush).toBe(before);

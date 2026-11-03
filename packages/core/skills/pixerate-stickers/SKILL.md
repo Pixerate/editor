@@ -19,7 +19,7 @@ none, it is the editor's own stamps (`editorStickers()`: `editor:dot`, `editor:s
 2. **Check.** `describe_sticker` when the choice matters: its licence (and the attribution line
    it asks for), dominant colours, variants and outline.
 3. **Use.** Pass refs to the editor that places them: in the paint editor, a sticker brush
-   (`set_brush` `sticker.stamps`, then `paint_stroke`) sprays them and `add_stickers` places
+   (`set_brush` `tip.stamps`, then `paint_stroke`) sprays them and `add_stickers` places
    them exactly. In the vector, image and canvas editors, `insert_sticker` puts one in (`x`,
    `y` centre, `width`): vector, a group of editable paths; image, a pixel layer; canvas, a
    shape node from its outline in one colour. A provider's art loads before it is drawn.

@@ -1,6 +1,6 @@
 /**
  * Agent tools for wet media (watercolour and gouache on a simulated wet layer). Wet strokes are
- * painted with `paint_stroke` and a wet brush (`list_brushes` category `watercolor` or
+ * painted with `paint_stroke` and a wet brush (`list_brush_presets` variety `watercolor` or
  * `wet-tool`); these tools read and steer the wet paint. Every result says whether paint is still
  * wet. Settings (wet parameters, flow maps, tilt) are saved with the document but are not undo
  * steps; drying and wetting the paper are.

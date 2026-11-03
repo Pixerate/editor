@@ -4,7 +4,7 @@ Paint that changes colour as the stroke goes: give a gradient where a colour wou
 
 1. **`set_paint`** with `{ type: "gradient", stops, map }` makes it the paint for every following
    stroke (`set_color` goes back to one colour); `paint_stroke` `paint` overrides it for one stroke;
-   a brush can carry its own (`set_brush` `paint`, presets `gradient-round`, `pressure-ombre`,
+   a brush can carry its own (`set_brush` `colour.default`, presets `gradient-round`, `pressure-ombre`,
    `rainbow-marker`, `gradient-wash`).
 2. **Choose the mapping by what the stroke should do**: `distance` (default, 300 px then
    `mirror` back) for "drag it out" colour; `pressure` for light-to-heavy shading in one stroke;

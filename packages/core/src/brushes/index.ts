@@ -4,7 +4,9 @@
  * one into the flat form the paint engine reads, `migrateBrushV1` reads brushes written before
  * the facet model, and `BRUSH_PRESETS` is the built-in library. Host profiles say what each editor
  * can render (`checkBrush`), `createBrushLibrary` keeps user brushes on any storage adapter, and
- * `createBrushLibraryToolProvider` gives agents the library. No renderer is bundled.
+ * `createBrushLibraryToolProvider` gives agents the library, and `brushEditorSections` /
+ * `brushLibraryGroups` describe the brush editor and library browser the UI packages draw. No
+ * renderer is bundled.
  */
 
 export * from './types';
@@ -27,4 +29,6 @@ export {
   type ImportBrushesResult,
   type SaveBrushResult,
 } from './library';
+export { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch, UNSETTABLE_BRUSH_FACETS, type BrushPatch, type UnsettableBrushFacet } from './patch';
+export { brushEditorSections, brushLibraryGroups, setBrushEditorValue, type BrushEditorControl, type BrushEditorSection, type BrushEditorSectionId, type BrushLibraryGroup } from './ui';
 export { createBrushLibraryToolProvider, createBrushLibraryTools, type BrushLibraryToolProviderOptions, type BrushPreviewImage, type BrushPreviewRenderer } from './tools';

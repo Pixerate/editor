@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPolygonArea, createPaintEditorToolProvider, toggleDotTexture, DEFAULT_PARTICLE, normalizeParticle, PaintEditorController, replayPainting, type PaintPixelLayer } from '../src/paint-editor';
+import { addPolygonArea, createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, toggleDotTexture, DEFAULT_PARTICLE, normalizeParticle, PaintEditorController, replayPainting, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 import { ToolRegistry } from '../src/tools/registry';
 
@@ -166,6 +166,7 @@ describe('particle brushes: ribbons, waves, elastic and fuzzy kinds, textured do
       const c = editor();
       const r = new ToolRegistry();
       r.register(createPaintEditorToolProvider(c));
+      r.register(createPaintBrushLibraryToolProvider(c));
       return { c, r };
     };
     const ok = (res: { isError?: boolean; structuredContent?: unknown; content: unknown[] }) => {
@@ -176,22 +177,21 @@ describe('particle brushes: ribbons, waves, elastic and fuzzy kinds, textured do
 
     it('set_brush and get_brush take and return the new particle settings', async () => {
       const { c, r } = setup();
-      ok(await r.callTool('set_brush', { id: 'spring-ink', particle: { kind: 'elastic', render: 'ribbon', ribbonFill: 0.3, ribbonPairs: 'first-last', waveAmplitude: 0.2, waveLength: 80, waveSpeed: 0.5, wavePhaseJitter: 0.4, dotTextures: ['sparkle', 'star'], dotTextureOrder: 'random', dotRotation: 'follow' } }));
+      ok(await r.callTool('set_brush', { id: 'spring-ink', tip: { shape: 'stamp', stamps: ['editor:sparkle', 'editor:star'] }, marks: { kind: 'particles', physics: 'elastic', render: 'ribbon', ribbonFill: 0.3, ribbonPairs: 'first-last', waveAmplitude: 0.2, waveLength: 80, wavePhaseJitter: 0.4, stampOrder: 'random', stampRotation: 'follow' }, motion: { waveSpeed: 0.5 } }));
       const got = ok(await r.callTool('get_brush', {}));
-      expect(JSON.stringify(got)).toContain('"ribbonPairs":"first-last"');
+      expect(got.brush).toMatchObject({ tip: { shape: 'stamp', stamps: ['editor:sparkle', 'editor:star'] }, marks: { physics: 'elastic', ribbonPairs: 'first-last' }, motion: { waveSpeed: 0.5 } });
       expect(c.getState().brush.particle).toMatchObject({ kind: 'elastic', render: 'ribbon', ribbonFill: 0.3, waveLength: 80, dotTextures: ['sparkle', 'star'], dotRotation: 'follow' });
       const bad = [
-        { kind: 'wobbly' },
-        { render: 'mesh' },
-        { dotTextures: ['star', 'star', 'star', 'star', 'star'] },
-        { dotTextures: ['teapot'] },
-        { waveLength: 2 },
-        { ribbonFill: 1.5 },
-        { ribbon: 1 },
+        { marks: { kind: 'particles', physics: 'wobbly' } },
+        { marks: { kind: 'particles', render: 'mesh' } },
+        { marks: { kind: 'particles', waveLength: 2 } },
+        { marks: { kind: 'particles', ribbonFill: 1.5 } },
+        { marks: { kind: 'particles', ribbon: 1 } },
+        { particle: { kind: 'elastic' } },
       ];
-      for (const particle of bad) {
-        const res = await r.callTool('set_brush', { particle });
-        expect(res.isError, JSON.stringify(particle)).toBe(true);
+      for (const args of bad) {
+        const res = await r.callTool('set_brush', args);
+        expect(res.isError, JSON.stringify(args)).toBe(true);
         expect(text(res).length).toBeGreaterThan(10);
       }
       // A failed call changes nothing.
@@ -201,7 +201,7 @@ describe('particle brushes: ribbons, waves, elastic and fuzzy kinds, textured do
     it('every Light preset paints light and has a thumbnail', async () => {
       const { r } = setup();
       for (const id of ['light-ribbon', 'flame-ribbon', 'neon-strand', 'smoke-ribbon', 'bokeh-dots', 'twinkle-sparks']) {
-        const thumb = await r.callTool('render_brush_thumbnail', { id });
+        const thumb = await r.callTool('preview_brush', { id });
         expect(thumb.isError, id).toBeFalsy();
         expect(thumb.content[0], id).toMatchObject({ type: 'image' });
         const c = editor();

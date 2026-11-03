@@ -49,7 +49,14 @@ import {
   type RasterRect,
   type Tile,
 } from '../raster/surface';
-import { brushToJSON, BUILTIN_BRUSHES, DEFAULT_BRUSH_ID, normalizePaintBrush, type PaintBrushInput, parseBrushLibrary, BRUSH_ID, type BrushLibraryFile, type PaintBrush } from './brushes';
+import { brushToJSON, DEFAULT_BRUSH_ID, normalizePaintBrush, type PaintBrushInput, BRUSH_ID, type PaintBrush } from './brushes';
+import { BrushLibraryError, closest, createBrushLibrary, type BrushLibrary, type BrushLibraryFile } from '../brushes/library';
+import { migrateBrushV1 } from '../brushes/migrate';
+import { normalizeBrushSpec } from '../brushes/normalize';
+import { mergeBrushPatch, type BrushPatch, type UnsettableBrushFacet } from '../brushes/patch';
+import { resolveBrush } from '../brushes/resolve';
+import type { Brush } from '../brushes/types';
+import { brushSpecOf, builtinLibraryBrushes, copyJSON, engineChanges, libraryBrush, seededStorage, type LibraryBrush } from './brush-library';
 import {
   createPaintDocument,
   createPaintLayer,
@@ -78,7 +85,7 @@ import {
   type SerializedPaintDocument,
 } from './serialize';
 import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
-import { affineCopy, normalizeBrushStroke, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
+import { affineCopy, normalizeBrushStroke, strokeToJSON, strokeBounds, variationAffine, varyStroke, IDENTITY_AFFINE, type Affine, type RecordedStroke, type StrokeVariation } from './strokes';
 import { renderBrushThumbnail, type BrushThumbnail } from './thumbnails';
 import { colorHarmony, DEFAULT_SWATCHES, readSwatch, type ColorWheel, type HarmonyColor, type HarmonyKind, type Swatch } from './color';
 import {
@@ -137,12 +144,26 @@ export class PaintEditorError extends Error {
   }
 }
 
+/** Library errors as the paint editor's own. */
+async function libraryCall<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (e) {
+    throw e instanceof BrushLibraryError ? new PaintEditorError(e.message) : e;
+  }
+}
+
 export interface PaintEditorOptions extends Partial<PaintCanvas> {
   /** Paper settings, or a library preset id (default cold pressed). */
   paper?: Partial<PaperSettings> | string;
   /** Active brush id (default `pencil-6b`). */
   brushId?: string;
-  /** Saved user brushes to start the library with. */
+  /**
+   * The brush library: built-in presets plus saved brushes, on any storage. Pass one library to
+   * every editor so a brush saved in one shows in all of them (default: a library in memory).
+   */
+  brushLibrary?: BrushLibrary;
+  /** Saved user brushes to start the default library with (or to add to `brushLibrary`). */
   brushes?: readonly PaintBrush[];
   /** Paint colour #rrggbb (default #1f2937). */
   color?: string;
@@ -428,8 +449,17 @@ export class PaintEditorController {
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   private readonly historyLimit: number;
+  /** The brush library this editor lists, saves into and paints from (shared with other editors when the host passes one). */
+  readonly brushLibrary: BrushLibrary;
   private brush: PaintBrush;
-  private userBrushes: PaintBrush[];
+  /** The active brush as facets (what `getBrushSpec` and saving use). */
+  private brushSpec: Brush;
+  /** The library's brushes as last read, each as stored (facets) and as the engine paints it. */
+  private brushEntries: readonly LibraryBrush[];
+  /** The brush id asked for at construction, while the library had not listed it yet. */
+  private pendingBrushId: string | null = null;
+  private brushesLoaded: Promise<void> = Promise.resolve();
+  private readonly unsubscribeLibrary: () => void;
   /** The library list in the state (the same array until the user brushes change, so thumbnails are not redrawn). */
   private library: readonly PaintBrush[] | null = null;
   private color: string;
@@ -512,9 +542,18 @@ export class PaintEditorController {
     this.rasterizeSticker = options.rasterizeSticker ?? defaultStickerRasterizer;
     if (options.stickers) this.stickers.set(options.stickers);
     this.doc = createPaintDocument({ width: options.width, height: options.height, dpi: options.dpi, paper: this.resolvePaper(options.paper) });
-    this.userBrushes = (options.brushes ?? []).map((b) => normalizePaintBrush({ ...b, builtin: false }));
-    const start = this.findBrush(options.brushId ?? DEFAULT_BRUSH_ID) ?? this.findBrush(DEFAULT_BRUSH_ID)!;
-    this.brush = normalizePaintBrush(start);
+    const seed = (options.brushes ?? []).map((b) => normalizePaintBrush({ ...b, builtin: false }));
+    this.brushLibrary = options.brushLibrary ?? createBrushLibrary({ storage: seededStorage(seed) });
+    this.brushEntries = [...builtinLibraryBrushes(), ...seed.map((b) => libraryBrush(migrateBrushV1(b), false, b))];
+    const wanted = options.brushId ?? DEFAULT_BRUSH_ID;
+    const start = this.findEntry(wanted) ?? this.findEntry(DEFAULT_BRUSH_ID)!;
+    this.brush = normalizePaintBrush(start.brush);
+    this.brushSpec = copyJSON(start.spec);
+    // Brushes kept in the library's storage are listed once it is read; then the wanted brush is chosen.
+    this.unsubscribeLibrary = this.brushLibrary.subscribe(() => void this.refreshBrushes().catch(() => undefined));
+    if (options.brushLibrary && seed.length) void this.brushLibrary.importFile(seed.map(brushToJSON)).catch(() => undefined);
+    void this.refreshBrushes().catch(() => undefined);
+    this.pendingBrushId = start.brush.id === wanted ? null : wanted;
     this.color = options.color ? parseColor(options.color) : '#1f2937';
     this.hand = options.hand === 'left' ? 'left' : 'right';
     this.encodeImage = options.encodeImage;
@@ -572,7 +611,7 @@ export class PaintEditorController {
     this.cached = {
       document: this.doc,
       brush: this.brush,
-      brushes: (this.library ??= [...BUILTIN_BRUSHES, ...this.userBrushes]),
+      brushes: (this.library ??= this.brushEntries.map((e) => e.brush)),
       color: this.color,
       secondaryColor: this.secondaryColor,
       paint: this.gradient ?? { type: 'color', color: this.color },
@@ -1754,111 +1793,184 @@ export class PaintEditorController {
 
   // --- Brushes -------------------------------------------------------------------
 
-  private findBrush(id: string): PaintBrush | undefined {
-    return BUILTIN_BRUSHES.find((b) => b.id === id) ?? this.userBrushes.find((b) => b.id === id);
+  private findEntry(id: string): LibraryBrush | undefined {
+    return this.brushEntries.find((e) => e.brush.id === id);
   }
 
-  /** A library brush by id (`undefined` when unknown). */
+  private findBrush(id: string): PaintBrush | undefined {
+    return this.findEntry(id)?.brush;
+  }
+
+  private requireEntry(id: string): LibraryBrush {
+    const e = this.findEntry(id);
+    if (!e) throw new PaintEditorError(`Unknown brush "${id}". ${closest(id, this.brushEntries.map((x) => x.brush.id))}Call list_brush_presets for the ids.`);
+    return e;
+  }
+
+  private requireBrush(id: string): PaintBrush {
+    return this.requireEntry(id).brush;
+  }
+
+  /** Reads the library again (after a change anywhere it is shared). */
+  private refreshBrushes(): Promise<void> {
+    const run = this.brushLibrary.list().then((entries) => {
+      this.brushEntries = entries.map((e) => libraryBrush(e.brush, e.builtin));
+      this.library = null;
+      const pending = this.pendingBrushId;
+      this.pendingBrushId = null;
+      if (pending && this.findEntry(pending)) this.setBrush({ id: pending });
+      else this.emit([]);
+    });
+    this.brushesLoaded = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Resolves once the brush library has been read (user brushes kept in storage are listed from then on). */
+  whenBrushesLoaded(): Promise<void> {
+    return this.brushesLoaded;
+  }
+
+  /** A library brush by id, as the engine paints it (`undefined` when unknown). */
   getBrush(id: string): PaintBrush | undefined {
     const b = this.findBrush(id);
     return b ? normalizePaintBrush(b, b) : undefined;
   }
 
-  private requireBrush(id: string): PaintBrush {
-    const b = this.findBrush(id);
-    if (!b) throw new PaintEditorError(`Unknown brush "${id}". Call list_brushes for the ids.`);
-    return b;
+  /** A library brush by id as stored (its facets), or without an id the active brush as edited. */
+  getBrushSpec(id?: string): Brush | undefined {
+    const spec = id === undefined ? this.brushSpec : this.findEntry(id)?.spec;
+    return spec ? copyJSON(spec) : undefined;
   }
 
   /**
-   * Chooses the active brush (`id`: a library brush) and / or changes its settings. Editor state,
-   * not an undo step. Returns the active brush.
+   * Chooses the active brush (`id`: a library brush) and / or changes its engine settings. Editor
+   * state, not an undo step. Returns the active brush. `setBrushFacets` changes it by facets.
    */
   setBrush(update: { id?: string } & Omit<PaintBrushInput, 'id'> = {}): PaintBrush {
     const { id, ...changes } = update;
-    const base = id !== undefined ? this.requireBrush(id) : this.brush;
+    const entry = id !== undefined ? this.requireEntry(id) : null;
+    const base = entry ? entry.brush : this.brush;
+    const baseSpec = entry ? entry.spec : this.brushSpec;
     // Gradient paint is checked strictly here (documents and presets are read leniently).
     if (changes.paint !== undefined && changes.paint !== null) this.readStrokePaint(changes.paint);
+    const unchanged = !Object.keys(changes).length;
     const next = normalizePaintBrush({ ...changes, id: base.id }, base);
-    // The active brush is `builtin` only while it is an unchanged built-in preset.
-    if (base.builtin && !Object.keys(changes).length) next.builtin = true;
-    else delete next.builtin;
-    this.brush = next;
-    this.emit([]);
-    // Provider stickers are loaded now, so the spray can draw them by the time the stroke starts.
-    if (next.engine === 'sticker' && next.sticker.stamps.some((r) => !editorStampOf(r))) void this.prepareStickers(next.sticker.stamps).catch(() => this.emit([]));
+    this.useBrush(next, unchanged ? baseSpec : brushSpecOf(next, baseSpec), unchanged && base.builtin === true);
     return this.brush;
   }
 
-  /** Saves the active brush (or `brush`) into the user library under `id` / `name`. */
-  saveBrush(options: { id: string; name?: string; brush?: PaintBrushInput }): PaintBrush {
-    if (!BRUSH_ID.test(options.id)) throw new PaintEditorError(`Brush id "${options.id}" is invalid; use lowercase letters, digits and dashes (e.g. "my-pencil").`);
-    if (BUILTIN_BRUSHES.some((b) => b.id === options.id)) throw new PaintEditorError(`"${options.id}" is a built-in brush; save under another id.`);
-    const source = options.brush ? normalizePaintBrush(options.brush, this.brush) : this.brush;
-    const saved = normalizePaintBrush({ ...source, id: options.id, name: options.name ?? source.name });
-    delete saved.builtin;
-    const i = this.userBrushes.findIndex((b) => b.id === options.id);
-    if (i >= 0) this.userBrushes[i] = saved;
-    else this.userBrushes.push(saved);
-    this.library = null;
-    this.emit([]);
-    return saved;
-  }
-
-  removeBrush(id: string): void {
-    if (BUILTIN_BRUSHES.some((b) => b.id === id)) throw new PaintEditorError(`"${id}" is a built-in brush and cannot be removed.`);
-    const i = this.userBrushes.findIndex((b) => b.id === id);
-    if (i < 0) throw new PaintEditorError(`Unknown brush "${id}". Call list_brushes for the ids.`);
-    this.userBrushes.splice(i, 1);
-    this.library = null;
-    this.emit([]);
-  }
-
-  /** The user's saved brushes. */
-  getUserBrushes(): PaintBrush[] {
-    return this.userBrushes.map((b) => normalizePaintBrush(b, b));
-  }
-
-  /** A brush library file of the given brushes (default: the user's brushes). */
-  exportBrushes(ids?: readonly string[]): BrushLibraryFile {
-    const list = ids ? ids.map((id) => this.requireBrush(id)) : this.userBrushes;
-    return { format: 'pixerate-brushes', version: 1, brushes: list.map(brushToJSON) };
+  /**
+   * Chooses the active brush (`id`: a library brush) and / or lays a facet patch over it (objects
+   * merge, lists and values replace, as the library's `update_brush` does). Editor state, not an
+   * undo step. `unset` removes whole facets first. Returns the active brush as the engine paints
+   * it, its facets, and what was clamped or dropped.
+   */
+  setBrushFacets(patch: BrushPatch = {}, id?: string, unset: readonly UnsettableBrushFacet[] = []): { brush: PaintBrush; spec: Brush; problems: string[] } {
+    const entry = id !== undefined ? this.requireEntry(id) : null;
+    const unchanged = !Object.keys(patch).length && !unset.length;
+    const problems: string[] = [];
+    const base = copyJSON(entry ? entry.spec : this.brushSpec) as Brush & Record<string, unknown>;
+    for (const k of unset) delete base[k];
+    const spec = this.readBrushPatch(base, patch, problems);
+    this.useBrush(unchanged && entry ? entry.brush : resolveBrush(spec), spec, unchanged && entry?.builtin === true);
+    return { brush: this.brush, spec: copyJSON(this.brushSpec), problems };
   }
 
   /**
-   * Adds the brushes of a library file to the user library. A brush whose id is taken is skipped
-   * unless `replace` (built-in ids are always skipped). Returns the ids added and the problems.
+   * Makes `spec` (a whole facet brush, as the brush editor edits it) the active brush, keeping the
+   * active brush's id. Editor state, not an undo step. Returns it as the engine paints it, its
+   * facets, and what was clamped or dropped.
    */
-  importBrushes(file: unknown, options: { replace?: boolean } = {}): { added: string[]; skipped: string[]; problems: string[] } {
+  setBrushSpec(spec: Brush): { brush: PaintBrush; spec: Brush; problems: string[] } {
     const problems: string[] = [];
-    let list: PaintBrush[];
+    const paint = spec.colour?.default;
+    if (paint && typeof paint === 'object' && 'type' in paint && paint.type === 'gradient') this.readStrokePaint(paint);
+    let next: Brush;
     try {
-      list = parseBrushLibrary(file, problems);
+      next = normalizeBrushSpec({ ...spec, id: this.brush.id }, problems);
     } catch (e) {
       throw new PaintEditorError((e as Error).message);
     }
-    const added: string[] = [];
-    const skipped: string[] = [];
-    for (const b of list) {
-      if (BUILTIN_BRUSHES.some((x) => x.id === b.id)) {
-        skipped.push(b.id);
-        problems.push(`"${b.id}" is a built-in brush id; rename it to import it.`);
-        continue;
-      }
-      const i = this.userBrushes.findIndex((x) => x.id === b.id);
-      if (i >= 0 && !options.replace) {
-        skipped.push(b.id);
-        continue;
-      }
-      if (i >= 0) this.userBrushes[i] = b;
-      else this.userBrushes.push(b);
-      added.push(b.id);
+    this.useBrush(resolveBrush(next), next, false);
+    return { brush: this.brush, spec: copyJSON(this.brushSpec), problems };
+  }
+
+  /**
+   * The engine settings a facet patch changes on a brush (`from`: a library brush id or a brush as
+   * painted; default the active brush), as `paintStroke`'s and `updateStroke`'s `brush` take them.
+   */
+  brushChanges(patch: BrushPatch, from?: string | PaintBrush): Omit<PaintBrushInput, 'id'> {
+    const entry = typeof from === 'string' ? this.requireEntry(from) : null;
+    const base = entry ? entry.brush : typeof from === 'object' ? normalizePaintBrush(from, from) : this.brush;
+    const spec = entry ? entry.spec : typeof from === 'object' ? migrateBrushV1(base) : this.brushSpec;
+    return engineChanges(base, resolveBrush(this.readBrushPatch(spec, patch, [])));
+  }
+
+  private readBrushPatch(base: Brush, patch: BrushPatch, problems: string[]): Brush {
+    const { id: _id, name, ...rest } = patch as BrushPatch & { id?: unknown };
+    // Gradient paint is checked strictly here (documents and presets are read leniently).
+    const paint = rest.colour?.default;
+    if (paint && typeof paint === 'object' && 'type' in paint && paint.type === 'gradient') this.readStrokePaint(paint);
+    try {
+      return normalizeBrushSpec(mergeBrushPatch(base as unknown as Record<string, unknown>, { ...rest, ...(name !== undefined ? { name } : {}) }), problems);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
     }
-    if (added.length) {
-      this.library = null;
-      this.emit([]);
-    }
-    return { added, skipped, problems };
+  }
+
+  private useBrush(next: PaintBrush, spec: Brush, builtin: boolean): void {
+    next = normalizePaintBrush(next, next);
+    // The active brush is `builtin` only while it is an unchanged built-in preset.
+    if (builtin) next.builtin = true;
+    else delete next.builtin;
+    this.brush = next;
+    this.brushSpec = { ...copyJSON(spec), id: next.id, name: next.name };
+    this.pendingBrushId = null;
+    this.emit([]);
+    // Provider stickers are loaded now, so the spray can draw them by the time the stroke starts.
+    if (next.engine === 'sticker' && next.sticker.stamps.some((r) => !editorStampOf(r))) void this.prepareStickers(next.sticker.stamps).catch(() => this.emit([]));
+  }
+
+  /**
+   * Saves the active brush (or `brush`, engine settings on top of it) into the brush library under
+   * `id` / `name`, replacing a user brush with that id. Built-in ids are refused. Resolves with the
+   * saved brush.
+   */
+  async saveBrush(options: { id: string; name?: string; brush?: PaintBrushInput }): Promise<PaintBrush> {
+    if (!BRUSH_ID.test(options.id)) throw new PaintEditorError(`Brush id "${options.id}" is invalid; use lowercase letters, digits and dashes (e.g. "my-pencil").`);
+    if (this.brushLibrary.isBuiltin(options.id)) throw new PaintEditorError(`"${options.id}" is a built-in brush; save under another id.`);
+    const spec = options.brush ? brushSpecOf(normalizePaintBrush(options.brush, this.brush), this.brushSpec) : this.brushSpec;
+    const { brush } = await libraryCall(() => this.brushLibrary.save({ ...spec, id: options.id, name: options.name ?? spec.name }, { overwrite: true }));
+    await this.refreshBrushes();
+    return this.requireBrush(brush.id);
+  }
+
+  /** Removes a user brush from the brush library (built-in brushes can't be removed). */
+  async removeBrush(id: string): Promise<void> {
+    if (this.brushLibrary.isBuiltin(id)) throw new PaintEditorError(`"${id}" is a built-in brush and cannot be removed.`);
+    if (!(await libraryCall(() => this.brushLibrary.remove(id)))) throw new PaintEditorError(`Unknown brush "${id}". Call list_brush_presets for the ids.`);
+    await this.refreshBrushes();
+  }
+
+  /** The user's saved brushes, as the engine paints them. */
+  getUserBrushes(): PaintBrush[] {
+    return this.brushEntries.filter((e) => !e.builtin).map((e) => normalizePaintBrush(e.brush, e.brush));
+  }
+
+  /** A brush library file (version 2) of the given brushes (default: the user's brushes). */
+  exportBrushes(ids?: readonly string[]): Promise<BrushLibraryFile> {
+    return libraryCall(() => this.brushLibrary.exportFile(ids));
+  }
+
+  /**
+   * Adds the brushes of a library file (version 1 or 2) to the brush library. A brush whose id is
+   * taken is skipped unless `replace` (built-in ids are always skipped). Resolves with the ids
+   * added or replaced, the ids skipped and the problems.
+   */
+  async importBrushes(file: unknown, options: { replace?: boolean } = {}): Promise<{ added: string[]; skipped: string[]; problems: string[] }> {
+    const r = await libraryCall(() => this.brushLibrary.importFile(file, { overwrite: !!options.replace }));
+    await this.refreshBrushes();
+    return { added: [...r.added, ...r.replaced], skipped: r.skipped, problems: r.problems };
   }
 
   /** A thumbnail of a brush: a test stroke on the current paper. */
@@ -2038,7 +2150,7 @@ export class PaintEditorController {
     const brush = this.strokeBrush(init);
     const effect = this.strokeEffect(init, brush);
     if (brush.light.amount > 0) {
-      if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (list_brushes category light), or set light.amount to 0 (set_brush).`);
+      if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
     }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
@@ -2500,7 +2612,8 @@ export class PaintEditorController {
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
-    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushes: this.userBrushes, wet: this.wetOptions });
+    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions });
+    target.brushEntries = this.brushEntries;
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
     target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [] }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
@@ -2563,6 +2676,7 @@ export class PaintEditorController {
 
   /** Stops the wet simulation's worker threads (call when the editor goes away). */
   dispose(): void {
+    this.unsubscribeLibrary();
     this.wet.destroy();
     this.effectsRenderer.dispose();
     this.effectPaintPixels.clear();
@@ -2982,7 +3096,7 @@ export class PaintEditorController {
     if (Object.keys(stickers).length) ext.stickers = stickers;
     else delete ext.stickers;
     const liveStrokes: Record<string, RecordedStroke[]> = {};
-    for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map((x) => JSON.parse(JSON.stringify(x)));
+    for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map(strokeToJSON) as unknown as RecordedStroke[];
     if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
     else delete ext.liveStrokes;
     const light: Record<string, unknown> = {};
@@ -3493,7 +3607,7 @@ export class PaintEditorController {
   private stickerLayer(layerId: string | undefined): { layer: PaintPixelLayer; stickers: Sticker[] } {
     const l = this.wetLayer(layerId, 'edit the stickers of');
     const stickers = this.doc.stickers?.[l.id];
-    if (!stickers) throw new PaintEditorError(`Layer "${l.name}" has no stickers; spray some with a sticker brush (list_brushes category sticker).`);
+    if (!stickers) throw new PaintEditorError(`Layer "${l.name}" has no stickers; spray some with a sticker brush (sticker-stars; list_brush_presets lists them).`);
     return { layer: l, stickers };
   }
 
