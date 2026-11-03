@@ -1,5 +1,21 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { PaintDirector, PaintEditorController, PaintPresence, createPaintEditorDocument, type PaintDirectorOptions, type PaintEditorOptions, type PaintEditorState, type SerializedPaintDocument } from '@pixerate/editor/paint-editor';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  PaintDirector,
+  PaintEditorController,
+  PaintPresence,
+  createPaintChangeFeed,
+  createPaintEditorDocument,
+  createPaintProposals,
+  type PaintChange,
+  type PaintChangeFeed,
+  type PaintDirectorOptions,
+  type PaintEditorOptions,
+  type PaintEditorState,
+  type PaintProposal,
+  type PaintProposals,
+  type PaintProposalsOptions,
+  type SerializedPaintDocument,
+} from '@pixerate/editor/paint-editor';
 import type { EditorDocument } from '@pixerate/editor/persistence';
 
 export interface UsePaintEditorReturn {
@@ -43,4 +59,51 @@ export function usePaintDirector(controller: PaintEditorController, options: Omi
     return { presence, director: new PaintDirector(controller, presence, options) };
   });
   return value;
+}
+
+export interface PaintProposalsHandle {
+  /** The framework-free store (for `createPaintProposalToolProvider` and agents). */
+  readonly store: PaintProposals;
+  /** Pending proposals; pass `store` to `PaintCanvas` (`proposals`) to draw them as ghosts. */
+  proposals: readonly PaintProposal[];
+  propose: PaintProposals['propose'];
+  accept: PaintProposals['accept'];
+  reject: PaintProposals['reject'];
+  clear: PaintProposals['clear'];
+}
+
+/**
+ * Paint an agent suggests without painting it: ghosts the user accepts (painted on a layer of
+ * their own as one undo step, made by the proposer) or dismisses. Pass `store` to `PaintCanvas`
+ * as `proposals` to draw the ghosts, and to `createPaintProposalToolProvider` for agents. Options
+ * are read on the first render. The same API as the Svelte `createPaintProposalState`.
+ */
+export function usePaintProposals(controller: PaintEditorController, options: Omit<PaintProposalsOptions, 'controller'> = {}): PaintProposalsHandle {
+  const [store] = useState(() => createPaintProposals({ ...options, controller }));
+  const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  return useMemo(() => ({ store, proposals: state.proposals, propose: store.propose, accept: store.accept, reject: store.reject, clear: store.clear }), [store, state]);
+}
+
+/**
+ * What changed in the painting, after each change: strokes, fills and layers added, removed or
+ * changed, and the start and end of each stroke, with who made it. For agents that paint
+ * alongside the user. Returns the feed (`null` until mounted) and the latest change. The same API
+ * as the Svelte `createPaintChangeWatcher`.
+ */
+export function usePaintChangeFeed(controller: PaintEditorController, options: { onChange?: (change: PaintChange) => void } = {}): { feed: PaintChangeFeed | null; last: PaintChange | null } {
+  const onChange = useRef(options.onChange);
+  onChange.current = options.onChange;
+  const [last, setLast] = useState<PaintChange | null>(null);
+  const [feed, setFeed] = useState<PaintChangeFeed | null>(null);
+  // The feed lives in the effect, so a StrictMode unmount and remount gets a live one (see GOTCHAS).
+  useEffect(() => {
+    const next = createPaintChangeFeed(controller);
+    next.subscribe((change) => {
+      setLast(change);
+      onChange.current?.(change);
+    });
+    setFeed(next);
+    return () => next.dispose();
+  }, [controller]);
+  return { feed, last };
 }

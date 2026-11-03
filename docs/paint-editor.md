@@ -99,6 +99,18 @@ Strokes are data (`strokes.ts`), and so are fills, clears, flattened relief and 
 
 Stroke-by-stroke painting is a weak fit for a model, so the skill steers agents to what they do well: blocking in shapes and fills, applying a brush or paper across a layer, replaying or varying recorded strokes, washes and glazes, and mixing colours.
 
+### Painting alongside the user
+
+An agent that contributes while the user paints suggests rather than paints:
+
+- **Who painted what.** `PaintEditorController` records each undo step's origin (`withOrigin(origin, fn)`, `user` by default) and reports steps through `onCommit`, so `createOriginMiddleware` can stamp agent tool calls. `group(label, fn)` makes several changes one undo step.
+- **What changed** (`createPaintChangeFeed`): strokes, fills and layers added, removed or changed, and the start and end of each stroke, tagged with who made them. React `usePaintChangeFeed`, Svelte `createPaintChangeWatcher`.
+- **Paint proposals** (`createPaintProposals`, tools `propose_paint`, `list_paint_proposals`, `accept_paint_proposal`, `reject_paint_proposal`):
+  - A proposal is a few operations: strokes along points, a wash over its layer, or an echo of strokes already painted, moved, turned, scaled or repeated.
+  - `previewPaint` paints them on a scratch layer and rolls everything back, so the ghost is the real paint. `PaintCanvas` draws it translucent with a dashed edge (`proposals` prop).
+  - Accepting paints it on a new layer of its own (on top, at the bottom, or above a layer) as one undo step recorded as the proposer's. The user's active layer stays theirs.
+  - Suggestions use dry brushes only: wet media can't be previewed and rolled back.
+
 ## Phases
 
 | Phase | PRs | Shipped |

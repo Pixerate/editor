@@ -32,6 +32,8 @@ export { default as PaintEffectsPanel } from './PaintEffectsPanel.svelte';
 export { default as PaintGradientEditor } from './PaintGradientEditor.svelte';
 export { default as PaintSlider } from './PaintSlider.svelte';
 export { default as PaintPresenceLayer } from './PaintPresenceLayer.svelte';
+export { default as PaintProposalGhosts } from './PaintProposalGhosts.svelte';
+export { createPaintChangeWatcher, createPaintProposalState, type PaintChangeWatcherRune, type PaintProposalStateRune } from './paintProposalRune.svelte.js';
 export { createPaintDirector, createReactivePaintEditor, paintEditorState, paintEffectsProvider, usePaintEffectsTools } from './paintEditorRune.svelte.js';
 
 export type PaintEditorProps = ComponentProps<typeof PaintEditorComponent>;

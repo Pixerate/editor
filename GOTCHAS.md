@@ -3550,3 +3550,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `set_brush { colour: { default: <gradient with unsorted stops> } }` was accepted, and the stops were sorted silently. The old `set_brush { paint }` refused it with "sorted by offset".
 - **Root Cause**: The normaliser reads documents, presets and libraries, where a fix-and-report is right. A tool argument should be refused.
 - **Solution / Workaround**: The paint controller runs `readStrokePaint` (strict) on a gradient `colour.default` in `setBrushFacets`, `setBrushSpec` and `brushChanges` before normalising.
+
+### [core/paint-editor] A Change Feed Must Hear the Commit Before the Change, and a Group Only at Its End
+
+- **Issue / Symptom**: The paint change feed tagged an accepted agent proposal, and agent strokes, as the user's.
+- **Root Cause**: The controller notified state listeners (`emit`) before commit listeners (`onCommit`), so the feed diffed the document before it knew who made the step. Inside `group`, each inner change emitted on its own, before the group's single commit.
+- **Solution / Workaround**: `commit`, `undo`, `redo` and merges call `notifyCommit` before `emit`. Inside `group`, inner changes don't emit; the group emits once, after its commit event. Keep that order in any new path that records a step.
+
+### [core/paint-editor] A Paint Preview Can't Include Wet Paint
+
+- **Issue / Symptom**: Previewing a watercolour stroke would leave the wet simulation changed after the preview rolled the document back.
+- **Root Cause**: `previewPaint` restores the document, history and counters, but the wet simulation (`WetWorld`, workers) has state of its own that isn't part of the document.
+- **Solution / Workaround**: `sessionFor` refuses wet brushes while `previewing`, before the simulation is touched. Paint proposals accept only dry engines (dab, particle, bristle, mixer without pickup).
+
+### [react/paint-editor] `usePaintChangeFeed` Creates Its Feed in the Effect
+
+- **Issue / Symptom**: Under StrictMode, the change feed stopped reporting anything after mount.
+- **Root Cause**: A feed made in `useMemo` subscribes to the controller once. StrictMode runs the unmount cleanup (`dispose`) and remounts, which reuses the disposed feed.
+- **Solution / Workaround**: Create the feed inside the effect, dispose it in that effect's cleanup, and keep it in state, so each mount has a live one. `feed` is `null` until mounted.

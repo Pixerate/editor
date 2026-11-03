@@ -57,3 +57,5 @@ export * from './editorDocument';
 export { StickerBrowser, type StickerBrowserItem, type StickerBrowserState } from '../stickers/browser';
 export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/types';
 export * from './sticker-art';
+export * from './collaboration';
+export * from './collaboration-tools';

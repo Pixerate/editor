@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
-import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools } from '@pixerate/editor-react/paint-editor';
-import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
+import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools, usePaintProposals } from '@pixerate/editor-react/paint-editor';
+import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintProposalToolProvider } from '@pixerate/editor/paint-editor';
+import { createOriginMiddleware } from '@pixerate/editor/tools';
 import { demoBrushLibrary } from '../demoBrushes';
 import { demoStickers } from '../demoStickers';
 import { Brush } from 'lucide-react';
@@ -31,6 +32,16 @@ function PaintView() {
   // facet brushes, then paint__set_brush picks one; previews are test strokes on the current paper.
   const brushTools = useMemo(() => createPaintBrushLibraryToolProvider(editor.controller), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, brushTools);
+  // Agent suggestions: paint__propose_paint shows paint as a ghost over the canvas that the user
+  // accepts (painted on its own layer, one undo step recorded as the agent's) or dismisses below.
+  const proposals = usePaintProposals(editor.controller);
+  const proposalTools = useMemo(() => createPaintProposalToolProvider(proposals.store, { id: 'paint-proposals', namespace: 'paint' }), [proposals.store]);
+  useAgentToolProvider(demoToolRegistry, proposalTools);
+  // Steps the paint tools make are recorded as the calling agent's (agent:<id>), not the user's.
+  useEffect(
+    () => demoToolRegistry.use(createOriginMiddleware({ histories: (call) => (call.provider.id.startsWith('paint') ? editor.controller : undefined) })),
+    [editor.controller]
+  );
   // Save / load (the editor's own tools have undo), with layer pixels kept as assets; and autosave.
   useDemoDocumentTools(editor.editorDocument, { namespace: 'paint', skill: 'pixerate-paint-editor', history: false });
   // The demo-wide effects provider (built-in test effects, or Flair): effect paper, effect layers,
@@ -52,8 +63,28 @@ function PaintView() {
       <EditorDocumentAutosave doc={editor.editorDocument} name="Painting" />
       <div className="relative">
         {/* The director's presence is the editor's playback cursor too: strokes and panel edits share it. */}
-        <PaintEditor controller={editor.controller} height={760} presence={presence} playback={demoPlayback} />
+        <PaintEditor controller={editor.controller} height={760} presence={presence} proposals={proposals.store} playback={demoPlayback} />
       </div>
+      {proposals.proposals.length > 0 && (
+        <div className="bg-violet-950/40 border border-violet-800/60 rounded-xl p-3 flex flex-col gap-2" aria-label="Paint suggestions">
+          <span className="text-xs font-semibold uppercase tracking-wider text-violet-300">Suggestions</span>
+          {proposals.proposals.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 text-xs text-slate-200" data-paint-suggestion={p.id}>
+              <span className="font-medium">{p.title}</span>
+              {p.rationale && <span className="text-slate-400 truncate">{p.rationale}</span>}
+              <span className="text-slate-500">({p.origin})</span>
+              <span className="ml-auto flex gap-1.5">
+                <button type="button" className="px-2 py-0.5 rounded border border-violet-600 bg-violet-600/30 hover:bg-violet-600/50" onClick={() => proposals.accept(p.id)}>
+                  Accept
+                </button>
+                <button type="button" className="px-2 py-0.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700" onClick={() => proposals.reject(p.id)}>
+                  Dismiss
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <EffectsProviderSwitch />
       <AgentScriptPanel
         scripts={scripts}
