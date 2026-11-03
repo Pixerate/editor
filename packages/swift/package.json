@@ -1,0 +1,12 @@
+{
+  "name": "@pixerate/swift",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Native Swift editors for macOS and iOS (SwiftPM; the manifest is Package.swift at the repository root). Versioned with changesets; released as SwiftPM tags.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pixerate/editor.git",
+    "directory": "packages/swift"
+  }
+}
