@@ -161,6 +161,43 @@ describe('createCanvasChangeFeed', () => {
 		expect(heard).toEqual([1]);
 	});
 
+	it('reports the end of a gesture even when the drop changes nothing else', () => {
+		const { canvas } = setup();
+		const feed = createCanvasChangeFeed({ getNodes: () => canvas.nodes, getEdges: () => canvas.edges });
+		canvas.nodes = [{ ...canvas.nodes[0]!, position: { x: 40, y: 0 }, dragging: true }];
+		expect(feed.check()).toMatchObject({ inGesture: true });
+		expect(feed.check()?.gestureEnded).toBeUndefined();
+		// The drop only clears the runtime flag: still reported, once, with nothing else in it.
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: false }];
+		expect(feed.check()).toMatchObject({ inGesture: false, gestureEnded: true, changedNodes: [], addedNodes: [], removedNodes: [] });
+		canvas.nodes = [{ ...canvas.nodes[0]!, measured: { width: 10 } }];
+		expect(feed.check()).toBeNull();
+		// A drop that also moves the node reports the move and the end together.
+		canvas.nodes = [{ ...canvas.nodes[0]!, resizing: true, width: 50 }];
+		expect(feed.check()).toMatchObject({ inGesture: true });
+		canvas.nodes = [{ ...canvas.nodes[0]!, resizing: false, width: 60 }];
+		const end = feed.check()!;
+		expect(end).toMatchObject({ inGesture: false, gestureEnded: true });
+		expect(end.changedNodes[0]!.fields).toEqual(['width']);
+		// A plain edit afterwards is not a gesture end.
+		canvas.nodes = [{ ...canvas.nodes[0]!, data: { label: 'x' } }];
+		expect(feed.check()?.gestureEnded).toBeUndefined();
+	});
+
+	it('carries a gesture in progress across reset, so its end is still reported', () => {
+		const { canvas } = setup();
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: true }];
+		const feed = createCanvasChangeFeed({ getNodes: () => canvas.nodes, getEdges: () => canvas.edges });
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: false }];
+		expect(feed.check()).toMatchObject({ gestureEnded: true });
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: true }];
+		feed.reset();
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: false }];
+		expect(feed.check()).toMatchObject({ gestureEnded: true });
+		canvas.nodes = [{ ...canvas.nodes[0]!, dragging: true }];
+		expect(feed.check()).toBeNull();
+	});
+
 	it('takes commits it is told about with noteCommit', () => {
 		const { canvas, history } = setup();
 		const feed = createCanvasChangeFeed({ getNodes: () => canvas.nodes, getEdges: () => canvas.edges });

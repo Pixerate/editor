@@ -3550,3 +3550,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `set_brush { colour: { default: <gradient with unsorted stops> } }` was accepted, and the stops were sorted silently. The old `set_brush { paint }` refused it with "sorted by offset".
 - **Root Cause**: The normaliser reads documents, presets and libraries, where a fix-and-report is right. A tool argument should be refused.
 - **Solution / Workaround**: The paint controller runs `readStrokePaint` (strict) on a gradient `colour.default` in `setBrushFacets`, `setBrushSpec` and `brushChanges` before normalising.
+
+### [core/canvas] A Drop Changes Nothing the Change Feed Compares, So Followers Never Heard the Gesture End
+
+- **Issue / Symptom**: An agent following the canvas (jazz) stopped responding after the user dragged a node. It waited forever for the drag to finish.
+- **Root Cause**: During a drag, each move is reported with `inGesture: true`. The drop often only clears `dragging`, a runtime field the feed ignores when diffing, so `check()` found no change and reported nothing. Followers never got a change with `inGesture: false`.
+- **Solution / Workaround**: The feed remembers whether the last snapshot was mid-gesture and reports the first change after a gesture as `gestureEnded: true`, even when nothing else changed (empty arrays). Followers that wait for gestures should treat `gestureEnded` as the end of the user's action.

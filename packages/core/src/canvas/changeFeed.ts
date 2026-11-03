@@ -44,6 +44,12 @@ export interface CanvasChange<TNode extends CanvasNode = CanvasNode, TEdge exten
 	selection?: { before: string[]; after: string[] };
 	/** A node is being dragged or resized: more changes of the same gesture will follow. */
 	inGesture: boolean;
+	/**
+	 * The drag or resize that earlier changes reported (`inGesture`) has ended. Set on the first
+	 * change after it, which the feed reports even when nothing else changed: a drop often only
+	 * clears the runtime `dragging` flag, and followers need to know the gesture is over.
+	 */
+	gestureEnded?: true;
 	/** Milliseconds since the epoch. */
 	at: number;
 }
@@ -101,6 +107,9 @@ export function createCanvasChangeFeed<TNode extends CanvasNode = CanvasNode, TE
 	let seq = 0;
 	/** The latest history step not yet matched to a change. */
 	let pending: HistoryCommitEvent | undefined;
+	const gesturing = (list: readonly TNode[]) => list.some((n) => n.dragging || n.resizing);
+	/** Whether the last snapshot was mid-gesture, to report when the gesture ends. */
+	let wasInGesture = gesturing(nodes);
 
 	const check = (): CanvasChange<TNode, TEdge> | null => {
 		const nextNodes = options.getNodes();
@@ -135,8 +144,11 @@ export function createCanvasChangeFeed<TNode extends CanvasNode = CanvasNode, TE
 
 		nodes = nextNodes;
 		edges = nextEdges;
+		const inGesture = gesturing(nextNodes);
+		const gestureEnded = wasInGesture && !inGesture;
+		wasInGesture = inGesture;
 		const edited = addedNodes.length + removedNodes.length + changedNodes.length + addedEdges.length + removedEdges.length + changedEdges.length > 0;
-		if (!edited && !selectionChanged) return null;
+		if (!edited && !selectionChanged && !gestureEnded) return null;
 
 		const commit = edited ? pending : undefined;
 		if (edited) pending = undefined;
@@ -151,7 +163,8 @@ export function createCanvasChangeFeed<TNode extends CanvasNode = CanvasNode, TE
 			removedEdges,
 			changedEdges,
 			...(selectionChanged ? { selection: { before: selBefore, after: selAfter } } : {}),
-			inGesture: nextNodes.some((n) => n.dragging || n.resizing),
+			inGesture,
+			...(gestureEnded ? { gestureEnded: true as const } : {}),
 			at: now()
 		};
 		listeners.forEach((l) => l(change));
@@ -178,6 +191,7 @@ export function createCanvasChangeFeed<TNode extends CanvasNode = CanvasNode, TE
 			nodes = options.getNodes();
 			edges = options.getEdges();
 			pending = undefined;
+			wasInGesture = gesturing(nodes);
 		},
 		noteCommit,
 		dispose: () => {
