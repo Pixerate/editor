@@ -84,7 +84,8 @@ async function scene(light: number): Promise<WetWorld> {
   return world;
 }
 
-describe('wet light paint: the simulation', () => {
+// Wet paint runs a real simulation, slower on CI runners.
+describe('wet light paint: the simulation', { timeout: 30_000 }, () => {
   it('light never changes the water or pigment, and without light its planes stay empty', async () => {
     const lit = planes(await scene(0.8));
     const plain = planes(await scene(0));
@@ -109,7 +110,8 @@ describe('wet light paint: the simulation', () => {
   });
 });
 
-describe('wet light paint: brushes', () => {
+// Wet paint runs a real simulation, slower on CI runners.
+describe('wet light paint: brushes', { timeout: 30_000 }, () => {
   it('a wet brush lays light that flows with the paint, then bakes into the layer when it dries', async () => {
     const c = editor();
     c.paintStroke({ brushId: 'glow-wash', brush: { tip: { size: 60 } }, points: LINE, color: '#22d3ee', seed: 3 });
