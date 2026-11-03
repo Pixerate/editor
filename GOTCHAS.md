@@ -3545,6 +3545,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `migrateBrushV1` builds facets from what the engine reads. Medium, variety, description, tags, suggested colours, light spill and glow, and motion hints aren't in the engine brush.
 - **Solution / Workaround**: `brushSpecOf(next, from)` migrates the edited brush and carries the hints over from the facets it was edited from. It keeps them only if the brush still resolves to the same engine brush (a wet variety on a dab brush would change it). The controller keeps the active brush's facets next to its engine form, and uses them for `getBrushSpec()` and saving.
 
+### [conformance] Contract Files Are Generated: Change the Code, Then Run `pnpm contracts`
+
+- **Issue / Symptom**: `brush-contracts.test.ts` fails with "matches the code" after a change to a preset, the brush schema, a profile, the resolver, migration, the library tools or the editor sections.
+- **Root Cause**: `packages/conformance/domains/brushes/*.json` are snapshots of `brushContracts()`, committed so the Swift port can conform to them. They are meant to change whenever the behaviour they describe changes.
+- **Solution / Workaround**: Build the core, then run `pnpm contracts` (`node scripts/export-contracts.mjs`) and commit the changed files with the change that caused them. Never edit them by hand. Keep the package version out of the contracts: a release would change every file. Bump `BRUSH_CONTRACT_FORMAT_VERSION` only when a file changes shape. `@pixerate/conformance` is private, so changesets skip it: a first npm publish needs npm's trusted publishing set up for the new name first.
+
 ### [core/paint-editor] A Brush's Default Colour Is Taken When the Brush Is Chosen, Not When It Paints
 
 - **Issue / Symptom**: Should the highlighter paint yellow? Applying `colour.default` at every stroke would override the colour the user just picked. Ignoring it would make the highlighter paint the last colour used.

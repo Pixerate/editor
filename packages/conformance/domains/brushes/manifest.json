@@ -1,0 +1,25 @@
+{
+  "domain": "brushes",
+  "formatVersion": 1,
+  "limits": {
+    "maxPalette": 16
+  },
+  "counts": {
+    "presets": 73,
+    "profiles": 4,
+    "migrations": 14,
+    "editorSections": 28
+  },
+  "files": [
+    "brush.schema.json",
+    "checks.json",
+    "editor-sections.json",
+    "library-file.schema.json",
+    "migrations.json",
+    "presets.json",
+    "profile.schema.json",
+    "profiles.json",
+    "resolved.json",
+    "tools.json"
+  ]
+}

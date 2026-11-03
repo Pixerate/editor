@@ -1,0 +1,3067 @@
+{
+  "tools": [
+    {
+      "name": "list_brush_presets",
+      "title": "List brushes",
+      "description": "Lists the brush library (built-in presets and saved brushes) that this host (Paint editor) can render, filtered by kind, medium, variety, tool, tag or words. Returns each brush's id (for describe_brush, create_brush basedOn, duplicate_brush and the editor's set_brush), name, builtin, kind, medium, variety or tool, category, engine, tip shape and size, marks, surface and light, plus total. Call it first to find the nearest brush to start from. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mark",
+              "tool"
+            ],
+            "description": "mark (lays a material) or tool (works on paint already down)."
+          },
+          "medium": {
+            "type": "string",
+            "enum": [
+              "paint",
+              "ink",
+              "dry",
+              "spray"
+            ],
+            "description": "Marks laying this medium."
+          },
+          "variety": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "This variety (oil, watercolor, pencil, highlighter…)."
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "eraser",
+              "blender",
+              "smudge",
+              "water",
+              "dryer",
+              "blow",
+              "blot",
+              "wet-blend",
+              "wet-drag"
+            ],
+            "description": "Tools that do this."
+          },
+          "tag": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Brushes with this tag."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Words in the id, name, description, variety or tags (each word must match the start of one)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "all",
+              "builtin",
+              "user"
+            ],
+            "description": "all (default), builtin presets only, or user (saved) brushes only."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Also list brushes this host can't render, each with renderable false (default false)."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Skip this many (default 0)."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "At most this many (default 100)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "List brushes",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "describe_brush",
+      "title": "Describe a brush",
+      "description": "Reads one brush by id: its full facet spec (kind, medium, variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), whether it is built in, the engine and category it resolves to, and check: what this host (Paint editor) refuses or paints without, each with a fix. Unknown ids are refused with the closest ones. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Brush id from list_brush_presets (lowercase letters, digits and dashes)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Describe a brush",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "check_brush",
+      "title": "Check a brush for a host",
+      "description": "Checks a brush (by id, or a facet spec not yet saved) against a host profile: paint, image, canvas, vector (default this host, paint). Returns ok (no errors), issues (facet, severity error or warning, reason, fix) and, when it is refused, degraded: the brush with the refused facets stripped and what was dropped. Use it before create_brush, or to see whether a brush works in another editor. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "A brush in the library (give id or brush, not both)."
+          },
+          "brush": {
+            "type": "object",
+            "description": "A facet brush spec (the create_brush fields, with id and name)."
+          },
+          "host": {
+            "type": "string",
+            "enum": [
+              "paint",
+              "image",
+              "canvas",
+              "vector"
+            ],
+            "description": "The host profile (default paint)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Check a brush for a host",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "export_brushes",
+      "title": "Export brushes",
+      "description": "Writes a brush library file (format pixerate-brushes, version 2) of the saved brushes, or of the ids given (built-ins included). Returns the file as JSON, for import_brushes in another library. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+              "description": "Brush id from list_brush_presets (lowercase letters, digits and dashes)."
+            },
+            "description": "Only these brushes (default every saved brush)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Export brushes",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "preview_brush",
+      "title": "Preview a brush",
+      "description": "Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Returns the image plus id, width and height. Changes nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Brush id from list_brush_presets (lowercase letters, digits and dashes)."
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 32,
+            "maximum": 1024,
+            "description": "Image width in px (default 256)."
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 512,
+            "description": "Image height in px (default 96)."
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "Paint colour #rrggbb (default the brush's own default colour, else #1f2937)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Preview a brush",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "create_brush",
+      "title": "Save a new brush",
+      "description": "Saves a new brush made of facets (to save an editor's current brush settings, pass the brush get_brush returns), optionally basedOn an existing brush (its facets are copied and the ones given here laid over them: objects merge, lists and values replace). Values are normalised (out-of-range numbers clamped, unused facets dropped, each reported in problems) and checked against this host (Paint editor): a brush it can't render is refused with the facet and fix, and nothing is saved. Returns the new id, the stored brush, the engine it resolves to, problems and warnings (settings this host paints without). Start from the nearest preset (list_brush_presets) rather than from nothing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "The new brush id: lowercase letters, digits and dashes, not taken (list_brush_presets)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Display name."
+          },
+          "basedOn": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Copy this brush's facets first (a built-in preset or a saved brush)."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What the brush is for, in a sentence."
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+              "description": "A tag: lowercase letters, digits and dashes."
+            },
+            "description": "Search tags."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mark",
+              "tool"
+            ],
+            "description": "mark: lays a material (see medium); tool: works on paint already down (see tool)."
+          },
+          "medium": {
+            "type": "string",
+            "enum": [
+              "paint",
+              "ink",
+              "dry",
+              "spray"
+            ],
+            "description": "Marks: what it lays. paint (dry, wet or thick), ink, dry (pencil, pastel, charcoal) or spray (airbrush). Descriptive: the tip, marks and behaviour decide how it renders."
+          },
+          "variety": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium."
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "eraser",
+              "blender",
+              "smudge",
+              "water",
+              "dryer",
+              "blow",
+              "blot",
+              "wet-blend",
+              "wet-drag"
+            ],
+            "description": "Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint."
+          },
+          "tip": {
+            "type": "object",
+            "description": "The tip: its shape and the dab it lays. In a patch, shape may be left out to keep it.",
+            "properties": {
+              "shape": {
+                "type": "string",
+                "enum": [
+                  "round",
+                  "flat",
+                  "chisel",
+                  "bristle",
+                  "stamp"
+                ],
+                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles."
+              },
+              "size": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 2500,
+                "description": "Diameter in px (default 20)."
+              },
+              "hardness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Edge hardness, 0 soft .. 1 hard (default 1)."
+              },
+              "spacing": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 10,
+                "description": "Dab spacing as a fraction of the diameter: 0.05 smooth, 1 dotted (default 0.1)."
+              },
+              "angle": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360,
+                "description": "Tip angle in degrees, counter-clockwise; added to the stroke direction or barrel with dynamics.rotation (default 0)."
+              },
+              "roundness": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 1,
+                "description": "Roundness: 1 round (default), lower a flat ellipse (pastel, chisel)."
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Stroke opacity ceiling: overlapping dabs never exceed it (default 1)."
+              },
+              "flow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Build-up per dab towards the opacity: low flow builds softly, like an airbrush (default 1)."
+              },
+              "blend": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "darken",
+                  "multiply",
+                  "color-burn",
+                  "linear-burn",
+                  "darker-color",
+                  "lighten",
+                  "screen",
+                  "color-dodge",
+                  "linear-dodge",
+                  "lighter-color",
+                  "overlay",
+                  "soft-light",
+                  "hard-light",
+                  "vivid-light",
+                  "linear-light",
+                  "pin-light",
+                  "hard-mix",
+                  "difference",
+                  "exclusion",
+                  "subtract",
+                  "divide",
+                  "hue",
+                  "saturation",
+                  "color",
+                  "luminosity",
+                  "pigment",
+                  "watercolor",
+                  "tint",
+                  "highlight",
+                  "shadow"
+                ],
+                "description": "How the stroke paints onto the layer (default normal). pigment mixes like real paint; multiply darkens like marker ink; watercolor glazes; tint, highlight and shadow recolour, light and shade."
+              },
+              "bristle": {
+                "type": "object",
+                "description": "Bristle tips: the tuft. Missing fields take their defaults.",
+                "properties": {
+                  "count": {
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 128,
+                    "description": "Bristles in the tuft (default 32)."
+                  },
+                  "stiffness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Stiff bristles follow the tip; soft ones lag and bend into curves at turns (default 0.5)."
+                  },
+                  "splay": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far pressure spreads the tuft (default 0.5)."
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Each bristle's line width as a fraction of the tip size (default 0.06)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint per bristle: 1 never runs dry; lower, bristles run out along the stroke, a dry brush (default 0.6)."
+                  },
+                  "jitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random variation between bristles: length, paint, position (default 0.4)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "stamps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[^:\\s]+:\\S+|dot|star|heart|leaf|flower|confetti|splat|sparkle|ring)$",
+                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring). A bare editor stamp (star) means editor:star."
+                },
+                "description": "Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first 4 in marks.stampOrder, and repeats weight the order."
+              }
+            },
+            "additionalProperties": false
+          },
+          "marks": {
+            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).",
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Dabs laid along the path (the default).",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "continuous",
+                    "description": "Always \"continuous\"."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "A spray (a spray can): each dab lays a seeded scatter of droplets across the tip; jitter and size come from dynamics and the tip. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "scatter",
+                    "description": "Always \"scatter\"."
+                  },
+                  "density": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Droplets per dab: 1 + density × 31 (default 0.5)."
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0.02,
+                    "maximum": 1,
+                    "description": "Droplet size as a fraction of the tip size (default 0.12)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "Particles that move with the pen and draw as they go. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "particles",
+                    "description": "Always \"particles\"."
+                  },
+                  "physics": {
+                    "type": "string",
+                    "enum": [
+                      "string",
+                      "spring",
+                      "orbit",
+                      "flow",
+                      "elastic",
+                      "fuzzy"
+                    ],
+                    "description": "How the particles move (default spring). string: strands dragged behind the pen (hair, fur); spring: on springs to the pen, overshooting; orbit: circling the pen (curls); flow: thrown into a swirling flow until they fade; elastic: links that stretch and snap back; fuzzy: winding strings waving out of step."
+                  },
+                  "render": {
+                    "type": "string",
+                    "enum": [
+                      "dot",
+                      "line",
+                      "sequence",
+                      "ribbon"
+                    ],
+                    "description": "How they draw (default line). dot: a mark per step; line: a continuous line each; sequence: beads spaced along each path; ribbon: the band between neighbouring paths filled."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "Particles (flow: thrown per tip of travel). Default 12."
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Mark size as a fraction of the tip size; ribbon: its edge width (default 0.08)."
+                  },
+                  "spread": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far apart they start, as a fraction of the tip size; ribbon: its width (default 0.5)."
+                  },
+                  "stiffness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Spring, string and elastic stiffness: stiff follows closely, soft swings wide (default 0.4)."
+                  },
+                  "damping": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How quickly motion dies down (default 0.25)."
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Orbit and flow speed (default 0.5)."
+                  },
+                  "gravity": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "description": "Pull downwards; negative pulls up (default 0)."
+                  },
+                  "life": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Flow particles: how long they live (default 0.5)."
+                  },
+                  "interval": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Sequence: spacing of the beads (default 0.3)."
+                  },
+                  "ribbonFill": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Ribbon: fill opacity between the paths, relative to their edges (default 0.5; 0 only edges)."
+                  },
+                  "ribbonPairs": {
+                    "type": "string",
+                    "enum": [
+                      "adjacent",
+                      "first-last"
+                    ],
+                    "description": "Ribbon: adjacent (default) joins each particle to its neighbour; first-last makes one band between the outermost two."
+                  },
+                  "waveAmplitude": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wave: sideways swing as a fraction of the tip size (default 0: no wave)."
+                  },
+                  "waveLength": {
+                    "type": "number",
+                    "minimum": 4,
+                    "maximum": 2000,
+                    "description": "Wave: wavelength in px of pen travel (default 60)."
+                  },
+                  "wavePhaseJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wave: how far out of step the particles' waves are; 0 in step, 1 random phases (default 0)."
+                  },
+                  "stampOrder": {
+                    "type": "string",
+                    "enum": [
+                      "sequence",
+                      "random"
+                    ],
+                    "description": "Stamp tips: sequence (default) uses the stamps in turn; random picks one per dot, seeded."
+                  },
+                  "stampRotation": {
+                    "type": "string",
+                    "enum": [
+                      "follow",
+                      "random",
+                      "fixed"
+                    ],
+                    "description": "Stamp tips: follow turns each with its particle's motion; random (default); fixed uses the tip angle."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "Each mark stays an editable object (a sticker) on a sticker layer; needs a stamp tip. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "objects",
+                    "description": "Always \"objects\"."
+                  },
+                  "density": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "About density × 4 marks per tip diameter of travel; 0.25 ≈ one per diameter (default 0.4)."
+                  },
+                  "sizeJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random size change (default 0.4)."
+                  },
+                  "rotationJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random turn as a fraction of ±180° (default 1)."
+                  },
+                  "scatter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "How far from the path marks land, in tip diameters (default 0.5)."
+                  },
+                  "colourJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "dynamics": {
+            "type": "object",
+            "description": "Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing. Every amount 0 (off) .. 1 unless noted; missing fields take their defaults.",
+            "properties": {
+              "pressureSize": {
+                "type": "boolean",
+                "description": "Pressure scales the size, down to minSize (default true)."
+              },
+              "pressureOpacity": {
+                "type": "boolean",
+                "description": "Pressure scales the opacity (default false)."
+              },
+              "smoothing": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.95,
+                "description": "Position smoothing of the input (default 0)."
+              },
+              "pressureSmoothing": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.95,
+                "description": "Pressure smoothing, separate from position smoothing (default 0)."
+              },
+              "rotation": {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "stroke",
+                  "barrel"
+                ],
+                "description": "What turns the tip: fixed (tip.angle, default), stroke (direction of travel) or barrel (pen barrel rotation)."
+              },
+              "minSize": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Size at zero pressure as a fraction of the full size, with pressureSize (default 0)."
+              },
+              "pressureFlow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much pressure scales flow (default 0)."
+              },
+              "tiltSize": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down widens the tip, up to 2.5× (default 0)."
+              },
+              "tiltRoundness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down flattens the tip along the tilt, side-of-the-pencil shading (default 0)."
+              },
+              "tiltOpacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down lightens the mark (default 0)."
+              },
+              "velocitySize": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1,
+                "description": "Positive grows the tip on fast strokes, negative thins it; needs timed points (default 0)."
+              },
+              "velocityOpacity": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1,
+                "description": "Positive darkens fast marks, negative lightens them; needs timed points (default 0)."
+              },
+              "sizeJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random size change per dab (default 0)."
+              },
+              "angleJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random angle per dab, as a fraction of ±180° (default 0)."
+              },
+              "opacityJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random opacity drop per dab (default 0)."
+              },
+              "scatter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 4,
+                "description": "Random offset across the stroke, in diameters (default 0)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "behaviour": {
+            "type": "object",
+            "description": "What the material does on the surface, and how tools work. Missing fields take their defaults.",
+            "properties": {
+              "surface": {
+                "type": "string",
+                "enum": [
+                  "dry",
+                  "wet",
+                  "thick"
+                ],
+                "description": "dry (default): stays where it lands; wet: flows, pools and dries (see wet); thick: stands up in relief (see thick)."
+              },
+              "grain": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Default 0."
+              },
+              "mixing": {
+                "type": "string",
+                "enum": [
+                  "pigment",
+                  "rgb"
+                ],
+                "description": "How colours mix: pigment (Kubelka-Munk, blue and yellow make green) or rgb (straight averages). Default pigment; a Mixer Brush and the smudge tool default to rgb."
+              },
+              "exchange": {
+                "type": "object",
+                "description": "Paint exchange with the canvas: picking up paint and mixing it into what the brush lays. Paint brushes on a dry, wet or thick surface and Mixer Brushes.",
+                "properties": {
+                  "pickup": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Pick-up ratio: how much of the paint under each dab the brush lifts and carries (default 0; with a reservoir 0.5)."
+                  },
+                  "mix": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Mix ratio: how much of the carried paint goes into what the brush lays, against its own colour (default 0.5)."
+                  },
+                  "dirty": {
+                    "type": "boolean",
+                    "description": "Keep the carried paint after the stroke, so the next one starts with the last colour touched (default false)."
+                  },
+                  "reservoir": {
+                    "type": "object",
+                    "description": "A paint reservoir makes this a Mixer Brush (an empty object takes every default).",
+                    "properties": {
+                      "load": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much paint the reservoir holds; below 1 it drains per dab and long strokes run dry (default 0.5)."
+                      },
+                      "refill": {
+                        "type": "boolean",
+                        "description": "Refill with the paint colour before each stroke (default true)."
+                      },
+                      "loadsColour": {
+                        "type": "boolean",
+                        "description": "Load the current colour at all (default true; false: it only moves paint already down)."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "wet": {
+                "type": "object",
+                "description": "Wet surface (watercolour, gouache, wet oil) and the wet tools. Missing fields take their defaults.",
+                "properties": {
+                  "medium": {
+                    "type": "string",
+                    "enum": [
+                      "watercolor",
+                      "gouache",
+                      "oil"
+                    ],
+                    "description": "The wet medium; a layer takes the medium's wet settings the first time it holds wet paint (default: the variety when it is watercolor, gouache or oil, else watercolor)."
+                  },
+                  "water": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wetness: water laid, 0.2 a damp brush .. 1 dripping (default 0.5)."
+                  },
+                  "pigment": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Pigment concentration: 0 clear water .. 1 straight from the tube (default 0.5)."
+                  },
+                  "body": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Body: 0 transparent watercolour .. 1 opaque gouache (default 0)."
+                  },
+                  "rewet": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much dried paint the water lifts again: 0 staining (default 0)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint loading: 1 never runs out; lower, the brush runs dry along a long stroke (default 1)."
+                  },
+                  "thinner": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Thinner (water or solvent): more transparent, runnier paint (default 0)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "thick": {
+                "type": "object",
+                "description": "Thick surface (impasto: paint with relief, lit by the canvas lighting). Missing fields take their defaults.",
+                "properties": {
+                  "applicator": {
+                    "type": "string",
+                    "enum": [
+                      "brush",
+                      "tube",
+                      "knife",
+                      "roller",
+                      "gloop"
+                    ],
+                    "description": "What lays the paint (default brush). brush: bristle ridges; tube: blobs squeezed from the tube; knife: scrapes the relief flat and smears; roller: a flat stippled band; gloop: a thick glossy bead."
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far the paint stands up (default 0.6)."
+                  },
+                  "gloss": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Shine: 0 matte .. 1 wet-looking gloss (default 0.4)."
+                  },
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Metallic: highlights take the paint colour, gold, copper, silver (default 0)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint loading: 1 never runs out; lower, the stroke thins as the brush empties (default 0.9)."
+                  },
+                  "thinner": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Thinner: flatter, more transparent paint (default 0)."
+                  },
+                  "drag": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Knife and brush: how much of the paint under the tool is dragged along (default 0.4)."
+                  },
+                  "rim": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Light paint: light is stronger where the bead turns away, as on backlit glass (default 0)."
+                  },
+                  "clarity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Glassy paint: the middle of a bead lets the layers below show through (default 0)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "strength": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Tools: how strongly the blender, smudge or wet tool works per dab (default 0.5; smudge 0.7)."
+              },
+              "distance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Blender: how far away colours are mixed in, as a fraction of the tip diameter (default 0.35)."
+              },
+              "length": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Smudge: how far paint is dragged, the share of carried paint kept per dab (default 0.85)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "light": {
+            "type": "object",
+            "description": "Light the brush gives off with its colour (glow and spill). Give light brushes dark paper.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Light per dab, scaled by its coverage and flow (default 0: none)."
+              },
+              "pressure": {
+                "type": "boolean",
+                "description": "Pressure scales the light (default false)."
+              },
+              "spill": {
+                "type": "object",
+                "description": "Suggested spill for the layer, applied when it has none of its own.",
+                "properties": {
+                  "radius": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 512,
+                    "description": "How far the light reaches, px; 0 turns spill off (a highlighter)."
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "How strong the spill is."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "glow": {
+                "type": "boolean",
+                "description": "Suggest a glow layer effect for the layer (glow stays a layer effect)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "motion": {
+            "type": "object",
+            "description": "Animation after painting.",
+            "properties": {
+              "live": {
+                "type": "boolean",
+                "description": "Effect paint keeps playing on stroke layers (default false)."
+              },
+              "fps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60,
+                "description": "Suggested playback rate in frames per second."
+              },
+              "waveSpeed": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Particle waves: how fast they run by stroke time; 0 they stand still (default 0), 1 about four a second."
+              }
+            },
+            "additionalProperties": false
+          },
+          "colour": {
+            "type": "object",
+            "description": "The brush's colours. The user's colour still wins unless own is set.",
+            "properties": {
+              "default": {
+                "description": "The colour the brush starts with. A gradient is always painted (its paint / secondary stops take the user's colours); a solid colour or effect paint is suggested to the host.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                    "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                  },
+                  {
+                    "type": "object",
+                    "description": "A colour for each colour scheme; the host picks one when the stroke starts and records it.",
+                    "properties": {
+                      "light": {
+                        "type": "string",
+                        "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                        "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                      },
+                      "dark": {
+                        "type": "string",
+                        "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                        "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                      }
+                    },
+                    "required": [
+                      "light",
+                      "dark"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Gradient paint: the brush samples it dab by dab as the stroke goes. Example (blue to yellow over 300 px of stroke, and back): { \"type\": \"gradient\", \"stops\": [{ \"offset\": 0, \"color\": \"#1d4ed8\" }, { \"offset\": 1, \"color\": \"#facc15\" }], \"map\": { \"by\": \"distance\", \"length\": 300, \"repeat\": \"mirror\" } }.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "gradient"
+                        ],
+                        "description": "Always \"gradient\"."
+                      },
+                      "stops": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 16,
+                        "items": {
+                          "type": "object",
+                          "description": "A gradient stop.",
+                          "properties": {
+                            "offset": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "Where the stop is, 0..1 along the gradient. Stops must be sorted by offset."
+                            },
+                            "color": {
+                              "type": "string",
+                              "pattern": "^(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|paint|secondary)$",
+                              "description": "#rrggbb, or \"paint\" / \"secondary\": the editor's paint or second colour when the stroke starts."
+                            },
+                            "opacity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "0..1 (default 1): multiplies the brush's flow where this colour is laid."
+                            },
+                            "midpoint": {
+                              "type": "number",
+                              "minimum": 0.05,
+                              "maximum": 0.95,
+                              "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 of the way (default 0.5)."
+                            }
+                          },
+                          "required": [
+                            "offset",
+                            "color"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "2..16 stops sorted by offset."
+                      },
+                      "space": {
+                        "type": "string",
+                        "enum": [
+                          "pigment",
+                          "oklab",
+                          "srgb"
+                        ],
+                        "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                      },
+                      "map": {
+                        "type": "object",
+                        "description": "What moves the stroke along the gradient (default distance, 300 px, mirror).",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "enum": [
+                              "distance",
+                              "pressure",
+                              "tilt",
+                              "velocity",
+                              "direction",
+                              "time",
+                              "across-tip",
+                              "random"
+                            ],
+                            "description": "distance: px (or dabs) of stroke travelled; pressure: pen pressure 0..1; tilt: pen lean, upright 0 .. flat 1; velocity: pen speed, 0 .. 2.5 px/ms; direction: direction of travel, once round per 360°; time: ms since the stroke began (needs timed points); across-tip: left to right across the tip, looking along the stroke (a brush loaded with several colours); random: a random point per dab (seeded, so replays match)."
+                          },
+                          "length": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 100000,
+                            "description": "distance: px of travel (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                          },
+                          "repeat": {
+                            "type": "string",
+                            "enum": [
+                              "clamp",
+                              "repeat",
+                              "mirror"
+                            ],
+                            "description": "distance and time: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default for distance, clamp for time)."
+                          },
+                          "unit": {
+                            "type": "string",
+                            "enum": [
+                              "px",
+                              "dabs"
+                            ],
+                            "description": "distance: px (default) or dabs."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 600000,
+                            "description": "time: ms per run through the gradient (default 2000)."
+                          },
+                          "every": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "description": "random: dabs per random pick (default 1)."
+                          }
+                        },
+                        "required": [
+                          "by"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "softness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "stops"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Effect paint: the brush paints an effect (search_effects).",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "effect",
+                        "description": "Always \"effect\"."
+                      },
+                      "effect": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The effect id."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "The provider's id when it was chosen."
+                      },
+                      "values": {
+                        "type": "object",
+                        "description": "Every control value (number, string, boolean or a number list)."
+                      },
+                      "time": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Which moment of an animated effect, ms."
+                      },
+                      "map": {
+                        "type": "object",
+                        "description": "Lay the effect along each stroke instead of fixing it to the canvas.",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "const": "stroke",
+                            "description": "Always \"stroke\"."
+                          },
+                          "length": {
+                            "type": "number",
+                            "minimum": 16,
+                            "maximum": 4096,
+                            "description": "Strip length: px of stroke per repeat of the effect."
+                          },
+                          "repeat": {
+                            "type": "string",
+                            "enum": [
+                              "repeat",
+                              "mirror",
+                              "clamp"
+                            ],
+                            "description": "Past the strip end: start again, run back or hold."
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "length",
+                          "repeat"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "live": {
+                        "type": "boolean",
+                        "description": "On a stroke layer the stroke keeps playing the effect."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "effect",
+                      "provider",
+                      "values",
+                      "time"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "palette": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "description": "A colour a brush can carry: a solid colour, a light / dark pair, a gradient or effect paint.",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                      "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                    },
+                    {
+                      "type": "object",
+                      "description": "A colour for each colour scheme; the host picks one when the stroke starts and records it.",
+                      "properties": {
+                        "light": {
+                          "type": "string",
+                          "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                          "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                        },
+                        "dark": {
+                          "type": "string",
+                          "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                          "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                        }
+                      },
+                      "required": [
+                        "light",
+                        "dark"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "Gradient paint: the brush samples it dab by dab as the stroke goes. Example (blue to yellow over 300 px of stroke, and back): { \"type\": \"gradient\", \"stops\": [{ \"offset\": 0, \"color\": \"#1d4ed8\" }, { \"offset\": 1, \"color\": \"#facc15\" }], \"map\": { \"by\": \"distance\", \"length\": 300, \"repeat\": \"mirror\" } }.",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "gradient"
+                          ],
+                          "description": "Always \"gradient\"."
+                        },
+                        "stops": {
+                          "type": "array",
+                          "minItems": 2,
+                          "maxItems": 16,
+                          "items": {
+                            "type": "object",
+                            "description": "A gradient stop.",
+                            "properties": {
+                              "offset": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Where the stop is, 0..1 along the gradient. Stops must be sorted by offset."
+                              },
+                              "color": {
+                                "type": "string",
+                                "pattern": "^(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|paint|secondary)$",
+                                "description": "#rrggbb, or \"paint\" / \"secondary\": the editor's paint or second colour when the stroke starts."
+                              },
+                              "opacity": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "0..1 (default 1): multiplies the brush's flow where this colour is laid."
+                              },
+                              "midpoint": {
+                                "type": "number",
+                                "minimum": 0.05,
+                                "maximum": 0.95,
+                                "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 of the way (default 0.5)."
+                              }
+                            },
+                            "required": [
+                              "offset",
+                              "color"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "2..16 stops sorted by offset."
+                        },
+                        "space": {
+                          "type": "string",
+                          "enum": [
+                            "pigment",
+                            "oklab",
+                            "srgb"
+                          ],
+                          "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                        },
+                        "map": {
+                          "type": "object",
+                          "description": "What moves the stroke along the gradient (default distance, 300 px, mirror).",
+                          "properties": {
+                            "by": {
+                              "type": "string",
+                              "enum": [
+                                "distance",
+                                "pressure",
+                                "tilt",
+                                "velocity",
+                                "direction",
+                                "time",
+                                "across-tip",
+                                "random"
+                              ],
+                              "description": "distance: px (or dabs) of stroke travelled; pressure: pen pressure 0..1; tilt: pen lean, upright 0 .. flat 1; velocity: pen speed, 0 .. 2.5 px/ms; direction: direction of travel, once round per 360°; time: ms since the stroke began (needs timed points); across-tip: left to right across the tip, looking along the stroke (a brush loaded with several colours); random: a random point per dab (seeded, so replays match)."
+                            },
+                            "length": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 100000,
+                              "description": "distance: px of travel (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                            },
+                            "repeat": {
+                              "type": "string",
+                              "enum": [
+                                "clamp",
+                                "repeat",
+                                "mirror"
+                              ],
+                              "description": "distance and time: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default for distance, clamp for time)."
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "px",
+                                "dabs"
+                              ],
+                              "description": "distance: px (default) or dabs."
+                            },
+                            "duration": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 600000,
+                              "description": "time: ms per run through the gradient (default 2000)."
+                            },
+                            "every": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 500,
+                              "description": "random: dabs per random pick (default 1)."
+                            }
+                          },
+                          "required": [
+                            "by"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "softness": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "stops"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "Effect paint: the brush paints an effect (search_effects).",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "effect",
+                          "description": "Always \"effect\"."
+                        },
+                        "effect": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The effect id."
+                        },
+                        "provider": {
+                          "type": "string",
+                          "description": "The provider's id when it was chosen."
+                        },
+                        "values": {
+                          "type": "object",
+                          "description": "Every control value (number, string, boolean or a number list)."
+                        },
+                        "time": {
+                          "type": "number",
+                          "minimum": 0,
+                          "description": "Which moment of an animated effect, ms."
+                        },
+                        "map": {
+                          "type": "object",
+                          "description": "Lay the effect along each stroke instead of fixing it to the canvas.",
+                          "properties": {
+                            "by": {
+                              "type": "string",
+                              "const": "stroke",
+                              "description": "Always \"stroke\"."
+                            },
+                            "length": {
+                              "type": "number",
+                              "minimum": 16,
+                              "maximum": 4096,
+                              "description": "Strip length: px of stroke per repeat of the effect."
+                            },
+                            "repeat": {
+                              "type": "string",
+                              "enum": [
+                                "repeat",
+                                "mirror",
+                                "clamp"
+                              ],
+                              "description": "Past the strip end: start again, run back or hold."
+                            }
+                          },
+                          "required": [
+                            "by",
+                            "length",
+                            "repeat"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "live": {
+                          "type": "boolean",
+                          "description": "On a stroke layer the stroke keeps playing the effect."
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "effect",
+                        "provider",
+                        "values",
+                        "time"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "description": "Up to 16 suggested colours."
+              },
+              "own": {
+                "type": "boolean",
+                "description": "The brush always paints its own colour (a rainbow marker); default false."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Save a new brush",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "update_brush",
+      "title": "Update a brush",
+      "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush; a refused change saves nothing. One change. Returns the brush, the leaf paths changed, problems and warnings.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "The saved brush to change (not a built-in)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Display name."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What the brush is for, in a sentence."
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+              "description": "A tag: lowercase letters, digits and dashes."
+            },
+            "description": "Search tags."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mark",
+              "tool"
+            ],
+            "description": "mark: lays a material (see medium); tool: works on paint already down (see tool)."
+          },
+          "medium": {
+            "type": "string",
+            "enum": [
+              "paint",
+              "ink",
+              "dry",
+              "spray"
+            ],
+            "description": "Marks: what it lays. paint (dry, wet or thick), ink, dry (pencil, pastel, charcoal) or spray (airbrush). Descriptive: the tip, marks and behaviour decide how it renders."
+          },
+          "variety": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "What kind of the medium: oil, watercolor, gouache, pencil, pastel, charcoal, airbrush, marker, highlighter… A wet brush whose variety is watercolor, gouache or oil paints that medium."
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "eraser",
+              "blender",
+              "smudge",
+              "water",
+              "dryer",
+              "blow",
+              "blot",
+              "wet-blend",
+              "wet-drag"
+            ],
+            "description": "Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint."
+          },
+          "tip": {
+            "type": "object",
+            "description": "The tip: its shape and the dab it lays. In a patch, shape may be left out to keep it.",
+            "properties": {
+              "shape": {
+                "type": "string",
+                "enum": [
+                  "round",
+                  "flat",
+                  "chisel",
+                  "bristle",
+                  "stamp"
+                ],
+                "description": "round, flat, chisel: an ellipse set by roundness and angle (the name is for people); bristle: a tuft of bristles (see bristle); stamp: textured stamps (see stamps), laid as objects or particles."
+              },
+              "size": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 2500,
+                "description": "Diameter in px (default 20)."
+              },
+              "hardness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Edge hardness, 0 soft .. 1 hard (default 1)."
+              },
+              "spacing": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 10,
+                "description": "Dab spacing as a fraction of the diameter: 0.05 smooth, 1 dotted (default 0.1)."
+              },
+              "angle": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360,
+                "description": "Tip angle in degrees, counter-clockwise; added to the stroke direction or barrel with dynamics.rotation (default 0)."
+              },
+              "roundness": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 1,
+                "description": "Roundness: 1 round (default), lower a flat ellipse (pastel, chisel)."
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Stroke opacity ceiling: overlapping dabs never exceed it (default 1)."
+              },
+              "flow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Build-up per dab towards the opacity: low flow builds softly, like an airbrush (default 1)."
+              },
+              "blend": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "darken",
+                  "multiply",
+                  "color-burn",
+                  "linear-burn",
+                  "darker-color",
+                  "lighten",
+                  "screen",
+                  "color-dodge",
+                  "linear-dodge",
+                  "lighter-color",
+                  "overlay",
+                  "soft-light",
+                  "hard-light",
+                  "vivid-light",
+                  "linear-light",
+                  "pin-light",
+                  "hard-mix",
+                  "difference",
+                  "exclusion",
+                  "subtract",
+                  "divide",
+                  "hue",
+                  "saturation",
+                  "color",
+                  "luminosity",
+                  "pigment",
+                  "watercolor",
+                  "tint",
+                  "highlight",
+                  "shadow"
+                ],
+                "description": "How the stroke paints onto the layer (default normal). pigment mixes like real paint; multiply darkens like marker ink; watercolor glazes; tint, highlight and shadow recolour, light and shade."
+              },
+              "bristle": {
+                "type": "object",
+                "description": "Bristle tips: the tuft. Missing fields take their defaults.",
+                "properties": {
+                  "count": {
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 128,
+                    "description": "Bristles in the tuft (default 32)."
+                  },
+                  "stiffness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Stiff bristles follow the tip; soft ones lag and bend into curves at turns (default 0.5)."
+                  },
+                  "splay": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far pressure spreads the tuft (default 0.5)."
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Each bristle's line width as a fraction of the tip size (default 0.06)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint per bristle: 1 never runs dry; lower, bristles run out along the stroke, a dry brush (default 0.6)."
+                  },
+                  "jitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random variation between bristles: length, paint, position (default 0.4)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "stamps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[^:\\s]+:\\S+|dot|star|heart|leaf|flower|confetti|splat|sparkle|ring)$",
+                  "description": "A sticker ref provider:id (find_stickers lists them; the editor's own are editor:dot, editor:star, editor:heart, editor:leaf, editor:flower, editor:confetti, editor:splat, editor:sparkle, editor:ring). A bare editor stamp (star) means editor:star."
+                },
+                "description": "Stamp tips: the stickers. Objects take any sticker and pick one at random per mark (default editor:star; repeats count once); particles take only the editor's stamps, use the first 4 in marks.stampOrder, and repeats weight the order."
+              }
+            },
+            "additionalProperties": false
+          },
+          "marks": {
+            "description": "How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).",
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Dabs laid along the path (the default).",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "continuous",
+                    "description": "Always \"continuous\"."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "A spray (a spray can): each dab lays a seeded scatter of droplets across the tip; jitter and size come from dynamics and the tip. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "scatter",
+                    "description": "Always \"scatter\"."
+                  },
+                  "density": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Droplets per dab: 1 + density × 31 (default 0.5)."
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0.02,
+                    "maximum": 1,
+                    "description": "Droplet size as a fraction of the tip size (default 0.12)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "Particles that move with the pen and draw as they go. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "particles",
+                    "description": "Always \"particles\"."
+                  },
+                  "physics": {
+                    "type": "string",
+                    "enum": [
+                      "string",
+                      "spring",
+                      "orbit",
+                      "flow",
+                      "elastic",
+                      "fuzzy"
+                    ],
+                    "description": "How the particles move (default spring). string: strands dragged behind the pen (hair, fur); spring: on springs to the pen, overshooting; orbit: circling the pen (curls); flow: thrown into a swirling flow until they fade; elastic: links that stretch and snap back; fuzzy: winding strings waving out of step."
+                  },
+                  "render": {
+                    "type": "string",
+                    "enum": [
+                      "dot",
+                      "line",
+                      "sequence",
+                      "ribbon"
+                    ],
+                    "description": "How they draw (default line). dot: a mark per step; line: a continuous line each; sequence: beads spaced along each path; ribbon: the band between neighbouring paths filled."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64,
+                    "description": "Particles (flow: thrown per tip of travel). Default 12."
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Mark size as a fraction of the tip size; ribbon: its edge width (default 0.08)."
+                  },
+                  "spread": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far apart they start, as a fraction of the tip size; ribbon: its width (default 0.5)."
+                  },
+                  "stiffness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Spring, string and elastic stiffness: stiff follows closely, soft swings wide (default 0.4)."
+                  },
+                  "damping": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How quickly motion dies down (default 0.25)."
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Orbit and flow speed (default 0.5)."
+                  },
+                  "gravity": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "description": "Pull downwards; negative pulls up (default 0)."
+                  },
+                  "life": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Flow particles: how long they live (default 0.5)."
+                  },
+                  "interval": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Sequence: spacing of the beads (default 0.3)."
+                  },
+                  "ribbonFill": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Ribbon: fill opacity between the paths, relative to their edges (default 0.5; 0 only edges)."
+                  },
+                  "ribbonPairs": {
+                    "type": "string",
+                    "enum": [
+                      "adjacent",
+                      "first-last"
+                    ],
+                    "description": "Ribbon: adjacent (default) joins each particle to its neighbour; first-last makes one band between the outermost two."
+                  },
+                  "waveAmplitude": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wave: sideways swing as a fraction of the tip size (default 0: no wave)."
+                  },
+                  "waveLength": {
+                    "type": "number",
+                    "minimum": 4,
+                    "maximum": 2000,
+                    "description": "Wave: wavelength in px of pen travel (default 60)."
+                  },
+                  "wavePhaseJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wave: how far out of step the particles' waves are; 0 in step, 1 random phases (default 0)."
+                  },
+                  "stampOrder": {
+                    "type": "string",
+                    "enum": [
+                      "sequence",
+                      "random"
+                    ],
+                    "description": "Stamp tips: sequence (default) uses the stamps in turn; random picks one per dot, seeded."
+                  },
+                  "stampRotation": {
+                    "type": "string",
+                    "enum": [
+                      "follow",
+                      "random",
+                      "fixed"
+                    ],
+                    "description": "Stamp tips: follow turns each with its particle's motion; random (default); fixed uses the tip angle."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "description": "Each mark stays an editable object (a sticker) on a sticker layer; needs a stamp tip. Missing fields take their defaults.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "objects",
+                    "description": "Always \"objects\"."
+                  },
+                  "density": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "About density × 4 marks per tip diameter of travel; 0.25 ≈ one per diameter (default 0.4)."
+                  },
+                  "sizeJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random size change (default 0.4)."
+                  },
+                  "rotationJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random turn as a fraction of ±180° (default 1)."
+                  },
+                  "scatter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "How far from the path marks land, in tip diameters (default 0.5)."
+                  },
+                  "colourJitter": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Random colour change: at 1 up to ±40° of hue and ±0.15 OKLab lightness (default 0.2)."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "dynamics": {
+            "type": "object",
+            "description": "Pen feel: pressure, tilt, velocity, jitter, rotation and smoothing. Every amount 0 (off) .. 1 unless noted; missing fields take their defaults.",
+            "properties": {
+              "pressureSize": {
+                "type": "boolean",
+                "description": "Pressure scales the size, down to minSize (default true)."
+              },
+              "pressureOpacity": {
+                "type": "boolean",
+                "description": "Pressure scales the opacity (default false)."
+              },
+              "smoothing": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.95,
+                "description": "Position smoothing of the input (default 0)."
+              },
+              "pressureSmoothing": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.95,
+                "description": "Pressure smoothing, separate from position smoothing (default 0)."
+              },
+              "rotation": {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "stroke",
+                  "barrel"
+                ],
+                "description": "What turns the tip: fixed (tip.angle, default), stroke (direction of travel) or barrel (pen barrel rotation)."
+              },
+              "minSize": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Size at zero pressure as a fraction of the full size, with pressureSize (default 0)."
+              },
+              "pressureFlow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much pressure scales flow (default 0)."
+              },
+              "tiltSize": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down widens the tip, up to 2.5× (default 0)."
+              },
+              "tiltRoundness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down flattens the tip along the tilt, side-of-the-pencil shading (default 0)."
+              },
+              "tiltOpacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Laying the pen down lightens the mark (default 0)."
+              },
+              "velocitySize": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1,
+                "description": "Positive grows the tip on fast strokes, negative thins it; needs timed points (default 0)."
+              },
+              "velocityOpacity": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1,
+                "description": "Positive darkens fast marks, negative lightens them; needs timed points (default 0)."
+              },
+              "sizeJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random size change per dab (default 0)."
+              },
+              "angleJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random angle per dab, as a fraction of ±180° (default 0)."
+              },
+              "opacityJitter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Random opacity drop per dab (default 0)."
+              },
+              "scatter": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 4,
+                "description": "Random offset across the stroke, in diameters (default 0)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "behaviour": {
+            "type": "object",
+            "description": "What the material does on the surface, and how tools work. Missing fields take their defaults.",
+            "properties": {
+              "surface": {
+                "type": "string",
+                "enum": [
+                  "dry",
+                  "wet",
+                  "thick"
+                ],
+                "description": "dry (default): stays where it lands; wet: flows, pools and dries (see wet); thick: stands up in relief (see thick)."
+              },
+              "grain": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Default 0."
+              },
+              "mixing": {
+                "type": "string",
+                "enum": [
+                  "pigment",
+                  "rgb"
+                ],
+                "description": "How colours mix: pigment (Kubelka-Munk, blue and yellow make green) or rgb (straight averages). Default pigment; a Mixer Brush and the smudge tool default to rgb."
+              },
+              "exchange": {
+                "type": "object",
+                "description": "Paint exchange with the canvas: picking up paint and mixing it into what the brush lays. Paint brushes on a dry, wet or thick surface and Mixer Brushes.",
+                "properties": {
+                  "pickup": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Pick-up ratio: how much of the paint under each dab the brush lifts and carries (default 0; with a reservoir 0.5)."
+                  },
+                  "mix": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Mix ratio: how much of the carried paint goes into what the brush lays, against its own colour (default 0.5)."
+                  },
+                  "dirty": {
+                    "type": "boolean",
+                    "description": "Keep the carried paint after the stroke, so the next one starts with the last colour touched (default false)."
+                  },
+                  "reservoir": {
+                    "type": "object",
+                    "description": "A paint reservoir makes this a Mixer Brush (an empty object takes every default).",
+                    "properties": {
+                      "load": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How much paint the reservoir holds; below 1 it drains per dab and long strokes run dry (default 0.5)."
+                      },
+                      "refill": {
+                        "type": "boolean",
+                        "description": "Refill with the paint colour before each stroke (default true)."
+                      },
+                      "loadsColour": {
+                        "type": "boolean",
+                        "description": "Load the current colour at all (default true; false: it only moves paint already down)."
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "wet": {
+                "type": "object",
+                "description": "Wet surface (watercolour, gouache, wet oil) and the wet tools. Missing fields take their defaults.",
+                "properties": {
+                  "medium": {
+                    "type": "string",
+                    "enum": [
+                      "watercolor",
+                      "gouache",
+                      "oil"
+                    ],
+                    "description": "The wet medium; a layer takes the medium's wet settings the first time it holds wet paint (default: the variety when it is watercolor, gouache or oil, else watercolor)."
+                  },
+                  "water": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Wetness: water laid, 0.2 a damp brush .. 1 dripping (default 0.5)."
+                  },
+                  "pigment": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Pigment concentration: 0 clear water .. 1 straight from the tube (default 0.5)."
+                  },
+                  "body": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Body: 0 transparent watercolour .. 1 opaque gouache (default 0)."
+                  },
+                  "rewet": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much dried paint the water lifts again: 0 staining (default 0)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint loading: 1 never runs out; lower, the brush runs dry along a long stroke (default 1)."
+                  },
+                  "thinner": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Thinner (water or solvent): more transparent, runnier paint (default 0)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "thick": {
+                "type": "object",
+                "description": "Thick surface (impasto: paint with relief, lit by the canvas lighting). Missing fields take their defaults.",
+                "properties": {
+                  "applicator": {
+                    "type": "string",
+                    "enum": [
+                      "brush",
+                      "tube",
+                      "knife",
+                      "roller",
+                      "gloop"
+                    ],
+                    "description": "What lays the paint (default brush). brush: bristle ridges; tube: blobs squeezed from the tube; knife: scrapes the relief flat and smears; roller: a flat stippled band; gloop: a thick glossy bead."
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far the paint stands up (default 0.6)."
+                  },
+                  "gloss": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Shine: 0 matte .. 1 wet-looking gloss (default 0.4)."
+                  },
+                  "metallic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Metallic: highlights take the paint colour, gold, copper, silver (default 0)."
+                  },
+                  "load": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Paint loading: 1 never runs out; lower, the stroke thins as the brush empties (default 0.9)."
+                  },
+                  "thinner": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Thinner: flatter, more transparent paint (default 0)."
+                  },
+                  "drag": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Knife and brush: how much of the paint under the tool is dragged along (default 0.4)."
+                  },
+                  "rim": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Light paint: light is stronger where the bead turns away, as on backlit glass (default 0)."
+                  },
+                  "clarity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Glassy paint: the middle of a bead lets the layers below show through (default 0)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "strength": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Tools: how strongly the blender, smudge or wet tool works per dab (default 0.5; smudge 0.7)."
+              },
+              "distance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Blender: how far away colours are mixed in, as a fraction of the tip diameter (default 0.35)."
+              },
+              "length": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Smudge: how far paint is dragged, the share of carried paint kept per dab (default 0.85)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "light": {
+            "type": "object",
+            "description": "Light the brush gives off with its colour (glow and spill). Give light brushes dark paper.",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Light per dab, scaled by its coverage and flow (default 0: none)."
+              },
+              "pressure": {
+                "type": "boolean",
+                "description": "Pressure scales the light (default false)."
+              },
+              "spill": {
+                "type": "object",
+                "description": "Suggested spill for the layer, applied when it has none of its own.",
+                "properties": {
+                  "radius": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 512,
+                    "description": "How far the light reaches, px; 0 turns spill off (a highlighter)."
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "How strong the spill is."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "glow": {
+                "type": "boolean",
+                "description": "Suggest a glow layer effect for the layer (glow stays a layer effect)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "motion": {
+            "type": "object",
+            "description": "Animation after painting.",
+            "properties": {
+              "live": {
+                "type": "boolean",
+                "description": "Effect paint keeps playing on stroke layers (default false)."
+              },
+              "fps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60,
+                "description": "Suggested playback rate in frames per second."
+              },
+              "waveSpeed": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Particle waves: how fast they run by stroke time; 0 they stand still (default 0), 1 about four a second."
+              }
+            },
+            "additionalProperties": false
+          },
+          "colour": {
+            "type": "object",
+            "description": "The brush's colours. The user's colour still wins unless own is set.",
+            "properties": {
+              "default": {
+                "description": "The colour the brush starts with. A gradient is always painted (its paint / secondary stops take the user's colours); a solid colour or effect paint is suggested to the host.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                    "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                  },
+                  {
+                    "type": "object",
+                    "description": "A colour for each colour scheme; the host picks one when the stroke starts and records it.",
+                    "properties": {
+                      "light": {
+                        "type": "string",
+                        "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                        "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                      },
+                      "dark": {
+                        "type": "string",
+                        "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                        "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                      }
+                    },
+                    "required": [
+                      "light",
+                      "dark"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Gradient paint: the brush samples it dab by dab as the stroke goes. Example (blue to yellow over 300 px of stroke, and back): { \"type\": \"gradient\", \"stops\": [{ \"offset\": 0, \"color\": \"#1d4ed8\" }, { \"offset\": 1, \"color\": \"#facc15\" }], \"map\": { \"by\": \"distance\", \"length\": 300, \"repeat\": \"mirror\" } }.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "gradient"
+                        ],
+                        "description": "Always \"gradient\"."
+                      },
+                      "stops": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 16,
+                        "items": {
+                          "type": "object",
+                          "description": "A gradient stop.",
+                          "properties": {
+                            "offset": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "Where the stop is, 0..1 along the gradient. Stops must be sorted by offset."
+                            },
+                            "color": {
+                              "type": "string",
+                              "pattern": "^(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|paint|secondary)$",
+                              "description": "#rrggbb, or \"paint\" / \"secondary\": the editor's paint or second colour when the stroke starts."
+                            },
+                            "opacity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "0..1 (default 1): multiplies the brush's flow where this colour is laid."
+                            },
+                            "midpoint": {
+                              "type": "number",
+                              "minimum": 0.05,
+                              "maximum": 0.95,
+                              "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 of the way (default 0.5)."
+                            }
+                          },
+                          "required": [
+                            "offset",
+                            "color"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "2..16 stops sorted by offset."
+                      },
+                      "space": {
+                        "type": "string",
+                        "enum": [
+                          "pigment",
+                          "oklab",
+                          "srgb"
+                        ],
+                        "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                      },
+                      "map": {
+                        "type": "object",
+                        "description": "What moves the stroke along the gradient (default distance, 300 px, mirror).",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "enum": [
+                              "distance",
+                              "pressure",
+                              "tilt",
+                              "velocity",
+                              "direction",
+                              "time",
+                              "across-tip",
+                              "random"
+                            ],
+                            "description": "distance: px (or dabs) of stroke travelled; pressure: pen pressure 0..1; tilt: pen lean, upright 0 .. flat 1; velocity: pen speed, 0 .. 2.5 px/ms; direction: direction of travel, once round per 360°; time: ms since the stroke began (needs timed points); across-tip: left to right across the tip, looking along the stroke (a brush loaded with several colours); random: a random point per dab (seeded, so replays match)."
+                          },
+                          "length": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 100000,
+                            "description": "distance: px of travel (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                          },
+                          "repeat": {
+                            "type": "string",
+                            "enum": [
+                              "clamp",
+                              "repeat",
+                              "mirror"
+                            ],
+                            "description": "distance and time: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default for distance, clamp for time)."
+                          },
+                          "unit": {
+                            "type": "string",
+                            "enum": [
+                              "px",
+                              "dabs"
+                            ],
+                            "description": "distance: px (default) or dabs."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 600000,
+                            "description": "time: ms per run through the gradient (default 2000)."
+                          },
+                          "every": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 500,
+                            "description": "random: dabs per random pick (default 1)."
+                          }
+                        },
+                        "required": [
+                          "by"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "softness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "stops"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "description": "Effect paint: the brush paints an effect (search_effects).",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "effect",
+                        "description": "Always \"effect\"."
+                      },
+                      "effect": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The effect id."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "The provider's id when it was chosen."
+                      },
+                      "values": {
+                        "type": "object",
+                        "description": "Every control value (number, string, boolean or a number list)."
+                      },
+                      "time": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Which moment of an animated effect, ms."
+                      },
+                      "map": {
+                        "type": "object",
+                        "description": "Lay the effect along each stroke instead of fixing it to the canvas.",
+                        "properties": {
+                          "by": {
+                            "type": "string",
+                            "const": "stroke",
+                            "description": "Always \"stroke\"."
+                          },
+                          "length": {
+                            "type": "number",
+                            "minimum": 16,
+                            "maximum": 4096,
+                            "description": "Strip length: px of stroke per repeat of the effect."
+                          },
+                          "repeat": {
+                            "type": "string",
+                            "enum": [
+                              "repeat",
+                              "mirror",
+                              "clamp"
+                            ],
+                            "description": "Past the strip end: start again, run back or hold."
+                          }
+                        },
+                        "required": [
+                          "by",
+                          "length",
+                          "repeat"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "live": {
+                        "type": "boolean",
+                        "description": "On a stroke layer the stroke keeps playing the effect."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "effect",
+                      "provider",
+                      "values",
+                      "time"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "palette": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "description": "A colour a brush can carry: a solid colour, a light / dark pair, a gradient or effect paint.",
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                      "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                    },
+                    {
+                      "type": "object",
+                      "description": "A colour for each colour scheme; the host picks one when the stroke starts and records it.",
+                      "properties": {
+                        "light": {
+                          "type": "string",
+                          "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                          "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                        },
+                        "dark": {
+                          "type": "string",
+                          "pattern": "^(#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\))$",
+                          "description": "A solid colour: #rrggbb, #rrggbbaa or rgba(r, g, b, a)."
+                        }
+                      },
+                      "required": [
+                        "light",
+                        "dark"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "Gradient paint: the brush samples it dab by dab as the stroke goes. Example (blue to yellow over 300 px of stroke, and back): { \"type\": \"gradient\", \"stops\": [{ \"offset\": 0, \"color\": \"#1d4ed8\" }, { \"offset\": 1, \"color\": \"#facc15\" }], \"map\": { \"by\": \"distance\", \"length\": 300, \"repeat\": \"mirror\" } }.",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "gradient"
+                          ],
+                          "description": "Always \"gradient\"."
+                        },
+                        "stops": {
+                          "type": "array",
+                          "minItems": 2,
+                          "maxItems": 16,
+                          "items": {
+                            "type": "object",
+                            "description": "A gradient stop.",
+                            "properties": {
+                              "offset": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Where the stop is, 0..1 along the gradient. Stops must be sorted by offset."
+                              },
+                              "color": {
+                                "type": "string",
+                                "pattern": "^(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|paint|secondary)$",
+                                "description": "#rrggbb, or \"paint\" / \"secondary\": the editor's paint or second colour when the stroke starts."
+                              },
+                              "opacity": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "0..1 (default 1): multiplies the brush's flow where this colour is laid."
+                              },
+                              "midpoint": {
+                                "type": "number",
+                                "minimum": 0.05,
+                                "maximum": 0.95,
+                                "description": "Where between this stop and the next the colours are half mixed, 0.05..0.95 of the way (default 0.5)."
+                              }
+                            },
+                            "required": [
+                              "offset",
+                              "color"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "description": "2..16 stops sorted by offset."
+                        },
+                        "space": {
+                          "type": "string",
+                          "enum": [
+                            "pigment",
+                            "oklab",
+                            "srgb"
+                          ],
+                          "description": "How neighbouring stops mix: pigment (default; like paint, blue to yellow passes green), oklab (perceptual) or srgb (plain numbers)."
+                        },
+                        "map": {
+                          "type": "object",
+                          "description": "What moves the stroke along the gradient (default distance, 300 px, mirror).",
+                          "properties": {
+                            "by": {
+                              "type": "string",
+                              "enum": [
+                                "distance",
+                                "pressure",
+                                "tilt",
+                                "velocity",
+                                "direction",
+                                "time",
+                                "across-tip",
+                                "random"
+                              ],
+                              "description": "distance: px (or dabs) of stroke travelled; pressure: pen pressure 0..1; tilt: pen lean, upright 0 .. flat 1; velocity: pen speed, 0 .. 2.5 px/ms; direction: direction of travel, once round per 360°; time: ms since the stroke began (needs timed points); across-tip: left to right across the tip, looking along the stroke (a brush loaded with several colours); random: a random point per dab (seeded, so replays match)."
+                            },
+                            "length": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 100000,
+                              "description": "distance: px of travel (or dabs, with unit \"dabs\") per run through the gradient (default 300)."
+                            },
+                            "repeat": {
+                              "type": "string",
+                              "enum": [
+                                "clamp",
+                                "repeat",
+                                "mirror"
+                              ],
+                              "description": "distance and time: past the end, clamp (hold the last colour), repeat (start again) or mirror (run back; default for distance, clamp for time)."
+                            },
+                            "unit": {
+                              "type": "string",
+                              "enum": [
+                                "px",
+                                "dabs"
+                              ],
+                              "description": "distance: px (default) or dabs."
+                            },
+                            "duration": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 600000,
+                              "description": "time: ms per run through the gradient (default 2000)."
+                            },
+                            "every": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 500,
+                              "description": "random: dabs per random pick (default 1)."
+                            }
+                          },
+                          "required": [
+                            "by"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "softness": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "description": "How softly neighbouring stops blend: 1 smooth (default) .. 0 hard steps."
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "stops"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "Effect paint: the brush paints an effect (search_effects).",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "effect",
+                          "description": "Always \"effect\"."
+                        },
+                        "effect": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The effect id."
+                        },
+                        "provider": {
+                          "type": "string",
+                          "description": "The provider's id when it was chosen."
+                        },
+                        "values": {
+                          "type": "object",
+                          "description": "Every control value (number, string, boolean or a number list)."
+                        },
+                        "time": {
+                          "type": "number",
+                          "minimum": 0,
+                          "description": "Which moment of an animated effect, ms."
+                        },
+                        "map": {
+                          "type": "object",
+                          "description": "Lay the effect along each stroke instead of fixing it to the canvas.",
+                          "properties": {
+                            "by": {
+                              "type": "string",
+                              "const": "stroke",
+                              "description": "Always \"stroke\"."
+                            },
+                            "length": {
+                              "type": "number",
+                              "minimum": 16,
+                              "maximum": 4096,
+                              "description": "Strip length: px of stroke per repeat of the effect."
+                            },
+                            "repeat": {
+                              "type": "string",
+                              "enum": [
+                                "repeat",
+                                "mirror",
+                                "clamp"
+                              ],
+                              "description": "Past the strip end: start again, run back or hold."
+                            }
+                          },
+                          "required": [
+                            "by",
+                            "length",
+                            "repeat"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "live": {
+                          "type": "boolean",
+                          "description": "On a stroke layer the stroke keeps playing the effect."
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "effect",
+                        "provider",
+                        "values",
+                        "time"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "description": "Up to 16 suggested colours."
+              },
+              "own": {
+                "type": "boolean",
+                "description": "The brush always paints its own colour (a rainbow marker); default false."
+              }
+            },
+            "additionalProperties": false
+          },
+          "unset": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "description",
+                "tags",
+                "medium",
+                "variety",
+                "marks",
+                "dynamics",
+                "behaviour",
+                "light",
+                "motion",
+                "colour"
+              ],
+              "description": "A facet to remove."
+            },
+            "description": "Facets to remove, back to their defaults (applied before the facets given)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Update a brush",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "duplicate_brush",
+      "title": "Duplicate a brush",
+      "description": "Copies any brush (built-in presets included) to a new saved brush you can change with update_brush. Returns the new id (default <id>-copy, -copy-2…) and the brush.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Brush id from list_brush_presets (lowercase letters, digits and dashes)."
+          },
+          "newId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "Id for the copy (default <id>-copy, -copy-2…); must not be taken."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Name for the copy (default \"<name> copy\")."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Duplicate a brush",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "remove_brush",
+      "title": "Remove a brush",
+      "description": "Deletes a saved brush from the library for good (export_brushes first to keep a copy). Built-in presets are refused. Returns the id removed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "description": "The saved brush to remove (not a built-in)."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Remove a brush",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "import_brushes",
+      "title": "Import brushes",
+      "description": "Adds the brushes of a library file (format pixerate-brushes version 2 from export_brushes, a version 1 file of the paint editor's brushes, which are migrated, or a bare list of brushes). Brushes with a built-in id are skipped, and so are ids already saved unless overwrite. Returns added, replaced and skipped ids and problems (each fix or skip, per brush).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": [
+              "object",
+              "array"
+            ],
+            "description": "The library file object, or an array of brushes."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Replace saved brushes with the same id (default false: skip them)."
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Import brushes",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    }
+  ],
+  "hosts": {
+    "paint": [
+      "list_brush_presets",
+      "describe_brush",
+      "check_brush",
+      "export_brushes",
+      "preview_brush",
+      "create_brush",
+      "update_brush",
+      "duplicate_brush",
+      "remove_brush",
+      "import_brushes"
+    ],
+    "image": [
+      "list_brush_presets",
+      "describe_brush",
+      "check_brush",
+      "export_brushes",
+      "preview_brush",
+      "create_brush",
+      "update_brush",
+      "duplicate_brush",
+      "remove_brush",
+      "import_brushes"
+    ],
+    "canvas": [
+      "list_brush_presets",
+      "describe_brush",
+      "check_brush",
+      "export_brushes",
+      "preview_brush",
+      "create_brush",
+      "update_brush",
+      "duplicate_brush",
+      "remove_brush",
+      "import_brushes"
+    ],
+    "vector": [
+      "list_brush_presets",
+      "describe_brush",
+      "check_brush",
+      "export_brushes",
+      "preview_brush",
+      "create_brush",
+      "update_brush",
+      "duplicate_brush",
+      "remove_brush",
+      "import_brushes"
+    ]
+  }
+}

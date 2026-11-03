@@ -1,0 +1,4159 @@
+[
+  {
+    "input": {
+      "id": "plain",
+      "name": "Plain"
+    },
+    "output": {
+      "id": "plain",
+      "name": "Plain",
+      "kind": "mark",
+      "tip": {
+        "shape": "round"
+      }
+    },
+    "resolved": {
+      "id": "plain",
+      "name": "Plain",
+      "category": "custom",
+      "engine": "dab",
+      "tip": {
+        "size": 20,
+        "hardness": 1,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "dab"
+  },
+  {
+    "input": {
+      "id": "pencil-6b",
+      "name": "6B pencil",
+      "category": "pencil",
+      "engine": "dab",
+      "tip": {
+        "size": 7,
+        "hardness": 0.55,
+        "spacing": 0.07,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.75,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0.7,
+      "pressureSmoothing": 0.3,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 1,
+        "tiltRoundness": 0.75,
+        "tiltOpacity": 0.35,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "pencil-6b",
+      "name": "6B pencil",
+      "kind": "mark",
+      "medium": "dry",
+      "variety": "pencil",
+      "tip": {
+        "shape": "round",
+        "size": 7,
+        "hardness": 0.55,
+        "spacing": 0.07,
+        "flow": 0.75
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "pressureOpacity": true,
+        "pressureSmoothing": 0.3,
+        "minSize": 0.5,
+        "tiltSize": 1,
+        "tiltRoundness": 0.75,
+        "tiltOpacity": 0.35
+      },
+      "behaviour": {
+        "grain": 0.7
+      }
+    },
+    "resolved": {
+      "id": "pencil-6b",
+      "name": "6B pencil",
+      "category": "pencil",
+      "engine": "dab",
+      "tip": {
+        "size": 7,
+        "hardness": 0.55,
+        "spacing": 0.07,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.75,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0.7,
+      "pressureSmoothing": 0.3,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 1,
+        "tiltRoundness": 0.75,
+        "tiltOpacity": 0.35,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "dab"
+  },
+  {
+    "input": {
+      "id": "my-pastel",
+      "name": "My pastel",
+      "category": "custom",
+      "engine": "dab",
+      "tip": {
+        "size": 50,
+        "hardness": 0.55,
+        "spacing": 0.05,
+        "angle": 90,
+        "roundness": 0.55,
+        "opacity": 1,
+        "flow": 0.7,
+        "smoothing": 0.15,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0.2,
+      "pressureSmoothing": 0.25,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0.06,
+        "angleJitter": 0.02,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "my-pastel",
+      "name": "My pastel",
+      "kind": "mark",
+      "tip": {
+        "shape": "flat",
+        "size": 50,
+        "hardness": 0.55,
+        "spacing": 0.05,
+        "angle": 90,
+        "roundness": 0.55,
+        "flow": 0.7
+      },
+      "dynamics": {
+        "smoothing": 0.15,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "pressureSmoothing": 0.25,
+        "rotation": "stroke",
+        "sizeJitter": 0.06,
+        "angleJitter": 0.02
+      },
+      "behaviour": {
+        "grain": 0.2
+      }
+    },
+    "resolved": {
+      "id": "my-pastel",
+      "name": "My pastel",
+      "category": "custom",
+      "engine": "dab",
+      "tip": {
+        "size": 50,
+        "hardness": 0.55,
+        "spacing": 0.05,
+        "angle": 90,
+        "roundness": 0.55,
+        "opacity": 1,
+        "flow": 0.7,
+        "smoothing": 0.15,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0.2,
+      "pressureSmoothing": 0.25,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0.06,
+        "angleJitter": 0.02,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "dab"
+  },
+  {
+    "input": {
+      "id": "mixer-brush",
+      "name": "Mixer Brush",
+      "category": "mixer",
+      "engine": "mixer",
+      "tip": {
+        "size": 30,
+        "hardness": 0.7,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.5,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.95,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "pigment"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.5,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "mixer-brush",
+      "name": "Mixer Brush",
+      "kind": "mark",
+      "medium": "paint",
+      "variety": "mixer",
+      "tip": {
+        "shape": "round",
+        "size": 30,
+        "hardness": 0.7,
+        "flow": 0.5
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "minSize": 0.5
+      },
+      "behaviour": {
+        "exchange": {
+          "reservoir": {
+            "load": 0.95
+          }
+        },
+        "mixing": "pigment"
+      }
+    },
+    "resolved": {
+      "id": "mixer-brush",
+      "name": "Mixer Brush",
+      "category": "mixer",
+      "engine": "mixer",
+      "tip": {
+        "size": 30,
+        "hardness": 0.7,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.5,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.95,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "pigment"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.5,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "mixer"
+  },
+  {
+    "input": {
+      "id": "watercolor-wash",
+      "name": "Wash brush",
+      "category": "watercolor",
+      "engine": "wet",
+      "tip": {
+        "size": 90,
+        "hardness": 0.35,
+        "spacing": 0.1,
+        "angle": 90,
+        "roundness": 0.45,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.3,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.45,
+        "mix": 0.45,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.8,
+        "pigment": 0.45,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0.2,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "watercolor-wash",
+      "name": "Wash brush",
+      "kind": "mark",
+      "medium": "paint",
+      "variety": "watercolor",
+      "tip": {
+        "shape": "flat",
+        "size": 90,
+        "hardness": 0.35,
+        "angle": 90,
+        "roundness": 0.45
+      },
+      "dynamics": {
+        "smoothing": 0.3,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "rotation": "stroke"
+      },
+      "behaviour": {
+        "surface": "wet",
+        "exchange": {
+          "pickup": 0.45,
+          "mix": 0.45
+        },
+        "wet": {
+          "water": 0.8,
+          "pigment": 0.45,
+          "rewet": 0.2
+        }
+      }
+    },
+    "resolved": {
+      "id": "watercolor-wash",
+      "name": "Wash brush",
+      "category": "watercolor",
+      "engine": "wet",
+      "tip": {
+        "size": 90,
+        "hardness": 0.35,
+        "spacing": 0.1,
+        "angle": 90,
+        "roundness": 0.45,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.3,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.45,
+        "mix": 0.45,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.8,
+        "pigment": 0.45,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0.2,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "wet"
+  },
+  {
+    "input": {
+      "id": "impasto-brush",
+      "name": "Impasto brush",
+      "category": "impasto",
+      "engine": "impasto",
+      "tip": {
+        "size": 36,
+        "hardness": 0.8,
+        "spacing": 0.06,
+        "angle": 90,
+        "roundness": 0.55,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0.55,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.4,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.45,
+        "metallic": 0,
+        "load": 0.92,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "impasto-brush",
+      "name": "Impasto brush",
+      "kind": "mark",
+      "medium": "paint",
+      "tip": {
+        "shape": "flat",
+        "size": 36,
+        "hardness": 0.8,
+        "spacing": 0.06,
+        "angle": 90,
+        "roundness": 0.55
+      },
+      "dynamics": {
+        "smoothing": 0.25,
+        "rotation": "stroke",
+        "minSize": 0.55
+      },
+      "behaviour": {
+        "surface": "thick",
+        "exchange": {
+          "pickup": 0.4
+        },
+        "thick": {
+          "gloss": 0.45,
+          "load": 0.92
+        }
+      }
+    },
+    "resolved": {
+      "id": "impasto-brush",
+      "name": "Impasto brush",
+      "category": "impasto",
+      "engine": "impasto",
+      "tip": {
+        "size": 36,
+        "hardness": 0.8,
+        "spacing": 0.06,
+        "angle": 90,
+        "roundness": 0.55,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0.55,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0.4,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.45,
+        "metallic": 0,
+        "load": 0.92,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "impasto"
+  },
+  {
+    "input": {
+      "id": "hair-strands",
+      "name": "Hair strands",
+      "category": "procedural",
+      "engine": "particle",
+      "tip": {
+        "size": 40,
+        "hardness": 0.8,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 0.9,
+        "flow": 0.6,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "string",
+        "render": "line",
+        "count": 22,
+        "size": 0.025,
+        "spread": 1,
+        "stiffness": 0.08,
+        "damping": 0.3,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "hair-strands",
+      "name": "Hair strands",
+      "kind": "mark",
+      "tip": {
+        "shape": "round",
+        "size": 40,
+        "hardness": 0.8,
+        "opacity": 0.9,
+        "flow": 0.6
+      },
+      "marks": {
+        "kind": "particles",
+        "physics": "string",
+        "count": 22,
+        "size": 0.025,
+        "spread": 1,
+        "stiffness": 0.08,
+        "damping": 0.3
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "pressureOpacity": true
+      }
+    },
+    "resolved": {
+      "id": "hair-strands",
+      "name": "Hair strands",
+      "category": "procedural",
+      "engine": "particle",
+      "tip": {
+        "size": 40,
+        "hardness": 0.8,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 0.9,
+        "flow": 0.6,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "string",
+        "render": "line",
+        "count": 22,
+        "size": 0.025,
+        "spread": 1,
+        "stiffness": 0.08,
+        "damping": 0.3,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "particle"
+  },
+  {
+    "input": {
+      "id": "bristle-round",
+      "name": "Bristle round",
+      "category": "bristle",
+      "engine": "bristle",
+      "tip": {
+        "size": 30,
+        "hardness": 0.85,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.9,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0.4,
+        "pressureFlow": 0,
+        "tiltSize": 0.6,
+        "tiltRoundness": 0.6,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 28,
+        "stiffness": 0.45,
+        "splay": 0.6,
+        "thickness": 0.035,
+        "load": 0.7,
+        "jitter": 0.5
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "bristle-round",
+      "name": "Bristle round",
+      "kind": "mark",
+      "medium": "paint",
+      "tip": {
+        "shape": "bristle",
+        "size": 30,
+        "hardness": 0.85,
+        "flow": 0.9,
+        "bristle": {
+          "count": 28,
+          "stiffness": 0.45,
+          "splay": 0.6,
+          "thickness": 0.035,
+          "load": 0.7,
+          "jitter": 0.5
+        }
+      },
+      "dynamics": {
+        "smoothing": 0.25,
+        "rotation": "stroke",
+        "minSize": 0.4,
+        "tiltSize": 0.6,
+        "tiltRoundness": 0.6
+      }
+    },
+    "resolved": {
+      "id": "bristle-round",
+      "name": "Bristle round",
+      "category": "bristle",
+      "engine": "bristle",
+      "tip": {
+        "size": 30,
+        "hardness": 0.85,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 0.9,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0.4,
+        "pressureFlow": 0,
+        "tiltSize": 0.6,
+        "tiltRoundness": 0.6,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 28,
+        "stiffness": 0.45,
+        "splay": 0.6,
+        "thickness": 0.035,
+        "load": 0.7,
+        "jitter": 0.5
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "bristle"
+  },
+  {
+    "input": {
+      "id": "sticker-stars",
+      "name": "Star stickers",
+      "category": "sticker",
+      "engine": "sticker",
+      "tip": {
+        "size": 36,
+        "hardness": 1,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star",
+          "editor:sparkle"
+        ],
+        "density": 0.35,
+        "sizeJitter": 0.5,
+        "rotationJitter": 1,
+        "scatter": 0.6,
+        "colorJitter": 0.3
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "sticker-stars",
+      "name": "Star stickers",
+      "kind": "mark",
+      "tip": {
+        "shape": "stamp",
+        "size": 36,
+        "stamps": [
+          "editor:star",
+          "editor:sparkle"
+        ]
+      },
+      "marks": {
+        "kind": "objects",
+        "density": 0.35,
+        "sizeJitter": 0.5,
+        "scatter": 0.6,
+        "colourJitter": 0.3
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "minSize": 0.5
+      }
+    },
+    "resolved": {
+      "id": "sticker-stars",
+      "name": "Star stickers",
+      "category": "sticker",
+      "engine": "sticker",
+      "tip": {
+        "size": 36,
+        "hardness": 1,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star",
+          "editor:sparkle"
+        ],
+        "density": 0.35,
+        "sizeJitter": 0.5,
+        "rotationJitter": 1,
+        "scatter": 0.6,
+        "colorJitter": 0.3
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "sticker"
+  },
+  {
+    "input": {
+      "id": "rainbow-marker",
+      "name": "Rainbow marker",
+      "category": "marker",
+      "engine": "dab",
+      "tip": {
+        "size": 18,
+        "hardness": 0.9,
+        "spacing": 0.04,
+        "angle": 90,
+        "roundness": 0.4,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": false,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": {
+        "type": "gradient",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#e11d48"
+          },
+          {
+            "offset": 0.2,
+            "color": "#f59e0b"
+          },
+          {
+            "offset": 0.4,
+            "color": "#facc15"
+          },
+          {
+            "offset": 0.6,
+            "color": "#22c55e"
+          },
+          {
+            "offset": 0.8,
+            "color": "#3b82f6"
+          },
+          {
+            "offset": 1,
+            "color": "#8b5cf6"
+          }
+        ],
+        "space": "oklab",
+        "map": {
+          "by": "distance",
+          "length": 600,
+          "repeat": "repeat",
+          "unit": "px"
+        }
+      }
+    },
+    "output": {
+      "id": "rainbow-marker",
+      "name": "Rainbow marker",
+      "kind": "mark",
+      "medium": "ink",
+      "variety": "marker",
+      "tip": {
+        "shape": "flat",
+        "size": 18,
+        "hardness": 0.9,
+        "spacing": 0.04,
+        "angle": 90,
+        "roundness": 0.4
+      },
+      "dynamics": {
+        "smoothing": 0.25,
+        "pressureSize": false,
+        "rotation": "stroke"
+      },
+      "colour": {
+        "default": {
+          "type": "gradient",
+          "stops": [
+            {
+              "offset": 0,
+              "color": "#e11d48"
+            },
+            {
+              "offset": 0.2,
+              "color": "#f59e0b"
+            },
+            {
+              "offset": 0.4,
+              "color": "#facc15"
+            },
+            {
+              "offset": 0.6,
+              "color": "#22c55e"
+            },
+            {
+              "offset": 0.8,
+              "color": "#3b82f6"
+            },
+            {
+              "offset": 1,
+              "color": "#8b5cf6"
+            }
+          ],
+          "space": "oklab",
+          "map": {
+            "by": "distance",
+            "length": 600,
+            "repeat": "repeat",
+            "unit": "px"
+          }
+        }
+      }
+    },
+    "resolved": {
+      "id": "rainbow-marker",
+      "name": "Rainbow marker",
+      "category": "marker",
+      "engine": "dab",
+      "tip": {
+        "size": 18,
+        "hardness": 0.9,
+        "spacing": 0.04,
+        "angle": 90,
+        "roundness": 0.4,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": false,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "stroke",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": {
+        "type": "gradient",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#e11d48"
+          },
+          {
+            "offset": 0.2,
+            "color": "#f59e0b"
+          },
+          {
+            "offset": 0.4,
+            "color": "#facc15"
+          },
+          {
+            "offset": 0.6,
+            "color": "#22c55e"
+          },
+          {
+            "offset": 0.8,
+            "color": "#3b82f6"
+          },
+          {
+            "offset": 1,
+            "color": "#8b5cf6"
+          }
+        ],
+        "space": "oklab",
+        "map": {
+          "by": "distance",
+          "length": 600,
+          "repeat": "repeat",
+          "unit": "px"
+        }
+      }
+    },
+    "engine": "dab"
+  },
+  {
+    "input": {
+      "id": "blender",
+      "name": "Blender",
+      "category": "blender",
+      "engine": "blender",
+      "tip": {
+        "size": 34,
+        "hardness": 0.4,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": false,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "blender",
+      "name": "Blender",
+      "kind": "tool",
+      "tool": "blender",
+      "tip": {
+        "shape": "round",
+        "size": 34,
+        "hardness": 0.4
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true
+      }
+    },
+    "resolved": {
+      "id": "blender",
+      "name": "Blender",
+      "category": "blender",
+      "engine": "blender",
+      "tip": {
+        "size": 34,
+        "hardness": 0.4,
+        "spacing": 0.1,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": false,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "blender"
+  },
+  {
+    "input": {
+      "id": "add-water",
+      "name": "Add water",
+      "category": "wet-tool",
+      "engine": "wet",
+      "tip": {
+        "size": 40,
+        "hardness": 0.4,
+        "spacing": 0.12,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "water",
+        "water": 0.6,
+        "pigment": 0,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0.3,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "add-water",
+      "name": "Add water",
+      "kind": "tool",
+      "tool": "water",
+      "tip": {
+        "shape": "round",
+        "size": 40,
+        "hardness": 0.4,
+        "spacing": 0.12
+      },
+      "dynamics": {
+        "smoothing": 0.25,
+        "pressureOpacity": true,
+        "minSize": 0.5
+      },
+      "behaviour": {
+        "wet": {
+          "water": 0.6,
+          "pigment": 0,
+          "rewet": 0.3
+        }
+      }
+    },
+    "resolved": {
+      "id": "add-water",
+      "name": "Add water",
+      "category": "wet-tool",
+      "engine": "wet",
+      "tip": {
+        "size": 40,
+        "hardness": 0.4,
+        "spacing": 0.12,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.25,
+        "pressureSize": true,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.5,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "water",
+        "water": 0.6,
+        "pigment": 0,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0.3,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "wet"
+  },
+  {
+    "input": {
+      "id": "spray-can",
+      "name": "Spray can",
+      "category": "airbrush",
+      "engine": "dab",
+      "tip": {
+        "size": 60,
+        "hardness": 0.9,
+        "spacing": 0.08,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 0.9,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": {
+        "density": 0.7,
+        "size": 0.04
+      },
+      "paint": null
+    },
+    "output": {
+      "id": "spray-can",
+      "name": "Spray can",
+      "kind": "mark",
+      "medium": "spray",
+      "variety": "airbrush",
+      "tip": {
+        "shape": "round",
+        "size": 60,
+        "hardness": 0.9,
+        "spacing": 0.08,
+        "opacity": 0.9
+      },
+      "marks": {
+        "kind": "scatter",
+        "density": 0.7,
+        "size": 0.04
+      },
+      "dynamics": {
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true
+      }
+    },
+    "resolved": {
+      "id": "spray-can",
+      "name": "Spray can",
+      "category": "airbrush",
+      "engine": "dab",
+      "tip": {
+        "size": 60,
+        "hardness": 0.9,
+        "spacing": 0.08,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 0.9,
+        "flow": 1,
+        "smoothing": 0.2,
+        "pressureSize": false,
+        "pressureOpacity": true,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": 0,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": {
+        "density": 0.7,
+        "size": 0.04
+      },
+      "paint": null
+    },
+    "engine": "dab"
+  },
+  {
+    "input": {
+      "id": "ink-with-mixer",
+      "name": "Ink with mixer settings",
+      "category": "ink",
+      "engine": "dab",
+      "tip": {
+        "size": 4,
+        "hardness": 1,
+        "spacing": 0.05,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.5,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0.4,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.25,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": -0.45,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.9,
+        "load": 0.1,
+        "mix": 0.9,
+        "loadEachStroke": false,
+        "cleanEachStroke": false,
+        "mixing": "pigment"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "output": {
+      "id": "ink-with-mixer",
+      "name": "Ink with mixer settings",
+      "kind": "mark",
+      "medium": "ink",
+      "tip": {
+        "shape": "round",
+        "size": 4,
+        "spacing": 0.05
+      },
+      "dynamics": {
+        "smoothing": 0.5,
+        "pressureSmoothing": 0.4,
+        "minSize": 0.25,
+        "velocitySize": -0.45
+      }
+    },
+    "resolved": {
+      "id": "ink-with-mixer",
+      "name": "Ink with mixer settings",
+      "category": "ink",
+      "engine": "dab",
+      "tip": {
+        "size": 4,
+        "hardness": 1,
+        "spacing": 0.05,
+        "angle": 0,
+        "roundness": 1,
+        "opacity": 1,
+        "flow": 1,
+        "smoothing": 0.5,
+        "pressureSize": true,
+        "pressureOpacity": false,
+        "blend": "normal"
+      },
+      "grain": 0,
+      "pressureSmoothing": 0.4,
+      "rotation": "fixed",
+      "dynamics": {
+        "minSize": 0.25,
+        "pressureFlow": 0,
+        "tiltSize": 0,
+        "tiltRoundness": 0,
+        "tiltOpacity": 0,
+        "velocitySize": -0.45,
+        "velocityOpacity": 0,
+        "sizeJitter": 0,
+        "angleJitter": 0,
+        "opacityJitter": 0,
+        "scatter": 0
+      },
+      "mixer": {
+        "wet": 0.5,
+        "load": 0.5,
+        "mix": 0.5,
+        "loadEachStroke": true,
+        "cleanEachStroke": true,
+        "mixing": "rgb"
+      },
+      "loadsColor": true,
+      "behavior": {
+        "pickup": 0,
+        "mix": 0.5,
+        "dirty": false,
+        "mixing": "pigment",
+        "multicolor": {
+          "mode": "off",
+          "colors": [],
+          "order": "sequence",
+          "length": 12,
+          "softness": 1
+        }
+      },
+      "blender": {
+        "strength": 0.5,
+        "distance": 0.35,
+        "mixing": "pigment"
+      },
+      "smudge": {
+        "strength": 0.7,
+        "length": 0.85,
+        "mixing": "rgb"
+      },
+      "wet": {
+        "tool": "paint",
+        "water": 0.5,
+        "pigment": 0.5,
+        "body": 0,
+        "strength": 0.5,
+        "rewet": 0,
+        "medium": "watercolor",
+        "load": 1,
+        "thinner": 0
+      },
+      "impasto": {
+        "tool": "brush",
+        "thickness": 0.6,
+        "gloss": 0.4,
+        "metallic": 0,
+        "load": 0.9,
+        "thinner": 0,
+        "drag": 0.4,
+        "rim": 0,
+        "clarity": 0
+      },
+      "particle": {
+        "kind": "spring",
+        "render": "line",
+        "count": 12,
+        "size": 0.08,
+        "spread": 0.5,
+        "stiffness": 0.4,
+        "damping": 0.25,
+        "speed": 0.5,
+        "gravity": 0,
+        "life": 0.5,
+        "interval": 0.3,
+        "ribbonFill": 0.5,
+        "ribbonPairs": "adjacent",
+        "waveAmplitude": 0,
+        "waveLength": 60,
+        "waveSpeed": 0,
+        "wavePhaseJitter": 0,
+        "dotTextures": [],
+        "dotTextureOrder": "sequence",
+        "dotRotation": "random"
+      },
+      "bristle": {
+        "count": 32,
+        "stiffness": 0.5,
+        "splay": 0.5,
+        "thickness": 0.06,
+        "load": 0.6,
+        "jitter": 0.4
+      },
+      "sticker": {
+        "stamps": [
+          "editor:star"
+        ],
+        "density": 0.4,
+        "sizeJitter": 0.4,
+        "rotationJitter": 1,
+        "scatter": 0.5,
+        "colorJitter": 0.2
+      },
+      "light": {
+        "amount": 0,
+        "pressure": false
+      },
+      "stamp": null,
+      "spray": null,
+      "paint": null
+    },
+    "engine": "dab"
+  }
+]

@@ -1,0 +1,148 @@
+[
+  {
+    "id": "paint",
+    "name": "Paint editor",
+    "kinds": [
+      "mark",
+      "tool"
+    ],
+    "tools": [
+      "eraser",
+      "blender",
+      "smudge",
+      "water",
+      "dryer",
+      "blow",
+      "blot",
+      "wet-blend",
+      "wet-drag"
+    ],
+    "tipShapes": [
+      "round",
+      "flat",
+      "chisel",
+      "bristle",
+      "stamp"
+    ],
+    "marks": [
+      "continuous",
+      "scatter",
+      "particles",
+      "objects"
+    ],
+    "surfaces": [
+      "dry",
+      "wet",
+      "thick"
+    ],
+    "exchange": "full",
+    "reservoir": "full",
+    "grain": "full",
+    "light": "full",
+    "motion": "full",
+    "colours": [
+      "solid",
+      "dual",
+      "gradient",
+      "effect"
+    ],
+    "velocity": "full",
+    "tilt": "full"
+  },
+  {
+    "id": "image",
+    "name": "Image editor",
+    "kinds": [
+      "mark",
+      "tool"
+    ],
+    "tools": [
+      "eraser"
+    ],
+    "tipShapes": [
+      "round",
+      "flat",
+      "chisel"
+    ],
+    "marks": [
+      "continuous"
+    ],
+    "surfaces": [
+      "dry"
+    ],
+    "exchange": "ignored",
+    "reservoir": "full",
+    "grain": "ignored",
+    "light": "none",
+    "motion": "none",
+    "colours": [
+      "solid",
+      "dual",
+      "gradient"
+    ],
+    "velocity": "ignored",
+    "tilt": "ignored"
+  },
+  {
+    "id": "canvas",
+    "name": "Canvas",
+    "kinds": [
+      "mark"
+    ],
+    "tools": [],
+    "tipShapes": [
+      "round",
+      "flat",
+      "chisel"
+    ],
+    "marks": [
+      "continuous"
+    ],
+    "surfaces": [
+      "dry"
+    ],
+    "exchange": "ignored",
+    "reservoir": "none",
+    "grain": "full",
+    "light": "none",
+    "motion": "none",
+    "colours": [
+      "solid",
+      "dual",
+      "gradient"
+    ],
+    "velocity": "ignored",
+    "tilt": "full"
+  },
+  {
+    "id": "vector",
+    "name": "Vector editor",
+    "kinds": [
+      "mark"
+    ],
+    "tools": [],
+    "tipShapes": [
+      "round",
+      "flat",
+      "chisel"
+    ],
+    "marks": [
+      "continuous"
+    ],
+    "surfaces": [
+      "dry"
+    ],
+    "exchange": "ignored",
+    "reservoir": "none",
+    "grain": "full",
+    "light": "ignored",
+    "motion": "none",
+    "colours": [
+      "solid",
+      "dual",
+      "gradient"
+    ],
+    "velocity": "ignored",
+    "tilt": "full"
+  }
+]
