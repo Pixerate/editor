@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { createFakeStickerProvider } from '@pixerate/editor/stickers';
+import { createBrushLibrary } from '@pixerate/editor/brushes';
 import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
@@ -97,7 +98,7 @@ describe('Svelte paint editor', () => {
     expect(c.getState().hand).toBe('left');
   });
 
-  it('the brush panel picks brushes and edits settings', () => {
+  it('the brush panel picks brushes and edits settings', async () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     show(BrushPanel, { controller: c });
     click(Array.from(target.querySelectorAll('[role="option"]')).find((o) => o.getAttribute('title')?.startsWith('Charcoal stick'))!);
@@ -110,7 +111,10 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.rotation).toBe('barrel');
     setValue(target.querySelector('input[aria-label="Brush name"]')!, 'My Charcoal');
     click(byText('Save brush'));
-    expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']);
+    await vi.waitFor(() => expect(c.getUserBrushes().map((b) => b.id)).toEqual(['my-charcoal']));
+    // Saved with the edits, as facets that keep the preset's variety.
+    expect(c.getBrushSpec('my-charcoal')).toMatchObject({ name: 'My Charcoal', variety: 'charcoal', tip: { size: 60 }, behaviour: { grain: 0.3 }, dynamics: { rotation: 'barrel' } });
+    flushSync();
     // A preview of every brush in the library, the saved one included.
     const previewed = new Set(thumbnails.mock.calls.map(([id]) => id));
     expect(c.getState().brushes.map((b) => b.id).filter((id) => !previewed.has(id))).toEqual([]);
@@ -156,8 +160,48 @@ describe('Svelte paint editor', () => {
     expect(q<HTMLElement>('[aria-label="Brush load"]').getAttribute('title')).toMatch(/^#/);
     click(byText('Clean'));
     expect(c.getState().mixerLoad.reservoir).toBeNull();
+    // The eraser has no paint behaviour: only the paper grain.
     pick('Soft eraser');
-    expect(q('[data-testid="brush-engine"]')).toBeNull();
+    expect(q('input[aria-label="Pick-up"]')).toBeNull();
+    expect(q('[data-testid="brush-engine"]')!.textContent).toContain('Grain');
+  });
+
+  it('the brush editor builds a highlighter-style brush from facets, saves it into a shared library, and paints with it', async () => {
+    const library = createBrushLibrary();
+    const c = new PaintEditorController({ width: 96, height: 48, brushLibrary: library });
+    const other = new PaintEditorController({ width: 32, height: 32, brushLibrary: library });
+    show(BrushPanel, { controller: c });
+    const q = <T extends Element>(sel: string) => target.querySelector(sel) as unknown as T;
+    // The library is grouped by medium; the filter narrows it.
+    expect([...target.querySelectorAll('[data-testid="brush-library"] [role="group"]')].map((g) => g.getAttribute('aria-label'))).toEqual(['Dry media', 'Ink', 'Paint', 'Spray', 'Other', 'Tools']);
+    setValue(q('input[aria-label="Find a brush"]'), 'highlighter');
+    expect(target.querySelectorAll('[data-testid="brush-library"] [role="option"]')).toHaveLength(1);
+    click(q('[data-testid="brush-library"] [role="option"]'));
+    flushSync();
+    expect(c.getState().brush.id).toBe('highlighter');
+    // The fields show the chosen brush, not the one before it.
+    expect(q<HTMLInputElement>('input[aria-label="Brush variety"]').value).toBe('highlighter');
+    // Facets of the preset, edited: a narrower tip, a pink default colour and a palette colour.
+    expect(q('[data-testid="brush-editor"] canvas[aria-label="Brush preview"]')).not.toBeNull();
+    expect([...target.querySelectorAll('[data-testid="brush-editor"] section')].map((s) => s.getAttribute('data-section'))).toEqual(['medium', 'shape', 'marks', 'feel', 'behaviour', 'light', 'colour']);
+    setValue(q('input[aria-label="Size"]'), '18');
+    setValue(q('input[aria-label="Brush default colour"]'), '#ff6ec7', true);
+    setValue(q('input[aria-label="Add a palette colour"]'), '#ffd1ec', true);
+    expect(c.getBrushSpec()).toMatchObject({ variety: 'highlighter', tip: { size: 18, blend: 'multiply' }, colour: { default: '#ff6ec7' }, light: { spill: { radius: 0 } } });
+    expect(c.getBrushSpec()!.colour!.palette).toContain('#ffd1ec');
+    setValue(q('input[aria-label="Brush name"]'), 'Pink highlighter');
+    byText('Save brush').click();
+    await c.whenBrushesLoaded();
+    flushSync();
+    await vi.waitFor(() => expect(c.getBrush('pink-highlighter')).toBeDefined());
+    // The other editor on the same library has it, and paints with it.
+    await other.whenBrushesLoaded();
+    expect(other.getBrushSpec('pink-highlighter')).toMatchObject({ name: 'Pink highlighter', colour: { default: '#ff6ec7' } });
+    other.setBrush({ id: 'pink-highlighter' });
+    expect(other.paintStroke({ points: [{ x: 4, y: 16 }, { x: 28, y: 16 }], color: '#ff6ec7' }).dabs).toBeGreaterThan(0);
+    // A tip of another shape changes the engine the brush paints with.
+    setValue(q('select[aria-label="Brush tip"]'), 'bristle');
+    expect(c.getState().brush.engine).toBe('bristle');
   });
 
   it('the mixing pad picks with a sample size, mixes measured parts and keeps pads', () => {
@@ -343,11 +387,13 @@ describe('Svelte paint editor', () => {
     await new Promise((r) => setTimeout(r, 0));
     flushSync();
     expect(status()).toBe('Dry');
-    c.setBrush({ id: 'watercolor-round' });
+    // The wet tools are tool brushes: switch one to another.
+    c.setBrush({ id: 'add-water' });
     flushSync();
-    const tool = target.querySelector('select[aria-label="Wet tool"]') as HTMLSelectElement;
-    expect(tool.value).toBe('paint');
+    const tool = target.querySelector('select[aria-label="Brush tool"]') as HTMLSelectElement;
+    expect(tool.value).toBe('water');
     setValue(tool, 'blot');
+    flushSync();
     expect(c.getState().brush.wet.tool).toBe('blot');
     expect(target.querySelector('input[aria-label="Strength"]')).not.toBeNull();
     // Engine B: force the CPU, then let the GPU run again (there is none in jsdom: the reason shows).
@@ -453,9 +499,11 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.particle.kind).toBe('orbit');
     setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
     expect(c.getState().brush.particle.render).toBe('sequence');
-    // Textured dots (sequence beads), then ribbons and waves.
+    // Textured dots (sequence beads) on a stamp tip, then ribbons and waves.
     flushSync();
-    click(target.querySelector('[aria-label="Dot textures"] button[aria-pressed="false"]'));
+    setValue(target.querySelector('select[aria-label="Brush tip"]') as HTMLSelectElement, 'stamp');
+    flushSync();
+    click(target.querySelector('[aria-label="Brush stamps"] button[aria-pressed="false"]'));
     expect(c.getState().brush.particle.dotTextures).toHaveLength(1);
     flushSync();
     setValue(target.querySelector('select[aria-label="Dot texture order"]') as HTMLSelectElement, 'random');
@@ -463,7 +511,6 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.particle).toMatchObject({ dotTextureOrder: 'random', dotRotation: 'follow' });
     setValue(target.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'ribbon');
     flushSync();
-    expect(target.querySelector('[aria-label="Dot textures"]')).toBeNull();
     setValue(target.querySelector('select[aria-label="Ribbon pairs"]') as HTMLSelectElement, 'first-last');
     expect(c.getState().brush.particle.ribbonPairs).toBe('first-last');
     expect(target.querySelector('input[aria-label="Wave"]')).not.toBeNull();

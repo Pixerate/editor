@@ -1,52 +1,10 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
-  import {
-    BLEND_MENU_GROUPS,
-    BRUSH_ROTATIONS,
-    BRUSH_SLIDERS,
-    brushEngineControls,
-    brushLoadColor,
-    downloadBytes,
-    brushTakesPaint,
-    patchBrushValue,
-    patchPath,
-    readPath,
-    WET_TOOLS,
-    WET_TOOL_LABELS,
-    WET_MEDIA,
-    WET_MEDIUM_LABELS,
-    IMPASTO_TOOLS,
-    IMPASTO_TOOL_LABELS,
-    PARTICLE_KINDS,
-    PARTICLE_KIND_LABELS,
-    PARTICLE_RENDERS,
-    PARTICLE_RENDER_LABELS,
-    RIBBON_PAIRS,
-    RIBBON_PAIR_LABELS,
-    DOT_TEXTURE_ORDERS,
-    DOT_TEXTURE_ORDER_LABELS,
-    DOT_ROTATIONS,
-    DOT_ROTATION_LABELS,
-    toggleDotTexture,
-    STAMP_KINDS,
-    STAMP_LABELS,
-    toggleStickerRef,
-    type ParticleKind,
-    type ParticleRender,
-    type RibbonPairs,
-    type DotTextureOrder,
-    type DotRotation,
-    type ImpastoTool,
-    type WetMediumKind,
-    type BlendMode,
-    type BrushRotation,
-    type WetTool,
-    type PaintEditorController,
-  } from '@pixerate/editor/paint-editor';
+  import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
+  import { PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
-  import PaintSlider from './PaintSlider.svelte';
-  import PixelCanvas from './PixelCanvas.svelte';
-  import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/paint-editor';
+  import BrushEditor from './BrushEditor.svelte';
+  import BrushLibraryBrowser from './BrushLibraryBrowser.svelte';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -61,7 +19,6 @@
   const snap = $derived(editor.current);
   const brush = $derived(snap.brush);
   let error = $state<string | null>(null);
-  let saveName = $state('');
   let fileInput = $state<HTMLInputElement | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
   // Thumbnails follow the library and the paper.
@@ -73,200 +30,60 @@
     void paper;
     return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])));
   });
-  const engine = $derived(brushEngineControls(brush));
+  const entries = $derived.by<BrushLibraryEntry[]>(() => {
+    const list = library;
+    return untrack(() => list.map((b) => ({ brush: controller.getBrushSpec(b.id)!, builtin: Boolean(b.builtin) })));
+  });
+  // The active brush as facets and its preview follow every change to it.
+  const spec = $derived.by<Brush>(() => {
+    void brush;
+    return untrack(() => controller.getBrushSpec()!);
+  });
+  // Previewed in the brush's own default colour when it has one, else the paint colour.
+  const own = $derived(typeof spec.colour?.default === 'string' && /^#[0-9a-f]{6}/i.test(spec.colour.default) ? spec.colour.default.slice(0, 7) : undefined);
+  const preview = $derived.by(() => {
+    void brush;
+    void paper;
+    void snap.color;
+    const color = own;
+    return untrack(() => controller.brushThumbnail(brush.id, { width: 240, height: 64, color }));
+  });
   const carried = $derived(brushLoadColor(snap.mixerLoad));
-  const mixingValue = $derived(engine?.mixingPath === 'blender.mixing' ? brush.blender.mixing : engine?.mixingPath === 'smudge.mixing' ? brush.smudge.mixing : brush.behavior.mixing);
+  const loads = $derived(['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint'));
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
 </script>
 
-<!-- The brush library with thumbnails, the active brush's settings and blend, its engine's controls (blender, smudge, pick-up / mix, mixing, dirty, brush gradient, load), save, import and export. -->
-<div class={`${panel} ${className}`} data-testid="brush-panel">
-  <div class="grid grid-cols-2 gap-1" role="listbox" aria-label="Brushes">
-    {#each snap.brushes as b (b.id)}
-      <button
-        type="button"
-        role="option"
-        aria-selected={brush.id === b.id}
-        title={`${b.name} (${b.category})`}
-        class={`flex flex-col items-start gap-0.5 rounded p-1 text-left ${brush.id === b.id ? 'bg-indigo-600/30 ring-1 ring-indigo-500' : 'bg-slate-900 hover:bg-slate-800'}`}
-        onclick={() => controller.setBrush({ id: b.id })}
-      >
-        <PixelCanvas pixels={thumbs.get(b.id) ?? null} label={`${b.name} thumbnail`} class="rounded" style={`width: 100%; aspect-ratio: ${thumbnailWidth} / ${thumbnailHeight}`} />
-        <span class="truncate text-[10px] text-slate-300">{b.name}</span>
-      </button>
-    {/each}
-  </div>
-  <div class="flex flex-col gap-1.5">
-    {#each BRUSH_SLIDERS as c (c.path)}
-      <PaintSlider control={c} value={readPath(brush, c.path)} onchange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
-    {/each}
-    <label class="flex items-center justify-between gap-2">
-      <span class="text-slate-400">Rotation</span>
-      <select aria-label="Brush rotation" value={brush.rotation} onchange={(e) => controller.setBrush({ rotation: e.currentTarget.value as BrushRotation })} class="rounded bg-slate-800 px-1 py-0.5">
-        {#each BRUSH_ROTATIONS as r (r)}
-          <option value={r}>{r === 'stroke' ? 'Follow stroke' : r === 'barrel' ? 'Pen barrel' : 'Fixed'}</option>
-        {/each}
-      </select>
-    </label>
-    <label class="flex items-center gap-2">
-      <input type="checkbox" checked={brush.tip.pressureSize} onchange={(e) => controller.setBrush({ tip: { pressureSize: e.currentTarget.checked } })} /> Pressure → size
-    </label>
-    <label class="flex items-center gap-2">
-      <input type="checkbox" checked={brush.tip.pressureOpacity} onchange={(e) => controller.setBrush({ tip: { pressureOpacity: e.currentTarget.checked } })} /> Pressure → opacity
-    </label>
-    {#if brush.engine === 'dab'}
-      <label class="flex items-center justify-between gap-2">
-        <span class="text-slate-400">Blend</span>
-        <select aria-label="Brush blend" value={brush.tip.blend} onchange={(e) => controller.setBrush({ tip: { blend: e.currentTarget.value as BlendMode } })} class="rounded bg-slate-800 px-1 py-0.5">
-          {#each BLEND_MENU_GROUPS as g (g.label)}
-            <optgroup label={g.label}>
-              {#each g.modes as m (m.id)}
-                <option value={m.id} title={m.description}>{m.label}</option>
-              {/each}
-            </optgroup>
-          {/each}
-        </select>
-      </label>
-    {/if}
-  </div>
-  {#if engine}
-    <div class="flex flex-col gap-1.5" data-testid="brush-engine">
-      <span class="font-medium text-slate-300">{engine.title}</span>
-      {#if engine.wetTool}
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Wet tool</span>
-          <select aria-label="Wet tool" value={brush.wet.tool} onchange={(e) => controller.setBrush({ wet: { tool: e.currentTarget.value as WetTool } })} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each WET_TOOLS as t (t)}<option value={t}>{WET_TOOL_LABELS[t]}</option>{/each}
-          </select>
-        </label>
+{#snippet extra(section: string)}
+  {#if section === 'shape' && brush.engine === 'sticker'}
+    <StickerPicker {controller} label="Sticker stamps" selected={brush.sticker.stamps} onpick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />
+  {:else if section === 'behaviour' && loads}
+    <div class="flex items-center gap-1">
+      <span class="text-slate-400">Carries</span>
+      <span aria-label="Brush load" title={carried ?? 'Clean'} class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${carried ?? 'transparent'}`}></span>
+      {#if brush.engine === 'mixer'}
+        <button type="button" class={button} onclick={() => controller.loadMixerBrush()}>Load</button>
       {/if}
-      {#if engine.wetTool}
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Medium</span>
-          <select aria-label="Wet medium" value={brush.wet.medium} onchange={(e) => controller.setBrush({ wet: { medium: e.currentTarget.value as WetMediumKind } })} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each WET_MEDIA as m (m)}<option value={m}>{WET_MEDIUM_LABELS[m]}</option>{/each}
-          </select>
-        </label>
-      {/if}
-      {#if engine.particleMenus}
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Particles</span>
-          <select aria-label="Particle kind" value={brush.particle.kind} onchange={(e) => controller.setBrush({ particle: { kind: e.currentTarget.value as ParticleKind } })} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each PARTICLE_KINDS as k (k)}<option value={k}>{PARTICLE_KIND_LABELS[k]}</option>{/each}
-          </select>
-        </label>
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Drawn as</span>
-          <select aria-label="Particle render" value={brush.particle.render} onchange={(e) => controller.setBrush({ particle: { render: e.currentTarget.value as ParticleRender } })} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each PARTICLE_RENDERS as k (k)}<option value={k}>{PARTICLE_RENDER_LABELS[k]}</option>{/each}
-          </select>
-        </label>
-        {#if brush.particle.render === 'ribbon'}
-          <label class="flex items-center justify-between gap-2">
-            <span class="text-slate-400">Ribbon joins</span>
-            <select aria-label="Ribbon pairs" value={brush.particle.ribbonPairs} onchange={(e) => controller.setBrush({ particle: { ribbonPairs: e.currentTarget.value as RibbonPairs } })} class="rounded bg-slate-800 px-1 py-0.5">
-              {#each RIBBON_PAIRS as k (k)}<option value={k}>{RIBBON_PAIR_LABELS[k]}</option>{/each}
-            </select>
-          </label>
-        {/if}
-        {#if brush.particle.render === 'dot' || brush.particle.render === 'sequence'}
-          <div class="flex flex-wrap gap-1" role="group" aria-label="Dot textures" title="Stamps drawn instead of round dots (up to 4; none: round)">
-            {#each STAMP_KINDS as k (k)}
-              <button
-                type="button"
-                aria-pressed={brush.particle.dotTextures.includes(k)}
-                class={`px-1.5 py-0.5 rounded text-[10px] ${brush.particle.dotTextures.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-                onclick={() => controller.setBrush({ particle: { dotTextures: toggleDotTexture(brush.particle.dotTextures, k) } })}
-              >
-                {STAMP_LABELS[k]}
-              </button>
-            {/each}
-          </div>
-          {#if brush.particle.dotTextures.length > 0}
-            <label class="flex items-center justify-between gap-2">
-              <span class="text-slate-400">Texture order</span>
-              <select aria-label="Dot texture order" value={brush.particle.dotTextureOrder} onchange={(e) => controller.setBrush({ particle: { dotTextureOrder: e.currentTarget.value as DotTextureOrder } })} class="rounded bg-slate-800 px-1 py-0.5">
-                {#each DOT_TEXTURE_ORDERS as k (k)}<option value={k}>{DOT_TEXTURE_ORDER_LABELS[k]}</option>{/each}
-              </select>
-            </label>
-            <label class="flex items-center justify-between gap-2">
-              <span class="text-slate-400">Texture turn</span>
-              <select aria-label="Dot rotation" value={brush.particle.dotRotation} onchange={(e) => controller.setBrush({ particle: { dotRotation: e.currentTarget.value as DotRotation } })} class="rounded bg-slate-800 px-1 py-0.5">
-                {#each DOT_ROTATIONS as k (k)}<option value={k}>{DOT_ROTATION_LABELS[k]}</option>{/each}
-              </select>
-            </label>
-          {/if}
-        {/if}
-      {/if}
-      {#if engine.stickerStamps}
-        <StickerPicker {controller} label="Sticker stamps" selected={brush.sticker.stamps} onpick={(ref) => controller.setBrush({ sticker: { stamps: toggleStickerRef(brush.sticker.stamps, ref) } })} />
-      {/if}
-      {#if engine.impastoTool}
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Tool</span>
-          <select aria-label="Impasto tool" value={brush.impasto.tool} onchange={(e) => controller.setBrush({ impasto: { tool: e.currentTarget.value as ImpastoTool } })} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each IMPASTO_TOOLS as t (t)}<option value={t}>{IMPASTO_TOOL_LABELS[t]}</option>{/each}
-          </select>
-        </label>
-      {/if}
-      {#each engine.sliders as c (c.path)}
-        <PaintSlider control={c} value={readPath(brush, c.path)} onchange={(v) => controller.setBrush(patchPath(brush as never, c.path, v) as never)} />
-      {/each}
-      {#if engine.mixingPath}
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Mixing</span>
-          <select aria-label="Brush mixing" value={mixingValue} onchange={(e) => controller.setBrush(patchBrushValue(brush, engine.mixingPath!, e.currentTarget.value))} class="rounded bg-slate-800 px-1 py-0.5">
-            <option value="pigment">Pigment</option>
-            <option value="rgb">RGB</option>
-          </select>
-        </label>
-      {/if}
-      {#if engine.light && brush.light.amount > 0}
-        <label class="flex items-center gap-2" title="Pressure scales the light the brush lays">
-          <input type="checkbox" aria-label="Light follows pressure" checked={brush.light.pressure} onchange={(e) => controller.setBrush({ light: { pressure: e.currentTarget.checked } })} /> Light follows pressure
-        </label>
-      {/if}
-      {#if engine.dirty}
-        <label class="flex items-center gap-2" title="Keep the colour the brush picked up for the next stroke (needs Pick-up above 0)">
-          <input type="checkbox" aria-label="Dirty brush" checked={brush.behavior.dirty} onchange={(e) => controller.setBrush({ behavior: { dirty: e.currentTarget.checked } })} /> Dirty brush
-        </label>
-      {/if}
-      {#if brushTakesPaint(brush)}
-        <div class="flex flex-col gap-1.5" data-testid="brush-gradient">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">Brush gradient</span>
-            <button type="button" aria-pressed={brush.paint !== null} class={chip(brush.paint !== null)} onclick={() => run(() => controller.setBrush({ paint: brush.paint ? null : DEFAULT_PAINT_GRADIENT }))}>{brush.paint ? 'On' : 'Off'}</button>
-          </div>
-          {#if brush.paint}
-            <PaintGradientEditor value={brush.paint} colors={{ paint: snap.color, secondary: snap.secondaryColor }} onchange={(g) => run(() => controller.setBrush({ paint: g }))} />
-          {/if}
-        </div>
-      {/if}
-      {#if engine.load}
-        <div class="flex items-center gap-1">
-          <span class="text-slate-400">Carries</span>
-          <span aria-label="Brush load" title={carried ?? 'Clean'} class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${carried ?? 'transparent'}`}></span>
-          {#if brush.engine === 'mixer'}
-            <button type="button" class={button} onclick={() => controller.loadMixerBrush()}>Load</button>
-          {/if}
-          <button type="button" class={button} onclick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>Clean</button>
-        </div>
+      <button type="button" class={button} onclick={() => controller.cleanMixerBrush(brush.engine === 'mixer')}>Clean</button>
+    </div>
+  {:else if section === 'colour' && brushTakesPaint(brush)}
+    <div class="flex flex-col gap-1.5" data-testid="brush-gradient">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">Brush gradient</span>
+        <button type="button" aria-pressed={brush.paint !== null} class={chip(brush.paint !== null)} onclick={() => run(() => controller.setBrush({ paint: brush.paint ? null : DEFAULT_PAINT_GRADIENT }))}>{brush.paint ? 'On' : 'Off'}</button>
+      </div>
+      {#if brush.paint}
+        <PaintGradientEditor value={brush.paint} colors={{ paint: snap.color, secondary: snap.secondaryColor }} onchange={(g) => run(() => controller.setBrush({ paint: g }))} />
       {/if}
     </div>
   {/if}
+{/snippet}
+
+<!-- The brush library (BrushLibraryBrowser) and the active brush in the BrushEditor, plus the brush gradient, sticker stamps, what the brush carries, import and export. -->
+<div class={`${panel} ${className}`} data-testid="brush-panel">
+  <BrushLibraryBrowser {entries} activeId={brush.id} onselect={(id) => controller.setBrush({ id })} thumbnail={(id) => thumbs.get(id) ?? null} {thumbnailWidth} {thumbnailHeight} />
+  <BrushEditor brush={spec} profile={PAINT_PROFILE} {preview} onchange={(next) => run(() => controller.setBrushSpec(next))} onsaveas={(name) => controller.saveBrush({ id: slug(name), name })} {extra} />
   <div class="flex flex-wrap items-center gap-1">
-    <input bind:value={saveName} placeholder="Brush name" aria-label="Brush name" class="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
-    <button
-      type="button"
-      class={button}
-      disabled={!saveName.trim()}
-      onclick={() =>
-        run(() => {
-          controller.saveBrush({ id: slug(saveName), name: saveName.trim() });
-          saveName = '';
-        })}>Save brush</button
-    >
-    <button type="button" class={button} onclick={() => run(() => downloadBytes(JSON.stringify(controller.exportBrushes(), null, 2), 'brushes.json', 'application/json'))}>Export</button>
+    <button type="button" class={button} onclick={() => run(async () => downloadBytes(JSON.stringify(await controller.exportBrushes(), null, 2), 'brushes.json', 'application/json'))}>Export</button>
     <button type="button" class={button} onclick={() => fileInput?.click()}>Import…</button>
     <input
       bind:this={fileInput}
