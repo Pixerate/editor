@@ -1,5 +1,38 @@
 # @pixerate/editor
 
+## 0.243.0
+
+### Minor Changes
+
+- 3a884f8: Paint editor: light paint.
+
+  - **Laying light:** any dab, particle, bristle, Mixer Brush or impasto brush lays light with `light.amount` (and `light.pressure`) into a per-layer light channel (`doc.light`).
+  - **It moves like paint:** a twin of each stroke on a lit layer moves the light, so plain paint over glowing paint dims it, erasers remove it, and smudges, blenders, the knife, the Mixer Brush and pick-up brushes carry it with the colour.
+  - **Rendering:** the paint glows in its own colour whatever the lighting, and spills, blurred, onto everything around and below it (per-layer `radius` and `strength`, saved with the document, not undo steps).
+  - **Glassy impasto:** `impasto.rim` brightens a bead's light at its edges, and `impasto.clarity` lets its middle show the layers below (stored in material B and A).
+  - **Presets:** a Light category: glow gel, neon marker, light airbrush and spark trail. Brush thumbnails show light on dark paper.
+  - **Layer operations:** light is undone, saved and loaded, replayed, duplicated, merged down, cleared and dimmed by fills.
+  - **PSD export:** layers are written with their glow, plus a "‹layer› light" Linear Dodge (Add) layer for spill.
+  - **Not yet:** wet and sticker brushes and stroke layers refuse light above 0.
+  - **Agent tools:** `get_light`, `set_light_spill` and `clear_light`; `set_brush` takes `light`, `impasto.rim` and `impasto.clarity`, and `list_brushes` reports each brush's light.
+  - **React and Svelte:** Light (and Rim, Clarity) sliders and a pressure toggle in the brush panel, and a Light section (spill, Clear light) in the layers panel.
+
+## 0.242.0
+
+### Minor Changes
+
+- 3b93772: Effects along a path.
+
+  - **Effects contract:**
+    - `EffectSummary.accepts` and `EffectSearchOptions.accepts: ['path']` find effects with a control that draws along a path given at run time.
+    - `pathControlsOf(description)` names those controls.
+    - An optional `EffectProvider.pathFromText` writes words as single-stroke path data.
+    - `checkEffectProvider` checks that path controls and `accepts` agree.
+    - The fake provider gains `fake.trail` (an overlay) and `fake.route` (a vector effect), both drawn along a path, and writes words as paths.
+  - **Video editor:** `setEffectPath` gives an effect clip or clip effect its path from frame points, path data, a clip's mask outline or words. Points are mapped into the picture the effect renders, so a clip effect follows its moved clip. New agent tool `set_video_effect_path`; `search_effects` takes `accepts`, and `describe_effect` returns `pathControls`.
+  - **Animation editor:** `addVectorEffect` / `add_vector_effect` take `path: { node }` (the node's world outline; the picture lands on the node at scale 1) or `path: { text }`.
+  - **React and Svelte:** `VideoEffectsPanel` shows a Path row for path effects (Draw path on the preview, Use mask outline, Write words, Clear path), and `VideoPreview` takes the pointer while a path is drawn.
+
 ## 0.241.0
 
 ### Minor Changes
