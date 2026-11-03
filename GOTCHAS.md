@@ -290,6 +290,12 @@ All contributors and AI assistants should check this file before starting work a
   - Benchmarks go in `*.bench.test.ts` files that skip unless their environment variable is set (e.g. `WET_BENCH=1`).
   - Raise a timeout only for work that is slow by design and can't be smaller (real ffmpeg runs, growth measurements), with a comment saying why.
 
+### [monorepo/ci] PR CI Runs Only the Affected Tests
+
+- **Issue / Symptom**: A pull request's CI passes, and the same test fails on `main` or in the Release run after the merge. Or a PR that broke a React or Svelte test shows no test run for it at all.
+- **Root Cause**: On a PR, `scripts/ci-test.mjs` runs only the tests the change can affect, split over 4 shards. Pushes to `main` and the Release workflow still run everything. Vitest's import graph (`vitest list --changed`) sees imports only. React, Svelte and the demo import `@pixerate/editor` through its built `dist/`, so the graph doesn't link a `packages/core/src` change to their tests. A test that reads a file (`readFileSync`, `readdirSync`, `existsSync`…) instead of importing it isn't linked to that file either.
+- **Solution / Workaround**: The script covers both: a change under a package's `src/` or `assembly/` runs every test of the packages that depend on it (from their `package.json`), and every test that calls a file-reading function runs on any non-docs PR. A change to the lockfile, a `package.json`, a tsconfig, a vitest config, the script or `ci.yml` runs everything. When a new kind of hidden dependency appears (a test that spawns a process, or reads a file through a helper in another module), add it to `GLOBAL` or `READS_DISK` in the script, with a case in `packages/core/tests/ci-test-script.test.ts`. To see what a PR will run: `BASE_SHA=$(git merge-base origin/main HEAD) node scripts/ci-test.mjs --list`.
+
 ### [tests] Heavy Tests Time Out Only Under the Full Parallel `pnpm test` Run
 
 - **Issue / Symptom**: `pnpm test` (and CI, and the Release workflow) failed 2–4 different tests per run with "Test timed out in 5000ms", for example `paint-editor-extend.test.ts` ("by whole wet tiles…" at 5.6 s) and `tool-search-eval.test.ts`. The same test passes alone in about 1–2 s, so `npx vitest run <file>` never shows the problem.
