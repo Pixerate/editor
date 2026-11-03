@@ -18,12 +18,13 @@ import { STAMP_KINDS } from './stickers';
 import { createPaintStickerTools } from './sticker-tools';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
-import type { PaintEditorController } from './controller';
+import { PaintEditorError, type PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import type { RecordedStroke } from './strokes';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
 import { MAX_ZOOM, MIN_ZOOM } from './view';
 import { createPaintGuideTools } from './guide-tools';
+import { createLayerEffectTools } from '../image-editor/effect-tools';
 import { createPaintWetTools } from './wet-tools';
 import { createPaintThickTools } from './thick-tools';
 import { createPaintReplayTools } from './replay-tools';
@@ -1277,6 +1278,20 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintReplayTools(c));
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
+  // Layer styles: the image editor's tools, schemas and defaults on paint layers (no global light of its own).
+  tools.push(
+    ...createLayerEffectTools(
+      {
+        requireLayer: (id) => void c.getLayerEffects(id),
+        getLayerEffects: (id) => c.getLayerEffects(id),
+        addLayerEffect: (id, kind, settings, index) => c.addLayerEffect(id, kind, settings, index),
+        updateLayerEffect: (id, effectId, changes) => c.updateLayerEffect(id, effectId, changes),
+        removeLayerEffect: (id, effectId) => c.removeLayerEffect(id, effectId),
+        setLayerEffectsEnabled: (id, enabled, scale) => c.setLayerEffectsEnabled(id, enabled, scale),
+      },
+      { layers: 'a pixel, stroke, sticker or group layer', error: (m) => new PaintEditorError(m) }
+    )
+  );
 
   const exclude = new Set(options.exclude ?? []);
   const description = 'Natural-media painting: paper and grain, dry and wet brushes, the brush library, strokes as data, pigment mixing, stencils, guides, layers and export.';

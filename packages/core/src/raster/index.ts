@@ -19,6 +19,7 @@ export * from './curve';
 export * from './transform';
 export * from './effects/model';
 export * from './effects/patterns';
+export * from './effects/ui';
 export {
   activeEffectItems,
   buildEffectMaps,

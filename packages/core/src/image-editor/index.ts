@@ -47,7 +47,7 @@ export * from './layers/shape-type-ui';
 export { rasterizeCoverage, flattenPath, type CoverageFillRule, type FlatPath } from './layers/vector-raster';
 export { parseCssColor } from './layers/css-color';
 export * from './layers/panel';
-export * from './layers/effects-ui';
+export * from '../raster/effects/ui';
 export * from '../paint';
 export * from './paint-tools';
 export * from './color-tools';
