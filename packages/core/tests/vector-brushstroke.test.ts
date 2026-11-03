@@ -107,7 +107,9 @@ describe('brushstrokes in the editor', () => {
 		c.undo();
 		expect((c.getNode('a') as VectorPathNode).strokes![index].brush!.brushId).toBe('pencil-hb');
 		expect(c.setBrushstroke(0, { size: 4 }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringContaining('no brushstroke') });
-		expect(c.addBrushstroke({ brushId: 'watercolor-wash' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringContaining('Unknown brush') });
+		// A preset the vector profile refuses says why; an unknown id gives the closest ones.
+		expect(c.addBrushstroke({ brushId: 'watercolor-wash' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Brush "watercolor-wash" \(Wash brush\) can't paint a brushstroke: .*wet.* Use one of: pencil-hb/) });
+		expect(c.addBrushstroke({ brushId: 'pencil-h' }, { ids: ['a'] })).toMatchObject({ ok: false, message: expect.stringMatching(/^Unknown brush "pencil-h"\. Closest: pencil-hb/) });
 	});
 });
 

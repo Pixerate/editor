@@ -16,7 +16,8 @@ import {
 	type FreehandStrokeStyle,
 	type FreehandTool
 } from './freehand.js';
-import { listCanvasBrushes, loadCanvasBrushstrokeRenderer, validateCanvasBrush, type CanvasBrush, type CanvasBrushPaint } from './brushstroke.js';
+import { listCanvasBrushes, loadCanvasBrushstrokeRenderer, resolveCanvasBrushSpec, validateCanvasBrush, type CanvasBrush, type CanvasBrushPaint } from './brushstroke.js';
+import type { BrushLibrary } from '../brushes/library.js';
 
 /** A stroke drawn by code or an agent (`drawStroke`). */
 export interface DrawStrokeInput {
@@ -45,6 +46,11 @@ export interface DrawStrokeResult<TNode extends CanvasNode = CanvasNode> {
 }
 
 export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNode> {
+	/**
+	 * The brush library whose saved brushes strokes may use besides the presets (the canvas
+	 * profile decides which). Share one with the paint editor so a brush saved there draws here.
+	 */
+	brushLibrary?: Pick<BrushLibrary, 'list' | 'get' | 'isBuiltin'>;
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
 	history?: ArrangeHistoryTarget;
@@ -230,7 +236,13 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		if (style.paint !== undefined && style.brush === undefined) {
 			throw new Error('paint (gradient paint) only colours brushed strokes: pass a brush too (see canvas.listBrushes), or use color for a plain stroke.');
 		}
-		if (style.brush !== undefined) await validateCanvasBrush(style.brush as CanvasBrush);
+		if (style.brush !== undefined) {
+			// A saved brush from the library is embedded, so the stroke renders without the library.
+			const spec = (style.brushSpec?.id === style.brush ? style.brushSpec : undefined) ?? (await resolveCanvasBrushSpec(style.brush as CanvasBrush, options.brushLibrary));
+			await validateCanvasBrush(style.brush as CanvasBrush, spec);
+			if (spec) style.brushSpec = spec;
+			else delete style.brushSpec;
+		}
 		// Store the paint normalised (lowercase #rrggbb, defaults filled in) so the result shows what renders.
 		if (style.paint !== undefined) style.paint = (await loadCanvasBrushstrokeRenderer()).resolveCanvasPaint(style.paint) as CanvasBrushPaint;
 
@@ -328,8 +340,10 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		eraseAt,
 		drawStroke,
 		nodeBounds,
-		/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
-		listBrushes: listCanvasBrushes
+		/** The presets and saved brushes (of `brushLibrary`) a stroke can be brushed with (loads the paint engine). */
+		listBrushes: () => listCanvasBrushes(options.brushLibrary),
+		/** The saved brush to embed for a brush id (undefined for presets and tip settings); for a brush picker. */
+		brushSpec: (brush: CanvasBrush) => resolveCanvasBrushSpec(brush, options.brushLibrary)
 	};
 }
 

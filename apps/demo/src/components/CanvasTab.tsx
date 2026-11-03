@@ -47,7 +47,10 @@ import {
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
-import { createCanvasGestureRecorder, createCanvasStickerHost, type CanvasEdge } from "@pixerate/editor/canvas";
+import { createCanvasGestureRecorder, createCanvasStickerHost, renderCanvasBrushPreview, type CanvasEdge } from "@pixerate/editor/canvas";
+import { CANVAS_PROFILE, createBrushLibraryToolProvider } from "@pixerate/editor/brushes";
+import { BrushLibraryBrowser, useBrushLibrary } from "@pixerate/editor-react/brushes";
+import { demoBrushLibrary } from "../demoBrushes";
 import { createOriginMiddleware } from "@pixerate/editor/tools";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
@@ -266,23 +269,28 @@ const CanvasDemo: React.FC = () => {
     setNodes,
     history: history.manager,
     initialTool: "select",
+    brushLibrary: demoBrushLibrary,
   });
   // Dry paint brushes for freehand strokes; the paint engine loads when this list is first read.
   // Picking a brush sets the size to the preset's own; the slider then changes the brush size.
   const [brushId, setBrushId] = useState("");
   const [brushSize, setBrushSize] = useState<number | undefined>(undefined);
   const [brushMenuOpen, setBrushMenuOpen] = useState(false);
-  const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, color: "#e2e8f0" } });
+  // The presets and the demo library's saved brushes the canvas can paint (a brush saved in the
+  // Paint tab shows here); a saved brush's facets go into the stroke style, so strokes keep a copy.
+  const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, color: "#e2e8f0" }, library: demoBrushLibrary });
+  const brushEntries = useBrushLibrary(demoBrushLibrary, { profile: CANVAS_PROFILE });
   const pickBrush = useCallback((id: string) => {
     setBrushId(id);
     setBrushSize(brushes.brushes.find((b) => b.id === id)?.size);
     setBrushMenuOpen(false);
   }, [brushes.brushes]);
   useEffect(() => {
-    if ((draw.tool === "pen" || draw.tool === "highlighter") && ((draw.style.brush ?? "") !== brushId || draw.style.brushSize !== brushSize)) {
-      draw.setStyle({ brush: brushId || undefined, brushSize: brushId ? brushSize : undefined });
+    const brushSpec = brushes.brushes.find((b) => b.id === brushId)?.spec;
+    if ((draw.tool === "pen" || draw.tool === "highlighter") && ((draw.style.brush ?? "") !== brushId || draw.style.brushSize !== brushSize || draw.style.brushSpec !== brushSpec)) {
+      draw.setStyle({ brush: brushId || undefined, brushSize: brushId ? brushSize : undefined, brushSpec });
     }
-  }, [draw, brushId, brushSize]);
+  }, [draw, brushId, brushSize, brushes.brushes]);
   const currentBrush = brushes.brushes.find((b) => b.id === brushId);
   // Gradient paint for brushed strokes, sampled dab by dab (the stroke colour fills "paint" stops).
   const [brushPaintId, setBrushPaintId] = useState("");
@@ -324,6 +332,10 @@ const CanvasDemo: React.FC = () => {
   const stickerHost = useMemo(() => createCanvasStickerHost<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager }), [setNodes, history.manager]);
   const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "canvas-stickers", namespace: "canvasstickers" }), [stickerHost]);
   useAgentToolProvider(demoToolRegistry, stickerTools);
+  // The shared brush library's tools for the canvas profile (canvasbrushes__*): list, create and
+  // check the brushes canvas.drawFreehand takes; previews are canvas strokes.
+  const canvasBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: CANVAS_PROFILE, renderPreview: renderCanvasBrushPreview, id: "canvas-brushes", namespace: "canvasbrushes" }), []);
+  useAgentToolProvider(demoToolRegistry, canvasBrushTools);
   useCanvasEffectsTools(demoToolRegistry, canvasEffects, { id: "canvas-effects", namespace: "canvasfx" });
   // Switching libraries re-fills the demo star with one of the new library's generators, as long as
   // it still holds the effect the demo gave it (an effect someone applied stays, drawn as a hatch).
@@ -788,25 +800,13 @@ const CanvasDemo: React.FC = () => {
                 <span>{currentBrush?.name ?? "Vector stroke"}</span>
               </button>
               {brushMenuOpen && (
-                <ul role="listbox" aria-label="Brushes" className="absolute z-50 mt-1 w-52 max-h-72 overflow-auto bg-slate-900 border border-slate-700 rounded shadow-lg p-1">
-                  <li role="option" aria-selected={!brushId}>
-                    <button type="button" className="w-full text-left text-xs text-slate-200 px-2 py-1.5 rounded hover:bg-slate-800" onClick={() => pickBrush("")}>
-                      Vector stroke
-                    </button>
-                  </li>
-                  {brushes.brushes.map((b) => (
-                    <li key={b.id} role="option" aria-selected={b.id === brushId}>
-                      <button
-                        type="button"
-                        className={`w-full flex items-center gap-2 text-left text-xs text-slate-200 px-2 py-1 rounded hover:bg-slate-800 ${b.id === brushId ? "bg-slate-800" : ""}`}
-                        onClick={() => pickBrush(b.id)}
-                      >
-                        {b.swatch ? <img src={b.swatch} alt="" className="h-[22px] w-24 object-contain" /> : <span className="h-[22px] w-24" />}
-                        <span>{b.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="absolute z-50 mt-1 w-64 max-h-96 overflow-auto bg-slate-900 border border-slate-700 rounded shadow-lg p-1.5 flex flex-col gap-1.5 text-xs text-slate-200">
+                  <button type="button" aria-pressed={!brushId} className="w-full text-left text-xs text-slate-200 px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700" onClick={() => pickBrush("")}>
+                    Vector stroke
+                  </button>
+                  {/* The shared brush library, filtered by the canvas profile; thumbnails are canvas swatches. */}
+                  <BrushLibraryBrowser entries={brushEntries} activeId={brushId || undefined} profile={CANVAS_PROFILE} onSelect={pickBrush} thumbnail={(id) => brushes.brushes.find((b) => b.id === id)?.swatch} thumbnailWidth={96} thumbnailHeight={22} />
+                </div>
               )}
             </div>
           )}

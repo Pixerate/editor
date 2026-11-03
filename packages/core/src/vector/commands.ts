@@ -1,5 +1,5 @@
 import { withVectorPlayback } from './playback.js';
-import { VECTOR_BRUSHSTROKE_MAX_SEED, vectorBrushstrokeBrushes } from './brushstroke.js';
+import { VECTOR_BRUSHSTROKE_MAX_SEED, vectorBrushstrokeBrush } from './brushstroke.js';
 import { GRAIN_PATTERNS } from '../paint/grain.js';
 import { type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_LENS_SPECS } from './lens.js';
@@ -1554,9 +1554,9 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Brushstroke Brushes',
 			readOnly: true,
 			keywords: ['brush', 'brushstroke', 'pencil', 'pastel', 'charcoal', 'ink', 'marker', 'natural media'],
-			description: 'Lists the brushes a brushstroke can use (the paint editor\'s dry brushes): { brushes: [{ id, name, category, size }] } (size: the brush\'s own diameter in document units).',
+			description: 'Lists the brushes a brushstroke can use (the dry presets, then saved brushes from the brush library the vector profile admits): { brushes: [{ id, name, category, size, builtin }] } (size: the brush\'s own diameter in document units).',
 			params: { type: 'object', properties: {}, additionalProperties: false },
-			run: () => ({ brushes: vectorBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size })) })
+			run: () => ({ brushes: controller.listBrushstrokeBrushes().map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: vectorBrushstrokeBrush(b.id) !== null })) })
 		},
 		{
 			...base,

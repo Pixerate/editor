@@ -103,3 +103,4 @@ export * from './paths';
 export * from './path-edit';
 export * from './content-aware-fill-session';
 export * from './stickers';
+export * from './brush-presets';

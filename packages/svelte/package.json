@@ -48,6 +48,11 @@
       "svelte": "./dist/paint-editor/index.js",
       "default": "./dist/paint-editor/index.js"
     },
+    "./brushes": {
+      "types": "./dist/brushes/index.d.ts",
+      "svelte": "./dist/brushes/index.js",
+      "default": "./dist/brushes/index.js"
+    },
     "./commands": {
       "types": "./dist/commands/index.d.ts",
       "svelte": "./dist/commands/index.js",

@@ -352,7 +352,7 @@ export interface DrawCommandTarget {
 		tiltY?: readonly number[];
 		streamline?: boolean;
 	}): Promise<{ id: string; bounds: { x: number; y: number; width: number; height: number }; brush?: unknown }>;
-	/** The dry paint presets a stroke can be brushed with (loads the paint engine). */
+	/** The presets and saved brushes a stroke can be brushed with (the canvas profile's; loads the paint engine). */
 	listBrushes(): Promise<CanvasBrushPreset[]>;
 	/** A node's box in canvas coordinates, so gestures can take `{ nodeId }` targets (without it they take boxes and points only). */
 	nodeBounds?(id: string): { x: number; y: number; width: number; height: number } | undefined;
@@ -513,7 +513,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			label: 'Draw Freehand Stroke',
 			keywords: ['pen', 'highlighter', 'brush', 'sketch', 'draw', 'stroke', 'pencil', 'ink'],
 			description:
-				'Draws a freehand pen or highlighter stroke through points (canvas coordinates) as one path shape node, in one undo step. With `brush` it is painted with a dry paint brush (a preset id from canvas.listBrushes, or tip settings) and `pressure` / `tiltX` / `tiltY` profiles shape it along its length; `paint` gives it gradient paint that changes colour along the stroke. Wet brushes are refused. Returns the new node `id`, its `bounds` and the stored `brush`.',
+				'Draws a freehand pen or highlighter stroke through points (canvas coordinates) as one path shape node, in one undo step. With `brush` it is painted with a dry brush (a preset or saved brush id from canvas.listBrushes, or tip settings) and `pressure` / `tiltX` / `tiltY` profiles shape it along its length; `paint` gives it gradient paint that changes colour along the stroke. Brushes the canvas cannot paint (wet, thick, particle and sticker brushes, tools, light) are refused with the reason and the ids it can use. Returns the new node `id`, its `bounds` and the stored `brush`.',
 			params: {
 				type: 'object',
 				additionalProperties: false,
@@ -531,7 +531,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool). For brushed strokes it is the brush diameter; leave it out to use the preset\'s own size (canvas.listBrushes gives it).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
 					brush: {
-						description: 'Paint the stroke with a dry paint brush: a preset id such as "ink-pen", "pencil-hb", "brush-pen", "charcoal-stick", "soft-pastel", "marker" or "airbrush" (all ids: canvas.listBrushes), or tip settings. Omit for a plain vector stroke.',
+						description: 'Paint the stroke with a dry brush: a preset id such as "ink-pen", "pencil-hb", "brush-pen", "charcoal-stick", "soft-pastel", "marker" or "airbrush", a saved brush from the brush library (all ids: canvas.listBrushes), or tip settings. Omit for a plain vector stroke.',
 						oneOf: [{ type: 'string', minLength: 1 }, BRUSH_SETTINGS_PARAM]
 					},
 					paint: BRUSH_PAINT_PARAM,
@@ -581,7 +581,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			id: `${prefix}listBrushes`,
 			label: 'List Freehand Brushes',
 			keywords: ['brushes', 'presets', 'paint', 'pencil', 'ink'],
-			description: 'Read-only: the dry paint presets canvas.drawFreehand accepts as `brush`, as { id, name, category, size } (size is the preset\'s own diameter, which a brushed stroke uses unless `width` is given).',
+			description: 'Read-only: the brushes canvas.drawFreehand accepts as `brush`: the dry presets, then saved brushes from the brush library the canvas can paint, as { id, name, category, size, builtin } (size is the brush\'s own diameter, which a brushed stroke uses unless `width` is given).',
 			params: { type: 'object', additionalProperties: false, properties: {} },
 			readOnly: true,
 			run: async () => ({ brushes: await target.listBrushes() })
@@ -639,7 +639,7 @@ const GESTURE_STYLE_PARAMS = {
 	width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool; with a brush, the preset\'s own size).' },
 	opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
 	brush: {
-		description: 'Paint the mark with a dry paint brush: a preset id such as "ink-pen", "marker", "pencil-hb" or "brush-pen" (all ids: canvas.listBrushes), or tip settings. Brushed marks get an uneven hand pressure. Omit for a plain vector stroke.',
+		description: 'Paint the mark with a dry brush: a preset id such as "ink-pen", "marker", "pencil-hb" or "brush-pen", a saved brush (all ids: canvas.listBrushes), or tip settings. Brushed marks get an uneven hand pressure. Omit for a plain vector stroke.',
 		oneOf: [{ type: 'string', minLength: 1 }, BRUSH_SETTINGS_PARAM]
 	},
 	seed: { type: 'integer', minimum: 0, maximum: 4294967295, description: 'Seed for the hand-drawn wobble (default: derived from the other params, so the same request draws the same mark). Change it for a different take.' }

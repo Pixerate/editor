@@ -5,6 +5,8 @@ import { createImageEditorToolProvider, createImageEffectsToolProvider, createIm
 import { createStickerToolProvider } from '@pixerate/editor/stickers';
 import { StickerInsertPanel } from '@pixerate/editor-react/stickers';
 import { demoStickers } from '../demoStickers';
+import { demoBrushLibrary } from '../demoBrushes';
+import { createBrushLibraryToolProvider, IMAGE_PROFILE } from '@pixerate/editor/brushes';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
@@ -94,7 +96,11 @@ function ImagePicker({ image, onPick }: { image: string; onPick: (url: string) =
 function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (url: string) => void }) {
   const [exportedUrl, setExportedUrl] = useState<string | null>(null);
   const openPanel = useOpenPanel();
-  const editor = useImageEditor();
+  // Brush presets come from the demo's shared brush library: a brush saved in the Paint tab shows here.
+  const editor = useImageEditor({ brushLibrary: demoBrushLibrary });
+  // The library's tools for the image profile (imagebrushes__*): list_brush_presets lists what set_brush_preset takes.
+  const imageBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: IMAGE_PROFILE, id: 'image-brushes', namespace: 'imagebrushes' }), []);
+  useAgentToolProvider(demoToolRegistry, imageBrushTools);
   // The long selections (Select Subject, Sky, Focus Area, Object and Quick Selection, the Select
   // and Mask preview) run in a worker, so the page stays responsive.
   useEffect(() => {

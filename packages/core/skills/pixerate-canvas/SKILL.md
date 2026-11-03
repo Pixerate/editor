@@ -250,8 +250,8 @@ character: seeded jitter and the paper grain they catch) and, when a width was c
 
 | Command | Use it to |
 | --- | --- |
-| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
-| `canvas.listBrushes` | Read-only: the dry paint presets `canvas.drawFreehand` and the gestures accept as `brush` (`id`, `name`, `category`, the preset's own `size`, which a stroke uses unless you pass `width`). Call it before the first brushed stroke instead of guessing ids. |
+| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset or saved brush id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
+| `canvas.listBrushes` | Read-only: the brushes `canvas.drawFreehand` and the gestures accept as `brush`: the dry presets, then saved brushes from the brush library the canvas can paint (`id`, `name`, `category`, the brush's own `size`, which a stroke uses unless you pass `width`, and `builtin`). Call it before the first brushed stroke instead of guessing ids. |
 
 Gestures draw one hand-drawn stroke node each (one undo step) through the same path as
 `canvas.drawFreehand`, and the agent's cursor traces them. Targets are boxes
@@ -348,9 +348,14 @@ effects provider (for example Flair); without one the read tools say so and the 
 - **A shape node holds one effect.** `apply_effect` replaces the effect that is there. Effects draw on shape nodes only (nodes with `data.shape`).
 - **Effects belong to the provider they came from.** Each saved effect keeps its provider id. After the provider changes (another effects library), check `list_applied_effects` for `available: false` and re-apply those effects with ids from the new provider's `search_effects`; the old effect ids mean nothing to it.
 
-- **Brushes are dry only.** Wet presets (watercolour, gouache, wet oils), mixer, blender, smudge and
-  eraser presets are refused: wet paint needs an area to flow in, and the others need paint under
-  them. `pressure` and tilt without a `brush` are refused too.
+- **Brushes are dry only.** The canvas profile (`CANVAS_PROFILE`, see `pixerate-brushes`) refuses
+  wet and thick brushes (watercolour, gouache, wet oils, impasto), particle and sticker brushes,
+  tools (mixer, blender, smudge, eraser) and light brushes, saying why and which ids to use:
+  wet paint needs an area to flow in, tools need paint under them, light needs the paint editor's
+  light channel. Saved brushes from the brush library work when they are dry (`check_brush` with
+  `host: "canvas"` says, and gives a `degraded` brush to save instead); a stroke keeps a copy of
+  the saved brush, so it renders without the library. `pressure` and tilt without a `brush` are
+  refused too.
 - **Gradient paint needs a brush, and no timing.** `paint` without `brush` is refused; use
   `color` for a plain stroke. Canvas strokes record no timing, so `velocity` and `time` mappings
   are refused: use `distance` for colour that changes along the stroke. The stroke `color` still

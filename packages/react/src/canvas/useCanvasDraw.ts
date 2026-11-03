@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
 	createCanvasDrawController,
+	type CanvasDrawControllerOptions,
 	type ArrangeHistoryTarget,
 	type CanvasBrushPreset,
 	type CanvasNode,
@@ -21,6 +22,8 @@ export interface UseCanvasDrawOptions<TNode extends CanvasNode = CanvasNode> {
 	initialStyle?: Partial<FreehandStrokeStyle>;
 	drawOptions?: FreehandDrawOptions;
 	generateNodeId?: () => string;
+	/** The brush library whose saved brushes strokes may use besides the presets (the canvas profile decides which); read once, on mount. */
+	brushLibrary?: CanvasDrawControllerOptions<TNode>['brushLibrary'];
 	onStrokeComplete?: (node: TNode) => void;
 	onNodesErase?: (erasedNodes: TNode[]) => void;
 }
@@ -45,7 +48,7 @@ export interface CanvasDrawActions<TNode extends CanvasNode = CanvasNode> {
 	drawStroke: (input: DrawStrokeInput) => Promise<DrawStrokeResult<TNode>>;
 	/** A node's box in canvas coordinates (lets gesture commands such as `canvas.circle` take `{ nodeId }`). */
 	nodeBounds: (id: string) => { x: number; y: number; width: number; height: number } | undefined;
-	/** The dry paint presets `style.brush` accepts (loads the paint engine). */
+	/** The presets and saved brushes `style.brush` accepts (loads the paint engine). */
 	listBrushes: () => Promise<CanvasBrushPreset[]>;
 }
 
@@ -81,6 +84,7 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 				style: options.initialStyle,
 				drawOptions: options.drawOptions,
 				generateNodeId: options.generateNodeId,
+				brushLibrary: options.brushLibrary,
 				onToolChange: setToolState,
 				onStyleChange: (s) => setStyleState(s),
 				onActiveStrokeChange: setActiveStroke,

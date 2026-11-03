@@ -38,9 +38,15 @@ paints without (warnings), each with a fix; lists and writes use the current hos
 | Host | Renders |
 | --- | --- |
 | Paint editor (`paint`) | Everything. |
-| Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, light or motion. |
-| Canvas (`canvas`) | Dry dab brushes along a path (no tools, wet, thick, particles, objects or light); velocity is ignored. |
-| Vector strokes (`vector`) | As canvas, but light brushes paint as plain colour. |
+| Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, light or motion. Pick one with `set_brush_preset`. |
+| Canvas (`canvas`) | Dry dab brushes along a path (no tools, wet, thick, particles, objects or light); velocity is ignored. Draw with one as `canvas.drawFreehand` `brush`. |
+| Vector strokes (`vector`) | As canvas, but light brushes paint as plain colour. Draw with one as `vector.addBrushstroke` `brushId`. |
+
+Every host lists the presets its profile admits and the library's saved brushes it admits, and
+each registers these tools with its own profile, so `list_brush_presets` shows that host's brushes.
+A saved brush used in canvas or vector strokes is copied into the stroke, so the document renders
+where the library is not; changing the brush in the library later doesn't change strokes already
+drawn.
 
 ## Working method
 

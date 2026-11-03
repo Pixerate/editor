@@ -3,7 +3,7 @@
  * gradient defs) and the overlay (screen-space selection box, anchors, handles, marquee and
  * pen preview). React, Svelte or plain DOM code turns these into `<svg>` elements.
  */
-import { isVectorBrushstrokeLayer, vectorBrushstrokeBrush, vectorBrushstrokeImages, type VectorBrushstrokeImage } from './brushstroke.js';
+import { isVectorBrushstrokeLayer, vectorBrushstrokeBrushOf, vectorBrushstrokeImages, type VectorBrushstrokeImage } from './brushstroke.js';
 import { resolveVectorMasterPages } from './pages.js';
 import { vectorPerspectiveGridLines, vectorPerspectivePlanes } from './perspective.js';
 import { resolveVectorLenses } from './lens.js';
@@ -1907,7 +1907,7 @@ export function getVectorAppearancePanel(state: Pick<VectorEditorState, 'documen
 		...(isVectorBrushstrokeLayer(l as VectorStrokeLayer)
 			? (() => {
 					const b = (l as VectorStrokeLayer).brush!;
-					const preset = vectorBrushstrokeBrush(b.brushId)!;
+					const preset = vectorBrushstrokeBrushOf(b)!;
 					return { brushstroke: { brushId: b.brushId, name: preset.name, size: b.size ?? preset.tip.size, ...(b.seed !== undefined ? { seed: b.seed } : {}), grain: b.seed !== undefined && b.paper !== null } };
 				})()
 			: (l.kind ?? 'paint') !== 'paint'

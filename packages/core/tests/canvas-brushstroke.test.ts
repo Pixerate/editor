@@ -126,7 +126,7 @@ describe('brushed freehand strokes', () => {
 		expect(brushes.map((b) => b.id)).toEqual(expect.arrayContaining(['ink-pen', 'pencil-hb']));
 		expect(brushes.some((b) => b.id.startsWith('watercolor'))).toBe(false);
 		const wet = { ...((strokeToShapeNode(stroke()).data as any).shape as PathShape), brush: { brush: 'watercolor-round' } };
-		await expect(renderShapeBrushstroke(wet)).rejects.toThrow(/not a dry brush.*wet paint needs an area to flow in/);
+		await expect(renderShapeBrushstroke(wet)).rejects.toThrow(/can't brush a canvas stroke: Canvas has no wet surface\. Set behaviour.surface to dry\..* Use one of: pencil-hb/);
 		await expect(renderShapeBrushstroke({ ...wet, brush: { brush: 'nope' } })).rejects.toThrow(/Unknown brush 'nope'.*ink-pen/);
 	});
 });
@@ -236,7 +236,7 @@ describe('drawStroke and the canvas.drawFreehand command', () => {
 		const call = (params: unknown) => registry.callTool('run_command', { id: 'canvas.drawFreehand', params });
 		const wet = await call({ points: [[0, 0], [10, 0]], brush: 'watercolor-round' });
 		expect(wet.isError).toBe(true);
-		expect((wet.structuredContent as any).error.message).toMatch(/not a dry brush/);
+		expect((wet.structuredContent as any).error.message).toMatch(/can't brush a canvas stroke: Canvas has no wet surface/);
 		const noBrush = await call({ points: [[0, 0], [10, 0]], pressure: [0.5] });
 		expect((noBrush.structuredContent as any).error.message).toMatch(/pass a brush too/);
 		const badProfile = await call({ points: [[0, 0]], brush: 'ink-pen', pressure: [2] });
@@ -378,7 +378,7 @@ describe('renderCanvasBrushSwatch', () => {
 		expect(charcoal).toMatch(/^data:image\/png;base64,/);
 		expect(charcoal).not.toBe(airbrush);
 		expect(await renderCanvasBrushSwatch('charcoal-stick', { width: 80, height: 24 })).toBe(charcoal);
-		await expect(renderCanvasBrushSwatch('watercolor-round')).rejects.toThrow(/not a dry brush/);
+		await expect(renderCanvasBrushSwatch('watercolor-round')).rejects.toThrow(/can't brush a canvas stroke/);
 	});
 });
 

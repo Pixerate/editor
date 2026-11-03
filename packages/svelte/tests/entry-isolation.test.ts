@@ -25,13 +25,14 @@ function reachablePackages(entry: string): Set<string> {
   return packages;
 }
 
-/** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI, the image and paint editors share the layer style panel's view model from raster, and the paint editor draws its brush editor from brushes. */
+/** Dependency-free core subpaths an entry may use besides its own: editors with effects support use the effects UI, the image and paint editors share the layer style panel's view model from raster, and the paint editor, image editor and vector editor draw brush pickers from brushes. */
 const EXTRA: Record<string, readonly string[]> = {
   "video-editor": ["effects", "parameters", "tools", "color"],
-  "image-editor": ["effects", "parameters", "tools", "color", "raster"],
-  vector: ["effects", "parameters", "tools", "color"],
+  "image-editor": ["effects", "parameters", "tools", "color", "raster", "brushes"],
+  vector: ["effects", "parameters", "tools", "color", "brushes"],
   "animation-editor": ["effects", "parameters", "tools", "color"],
   "paint-editor": ["effects", "parameters", "tools", "color", "raster", "stickers", "brushes"],
+  brushes: [],
   effects: ["parameters", "color"],
   stickers: [],
   spreadsheet: ["tools"],
@@ -52,6 +53,7 @@ describe("subpath entry isolation", () => {
     ["spreadsheet/index.js", "spreadsheet"],
     ["image-editor/index.js", "image-editor"],
     ["paint-editor/index.js", "paint-editor"],
+    ["brushes/index.js", "brushes"],
     ["commands/index.js", "commands"],
     ["persistence/index.js", "persistence"],
     ["generation/index.js", "generation"],

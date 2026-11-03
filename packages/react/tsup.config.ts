@@ -7,6 +7,7 @@ export default defineConfig({
     "canvas/index": "src/canvas/index.ts",
     "image-editor/index": "src/image-editor/index.ts",
     "paint-editor/index": "src/paint-editor/index.ts",
+    "brushes/index": "src/brushes/index.ts",
     "commands/index": "src/commands/index.ts",
     "persistence/index": "src/persistence/index.ts",
     "generation/index": "src/generation/index.ts",
