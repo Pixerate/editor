@@ -110,6 +110,7 @@ An agent that contributes while the user paints suggests rather than paints:
   - `previewPaint` paints them on a scratch layer and rolls everything back, so the ghost is the real paint. `PaintCanvas` draws it translucent with a dashed edge (`proposals` prop).
   - Accepting paints it on a new layer of its own (on top, at the bottom, or above a layer) as one undo step recorded as the proposer's. The user's active layer stays theirs.
   - Suggestions use dry brushes only: wet media can't be previewed and rolled back.
+- **Painting at the same time.** `onStrokeSample` streams the user's live strokes as they're painted: begin, each batch of samples, then end or cancel, with the brush and colour. `getLiveStroke` and the `get_live_stroke` tool give a snapshot. The editor paints one stroke at a time, so an agent playing along draws its companion strokes live into `createPaintAgentStrokes`, which `PaintCanvas` (`agentStrokes`) draws as soft lines. It then paints them for real at `end`; the editor is idle by then.
 
 ## Phases
 

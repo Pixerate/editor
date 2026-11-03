@@ -11,7 +11,10 @@
     type PaintEditorController,
     type PaintPresence,
     type PaintProposals,
+    type PaintAgentStrokes,
+    type PaintAgentStrokesState,
     type PaintTool,
+    paintAgentStrokePoints,
   } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
   import { paintEditorState } from './paintEditorRune.svelte.js';
@@ -33,9 +36,23 @@
     presence?: PaintPresence;
     /** Paint an agent suggests, drawn over the canvas as ghosts (see `createPaintProposalState`). */
     proposals?: PaintProposals;
+    /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
+    agentStrokes?: PaintAgentStrokes;
     class?: string;
   }
-  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, proposals, class: className = '' }: Props = $props();
+  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, proposals, agentStrokes, class: className = '' }: Props = $props();
+  let agentLines = $state.raw<PaintAgentStrokesState>({ strokes: [] });
+  $effect(() => {
+    const store = agentStrokes;
+    if (!store) {
+      agentLines = { strokes: [] };
+      return;
+    }
+    agentLines = store.getState();
+    return store.subscribe((next) => {
+      agentLines = next;
+    });
+  });
 
   const editor = paintEditorState(() => controller);
   const snap = $derived(editor.current);
@@ -197,6 +214,9 @@
         stroke-width={1 / snap.view.zoom}
         stroke-dasharray={l.kind === 'symmetry' ? `${6 / snap.view.zoom} ${4 / snap.view.zoom}` : undefined}
       />
+    {/each}
+    {#each agentLines.strokes as s (s.id)}
+      <polyline data-agent-stroke={s.id} points={paintAgentStrokePoints(s)} fill="none" stroke={s.color} stroke-opacity={s.opacity ?? 0.6} stroke-width={s.size} stroke-linecap="round" stroke-linejoin="round" />
     {/each}
     {#if predicted.length > 0}
       <polyline points={predicted.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={snap.color} stroke-opacity="0.5" stroke-width={Math.max(1, snap.brush.tip.size / 2)} stroke-linecap="round" />

@@ -305,6 +305,22 @@ export interface PaintLayerInfo {
   effects?: number;
 }
 
+/** A live stroke as it is painted (`onStrokeSample`), for agents that paint along with the user. */
+export interface PaintStrokeSample {
+  /** `begin`: the pen went down. `points`: new samples. `end`: the stroke was recorded. `cancel`: it was abandoned. */
+  phase: 'begin' | 'points' | 'end' | 'cancel';
+  layerId: string;
+  brush: PaintBrush;
+  /** #rrggbb */
+  color: string;
+  /** Every raw sample so far (document pixels), in order. */
+  points: readonly PenPoint[];
+  /** The samples this event added (`points` only). */
+  added: readonly PenPoint[];
+  /** `end`: the recorded stroke's id, or `null` when it painted nothing. */
+  strokeId?: string | null;
+}
+
 /** One change to the paint history, for hosts and change feeds (`onCommit`). */
 export interface PaintCommitEvent {
   /** `execute`: a new undo step. `merge`: folded into the last one (a slider drag). */
@@ -523,6 +539,7 @@ export class PaintEditorController {
   private readonly encodeImage: ImageEncoder | undefined;
   private listeners = new Set<() => void>();
   private commitListeners = new Set<(event: PaintCommitEvent) => void>();
+  private sampleListeners = new Set<(sample: PaintStrokeSample) => void>();
   /** Origins set by `withOrigin`, innermost last. */
   private origins: string[] = [];
   /** `group` in progress: commits fold into one step, recorded when it ends. */
@@ -641,6 +658,30 @@ export class PaintEditorController {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Hears the user's live strokes as they are painted (`beginStroke` sessions, not strokes painted
+   * from data): when the pen goes down, each batch of samples, and the end or cancel. For agents
+   * that paint along in real time. Returns an unsubscribe function.
+   */
+  onStrokeSample(listener: (sample: PaintStrokeSample) => void): () => void {
+    this.sampleListeners.add(listener);
+    return () => {
+      this.sampleListeners.delete(listener);
+    };
+  }
+
+  private notifySample(phase: PaintStrokeSample['phase'], session: PaintStrokeSession, added: readonly PenPoint[] = [], strokeId?: string | null): void {
+    if (!this.sampleListeners.size || this.previewing) return;
+    const sample: PaintStrokeSample = { phase, layerId: session.layerId, brush: session.init.brush, color: session.init.colorHex, points: session.points, added, ...(strokeId !== undefined ? { strokeId } : {}) };
+    for (const l of [...this.sampleListeners]) l(sample);
+  }
+
+  /** The stroke being painted now, or `null`: its layer, brush, colour and samples so far. */
+  getLiveStroke(): { layerId: string; brushId: string; brushName: string; color: string; points: readonly PenPoint[] } | null {
+    const s = this.session;
+    return s ? { layerId: s.layerId, brushId: s.init.brush.id, brushName: s.init.brush.name, color: s.init.colorHex, points: s.points } : null;
   }
 
   /** Hears each undo step recorded, merged, undone or redone, with who made it. Returns an unsubscribe function. */
@@ -2548,6 +2589,7 @@ export class PaintEditorController {
         this.liveThick = ch ? { layerId, channels: ch } : null;
         this.emit(rects);
       },
+      sampled: (s, points) => this.notifySample('points', s, points),
       commit: (s, surface, cancelled) => {
         this.session = null;
         this.live = null;
@@ -2568,6 +2610,7 @@ export class PaintEditorController {
             this.wet.syncDisplays();
           }
           this.emit();
+          this.notifySample(cancelled ? 'cancel' : 'end', s, [], cancelled ? undefined : null);
           return;
         }
         const stroke = this.record(s);
@@ -2588,6 +2631,8 @@ export class PaintEditorController {
         const wetLight = wetStroke && this.wet.world?.hasLane(l.id) ? this.wet.world.lightDisplay(l.id) : null;
         const light = withLayerLight(this.doc.light, l.id, s.lightChannel() ?? wetLight);
         this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), wetStroke ? before : this.doc);
+        // After the commit, so a listener that paints in reply finds the editor idle.
+        this.notifySample('end', s, [], stroke.id);
       },
     };
     let session: PaintStrokeSession;
@@ -2599,6 +2644,7 @@ export class PaintEditorController {
     }
     this.session = session;
     this.emit([]);
+    this.notifySample('begin', session);
     return session;
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
-import { PaintEditorController, type PaintChange } from '@pixerate/editor/paint-editor';
+import { PaintEditorController, createPaintAgentStrokes, type PaintChange } from '@pixerate/editor/paint-editor';
 import { PaintCanvas, createPaintChangeWatcher, createPaintProposalState } from '../src/paint-editor';
 
 const line = (y: number) => Array.from({ length: 12 }, (_, i) => ({ x: 10 + i * 8, y, pressure: 0.7 }));
@@ -39,5 +39,19 @@ describe('createPaintProposalState and PaintCanvas ghosts (Svelte)', () => {
       unmount(component);
     });
     cleanup();
+  });
+
+  it('draws an agent\'s live strokes over the canvas', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    const strokes = createPaintAgentStrokes();
+    const component = mount(PaintCanvas, { target, props: { controller: c, fitOnMount: false, agentStrokes: strokes } });
+    flushSync();
+    strokes.set({ id: 'k1', origin: 'agent:pixie', points: [{ x: 1, y: 2 }, { x: 30, y: 40 }], color: '#ff8800', size: 6 });
+    flushSync();
+    expect(target.querySelector('[data-agent-stroke="k1"]')!.getAttribute('points')).toBe('1,2 30,40');
+    strokes.clear();
+    flushSync();
+    expect(target.querySelector('[data-agent-stroke]')).toBeNull();
+    unmount(component);
   });
 });

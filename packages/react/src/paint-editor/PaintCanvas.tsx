@@ -10,7 +10,9 @@ import {
   handlePaintShortcut,
   viewCssTransform,
   type PaintEditorController,
+  paintAgentStrokePoints,
   paintProposalGhost,
+  type PaintAgentStrokes,
   type PaintPresence,
   type PaintProposal,
   type PaintProposals,
@@ -33,6 +35,8 @@ export interface PaintCanvasProps {
   presence?: PaintPresence;
   /** Paint an agent suggests, drawn over the canvas as ghosts (see `usePaintProposals`). */
   proposals?: PaintProposals;
+  /** Strokes an agent is painting live alongside the user's, drawn as soft lines (see `createPaintAgentStrokes`). */
+  agentStrokes?: PaintAgentStrokes;
   className?: string;
 }
 
@@ -43,7 +47,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, agentStrokes, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -191,6 +195,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
             strokeDasharray={l.kind === 'symmetry' ? `${6 / state.view.zoom} ${4 / state.view.zoom}` : undefined}
           />
         ))}
+        {agentStrokes && <PaintAgentStrokeLines strokes={agentStrokes} />}
         {predicted.length > 0 && (
           <polyline points={predicted.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={state.color} strokeOpacity={0.5} strokeWidth={Math.max(1, state.brush.tip.size / 2)} strokeLinecap="round" />
         )}
@@ -314,5 +319,17 @@ const PaintProposalGhost: React.FC<{ proposal: PaintProposal; transform: string;
       className="absolute left-0 top-0 pointer-events-none"
       style={{ transform: `${transform} translate(${ghost.x}px, ${ghost.y}px)`, transformOrigin: '0 0', opacity: 0.7, outline: `${1.5 / zoom}px dashed #a78bfa`, outlineOffset: `${2 / zoom}px` }}
     />
+  );
+};
+
+/** Live agent strokes as soft round-capped lines, in document coordinates (inside the canvas's SVG overlay). */
+const PaintAgentStrokeLines: React.FC<{ strokes: PaintAgentStrokes }> = ({ strokes }) => {
+  const { strokes: list } = useSyncExternalStore(strokes.subscribe, strokes.getState, strokes.getState);
+  return (
+    <>
+      {list.map((s) => (
+        <polyline key={s.id} data-agent-stroke={s.id} points={paintAgentStrokePoints(s)} fill="none" stroke={s.color} strokeOpacity={s.opacity ?? 0.6} strokeWidth={s.size} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </>
   );
 };
