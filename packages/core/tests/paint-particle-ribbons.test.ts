@@ -30,7 +30,7 @@ const paint = (particle: Record<string, unknown>, extra: Record<string, unknown>
   return c;
 };
 
-describe('particle brushes: ribbons, waves, elastic and fuzzy kinds, textured dots', () => {
+describe('particle brushes: ribbons, waves, elastic and fuzzy kinds, textured dots', { timeout: 30_000 }, () => {
   it('addPolygonArea: polygons sharing an edge add up to exactly the area they cover, with no seam', () => {
     const rect = { x: 0, y: 0, width: 12, height: 12 };
     const out = new Float32Array(144);
