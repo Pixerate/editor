@@ -3545,6 +3545,29 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `migrateBrushV1` builds facets from what the engine reads. Medium, variety, description, tags, suggested colours, light spill and glow, and motion hints aren't in the engine brush.
 - **Solution / Workaround**: `brushSpecOf(next, from)` migrates the edited brush and carries the hints over from the facets it was edited from. It keeps them only if the brush still resolves to the same engine brush (a wet variety on a dab brush would change it). The controller keeps the active brush's facets next to its engine form, and uses them for `getBrushSpec()` and saving.
 
+### [core/paint-editor] A Brush's Default Colour Is Taken When the Brush Is Chosen, Not When It Paints
+
+- **Issue / Symptom**: Should the highlighter paint yellow? Applying `colour.default` at every stroke would override the colour the user just picked. Ignoring it would make the highlighter paint the last colour used.
+- **Root Cause**: The colour belongs to the user. A brush's default is only a suggestion, unless `colour.own` is set.
+- **Solution / Workaround**: The rule:
+  - Choosing a brush (`setBrush` / `setBrushFacets` with an id, or a patch that sets `colour.default`) makes a solid or light / dark default the paint colour, unless `setColorLocked(true)` (`set_color` `locked`, "Keep my colour").
+  - A colour taken from a light / dark default resolves again when `setColorScheme` changes, until the user picks another colour.
+  - `colour.own` brushes paint their default at every stroke, resolved when the stroke starts. The stroke records the hex, so replays in another scheme stay exact.
+  - Gradient defaults were already the brush's own paint. Effect defaults stay a suggestion.
+  - The image editor's `setBrushPreset` takes the default as the foreground unless `keepColour`.
+
+### [core/paint-editor] Stamp Tips and Spray Only Run in the Dry Dab Engine
+
+- **Issue / Symptom**: A stamp tip, or `marks: scatter`, painted round single dabs when the brush also picked paint up or used gradient paint.
+- **Root Cause**: Those brushes paint through `PaintDabStroke` (the exchange path), not `DryStroke`. Only `DryStroke` asks `stampSampler` for the tip and scatters droplets.
+- **Solution / Workaround**: The normaliser drops scatter marks on wet, thick, bristle and pick-up brushes. Stamp tips with pick-up or gradient paint still paint round, so keep them on dry brushes. Provider sticker art must be loaded (`prepareStickers`, which `set_brush` and `paint_stroke` call); until it is, the tip paints round. Canvas, vector and image profiles refuse stamp tips and scatter marks.
+
+### [core/brushes] Every Built-In Preset Needs a Flat Twin in `BUILTIN_BRUSHES`
+
+- **Issue / Symptom**: A preset added to `BRUSH_PRESETS` alone failed "has a facet spec for every built-in brush". Canvas and vector also threw while building their lists (`find` returned undefined).
+- **Root Cause**: The paint editor's v1 `BUILTIN_BRUSHES` is still a hand-written flat list. The hosts pair each preset with its flat brush by id. Making `BUILTIN_BRUSHES` resolve the presets would create an import cycle (`brushes/resolve` imports `paint-editor/brushes`).
+- **Solution / Workaround**: Add the facet spec, then generate the flat entry from what it resolves to: `engineChanges(normalizePaintBrush({ id, name }), resolveBrush(spec))`, with the category set by hand. Append it at the same position in both lists. `tests/brushes.test.ts` checks every pair deep-equals.
+
 ### [core/canvas] Canvas and Vector Strokes Copy a Saved Brush Into the Stroke
 
 - **Issue / Symptom**: A canvas stroke or vector brushstroke drawn with a saved brush (`my-pencil`) stored only the id. A document opened without that library, or after the brush was removed, couldn't render it. The canvas renderer is a lazy chunk with no access to the host's library anyway.

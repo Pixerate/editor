@@ -57,6 +57,9 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 | A brush that must work in another editor | `check_brush` with that `host`, then `create_brush` from its `degraded` brush under a new id. |
 | A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. |
 | A light brush (neon, glow) | `light.amount`, and paint it on dark paper; a highlighter keeps `light.spill.radius` 0. |
+| A colour that depends on the background (chalk, white ink) | `colour.default` as a light / dark pair `{ light, dark }`: the editor takes the side for its colour scheme when the brush is chosen. |
+| A shape as the tip (stars, leaves, a logo) | `tip.shape` stamp with `stamps` (an editor stamp or a ref from `find_stickers`), continuous marks; it paints in the user's colour. Keep the sticker's colours with `marks` objects. Paint editor only. |
+| A spray can or mist | `basedOn` `spray-can`, or `medium` spray with `marks` scatter (`density`, `size`). Paint editor only. |
 | A change to a built-in | `duplicate_brush`, then `update_brush` the copy. |
 
 ## Recipes
@@ -64,8 +67,9 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 **A pink highlighter.** `create_brush` `{ id: "pink-highlighter", name: "Pink highlighter",
 basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
 
-**Chalk for canvas strokes.** On the canvas host, `create_brush` `{ id: "chalk", name: "Chalk",
-basedOn: "soft-pastel", variety: "chalk", behaviour: { grain: 1 }, dynamics: { sizeJitter: 0.12 } }`.
+**Chalk on a blackboard, for canvas strokes.** On the canvas host, `create_brush`
+`{ id: "board-chalk", name: "Board chalk", basedOn: "chalk", colour: { default: { light:
+"#334155", dark: "#f8fafc" } } }`: white chalk in dark mode, slate on light paper.
 
 **Port a wet brush to vector.** `check_brush` `{ id, host: "vector" }`; `create_brush` from the
 `degraded` brush with `id` `<id>-vector`; `check_brush` again.

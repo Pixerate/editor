@@ -70,6 +70,8 @@ export interface StrokeSessionInit {
   selection?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Sticker brushes: the next sticker number on the layer. */
   sticker?: { nextId: number; art?: StickerArtLookup };
+  /** Loaded sticker art for stamp tips and textured particle dots of stickers from the sticker library. */
+  stampArt?: StickerArtLookup;
   /** Gradient paint (resolved: concrete colours), or `null` for the one colour. Recorded with the stroke. */
   paint?: PaintGradientSource | null;
   /**
@@ -188,7 +190,7 @@ export class PaintStrokeSession {
         effect,
       });
     } else {
-      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect };
+      const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect, stampArt: init.stampArt };
       this.dry = brush.engine === 'particle' ? new ParticleStroke(brush, opts) : brush.engine === 'bristle' ? new BristleStroke(brush, opts) : new DryStroke(brush, opts);
     }
   }

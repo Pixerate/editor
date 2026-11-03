@@ -29,6 +29,8 @@
     problems = r.problems.length ? r.problems.join(' ') : null;
     if (r.brush !== brush) onchange(r.brush);
   };
+  const setColour = (path: string, light: string, dark: string | null) => set(path, dark === null ? light : { light, dark });
+  const setAt = (path: string, list: Array<string | { light: string; dark: string }>, i: number, entry: string | { light: string; dark: string }) => set(path, list.map((x, j) => (j === i ? entry : x)));
   const save = async () => {
     try {
       await onsaveas?.(name.trim());
@@ -71,22 +73,44 @@
             <input aria-label={c.ariaLabel} value={c.value} placeholder={c.placeholder} onblur={(e) => e.currentTarget.value !== c.value && set(c.path, e.currentTarget.value.trim().toLowerCase())} class="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
           </label>
         {:else if c.kind === 'colour'}
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-slate-400">{c.label}</span>
-            <span class="flex items-center gap-1">
-              <input type="color" aria-label={c.ariaLabel} value={c.value ?? '#000000'} onchange={(e) => set(c.path, e.currentTarget.value)} class="h-5 w-8" />
-              {#if c.value}<button type="button" class={button} onclick={() => set(c.path, undefined)}>None</button>{/if}
-            </span>
+          <!-- One colour, or a light / dark pair resolved for the host's colour scheme. -->
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-slate-400">{c.label}</span>
+              <span class="flex items-center gap-1">
+                <input type="color" aria-label={c.ariaLabel} title={c.dark !== null ? 'On light backgrounds' : undefined} value={c.value ?? '#000000'} onchange={(e) => setColour(c.path, e.currentTarget.value, c.dark)} class="h-5 w-8" />
+                {#if c.dark !== null}
+                  <input type="color" aria-label={`${c.ariaLabel} (dark)`} title="On dark backgrounds" value={c.dark} onchange={(e) => setColour(c.path, c.value ?? '#000000', e.currentTarget.value)} class="h-5 w-8" />
+                {/if}
+                {#if c.value || c.gradient}<button type="button" class={button} onclick={() => set(c.path, undefined)}>None</button>{/if}
+              </span>
+            </div>
+            {#if c.gradient}
+              <span class="text-[10px] text-slate-500">A gradient (its own paint).</span>
+            {:else}
+              <label class="flex items-center gap-2">
+                <input type="checkbox" aria-label={`${c.ariaLabel}: light and dark`} checked={c.dark !== null} onchange={(e) => setColour(c.path, c.value ?? '#000000', e.currentTarget.checked ? (c.value ?? '#ffffff') : null)} /> Light / dark
+              </label>
+            {/if}
           </div>
         {:else if c.kind === 'palette'}
-          <div class="flex flex-wrap items-center gap-1" role="group" aria-label={c.ariaLabel}>
+          <div class="flex flex-col gap-1" role="group" aria-label={c.ariaLabel}>
             <span class="text-slate-400">{c.label}</span>
-            {#each c.value as col, i (`${col}-${i}`)}
-              <button type="button" title={`Remove ${col}`} aria-label={`Remove ${col}`} class="h-4 w-4 rounded ring-1 ring-slate-700" style={`background: ${col}`} onclick={() => set(c.path, c.value.filter((_, j) => j !== i))}></button>
-            {/each}
-            {#if c.value.length < c.max}
-              <input type="color" aria-label="Add a palette colour" onchange={(e) => set(c.path, [...c.value, e.currentTarget.value])} class="h-4 w-6" />
-            {/if}
+            <div class="flex flex-wrap items-center gap-1">
+              {#each c.value as col, i (i)}
+                <span class="flex items-center gap-0.5 rounded bg-slate-900 p-0.5">
+                  <input type="color" aria-label={`Palette colour ${i + 1}`} value={typeof col === 'string' ? col : col.light} onchange={(e) => setAt(c.path, c.value, i, typeof col === 'string' ? e.currentTarget.value : { ...col, light: e.currentTarget.value })} class="h-4 w-5" />
+                  {#if typeof col !== 'string'}
+                    <input type="color" aria-label={`Palette colour ${i + 1} (dark)`} value={col.dark} onchange={(e) => setAt(c.path, c.value, i, { ...col, dark: e.currentTarget.value })} class="h-4 w-5" />
+                  {/if}
+                  <button type="button" aria-label={`Remove palette colour ${i + 1}`} class="px-0.5 text-slate-400 hover:text-white" onclick={() => set(c.path, c.value.filter((_, j) => j !== i))}>×</button>
+                </span>
+              {/each}
+              {#if c.value.length < c.max}
+                <input type="color" aria-label="Add a palette colour" onchange={(e) => set(c.path, [...c.value, e.currentTarget.value])} class="h-4 w-6" />
+                <button type="button" class={button} onclick={() => set(c.path, [...c.value, { light: '#334155', dark: '#e2e8f0' }])}>Add light / dark pair</button>
+              {/if}
+            </div>
           </div>
         {:else if c.kind === 'stamps'}
           <div class="flex flex-wrap gap-1" role="group" aria-label={c.ariaLabel} title={`Up to ${c.max}`}>

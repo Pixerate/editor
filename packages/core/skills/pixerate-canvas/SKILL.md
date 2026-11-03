@@ -94,8 +94,9 @@ you to. Withdraw stale ones with `reject_proposal`: when the user changes what a
   use the preset's own size (`canvas.listBrushes` gives it); pass it only to make the mark finer
   or bolder.
 - **Brush character.** Each preset draws with its own character: charcoal and pastel are broad and
-  grainy (they catch the paper's tooth), pencil is fine and slightly grainy, ink, marker and brush
-  pen are clean, the airbrush is a soft spray. The grain and jitter are seeded per stroke, so a
+  grainy (they catch the paper's tooth), as are crayon and chalk; pencil is fine and slightly
+  grainy; ink, marker, brush pen, ballpoint, gel pen and fineliner are clean (the fineliner keeps
+  one width), the airbrush is a soft spray. The grain and jitter are seeded per stroke, so a
   stroke always looks the same, and neighbouring strokes share one sheet of paper. Pick the brush
   for the look, then the colour; for a sketch, use one or two brushes rather than all of them.
 - **Annotate with gestures, not points.** To mark up work the way a designer marks up a print,

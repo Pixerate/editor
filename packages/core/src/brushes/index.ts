@@ -15,6 +15,7 @@ export { normalizeBrushSpec, WET_BRUSH_TOOLS } from './normalize';
 export { resolveBrush, resolveCategory, resolveEngine, resolveWetMedium, type ResolveBrushOptions } from './resolve';
 export { migrateBrushV1 } from './migrate';
 export { BRUSH_PRESETS } from './presets';
+export { brushColourHex } from './colour';
 export { BRUSH_HOST_PROFILES, brushColourKind, CANVAS_PROFILE, checkBrush, degrade, IMAGE_PROFILE, listPresets, PAINT_PROFILE, VECTOR_PROFILE, type BrushCheck, type BrushColourKind, type BrushHostProfile, type BrushIssue, type BrushSupport, type DegradedBrush } from './profiles';
 export {
   BrushLibraryError,

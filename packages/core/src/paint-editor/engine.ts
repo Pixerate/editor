@@ -19,7 +19,9 @@ import { CoverageMap, dabRect, rasterizeDab, type BrushSettings, type Dab, type 
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
-import { randSigned } from './noise';
+import { rand01, randSigned } from './noise';
+import { rasterizeStampDab, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
+import type { StickerArtLookup } from './sticker-art';
 import { grainCatch, type PaperGrain } from './paper';
 
 /** One pen sample in document pixels. Every channel but x and y is optional. */
@@ -341,6 +343,8 @@ export interface DryStrokeOptions {
   copies?: readonly StrokeCopy[];
   /** Effect paint: each pixel takes its colour (and alpha) from these canvas-sized pixels. */
   effect?: EffectPaintPixels | null;
+  /** Loaded sticker art, for a stamp tip of a sticker from the sticker library (`brush.stamp`); without it such a tip paints round. */
+  stampArt?: StickerArtLookup;
 }
 
 /**
@@ -359,7 +363,11 @@ export class DryStroke {
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
 
+  /** The stamp tip's shape, or `null` for the round computed tip. */
+  private readonly stamp: StampSampler | null;
+
   constructor(readonly brush: PaintBrush, private readonly options: DryStrokeOptions) {
+    this.stamp = brush.stamp ? stampSampler(brush.stamp, options.stampArt) : null;
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     this.copies = options.copies?.length ? options.copies : [IDENTITY_COPY];
     this.walkers = this.copies.map((c, i) => new PenDabWalker(brush, ((options.seed ?? 0) + i * 7919) | 0, c.linear));
@@ -390,33 +398,53 @@ export class DryStroke {
 
   private paint(dabs: PenDab[]): RasterRect[] {
     const rects: RasterRect[] = [];
-    const hardness = this.brush.tip.hardness;
-    const grain = this.options.grain;
+    const spray = this.brush.spray;
+    const seed = this.options.seed ?? 0;
     for (const d of dabs) {
-      const rect = dabRect(d, hardness);
-      const n = rect.width * rect.height;
-      if (this.buf.length < n) this.buf = new Float32Array(n);
-      const vals = this.buf.subarray(0, n);
-      rasterizeDab(d, hardness, rect, vals);
-      if (this.depth > 0 && grain) {
-        for (let yy = 0, k = 0; yy < rect.height; yy++) {
-          const y = rect.y + yy + 0.5;
-          for (let xx = 0; xx < rect.width; xx++, k++) {
-            if (vals[k] > 0) vals[k] *= grainCatch(grain.at(rect.x + xx + 0.5, y), this.depth, d.pressure);
-          }
-        }
+      if (!spray) {
+        this.mark(d, d, rects);
+        continue;
       }
-      let field: Float32Array | null = null;
-      if (this.options.effect) {
-        if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
-        field = this.field.subarray(0, n * 3);
-        sampleEffectField(this.options.effect, rect, vals, field, d);
+      // Spray: droplets spread evenly over the tip's disc (seeded per dab, so replays match).
+      const count = 1 + Math.round(spray.density * 31);
+      const key = d.index * 131 + Math.round(d.travel * 8);
+      for (let i = 0; i < count; i++) {
+        const a = rand01(seed, key * 64 + i, 61) * Math.PI * 2;
+        const rr = Math.sqrt(rand01(seed, key * 64 + i, 67)) * d.radius;
+        const drop: Dab = { ...d, x: d.x + Math.cos(a) * rr, y: d.y + Math.sin(a) * rr, radius: Math.max(0.5, d.radius * spray.size * (0.6 + 0.8 * rand01(seed, key * 64 + i, 71))), roundness: 1, angle: rand01(seed, key * 64 + i, 73) * Math.PI * 2 };
+        this.mark(drop, d, rects);
       }
-      this.coverage.accumulate(rect, vals, d.opacity, null, field);
-      rects.push(rect);
-      this.dabCount++;
     }
     return rects;
+  }
+
+  /** Lays one mark (a dab, or a spray droplet of dab `d`): the round tip or the stamp, the paper grain, effect paint. */
+  private mark(m: Dab, d: PenDab, rects: RasterRect[]): void {
+    const hardness = this.brush.tip.hardness;
+    const grain = this.options.grain;
+    const rect = this.stamp ? stampDabRect(m) : dabRect(m, hardness);
+    const n = rect.width * rect.height;
+    if (this.buf.length < n) this.buf = new Float32Array(n);
+    const vals = this.buf.subarray(0, n);
+    if (this.stamp) rasterizeStampDab(m, this.stamp, d.index, rect, vals);
+    else rasterizeDab(m, hardness, rect, vals);
+    if (this.depth > 0 && grain) {
+      for (let yy = 0, k = 0; yy < rect.height; yy++) {
+        const y = rect.y + yy + 0.5;
+        for (let xx = 0; xx < rect.width; xx++, k++) {
+          if (vals[k] > 0) vals[k] *= grainCatch(grain.at(rect.x + xx + 0.5, y), this.depth, d.pressure);
+        }
+      }
+    }
+    let field: Float32Array | null = null;
+    if (this.options.effect) {
+      if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
+      field = this.field.subarray(0, n * 3);
+      sampleEffectField(this.options.effect, rect, vals, field, d);
+    }
+    this.coverage.accumulate(rect, vals, m.opacity, null, field);
+    rects.push(rect);
+    this.dabCount++;
   }
 }
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-import { PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
 import { BrushEditor } from './BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
@@ -42,6 +42,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   const own = typeof spec.colour?.default === 'string' && /^#[0-9a-f]{6}/i.test(spec.colour.default) ? spec.colour.default.slice(0, 7) : undefined;
   const preview = useMemo(() => controller.brushThumbnail(brush.id, { width: 240, height: 64, color: own }), [controller, brush, paper, state.color, own]);
   const carried = brushLoadColor(state.mixerLoad);
+  // The brush's suggested colours, resolved for the colour scheme: one click makes one the paint colour.
+  const palette = (spec.colour?.palette ?? []).flatMap((c) => brushColourHex(c, state.colorScheme) ?? []);
   const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'brush';
   const loads = ['dab', 'mixer', 'impasto'].includes(brush.engine) || (brush.engine === 'wet' && brush.wet.tool === 'paint');
 
@@ -72,8 +74,20 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
                 </button>
               </div>
             );
-          if (section === 'colour' && brushTakesPaint(brush))
+          if (section === 'colour')
             return (
+              <>
+                {palette.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Paint with a palette colour">
+                    {palette.map((hex, i) => (
+                      <button key={`${hex}-${i}`} type="button" aria-label={`Paint with ${hex}`} title={hex} aria-pressed={state.color === hex} className={`h-5 w-5 rounded ring-1 ${state.color === hex ? 'ring-white' : 'ring-slate-700'}`} style={{ background: hex }} onClick={() => controller.setColor(hex)} />
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center gap-2" title="Choosing a brush with a default colour (the highlighter's yellow) makes it your colour unless this is on">
+                  <input type="checkbox" aria-label="Keep my colour" checked={state.colorLocked} onChange={(e) => controller.setColorLocked(e.target.checked)} /> Keep my colour when choosing a brush
+                </label>
+                {brushTakesPaint(brush) && (
               <div className="flex flex-col gap-1.5" data-testid="brush-gradient">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-400" title="A gradient of the brush's own, used instead of the paint (the multi-colour brush)">
@@ -85,6 +99,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
                 </div>
                 {brush.paint && <PaintGradientEditor value={brush.paint} colors={{ paint: state.color, secondary: state.secondaryColor }} onChange={(g) => attempt(() => controller.setBrush({ paint: g }))} />}
               </div>
+                )}
+              </>
             );
           return null;
         }}

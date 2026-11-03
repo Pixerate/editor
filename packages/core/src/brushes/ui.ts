@@ -18,6 +18,8 @@ import { normalizeBrushSpec } from './normalize';
 import { checkBrush, PAINT_PROFILE, type BrushHostProfile } from './profiles';
 import { BRUSH_FIELDS, getPath, resolveBrush, resolveEngine, setPath } from './resolve';
 import { MAX_BRUSH_PALETTE } from './schema';
+import { brushColourHex } from './colour';
+import { isDualColor } from '../color/dual';
 import { BRUSH_MEDIA, type Brush, type BrushMedium, type BrushTool } from './types';
 
 export type BrushEditorSectionId = 'medium' | 'shape' | 'marks' | 'feel' | 'behaviour' | 'light' | 'motion' | 'colour';
@@ -37,9 +39,14 @@ export type BrushEditorControl =
   | (ControlBase & { kind: 'choice'; options: ReadonlyArray<{ value: string; label: string }>; value: string })
   | (ControlBase & { kind: 'toggle'; value: boolean })
   | (ControlBase & { kind: 'text'; value: string; placeholder?: string })
-  /** A solid colour (#rrggbb), or `null` when there is none (or the default is a gradient or effect). */
-  | (ControlBase & { kind: 'colour'; value: string | null })
-  | (ControlBase & { kind: 'palette'; value: string[]; max: number })
+  /**
+   * A solid colour (#rrggbb, its light side when `dark` is set), or `null` when there is none (or
+   * the default is a gradient or effect: `gradient` says so). `dark`: the dark side of a light /
+   * dark pair, `null` for one colour in both schemes.
+   */
+  | (ControlBase & { kind: 'colour'; value: string | null; dark: string | null; gradient: boolean })
+  /** Suggested colours: solid (#rrggbb) or light / dark pairs; gradient and effect entries are left out. */
+  | (ControlBase & { kind: 'palette'; value: Array<string | { light: string; dark: string }>; max: number })
   /** Stamp refs (`editor:star`…): `options` are the editor's stamps; hosts may offer more refs. */
   | (ControlBase & { kind: 'stamps'; value: string[]; max: number; options: ReadonlyArray<{ value: string; label: string }> });
 
@@ -192,9 +199,18 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
 
   if (!isTool) {
     const own = brush.colour?.default;
+    const hex = (c: unknown) => (typeof c === 'string' ? (brushColourHex(c, 'light') ?? null) : null);
+    const pair = isDualColor(own) ? own : null;
     add('colour', 'Colour', [
-      withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: typeof own === 'string' && /^#[0-9a-f]{6}/i.test(own) ? own.slice(0, 7).toLowerCase() : null }),
-      withNote({ kind: 'palette', path: 'colour.palette', label: 'Palette', ariaLabel: 'Brush palette', value: (brush.colour?.palette ?? []).filter((c): c is string => typeof c === 'string'), max: MAX_BRUSH_PALETTE }),
+      withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: pair ? (brushColourHex(pair, 'light') ?? null) : hex(own), dark: pair ? (brushColourHex(pair, 'dark') ?? null) : null, gradient: own !== undefined && typeof own === 'object' && !pair }),
+      withNote({
+        kind: 'palette',
+        path: 'colour.palette',
+        label: 'Palette',
+        ariaLabel: 'Brush palette',
+        value: (brush.colour?.palette ?? []).flatMap((c): Array<string | { light: string; dark: string }> => (isDualColor(c) ? [{ light: brushColourHex(c, 'light')!, dark: brushColourHex(c, 'dark')! }] : hex(c) ? [hex(c)!] : [])),
+        max: MAX_BRUSH_PALETTE,
+      }),
       toggle('colour.own', 'Always its own colour'),
     ]);
   }

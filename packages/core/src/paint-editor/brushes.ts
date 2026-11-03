@@ -10,7 +10,7 @@ import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, typ
 import type { MixingModel } from '../paint/exchange';
 import { readPaintSource, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
-import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
+import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, STAMP_KINDS, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
@@ -265,6 +265,14 @@ export interface PaintBrush {
   /** Light paint: the light it lays with its colour (amount 0: none). */
   light: LightSettings;
   /**
+   * Dab engine: a stamp tip. Each dab (and each spray droplet) is this sticker's shape, an editor
+   * stamp (`editor:star`) or any sticker ref from the sticker library, laid in the paint colour;
+   * `null` (default): the round computed tip.
+   */
+  stamp: string | null;
+  /** Dab engine: spray marks. Each dab lays a seeded scatter of droplets across the tip; `null` (default): one mark per dab. */
+  spray: SpraySettings | null;
+  /**
    * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
    * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
    * (the editor's two colours). This is what the multi-colour brush became.
@@ -322,7 +330,34 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light'>> & {
+/** Spray marks (dab engine). */
+export interface SpraySettings {
+  /** Droplets per dab: 1 + density × 31 (0..1, default 0.5). */
+  density: number;
+  /** Droplet size as a fraction of the tip size, 0.02..1 (default 0.12). */
+  size: number;
+}
+
+export const DEFAULT_SPRAY: Readonly<SpraySettings> = { density: 0.5, size: 0.12 };
+
+/** A stamp tip's ref: an editor stamp or any `provider:id` sticker ref (a bare editor stamp reads as `editor:<stamp>`), or null. */
+function readStamp(raw: unknown, base: string | null): string | null {
+  if (raw === null) return null;
+  if (typeof raw !== 'string') return base;
+  if ((STAMP_KINDS as readonly string[]).includes(raw)) return `editor:${raw}`;
+  return /^[^:\s]+:\S+$/.test(raw) && raw.length <= 200 ? raw : base;
+}
+
+function readSpray(raw: unknown, base: SpraySettings | null): SpraySettings | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<SpraySettings>;
+  const b = base ?? DEFAULT_SPRAY;
+  return { density: unit(r.density, b.density), size: range(r.size, 0.02, 1, b.size) };
+}
+
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light' | 'spray'>> & {
+  spray?: Partial<SpraySettings> | null;
   light?: Partial<LightSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
@@ -470,6 +505,8 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
     light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
+    stamp: readStamp(raw.stamp, b.stamp ?? null),
+    spray: readSpray(raw.spray, b.spray ?? null),
     paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };
@@ -496,6 +533,8 @@ const BASE_BRUSH: PaintBrush = {
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
   light: { ...DEFAULT_LIGHT },
+  stamp: null,
+  spray: null,
   paint: null,
 };
 
@@ -921,6 +960,41 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     id: 'blot', name: 'Blot (erase wet)', category: 'wet-tool', engine: 'wet',
     tip: { size: 40, hardness: 0.5, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     wet: { tool: 'blot', strength: 0.7 },
+  }),
+  // Pens, crayon, chalk and the spray can (their facets: `@pixerate/editor/brushes` presets).
+  builtin({
+    id: 'ballpoint', name: 'Ballpoint', category: 'ink',
+    tip: { size: 3, hardness: 0.95, spacing: 0.05, opacity: 0.9, smoothing: 0.35, pressureOpacity: true },
+    grain: 0.15,
+    pressureSmoothing: 0.3,
+    dynamics: { minSize: 0.7, opacityJitter: 0.08 },
+  }),
+  builtin({
+    id: 'gel-pen', name: 'Gel pen', category: 'ink',
+    tip: { size: 4, spacing: 0.04, smoothing: 0.3 },
+    pressureSmoothing: 0.3,
+    dynamics: { minSize: 0.8 },
+  }),
+  builtin({
+    id: 'fineliner', name: 'Fineliner', category: 'ink',
+    tip: { size: 2, spacing: 0.05, smoothing: 0.4, pressureSize: false },
+  }),
+  builtin({
+    id: 'crayon', name: 'Crayon', category: 'pastel',
+    tip: { size: 14, hardness: 0.7, spacing: 0.06, opacity: 0.9, flow: 0.85, smoothing: 0.2 },
+    grain: 0.9,
+    dynamics: { minSize: 0.6, tiltSize: 0.6, sizeJitter: 0.1, opacityJitter: 0.1 },
+  }),
+  builtin({
+    id: 'chalk', name: 'Chalk', category: 'pastel',
+    tip: { size: 18, hardness: 0.6, spacing: 0.05, opacity: 0.95, flow: 0.8, smoothing: 0.2 },
+    grain: 1,
+    dynamics: { minSize: 0.5, tiltSize: 0.8, sizeJitter: 0.12, scatter: 0.05 },
+  }),
+  builtin({
+    id: 'spray-can', name: 'Spray can', category: 'airbrush',
+    tip: { size: 60, hardness: 0.9, spacing: 0.08, opacity: 0.9, smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    spray: { density: 0.7, size: 0.04 },
   }),
 ];
 

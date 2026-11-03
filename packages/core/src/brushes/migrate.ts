@@ -28,7 +28,7 @@ const CATEGORY_MEDIUM: Readonly<Record<string, [BrushMedium, string?]>> = {
 
 function tipShape(b: ResolvedBrush): BrushTipShape {
   if (b.engine === 'bristle') return 'bristle';
-  if (b.engine === 'sticker' || (b.engine === 'particle' && b.particle.dotTextures.length > 0)) return 'stamp';
+  if (b.engine === 'sticker' || (b.engine === 'particle' && b.particle.dotTextures.length > 0) || (b.engine === 'dab' && b.stamp)) return 'stamp';
   if (b.tip.roundness >= 1) return 'round';
   return Math.abs(Math.abs(b.tip.angle % 180) - 45) < 1e-9 || Math.abs(Math.abs(b.tip.angle % 180) - 135) < 1e-9 ? 'chisel' : 'flat';
 }
@@ -56,7 +56,7 @@ function skeleton(b: ResolvedBrush): Brush {
       return { ...brush, marks: { kind: 'objects' } };
     default: {
       const [medium, variety] = CATEGORY_MEDIUM[b.category] ?? [];
-      return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}) };
+      return { ...brush, ...(medium ? { medium } : {}), ...(variety ? { variety } : {}), ...(b.engine === 'dab' && b.spray ? { marks: { kind: 'scatter' } } : {}) };
     }
   }
 }
@@ -74,7 +74,7 @@ export function migrateBrushV1(raw: PaintBrushInput): Brush {
   const brush = skeleton(b) as unknown as Record<string, unknown>;
   const defaults = resolveBrush(brush as unknown as Brush);
   for (const field of BRUSH_FIELDS) {
-    if (!field.engines.includes(b.engine) || (field.shapes && !field.shapes.includes((brush.tip as Brush['tip']).shape))) continue;
+    if (!field.engines.includes(b.engine) || (field.shapes && !field.shapes.includes((brush.tip as Brush['tip']).shape)) || (field.marks && !field.marks.includes((brush.marks as Brush['marks'])?.kind ?? 'continuous'))) continue;
     const v = getPath(b, field.engine);
     if (!equal(v, getPath(defaults, field.engine))) setPath(brush, field.facet, field.map ? field.map.toFacet(v) : copy(v));
   }

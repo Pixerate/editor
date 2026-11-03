@@ -204,6 +204,32 @@ describe('Svelte paint editor', () => {
     expect(c.getState().brush.engine).toBe('bristle');
   });
 
+  it('the brush editor sets default colours and light / dark pairs, and the panel can keep my colour', async () => {
+    const c = new PaintEditorController({ width: 64, height: 32 });
+    show(BrushPanel, { controller: c });
+    const q = <T extends Element>(sel: string) => target.querySelector(sel) as unknown as T;
+    const choose = (name: string) => click([...target.querySelectorAll('[data-testid="brush-library"] [role="option"]')].find((o) => o.getAttribute('title')?.startsWith(name))!);
+    choose('Highlighter');
+    expect(c.getState().color).toBe('#fff200');
+    // The brush's palette: one click paints with that colour.
+    click(q('button[aria-label="Paint with #ff6ec7"]'));
+    expect(c.getState().color).toBe('#ff6ec7');
+    // A light / dark default: the toggle makes a pair, the dark picker sets its other side.
+    click(q('input[aria-label="Brush default colour: light and dark"]'));
+    setValue(q('input[aria-label="Brush default colour (dark)"]'), '#ffe066', true);
+    expect(c.getBrushSpec()!.colour!.default).toEqual({ light: '#fff200', dark: '#ffe066' });
+    click(byText('Add light / dark pair'));
+    expect(c.getBrushSpec()!.colour!.palette!.at(-1)).toEqual({ light: '#334155', dark: '#e2e8f0' });
+    setValue(q(`input[aria-label="Palette colour ${c.getBrushSpec()!.colour!.palette!.length} (dark)"]`), '#ffffff', true);
+    expect(c.getBrushSpec()!.colour!.palette!.at(-1)).toEqual({ light: '#334155', dark: '#ffffff' });
+    // Kept: choosing a brush with a default colour leaves mine.
+    c.setColor('#123456');
+    click(q('input[aria-label="Keep my colour"]'));
+    expect(c.getState().colorLocked).toBe(true);
+    choose('Ballpoint');
+    expect(c.getState().color).toBe('#123456');
+  });
+
   it('the mixing pad picks with a sample size, mixes measured parts and keeps pads', () => {
     const c = new PaintEditorController({ width: 32, height: 32 });
     c.setColor('#1e40af');

@@ -15,20 +15,23 @@ built-in presets (read-only) and the user's brushes, shared by every editor that
 | Kind | `mark` lays a material; `tool` works on paint already down. |
 | Medium and variety | Marks: what it lays (`paint`, `ink`, `dry`, `spray`) and what kind (`oil`, `watercolor`, `gouache`, `pencil`, `charcoal`, `airbrush`, `marker`, `highlighter`…). Descriptive, for finding brushes; a wet brush whose variety is `watercolor`, `gouache` or `oil` paints that medium. |
 | Tool | Tools: `eraser`, `blender`, `smudge`, and on wet paint `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`. |
-| Tip | `shape` (`round`, `flat`, `chisel` are ellipses set by `roundness` and `angle`; `bristle` has a tuft; `stamp` lays stickers), size in px, hardness, spacing, opacity, flow, blend mode. |
-| Marks | `continuous` dabs (default), `particles` (strands, springs, ribbons, sparks) or `objects` (each mark an editable sticker). |
+| Tip | `shape` (`round`, `flat`, `chisel` are ellipses set by `roundness` and `angle`; `bristle` has a tuft; `stamp` takes the shape of `stamps`: an editor stamp `editor:star` or any sticker ref from `find_stickers`), size in px, hardness, spacing, opacity, flow, blend mode. |
+| Marks | `continuous` dabs (default; on a stamp tip every dab is the first stamp's shape, in the paint colour), `scatter` (a spray: droplets across the tip, `density`, `size`), `particles` (strands, springs, ribbons, sparks; textured dots from the stamps) or `objects` (each mark an editable sticker, in its own colours). |
 | Dynamics | Pen feel: pressure to size and opacity, smoothing, tilt, velocity, jitter, rotation. |
 | Behaviour | `surface` `dry`, `wet` (`wet` settings) or `thick` (`thick` impasto settings); paper `grain`; `exchange` (pick-up and mix; a `reservoir` makes a Mixer Brush); tool `strength`. |
 | Light | Light the brush gives off (`amount`), plus suggested layer `spill` and `glow`. |
 | Motion | Animation after painting (live effect paint, particle `waveSpeed`). |
-| Colour | A `default` colour, a `palette` of up to 16, `own` (always its own colour). A gradient default is always painted; a solid one is a suggestion. |
+| Colour | A `default` colour, a `palette` of up to 16, `own` (always its own colour). Each is a hex or `rgba()` colour, a light / dark pair `{ light, dark }`, a gradient or effect paint. A gradient default is always painted; a solid or light / dark default becomes the editor's colour when the brush is chosen (unless the user locked theirs), resolved for the colour scheme. |
 
 How media map to facets: a **pencil** or **charcoal** is `dry` with high `grain` and tilt;
 **ink** is a hard round tip with pressure to size (a pen thins with velocity); **watercolour**
 and **wet oil** are `paint` on `surface: 'wet'`; **impasto** is `surface: 'thick'`; an
-**airbrush** is `spray`, soft and low flow; a **highlighter** is `ink` / `highlighter`, a
-multiply chisel tip with a little light and `spill` radius 0; **particle** and **sticker**
-brushes are `marks` particles or objects on a `stamp` tip.
+**airbrush** is `spray`, soft and low flow; a **spray can** is `spray` with `marks` scatter; a
+**ballpoint**, **gel pen** or **fineliner** is `ink` with a small hard tip (a fineliner without
+pressure to size); **crayon** and **chalk** are `dry` with high `grain`; a **highlighter** is
+`ink` / `highlighter`, a multiply chisel tip with a little light, `spill` radius 0, fluorescent
+yellow by default; a **stamp brush** is a `stamp` tip with continuous marks; **particle** and
+**sticker** brushes are `marks` particles or objects on a `stamp` tip.
 
 ## Host profiles
 
@@ -74,16 +77,23 @@ drawn.
   glow stays on the stroke.
 - Keep `variety` truthful (it is how people find the brush) and add `tags` for the job
   (`lettering`, `foliage`).
-- Use `colour.palette` for suggested colours and `colour.own` only for brushes that must
+- Give a brush a `colour.default` only when the medium has a typical colour (blue ballpoint,
+  yellow highlighter): choosing the brush sets it as the user's colour. Use a light / dark pair
+  when the right colour depends on the background (white chalk on a dark board, graphite on
+  paper), and a `palette` for the other usual colours. `colour.own` only for brushes that must
   always paint their own (a rainbow marker).
+- Stamp tips paint the sticker's shape in the paint colour; to keep a sticker's own colours, use
+  `marks` objects instead.
 
 ## Pitfalls
 
 - **A facet the host refuses.** `create_brush` and `update_brush` refuse it with the facet and
   fix; `check_brush` returns `degraded`, the brush with those facets stripped, to start from.
 - **Ids.** Built-in ids can't be reused or changed; a taken id is refused (update it instead).
-- **Stamps.** Particle marks lay only the editor's stamps (`editor:star`…); sticker (`objects`)
-  marks take any sticker ref from `find_stickers`.
+- **Stamps.** Any marks take any sticker ref from `find_stickers`, or an editor stamp
+  (`editor:star`…). A ref the host's sticker library can't load is refused with the closest
+  refs. Only the paint editor renders stamp tips and scatter marks; canvas, vector and the image
+  editor refuse them (`check_brush` says so).
 - **Out-of-range values** are refused by the schema (`tip.size` is 1..2500 px); a stored brush
   is clamped on import and reported in `problems`.
 - **The paint editor paints from this library.** Its `set_brush` picks a brush by id here and
@@ -101,8 +111,8 @@ drawn.
 | Tool | Use |
 | --- | --- |
 | `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, engine, tip, size, marks, surface, light) and `total`. Call first. |
-| `describe_brush` | One brush by `id`: its full facet `brush`, `builtin`, `engine`, `category` and `check` for this host. Unknown ids are refused with the closest ones. |
-| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host; refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
+| `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category` and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
+| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
 | `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes the host can't render. Returns `brush`, `changed` paths, `problems`, `warnings`. |
 | `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |
 | `remove_brush` | Delete a saved brush for good (export it first to keep a copy). Built-ins are refused. Returns `removed`. |

@@ -9,6 +9,8 @@ import { closest } from '../brushes/library';
 import { checkBrush, IMAGE_PROFILE } from '../brushes/profiles';
 import { resolveBrush } from '../brushes/resolve';
 import type { Brush } from '../brushes/types';
+import { brushColourHex } from '../brushes/colour';
+import type { ColorScheme } from '../color/dual';
 import type { BrushSettings, MixerSettings, PaintSource } from '../paint';
 
 /** What choosing a brush preset sets in the image editor. */
@@ -22,6 +24,8 @@ export interface ImageBrushPreset {
   mixer?: MixerSettings;
   /** The brush's own gradient paint, when it has one. */
   paint?: PaintSource;
+  /** Its solid or light / dark default colour as #rrggbb for the colour scheme: the foreground it sets. */
+  color?: string;
   /** Settings the image editor paints without (grain, velocity…), with what they would need. */
   warnings: string[];
 }
@@ -39,7 +43,7 @@ export class ImageBrushPresetError extends Error {
  * `IMAGE_PROFILE` refuses (wet or thick paint, particles, stickers, light…) and their fixes.
  * `ids` are the brushes on offer, for the error's suggestions.
  */
-export function imageBrushPreset(brush: Brush, ids: readonly string[] = []): ImageBrushPreset {
+export function imageBrushPreset(brush: Brush, ids: readonly string[] = [], scheme: ColorScheme = 'light'): ImageBrushPreset {
   const check = checkBrush(brush, IMAGE_PROFILE);
   if (!check.ok) {
     const why = check.issues
@@ -57,6 +61,7 @@ export function imageBrushPreset(brush: Brush, ids: readonly string[] = []): Ima
     brush: { ...resolved.tip },
     ...(tool === 'mixer' ? { mixer: { ...resolved.mixer } } : {}),
     ...(resolved.paint && tool === 'brush' ? { paint: resolved.paint } : {}),
+    ...(tool !== 'eraser' && brush.colour?.default !== undefined && brushColourHex(brush.colour.default, scheme) ? { color: brushColourHex(brush.colour.default, scheme)! } : {}),
     warnings: check.issues.filter((i) => i.severity === 'warning').map((i) => i.reason),
   };
 }

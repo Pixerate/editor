@@ -143,7 +143,8 @@ describe('migrateBrushV1', () => {
       const strip = (b: Brush) => {
         const { medium: _m, variety: _v, light, colour, ...rest } = json(b);
         const l = light ? (({ spill: _s, ...x }) => x)(light) : undefined;
-        const c = colour?.default && typeof colour.default === 'object' ? { default: colour.default } : undefined;
+        // Only a gradient default is paint; solid and light / dark defaults are hints the engine form doesn't carry.
+        const c = colour?.default && typeof colour.default === 'object' && 'type' in colour.default && colour.default.type === 'gradient' ? { default: colour.default } : undefined;
         return { ...rest, ...(l && Object.keys(l).length ? { light: l } : {}), ...(c ? { colour: c } : {}) };
       };
       expect(strip(m), old.id).toEqual(strip(preset));
@@ -277,16 +278,31 @@ describe('normalizeBrushSpec', () => {
     expect(normalizeBrushSpec({ id: 'w', name: 'W', tool: 'water', tip: { shape: 'round' }, behaviour: { wet: { water: 0.6 }, strength: 0.4, exchange: { pickup: 0.1 } } }).behaviour).toEqual({ wet: { water: 0.6 }, strength: 0.4, exchange: { pickup: 0.1 } });
   });
 
-  it('reads stamps as sticker refs, and lays only editor stamps as particles', () => {
+  it('reads stamps as sticker refs for objects, particles and continuous stamp tips', () => {
     const problems: string[] = [];
     const objects = normalizeBrushSpec({ id: 'o', name: 'O', kind: 'mark', tip: { shape: 'stamp', stamps: ['star', 'host:cat'] }, marks: { kind: 'objects' } }, problems);
     expect(objects.tip.stamps).toEqual(['editor:star', 'host:cat']);
     expect(resolveBrush(objects).sticker.stamps).toEqual(['editor:star', 'host:cat']);
-    expect(problems).toEqual([]);
+    // Textured particle dots take library stickers too: the editor's bare in the engine, others as refs.
     const particles = normalizeBrushSpec({ id: 'p', name: 'P', kind: 'mark', tip: { shape: 'stamp', stamps: ['ring', 'host:cat'] }, marks: { kind: 'particles' } }, problems);
-    expect(particles.tip.stamps).toEqual(['editor:ring']);
-    expect(resolveBrush(particles).particle.dotTextures).toEqual(['ring']);
-    expect(problems).toEqual([expect.stringMatching(/"host:cat" dropped: particle marks lay only the editor's stamps/)]);
+    expect(particles.tip.stamps).toEqual(['editor:ring', 'host:cat']);
+    expect(resolveBrush(particles).particle.dotTextures).toEqual(['ring', 'host:cat']);
+    // A continuous stamp tip lays its first stamp as every dab.
+    const tip = normalizeBrushSpec({ id: 't', name: 'T', kind: 'mark', tip: { shape: 'stamp', stamps: ['host:cat', 'editor:star'] } }, problems);
+    expect(resolveBrush(tip)).toMatchObject({ engine: 'dab', stamp: 'host:cat' });
+    expect(migrateBrushV1(resolveBrush(tip))).toMatchObject({ tip: { shape: 'stamp', stamps: ['host:cat'] } });
+    expect(problems).toEqual([]);
+  });
+
+  it('sprays droplets with scatter marks, and round trips them through the engine form', () => {
+    const spray = normalizeBrushSpec({ id: 's', name: 'S', kind: 'mark', medium: 'spray', tip: { shape: 'round', size: 40 }, marks: { kind: 'scatter', density: 0.8, size: 0.05 } });
+    const r = resolveBrush(spray);
+    expect(r).toMatchObject({ engine: 'dab', spray: { density: 0.8, size: 0.05 } });
+    expect(migrateBrushV1(r)).toMatchObject({ marks: { kind: 'scatter', density: 0.8, size: 0.05 } });
+    expect(resolveBrush(normalizeBrushSpec({ id: 'd', name: 'D', kind: 'mark', tip: { shape: 'round' }, marks: { kind: 'scatter' } })).spray).toEqual({ density: 0.5, size: 0.12 });
+    const problems: string[] = [];
+    expect(normalizeBrushSpec({ id: 'w', name: 'W', kind: 'mark', tip: { shape: 'round' }, marks: { kind: 'scatter' }, behaviour: { surface: 'wet' } }, problems).marks).toBeUndefined();
+    expect(problems.join(' ')).toMatch(/wet paint is not sprayed/);
   });
 
   it('infers the kind from the tool and fills a missing tip', () => {

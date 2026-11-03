@@ -56,6 +56,9 @@ import { normalizeBrushSpec } from '../brushes/normalize';
 import { mergeBrushPatch, type BrushPatch, type UnsettableBrushFacet } from '../brushes/patch';
 import { resolveBrush } from '../brushes/resolve';
 import type { Brush } from '../brushes/types';
+import { brushStickerRefs } from './stamp-tip';
+import { brushColourHex } from '../brushes/colour';
+import type { ColorScheme, ColorValue } from '../color/dual';
 import { brushSpecOf, builtinLibraryBrushes, copyJSON, engineChanges, libraryBrush, seededStorage, type LibraryBrush } from './brush-library';
 import {
   createPaintDocument,
@@ -165,6 +168,11 @@ export interface PaintEditorOptions extends Partial<PaintCanvas> {
   brushLibrary?: BrushLibrary;
   /** Saved user brushes to start the default library with (or to add to `brushLibrary`). */
   brushes?: readonly PaintBrush[];
+  /**
+   * The host's colour scheme (default `light`): a brush's light / dark default colour resolves to
+   * its side when the brush is chosen and when a stroke starts. Follow the host with `setColorScheme`.
+   */
+  colorScheme?: ColorScheme;
   /** Paint colour #rrggbb (default #1f2937). */
   color?: string;
   hand?: Hand;
@@ -214,6 +222,10 @@ export interface PaintEditorState {
   brushes: readonly PaintBrush[];
   /** Paint colour #rrggbb. */
   color: string;
+  /** The colour scheme light / dark brush colours resolve for. */
+  colorScheme: ColorScheme;
+  /** Locked: choosing a brush with a default colour keeps the paint colour. */
+  colorLocked: boolean;
   /** The second colour (swap with `swapColors`). */
   secondaryColor: string;
   /**
@@ -590,6 +602,7 @@ export class PaintEditorController {
     void this.refreshBrushes().catch(() => undefined);
     this.pendingBrushId = start.brush.id === wanted ? null : wanted;
     this.color = options.color ? parseColor(options.color) : '#1f2937';
+    this.colorScheme = options.colorScheme === 'dark' ? 'dark' : 'light';
     this.hand = options.hand === 'left' ? 'left' : 'right';
     this.encodeImage = options.encodeImage;
     this.guides = defaultGuides(this.doc.canvas);
@@ -772,6 +785,8 @@ export class PaintEditorController {
       brush: this.brush,
       brushes: (this.library ??= this.brushEntries.map((e) => e.brush)),
       color: this.color,
+      colorScheme: this.colorScheme,
+      colorLocked: this.colorLocked,
       secondaryColor: this.secondaryColor,
       paint: this.gradient ?? { type: 'color', color: this.color },
       effectPaint: this.effectPaintPending ?? this.effectPaint,
@@ -2026,6 +2041,7 @@ export class PaintEditorController {
     if (changes.paint !== undefined && changes.paint !== null) this.readStrokePaint(changes.paint);
     const unchanged = !Object.keys(changes).length;
     const next = normalizePaintBrush({ ...changes, id: base.id }, base);
+    if (entry) this.takeBrushColour(entry.spec);
     this.useBrush(next, unchanged ? baseSpec : brushSpecOf(next, baseSpec), unchanged && base.builtin === true);
     return this.brush;
   }
@@ -2043,6 +2059,8 @@ export class PaintEditorController {
     const base = copyJSON(entry ? entry.spec : this.brushSpec) as Brush & Record<string, unknown>;
     for (const k of unset) delete base[k];
     const spec = this.readBrushPatch(base, patch, problems);
+    // Choosing a brush (or giving it a default colour) takes its default colour, unless the colour is locked.
+    if (entry || patch.colour?.default !== undefined) this.takeBrushColour(spec);
     this.useBrush(unchanged && entry ? entry.brush : resolveBrush(spec), spec, unchanged && entry?.builtin === true);
     return { brush: this.brush, spec: copyJSON(this.brushSpec), problems };
   }
@@ -2099,7 +2117,8 @@ export class PaintEditorController {
     this.pendingBrushId = null;
     this.emit([]);
     // Provider stickers are loaded now, so the spray can draw them by the time the stroke starts.
-    if (next.engine === 'sticker' && next.sticker.stamps.some((r) => !editorStampOf(r))) void this.prepareStickers(next.sticker.stamps).catch(() => this.emit([]));
+    const refs = brushStickerRefs(next);
+    if (refs.length) void this.prepareStickers(refs).catch(() => this.emit([]));
   }
 
   /**
@@ -2152,9 +2171,59 @@ export class PaintEditorController {
 
   // --- Colour --------------------------------------------------------------------
 
+  private colorScheme: ColorScheme;
+  private colorLocked = false;
+  /** The brush default colour the paint colour came from (resolved again when the scheme changes), or `null`. */
+  private brushColour: ColorValue | null = null;
+
+  /**
+   * The host's colour scheme: a paint colour that came from a brush's light / dark default
+   * resolves to the new side. Editor state, not an undo step.
+   */
+  setColorScheme(scheme: ColorScheme): void {
+    const next: ColorScheme = scheme === 'dark' ? 'dark' : 'light';
+    if (next === this.colorScheme) return;
+    this.colorScheme = next;
+    const hex = this.brushColour ? brushColourHex(this.brushColour, next) : null;
+    if (hex) this.color = hex;
+    this.emit([]);
+  }
+
+  /** Locks the paint colour: choosing a brush with a default colour keeps it. Editor state, not an undo step. */
+  setColorLocked(locked: boolean): void {
+    if (this.colorLocked === locked) return;
+    this.colorLocked = locked;
+    this.emit([]);
+  }
+
+  /**
+   * After the user chooses a brush: its solid or light / dark default colour becomes the paint
+   * colour (resolved for the colour scheme), unless the colour is locked. Gradient defaults are the
+   * brush's own paint already; effect defaults stay a suggestion.
+   */
+  private takeBrushColour(spec: Brush): void {
+    if (this.colorLocked) return;
+    const d = spec.colour?.default;
+    const hex = d !== undefined ? brushColourHex(d, this.colorScheme) : null;
+    if (!hex) return;
+    this.color = hex;
+    this.gradient = null;
+    this.effectPaint = this.effectPaintPending = null;
+    this.paintEpoch++;
+    this.brushColour = d as ColorValue;
+  }
+
+  /** A brush that always paints its own colour (`colour.own`): that colour, resolved for the scheme now; else `null`. */
+  private ownColour(brushId: string | undefined): string | null {
+    const spec = brushId !== undefined ? this.findEntry(brushId)?.spec : this.brushSpec;
+    const d = spec?.colour?.own ? spec.colour.default : undefined;
+    return d !== undefined ? brushColourHex(d, this.colorScheme) : null;
+  }
+
   /** Sets the paint colour (and goes back to one colour from gradient paint). */
   setColor(color: string): string {
     this.color = parseColor(color);
+    this.brushColour = null;
     this.gradient = null;
     this.effectPaint = this.effectPaintPending = null;
     this.paintEpoch++;
@@ -2359,7 +2428,7 @@ export class PaintEditorController {
       this.beginWetOp();
       const world = this.wet.ensureLane(layer.id, brush.wet.medium);
       const id = layer.id;
-      const wetColor = init.color === undefined ? this.color : parseColor(init.color);
+      const wetColor = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
       const [r, g, b] = hexToRgb8(wetColor);
       const wetGradient = this.strokeGradient(init, brush, wetColor);
       const load = init.load ?? brushLoadForStroke(brush, this.mixerLoad, [r / 255, g / 255, b / 255]);
@@ -2388,7 +2457,8 @@ export class PaintEditorController {
       const dried = findLayer(this.doc.layers, layer.id)!.layer as PaintPixelLayer;
       layer = dried;
     }
-    let color = init.color === undefined ? this.color : parseColor(init.color);
+    // A brush with its own colour paints it (resolved for the scheme now, and recorded with the stroke).
+    let color = init.color === undefined ? (this.ownColour(init.brushId) ?? this.color) : parseColor(init.color);
     const tracing = this.guides.tracing;
     if (init.color === undefined && init.start && tracing?.visible && tracing.sampleColors) color = this.sampleTracingColor(init.start.x, init.start.y) ?? color;
     const perspective = this.guides.perspective;
@@ -2428,6 +2498,7 @@ export class PaintEditorController {
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get } : undefined,
+      stampArt: this.stickerArt.get,
       paint: effect ? null : this.strokeGradient(init, brush, color),
       effect,
     });

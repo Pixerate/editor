@@ -41,8 +41,8 @@ export type BrushTipShape = 'round' | 'flat' | 'chisel' | 'bristle' | 'stamp';
 export const BRUSH_TIP_SHAPES: readonly BrushTipShape[] = ['round', 'flat', 'chisel', 'bristle', 'stamp'];
 
 /** How the tip is laid along the path. */
-export type BrushMarksKind = 'continuous' | 'particles' | 'objects';
-export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'particles', 'objects'];
+export type BrushMarksKind = 'continuous' | 'scatter' | 'particles' | 'objects';
+export const BRUSH_MARKS_KINDS: readonly BrushMarksKind[] = ['continuous', 'scatter', 'particles', 'objects'];
 
 /** What the material does on the surface: stays where it lands (`dry`), flows and dries (`wet`) or stands up in relief (`thick`). */
 export type BrushSurface = 'dry' | 'wet' | 'thick';
@@ -98,6 +98,15 @@ export interface BrushTip {
 /** Dabs laid along the path (the default). */
 export interface BrushContinuousMarks {
   kind: 'continuous';
+}
+
+/** A spray: each dab lays a seeded scatter of droplets across the tip (a spray can). */
+export interface BrushScatterMarks {
+  kind: 'scatter';
+  /** Droplets per dab, 0..1: 1 + density × 31 (default 0.5). */
+  density?: number;
+  /** Droplet size as a fraction of the tip size, 0.02..1 (default 0.12). */
+  size?: number;
 }
 
 /** Particles that move with the pen and draw as they go (each 0..1 unless noted). */
@@ -156,7 +165,7 @@ export interface BrushObjectMarks {
   colourJitter?: number;
 }
 
-export type BrushMarks = BrushContinuousMarks | BrushParticleMarks | BrushObjectMarks;
+export type BrushMarks = BrushContinuousMarks | BrushScatterMarks | BrushParticleMarks | BrushObjectMarks;
 
 /** Pen feel. Every amount is 0 (off) .. 1 unless noted. */
 export interface BrushDynamics {

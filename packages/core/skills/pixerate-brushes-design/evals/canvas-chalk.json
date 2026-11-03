@@ -1,15 +1,15 @@
 {
-	"prompt": "I'm drawing brushed strokes on the canvas. Make a soft, grainy chalk brush with the id chalk that the canvas can actually use.",
+	"prompt": "I'm drawing brushed strokes on the canvas, on a dark blackboard in dark mode and on paper in light mode. Make a grainy chalk brush with the id board-chalk that the canvas can use: near-white chalk in dark mode, a dark slate on light backgrounds.",
 	"fixture": { "editor": "brushes", "host": "canvas" },
 	"checks": [
-		{ "why": "the canvas can render it", "tool": "check_brush", "args": { "id": "chalk", "host": "canvas" }, "expect": { "ok": true } },
-		{ "why": "a dry chalk", "tool": "describe_brush", "args": { "id": "chalk" }, "expect": { "brush": { "kind": "mark", "medium": "dry", "variety": "chalk" } } },
-		{ "why": "it catches the paper grain strongly", "tool": "describe_brush", "args": { "id": "chalk" }, "expect": { "brush": { "behaviour": { "grain": { "$min": 0.8 } } } } },
-		{ "why": "soft-edged", "tool": "describe_brush", "args": { "id": "chalk" }, "expect": { "brush": { "tip": { "hardness": { "$max": 0.6 } } } } }
+		{ "why": "the canvas can render it", "tool": "check_brush", "args": { "id": "board-chalk", "host": "canvas" }, "expect": { "ok": true } },
+		{ "why": "a dry chalk", "tool": "describe_brush", "args": { "id": "board-chalk" }, "expect": { "brush": { "kind": "mark", "medium": "dry", "variety": "chalk" } } },
+		{ "why": "it catches the paper grain strongly", "tool": "describe_brush", "args": { "id": "board-chalk" }, "expect": { "brush": { "behaviour": { "grain": { "$min": 0.8 } } } } },
+		{ "why": "its default colour is a light / dark pair: light chalk on dark, dark on light", "tool": "describe_brush", "args": { "id": "board-chalk" }, "expect": { "brush": { "colour": { "default": { "$expr": "typeof v === 'object' && /^#[c-f]/i.test(v.dark) && /^#[0-6]/i.test(v.light)" } } } } }
 	],
 	"solution": [
-		{ "tool": "list_brush_presets", "args": { "medium": "dry" } },
-		{ "tool": "create_brush", "args": { "id": "chalk", "name": "Chalk", "basedOn": "soft-pastel", "variety": "chalk", "behaviour": { "grain": 1 }, "dynamics": { "sizeJitter": 0.12 } } },
-		{ "tool": "check_brush", "args": { "id": "chalk", "host": "canvas" } }
+		{ "tool": "list_brush_presets", "args": { "variety": "chalk" } },
+		{ "tool": "create_brush", "args": { "id": "board-chalk", "name": "Board chalk", "basedOn": "chalk", "colour": { "default": { "light": "#334155", "dark": "#f8fafc" } } } },
+		{ "tool": "check_brush", "args": { "id": "board-chalk", "host": "canvas" } }
 	]
 }

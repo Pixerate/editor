@@ -109,30 +109,63 @@ const EditorControl: React.FC<{ control: BrushEditorControl; onSet: (path: strin
           <input key={c.value} aria-label={c.ariaLabel} defaultValue={c.value} placeholder={c.placeholder} onBlur={(e) => e.target.value !== c.value && onSet(c.path, e.target.value.trim().toLowerCase())} className="w-28 rounded bg-slate-800 px-1.5 py-0.5" />
         </label>
       );
-    case 'colour':
+    case 'colour': {
+      // One colour, or a light / dark pair resolved for the host's colour scheme.
+      const set = (light: string, dark: string | null) => onSet(c.path, dark === null ? light : { light, dark });
       return (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-400">{c.label}</span>
+            <span className="flex items-center gap-1">
+              <input type="color" aria-label={c.ariaLabel} title={c.dark !== null ? 'On light backgrounds' : undefined} value={c.value ?? '#000000'} onChange={(e) => set(e.target.value, c.dark)} className="h-5 w-8" />
+              {c.dark !== null && <input type="color" aria-label={`${c.ariaLabel} (dark)`} title="On dark backgrounds" value={c.dark} onChange={(e) => set(c.value ?? '#000000', e.target.value)} className="h-5 w-8" />}
+              {(c.value || c.gradient) && (
+                <button type="button" className={button} onClick={() => onSet(c.path, undefined)}>
+                  None
+                </button>
+              )}
+            </span>
+          </div>
+          {c.gradient ? (
+            <span className="text-[10px] text-slate-500">A gradient (its own paint).</span>
+          ) : (
+            <label className="flex items-center gap-2">
+              <input type="checkbox" aria-label={`${c.ariaLabel}: light and dark`} checked={c.dark !== null} onChange={(e) => set(c.value ?? '#000000', e.target.checked ? (c.value ?? '#ffffff') : null)} /> Light / dark
+            </label>
+          )}
+        </div>
+      );
+    }
+    case 'palette': {
+      const at = (i: number, entry: string | { light: string; dark: string }) => onSet(c.path, c.value.map((x, j) => (j === i ? entry : x)));
+      return (
+        <div className="flex flex-col gap-1" role="group" aria-label={c.ariaLabel}>
           <span className="text-slate-400">{c.label}</span>
-          <span className="flex items-center gap-1">
-            <input type="color" aria-label={c.ariaLabel} value={c.value ?? '#000000'} onChange={(e) => onSet(c.path, e.target.value)} className="h-5 w-8" />
-            {c.value && (
-              <button type="button" className={button} onClick={() => onSet(c.path, undefined)}>
-                None
-              </button>
+          <div className="flex flex-wrap items-center gap-1">
+            {c.value.map((col, i) => {
+              const light = typeof col === 'string' ? col : col.light;
+              return (
+                <span key={i} className="flex items-center gap-0.5 rounded bg-slate-900 p-0.5">
+                  <input type="color" aria-label={`Palette colour ${i + 1}`} value={light} onChange={(e) => at(i, typeof col === 'string' ? e.target.value : { ...col, light: e.target.value })} className="h-4 w-5" />
+                  {typeof col !== 'string' && <input type="color" aria-label={`Palette colour ${i + 1} (dark)`} value={col.dark} onChange={(e) => at(i, { ...col, dark: e.target.value })} className="h-4 w-5" />}
+                  <button type="button" aria-label={`Remove palette colour ${i + 1}`} className="px-0.5 text-slate-400 hover:text-white" onClick={() => onSet(c.path, c.value.filter((_, j) => j !== i))}>
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+            {c.value.length < c.max && (
+              <>
+                <input type="color" aria-label="Add a palette colour" onChange={(e) => onSet(c.path, [...c.value, e.target.value])} className="h-4 w-6" />
+                <button type="button" className={button} onClick={() => onSet(c.path, [...c.value, { light: '#334155', dark: '#e2e8f0' }])}>
+                  Add light / dark pair
+                </button>
+              </>
             )}
-          </span>
+          </div>
         </div>
       );
-    case 'palette':
-      return (
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={c.ariaLabel}>
-          <span className="text-slate-400">{c.label}</span>
-          {c.value.map((col, i) => (
-            <button key={`${col}-${i}`} type="button" title={`Remove ${col}`} aria-label={`Remove ${col}`} className="h-4 w-4 rounded ring-1 ring-slate-700" style={{ background: col }} onClick={() => onSet(c.path, c.value.filter((_, j) => j !== i))} />
-          ))}
-          {c.value.length < c.max && <input type="color" aria-label="Add a palette colour" onChange={(e) => onSet(c.path, [...c.value, e.target.value])} className="h-4 w-6" />}
-        </div>
-      );
+    }
     case 'stamps':
       return (
         <div className="flex flex-wrap gap-1" role="group" aria-label={c.ariaLabel} title={`Up to ${c.max}`}>

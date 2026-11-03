@@ -108,6 +108,16 @@ const PARTICLES = object(
   ['kind'],
 );
 
+const SCATTER = object(
+  'A spray (a spray can): each dab lays a seeded scatter of droplets across the tip; jitter and size come from dynamics and the tip. Missing fields take their defaults.',
+  {
+    kind: { type: 'string', const: 'scatter', description: 'Always "scatter".' },
+    density: unit('Droplets per dab: 1 + density × 31 (default 0.5).'),
+    size: num(0.02, 1, 'Droplet size as a fraction of the tip size (default 0.12).'),
+  },
+  ['kind'],
+);
+
 const OBJECTS = object(
   'Each mark stays an editable object (a sticker) on a sticker layer; needs a stamp tip. Missing fields take their defaults.',
   {
@@ -261,7 +271,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
       'Tools: eraser removes paint; blender mixes the colours under the tip; smudge drags paint along; water lays clear water (lifts dried paint with behaviour.wet.rewet); dryer dries wet paint; blow pushes water along; blot takes wet paint up; wet-blend evens out wet pigment; wet-drag drags wet paint.',
     ),
     tip: TIP,
-    marks: { description: 'How the tip is laid along the path (default continuous).', oneOf: [CONTINUOUS, PARTICLES, OBJECTS] },
+    marks: { description: 'How the tip is laid along the path (default continuous): continuous dabs, a scatter of spray droplets, particles, or objects (editable stickers).', oneOf: [CONTINUOUS, SCATTER, PARTICLES, OBJECTS] },
     dynamics: DYNAMICS,
     behaviour: BEHAVIOUR,
     light: LIGHT,
@@ -274,7 +284,7 @@ export const BRUSH_JSON_SCHEMA: JsonSchema = object(
 /** The facet schemas, for tools that take one facet. */
 export const BRUSH_FACET_SCHEMAS = {
   tip: TIP,
-  marks: { continuous: CONTINUOUS, particles: PARTICLES, objects: OBJECTS },
+  marks: { continuous: CONTINUOUS, scatter: SCATTER, particles: PARTICLES, objects: OBJECTS },
   dynamics: DYNAMICS,
   behaviour: BEHAVIOUR,
   light: LIGHT,
