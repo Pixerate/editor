@@ -1,0 +1,436 @@
+/**
+ * The built-in brushes as facet specs. Each resolves (`resolveBrush`) to exactly the paint
+ * editor's built-in brush of the same id (`BUILTIN_BRUSHES`, which `tests/brushes.test.ts`
+ * checks), so the engine paints them as it always has. Medium and variety are new: they file
+ * each brush under what it is for browsing and filtering. Only what differs from the engine's
+ * defaults is written down.
+ *
+ * Our own settings; none come from another product.
+ */
+
+import type { Brush } from './types';
+
+/** The built-in brush library, in the paint editor's order. */
+export const BRUSH_PRESETS: readonly Brush[] = [
+  {
+    id: 'pencil-hb', name: 'HB pencil', kind: 'mark', medium: 'dry', variety: 'pencil',
+    tip: { shape: 'round', size: 4, hardness: 0.7, spacing: 0.08, opacity: 0.85, flow: 0.55 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, pressureSmoothing: 0.3, minSize: 0.55, tiltSize: 0.9, tiltRoundness: 0.7, tiltOpacity: 0.5 },
+    behaviour: { grain: 0.85 },
+  },
+  {
+    id: 'pencil-6b', name: '6B pencil', kind: 'mark', medium: 'dry', variety: 'pencil',
+    tip: { shape: 'round', size: 7, hardness: 0.55, spacing: 0.07, flow: 0.75 },
+    dynamics: { smoothing: 0.2, pressureOpacity: true, pressureSmoothing: 0.3, minSize: 0.5, tiltSize: 1, tiltRoundness: 0.75, tiltOpacity: 0.35 },
+    behaviour: { grain: 0.7 },
+  },
+  {
+    id: 'soft-pastel', name: 'Soft pastel', kind: 'mark', medium: 'dry', variety: 'soft-pastel',
+    tip: { shape: 'flat', size: 32, hardness: 0.55, spacing: 0.05, angle: 90, roundness: 0.55, flow: 0.7 },
+    dynamics: { smoothing: 0.15, pressureSize: false, pressureOpacity: true, pressureSmoothing: 0.25, rotation: 'stroke', sizeJitter: 0.06, angleJitter: 0.02 },
+    behaviour: { grain: 1 },
+  },
+  {
+    id: 'oil-pastel', name: 'Oil pastel', kind: 'mark', medium: 'dry', variety: 'oil-pastel',
+    tip: { shape: 'flat', size: 26, hardness: 0.8, spacing: 0.05, angle: 90, roundness: 0.7, flow: 0.9, blend: 'pigment' },
+    dynamics: { smoothing: 0.15, pressureSmoothing: 0.25, rotation: 'stroke', minSize: 0.6 },
+    behaviour: { grain: 0.5 },
+  },
+  {
+    id: 'charcoal-stick', name: 'Charcoal stick', kind: 'mark', medium: 'dry', variety: 'charcoal',
+    tip: { shape: 'flat', size: 26, hardness: 0.4, spacing: 0.05, angle: 90, roundness: 0.35, opacity: 0.95, flow: 0.5 },
+    dynamics: { smoothing: 0.15, pressureSize: false, pressureOpacity: true, pressureSmoothing: 0.2, rotation: 'stroke', tiltSize: 0.6, sizeJitter: 0.1, angleJitter: 0.03 },
+    behaviour: { grain: 0.95 },
+  },
+  {
+    id: 'vine-charcoal', name: 'Vine charcoal', kind: 'mark', medium: 'dry', variety: 'charcoal',
+    tip: { shape: 'round', size: 10, hardness: 0.3, spacing: 0.06, opacity: 0.75, flow: 0.45 },
+    dynamics: { smoothing: 0.2, pressureOpacity: true, pressureSmoothing: 0.2, minSize: 0.4, tiltSize: 0.8, tiltRoundness: 0.5, tiltOpacity: 0.3, sizeJitter: 0.08 },
+    behaviour: { grain: 0.9 },
+  },
+  {
+    id: 'airbrush', name: 'Airbrush', kind: 'mark', medium: 'spray', variety: 'airbrush',
+    tip: { shape: 'round', size: 90, hardness: 0, spacing: 0.04, flow: 0.06 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureSmoothing: 0.3, pressureFlow: 1, tiltSize: 0.5, tiltRoundness: 0.6 },
+  },
+  {
+    id: 'marker', name: 'Chisel marker', kind: 'mark', medium: 'ink', variety: 'marker',
+    tip: { shape: 'chisel', size: 24, hardness: 0.85, spacing: 0.04, angle: 45, roundness: 0.35, opacity: 0.6, blend: 'multiply' },
+    dynamics: { smoothing: 0.3, pressureSize: false },
+    behaviour: { grain: 0.1 },
+  },
+  {
+    id: 'ink-pen', name: 'Ink pen', kind: 'mark', medium: 'ink', variety: 'pen',
+    tip: { shape: 'round', size: 4, spacing: 0.05 },
+    dynamics: { smoothing: 0.5, pressureSmoothing: 0.4, minSize: 0.25, velocitySize: -0.45 },
+  },
+  {
+    id: 'brush-pen', name: 'Brush pen', kind: 'mark', medium: 'ink', variety: 'brush-pen',
+    tip: { shape: 'flat', size: 14, hardness: 0.9, spacing: 0.04, roundness: 0.8 },
+    dynamics: { smoothing: 0.5, pressureSmoothing: 0.45, rotation: 'stroke', minSize: 0.05, velocitySize: -0.3 },
+  },
+  {
+    id: 'eraser-soft', name: 'Soft eraser', kind: 'tool', tool: 'eraser',
+    tip: { shape: 'round', size: 40, hardness: 0.2, spacing: 0.08, flow: 0.6 },
+    dynamics: { pressureSize: false, pressureOpacity: true },
+  },
+  {
+    id: 'eraser-hard', name: 'Hard eraser', kind: 'tool', tool: 'eraser',
+    tip: { shape: 'round', size: 16, hardness: 0.9, spacing: 0.06 },
+    dynamics: { minSize: 0.5 },
+    behaviour: { grain: 0.3 },
+  },
+  {
+    id: 'blender', name: 'Blender', kind: 'tool', tool: 'blender',
+    tip: { shape: 'round', size: 34, hardness: 0.4 },
+    dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+  },
+  {
+    id: 'smudge', name: 'Smudge', kind: 'tool', tool: 'smudge',
+    tip: { shape: 'round', size: 26, hardness: 0.6, spacing: 0.06 },
+    dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    behaviour: { strength: 0.75 },
+  },
+  {
+    id: 'wet-smudge', name: 'Pigment smudge', kind: 'tool', tool: 'smudge',
+    tip: { shape: 'round', size: 30, hardness: 0.5, spacing: 0.06 },
+    dynamics: { smoothing: 0.2, pressureOpacity: true, minSize: 0.6 },
+    behaviour: { length: 0.9, mixing: 'pigment' },
+  },
+  {
+    id: 'dirty-round', name: 'Dirty round', kind: 'mark', medium: 'paint', variety: 'acrylic',
+    tip: { shape: 'round', size: 22, hardness: 0.65, spacing: 0.06, flow: 0.7 },
+    dynamics: { smoothing: 0.2, minSize: 0.5 },
+    behaviour: { exchange: { pickup: 0.55, mix: 0.6, dirty: true } },
+  },
+  // The paint and second colours side by side across the tip.
+  {
+    id: 'multicolor-flat', name: 'Multi-colour flat', kind: 'mark', medium: 'paint', variety: 'acrylic',
+    tip: { shape: 'flat', size: 30, hardness: 0.75, spacing: 0.05, angle: 90, roundness: 0.3, flow: 0.85 },
+    dynamics: { smoothing: 0.2, rotation: 'stroke', minSize: 0.6 },
+    behaviour: { exchange: { pickup: 0.15, mix: 0.4 } },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'across-tip' }, softness: 0.7 } },
+  },
+  // From the paint colour to the second colour and back, every 6 dabs.
+  {
+    id: 'palette-dabber', name: 'Palette dabber', kind: 'mark', medium: 'paint', variety: 'acrylic',
+    tip: { shape: 'round', size: 18, hardness: 0.7, spacing: 0.35, flow: 0.9 },
+    dynamics: { smoothing: 0.1, minSize: 0.5, sizeJitter: 0.15, scatter: 0.3 },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 0.5, color: 'secondary' }, { offset: 1, color: 'paint' }], space: 'pigment', map: { by: 'distance', length: 12, repeat: 'repeat', unit: 'dabs' }, softness: 0.4 } },
+  },
+  // Changes colour as it is dragged out: paint → second colour over 300 px, and back.
+  {
+    id: 'gradient-round', name: 'Gradient round', kind: 'mark', medium: 'paint', variety: 'gradient',
+    tip: { shape: 'round', size: 24, hardness: 0.8, spacing: 0.05, flow: 0.9 },
+    dynamics: { smoothing: 0.2, minSize: 0.5 },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 300, repeat: 'mirror', unit: 'px' } } },
+  },
+  // Light pressure lays the second colour, full pressure the paint colour.
+  {
+    id: 'pressure-ombre', name: 'Pressure ombré', kind: 'mark', medium: 'paint', variety: 'gradient',
+    tip: { shape: 'round', size: 26, hardness: 0.6, spacing: 0.05, flow: 0.8 },
+    dynamics: { smoothing: 0.2, pressureSize: false },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'secondary' }, { offset: 1, color: 'paint' }], space: 'pigment', map: { by: 'pressure' } } },
+  },
+  {
+    id: 'rainbow-marker', name: 'Rainbow marker', kind: 'mark', medium: 'ink', variety: 'marker',
+    tip: { shape: 'flat', size: 18, hardness: 0.9, spacing: 0.04, angle: 90, roundness: 0.4 },
+    dynamics: { smoothing: 0.25, pressureSize: false, rotation: 'stroke' },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: '#e11d48' }, { offset: 0.2, color: '#f59e0b' }, { offset: 0.4, color: '#facc15' }, { offset: 0.6, color: '#22c55e' }, { offset: 0.8, color: '#3b82f6' }, { offset: 1, color: '#8b5cf6' }], space: 'oklab', map: { by: 'distance', length: 600, repeat: 'repeat', unit: 'px' } }, own: true },
+  },
+  {
+    id: 'mixer-brush', name: 'Mixer Brush', kind: 'mark', medium: 'paint', variety: 'mixer',
+    tip: { shape: 'round', size: 30, hardness: 0.7, flow: 0.5 },
+    dynamics: { smoothing: 0.2, minSize: 0.5 },
+    behaviour: { exchange: { reservoir: { load: 0.95 } }, mixing: 'pigment' },
+  },
+  {
+    id: 'watercolor-round', name: 'Watercolour round', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 28, hardness: 0.6, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.55 }, wet: { water: 0.55, rewet: 0.2 } },
+  },
+  {
+    id: 'watercolor-wash', name: 'Wash brush', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'flat', size: 90, hardness: 0.35, angle: 90, roundness: 0.45 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureOpacity: true, rotation: 'stroke' },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.45, mix: 0.45 }, wet: { water: 0.8, pigment: 0.45, rewet: 0.2 } },
+  },
+  // A graded wash: the paint colour runs into the second colour as the brush travels.
+  {
+    id: 'gradient-wash', name: 'Gradient wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'flat', size: 80, hardness: 0.35, angle: 90, roundness: 0.5 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureOpacity: true, rotation: 'stroke' },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.4, mix: 0.4 }, wet: { water: 0.8, pigment: 0.45, rewet: 0.2 } },
+    colour: { default: { type: 'gradient', stops: [{ offset: 0, color: 'paint' }, { offset: 1, color: 'secondary' }], space: 'pigment', map: { by: 'distance', length: 500, repeat: 'mirror', unit: 'px' } } },
+  },
+  {
+    id: 'watercolor-detail', name: 'Watercolour rigger', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 7, hardness: 0.75 },
+    dynamics: { smoothing: 0.4, minSize: 0.2 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.4, mix: 0.45 }, wet: { water: 0.4, pigment: 0.7, rewet: 0.2 } },
+  },
+  {
+    id: 'gouache', name: 'Gouache', kind: 'mark', medium: 'paint', variety: 'gouache',
+    tip: { shape: 'round', size: 26, hardness: 0.7 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.65, mix: 0.6 }, wet: { water: 0.35, pigment: 0.8, body: 1, rewet: 0.3 } },
+  },
+  {
+    id: 'oil-round', name: 'Wet oil round', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'round', size: 24, hardness: 0.75, spacing: 0.08 },
+    dynamics: { smoothing: 0.25, minSize: 0.5 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.6, mix: 0.55 }, wet: { water: 0.4, pigment: 0.9, body: 1, load: 0.97 } },
+  },
+  {
+    id: 'oil-flat', name: 'Wet oil flat', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'flat', size: 40, hardness: 0.85, spacing: 0.06, angle: 90, roundness: 0.35 },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.6 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.65, mix: 0.6 }, wet: { water: 0.45, pigment: 0.9, body: 1, load: 0.95 } },
+  },
+  {
+    id: 'impasto-brush', name: 'Impasto brush', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'flat', size: 36, hardness: 0.8, spacing: 0.06, angle: 90, roundness: 0.55 },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.55 },
+    behaviour: { surface: 'thick', exchange: { pickup: 0.4 }, thick: { gloss: 0.45, load: 0.92 } },
+  },
+  {
+    id: 'paint-tube', name: 'Paint tube', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'round', size: 22, hardness: 0.9, spacing: 0.05 },
+    dynamics: { smoothing: 0.35, minSize: 0.4 },
+    behaviour: { surface: 'thick', thick: { applicator: 'tube', thickness: 0.9, gloss: 0.5, load: 1, drag: 0.1 } },
+  },
+  {
+    id: 'palette-knife', name: 'Palette knife', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'flat', size: 48, spacing: 0.05, angle: 90, roundness: 0.18 },
+    dynamics: { smoothing: 0.3, pressureSize: false, rotation: 'stroke' },
+    behaviour: { surface: 'thick', thick: { applicator: 'knife', thickness: 0.3, gloss: 0.55, load: 1, drag: 0.85 } },
+  },
+  {
+    id: 'paint-roller', name: 'Roller', kind: 'mark', medium: 'paint', variety: 'acrylic',
+    tip: { shape: 'flat', size: 70, hardness: 0.95, spacing: 0.04, angle: 90, roundness: 0.12 },
+    dynamics: { smoothing: 0.4, pressureSize: false, rotation: 'stroke' },
+    behaviour: { surface: 'thick', thick: { applicator: 'roller', thickness: 0.25, gloss: 0.3, drag: 0.15 } },
+  },
+  {
+    id: 'gloop-pen', name: 'Gloop pen', kind: 'mark', medium: 'paint', variety: 'gloop',
+    tip: { shape: 'round', size: 14, hardness: 0.9, spacing: 0.05 },
+    dynamics: { smoothing: 0.5, minSize: 0.5 },
+    behaviour: { surface: 'thick', thick: { applicator: 'gloop', thickness: 1, gloss: 0.9, load: 1, drag: 0 } },
+  },
+  {
+    id: 'metallic-paint', name: 'Metallic paint', kind: 'mark', medium: 'paint', variety: 'metallic',
+    tip: { shape: 'flat', size: 30, hardness: 0.8, spacing: 0.06, angle: 90, roundness: 0.6 },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
+    behaviour: { surface: 'thick', exchange: { pickup: 0.2, mix: 0.4 }, thick: { thickness: 0.45, gloss: 0.8, metallic: 1, load: 0.95, drag: 0.3 } },
+  },
+  {
+    id: 'hair-strands', name: 'Hair strands', kind: 'mark', medium: 'ink', variety: 'hair',
+    tip: { shape: 'round', size: 40, hardness: 0.8, opacity: 0.9, flow: 0.6 },
+    marks: { kind: 'particles', physics: 'string', count: 22, size: 0.025, spread: 1, stiffness: 0.08, damping: 0.3 },
+    dynamics: { smoothing: 0.2, pressureOpacity: true },
+  },
+  {
+    id: 'spring-ink', name: 'Spring ink', kind: 'mark', medium: 'ink', variety: 'spring',
+    tip: { shape: 'round', size: 30, hardness: 0.9, flow: 0.8 },
+    marks: { kind: 'particles', count: 5, spread: 0.6, stiffness: 0.2, damping: 0.1 },
+    dynamics: { smoothing: 0.1 },
+  },
+  {
+    id: 'orbit-curls', name: 'Orbit curls', kind: 'mark', medium: 'ink', variety: 'curls',
+    tip: { shape: 'round', size: 36, hardness: 0.85, opacity: 0.9, flow: 0.7 },
+    marks: { kind: 'particles', physics: 'orbit', count: 4, size: 0.05, spread: 0.6, speed: 0.45 },
+    dynamics: { smoothing: 0.2 },
+  },
+  {
+    id: 'flow-fur', name: 'Flow fur', kind: 'mark', medium: 'ink', variety: 'fur',
+    tip: { shape: 'round', size: 50, hardness: 0.7, opacity: 0.8, flow: 0.5 },
+    marks: { kind: 'particles', physics: 'flow', count: 10, size: 0.03, spread: 0.6, life: 0.25 },
+    dynamics: { smoothing: 0.2, pressureOpacity: true },
+  },
+  {
+    id: 'bead-trail', name: 'Bead trail', kind: 'mark', medium: 'paint', variety: 'beads',
+    tip: { shape: 'round', size: 34, hardness: 0.9 },
+    marks: { kind: 'particles', render: 'sequence', count: 3, size: 0.18, stiffness: 0.3, damping: 0.3, interval: 0.4 },
+    dynamics: { smoothing: 0.25 },
+  },
+  {
+    id: 'sparkle-dust', name: 'Sparkle dust', kind: 'mark', medium: 'paint', variety: 'glitter',
+    tip: { shape: 'round', size: 60, hardness: 0.6, flow: 0.9 },
+    marks: { kind: 'particles', physics: 'flow', render: 'dot', count: 6, size: 0.05, spread: 0.9, speed: 0.7, life: 0.4 },
+    dynamics: { smoothing: 0.1, pressureOpacity: true },
+  },
+  {
+    id: 'bristle-round', name: 'Bristle round', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'bristle', size: 30, hardness: 0.85, flow: 0.9, bristle: { count: 28, stiffness: 0.45, splay: 0.6, thickness: 0.035, load: 0.7, jitter: 0.5 } },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.4, tiltSize: 0.6, tiltRoundness: 0.6 },
+  },
+  {
+    id: 'bristle-flat', name: 'Bristle flat', kind: 'mark', medium: 'paint', variety: 'oil',
+    tip: { shape: 'bristle', size: 46, hardness: 0.85, angle: 90, roundness: 0.3, flow: 0.9, bristle: { count: 40, stiffness: 0.6, splay: 0.4, thickness: 0.025, load: 0.65, jitter: 0.45 } },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5, tiltSize: 0.5 },
+  },
+  {
+    id: 'dry-brush', name: 'Dry brush', kind: 'mark', medium: 'paint', variety: 'dry-brush',
+    tip: { shape: 'bristle', size: 44, hardness: 0.9, angle: 90, roundness: 0.45, flow: 0.8, bristle: { count: 48, stiffness: 0.35, splay: 0.7, thickness: 0.05, load: 0.15, jitter: 0.8 } },
+    dynamics: { smoothing: 0.2, rotation: 'stroke' },
+    behaviour: { grain: 0.6 },
+  },
+  // Light paint: brushes that lay light with their colour (glow and spill; see light.ts).
+  {
+    id: 'glow-gel', name: 'Glow gel', kind: 'mark', medium: 'paint', variety: 'gel',
+    tip: { shape: 'round', size: 16, hardness: 0.9, spacing: 0.05 },
+    dynamics: { smoothing: 0.5, minSize: 0.6 },
+    behaviour: { surface: 'thick', thick: { applicator: 'gloop', thickness: 1, gloss: 0.95, load: 1, drag: 0, rim: 0.8, clarity: 0.5 } },
+    light: { amount: 0.85 },
+  },
+  {
+    id: 'neon-marker', name: 'Neon marker', kind: 'mark', medium: 'ink', variety: 'neon',
+    tip: { shape: 'round', size: 10, hardness: 0.9, spacing: 0.04 },
+    dynamics: { smoothing: 0.45, pressureSize: false },
+    light: { amount: 1 },
+  },
+  {
+    id: 'light-airbrush', name: 'Light airbrush', kind: 'mark', medium: 'spray', variety: 'airbrush',
+    tip: { shape: 'round', size: 90, hardness: 0, spacing: 0.04, flow: 0.06 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureSmoothing: 0.3, pressureFlow: 1 },
+    light: { amount: 0.7, pressure: true },
+  },
+  {
+    id: 'spark-trail', name: 'Spark trail', kind: 'mark', medium: 'paint', variety: 'sparks',
+    tip: { shape: 'round', size: 50, hardness: 0.7 },
+    marks: { kind: 'particles', physics: 'flow', render: 'dot', count: 8, size: 0.06, spread: 0.7, speed: 0.9, life: 0.3 },
+    dynamics: { smoothing: 0.1 },
+    light: { amount: 1 },
+  },
+  // Silk of light: strands dragged behind the pen on slow waves, the bands between them filled.
+  {
+    id: 'light-ribbon', name: 'Light ribbon', kind: 'mark', medium: 'paint', variety: 'ribbon',
+    tip: { shape: 'round', size: 80, hardness: 0.8, opacity: 0.9 },
+    marks: { kind: 'particles', physics: 'string', render: 'ribbon', count: 5, size: 0.015, spread: 1, stiffness: 0.05, damping: 0.3, ribbonFill: 0.45, waveAmplitude: 0.25, waveLength: 220, wavePhaseJitter: 0.25 },
+    dynamics: { smoothing: 0.35, pressureSize: false },
+    light: { amount: 0.8 },
+  },
+  // Flames: short-lived bands thrown off the pen, rising and curling in the flow.
+  {
+    id: 'flame-ribbon', name: 'Flame ribbon', kind: 'mark', medium: 'paint', variety: 'flame',
+    tip: { shape: 'round', size: 50, hardness: 0.6, opacity: 0.85 },
+    marks: { kind: 'particles', physics: 'flow', render: 'ribbon', count: 4, size: 0.012, speed: 0.6, gravity: -0.6, life: 0.2 },
+    dynamics: { smoothing: 0.25 },
+    light: { amount: 1 },
+  },
+  // A neon tube that lags and snaps back, with a slow shimmer.
+  {
+    id: 'neon-strand', name: 'Neon strand', kind: 'mark', medium: 'ink', variety: 'neon',
+    tip: { shape: 'round', size: 40, hardness: 0.9 },
+    marks: { kind: 'particles', physics: 'elastic', count: 3, size: 0.05, spread: 0.25, stiffness: 0.6, damping: 0.3, waveAmplitude: 0.06, waveLength: 120 },
+    dynamics: { smoothing: 0.4, pressureSize: false },
+    light: { amount: 1 },
+  },
+  // Smoke lit from within: thin bands thrown into a slow, rising flow.
+  {
+    id: 'smoke-ribbon', name: 'Smoke ribbon', kind: 'mark', medium: 'paint', variety: 'smoke',
+    tip: { shape: 'round', size: 70, hardness: 0.3, opacity: 0.45 },
+    marks: { kind: 'particles', physics: 'flow', render: 'ribbon', count: 3, size: 0.005, speed: 0.15, gravity: -0.15, life: 0.35, ribbonFill: 0.25, waveAmplitude: 0.1, waveLength: 140, wavePhaseJitter: 1 },
+    dynamics: { smoothing: 0.3 },
+    light: { amount: 0.3 },
+  },
+  // Out-of-focus lights: soft discs and rings spaced along springy paths.
+  {
+    id: 'bokeh-dots', name: 'Bokeh dots', kind: 'mark', medium: 'paint', variety: 'bokeh',
+    tip: { shape: 'stamp', size: 80, hardness: 0.7, opacity: 0.6, stamps: ['editor:dot', 'editor:dot', 'editor:ring'] },
+    marks: { kind: 'particles', render: 'sequence', count: 3, size: 0.3, spread: 1, stiffness: 0.15, damping: 0.4, interval: 1, stampOrder: 'random' },
+    dynamics: { smoothing: 0.3 },
+    light: { amount: 0.9 },
+  },
+  // Sparks: twinkles and stars thrown into the flow, spaced along it.
+  {
+    id: 'twinkle-sparks', name: 'Twinkle sparks', kind: 'mark', medium: 'paint', variety: 'sparks',
+    tip: { shape: 'stamp', size: 50, hardness: 0.8, stamps: ['editor:sparkle', 'editor:sparkle', 'editor:star'] },
+    marks: { kind: 'particles', physics: 'flow', render: 'sequence', count: 3, size: 0.25, spread: 0.8, speed: 0.9, life: 0.35, interval: 0.6, stampOrder: 'random' },
+    dynamics: { smoothing: 0.1 },
+    light: { amount: 1 },
+  },
+  {
+    id: 'glow-wash', name: 'Glow wash', kind: 'mark', medium: 'paint', variety: 'watercolor',
+    tip: { shape: 'round', size: 40, hardness: 0.55, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.35 },
+    behaviour: { surface: 'wet', exchange: { pickup: 0.4 }, wet: { water: 0.65, pigment: 0.75, rewet: 0.1 } },
+    light: { amount: 0.7 },
+  },
+  // Fluorescent ink: a transparent chisel marker that multiplies (text under it stays dark) and glows a little
+  // brighter than the paper. Its light spills nowhere (a spill hint of 0), and it comes in highlighter colours.
+  {
+    id: 'highlighter', name: 'Highlighter', kind: 'mark', medium: 'ink', variety: 'highlighter',
+    tip: { shape: 'chisel', size: 30, hardness: 0.85, spacing: 0.04, angle: 45, roundness: 0.35, opacity: 0.6, blend: 'multiply' },
+    dynamics: { smoothing: 0.3, pressureSize: false },
+    behaviour: { grain: 0.05 },
+    light: { amount: 0.5, spill: { radius: 0 } },
+    colour: { default: '#fff200', palette: ['#fff200', '#ff6ec7', '#7cff4f', '#ffa630'] },
+  },
+  {
+    id: 'sticker-stars', name: 'Star stickers', kind: 'mark', variety: 'stars',
+    tip: { shape: 'stamp', size: 36, stamps: ['editor:star', 'editor:sparkle'] },
+    marks: { kind: 'objects', density: 0.35, sizeJitter: 0.5, scatter: 0.6, colourJitter: 0.3 },
+    dynamics: { smoothing: 0.2, minSize: 0.5 },
+  },
+  {
+    id: 'sticker-leaves', name: 'Leaf stickers', kind: 'mark', variety: 'leaves',
+    tip: { shape: 'stamp', size: 40, stamps: ['editor:leaf'] },
+    marks: { kind: 'objects', density: 0.5, rotationJitter: 0.35, scatter: 0.4, colourJitter: 0.35 },
+    dynamics: { smoothing: 0.25, rotation: 'stroke', minSize: 0.5 },
+  },
+  {
+    id: 'sticker-confetti', name: 'Confetti', kind: 'mark', variety: 'confetti',
+    tip: { shape: 'stamp', size: 22, stamps: ['editor:confetti', 'editor:dot', 'editor:ring'] },
+    marks: { kind: 'objects', density: 0.7, sizeJitter: 0.5, scatter: 1.5, colourJitter: 1 },
+    dynamics: { smoothing: 0.1, pressureSize: false },
+  },
+  {
+    id: 'sticker-flowers', name: 'Flower stickers', kind: 'mark', variety: 'flowers',
+    tip: { shape: 'stamp', size: 44, stamps: ['editor:flower', 'editor:heart'] },
+    marks: { kind: 'objects', density: 0.3, sizeJitter: 0.5, scatter: 0.7, colourJitter: 0.4 },
+    dynamics: { smoothing: 0.2 },
+  },
+  {
+    id: 'sticker-splats', name: 'Paint splats', kind: 'mark', variety: 'splats',
+    tip: { shape: 'stamp', size: 50, opacity: 0.95, stamps: ['editor:splat'] },
+    marks: { kind: 'objects', density: 0.25, sizeJitter: 0.6, scatter: 0.8, colourJitter: 0.15 },
+    dynamics: { smoothing: 0.1 },
+  },
+  {
+    id: 'add-water', name: 'Add water', kind: 'tool', tool: 'water',
+    tip: { shape: 'round', size: 40, hardness: 0.4, spacing: 0.12 },
+    dynamics: { smoothing: 0.25, pressureOpacity: true, minSize: 0.5 },
+    behaviour: { wet: { water: 0.6, pigment: 0, rewet: 0.3 } },
+  },
+  {
+    id: 'hair-dryer', name: 'Dry', kind: 'tool', tool: 'dryer',
+    tip: { shape: 'round', size: 80, hardness: 0.1, spacing: 0.15 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+  },
+  {
+    id: 'blow', name: 'Blow', kind: 'tool', tool: 'blow',
+    tip: { shape: 'round', size: 50, hardness: 0.2 },
+    dynamics: { smoothing: 0.3, pressureSize: false, pressureOpacity: true },
+    behaviour: { strength: 0.6 },
+  },
+  {
+    id: 'wet-blend', name: 'Wet blend', kind: 'tool', tool: 'wet-blend',
+    tip: { shape: 'round', size: 36, hardness: 0.3 },
+    dynamics: { smoothing: 0.25, pressureSize: false, pressureOpacity: true },
+    behaviour: { strength: 0.4 },
+  },
+  {
+    id: 'wet-drag', name: 'Wet smudge', kind: 'tool', tool: 'wet-drag',
+    tip: { shape: 'round', size: 30, hardness: 0.5, spacing: 0.08 },
+    dynamics: { smoothing: 0.25, pressureSize: false, pressureOpacity: true },
+    behaviour: { strength: 0.6 },
+  },
+  {
+    id: 'blot', name: 'Blot (erase wet)', kind: 'tool', tool: 'blot',
+    tip: { shape: 'round', size: 40, hardness: 0.5, spacing: 0.12 },
+    dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    behaviour: { strength: 0.7 },
+  },
+];

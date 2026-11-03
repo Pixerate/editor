@@ -20,6 +20,7 @@ export default defineConfig({
     "image-editor/index": "src/image-editor/index.ts",
     "image-editor/selection-worker": "src/image-editor/selection-worker.ts",
     "paint-editor/index": "src/paint-editor/index.ts",
+    "brushes/index": "src/brushes/index.ts",
     "commands/index": "src/commands/index.ts",
     "persistence/index": "src/persistence/index.ts",
     "generation/index": "src/generation/index.ts",

@@ -1,0 +1,13 @@
+/**
+ * `@pixerate/editor/brushes`: the brush model shared by every editor that paints. A `Brush` is
+ * made of facets (tip, marks, dynamics, behaviour, light, motion, colour); `resolveBrush` turns
+ * one into the flat form the paint engine reads, `migrateBrushV1` reads brushes written before
+ * the facet model, and `BRUSH_PRESETS` is the built-in library. No renderer is bundled.
+ */
+
+export * from './types';
+export { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA, BRUSH_WORD, MAX_BRUSH_PALETTE } from './schema';
+export { normalizeBrushSpec, WET_BRUSH_TOOLS } from './normalize';
+export { resolveBrush, resolveCategory, resolveEngine, resolveWetMedium, type ResolveBrushOptions } from './resolve';
+export { migrateBrushV1 } from './migrate';
+export { BRUSH_PRESETS } from './presets';

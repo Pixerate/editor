@@ -22,6 +22,8 @@ import type { StickerRef } from '../stickers/types';
 import { sampleArt, type StickerArt, type StickerArtLookup } from './sticker-art';
 
 export { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
+export { DEFAULT_STICKER, MAX_STICKER_STAMPS, normalizeStickerSettings, type StickerSettings } from './mark-settings';
+import type { StickerSettings } from './mark-settings';
 import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { oklabToOklch, oklabToRgb, oklchToOklab, rgbToOklab } from '../color/convert';
 
@@ -44,52 +46,6 @@ export interface Sticker {
   opacity: number;
   /** Texture seed. */
   seed: number;
-}
-
-/** Sticker spray settings (each 0..1 unless noted). */
-export interface StickerSettings {
-  /**
-   * The stickers to spray (one picked at random per sticker): refs `provider:id`. A bare editor
-   * stamp (`"star"`) is read as `editor:star`.
-   */
-  stamps: StickerRef[];
-  /** How closely stickers follow each other: about `density × 4` per tip diameter of travel (0.25 ≈ one per diameter). */
-  density: number;
-  /** Random size change. */
-  sizeJitter: number;
-  /** Random turn, as a fraction of ±180°. */
-  rotationJitter: number;
-  /** How far from the path stickers land, in tip diameters (0..2). */
-  scatter: number;
-  /** Random colour change (hue and lightness). */
-  colorJitter: number;
-}
-
-/** At most this many stickers in a sticker brush. */
-export const MAX_STICKER_STAMPS = 16;
-
-export const DEFAULT_STICKER: Readonly<StickerSettings> = { stamps: ['editor:star'], density: 0.4, sizeJitter: 0.4, rotationJitter: 1, scatter: 0.5, colorJitter: 0.2 };
-
-const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
-
-export function normalizeStickerSettings(raw: Partial<StickerSettings> = {}, base: StickerSettings = DEFAULT_STICKER): StickerSettings {
-  const refs = (list: readonly unknown[]) =>
-    list.flatMap((s) => {
-      try {
-        return [normalizeStickerRef(s as string)];
-      } catch {
-        return [];
-      }
-    });
-  const stamps = Array.isArray(raw.stamps) ? refs(raw.stamps) : refs(base.stamps);
-  return {
-    stamps: stamps.length ? [...new Set(stamps)].slice(0, MAX_STICKER_STAMPS) : refs(base.stamps.length ? base.stamps : DEFAULT_STICKER.stamps),
-    density: unit(raw.density, base.density),
-    sizeJitter: unit(raw.sizeJitter, base.sizeJitter),
-    rotationJitter: unit(raw.rotationJitter, base.rotationJitter),
-    scatter: typeof raw.scatter === 'number' && Number.isFinite(raw.scatter) ? Math.min(2, Math.max(0, raw.scatter)) : base.scatter,
-    colorJitter: unit(raw.colorJitter, base.colorJitter),
-  };
 }
 
 function hexRgb(hex: string): [number, number, number] {

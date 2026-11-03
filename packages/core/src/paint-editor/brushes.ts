@@ -10,8 +10,7 @@ import { DEFAULT_BLENDER, DEFAULT_SMUDGE, normalizeBlender, normalizeSmudge, typ
 import type { MixingModel } from '../paint/exchange';
 import { readPaintSource, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { DEFAULT_MIXER, normalizeMixer, type MixerSettings } from '../paint/mixer';
-import { DEFAULT_STICKER, normalizeStickerSettings, type StickerSettings } from './stickers';
-import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, normalizeBristle, normalizeParticle, type BristleSettings, type ParticleSettings } from './procedural';
+import { DEFAULT_BRISTLE, DEFAULT_PARTICLE, DEFAULT_STICKER, normalizeBristle, normalizeParticle, normalizeStickerSettings, type BristleSettings, type ParticleSettings, type StickerSettings } from './mark-settings';
 
 /**
  * How a brush makes marks: `dab` (dabs into a stroke buffer, or dab by dab through the pick-up /
