@@ -33,6 +33,8 @@ export interface StrokeSessionHost {
   update(layerId: string, surface: TiledSurface, rects: RasterRect[]): void;
   /** Ends the stroke: `surface` is the new pixels, or `null` when nothing changed / it was cancelled. */
   commit(session: PaintStrokeSession, surface: TiledSurface | null, cancelled: boolean): void;
+  /** Hears the raw samples as they arrive (after the input filter), before they are painted. */
+  sampled?(session: PaintStrokeSession, points: readonly PenPoint[]): void;
 }
 
 export interface StrokeSessionInit {
@@ -260,6 +262,7 @@ export class PaintStrokeSession {
     if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
+    this.host.sampled?.(this, points);
     this.lightTwin?.push(points);
     if (this.wetDriver) {
       this.wetUpdate(this.wetDriver.push(points));

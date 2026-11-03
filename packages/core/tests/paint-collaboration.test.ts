@@ -206,3 +206,67 @@ describe('createPaintProposals', () => {
     expect(() => store.reject('gone')).toThrow('No pending paint proposal "gone". Call list_paint_proposals for the ids.');
   });
 });
+
+describe('live strokes', () => {
+  it('streams the user\'s stroke as it is painted, and lets a listener paint in reply at the end', () => {
+    const c = editor();
+    const heard: string[] = [];
+    let replied = false;
+    c.onStrokeSample((s) => {
+      heard.push(`${s.phase}:${s.points.length}:${s.added.length}:${s.color}`);
+      if (s.phase === 'end' && !replied) {
+        replied = true;
+        c.withOrigin('agent:pixie', () => c.paintStroke({ points: s.points.map((p) => ({ ...p, y: p.y + 30 })), brushId: 'soft-pastel', color: '#ff8800' }));
+      }
+    });
+    const session = c.beginStroke({ brushId: 'soft-pastel', color: '#2255aa' });
+    expect(c.getLiveStroke()).toMatchObject({ brushId: 'soft-pastel', color: '#2255aa', points: [] });
+    session.push(line(40).slice(0, 5));
+    session.push(line(40).slice(5));
+    expect(c.getLiveStroke()!.points).toHaveLength(20);
+    session.end();
+    expect(heard).toEqual(['begin:0:0:#2255aa', 'points:5:5:#2255aa', 'points:20:15:#2255aa', 'end:20:0:#2255aa']);
+    expect(c.getLiveStroke()).toBeNull();
+    expect(c.getStrokes().map((s) => s.color)).toEqual(['#2255aa', '#ff8800']);
+  });
+
+  it('reports a cancelled stroke, and nothing for strokes painted from data', () => {
+    const c = editor();
+    const heard: string[] = [];
+    c.onStrokeSample((s) => heard.push(s.phase));
+    const session = c.beginStroke({ brushId: 'soft-pastel' });
+    session.push(line(40).slice(0, 3));
+    session.cancel();
+    c.paintStroke({ points: line(60), brushId: 'soft-pastel' });
+    expect(heard).toEqual(['begin', 'points', 'cancel']);
+  });
+
+  it('gives agents the stroke in progress', async () => {
+    const c = editor();
+    const registry = new ToolRegistry();
+    const { createPaintEditorToolProvider } = await import('../src/paint-editor');
+    registry.register(createPaintEditorToolProvider(c, { id: 'paint' }));
+    expect((await registry.callTool('paint__get_live_stroke', {})).structuredContent).toEqual({ live: false });
+    const session = c.beginStroke({ brushId: 'soft-pastel', color: '#2255aa' });
+    session.push(line(40));
+    expect((await registry.callTool('paint__get_live_stroke', { limit: 2 })).structuredContent).toMatchObject({ live: true, brushId: 'soft-pastel', color: '#2255aa', total: 20, points: [{ x: expect.any(Number) }, { x: 200 }] });
+    expect((await registry.callTool('paint__get_live_stroke', { limit: 0 })).isError).toBe(true);
+    session.end();
+  });
+
+  it('keeps live agent strokes for the canvas to draw', async () => {
+    const { createPaintAgentStrokes, paintAgentStrokePoints } = await import('../src/paint-editor');
+    const store = createPaintAgentStrokes();
+    const seen: number[] = [];
+    store.subscribe((s) => seen.push(s.strokes.length));
+    store.set({ id: 'a', origin: 'agent:pixie', points: [{ x: 1.04, y: 2 }, { x: 3, y: 4 }], color: '#ff8800', size: 6 });
+    store.set({ id: 'a', origin: 'agent:pixie', points: [{ x: 1, y: 2 }], color: '#ff8800', size: 6 });
+    store.set({ id: 'b', origin: 'agent:other', points: [], color: '#000000', size: 2 });
+    expect(paintAgentStrokePoints(store.getState().strokes[0]!)).toBe('1,2');
+    store.clear('agent:pixie');
+    expect(store.getState().strokes.map((s) => s.id)).toEqual(['b']);
+    store.remove('b');
+    store.remove('b');
+    expect(seen).toEqual([1, 1, 2, 1, 0]);
+  });
+});

@@ -609,6 +609,25 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   });
 
   add({
+    name: 'get_live_stroke',
+    title: 'Get the stroke being painted',
+    description:
+      'Reads the stroke the user is painting right now, if any: its layer, brush id and name, colour, and the pen samples so far (document pixels; at most the last `limit`). Returns live: false when no stroke is in progress. For agents that paint along with the user: hosts stream the same samples to them live (onStrokeSample); this is a snapshot.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1, maximum: 5000, description: 'Most recent samples to return (default 500).' } },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Get the stroke being painted', ...READ },
+    handler: (args) => {
+      const live = c.getLiveStroke();
+      if (!live) return { live: false };
+      const limit = args.limit ?? 500;
+      return { live: true, layerId: live.layerId, brushId: live.brushId, brushName: live.brushName, color: live.color, total: live.points.length, points: live.points.slice(-limit) };
+    },
+  });
+
+  add({
     name: 'list_strokes',
     title: 'List recorded strokes',
     description:

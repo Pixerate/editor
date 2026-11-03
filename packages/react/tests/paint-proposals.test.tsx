@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PaintEditorController, createPaintProposalToolProvider, type PaintChange } from '@pixerate/editor/paint-editor';
+import { PaintEditorController, createPaintAgentStrokes, createPaintProposalToolProvider, type PaintChange } from '@pixerate/editor/paint-editor';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import { PaintCanvas, usePaintChangeFeed, usePaintProposals, type PaintProposalsHandle } from '../src/paint-editor';
 
@@ -70,5 +70,17 @@ describe('usePaintProposals and PaintCanvas ghosts (React)', () => {
     });
     expect(result.structuredContent).toMatchObject({ title: 'Warm ground', origin: 'agent:pixie', placement: { place: 'bottom' }, bounds: { x: 0, y: 0, width: 120, height: 80 } });
     expect(out.handle!.proposals).toHaveLength(1);
+  });
+
+  it('draws an agent\'s live strokes over the canvas', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    const strokes = createPaintAgentStrokes();
+    act(() => root.render(<PaintCanvas controller={c} fitOnMount={false} agentStrokes={strokes} />));
+    act(() => strokes.set({ id: 'k1', origin: 'agent:pixie', points: [{ x: 1, y: 2 }, { x: 30, y: 40 }], color: '#ff8800', size: 6, opacity: 0.5 }));
+    const line = container.querySelector('[data-agent-stroke="k1"]')!;
+    expect(line.getAttribute('points')).toBe('1,2 30,40');
+    expect(line.getAttribute('stroke')).toBe('#ff8800');
+    act(() => strokes.clear());
+    expect(container.querySelector('[data-agent-stroke]')).toBeNull();
   });
 });

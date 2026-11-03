@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintProposals, type PaintTool } from '@pixerate/editor/paint-editor';
+import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintProposals, type PaintAgentStrokes, type PaintTool } from '@pixerate/editor/paint-editor';
 import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
 import { useAgentPlayback } from '../playback/AgentPlaybackContext';
 import { usePlaybackSurface } from '../playback/usePlaybackSurface';
@@ -26,6 +26,8 @@ export interface PaintEditorProps {
   presence?: PaintPresence;
   /** Paint an agent suggests, drawn over the canvas as ghosts (see `usePaintProposals`). */
   proposals?: PaintProposals;
+  /** Strokes an agent is painting live alongside the user's (see `createPaintAgentStrokes`). */
+  agentStrokes?: PaintAgentStrokes;
   className?: string;
   /**
    * Agent playback: act out the paint tools' calls here with the agent's cursor, opening the panel
@@ -53,7 +55,7 @@ type SideTab = 'color' | 'wet' | 'paper' | 'layers' | 'effects';
  * harmonies, swatches, mixing pad), wet media, paper and layers on the right, and provider effects
  * when an effects provider is registered.
  */
-export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
+export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, height = 720, presence, proposals, agentStrokes, className, playback, playbackId = 'paint', onPlaybackReveal }) => {
   const [tool, setTool] = useState<PaintTool>('brush');
   const [tab, setTab] = useState<SideTab>('color');
   const tabRef = useRef(tab);
@@ -131,7 +133,7 @@ export const PaintEditor: React.FC<PaintEditorProps> = ({ controller, fileName, 
         <BrushPanel controller={controller} className="w-60 shrink-0 overflow-y-auto pr-1" />
         <div className="flex min-w-0 flex-1 flex-col">
           {/* With playback the editor draws the cursor (over the panels too), so the canvas doesn't. */}
-          <PaintCanvas controller={controller} tool={tool} onError={setError} presence={playing ? undefined : presence} proposals={proposals} className="flex-1 rounded-lg" />
+          <PaintCanvas controller={controller} tool={tool} onError={setError} presence={playing ? undefined : presence} proposals={proposals} agentStrokes={agentStrokes} className="flex-1 rounded-lg" />
           {error && (
             <p role="alert" className="mt-1 text-[11px] text-rose-400">
               {error}

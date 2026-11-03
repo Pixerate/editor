@@ -454,3 +454,74 @@ export function paintProposalGhost(proposal: PaintProposal): { x: number; y: num
   if (!b || !b.width || !b.height || proposal.ghost.length !== b.width * b.height * 4) return null;
   return { x: b.x, y: b.y, width: b.width, height: b.height, data: proposal.ghost };
 }
+
+// --- Live agent strokes ----------------------------------------------------------------
+
+/** A stroke an agent is painting live, drawn over the canvas until it is painted for real. */
+export interface PaintAgentStroke {
+  id: string;
+  /** Who paints it (`agent:<id>`). */
+  origin: string;
+  /** Path in document pixels. */
+  points: readonly { x: number; y: number }[];
+  /** #rrggbb */
+  color: string;
+  /** Line width in document pixels. */
+  size: number;
+  /** 0..1 (default 0.6). */
+  opacity?: number;
+}
+
+export interface PaintAgentStrokesState {
+  strokes: readonly PaintAgentStroke[];
+}
+
+/** Agent strokes in progress, for `PaintCanvas` (`agentStrokes`) to draw while the user's pen is down. */
+export interface PaintAgentStrokes {
+  getState(): PaintAgentStrokesState;
+  subscribe(listener: (state: PaintAgentStrokesState) => void): () => void;
+  /** Adds or replaces a stroke (by id). */
+  set(stroke: PaintAgentStroke): void;
+  remove(id: string): void;
+  /** Removes every stroke (or those of one origin). */
+  clear(origin?: string): void;
+}
+
+/**
+ * Live agent strokes: an agent painting along with the user draws its companion strokes here
+ * while the user's stroke is in progress (the editor can't paint two strokes at once), then paints
+ * them for real when the user lifts the pen. `PaintCanvas` draws them as soft lines over the canvas.
+ */
+export function createPaintAgentStrokes(): PaintAgentStrokes {
+  let state: PaintAgentStrokesState = { strokes: [] };
+  const listeners = new Set<(state: PaintAgentStrokesState) => void>();
+  const set = (strokes: readonly PaintAgentStroke[]) => {
+    state = { strokes };
+    listeners.forEach((l) => l(state));
+  };
+  return {
+    getState: () => state,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(stroke) {
+      const i = state.strokes.findIndex((s) => s.id === stroke.id);
+      set(i < 0 ? [...state.strokes, stroke] : state.strokes.map((s, j) => (j === i ? stroke : s)));
+    },
+    remove(id) {
+      if (state.strokes.some((s) => s.id === id)) set(state.strokes.filter((s) => s.id !== id));
+    },
+    clear(origin) {
+      const keep = origin ? state.strokes.filter((s) => s.origin !== origin) : [];
+      if (keep.length !== state.strokes.length) set(keep);
+    },
+  };
+}
+
+/** An SVG `points` attribute for a live agent stroke. */
+export function paintAgentStrokePoints(stroke: PaintAgentStroke): string {
+  return stroke.points.map((p) => `${Math.round(p.x * 10) / 10},${Math.round(p.y * 10) / 10}`).join(' ');
+}
