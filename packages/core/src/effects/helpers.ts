@@ -21,9 +21,13 @@ import type {
 	EffectSummary,
 	EffectUse,
 	EffectValue,
-	EffectValues
+	EffectValues,
+	TimingBlend,
+	TimingFrame,
+	TimingSample,
+	TimingSampleRequest
 } from './types.js';
-import { EFFECT_PATH_FORMAT } from './types.js';
+import { EFFECT_PATH_FORMAT, TIMING_BLENDS, TIMING_DEFAULT_FPS, TIMING_MAX_FPS, TIMING_MAX_FRAMES } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Values
@@ -50,15 +54,18 @@ export function resolveEffectValues(description: Pick<EffectDescription, 'id' | 
 // Search
 // ---------------------------------------------------------------------------
 
+/** Kinds that draw no picture of their own, each offered only where its use (the same name) is. */
+const PIXELLESS_KINDS = ['motion', 'camera', 'timing'] as const;
+
 /**
- * Whether an editor offering `uses` should offer `e` (in a picker or an `effect` enum). Motion
- * and camera effects draw no picture of their own, so they are offered only where `uses` names
- * them (`motion`, `camera`); with no `uses`, every other effect is.
+ * Whether an editor offering `uses` should offer `e` (in a picker or an `effect` enum). Motion,
+ * camera and timing effects draw no picture of their own, so they are offered only where `uses`
+ * names them (`motion`, `camera`, `timing`); with no `uses`, every other effect is.
  */
 export function effectOffered(e: Pick<EffectSummary, 'kind' | 'uses'>, uses?: readonly EffectUse[]): boolean {
-	if (!uses) return e.kind !== 'motion' && e.kind !== 'camera';
-	if (e.kind === 'motion' && !uses.includes('motion')) return false;
-	if (e.kind === 'camera' && !uses.includes('camera')) return false;
+	const pixelless = (PIXELLESS_KINDS as readonly string[]).includes(e.kind);
+	if (!uses) return !pixelless;
+	if (pixelless && !uses.includes(e.kind as EffectUse)) return false;
 	return e.uses.some((u) => uses.includes(u));
 }
 
@@ -390,4 +397,151 @@ export function cameraBoxOfView(view: CameraView, stage: CameraStage): CameraBox
 	const width = stage.width / view.zoom;
 	const height = stage.height / view.zoom;
 	return { x: -view.scrollX, y: -view.scrollY, width, height };
+}
+
+// ---------------------------------------------------------------------------
+// Timing effects
+// ---------------------------------------------------------------------------
+
+/** Throws `EffectUnsupportedError` unless `footageMs` is a footage length a timing effect takes (a number of ms > 0). */
+export function checkTimingFootage(footageMs: number, id?: string): void {
+	if (typeof footageMs !== 'number' || !Number.isFinite(footageMs) || footageMs <= 0) {
+		throw new EffectUnsupportedError(`The footage's length is a number of ms above 0; it was ${String(footageMs)}.`, id);
+	}
+}
+
+/**
+ * Checks a timing request (footage, time and fps), throwing `EffectUnsupportedError` with a
+ * sentence naming the valid range, and gives its fps (default `TIMING_DEFAULT_FPS`).
+ */
+export function checkTimingRequest(request: TimingSampleRequest, id?: string): number {
+	if (!request || typeof request !== 'object') throw new EffectUnsupportedError('A timing request is { time, footage, fps? }: ms into the retimed clip, the footage\'s length in ms, and its frame rate.', id);
+	checkTimingFootage(request.footage, id);
+	const fps = request.fps ?? TIMING_DEFAULT_FPS;
+	if (typeof fps !== 'number' || !Number.isFinite(fps) || fps <= 0 || fps > TIMING_MAX_FPS) {
+		throw new EffectUnsupportedError(`The footage's frame rate is above 0 and at most ${TIMING_MAX_FPS} frames per second; it was ${String(fps)}.`, id);
+	}
+	if (typeof request.time !== 'number' || !Number.isFinite(request.time)) throw new EffectUnsupportedError(`The time is a number of ms into the retimed clip; it was ${String(request.time)}.`, id);
+	return fps;
+}
+
+/** Index of the footage's last frame at `fps`. */
+const lastFrameOf = (footageMs: number, fps: number) => Math.max(0, Math.ceil((footageMs * fps) / 1000 - 1e-9) - 1);
+
+/**
+ * Raw footage frames (any times, any positive weights) as a `TimingSample`: each time held within
+ * the footage and moved to the start of its frame, frames on the same footage frame merged, at
+ * most `TIMING_MAX_FRAMES` (evenly spaced), weights scaled to add up to 1, earliest first. Frames
+ * with a time or weight that is not a finite number, or a weight ≤ 0, are dropped; with none left,
+ * the sample is the frame at `request.time`. Providers can build `timingSample` on it.
+ */
+export function normaliseTimingSample(raw: readonly TimingFrame[], request: TimingSampleRequest, blend: TimingBlend = 'average'): TimingSample {
+	const fps = request.fps ?? TIMING_DEFAULT_FPS;
+	const frameMs = 1000 / fps;
+	const last = lastFrameOf(request.footage, fps);
+	const frameOf = (t: number) => Math.min(last, Math.max(0, Math.floor(t / frameMs + 1e-6)));
+	const weights = new Map<number, number>();
+	for (const f of raw) {
+		if (!Number.isFinite(f.time) || !Number.isFinite(f.weight) || f.weight <= 0) continue;
+		const i = frameOf(f.time);
+		weights.set(i, (weights.get(i) ?? 0) + f.weight);
+	}
+	if (!weights.size) weights.set(Number.isFinite(request.time) ? frameOf(request.time) : 0, 1);
+	let frames = [...weights.entries()].sort((a, b) => a[0] - b[0]);
+	if (frames.length > TIMING_MAX_FRAMES) {
+		const stride = frames.length / TIMING_MAX_FRAMES;
+		frames = Array.from({ length: TIMING_MAX_FRAMES }, (_, k) => frames[Math.floor(k * stride)]);
+	}
+	const total = frames.reduce((sum, [, w]) => sum + w, 0);
+	return { frames: frames.map(([i, w]) => ({ time: (i * 1000) / fps, weight: w / total })), blend };
+}
+
+/**
+ * What is wrong with `sample` as the answer to `request` (see `TimingSample`), as sentences; empty
+ * when it keeps every rule. `checkEffectProvider` uses it; hosts can check a provider's samples
+ * with it.
+ */
+export function timingSampleProblems(sample: unknown, request: TimingSampleRequest): string[] {
+	if (!sample || typeof sample !== 'object') return ['the sample is not an object { frames, blend }'];
+	const { frames, blend } = sample as Partial<TimingSample>;
+	const problems: string[] = [];
+	if (!TIMING_BLENDS.includes(blend as TimingBlend)) problems.push(`blend "${String(blend)}" is not one of ${TIMING_BLENDS.join(', ')}`);
+	if (!Array.isArray(frames) || !frames.length) return [...problems, 'frames must be a list of at least one { time, weight }'];
+	if (frames.length > TIMING_MAX_FRAMES) problems.push(`it has ${frames.length} frames; at most ${TIMING_MAX_FRAMES} are allowed`);
+	const fps = request.fps ?? TIMING_DEFAULT_FPS;
+	const last = lastFrameOf(request.footage, fps);
+	let total = 0;
+	let previous = -Infinity;
+	for (const f of frames as readonly TimingFrame[]) {
+		if (!f || !Number.isFinite(f.time) || !Number.isFinite(f.weight)) {
+			problems.push(`frame ${JSON.stringify(f)} needs a finite time and weight`);
+			continue;
+		}
+		const index = (f.time * fps) / 1000;
+		if (Math.abs(index - Math.round(index)) > 1e-6) problems.push(`frame time ${f.time} is not the start of a frame at ${fps} fps (index × ${+(1000 / fps).toFixed(6)} ms)`);
+		else if (Math.round(index) < 0 || Math.round(index) > last) problems.push(`frame time ${f.time} is outside the footage (frames 0 to ${last}, the last at ${+((last * 1000) / fps).toFixed(6)} ms)`);
+		if (f.time <= previous) problems.push(`frame times must be distinct and earliest first; ${f.time} follows ${previous}`);
+		previous = f.time;
+		if (!(f.weight > 0)) problems.push(`frame at ${f.time} has weight ${f.weight}; weights are > 0`);
+		total += f.weight;
+	}
+	if (Math.abs(total - 1) > 1e-6) problems.push(`weights add up to ${total}, not 1`);
+	return problems;
+}
+
+/**
+ * Blends footage frames by weight as a timing sample says (see `TimingBlend`): the reference for
+ * hosts that blend in their own pipeline, and a ready blend for `EffectPixels`. Reads and writes
+ * 8-bit `data` (straight alpha, rounded); `float` is not used. Writes into `out` when given (the
+ * frames' size), else a new picture. Throws `EffectUnsupportedError` for no frames or frames of
+ * different sizes.
+ */
+export function blendTimingFrames(frames: readonly { pixels: EffectPixels; weight: number }[], blend: TimingBlend, out?: EffectPixels): EffectPixels {
+	if (!frames.length) throw new EffectUnsupportedError('There are no frames to blend; a timing sample has at least one.');
+	const { width, height } = frames[0].pixels;
+	for (const f of frames) {
+		if (f.pixels.width !== width || f.pixels.height !== height) throw new EffectUnsupportedError(`A ${f.pixels.width}×${f.pixels.height} frame cannot be blended with ${width}×${height} frames.`);
+	}
+	const target = out ?? createEffectPixels(width, height);
+	if (target.width !== width || target.height !== height) throw new EffectUnsupportedError(`The output is ${target.width}×${target.height}; the frames are ${width}×${height}.`);
+	const o = target.data;
+	if (frames.length === 1) {
+		o.set(frames[0].pixels.data);
+		return target;
+	}
+	const s = new Float64Array(o.length);
+	if (blend === 'lighten') {
+		const heaviest = Math.max(...frames.map((f) => f.weight));
+		for (const f of frames) {
+			const k = heaviest > 0 ? f.weight / heaviest : 1;
+			const p = f.pixels.data;
+			for (let i = 0; i < s.length; i += 4) {
+				const a = (p[i + 3] / 255) * k;
+				for (let c = 0; c < 3; c++) if (p[i + c] * a > s[i + c]) s[i + c] = p[i + c] * a;
+				if (a > s[i + 3]) s[i + 3] = a;
+			}
+		}
+		for (let i = 0; i < s.length; i += 4) {
+			// Colour stays as it was dimmed (a faded trail is darker), not divided back up by its alpha.
+			for (let c = 0; c < 3; c++) o[i + c] = Math.round(s[i + c]);
+			o[i + 3] = Math.round(s[i + 3] * 255);
+		}
+		return target;
+	}
+	let total = 0;
+	for (const f of frames) {
+		total += f.weight;
+		const p = f.pixels.data;
+		for (let i = 0; i < s.length; i += 4) {
+			const a = p[i + 3] * f.weight;
+			for (let c = 0; c < 3; c++) s[i + c] += p[i + c] * a;
+			s[i + 3] += a;
+		}
+	}
+	for (let i = 0; i < s.length; i += 4) {
+		const a = s[i + 3];
+		for (let c = 0; c < 3; c++) o[i + c] = a > 0 ? Math.round(s[i + c] / a) : 0;
+		o[i + 3] = total > 0 ? Math.round(a / total) : 0;
+	}
+	return target;
 }

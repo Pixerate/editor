@@ -1,6 +1,6 @@
 # Effects providers
 
-`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion, camera moves) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
+`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion, camera moves, timing effects) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
 
 The real provider is [Flair](https://github.com/Pixerate/flair): `flairEffects()` from `@pixerate/flair/integrations`. The adapter lives **in Flair**, not here, so this repo never depends on Flair. The demo is the only place that uses both: `@pixerate/flair` is a devDependency of `apps/demo`, and `apps/demo/src/demoEffects.ts` loads it on demand when the user picks it from the demo's effects switch (the default is the fake "test" provider).
 
@@ -21,6 +21,8 @@ interface EffectProvider {
   applyVectorEffect?(id, target, values?): MaybePromise<EffectVectorMotion>;
   cameraView?(id, ctx, values?): CameraView;                // camera moves; sync and pure
   sampleCameraMove?(id, request): MaybePromise<CameraMoveSample>;
+  timingLength?(id, footageMs, values?): number;            // timing effects; sync and pure
+  timingSample?(id, { time, footage, fps? }, values?): TimingSample;
   listTemplates?(options?): MaybePromise<EffectTemplateSummary[]>;          // sequence templates
   describeTemplate?(id): MaybePromise<EffectTemplateDescription>;            // slots shaped for a form
   instantiateTemplate?(id, values?, options?): MaybePromise<EffectTemplateResult>;
@@ -36,8 +38,8 @@ interface EffectRenderer {
 }
 ```
 
-- **Kinds** are `shader`, `vector`, `motion` and `camera`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive` and `camera`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion and camera effects only where their use is named).
-- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera` and `supportsTemplates`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
+- **Kinds** are `shader`, `vector`, `motion`, `camera` and `timing`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive`, `camera` and `timing`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion, camera and timing effects only where their use is named).
+- **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera`, `supportsTiming` and `supportsTemplates`. Editors check them before asking for something (16/32-bit pixels, masks, vector output).
 - **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider` and `unknown_template` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`, `UnknownTemplateError`; `isEffectError`). Agent tools turn them into `isError` results.
 - **One render at a time per renderer.** `EffectRendererPool` (`pool.ts`) keeps a few renderers alive per effect, size and depth (default 4) and disposes the least recently used. GPU providers hold one WebGL context per renderer, and browsers drop the oldest after about sixteen (#281).
 - **Saved documents** keep the provider id, effect id and values. They load and save unchanged without a provider; filters pass pixels through and generated layers keep their last pixels.
@@ -100,6 +102,23 @@ A `camera` effect moves a scene's camera rather than drawing pixels: Flair's `ca
 - **No pixels.** `createRenderer` for a camera effect may refuse with `EffectUnsupportedError` and a sentence saying why; thumbnails show "Camera".
 - **Checks.** `checkEffectProvider` checks the summary fields, that camera moves are listed only with `supportsCamera`, and calls `cameraView` along a probe move (a view at each step, the same view twice, refusing unknown ids, other kinds and unknown controls), and compares `sampleCameraMove` with it at both ends. `createFakeEffectProvider({ camera: true })` adds three camera moves: `fake.glide`, `fake.whip` (cuts at 0.5) and `fake.drift` (a hold).
 - **Agents.** `search_effects` filters by `kind: 'camera'` and returns each move's `camera` fields; `describe_effect` reports them with `appliesHere: false` in the editors that cannot use them yet. The animation and video editors adopt camera moves (shot cameras, baked holds, whip and punch transitions) in follow-ups, with their own tools.
+
+## Timing effects
+
+A `timing` effect retimes video footage rather than drawing pixels: Flair's speed change, speed ramp, reverse, boomerang, freeze frame, stutter, step frames, frame echo and long exposure. For each frame of the retimed clip it names the footage frames that frame shows and how to blend them. The host decodes those frames with its own video decoder and blends them, because editors already own their footage. A provider offers timing effects by setting `capabilities.supportsTiming` and implementing `timingLength` and `timingSample`; a provider without them is unchanged and conforms as before.
+
+- **Summary.** A timing effect has `kind: 'timing'`, exactly the use `timing` (so pixel editors never offer it), no `duration` (its length depends on its footage) and no `inputs` (the footage is the host's).
+- **`timingLength(id, footageMs, values?)`** returns how long the retimed clip lasts (ms, > 0) for footage `footageMs` long: a speed change stretches or squeezes it, a freeze adds its hold, a boomerang goes there and back.
+- **`timingSample(id, { time, footage, fps? }, values?)`** returns `{ frames: [{ time, weight }], blend }` for the retimed frame `time` ms into the clip, for footage `footage` ms long at `fps` frames per second (default `TIMING_DEFAULT_FPS`, 30; at most 240). Exactly:
+  - each frame `time` is the start of a footage frame, `index * 1000 / fps` with a whole `index` from 0 to the last frame (`ceil(footage * fps / 1000) - 1`); times before or after the footage are held on its first or last frame;
+  - times are distinct (repeats are merged, their weights added), sorted earliest first, and at most `TIMING_MAX_FRAMES` (128; a long exposure that wants more is spaced evenly);
+  - weights are > 0 and add up to 1.
+- **Blends.** `average` is the weighted mean in premultiplied alpha: colour Σ(c·a·w) / Σ(a·w), alpha Σ(a·w) / Σw, so transparent edges do not darken. `lighten` keeps each channel's brightest after scaling every frame by `k = weight / maxWeight` (colour by a·k, alpha by k), and does not divide the colour back up by the alpha, so a faded trail stays dimmer. A single frame is shown as it is. `blendTimingFrames(frames, blend, out?)` is the reference: it blends `EffectPixels` (8-bit), and hosts with their own pipeline (a GPU, a video encoder) match it.
+- **Pure and synchronous.** Both methods return the same result for the same id, request and values, so a frame can be drawn on its own, in any order, decoding only the footage it needs. Refusals are typed and say what is valid: an unknown id (`unknown_effect`), invalid values (`invalid_values`), and a non-timing effect, a footage length that is not > 0, an fps outside 0–240 or a time that is not finite (`unsupported`).
+- **Helpers.** `normaliseTimingSample(rawFrames, request, blend?)` turns any frames (times anywhere, weights any positive numbers) into a sample that keeps every rule above, so a provider can build `timingSample` on it. `checkTimingRequest` and `checkTimingFootage` throw the standard refusals; `timingSampleProblems(sample, request)` lists what a sample breaks.
+- **No pixels.** `createRenderer` for a timing effect may refuse with `EffectUnsupportedError` and a sentence saying why; thumbnails show "Timing".
+- **Checks.** `checkEffectProvider` checks the summary fields, that timing effects are listed only with `supportsTiming`, and for each timing effect calls `timingLength` and `timingSample` across two probe footages (3 s at 30 fps, 1 s at 24 fps): lengths > 0, every sample keeping the rules (`timingSampleProblems`), the same answer twice, synchronous results, and refusals of unknown ids, other kinds, unknown controls, no footage, 0 fps and a NaN time. `createFakeEffectProvider({ timing: true })` adds three: `fake.speed` (blends neighbouring frames when slowed, averages passed-over ones when sped up), `fake.freeze` and `fake.echo` (`average`, or `lighten` with its `lighten` control).
+- **Agents.** `search_effects` filters by `kind: 'timing'` and `use: 'timing'`; `describe_effect` reports `appliesHere: false` in the editors that cannot use them yet. The video editor adopts timing effects (retimed clips) in a follow-up, with its own tools.
 
 ## Sequence templates
 
@@ -184,7 +203,8 @@ The editor has a toolbar (play, undo, redo, save preset), a preview canvas, a so
 2. Throw the typed errors: an unknown id, invalid values, or something the provider can't do (a vector effect in a Worker, float output without float support).
 3. Make `render` deterministic for the same request, and free GPU or Worker resources in `dispose`.
 4. For camera moves, set `supportsCamera`, give each `camera: { role, durationMs, cut? }` and the use `camera`, and implement `cameraView` as a pure function (see [Camera moves](#camera-moves)).
-5. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
-6. Run `checkEffectProvider` in your tests.
+5. For timing effects, set `supportsTiming`, give each the use `timing` and no `duration`, and implement `timingLength` and `timingSample` as pure, synchronous functions; `normaliseTimingSample` makes a sample keep the rules (see [Timing effects](#timing-effects)).
+6. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
+7. Run `checkEffectProvider` in your tests.
 
 See [outstanding.md](./outstanding.md) for what is not done here.

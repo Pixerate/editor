@@ -17,6 +17,10 @@
  * With `camera: true` it also has camera moves (no pixels): `glide` and `whip` (transitions; the
  * whip cuts halfway) and `drift` (a hold that zooms in slowly).
  *
+ * With `timing: true` it also has timing effects (no pixels; they retime video footage): `speed`
+ * (slow or fast, blending frames), `freeze` (holds one frame, then plays on) and `echo` (fading
+ * copies of the frames before, averaged or lightened).
+ *
  * With `templates: true` it also has two sequence templates (see `fake-templates.ts`):
  * `fake.title-sequence` and `fake.picture-reveal`.
  */
@@ -24,7 +28,18 @@
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
 import { createEffectAuthoringSession } from './authoring-session.js';
 import { fakeTemplateMethods } from './fake-templates.js';
-import { createEffectPixels, encodeEffectFloat, isEffectPixels, resolveEffectValues, sampleCameraViews, searchEffectSummaries, srgbToLinear } from './helpers.js';
+import {
+	checkTimingFootage,
+	checkTimingRequest,
+	createEffectPixels,
+	encodeEffectFloat,
+	isEffectPixels,
+	normaliseTimingSample,
+	resolveEffectValues,
+	sampleCameraViews,
+	searchEffectSummaries,
+	srgbToLinear
+} from './helpers.js';
 import type {
 	CameraMoveContext,
 	CameraView,
@@ -40,7 +55,10 @@ import type {
 	EffectTextPathOptions,
 	EffectValues,
 	EffectVectorMotion,
-	EffectVectorTarget
+	EffectVectorTarget,
+	TimingFrame,
+	TimingSample,
+	TimingSampleRequest
 } from './types.js';
 
 const HEX = '^#[0-9a-fA-F]{6}$';
@@ -360,6 +378,80 @@ const CAMERA_DESCRIPTIONS: readonly EffectDescription[] = [
 	}
 ];
 
+const TIMING_DESCRIPTIONS: readonly EffectDescription[] = [
+	{
+		id: 'fake.speed',
+		name: 'Speed change',
+		kind: 'timing',
+		category: 'timing',
+		uses: ['timing'],
+		description: 'Footage played slower or faster throughout; slowed frames blend the two either side, sped-up ones average the frames they pass over.',
+		tags: ['retime', 'slow motion', 'time-lapse'],
+		transparent: false,
+		loop: false,
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				speed: { type: 'number', minimum: 0.1, maximum: 8, description: 'Playback speed as a multiple of real time, 0.1–8 (0.5 is half speed). Default 0.5.' },
+				smooth: { type: 'boolean', description: 'Blend frames: in-betweens when slowed, motion blur when sped up. Default true.' }
+			}
+		},
+		defaults: { speed: 0.5, smooth: true },
+		presets: [
+			{ name: 'Slow motion', values: { speed: 0.25 } },
+			{ name: 'Double speed', values: { speed: 2 } }
+		],
+		inputs: []
+	},
+	{
+		id: 'fake.freeze',
+		name: 'Freeze frame',
+		kind: 'timing',
+		category: 'timing',
+		uses: ['timing'],
+		description: 'Footage that stops on one frame, holds it, then plays on from where it stopped.',
+		tags: ['retime', 'freeze', 'hold'],
+		transparent: false,
+		loop: false,
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				at: { type: 'number', minimum: 0, maximum: 1, description: 'Where it freezes, as a share of the footage, 0–1. Default 0.5.' },
+				hold: { type: 'number', minimum: 0, maximum: 10000, description: 'How long it holds (ms). Default 1000.' }
+			}
+		},
+		defaults: { at: 0.5, hold: 1000 },
+		presets: [{ name: 'Opening still', values: { at: 0, hold: 2000 } }],
+		inputs: []
+	},
+	{
+		id: 'fake.echo',
+		name: 'Frame echo',
+		kind: 'timing',
+		category: 'timing',
+		uses: ['timing'],
+		description: 'Each frame with fading copies of the frames just before it, so moving things leave a trail.',
+		tags: ['retime', 'echo', 'trail'],
+		transparent: false,
+		loop: false,
+		controls: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				echoes: { type: 'integer', minimum: 1, maximum: 8, description: 'Copies of earlier frames, 1–8. Default 3.' },
+				spacing: { type: 'number', minimum: 10, maximum: 500, description: 'Footage time between copies (ms). Default 100.' },
+				decay: { type: 'number', minimum: 0.1, maximum: 0.95, description: 'Each copy\'s weight as a share of the one after it, 0.1–0.95. Default 0.5.' },
+				lighten: { type: 'boolean', description: 'Keep the brightest of the copies (light trails) instead of averaging them. Default false.' }
+			}
+		},
+		defaults: { echoes: 3, spacing: 100, decay: 0.5, lighten: false },
+		presets: [{ name: 'Light trails', values: { echoes: 6, spacing: 50, decay: 0.8, lighten: true } }],
+		inputs: []
+	}
+];
+
 const summaryOf = ({ controls: _c, defaults: _d, presets: _p, inputs: _i, ...summary }: EffectDescription): EffectSummary => summary;
 
 const hexToRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
@@ -508,6 +600,59 @@ function cameraViewOf(d: EffectDescription, ctx: CameraMoveContext, v: Record<st
 	}
 }
 
+/** Ms a fake timing effect's clip lasts for `footage` ms of footage (pure). */
+function timingLengthOf(d: EffectDescription, footage: number, v: Record<string, EffectValues[string]>): number {
+	switch (d.id) {
+		case 'fake.speed':
+			return footage / (v.speed as number);
+		case 'fake.freeze':
+			return footage + (v.hold as number);
+		case 'fake.echo':
+			return footage;
+		default:
+			throw new EffectUnsupportedError(`"${d.id}" is a ${d.kind} effect, not a timing effect.`, d.id);
+	}
+}
+
+/** The raw footage frames of a fake timing effect at `request.time` (pure); `normaliseTimingSample` tidies them. */
+function timingFramesOf(d: EffectDescription, request: Required<TimingSampleRequest>, v: Record<string, EffectValues[string]>): { frames: TimingFrame[]; lighten?: boolean } {
+	const { time, fps } = request;
+	const frameMs = 1000 / fps;
+	switch (d.id) {
+		case 'fake.speed': {
+			const speed = v.speed as number;
+			const s = time * speed;
+			if (!v.smooth) return { frames: [{ time: s, weight: 1 }] };
+			if (speed <= 1) {
+				// The two frames either side, by nearness.
+				const i = s / frameMs;
+				const f = Math.floor(i + 1e-6);
+				const frac = Math.max(0, i - f);
+				return { frames: [{ time: f * frameMs, weight: 1 - frac }, { time: (f + 1) * frameMs, weight: frac }] };
+			}
+			// The frames a sped-up frame passes over, averaged.
+			const n = Math.ceil(speed);
+			return { frames: Array.from({ length: n }, (_, k) => ({ time: s + (k * speed * frameMs) / n, weight: 1 })) };
+		}
+		case 'fake.freeze': {
+			const at = Math.floor(((v.at as number) * request.footage) / frameMs + 1e-6) * frameMs;
+			const hold = v.hold as number;
+			return { frames: [{ time: time < at ? time : time < at + hold ? at : time - hold, weight: 1 }] };
+		}
+		case 'fake.echo': {
+			const frames: TimingFrame[] = [];
+			for (let k = 0; k <= (v.echoes as number); k++) {
+				const t = time - k * (v.spacing as number);
+				if (t < 0) break;
+				frames.push({ time: t, weight: Math.pow(v.decay as number, k) });
+			}
+			return { frames, lighten: v.lighten as boolean };
+		}
+		default:
+			throw new EffectUnsupportedError(`"${d.id}" is a ${d.kind} effect, not a timing effect.`, d.id);
+	}
+}
+
 function toFloat(p: EffectPixels): EffectPixels {
 	const f = new Float32Array(p.data.length);
 	for (let i = 0; i < f.length; i += 4) {
@@ -540,11 +685,13 @@ export interface FakeEffectProviderOptions {
 	authoring?: boolean;
 	/** Adds the camera moves and `cameraView` / `sampleCameraMove` (default false). */
 	camera?: boolean;
+	/** Adds the timing effects and `timingLength` / `timingSample` (default false). */
+	timing?: boolean;
 	/** Adds two sequence templates and `listTemplates` / `describeTemplate` / `instantiateTemplate` (default false). */
 	templates?: boolean;
 }
 
-/** A deterministic CPU effects provider with seven effects, and camera moves and templates on request (see the module comment). */
+/** A deterministic CPU effects provider with nine effects, and camera moves, timing effects and templates on request (see the module comment). */
 export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}): EffectProvider {
 	const supportsAuthoring = options.authoring ?? true;
 	const capabilities: EffectProviderCapabilities = {
@@ -555,11 +702,12 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		supportsVector: true,
 		supportsAuthoring,
 		...(options.camera ? { supportsCamera: true } : {}),
+		...(options.timing ? { supportsTiming: true } : {}),
 		...(options.templates ? { supportsTemplates: true } : {}),
 		maxSize: 8192,
 		...options.capabilities
 	};
-	const all = options.camera ? [...DESCRIPTIONS, ...CAMERA_DESCRIPTIONS] : DESCRIPTIONS;
+	const all = [...DESCRIPTIONS, ...(options.camera ? CAMERA_DESCRIPTIONS : []), ...(options.timing ? TIMING_DESCRIPTIONS : [])];
 	const byId = new Map(all.map((d) => [d.id, d]));
 	const get = (id: string) => {
 		const d = byId.get(id);
@@ -573,6 +721,25 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		if (!(ctx.u >= 0 && ctx.u <= 1)) throw new EffectUnsupportedError(`u must be 0–1 through the move, got ${ctx.u}.`, id);
 		return cameraViewOf(d, ctx, resolveEffectValues(d, values));
 	};
+	const timingEffect = (id: string) => {
+		const d = get(id);
+		if (d.kind !== 'timing') {
+			const ids = TIMING_DESCRIPTIONS.map((t) => `"${t.id}"`).join(', ');
+			throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a timing effect; the timing effects are ${ids}.`, id);
+		}
+		return d;
+	};
+	const timingLength = (id: string, footageMs: number, values?: EffectValues): number => {
+		const d = timingEffect(id);
+		checkTimingFootage(footageMs, id);
+		return timingLengthOf(d, footageMs, resolveEffectValues(d, values));
+	};
+	const timingSample = (id: string, request: TimingSampleRequest, values?: EffectValues): TimingSample => {
+		const d = timingEffect(id);
+		const fps = checkTimingRequest(request, id);
+		const raw = timingFramesOf(d, { time: request.time, footage: request.footage, fps }, resolveEffectValues(d, values));
+		return normaliseTimingSample(raw.frames, { ...request, fps }, raw.lighten ? 'lighten' : 'average');
+	};
 
 	const provider: EffectProvider = {
 		id: 'fake',
@@ -585,6 +752,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		createRenderer(id: string, ro: EffectRendererOptions): EffectRenderer {
 			const d = get(id);
 			if (d.kind === 'camera') throw new EffectUnsupportedError(`"${id}" is a camera move: it moves a scene's camera and draws no pixels. Use cameraView.`, id);
+			if (d.kind === 'timing') throw new EffectUnsupportedError(`"${id}" is a timing effect: it retimes video footage and draws no pixels of its own. Use timingSample and blend the footage frames it names.`, id);
 			if (d.kind !== 'shader') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect; use applyVectorEffect.`, id);
 			const { width, height } = ro;
 			const depth = ro.depth ?? 8;
@@ -667,6 +835,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 					}
 			  }
 			: {}),
+		...(options.timing ? { timingLength, timingSample } : {}),
 		...(options.templates ? fakeTemplateMethods() : {}),
 		...(supportsAuthoring
 			? {
