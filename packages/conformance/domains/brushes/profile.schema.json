@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "profile.schema.json",
+  "type": "object",
+  "description": "What a host can render (`BrushHostProfile`).",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "paint, image, canvas, vector…"
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name, used in messages."
+    },
+    "kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "mark",
+          "tool"
+        ]
+      },
+      "description": "Brush kinds it has."
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "eraser",
+          "blender",
+          "smudge",
+          "water",
+          "dryer",
+          "blow",
+          "blot",
+          "wet-blend",
+          "wet-drag"
+        ]
+      },
+      "description": "Tools it has (kind tool)."
+    },
+    "tipShapes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "round",
+          "flat",
+          "chisel",
+          "bristle",
+          "stamp"
+        ]
+      },
+      "description": "Tip shapes it renders."
+    },
+    "marks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "continuous",
+          "scatter",
+          "particles",
+          "objects"
+        ]
+      },
+      "description": "Marks kinds it renders."
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "dry",
+          "wet",
+          "thick"
+        ]
+      },
+      "description": "Surfaces it renders."
+    },
+    "exchange": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Picking paint up and mixing it in."
+    },
+    "reservoir": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "The Mixer Brush reservoir."
+    },
+    "grain": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Paper grain response."
+    },
+    "light": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Light paint."
+    },
+    "motion": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Motion after painting."
+    },
+    "colours": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "solid",
+          "dual",
+          "gradient",
+          "effect"
+        ]
+      },
+      "description": "Colour kinds a default colour may be."
+    },
+    "velocity": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Velocity dynamics."
+    },
+    "tilt": {
+      "type": "string",
+      "enum": [
+        "full",
+        "ignored",
+        "none"
+      ],
+      "description": "Tilt dynamics."
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "kinds",
+    "tools",
+    "tipShapes",
+    "marks",
+    "surfaces",
+    "exchange",
+    "reservoir",
+    "grain",
+    "light",
+    "motion",
+    "colours",
+    "velocity",
+    "tilt"
+  ],
+  "additionalProperties": false
+}

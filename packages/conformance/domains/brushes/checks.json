@@ -1,0 +1,2772 @@
+[
+  {
+    "id": "pencil-hb",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "pencil-6b",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "soft-pastel",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "oil-pastel",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "charcoal-stick",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "vine-charcoal",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "airbrush",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "marker",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "ink-pen",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "brush-pen",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "dynamics.velocity",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "eraser-soft",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "eraser-hard",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "blender",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "smudge",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "wet-smudge",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "dirty-round",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "multicolor-flat",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "palette-dabber",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "gradient-round",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "pressure-ombre",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "rainbow-marker",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "mixer-brush",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.exchange.reservoir",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.exchange.reservoir",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "watercolor-round",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "watercolor-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "gradient-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "watercolor-detail",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "gouache",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "oil-round",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "oil-flat",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "impasto-brush",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "paint-tube",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "palette-knife",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "paint-roller",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "gloop-pen",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "metallic-paint",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "hair-strands",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "spring-ink",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "orbit-curls",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "flow-fur",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "bead-trail",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sparkle-dust",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "bristle-round",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "bristle-flat",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "dry-brush",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "glow-gel",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "neon-marker",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "light-airbrush",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "spark-trail",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "light-ribbon",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "flame-ribbon",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "neon-strand",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "smoke-ribbon",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "bokeh-dots",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "twinkle-sparks",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "glow-wash",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.surface",
+            "severity": "error"
+          },
+          {
+            "facet": "behaviour.exchange",
+            "severity": "warning"
+          },
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "highlighter",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "light",
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sticker-stars",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sticker-leaves",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sticker-confetti",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sticker-flowers",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "sticker-splats",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tip.shape",
+            "severity": "error"
+          },
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "add-water",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "hair-dryer",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "blow",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "wet-blend",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "wet-drag",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "blot",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "tool",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "kind",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "ballpoint",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "gel-pen",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "fineliner",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": []
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "crayon",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "chalk",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": true,
+        "issues": [
+          {
+            "facet": "behaviour.grain",
+            "severity": "warning"
+          },
+          {
+            "facet": "dynamics.tilt",
+            "severity": "warning"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": true,
+        "issues": []
+      },
+      "vector": {
+        "ok": true,
+        "issues": []
+      }
+    }
+  },
+  {
+    "id": "spray-can",
+    "hosts": {
+      "paint": {
+        "ok": true,
+        "issues": []
+      },
+      "image": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "canvas": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      },
+      "vector": {
+        "ok": false,
+        "issues": [
+          {
+            "facet": "marks",
+            "severity": "error"
+          }
+        ]
+      }
+    }
+  }
+]

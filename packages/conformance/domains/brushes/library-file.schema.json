@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "library-file.schema.json",
+  "type": "object",
+  "description": "A brush library file, as export_brushes writes it. Readers also accept version 1 files (flat engine brushes, migrated) and a bare array of brushes.",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "pixerate-brushes",
+      "description": "Always \"pixerate-brushes\"."
+    },
+    "version": {
+      "type": "integer",
+      "const": 2,
+      "description": "Always 2."
+    },
+    "brushes": {
+      "type": "array",
+      "items": {
+        "$ref": "brush.schema.json"
+      },
+      "description": "The brushes, each a facet brush (brush.schema.json)."
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "brushes"
+  ],
+  "additionalProperties": false
+}
