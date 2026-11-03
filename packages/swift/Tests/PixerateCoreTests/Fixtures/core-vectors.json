@@ -1,0 +1,1306 @@
+{
+ "mix": [
+  [
+   0,
+   0
+  ],
+  [
+   1,
+   1364076727
+  ],
+  [
+   4294967295,
+   2180083513
+  ],
+  [
+   7,
+   415870660
+  ],
+  [
+   42,
+   142593372
+  ],
+  [
+   255,
+   1818482051
+  ],
+  [
+   65535,
+   2721820263
+  ],
+  [
+   2147483647,
+   4190899880
+  ],
+  [
+   2147483648,
+   1832674720
+  ],
+  [
+   4294967295,
+   2180083513
+  ],
+  [
+   123456789,
+   3126909082
+  ],
+  [
+   3307312975,
+   1572353439
+  ]
+ ],
+ "hash": [
+  [
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   3,
+   0.19922667602077127
+  ],
+  [
+   0,
+   0,
+   99,
+   0.9008016679435968
+  ],
+  [
+   0,
+   0,
+   -12345,
+   0.36105527030304074
+  ],
+  [
+   0,
+   5,
+   0,
+   0.6172553612850606
+  ],
+  [
+   0,
+   5,
+   3,
+   0.33032196294516325
+  ],
+  [
+   0,
+   5,
+   99,
+   0.389447292778641
+  ],
+  [
+   0,
+   5,
+   -12345,
+   0.26543995062820613
+  ],
+  [
+   0,
+   -7,
+   0,
+   0.8432520607020706
+  ],
+  [
+   0,
+   -7,
+   3,
+   0.3159540370106697
+  ],
+  [
+   0,
+   -7,
+   99,
+   0.5403116168454289
+  ],
+  [
+   0,
+   -7,
+   -12345,
+   0.5314523030538112
+  ],
+  [
+   0,
+   65536,
+   0,
+   0.995997402118519
+  ],
+  [
+   0,
+   65536,
+   3,
+   0.34102043020538986
+  ],
+  [
+   0,
+   65536,
+   99,
+   0.669829118065536
+  ],
+  [
+   0,
+   65536,
+   -12345,
+   0.8102427003905177
+  ],
+  [
+   1,
+   0,
+   0,
+   0.06982020963914692
+  ],
+  [
+   1,
+   0,
+   3,
+   0.23450143123045564
+  ],
+  [
+   1,
+   0,
+   99,
+   0.4714156719855964
+  ],
+  [
+   1,
+   0,
+   -12345,
+   0.8184197503142059
+  ],
+  [
+   1,
+   5,
+   0,
+   0.71151112485677
+  ],
+  [
+   1,
+   5,
+   3,
+   0.46718949964269996
+  ],
+  [
+   1,
+   5,
+   99,
+   0.25428579933941364
+  ],
+  [
+   1,
+   5,
+   -12345,
+   0.4266046539414674
+  ],
+  [
+   1,
+   -7,
+   0,
+   0.7316833364311606
+  ],
+  [
+   1,
+   -7,
+   3,
+   0.6580361558590084
+  ],
+  [
+   1,
+   -7,
+   99,
+   0.8889970954041928
+  ],
+  [
+   1,
+   -7,
+   -12345,
+   0.1919202208518982
+  ],
+  [
+   1,
+   65536,
+   0,
+   0.5187355619855225
+  ],
+  [
+   1,
+   65536,
+   3,
+   0.6367743578739464
+  ],
+  [
+   1,
+   65536,
+   99,
+   0.9979403440374881
+  ],
+  [
+   1,
+   65536,
+   -12345,
+   0.4058312193956226
+  ],
+  [
+   -3,
+   0,
+   0,
+   0.06565130013041198
+  ],
+  [
+   -3,
+   0,
+   3,
+   0.5320475420448929
+  ],
+  [
+   -3,
+   0,
+   99,
+   0.9305433749686927
+  ],
+  [
+   -3,
+   0,
+   -12345,
+   0.3825528814923018
+  ],
+  [
+   -3,
+   5,
+   0,
+   0.4307108847424388
+  ],
+  [
+   -3,
+   5,
+   3,
+   0.9098902486730367
+  ],
+  [
+   -3,
+   5,
+   99,
+   0.25970572186633945
+  ],
+  [
+   -3,
+   5,
+   -12345,
+   0.6178952902555466
+  ],
+  [
+   -3,
+   -7,
+   0,
+   0.5162197498138994
+  ],
+  [
+   -3,
+   -7,
+   3,
+   0.7129281614907086
+  ],
+  [
+   -3,
+   -7,
+   99,
+   0.6353267156518996
+  ],
+  [
+   -3,
+   -7,
+   -12345,
+   0.772258035140112
+  ],
+  [
+   -3,
+   65536,
+   0,
+   0.06865694047883153
+  ],
+  [
+   -3,
+   65536,
+   3,
+   0.5865881163626909
+  ],
+  [
+   -3,
+   65536,
+   99,
+   0.03294423222541809
+  ],
+  [
+   -3,
+   65536,
+   -12345,
+   0.9651142924558371
+  ],
+  [
+   1000,
+   0,
+   0,
+   0.8302642067428678
+  ],
+  [
+   1000,
+   0,
+   3,
+   0.13527138507924974
+  ],
+  [
+   1000,
+   0,
+   99,
+   0.7134134066291153
+  ],
+  [
+   1000,
+   0,
+   -12345,
+   0.3328518441412598
+  ],
+  [
+   1000,
+   5,
+   0,
+   0.8728082806337625
+  ],
+  [
+   1000,
+   5,
+   3,
+   0.11657269299030304
+  ],
+  [
+   1000,
+   5,
+   99,
+   0.8454058957286179
+  ],
+  [
+   1000,
+   5,
+   -12345,
+   0.4281922404188663
+  ],
+  [
+   1000,
+   -7,
+   0,
+   0.45750859286636114
+  ],
+  [
+   1000,
+   -7,
+   3,
+   0.49757229373790324
+  ],
+  [
+   1000,
+   -7,
+   99,
+   0.5506009941454977
+  ],
+  [
+   1000,
+   -7,
+   -12345,
+   0.5469090284314007
+  ],
+  [
+   1000,
+   65536,
+   0,
+   0.04219553689472377
+  ],
+  [
+   1000,
+   65536,
+   3,
+   0.33721440588124096
+  ],
+  [
+   1000,
+   65536,
+   99,
+   0.810532848816365
+  ],
+  [
+   1000,
+   65536,
+   -12345,
+   0.8003286716993898
+  ],
+  [
+   2147483647,
+   0,
+   0,
+   0.40643335366621614
+  ],
+  [
+   2147483647,
+   0,
+   3,
+   0.06399661139585078
+  ],
+  [
+   2147483647,
+   0,
+   99,
+   0.7952398071065545
+  ],
+  [
+   2147483647,
+   0,
+   -12345,
+   0.9473321558907628
+  ],
+  [
+   2147483647,
+   5,
+   0,
+   0.8700004217680544
+  ],
+  [
+   2147483647,
+   5,
+   3,
+   0.960121045820415
+  ],
+  [
+   2147483647,
+   5,
+   99,
+   0.4245718375314027
+  ],
+  [
+   2147483647,
+   5,
+   -12345,
+   0.0012290030717849731
+  ],
+  [
+   2147483647,
+   -7,
+   0,
+   0.1785236308351159
+  ],
+  [
+   2147483647,
+   -7,
+   3,
+   0.6752601666375995
+  ],
+  [
+   2147483647,
+   -7,
+   99,
+   0.510168518172577
+  ],
+  [
+   2147483647,
+   -7,
+   -12345,
+   0.13197265658527613
+  ],
+  [
+   2147483647,
+   65536,
+   0,
+   0.6855706807691604
+  ],
+  [
+   2147483647,
+   65536,
+   3,
+   0.6894713633228093
+  ],
+  [
+   2147483647,
+   65536,
+   99,
+   0.6660234148148447
+  ],
+  [
+   2147483647,
+   65536,
+   -12345,
+   0.1601761095225811
+  ]
+ ],
+ "rand": [
+  [
+   0,
+   0,
+   0,
+   0,
+   -1
+  ],
+  [
+   12,
+   3,
+   51,
+   0.019480011891573668,
+   -0.9610399762168527
+  ],
+  [
+   99,
+   1000,
+   7,
+   0.6425091028213501,
+   0.2850182056427002
+  ],
+  [
+   -5,
+   17,
+   2,
+   0.44779074424877763,
+   -0.10441851150244474
+  ],
+  [
+   2147483647,
+   1,
+   1,
+   0.13026713067665696,
+   -0.7394657386466861
+  ]
+ ],
+ "seeds": [
+  [
+   "",
+   2872998923
+  ],
+  [
+   "a",
+   444641715
+  ],
+  [
+   "paper",
+   4039751260
+  ],
+  [
+   "cold-pressed",
+   3358981068
+  ],
+  [
+   "Ünïcödé",
+   4092753695
+  ],
+  [
+   "🎨 emoji",
+   943374856
+  ],
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   3849703086
+  ]
+ ],
+ "noise": {
+  "size": 256,
+  "cellsX": 4,
+  "cellsY": 3,
+  "octaves": 4,
+  "salt": 1234,
+  "samples": [
+   [
+    0,
+    0,
+    0.5508635958035787
+   ],
+   [
+    10.5,
+    3.25,
+    0.5363646302983883
+   ],
+   [
+    255.9,
+    255.9,
+    0.5508479768903991
+   ],
+   [
+    256,
+    0,
+    0.5508635958035787
+   ],
+   [
+    -17,
+    512.5,
+    0.5829985889382087
+   ],
+   [
+    128,
+    64,
+    0.6265303418040276
+   ]
+  ]
+ },
+ "numbers": [
+  [
+   0,
+   "0"
+  ],
+  [
+   0,
+   "0"
+  ],
+  [
+   1,
+   "1"
+  ],
+  [
+   -1,
+   "-1"
+  ],
+  [
+   0.1,
+   "0.1"
+  ],
+  [
+   1.5,
+   "1.5"
+  ],
+  [
+   100,
+   "100"
+  ],
+  [
+   1e+21,
+   "1e+21"
+  ],
+  [
+   1e-7,
+   "1e-7"
+  ],
+  [
+   1.5e-7,
+   "1.5e-7"
+  ],
+  [
+   123456789.123,
+   "123456789.123"
+  ],
+  [
+   100000000000000000000,
+   "100000000000000000000"
+  ],
+  [
+   0.000001,
+   "0.000001"
+  ],
+  [
+   0.0000015,
+   "0.0000015"
+  ],
+  [
+   9007199254740992,
+   "9007199254740992"
+  ],
+  [
+   -1e-300,
+   "-1e-300"
+  ],
+  [
+   5e-324,
+   "5e-324"
+  ],
+  [
+   1.7976931348623157e+308,
+   "1.7976931348623157e+308"
+  ],
+  [
+   0.3333333333333333,
+   "0.3333333333333333"
+  ]
+ ],
+ "schema": [
+  {
+   "name": "type mismatch",
+   "value": "x",
+   "schema": {
+    "type": "number"
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Expected number, got string."
+    }
+   ]
+  },
+  {
+   "name": "type union",
+   "value": null,
+   "schema": {
+    "type": [
+     "string",
+     "integer"
+    ]
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Expected string | integer, got null."
+    }
+   ]
+  },
+  {
+   "name": "integer vs number",
+   "value": 1.5,
+   "schema": {
+    "type": "integer"
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Expected integer, got number."
+    }
+   ]
+  },
+  {
+   "name": "enum",
+   "value": "c",
+   "schema": {
+    "enum": [
+     "a",
+     "b",
+     1,
+     null
+    ]
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Expected one of \"a\", \"b\", 1, null, got \"c\"."
+    }
+   ]
+  },
+  {
+   "name": "const",
+   "value": {
+    "a": 1
+   },
+   "schema": {
+    "const": {
+     "a": 2
+    }
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Expected {\"a\":2}."
+    }
+   ]
+  },
+  {
+   "name": "string bounds",
+   "value": "héllo😀",
+   "schema": {
+    "type": "string",
+    "minLength": 10,
+    "maxLength": 3,
+    "pattern": "^[a-z]+$"
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Must be at least 10 characters."
+    },
+    {
+     "path": "/",
+     "message": "Must be at most 3 characters."
+    },
+    {
+     "path": "/",
+     "message": "Must match pattern ^[a-z]+$."
+    }
+   ]
+  },
+  {
+   "name": "number bounds",
+   "value": 7,
+   "schema": {
+    "type": "number",
+    "minimum": 8,
+    "maximum": 6,
+    "exclusiveMinimum": 7,
+    "exclusiveMaximum": 7,
+    "multipleOf": 0.5
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Must be >= 8."
+    },
+    {
+     "path": "/",
+     "message": "Must be <= 6."
+    },
+    {
+     "path": "/",
+     "message": "Must be > 7."
+    },
+    {
+     "path": "/",
+     "message": "Must be < 7."
+    }
+   ]
+  },
+  {
+   "name": "multipleOf ok",
+   "value": 0.3,
+   "schema": {
+    "multipleOf": 0.1
+   },
+   "errors": []
+  },
+  {
+   "name": "array",
+   "value": [
+    1,
+    1,
+    "x"
+   ],
+   "schema": {
+    "type": "array",
+    "minItems": 4,
+    "maxItems": 2,
+    "uniqueItems": true,
+    "items": {
+     "type": "integer"
+    }
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Must have at least 4 items."
+    },
+    {
+     "path": "/",
+     "message": "Must have at most 2 items."
+    },
+    {
+     "path": "/1",
+     "message": "Duplicate item; items must be unique."
+    },
+    {
+     "path": "/2",
+     "message": "Expected integer, got string."
+    }
+   ]
+  },
+  {
+   "name": "object",
+   "value": {
+    "1": false,
+    "2": true,
+    "b": 1,
+    "nmae": "x"
+   },
+   "schema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "b": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "errors": [
+    {
+     "path": "/name",
+     "message": "Missing required property \"name\"."
+    },
+    {
+     "path": "/id",
+     "message": "Missing required property \"id\"."
+    },
+    {
+     "path": "/1",
+     "message": "Unknown property \"1\". Did you mean \"b\"? Allowed: name, b."
+    },
+    {
+     "path": "/2",
+     "message": "Unknown property \"2\". Did you mean \"b\"? Allowed: name, b."
+    },
+    {
+     "path": "/b",
+     "message": "Expected string, got integer."
+    },
+    {
+     "path": "/nmae",
+     "message": "Unknown property \"nmae\". Did you mean \"name\"? Allowed: name, b."
+    }
+   ]
+  },
+  {
+   "name": "additional schema",
+   "value": {
+    "a": 1,
+    "b": "x"
+   },
+   "schema": {
+    "type": "object",
+    "additionalProperties": {
+     "type": "number"
+    }
+   },
+   "errors": [
+    {
+     "path": "/b",
+     "message": "Expected number, got string."
+    }
+   ]
+  },
+  {
+   "name": "anyOf closest",
+   "value": {
+    "kind": "circle",
+    "r": "big"
+   },
+   "schema": {
+    "anyOf": [
+     {
+      "type": "object",
+      "properties": {
+       "kind": {
+        "const": "circle"
+       },
+       "r": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "kind",
+       "r"
+      ]
+     },
+     {
+      "type": "string"
+     }
+    ]
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Does not match any allowed shape (2 options); closest match failed with:"
+    },
+    {
+     "path": "/r",
+     "message": "Expected number, got string."
+    }
+   ]
+  },
+  {
+   "name": "oneOf many",
+   "value": 5,
+   "schema": {
+    "oneOf": [
+     {
+      "type": "number"
+     },
+     {
+      "type": "integer"
+     }
+    ]
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Matches 2 shapes; exactly one is allowed."
+    }
+   ]
+  },
+  {
+   "name": "allOf and not",
+   "value": "x",
+   "schema": {
+    "allOf": [
+     {
+      "type": "string"
+     },
+     {
+      "minLength": 2
+     }
+    ],
+    "not": {
+     "const": "x"
+    }
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Must be at least 2 characters."
+    },
+    {
+     "path": "/",
+     "message": "Matches a disallowed shape."
+    }
+   ]
+  },
+  {
+   "name": "refs",
+   "value": {
+    "item": {
+     "id": 3
+    },
+    "other": {}
+   },
+   "schema": {
+    "$defs": {
+     "item": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    },
+    "type": "object",
+    "properties": {
+     "item": {
+      "$ref": "#/$defs/item"
+     },
+     "other": {
+      "$ref": "#/$defs/missing"
+     }
+    }
+   },
+   "errors": [
+    {
+     "path": "/item/id",
+     "message": "Expected string, got integer."
+    },
+    {
+     "path": "/other",
+     "message": "Unresolvable schema reference #/$defs/missing."
+    }
+   ]
+  },
+  {
+   "name": "ref cycle",
+   "value": 1,
+   "schema": {
+    "$ref": "#"
+   },
+   "errors": [
+    {
+     "path": "/",
+     "message": "Schema reference # is nested too deeply."
+    }
+   ]
+  },
+  {
+   "name": "tool arguments",
+   "value": {
+    "layerId": "L1",
+    "kind": "outer-glow",
+    "settings": {
+     "size": 999,
+     "blend": "screen",
+     "colr": "#fff"
+    }
+   },
+   "schema": {
+    "type": "object",
+    "properties": {
+     "layerId": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "outer-glow",
+       "inner-glow"
+      ]
+     },
+     "settings": {
+      "type": "object",
+      "properties": {
+       "size": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 250
+       },
+       "blend": {
+        "type": "string"
+       },
+       "color": {
+        "type": "string",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+       }
+      },
+      "additionalProperties": false
+     }
+    },
+    "required": [
+     "layerId",
+     "kind"
+    ],
+    "additionalProperties": false
+   },
+   "errors": [
+    {
+     "path": "/settings/size",
+     "message": "Must be <= 250."
+    },
+    {
+     "path": "/settings/colr",
+     "message": "Unknown property \"colr\". Did you mean \"color\"? Allowed: size, blend, color."
+    }
+   ]
+  }
+ ],
+ "stringify": [
+  {
+   "value": {
+    "b": 1,
+    "a": [
+     1,
+     "two",
+     null,
+     true,
+     {
+      "2": 2,
+      "10": 1,
+      "x": 3
+     }
+    ],
+    "s": "quote \" back \\ nl \n tab \t ctl \u0001 é 😀"
+   },
+   "text": "{\"b\":1,\"a\":[1,\"two\",null,true,{\"2\":2,\"10\":1,\"x\":3}],\"s\":\"quote \\\" back \\\\ nl \\n tab \\t ctl \\u0001 é 😀\"}",
+   "pretty": "{\n  \"b\": 1,\n  \"a\": [\n    1,\n    \"two\",\n    null,\n    true,\n    {\n      \"2\": 2,\n      \"10\": 1,\n      \"x\": 3\n    }\n  ],\n  \"s\": \"quote \\\" back \\\\ nl \\n tab \\t ctl \\u0001 é 😀\"\n}"
+  },
+  {
+   "value": [],
+   "text": "[]",
+   "pretty": "[]"
+  },
+  {
+   "value": {},
+   "text": "{}",
+   "pretty": "{}"
+  },
+  {
+   "value": [
+    1.5e-7,
+    1e+21,
+    0
+   ],
+   "text": "[1.5e-7,1e+21,0]",
+   "pretty": "[\n  1.5e-7,\n  1e+21,\n  0\n]"
+  }
+ ],
+ "migrations": [
+  {
+   "name": "from 1 to 3",
+   "input": {
+    "version": 1,
+    "keep": "me"
+   },
+   "doc": {
+    "version": 3,
+    "keep": "me",
+    "v2": true,
+    "v3": true
+   },
+   "report": {
+    "migratedFrom": 1,
+    "version": 1,
+    "problems": [],
+    "readOnly": null,
+    "unknownKeys": []
+   }
+  },
+  {
+   "name": "missing version",
+   "input": {
+    "keep": "me"
+   },
+   "doc": {
+    "keep": "me",
+    "version": 3
+   },
+   "report": {
+    "migratedFrom": null,
+    "version": null,
+    "problems": [],
+    "readOnly": null,
+    "unknownKeys": []
+   }
+  },
+  {
+   "name": "newer",
+   "input": {
+    "version": 9
+   },
+   "doc": {
+    "version": 9
+   },
+   "report": {
+    "migratedFrom": null,
+    "version": 9,
+    "problems": [],
+    "readOnly": {
+     "kind": "newerVersion",
+     "version": 9,
+     "supported": 3,
+     "message": "document has version 9, newer than the supported 3"
+    },
+    "unknownKeys": []
+   }
+  },
+  {
+   "name": "not an object",
+   "input": [
+    1,
+    2
+   ],
+   "doc": {
+    "version": 3
+   },
+   "report": {
+    "migratedFrom": null,
+    "version": null,
+    "problems": [],
+    "readOnly": {
+     "kind": "invalid",
+     "message": "document is not a JSON object"
+    },
+    "unknownKeys": []
+   }
+  },
+  {
+   "name": "failing step",
+   "input": {
+    "version": 0
+   },
+   "doc": {
+    "version": 0
+   },
+   "report": {
+    "migratedFrom": null,
+    "version": 0,
+    "problems": [],
+    "readOnly": {
+     "kind": "migrationFailed",
+     "from": 0,
+     "message": "migration from version 0 failed: boom"
+    },
+    "unknownKeys": []
+   }
+  }
+ ]
+}

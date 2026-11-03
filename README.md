@@ -50,6 +50,7 @@ Everything in core runs without a framework (browser, Node.js, workers). The Rea
 | [`@pixerate/editor`](./packages/core#readme) | Core logic, TipTap extensions, controllers; no UI framework | `npm i @pixerate/editor` |
 | [`@pixerate/editor-react`](./packages/react#readme) | React 18+ hooks and components | `npm i @pixerate/editor @pixerate/editor-react` |
 | [`@pixerate/editor-svelte`](./packages/svelte#readme) | Svelte 5 runes and components (shipped as source, SSR-friendly) | `npm i @pixerate/editor @pixerate/editor-svelte` |
+| [Swift (`PixerateCore`)](./packages/swift#readme) | Native macOS and iOS editors, in progress (#533): the document envelope, history, RNG, schema validation and tool registry, checked against the TS core | SwiftPM: `Package.swift` at the repository root |
 
 - **Peer dependencies:** React needs `react` and `react-dom`; Svelte needs `svelte` 5. TipTap 2.x, ProseMirror and markdown-it are optional peers, needed only for rich text and prompts (the root entries and core's `/extensions`, `/serializers`, `/agent` and `/compare`); charts, spreadsheets, canvases, images and the other subpaths install and run without them. Each package README lists the install line for rich text. The canvas tools optionally use `@xyflow/react` / `@xyflow/svelte` and `@dagrejs/dagre`.
 - **Subpath imports** keep bundles small: import only the area you use, e.g. `@pixerate/editor/spreadsheet` or `@pixerate/editor-react/canvas`. The [core README](./packages/core#readme) lists every entry point.

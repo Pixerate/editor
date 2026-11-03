@@ -3460,3 +3460,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Code that compared `brush.sticker.stamps` with stamp names (`includes('star')`) or read `sticker.stamp` stopped matching: stamps are `editor:star`, and a host library's sticker has no `stamp`.
 - **Root Cause**: Sticker brushes and placed stickers name any sticker from any library by ref (`provider:id`). `normalizeStickerSettings` and document loading turn a bare editor stamp into its `editor:` ref, and `Sticker.ref` replaces `stamp`, which is kept (optional) only for editor stamps.
 - **Solution / Workaround**: Compare refs (`normalizeStickerRef`, `editorStampOf`, `stickerStamp(sticker)`). `toggleStickerRef` replaces `toggleStamp` for brush lists. The editor's stamps still draw procedurally, so old brushes and documents paint the same pixels (checked by a digest in `tests/stickers.test.ts`). A combined provider (`combineStickerProviders`) is `namespaced`: its ids are already refs, so use `stickerRefOf` / `stickerIdFor` rather than joining ids by hand.
+
+### [swift] The Swift Core Must Read and Write JSON the Way JavaScript Does
+
+- **Issue / Symptom**: Ported code that used `JSONSerialization` or `Codable` produced schema validation messages in a different order, `Unknown property` errors for the wrong key first, and serialised documents that differed from the TS core's (`1e-07` for `1e-7`, keys reordered).
+- **Root Cause**: JavaScript objects keep insertion order, except that integer-like keys ("2", "10") come first, ascending. `JSON.stringify` prints numbers as `Number.prototype.toString` (plain digits from 1e-6 up to 1e21, exponents with no leading zero outside). Messages and listings in the TS core depend on both, and Foundation's JSON follows neither.
+- **Solution / Workaround**: `PixerateCore` has its own `JSONValue` / `JSONObject` (insertion order with JavaScript's integer-key rule), parser and `stringified()` (`jsNumber`). Use them for anything compared with the TS core. `packages/core/tests/swift-vectors.test.ts` writes the vectors the Swift tests read (`UPDATE_SWIFT_VECTORS=1` to rewrite after an intended change), and fails when the TS outputs drift from the committed file.
+
+### [swift] Async Code Runs on the Caller's Executor; `Cancellable` Does Not Cancel on Release
+
+- **Issue / Symptom**: `swift build` refused `ToolRegistry.callTool` ("sending 'call' risks causing data races"), and a dropped `onCommit` result would have unsubscribed at once.
+- **Root Cause**: Under Swift 6, a nonisolated `async` function runs on the generic executor, so calling non-`Sendable` handlers, histories and registries from it crosses isolation. Separately, a `Cancellable` that cancels in `deinit` (as Combine's `AnyCancellable` does) ends a subscription as soon as its result is ignored, unlike the TS unsubscribe functions.
+- **Solution / Workaround**: `Package.swift` enables `NonisolatedNonsendingByDefault`, so async code runs on its caller's executor, as JavaScript's does. Keep new targets on the same `settings`. `PixerateCore.Cancellable` only cancels when `cancel()` is called.

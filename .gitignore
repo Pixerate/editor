@@ -10,3 +10,7 @@ build/
 
 # Downloaded PSD test corpus (pnpm test:corpus)
 corpus/
+
+# SwiftPM
+/.build/
+/.swiftpm/
