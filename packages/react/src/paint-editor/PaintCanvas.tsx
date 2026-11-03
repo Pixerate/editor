@@ -10,7 +10,10 @@ import {
   handlePaintShortcut,
   viewCssTransform,
   type PaintEditorController,
+  paintProposalGhost,
   type PaintPresence,
+  type PaintProposal,
+  type PaintProposals,
   type PaintTool,
   type PaintView,
 } from '@pixerate/editor/paint-editor';
@@ -28,6 +31,8 @@ export interface PaintCanvasProps {
   onError?: (message: string | null) => void;
   /** Agent cursors to draw over the canvas (see `PaintDirector` and `usePaintDirector`). */
   presence?: PaintPresence;
+  /** Paint an agent suggests, drawn over the canvas as ghosts (see `usePaintProposals`). */
+  proposals?: PaintProposals;
   className?: string;
 }
 
@@ -38,7 +43,7 @@ export interface PaintCanvasProps {
  * tail drawn as a thin preview, palm rejection, middle-button pan, wheel zoom and Shift+wheel
  * rotation. Guides and floating reference images are drawn on top.
  */
-export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, className }) => {
+export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'brush', showGuides = true, fitOnMount = true, onError, presence, proposals, className }) => {
   const state = usePaintEditorState(controller);
   const viewport = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -195,6 +200,7 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
         .map((r) => (
           <ReferencePanel key={r.id} controller={controller} id={r.id} />
         ))}
+      {proposals && <PaintProposalGhosts proposals={proposals} transform={transform} zoom={state.view.zoom} />}
       {presence && <PaintPresenceLayer presence={presence} view={state.view} canvas={doc} viewport={size} />}
       <div className="absolute bottom-1 right-2 text-[10px] text-slate-500 pointer-events-none" data-testid="paint-view-status">
         {Math.round(state.view.zoom * 100)}% · {Math.round(state.view.rotation)}°{state.view.mirror ? ' · mirrored' : ''}
@@ -273,5 +279,40 @@ const ReferencePanel: React.FC<{ controller: PaintEditorController; id: string }
         }}
       />
     </div>
+  );
+};
+
+/** Pending paint proposals drawn over the canvas: each ghost where its paint would go, translucent with a dashed edge. */
+export const PaintProposalGhosts: React.FC<{ proposals: PaintProposals; transform: string; zoom: number }> = ({ proposals, transform, zoom }) => {
+  const { proposals: pending } = useSyncExternalStore(proposals.subscribe, proposals.getState, proposals.getState);
+  return (
+    <>
+      {pending.map((p) => (
+        <PaintProposalGhost key={p.id} proposal={p} transform={transform} zoom={zoom} />
+      ))}
+    </>
+  );
+};
+
+const PaintProposalGhost: React.FC<{ proposal: PaintProposal; transform: string; zoom: number }> = ({ proposal, transform, zoom }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const ghost = paintProposalGhost(proposal);
+  useEffect(() => {
+    const ctx = ref.current?.getContext('2d');
+    if (!ctx || !ghost || typeof ImageData === 'undefined') return;
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(ghost.data), ghost.width, ghost.height), 0, 0);
+  }, [ghost?.data]);
+  if (!ghost) return null;
+  return (
+    <canvas
+      ref={ref}
+      width={ghost.width}
+      height={ghost.height}
+      data-paint-proposal={proposal.id}
+      title={proposal.rationale ? `${proposal.title}: ${proposal.rationale}` : proposal.title}
+      aria-label={`Suggested: ${proposal.title}`}
+      className="absolute left-0 top-0 pointer-events-none"
+      style={{ transform: `${transform} translate(${ghost.x}px, ${ghost.y}px)`, transformOrigin: '0 0', opacity: 0.7, outline: `${1.5 / zoom}px dashed #a78bfa`, outlineOffset: `${2 / zoom}px` }}
+    />
   );
 };

@@ -41,7 +41,7 @@ import { ImageEditorController, createImageEditorDocument, createImageEditorTool
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { createCanvasStickerHost } from '../src/canvas';
-import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
 import { TokenStore, createTokensEditorDocument, createTokensStyleToolProvider, tokensStyleDomain } from '../src/tokens';
@@ -166,6 +166,7 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-paint-editor': [
 			...toolNames(createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint' })),
 			...toolNames(createPaintEffectsToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-effects' })),
+			...toolNames(createPaintProposalToolProvider(createPaintProposals({ controller: new PaintEditorController({ width: 64, height: 64 }) }))),
 			...toolNames(createDocumentToolProvider(createPaintEditorDocument(new PaintEditorController({ width: 64, height: 64 })), { history: false, store: documentStore() }))
 		],
 		'pixerate-animation-editor': [
@@ -283,6 +284,7 @@ const FACTORIES: Record<string, string> = {
 	createImageSegmentationToolProvider: 'pixerate-image-editor',
 	createPaintEditorToolProvider: 'pixerate-paint-editor',
 	createPaintEffectsToolProvider: 'pixerate-paint-editor',
+	createPaintProposalToolProvider: 'pixerate-paint-editor',
 	createAnimationEditorToolProvider: 'pixerate-animation-editor',
 	createAnimationEffectsToolProvider: 'pixerate-animation-editor',
 	createVideoEditorToolProvider: 'pixerate-video-editor',

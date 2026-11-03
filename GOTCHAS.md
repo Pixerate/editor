@@ -3574,3 +3574,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: An agent following the canvas (jazz) stopped responding after the user dragged a node. It waited forever for the drag to finish.
 - **Root Cause**: During a drag, each move is reported with `inGesture: true`. The drop often only clears `dragging`, a runtime field the feed ignores when diffing, so `check()` found no change and reported nothing. Followers never got a change with `inGesture: false`.
 - **Solution / Workaround**: The feed remembers whether the last snapshot was mid-gesture and reports the first change after a gesture as `gestureEnded: true`, even when nothing else changed (empty arrays). Followers that wait for gestures should treat `gestureEnded` as the end of the user's action.
+
+### [core/paint-editor] A Change Feed Must Hear the Commit Before the Change, and a Group Only at Its End
+
+- **Issue / Symptom**: The paint change feed tagged an accepted agent proposal, and agent strokes, as the user's.
+- **Root Cause**: The controller notified state listeners (`emit`) before commit listeners (`onCommit`), so the feed diffed the document before it knew who made the step. Inside `group`, each inner change emitted on its own, before the group's single commit.
+- **Solution / Workaround**: `commit`, `undo`, `redo` and merges call `notifyCommit` before `emit`. Inside `group`, inner changes don't emit; the group emits once, after its commit event. Keep that order in any new path that records a step.
+
+### [core/paint-editor] A Paint Preview Can't Include Wet Paint
+
+- **Issue / Symptom**: Previewing a watercolour stroke would leave the wet simulation changed after the preview rolled the document back.
+- **Root Cause**: `previewPaint` restores the document, history and counters, but the wet simulation (`WetWorld`, workers) has state of its own that isn't part of the document.
+- **Solution / Workaround**: `sessionFor` refuses wet brushes while `previewing`, before the simulation is touched. Paint proposals accept only dry engines (dab, particle, bristle, mixer without pickup).
+
+### [react/paint-editor] `usePaintChangeFeed` Creates Its Feed in the Effect
+
+- **Issue / Symptom**: Under StrictMode, the change feed stopped reporting anything after mount.
+- **Root Cause**: A feed made in `useMemo` subscribes to the controller once. StrictMode runs the unmount cleanup (`dispose`) and remounts, which reuses the disposed feed.
+- **Solution / Workaround**: Create the feed inside the effect, dispose it in that effect's cleanup, and keep it in state, so each mount has a live one. `feed` is `null` until mounted.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintTool } from '@pixerate/editor/paint-editor';
+  import { PaintPresence, documentToScreen, screenToDocument, type PaintEditorController, type PaintProposals, type PaintTool } from '@pixerate/editor/paint-editor';
   import type { AgentPlayback, PlaybackPoint, PlaybackRect, PlaybackRef } from '@pixerate/editor/tools';
   import { createPlaybackSurface, getAgentPlayback } from '../playback/playback.svelte.js';
   import PresenceLayer from '../playback/PresenceLayer.svelte';
@@ -23,6 +23,8 @@
     height?: number | string;
     /** Agent cursors to draw over the canvas (see `createPaintDirector`). */
     presence?: PaintPresence;
+    /** Paint an agent suggests, drawn over the canvas as ghosts (see `createPaintProposalState`). */
+    proposals?: PaintProposals;
     class?: string;
     /**
      * Agent playback: act out the paint tools' calls here with the agent's cursor, opening the
@@ -35,7 +37,7 @@
     /** Bring the editor on screen (switch to its tab) before the agent acts. */
     onplaybackreveal?: () => void | Promise<void>;
   }
-  let { controller, fileName, height = 720, presence, class: className = '', playback, playbackId = 'paint', onplaybackreveal }: Props = $props();
+  let { controller, fileName, height = 720, presence, proposals, class: className = '', playback, playbackId = 'paint', onplaybackreveal }: Props = $props();
 
   /** Controls a paint plan can point at, by `{ kind: 'control', id }`. */
   const PAINT_CONTROLS: Record<string, string> = {
@@ -116,7 +118,7 @@
     <BrushPanel {controller} class="w-60 shrink-0 overflow-y-auto pr-1" />
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- With playback the editor draws the cursor (over the panels too), so the canvas doesn't. -->
-      <PaintCanvas {controller} {tool} presence={playing ? undefined : presence} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
+      <PaintCanvas {controller} {tool} presence={playing ? undefined : presence} {proposals} onerror={(e) => (error = e)} class="flex-1 rounded-lg" />
       {#if error}<p role="alert" class="mt-1 text-[11px] text-rose-400">{error}</p>{/if}
     </div>
     <div class="flex w-64 shrink-0 flex-col gap-2 overflow-y-auto pr-1">

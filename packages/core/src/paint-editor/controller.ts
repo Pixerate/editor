@@ -293,6 +293,32 @@ export interface PaintLayerInfo {
   effects?: number;
 }
 
+/** One change to the paint history, for hosts and change feeds (`onCommit`). */
+export interface PaintCommitEvent {
+  /** `execute`: a new undo step. `merge`: folded into the last one (a slider drag). */
+  kind: 'execute' | 'merge' | 'undo' | 'redo';
+  /** The step's name. */
+  label: string;
+  /** Who made the step: `user`, or `agent:<id>` (see `withOrigin`). */
+  origin: string;
+}
+
+/** Paint a preview produced (`previewPaint`), in document coordinates, straight RGBA. */
+export interface PaintPreview {
+  /** Where the new paint sits, or `null` when nothing was painted. */
+  bounds: RasterRect | null;
+  /** The new paint alone: `bounds.width × bounds.height` pixels (empty when nothing was painted). */
+  pixels: Uint8ClampedArray;
+  /** The whole picture as it would look with the new paint, inside `bounds` (with the paper; empty when nothing was painted). */
+  composite: Uint8ClampedArray;
+}
+
+/** Where `previewPaint` puts its layer: above a layer (default the active one), or at the bottom of the stack. */
+export interface PaintPreviewPlacement {
+  aboveId?: string;
+  bottom?: boolean;
+}
+
 export interface PaintStrokeInit {
   /** Default the active layer. */
   layerId?: string;
@@ -407,6 +433,8 @@ interface SavedMixingPad extends SavedMixingPadInfo {
 
 interface HistoryEntry {
   label: string;
+  /** Who made it: `user`, or `agent:<id>` (see `withOrigin`). */
+  origin: string;
   before: PaintDocumentState;
   after: PaintDocumentState;
   /** Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry). */
@@ -482,6 +510,13 @@ export class PaintEditorController {
   private stickerPreview: { base: PaintDocumentState; shown: PaintDocumentState } | null = null;
   private readonly encodeImage: ImageEncoder | undefined;
   private listeners = new Set<() => void>();
+  private commitListeners = new Set<(event: PaintCommitEvent) => void>();
+  /** Origins set by `withOrigin`, innermost last. */
+  private origins: string[] = [];
+  /** `group` in progress: commits fold into one step, recorded when it ends. */
+  private grouping: { label: string; before: PaintDocumentState; changed: boolean } | null = null;
+  /** `previewPaint` in progress: nothing is emitted or recorded. */
+  private previewing = false;
   private version = 0;
   private cached: PaintEditorState | null = null;
   private session: PaintStrokeSession | null = null;
@@ -595,7 +630,131 @@ export class PaintEditorController {
     return () => this.listeners.delete(listener);
   }
 
+  /** Hears each undo step recorded, merged, undone or redone, with who made it. Returns an unsubscribe function. */
+  onCommit(listener: (event: PaintCommitEvent) => void): () => void {
+    this.commitListeners.add(listener);
+    return () => {
+      this.commitListeners.delete(listener);
+    };
+  }
+
+  private notifyCommit(event: PaintCommitEvent): void {
+    if (this.previewing) return;
+    for (const l of [...this.commitListeners]) l(event);
+  }
+
+  /** The origin steps are recorded with now: the innermost `withOrigin`, else `user`. */
+  getOrigin(): string {
+    return this.origins[this.origins.length - 1] ?? 'user';
+  }
+
+  /**
+   * Records the steps `fn` makes as made by `origin` (`agent:<id>` for an agent). When `fn` returns
+   * a promise, the origin holds until it settles. Satisfies `createOriginMiddleware`'s history target,
+   * so agent tool calls are recorded as the calling agent's.
+   */
+  withOrigin<T>(origin: string, fn: () => T): T {
+    this.origins.push(origin);
+    let pending = false;
+    const pop = () => {
+      const i = this.origins.lastIndexOf(origin);
+      if (i >= 0) this.origins.splice(i, 1);
+    };
+    try {
+      const result = fn();
+      if (result && typeof (result as { then?: unknown }).then === 'function') {
+        pending = true;
+        return Promise.resolve(result).finally(pop) as T;
+      }
+      return result;
+    } finally {
+      if (!pending) pop();
+    }
+  }
+
+  /**
+   * Runs `fn` as one undo step named `label`: every change it makes (strokes, fills, new layers) is
+   * undone together. Wet paint can't be grouped. Nested groups join the outer one. If `fn` throws,
+   * its changes are put back and nothing is recorded.
+   */
+  group<T>(label: string, fn: () => T): T {
+    if (this.grouping) return fn();
+    this.requireIdle('grouping changes');
+    const before = this.doc;
+    const revision = this.docRevision;
+    this.grouping = { label, before, changed: false };
+    let result: T;
+    try {
+      result = fn();
+    } catch (e) {
+      this.grouping = null;
+      if (this.doc !== before) {
+        this.doc = before;
+        this.docRevision = revision + 1;
+        this.emit();
+      }
+      throw e;
+    }
+    const g = this.grouping;
+    this.grouping = null;
+    if (g.changed && this.doc !== before) {
+      this.undoStack.push({ label, origin: this.getOrigin(), before, after: this.doc });
+      if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+      this.redoStack = [];
+      this.notifyCommit({ kind: 'execute', label, origin: this.getOrigin() });
+      this.emit();
+    }
+    return result;
+  }
+
+  /**
+   * What `fn` would paint, without changing anything: it runs on a new empty layer (above the
+   * active layer, another one, or at the bottom), and the layer's pixels and the picture with them
+   * come back while the document, history and listeners stay as they were. `fn` gets that layer's id and must paint on it with dry brushes (strokes, replays and
+   * fills); wet paint can't be previewed. For ghost paint an agent suggests (`createPaintProposals`).
+   */
+  previewPaint(fn: (layerId: string) => void, placement: PaintPreviewPlacement = {}): PaintPreview {
+    this.requireIdle('previewing');
+    if (this.previewing) throw new PaintEditorError('A preview is already running.');
+    const saved = {
+      doc: this.doc,
+      undo: [...this.undoStack],
+      redo: this.redoStack,
+      revision: this.docRevision,
+      strokeCounter: this.strokeCounter,
+      seedCounter: this.seedCounter,
+      mixerLoad: this.mixerLoad,
+    };
+    this.previewing = true;
+    try {
+      const layer = this.addLayer({ name: 'Preview', ...(placement.aboveId ? { aboveId: placement.aboveId } : {}) });
+      if (placement.bottom) this.moveLayer(layer.id, 0, null);
+      fn(layer.id);
+      if (this.wetOp || this.pendingWetEvents.length) throw new PaintEditorError("Wet paint can't be previewed; suggest it with a dry brush.");
+      const found = findLayer(this.doc.layers, layer.id)?.layer;
+      const surface = found && isPixelLayer(found) ? found.surface : null;
+      const bounds = surface ? contentBounds(surface) : null;
+      const box = bounds ? clipToCanvas(bounds, this.doc.canvas) : null;
+      if (!surface || !box) return { bounds: null, pixels: new Uint8ClampedArray(0), composite: new Uint8ClampedArray(0) };
+      const composite = this.exportCompositor.composite(this.renderLayers({ wet: 'display' }), box, this.sources());
+      return { bounds: box, pixels: readRegion(surface, box), composite };
+    } finally {
+      this.wetOp = null;
+      this.pendingWetEvents = [];
+      this.doc = saved.doc;
+      this.undoStack = saved.undo;
+      this.redoStack = saved.redo;
+      this.docRevision = saved.revision;
+      this.strokeCounter = saved.strokeCounter;
+      this.seedCounter = saved.seedCounter;
+      this.mixerLoad = saved.mixerLoad;
+      this.cached = null;
+      this.previewing = false;
+    }
+  }
+
   private emit(dirty: RasterRect[] | 'all' = 'all'): void {
+    if (this.previewing) return;
     if (dirty === 'all' || this.dirty === 'all') this.dirty = 'all';
     else this.dirty.push(...dirty);
     this.version++;
@@ -687,7 +846,14 @@ export class PaintEditorController {
   }
 
   private commit(label: string, next: PaintDocumentState, before = this.doc): void {
-    const entry: HistoryEntry = { label, before, after: next };
+    if (this.grouping) {
+      // Inside `group`: the change joins the group's one step, and listeners hear it when the group ends.
+      this.grouping.changed = true;
+      this.doc = next;
+      this.docRevision++;
+      return;
+    }
+    const entry: HistoryEntry = { label, origin: this.getOrigin(), before, after: next };
     if (this.wetOp) {
       entry.wet = { before: this.wetOp.before, after: this.wet.snapshot(), lost: false };
       this.wetOp = null;
@@ -698,6 +864,8 @@ export class PaintEditorController {
     this.doc = next;
     this.docRevision++;
     this.trimWetHistory();
+    // Commit listeners first, so a change feed hearing `emit` knows who made the step.
+    this.notifyCommit({ kind: 'execute', label, origin: entry.origin });
     this.emit();
   }
 
@@ -707,7 +875,7 @@ export class PaintEditorController {
    */
   private commitOrAmend(label: string, next: PaintDocumentState, commitToHistory: boolean): void {
     const last = this.undoStack[this.undoStack.length - 1];
-    if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp) {
+    if (commitToHistory || !last || last.label !== label || last.wet || this.wetOp || this.grouping) {
       this.commit(label, next);
       return;
     }
@@ -715,6 +883,7 @@ export class PaintEditorController {
     this.redoStack = [];
     this.doc = next;
     this.docRevision++;
+    this.notifyCommit({ kind: 'merge', label, origin: last.origin });
     this.emit();
   }
 
@@ -794,6 +963,7 @@ export class PaintEditorController {
       this.wet.restore(e.wet.lost ? null : e.wet.before);
       if (paper !== this.doc.paper) this.wet.paperChanged();
     }
+    this.notifyCommit({ kind: 'undo', label: e.label, origin: this.getOrigin() });
     this.emit();
     return e.label;
   }
@@ -813,6 +983,7 @@ export class PaintEditorController {
       this.wet.restore(e.wet.lost ? null : e.wet.after);
       if (paper !== this.doc.paper) this.wet.paperChanged();
     }
+    this.notifyCommit({ kind: 'redo', label: e.label, origin: this.getOrigin() });
     this.emit();
     return e.label;
   }
@@ -2148,6 +2319,8 @@ export class PaintEditorController {
       return l;
     })();
     const brush = this.strokeBrush(init);
+    // A preview is rolled back, and the wet simulation can't be: refuse before it is touched.
+    if (this.previewing && isWetBrush(brush)) throw new PaintEditorError(`Wet paint can't be previewed; the ${brush.name} brush paints wet media. Suggest it with a dry brush.`);
     const effect = this.strokeEffect(init, brush);
     if (brush.light.amount > 0) {
       if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (glow-gel, neon-marker; list_brush_presets lists them), or set light.amount to 0 (set_brush).`);
@@ -4691,4 +4864,12 @@ function resampleInto(src: PixelImage, rect: { x: number; y: number; width: numb
     }
   }
   return { width, height, data: out };
+}
+
+function clipToCanvas(rect: RasterRect, canvas: { width: number; height: number }): RasterRect | null {
+  const x0 = Math.max(0, rect.x);
+  const y0 = Math.max(0, rect.y);
+  const x1 = Math.min(canvas.width, rect.x + rect.width);
+  const y1 = Math.min(canvas.height, rect.y + rect.height);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
 }

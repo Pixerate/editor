@@ -10,11 +10,13 @@
     viewCssTransform,
     type PaintEditorController,
     type PaintPresence,
+    type PaintProposals,
     type PaintTool,
   } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
   import { paintEditorState } from './paintEditorRune.svelte.js';
   import PaintPresenceLayer from './PaintPresenceLayer.svelte';
+  import PaintProposalGhosts from './PaintProposalGhosts.svelte';
   import ReferencePanel from './ReferencePanel.svelte';
 
   interface Props {
@@ -29,9 +31,11 @@
     onerror?: (message: string | null) => void;
     /** Agent cursors to draw over the canvas (see `PaintDirector` and `createPaintDirector`). */
     presence?: PaintPresence;
+    /** Paint an agent suggests, drawn over the canvas as ghosts (see `createPaintProposalState`). */
+    proposals?: PaintProposals;
     class?: string;
   }
-  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, class: className = '' }: Props = $props();
+  let { controller, tool = 'brush', showGuides = true, fitOnMount = true, onerror, presence, proposals, class: className = '' }: Props = $props();
 
   const editor = paintEditorState(() => controller);
   const snap = $derived(editor.current);
@@ -201,6 +205,7 @@
   {#each snap.guides.references.filter((r) => r.visible) as r (r.id)}
     <ReferencePanel {controller} reference={r} />
   {/each}
+  {#if proposals}<PaintProposalGhosts {proposals} {transform} zoom={snap.view.zoom} />{/if}
   {#if presence}<PaintPresenceLayer {presence} view={snap.view} canvas={doc} viewport={size} />{/if}
   <div class="absolute bottom-1 right-2 text-[10px] text-slate-500 pointer-events-none" data-testid="paint-view-status">
     {Math.round(snap.view.zoom * 100)}% · {Math.round(snap.view.rotation)}°{snap.view.mirror ? ' · mirrored' : ''}

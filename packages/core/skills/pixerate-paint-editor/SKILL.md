@@ -101,58 +101,32 @@ the pitfalls, and uses the tools below.
 
 ## Best practices
 
-- **Big to small, dark to light (or light to dark), one decision per layer.** Name layers by
-  purpose ("Underpainting", "Shadows", "Line"). Lower a layer's `opacity` instead of repainting.
-- **Pressure is your value control** on grainy media: points with `pressure` 0.2..0.4 give
-  texture-catching, broken marks; 0.8..1 fills the grain. Vary pressure along a stroke (swell in
-  the middle, lighten at the ends) for natural marks.
-- **Give points a time `t`** (milliseconds, about 8..16 ms apart for natural speed) when using an
-  ink or brush pen: velocity dynamics thin fast strokes. Without `t` there is no velocity effect.
-- **Tilt** (`altitude` near 0.3..0.6 radians with an `azimuth`) turns a pencil into broad side
-  shading; upright points draw a fine line.
-- **Space points** about a third of the brush size apart or closer; the brush fills in dabs
-  between them. Long smooth curves need more points than straight lines.
-- **Use `rotation: "stroke"`** for flat tips (pastel, charcoal, chisel marker) so the mark turns
-  with the path; `fixed` for calligraphic nibs.
+- **Big to small, dark to light (or light to dark), one decision per layer.** Name layers by purpose ("Underpainting", "Shadows", "Line"). Lower a layer's `opacity` instead of repainting.
+- **Pressure is your value control** on grainy media: points with `pressure` 0.2..0.4 give texture-catching, broken marks; 0.8..1 fills the grain. Vary pressure along a stroke (swell in the middle, lighten at the ends) for natural marks.
+- **Give points a time `t`** (milliseconds, about 8..16 ms apart for natural speed) when using an ink or brush pen: velocity dynamics thin fast strokes. Without `t` there is no velocity effect.
+- **Tilt** (`altitude` near 0.3..0.6 radians with an `azimuth`) turns a pencil into broad side shading; upright points draw a fine line.
+- **Space points** about a third of the brush size apart or closer; the brush fills in dabs between them. Long smooth curves need more points than straight lines.
+- **Use `rotation: "stroke"`** for flat tips (pastel, charcoal, chisel marker) so the mark turns with the path; `fixed` for calligraphic nibs.
 - **Blending tools**:
-  - `blender`: `strength` 0.3..0.6 for soft transitions, `distance` 0.2..0.5 (fraction of the
-    tip) for how far colours travel. Keep `mixing: "pigment"` for painterly blends; `rgb`
-    blends like a soft blur. Work along an edge in short strokes rather than over everything.
-  - `smudge`: `length` near 0.9 drags paint far (long streaks), 0.5 short pushes; `strength`
-    0.5..0.8. `mixing: "pigment"` (the `wet-smudge` preset) smears colours into each other like
-    wet paint.
+  - `blender`: `strength` 0.3..0.6 for soft transitions, `distance` 0.2..0.5 (fraction of the tip) for how far colours travel. Keep `mixing: "pigment"` for painterly blends; `rgb` blends like a soft blur. Work along an edge in short strokes rather than over everything.
+  - `smudge`: `length` near 0.9 drags paint far (long streaks), 0.5 short pushes; `strength` 0.5..0.8. `mixing: "pigment"` (the `wet-smudge` preset) smears colours into each other like wet paint.
   - Mixer Brush: blend with flow 0.3..0.6; at full flow it paints only its own colour.
-- **Pick-up and mix ratios**: `pickup` 0.3..0.7 with `mix` 0.4..0.7 gives a brush that drags
-  the colours it crosses into its own; `dirty: true` keeps them for the next stroke (wipe with
+- **Pick-up and mix ratios**: `pickup` 0.3..0.7 with `mix` 0.4..0.7 gives a brush that drags the colours it crosses into its own; `dirty: true` keeps them for the next stroke (wipe with
   `clean_mixer_brush`). Keep `pickup` 0 for clean, predictable colour.
-- **Multi-colour**: give 2..8 `colors` (or none for the paint and secondary colours). `tip` mode
-  with a flat tip and `rotation: "stroke"` paints ribbons; `softness` 0.3..0.7 keeps the stripes
-  readable. `dab` mode with `order: "sequence"` and `length` 5..20 walks through a palette;
+- **Multi-colour**: give 2..8 `colors` (or none for the paint and secondary colours). `tip` mode with a flat tip and `rotation: "stroke"` paints ribbons; `softness` 0.3..0.7 keeps the stripes readable. `dab` mode with `order: "sequence"` and `length` 5..20 walks through a palette;
   `random` for foliage and confetti.
-- **Pigment for paint, multiply for markers**: tip `blend: "pigment"` mixes subtractively on the
-  canvas; `multiply` darkens where marker strokes overlap. Pigment layers are written as Normal
-  to PSD (the export warns).
+- **Pigment for paint, multiply for markers**: tip `blend: "pigment"` mixes subtractively on the canvas; `multiply` darkens where marker strokes overlap. Pigment layers are written as Normal to PSD (the export warns).
 - **Painterly layer modes do the glazing for you** (`update_layer` `blend`, or a brush tip):
-  - `watercolor`: the layer is a transparent wash. Washes multiply wavelength by wavelength, so
-    each glaze darkens and blue over yellow makes green. White is clear: paint glazes on a
-    layer over the underpainting, at opacity 0.4..0.8.
-  - `tint`: recolours what is below (its hue and chroma) and keeps its lightness, gently near
-    white and black. Use it to warm or cool a whole passage.
-  - `highlight`: adds coloured light that rolls off towards white instead of clipping. Use it
-    for glints and glow; black does nothing.
-  - `shadow`: shades as if light were blocked, coloured by the layer (paint shadows in a cool
-    blue-violet), never crushing to black. White does nothing.
+  - `watercolor`: the layer is a transparent wash. Washes multiply wavelength by wavelength, so each glaze darkens and blue over yellow makes green. White is clear: paint glazes on a layer over the underpainting, at opacity 0.4..0.8.
+  - `tint`: recolours what is below (its hue and chroma) and keeps its lightness, gently near white and black. Use it to warm or cool a whole passage.
+  - `highlight`: adds coloured light that rolls off towards white instead of clipping. Use it for glints and glow; black does nothing.
+  - `shadow`: shades as if light were blocked, coloured by the layer (paint shadows in a cool blue-violet), never crushing to black. White does nothing.
 
-  PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow
-  as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
-- **Grow the canvas instead of starting big** with `extend_canvas` (pixels per side; nothing
-  painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you
-  hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first.
+  PSD has none of them: `export_psd` writes the nearest standard mode (watercolor and shadow as Multiply, tint as Color, highlight as Screen) and warns; the merged image stays exact.
+- **Grow the canvas instead of starting big** with `extend_canvas` (pixels per side; nothing painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first.
   `set_canvas` only crops or grows at the bottom-right.
-- **Save brushes you build** in the brush library: `create_brush` with `basedOn` and the facets
-  you changed (or `get_brush` then `create_brush` with its `brush`), and share them with
-  `export_brushes` / `import_brushes`. A saved brush shows in every editor that shares the
-  library; `set_brush` its id to paint with it.
+- **Save brushes you build** in the brush library: `create_brush` with `basedOn` and the facets you changed (or `get_brush` then `create_brush` with its `brush`), and share them with
+  `export_brushes` / `import_brushes`. A saved brush shows in every editor that shares the library; `set_brush` its id to paint with it.
 
 Which facet sets which engine setting: [references/brush-facets.md](references/brush-facets.md).
 
@@ -271,6 +245,17 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 | `list_papers` | Read the paper library: id, name, family, grain pattern, colour, depth and the wet-media properties (absorption, permeability, roughness, stored for later wet media). Call before `set_paper`. |
 | `get_paper` | Read every setting of the current paper (pattern, seed, scale, tiling, depth, shading, dry and wet tuning, and `metallic`, `backlight`, `backlightColor` when set). |
 | `set_paper` | Change the paper: `preset`, then any of `color`, `depth` (0..1), `scale` (0.25..8), `seed` (another sheet), `pattern`, `tiling`, `shading`, `dry` / `wet` tuning (`contrast` 0..3, `invert`), `metallic`, `backlight` (0..1, light from behind: glazes glow, opaque paint blocks; preset `stained-glass`) and `backlightColor`. Affects new strokes' grain and how the paper shows; strokes already painted keep their pixels. Returns the paper. |
+
+### Suggesting paint
+
+Contributing while the user paints: suggest, don't paint. Read [references/painting-alongside.md](references/painting-alongside.md).
+
+| Tool | Use |
+| --- | --- |
+| `propose_paint` | Suggest paint as a ghost the user accepts or dismisses: `title`, `rationale`, `ops` (`stroke` with points and a dry brush, `wash` over its layer, `echo` of stroke ids moved / turned / scaled / repeated) and where its new layer goes (`place` top, bottom or above `layerId`). Returns the proposal id, the ghost's `bounds` and the strokes it echoes. Use it for contributions the user didn't ask for. |
+| `list_paint_proposals` | Read the pending paint proposals: id, title, rationale, who proposed it, op kinds, placement, bounds, the strokes it echoes and any since removed (`missing`), and whether accepting is allowed. Call before accepting or rejecting. |
+| `accept_paint_proposal` | Paint a pending proposal on a new layer as one undo step recorded as the proposer's (`proposalId`). Only when the user said yes. Returns the layer id, stroke ids and undo step name. Refuses when a stroke it echoes is gone. |
+| `reject_paint_proposal` | Dismiss a pending proposal (`proposalId`); nothing changes. Use it to withdraw a suggestion that no longer fits. Returns the id and title. |
 
 ### Layers
 

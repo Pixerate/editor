@@ -29,7 +29,7 @@ import { VectorEditorController, createVectorEditorDocument, createVectorEffects
 import { createRichTextPreset, createRichTextEditorDocument, SpreadsheetController } from '../src';
 import { createAgentPlayback, createCaptureToolProvider, createElementCaptureSurface, createPlaybackToolProvider } from '../src/tools';
 import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider, createCanvasProposalToolProvider, createCanvasProposals } from '../src/canvas';
-import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider, createPaintProposalToolProvider, createPaintProposals } from '../src/paint-editor';
 import { createColorToolProvider } from '../src/color';
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
 import { CANVAS_PROFILE, createBrushLibrary, createBrushLibraryToolProvider, IMAGE_PROFILE } from '../src/brushes';
@@ -220,6 +220,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		}
 		registry.register(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }), { namespace: 'explosion' }));
 		registry.register(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }), { namespace: 'proposals' }));
+		registry.register(createPaintProposalToolProvider(createPaintProposals({ controller: new PaintEditorController({ width: 64, height: 64 }) }), { namespace: 'paintproposals' }));
 		registry.register(createCanvasCaptureToolProvider({ id: 'capture', namespace: 'capture', element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] }));
 		registry.register(createCaptureToolProvider(createElementCaptureSurface({ element: null }), { id: 'dom-capture', namespace: 'dom' }));
 		registry.register(createPlaybackToolProvider(createAgentPlayback()));
