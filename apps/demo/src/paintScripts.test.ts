@@ -87,4 +87,13 @@ describe("paint agent scripts", () => {
     expect(controller.getStrokes().at(-1)!.paint).toMatchObject({ type: "effect", live: true, map: { by: "stroke", length: 400 } });
     expect(controller.getState().effectPlayback).toMatchObject({ playing: true, fps: 24 });
   }, 120_000);
+
+  it("paints glowing glass loops on dark paper, one per layer, with spill", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-light")!, { control: { speed: Infinity, stopped: false } });
+    const loops = controller.listLayers().filter((l) => l.name.startsWith("Loop"));
+    expect(loops).toHaveLength(2);
+    for (const l of loops) expect(controller.lightOf(l.id).hasLight).toBe(true);
+    expect(controller.lightOf(loops.find((l) => l.name === "Loop 2")!.id).spill).toEqual({ radius: 48, strength: 1.4 });
+  }, 120_000);
 });

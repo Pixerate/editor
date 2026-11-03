@@ -220,6 +220,11 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
               </select>
             </label>
           )}
+          {engine.light && brush.light.amount > 0 && (
+            <label className="flex items-center gap-2" title="Pressure scales the light the brush lays">
+              <input type="checkbox" aria-label="Light follows pressure" checked={brush.light.pressure} onChange={(e) => controller.setBrush({ light: { pressure: e.target.checked } })} /> Light follows pressure
+            </label>
+          )}
           {engine.dirty && (
             <label className="flex items-center gap-2" title="Keep the colour the brush picked up for the next stroke (needs Pick-up above 0)">
               <input type="checkbox" aria-label="Dirty brush" checked={brush.behavior.dirty} onChange={(e) => controller.setBrush({ behavior: { dirty: e.target.checked } })} /> Dirty brush

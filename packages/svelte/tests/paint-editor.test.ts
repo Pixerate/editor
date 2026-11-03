@@ -499,3 +499,30 @@ describe('stroke layers', () => {
     expect(c.getState().undoLabel).toBe('Rasterize stroke layer');
   });
 });
+
+describe('light paint', () => {
+  it('the brush panel has Light (and Rim, Clarity for impasto), and the layers panel shows, spills and clears light', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    show(PaintEditor, { controller: c });
+    c.setBrush({ id: 'neon-marker' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Light"]')).not.toBeNull();
+    click(target.querySelector('input[aria-label="Light follows pressure"]'));
+    expect(c.getState().brush.light.pressure).toBe(true);
+    c.setBrush({ id: 'glow-gel' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Rim"]')).not.toBeNull();
+    expect(target.querySelector('input[aria-label="Clarity"]')).not.toBeNull();
+    click(byText('Layers'));
+    expect(target.querySelector('[data-testid="layer-light"]')).toBeNull();
+    c.paintStroke({ brushId: 'neon-marker', points: [{ x: 10, y: 40 }, { x: 110, y: 40 }] });
+    flushSync();
+    expect(target.querySelector('[data-testid="layer-light"]')).not.toBeNull();
+    setValue(target.querySelector('input[aria-label="Light spill radius"]') as HTMLInputElement, '60', true);
+    expect(c.lightOf().spill.radius).toBe(60);
+    click(byText('Clear light'));
+    expect(c.lightOf().hasLight).toBe(false);
+    expect(target.querySelector('[data-testid="layer-light"]')).toBeNull();
+  });
+});
+

@@ -66,6 +66,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
 | Scraped, smeared texture | `palette-knife` |
 | Blobs of paint straight from the tube | `paint-tube` |
 | A glossy bead or line | `gloop-pen` |
+| A glowing, glassy bead (a neon or glass tube) | `glow-gel` (light paint with rim and clarity, on dark paper; one loop per layer where they cross) |
 | Dry, broken strokes over texture | `dry-brush`, or a lower `impasto.load` |
 | A metallic highlight | `metallic-paint` |
 | Paint that stays exactly as laid | `set_instant_dry` on |

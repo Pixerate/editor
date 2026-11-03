@@ -16,6 +16,7 @@ import { WetWorld } from '../paint/wet/world';
 import { pigmentOf } from '../paint/wet/film';
 import { WetStrokeDriver, wetPaperInput } from './wet';
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, type ThickChannels } from './thick';
+import { computeSpill, emptyLight, LightCache } from './light';
 
 /** One small wet world reused for wet brush thumbnails (by size). */
 let thumbWorld: WetWorld | null = null;
@@ -77,16 +78,18 @@ export function thumbnailStroke(width: number, height: number): PenPoint[] {
 }
 
 /** Paints the test stroke with `brush` onto `surface`; returns the new pixels. */
-function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): TiledSurface {
+function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperSettings, color: string, width: number, height: number): { surface: TiledSurface; light: TiledSurface | null } {
   const [r, g, b] = hexToRgb8(color);
   let result = surface;
   let thick: ThickChannels | null = null;
+  let light: TiledSurface | null = null;
   const session = new PaintStrokeSession(
     {
       update: () => {},
       commit: (sess, s) => {
         result = s ?? result;
         thick = sess.thickChannels();
+        light = sess.lightChannel();
       },
     },
     {
@@ -106,12 +109,14 @@ function paintTestStroke(surface: TiledSurface, brush: PaintBrush, paper: PaperS
       mixerLoad: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, [r / 255, g / 255, b / 255]),
       thick: brush.engine === 'impasto' ? { channels: emptyThickChannels() } : undefined,
       sticker: brush.engine === 'sticker' ? { nextId: 1 } : undefined,
+      light: brush.light.amount > 0 && brush.engine !== 'wet' && brush.engine !== 'sticker' ? { surface: emptyLight() } : null,
     }
   );
   session.push(thumbnailStroke(width, height));
   session.end();
-  // Thick paint is shown lit, as on the canvas.
-  return thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
+  // Thick paint is shown lit, and light paint glowing, as on the canvas.
+  const lit = thick ? new LitCache().lit(result, thick, DEFAULT_LIGHTING) : result;
+  return { surface: light || thick ? new LightCache().glow(lit, light ?? undefined, thick ?? undefined) : lit, light };
 }
 
 export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperSettings; width?: number; height?: number; color: string }): BrushThumbnail {
@@ -133,8 +138,15 @@ export function renderBrushThumbnail(brush: PaintBrush, options: { paper: PaperS
     surface = fillRect(surface, { x: 0, y: 0, width, height: half }, rgba);
     surface = fillRect(surface, { x: 0, y: half, width, height: height - half }, [232, 196, 64, 255]);
   }
-  surface = b.engine === 'wet' ? paintWetTestStroke(b, options.paper, options.color, width, height) : paintTestStroke(surface, b, options.paper, options.color, width, height);
+  let light: TiledSurface | null = null;
+  if (b.engine === 'wet') surface = paintWetTestStroke(b, options.paper, options.color, width, height);
+  else ({ surface, light } = paintTestStroke(surface, b, options.paper, options.color, width, height));
   const layer: ViewLayer = { type: 'pixel', id: 'thumbnail', name: 'thumbnail', visible: true, opacity: 1, blend: 'normal', surface, offset: { x: 0, y: 0 } };
-  const data = createPaintCompositor().composite([paperNode(options.paper), layer], { x: 0, y: 0, width, height }, { width, height });
+  // Light paint reads on dark paper, with its spill.
+  const paper = light ? { ...options.paper, color: '#141414' } : options.paper;
+  const spill = light ? computeSpill(surface, light, { radius: Math.max(4, height / 6), strength: 1 }) : null;
+  const layers: ViewLayer[] = [paperNode(paper), layer];
+  if (spill) layers.push({ type: 'pixel', id: 'thumbnail-light', name: 'light', visible: true, opacity: 1, blend: 'linear-dodge', surface: spill, offset: { x: 0, y: 0 } } as ViewLayer);
+  const data = createPaintCompositor().composite(layers, { x: 0, y: 0, width, height }, { width, height });
   return { width, height, data };
 }

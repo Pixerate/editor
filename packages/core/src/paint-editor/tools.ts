@@ -216,6 +216,18 @@ const IMPASTO_BRUSH = {
     load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint loading: 1 never runs out; lower, the stroke thins and fades as the brush empties.' },
     thinner: { type: 'number', minimum: 0, maximum: 1, description: 'Thinner: flatter, more transparent paint.' },
     drag: { type: 'number', minimum: 0, maximum: 1, description: 'Knife and brush: how much of the paint under the tool is dragged along.' },
+    rim: { type: 'number', minimum: 0, maximum: 1, description: 'Light paint (with light.amount): the bead\'s light is stronger where its surface turns away, as on backlit glass (default 0).' },
+    clarity: { type: 'number', minimum: 0, maximum: 1, description: 'Glassy paint: the middle of a bead lets the layers below show through while its edges stay solid (default 0). flatten_relief clears it.' },
+  },
+  additionalProperties: false,
+} as const;
+
+const LIGHT_BRUSH = {
+  type: 'object',
+  description: 'Light paint: the light the brush lays with its colour, glowing in the paint\'s own colour and spilling onto its surroundings (set_light_spill). Dab, particle, bristle, Mixer Brush and impasto brushes take it; wet and sticker brushes refuse light above 0. Missing fields keep their current values.',
+  properties: {
+    amount: { type: 'number', minimum: 0, maximum: 1, description: 'Light each dab lays, scaled by its coverage and flow (0 none, default; 1 full).' },
+    pressure: { type: 'boolean', description: 'Pressure scales the light (default false).' },
   },
   additionalProperties: false,
 } as const;
@@ -290,6 +302,7 @@ const BRUSH_FIELDS = {
   particle: PARTICLE_BRUSH,
   bristle: BRISTLE_BRUSH,
   sticker: STICKER_BRUSH,
+  light: LIGHT_BRUSH,
   paint: BRUSH_PAINT,
 } as const;
 
@@ -340,6 +353,7 @@ function brushSummary(b: PaintBrush) {
     multicolor: b.behavior.multicolor.mode,
     ...(b.engine === 'wet' ? { wetTool: b.wet.tool, medium: b.wet.medium } : {}),
     ...(b.engine === 'impasto' ? { impastoTool: b.impasto.tool } : {}),
+    ...(b.light.amount > 0 ? { light: b.light.amount } : {}),
     builtin: Boolean(b.builtin),
   };
 }
@@ -702,7 +716,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_brushes',
     title: 'List brushes',
     description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
+      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
     inputSchema: EMPTY,
     annotations: { title: 'List brushes', ...READ },
     handler: () => {

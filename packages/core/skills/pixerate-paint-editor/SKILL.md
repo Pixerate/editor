@@ -159,8 +159,9 @@ read [references/wet-media.md](references/wet-media.md) for the engine and the w
 
 ## Oils and thick paint
 
-Wet oil barely flows and blends where the brush meets it; impasto brushes add relief lit by
-`set_lighting`. Load `pixerate-paint-oil-impasto`, and read [references/oils.md](references/oils.md).
+Wet oil blends where the brush meets it; impasto adds relief lit by `set_lighting`: load
+`pixerate-paint-oil-impasto` and read [references/oils.md](references/oils.md). **Light paint**
+(neon, glowing glass: `light.amount`, the Light category): [references/light-paint.md](references/light-paint.md).
 
 ## Gradient paint
 
@@ -261,12 +262,8 @@ When to use which:
 
 ## Canvas-hosted layer
 
-A host can mount the painting as a layer of a larger canvas (`createPaintEditorToolProvider` with
-`origin`). Then every position you pass or read back is a canvas coordinate, not a document
-pixel: stroke points, picks, bounds, guides, stencils, stickers and wet areas alike.
-`get_canvas_info` `bounds` says where the painting lies on that canvas; paint inside it. The
-host may leave out tools it owns (`new_canvas`, `set_canvas`, `extend_canvas`, exports, the
-view), so work with the tools you are given.
+When `get_canvas_info` has `bounds`, the painting is a layer of a larger canvas and every position
+is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hosted.md).
 
 ## Tool reference
 
@@ -375,7 +372,10 @@ view), so work with the tools you are given.
 | --- | --- |
 | `set_lighting` | Move the light for thick paint and metallic paper: `azimuth` (degrees clockwise from the top), `elevation` (5..90), `relief` (0..1). Nothing is repainted; not an undo step. Returns the lighting. Use a low elevation to show brushwork. |
 | `get_relief` | Read a layer's relief (`bounds`, `maxHeight` 0..255, null when flat) and the lighting. Changes nothing. |
-| `flatten_relief` | Remove a layer's relief and material, keeping its colour. One undo step. Returns whether anything was flattened. |
+| `flatten_relief` | Remove a layer's relief and material (rim and clarity too), keeping its colour and light. One undo step. Returns whether anything was flattened. |
+| `get_light` | Read a layer's light paint: `hasLight`, `bounds`, `peak` 0..255 and its `spill`. Changes nothing. |
+| `set_light_spill` | How far a layer's light spills (`radius` px, 0 off) and how strongly (`strength` 0..2). Not an undo step; nothing is repainted. |
+| `clear_light` | Take a layer's light away, keeping its colour. One undo step. |
 
 ### Stickers
 

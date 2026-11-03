@@ -1,7 +1,7 @@
 /**
  * Agent tools for thick paint and light: impasto strokes are painted with `paint_stroke` and an
- * impasto brush; these tools move the light, read and flatten a layer's relief, and switch instant
- * drying of wet strokes.
+ * impasto brush; these tools move the light, read and flatten a layer's relief, read, spill and
+ * clear light paint, and switch instant drying of wet strokes.
  */
 
 import type { PaintAgentTool } from './hosted';
@@ -14,6 +14,39 @@ const LAYER_ID = { type: 'string', description: 'Pixel layer id from list_layers
 
 export function createPaintThickTools(c: PaintEditorController): PaintAgentTool[] {
   return [
+    {
+      name: 'get_light',
+      title: 'Read a layer’s light paint',
+      description: 'Reads a layer’s light paint (laid by brushes with light.amount above 0): whether it has any, where it is (bounds, document pixels), its brightest value (peak 0..255) and its spill (radius px, strength). Changes nothing.',
+      inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
+      annotations: { title: 'Read a layer’s light paint', ...READ },
+      coordinates: { out: ['bounds'] },
+      handler: ({ layerId }) => c.lightOf(layerId),
+    },
+    {
+      name: 'set_light_spill',
+      title: 'Set how far a layer’s light spills',
+      description: 'Sets how far a layer’s light paint spills onto the paint and paper around it, in each stroke’s own colour: radius (px, 0 turns spill off, default 24) and strength (0..2, default 1). Nothing is repainted; saved with the document, not an undo step. Returns the layer’s spill.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          layerId: LAYER_ID,
+          radius: { type: 'number', minimum: 0, maximum: 512, description: 'How far the light reaches, px (0 turns spill off; default 24).' },
+          strength: { type: 'number', minimum: 0, maximum: 2, description: 'How strong the spill is, 0..2 (default 1).' },
+        },
+        additionalProperties: false,
+      },
+      annotations: { title: 'Set how far a layer’s light spills', ...SET },
+      handler: ({ layerId, radius, strength }) => c.setLightSpill(layerId, { radius, strength }),
+    },
+    {
+      name: 'clear_light',
+      title: 'Clear a layer’s light',
+      description: 'Takes a layer’s light paint away; its paint keeps its colour (and relief). One undo step. Returns whether anything was cleared.',
+      inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, additionalProperties: false },
+      annotations: { title: 'Clear a layer’s light', ...WRITE },
+      handler: ({ layerId }) => c.clearLight(layerId),
+    },
     {
       name: 'set_lighting',
       title: 'Move the light',

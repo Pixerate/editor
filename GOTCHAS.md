@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/paint-editor] Light Paint Moves With Paint Because Every Stroke Has a Grey Twin
+
+- **Issue / Symptom**: Laying light by each engine's coverage meant special code in every engine, and smudges, blenders, the knife, the Mixer Brush and pick-up brushes left light where it was laid, so a smeared neon line looked like lit paper, not paint.
+- **Root Cause**: Every engine moves colour its own way (coverage maps, the paint exchange, smudge tips, impasto drivers).
+- **Solution / Workaround**: On a layer with light (or with a brush that lays it), `PaintStrokeSession` runs a twin of the stroke over the light channel drawn as grey paint (`lightToShadow`: white, alpha = light). It uses the same engine, seed and points, the brush's light amount as its grey, a normal blend and RGB mixing (`lightTwinBrush`). Effect alpha and gradient opacity are kept in grey so light lands where colour does. `shadowToLight` turns the twin's result back into light (grey × alpha). Points are forwarded already filtered (the twin has no `inputFilter`, so stateful snappers run once). Wet and sticker strokes have no twin and refuse light above 0; stroke layers refuse it (their redraw doesn't carry light yet).
+
+### [core/paint-editor] Impasto Material A Is Clarity's Opacity, and 0 Means Solid
+
+- **Issue / Symptom**: Glassy thick paint needed a per-pixel clarity, and older documents already had material A = 255 everywhere impasto painted (A was written but never read).
+- **Root Cause**: The material map's B and A channels were unused, but A was not zero.
+- **Solution / Workaround**: B is the light rim (0..255) and A is opacity for clarity: `255 - clarity × 254`, so 255 is solid and 1 the clearest. A = 0 is "no impasto material" and also reads as solid. Clarity is drawn in `LightCache.glow` as alpha × (1 − clarity × facing), with facing from the height slope. Heights on one layer combine by maximum, so crossing beads fuse: paint one loop per layer for glassy crossings.
+
+### [core/paint-editor] Spill Is Computed From the Committed Painting, at a Reduced Resolution
+
+- **Issue / Symptom**: Spill (light blurred onto its surroundings) is a wide blur: redrawing it from the live stroke surface on every frame of a stroke would stall drawing on large canvases.
+- **Root Cause**: The stroke's live surface is a new object every frame, so any cache keyed by it misses every time.
+- **Solution / Workaround**: `lightLayers` takes spill from the document's committed layer surface, so it updates when a stroke ends. `computeSpill` downsamples by `radius / 6`, blurs three box passes (≈ Gaussian, σ ≈ radius / 2) in linear light, and upsamples bilinearly. `LightCache.spill` caches on (colour surface, light surface, radius, strength). Glow is per tile and does follow the live stroke. The spill pass is an extra Linear Dodge (Add) pixel layer inserted above its layer (`insertAfter`, id `‹layer›::light`), which PSD export writes as "‹layer› light".
+
 ### [core/video-editor] A Clip Effect's Path Is in Its Source's Pixels, Not the Frame's
 
 - **Issue / Symptom**: A path drawn on the preview, given to a clip effect as frame points, ran in the wrong place on a clip that was contained, moved, scaled or turned.

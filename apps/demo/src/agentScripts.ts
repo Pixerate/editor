@@ -1060,6 +1060,8 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
 ];
 
 /** A wavy line across the paint canvas, `n` samples with a pressure swell and times for velocity. */
+/** An ellipse of points (a closed loop) around (cx, cy). */
+const loop = (cx: number, cy: number, rx: number, ry: number, n = 72) => Array.from({ length: n + 1 }, (_, i) => ({ x: cx + Math.cos((i / n) * Math.PI * 2) * rx, y: cy + Math.sin((i / n) * Math.PI * 2) * ry, pressure: 0.8 }));
 const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
   Array.from({ length: n + 1 }, (_, i) => {
     const t = i / n;
@@ -1101,6 +1103,21 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { say: "Film grain and a vignette on their own effect layer.", tool: "paintfx__add_effect_layer", args: { effect: "vignette-grain", name: "Vignette" } },
       { say: "Checking what is applied.", tool: "paintfx__list_applied_effects", args: {} },
       { say: "Rendering a preview to check it.", tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-light",
+    prompt: "Paint glowing glass loops on dark paper",
+    steps: [
+      { say: "Light reads best on dark paper.", tool: "paint__set_paper", args: { preset: "smooth", color: "#0b1020" } },
+      { say: "A gradient that runs along each stroke: the loops shade from cyan to violet.", tool: "paint__set_paint", args: { paint: { type: "gradient", stops: [{ offset: 0, color: "#22d3ee" }, { offset: 0.5, color: "#a855f7" }, { offset: 1, color: "#f472b6" }], map: { by: "distance", length: 500, repeat: "mirror" } } } },
+      { say: "One loop per layer, so the glassy beads don't fuse where they cross.", tool: "paint__add_layer", args: { name: "Loop 1" }, as: "a" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.a.id, brushId: "glow-gel", brush: { tip: { size: 40 } }, points: loop(560, 300, 260, 140) }) },
+      { tool: "paint__add_layer", args: { name: "Loop 2" }, as: "b" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.b.id, brushId: "glow-gel", brush: { tip: { size: 40 } }, points: loop(660, 320, 220, 170) }) },
+      { say: "A wider, stronger spill on the top loop.", tool: "paint__set_light_spill", args: (ctx) => ({ layerId: ctx.results.b.id, radius: 48, strength: 1.4 }) },
+      { tool: "paint__get_light", args: (ctx) => ({ layerId: ctx.results.b.id }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },
   {

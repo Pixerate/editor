@@ -9,7 +9,7 @@
  */
 
 import type { RasterGroupLayer, RasterLayer, RasterPixelLayer } from '../raster/layers';
-import { emptySurface } from '../raster/surface';
+import { emptySurface, type TiledSurface } from '../raster/surface';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { RecordedStroke } from './strokes';
 import type { WetEvent } from './wet';
@@ -54,6 +54,8 @@ export interface PaintDocumentState {
    * stroke's brush, colour and points stay editable (`updateStroke`).
    */
   liveStrokes?: Readonly<Record<string, RecordedStroke[]>>;
+  /** Light paint: each layer's light channel, 0..255 per pixel in layer space (layers without light are missing). See `light.ts`. */
+  light?: Readonly<Record<string, TiledSurface>>;
   /** Thick paint: each layer's height and material channels (layers without relief are missing). */
   thick?: Readonly<Record<string, ThickChannels>>;
   /** Effect layers: the provider effect each one is drawn from (layers that are gone are ignored). */

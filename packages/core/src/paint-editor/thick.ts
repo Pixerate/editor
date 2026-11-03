@@ -51,7 +51,7 @@ export function normalizeLighting(raw: Partial<PaintLighting> = {}, base: PaintL
 export interface ThickChannels {
   /** Height 0..255 per pixel (1 channel). */
   height: TiledSurface;
-  /** Material per pixel (4 channels): R gloss, G metallic, B and A unused. */
+  /** Material per pixel (4 channels): R gloss, G metallic, B rim (light paint), A opacity for clarity (255 solid; 0 no material, read as solid). */
   material: TiledSurface;
 }
 
@@ -378,7 +378,7 @@ export class ThickStrokeDriver {
       // Scrape: the relief flattens towards its low points and is dragged along; the paint smears.
       st.smudge!.dab(this.medium, { x: d.x, y: d.y, radius: d.radius, opacity: k }, rect, tip);
       this.knifeHeight(st, d, rect, tip, k, im.drag);
-      this.paintMaterial(rect, tip, k * 0.6, im.gloss, im.metallic);
+      this.paintMaterial(rect, tip, k * 0.6, im.gloss, im.metallic, im.rim, im.clarity);
       return;
     }
     // Colour: the exchange mixes the brush paint with the wet paint it picks up (like oil).
@@ -449,7 +449,7 @@ export class ThickStrokeDriver {
         this.setH(lx, ly, Math.round(Math.max(0, Math.min(255, h))));
       }
     }
-    this.paintMaterial(rect, tip, k, im.gloss * (1 - 0.3 * im.thinner), im.metallic);
+    this.paintMaterial(rect, tip, k, im.gloss * (1 - 0.3 * im.thinner), im.metallic, im.rim, im.clarity);
   }
 
   /** The knife: flattens the relief under it and carries some of it along (a patch, like a smudge). */
@@ -482,7 +482,12 @@ export class ThickStrokeDriver {
     st.carried = pick;
   }
 
-  private paintMaterial(rect: RasterRect, tip: Float32Array, k: number, gloss: number, metal: number): void {
+  /**
+   * Material: R gloss, G metallic, B rim (light paint, 0..255), A opacity for light paint's clarity
+   * (255 solid .. 1 clearest; 0 is no material, read as solid).
+   */
+  private paintMaterial(rect: RasterRect, tip: Float32Array, k: number, gloss: number, metal: number, rim = 0, clarity = 0): void {
+    const opacity = 255 - clarity * 254;
     const off = this.init.target.offset;
     for (let yy = 0, p = 0; yy < rect.height; yy++) {
       for (let xx = 0; xx < rect.width; xx++, p++) {
@@ -494,7 +499,9 @@ export class ThickStrokeDriver {
         const i = ((ly & 255) * TILE + (lx & 255)) * 4;
         t[i] = Math.round(t[i] + (gloss * 255 - t[i]) * c);
         t[i + 1] = Math.round(t[i + 1] + (metal * 255 - t[i + 1]) * c);
-        t[i + 3] = 255;
+        t[i + 2] = Math.round(t[i + 2] + (rim * 255 - t[i + 2]) * c);
+        const a = t[i + 3] || 255;
+        t[i + 3] = Math.max(1, Math.round(a + (opacity - a) * c));
       }
     }
   }

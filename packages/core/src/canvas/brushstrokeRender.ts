@@ -11,7 +11,8 @@ import { resolveCanvasGradient } from './gradient.js';
 import { formatNumber, getShapeSvg, type ShapeSize } from './shapeGeometry.js';
 import { pathDataToPolyline, type BrushedPathShape, type CanvasBrushSwatchOptions, type CanvasBrush, type CanvasBrushPaint, type CanvasBrushPreset, type CanvasBrushstrokeImage } from './brushstroke.js';
 
-const DRY = BUILTIN_BRUSHES.filter((b) => isBrushstrokeBrush(b));
+// Light paint needs the paint editor's light channel (glow and spill), which canvas strokes don't have.
+const DRY = BUILTIN_BRUSHES.filter((b) => isBrushstrokeBrush(b) && b.light.amount === 0);
 
 export function listCanvasBrushes(): CanvasBrushPreset[] {
 	return DRY.map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size }));

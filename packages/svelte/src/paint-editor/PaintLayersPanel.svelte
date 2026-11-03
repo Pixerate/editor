@@ -14,6 +14,10 @@
     return untrack(() => controller.listLayers());
   });
   const active = $derived(layers.find((l) => l.active) ?? null);
+  const light = $derived.by(() => {
+    void editor.current;
+    return active?.type === 'pixel' ? untrack(() => controller.lightOf(active.id)) : null;
+  });
   let error = $state<string | null>(null);
   let renaming = $state<string | null>(null);
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
@@ -107,6 +111,23 @@
         {/each}
         <button type="button" aria-pressed={active.clipped} class={chip(active.clipped)} onclick={() => run(() => controller.updateLayer(active.id, { clipped: !active.clipped }))}>Clip</button>
       </div>
+      {#if light?.hasLight}
+        {@const id = active.id}
+        <div class="flex flex-col gap-1.5 border-t border-slate-800 pt-1.5" data-testid="layer-light">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-slate-300" title="This layer's paint gives off light">Light</span>
+            <button type="button" class={button} onclick={() => run(() => controller.clearLight(id))}>Clear light</button>
+          </div>
+          <label class="flex items-center gap-2" title="How far the light spills onto the paint and paper around it (0 turns it off)">
+            <span class="w-14 text-slate-400">Spill</span>
+            <input type="range" aria-label="Light spill radius" min="0" max="120" step="1" value={light.spill.radius} onchange={(e) => run(() => controller.setLightSpill(id, { radius: Number(e.currentTarget.value) }))} class="flex-1 accent-indigo-500" />
+          </label>
+          <label class="flex items-center gap-2">
+            <span class="w-14 text-slate-400">Strength</span>
+            <input type="range" aria-label="Light spill strength" min="0" max="2" step="0.05" value={light.spill.strength} onchange={(e) => run(() => controller.setLightSpill(id, { strength: Number(e.currentTarget.value) }))} class="flex-1 accent-indigo-500" />
+          </label>
+        </div>
+      {/if}
     </div>
   {/if}
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}
