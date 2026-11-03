@@ -22,6 +22,7 @@ export type PaintBrushLibraryToolProviderOptions = Omit<BrushLibraryToolProvider
 export function createPaintBrushLibraryToolProvider(controller: PaintEditorController, options: PaintBrushLibraryToolProviderOptions = {}): AgentToolProvider {
   return createBrushLibraryToolProvider(controller.brushLibrary, {
     profile: PAINT_PROFILE,
+    stickers: () => controller.stickers.provider,
     ...options,
     renderPreview: (brush, { width, height, color }) => {
       const t = renderBrushThumbnail(resolveBrush(brush), { paper: controller.getState().document.paper, width, height, color: color.toLowerCase() });

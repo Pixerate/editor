@@ -11,6 +11,9 @@ seed: its grain is a height map (peaks and valleys) that grain-responsive brushe
 is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y down. See
 `pixerate-agent-tools` for errors, namespacing and batching.
 
+- **Brush colours.** Choosing a brush with a default colour (highlighter yellow, ballpoint
+  blue, chalk light or dark for the colour scheme) makes it the paint colour, unless the colour is
+  locked (`set_color` `locked`). Set the colour after choosing the brush, or lock it first.
 - **Brushes** come from the shared brush library (`pixerate-brushes`: `list_brush_presets`,
   `create_brush`, `preview_brush`…) and are made of facets: a tip (size, hardness, spacing, angle,
   roundness, opacity, flow, blend), dynamics (pressure, tilt, velocity, jitter, a **rotation**
@@ -292,7 +295,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | Tool | Use |
 | --- | --- |
 | `mix_colors` | Predict a mix: `colors` with `weight` parts (and optional tinting `strength`), `model` `pigment` (default, Kubelka-Munk: what pigment blends, the Mixer Brush, pigment blending tools and the pad do) or `rgb` (what normal blending and rgb mixing do). Returns `mixed` by the model plus `pigment` and `rgbLerp` for comparison. Changes nothing. Use it to choose stroke colours. |
-| `set_color` | Set the default paint `color` (and `secondaryColor`); back to one colour after gradient paint or effect paint. |
+| `set_color` | Set the default paint `color` (and `secondaryColor`); back to one colour after gradient paint or effect paint. `locked: true` keeps it when you choose a brush with a default colour (by default choosing the highlighter makes your colour its yellow). Returns both colours and `locked`. |
 | `set_paint` | Set the paint: one colour, or gradient paint (`stops`, `space`, `map`, `softness`; see Gradient paint). Ends effect paint. Errors say what is wrong (unsorted stops, a bad mapping). Returns `paint`, `color`, `secondaryColor`. |
 | `pick_color` | Read the colour at `x`, `y`: of the painting with its paper, or of one layer (with alpha). |
 | `get_mixer_brush` | Read what the brush carries: the Mixer Brush `reservoir` and `amount` left, and `pickup` (paint picked up, kept by dirty brushes). |

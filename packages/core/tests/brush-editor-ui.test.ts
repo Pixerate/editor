@@ -38,6 +38,17 @@ describe('brushEditorSections', () => {
   });
 });
 
+describe('colour controls', () => {
+  it('shows a light / dark default and palette pairs, and a gradient default as such', () => {
+    expect(control(preset('chalk'), 'colour.default')).toMatchObject({ kind: 'colour', value: '#475569', dark: '#f8fafc', gradient: false });
+    expect(control(preset('chalk'), 'colour.palette')).toMatchObject({ value: [{ light: '#475569', dark: '#f8fafc' }, '#fca5a5', '#fde68a', '#93c5fd'] });
+    expect(control(preset('highlighter'), 'colour.default')).toMatchObject({ value: '#fff200', dark: null });
+    expect(control(preset('gradient-round'), 'colour.default')).toMatchObject({ value: null, gradient: true });
+    const pairs = setBrushEditorValue(preset('ballpoint'), 'colour.default', { light: '#1e3a8a', dark: '#93c5fd' }).brush;
+    expect(pairs.colour!.default).toEqual({ light: '#1e3a8a', dark: '#93c5fd' });
+  });
+});
+
 describe('setBrushEditorValue', () => {
   it('sets a value and normalises the brush', () => {
     const r = setBrushEditorValue(preset('highlighter'), 'tip.size', 12);

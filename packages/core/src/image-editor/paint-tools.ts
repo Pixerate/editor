@@ -319,10 +319,19 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
     name: 'set_brush_preset',
     title: 'Paint with a brush preset',
     description:
-      'Chooses a brush from the brush library (a built-in preset or a saved brush; list_brush_presets lists the ones the image editor can paint, describe_brush reads one) for the brush tools: it sets the paint tool the brush needs (brush, mixer for a Mixer Brush, eraser), its brush settings (size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressure, blend), its Mixer Brush settings and, for a brush with its own gradient, the paint. paint_stroke with that tool then paints with it. Brushes the image editor cannot paint (wet or thick paint, particles, stickers, light, the wet tools) are refused with the reason. View state, not an undo step. Returns the id, name, tool, brush, mixer, paint and warnings (settings it paints without, such as paper grain).',
-    inputSchema: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 64, description: 'Brush id from list_brush_presets (e.g. "pencil-hb", "marker", "mixer-brush", "eraser-soft").' } }, required: ['id'], additionalProperties: false },
+      'Chooses a brush from the brush library (a built-in preset or a saved brush; list_brush_presets lists the ones the image editor can paint, describe_brush reads one) for the brush tools: it sets the paint tool the brush needs (brush, mixer for a Mixer Brush, eraser), its brush settings (size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressure, blend), its Mixer Brush settings, its default colour as the foreground (unless keepColour) and, for a brush with its own gradient, the paint. paint_stroke with that tool then paints with it. Brushes the image editor cannot paint (wet or thick paint, particles, stickers, light, the wet tools) are refused with the reason. View state, not an undo step. Returns the id, name, tool, brush, mixer, paint, color and warnings (settings it paints without, such as paper grain).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', minLength: 1, maxLength: 64, description: 'Brush id from list_brush_presets (e.g. "pencil-hb", "marker", "highlighter", "mixer-brush", "eraser-soft").' },
+        keepColour: { type: 'boolean', description: "Keep the foreground colour instead of taking the brush's default colour (default false: a brush with a default colour, such as the highlighter's yellow, sets it)." },
+        colorScheme: { type: 'string', enum: ['light', 'dark'], description: 'Which side of a light / dark default colour to take (default light).' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
     annotations: { title: 'Paint with a brush preset', ...SET },
-    handler: async ({ id }) => controller.setBrushPreset(id as string),
+    handler: async ({ id, keepColour, colorScheme }) => controller.setBrushPreset(id as string, { keepColour: keepColour as boolean | undefined, colorScheme: colorScheme as 'light' | 'dark' | undefined }),
   };
   return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor, sampleGradient, setBrushPreset];
 }

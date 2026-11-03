@@ -16,6 +16,8 @@ import { bytesToBase64 } from '../raster/png';
 import { createStickerTools } from '../stickers/tools';
 import { createPaintStickerTools } from './sticker-tools';
 import { MAX_CANVAS_SIDE } from './document';
+import { normalizePaintBrush } from './brushes';
+import { brushStickerRefs } from './stamp-tip';
 import { PaintEditorError, type PaintEditorController } from './controller';
 import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, type BrushPatch, type UnsettableBrushFacet } from '../brushes/patch';
 import type { PenPoint } from './engine';
@@ -496,18 +498,24 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'set_color',
     title: 'Set the paint colour',
-    description: 'Sets the paint colour (and optionally the second colour) that strokes and fills use by default. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). Editor state, not an undo step. Returns both colours.',
+    description: "Sets the paint colour (and optionally the second colour) that strokes and fills use by default, and whether it is locked. Choosing a brush with a default colour (set_brush id, e.g. the highlighter's yellow) makes that the paint colour unless the colour is locked; a brush with colour.own always paints its own. Setting color goes back to one colour from gradient paint (set_paint) or effect paint (set_effect_paint). Editor state, not an undo step. Returns both colours and locked.",
     inputSchema: {
       type: 'object',
-      properties: { color: { ...COLOR, description: 'Paint colour #rrggbb.' }, secondaryColor: { ...COLOR, description: 'Second colour #rrggbb.' } },
+      properties: {
+        color: { ...COLOR, description: 'Paint colour #rrggbb.' },
+        secondaryColor: { ...COLOR, description: 'Second colour #rrggbb.' },
+        locked: { type: 'boolean', description: "Lock the paint colour: brushes chosen later keep it instead of taking their default colour (default: unchanged; the editor starts unlocked)." },
+      },
       additionalProperties: false,
     },
     annotations: { title: 'Set the paint colour', ...SET },
-    handler: ({ color, secondaryColor }) => {
+    handler: ({ color, secondaryColor, locked }) => {
+      if (color === undefined && secondaryColor === undefined && locked === undefined) throw new Error('Pass color, secondaryColor or locked.');
       if (color !== undefined) c.setColor(color);
       if (secondaryColor !== undefined) c.setSecondaryColor(secondaryColor);
+      if (locked !== undefined) c.setColorLocked(locked as boolean);
       const s = c.getState();
-      return { color: s.color, secondaryColor: s.secondaryColor };
+      return { color: s.color, secondaryColor: s.secondaryColor, locked: s.colorLocked };
     },
   });
 
@@ -601,7 +609,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       // Sticker brushes: load the stickers' art first, so the spray draws every one.
       const base = a.brushId ? c.getBrush(a.brushId as string) : c.getState().brush;
       const brush = a.brush ? c.brushChanges(a.brush as BrushPatch, a.brushId as string | undefined) : undefined;
-      if ((brush?.engine ?? base?.engine) === 'sticker') await c.prepareStickers(brush?.sticker?.stamps ?? base?.sticker.stamps ?? []);
+      // Sticker sprays, stamp tips and textured dots of library stickers: load their art first.
+      if (base) {
+        const refs = brushStickerRefs(normalizePaintBrush({ ...(brush ?? {}), id: base.id }, base));
+        if (refs.length) await c.prepareStickers(refs);
+      }
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;

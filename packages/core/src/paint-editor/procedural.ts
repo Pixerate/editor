@@ -30,7 +30,8 @@ import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
-import { stampCoverage } from './stickers';
+import { stampSampler } from './stamp-tip';
+import type { StickerArtLookup } from './sticker-art';
 import type { BristleSettings, ParticleSettings, StampKind } from './mark-settings';
 
 export {
@@ -62,6 +63,8 @@ export interface ProceduralStrokeOptions {
   paint?: PaintGradientSource | null;
   /** Effect paint: each pixel of a mark takes its colour (and alpha) from these canvas-sized pixels. */
   effect?: EffectPaintPixels | null;
+  /** Loaded sticker art, for textured dots of stickers from the sticker library. */
+  stampArt?: StickerArtLookup;
 }
 
 /** What a coverage-building stroke engine provides to the stroke session. */
@@ -174,8 +177,11 @@ abstract class MarkStroke implements CoverageStroke {
    * Stamps a textured mark: `kind` from the sticker stamps over a square of half-size `r`, turned
    * `rotation` radians clockwise, with flow `alpha` towards `opacity`. Small marks are supersampled.
    */
-  protected stamp(x: number, y: number, r: number, kind: StampKind, rotation: number, seed: number, alpha: number, opacity: number, pressure: number, rects: RasterRect[]): void {
+  protected stamp(x: number, y: number, r: number, kind: string, rotation: number, seed: number, alpha: number, opacity: number, pressure: number, rects: RasterRect[]): void {
     if (!(r > 0.05) || !(alpha > 0)) return;
+    // An editor stamp, or a library sticker's loaded art (its alpha); round while the art is not loaded.
+    const sample = stampSampler(kind, this.options.stampArt);
+    if (!sample) return this.mark(x, y, r, alpha, opacity, pressure, rects);
     const reach = Math.max(0.5, r) * Math.SQRT2 + 1;
     const rect: RasterRect = { x: Math.floor(x - reach), y: Math.floor(y - reach), width: 0, height: 0 };
     rect.width = Math.ceil(x + reach) - rect.x;
@@ -195,7 +201,7 @@ abstract class MarkStroke implements CoverageStroke {
             const dx = rect.x + xx + (sx + 0.5) / ss - x;
             const dy = rect.y + yy + (sy + 0.5) / ss - y;
             // Into the stamp's square: undo the turn (clockwise on screen, y down).
-            sum += stampCoverage(kind, (dx * c + dy * s) * inv, (dy * c - dx * s) * inv, seed);
+            sum += sample((dx * c + dy * s) * inv, (dy * c - dx * s) * inv, seed);
           }
         }
         vals[k] = (sum / (ss * ss)) * a;

@@ -31,17 +31,20 @@ describe('host profiles', () => {
   // The brushes canvas and vector strokes used before their hand-written filters were replaced by
   // these profiles (canvas: dry dab brushes without light; vector: dry dab brushes). The profiles
   // must keep listing exactly these presets.
+  // Since then the new dry and ink presets were added, and both hosts render them; the spray can's
+  // scatter marks are the paint editor's alone.
+  const ADDED = ['ballpoint', 'gel-pen', 'fineliner', 'crayon', 'chalk'];
   const CANVAS_BEFORE = ['pencil-hb', 'pencil-6b', 'soft-pastel', 'oil-pastel', 'charcoal-stick', 'vine-charcoal', 'airbrush', 'marker', 'ink-pen', 'brush-pen', 'dirty-round', 'multicolor-flat', 'palette-dabber', 'gradient-round', 'pressure-ombre', 'rainbow-marker'];
   const VECTOR_BEFORE = [...CANVAS_BEFORE, 'neon-marker', 'light-airbrush', 'highlighter'];
 
   it('lets canvas use exactly the brushes its hand-written filter allowed', () => {
-    expect(ids(listPresets(CANVAS_PROFILE))).toEqual(CANVAS_BEFORE);
-    expect(ids(listCanvasBrushes())).toEqual(CANVAS_BEFORE);
+    expect(ids(listPresets(CANVAS_PROFILE))).toEqual([...CANVAS_BEFORE, ...ADDED]);
+    expect(ids(listCanvasBrushes())).toEqual([...CANVAS_BEFORE, ...ADDED]);
   });
 
   it('lets vector use exactly the brushes its hand-written filter allowed', () => {
-    expect(ids(listPresets(VECTOR_PROFILE))).toEqual(VECTOR_BEFORE);
-    expect(ids(vectorBrushstrokeBrushes())).toEqual(VECTOR_BEFORE);
+    expect(ids(listPresets(VECTOR_PROFILE))).toEqual([...VECTOR_BEFORE, ...ADDED]);
+    expect(ids(vectorBrushstrokeBrushes())).toEqual([...VECTOR_BEFORE, ...ADDED]);
   });
 
   it('lets the paint editor use every preset', () => {

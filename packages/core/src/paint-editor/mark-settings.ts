@@ -117,7 +117,7 @@ export interface ParticleSettings {
   /** Wave: how far out of step the particles' waves are (0: all in step; 1: random phases). */
   wavePhaseJitter: number;
   /** Dots and beads: up to four sticker stamps drawn instead of round marks (empty: round). */
-  dotTextures: StampKind[];
+  dotTextures: Array<StampKind | `${string}:${string}`>;
   dotTextureOrder: DotTextureOrder;
   dotRotation: DotRotation;
 }
@@ -147,7 +147,14 @@ export const DEFAULT_PARTICLE: Readonly<ParticleSettings> = {
 
 
 export function normalizeParticle(raw: Partial<ParticleSettings> = {}, base: ParticleSettings = DEFAULT_PARTICLE): ParticleSettings {
-  const textures = Array.isArray(raw.dotTextures) ? raw.dotTextures.filter((t): t is StampKind => STAMP_KINDS.includes(t as StampKind)).slice(0, MAX_DOT_TEXTURES) : [...(base.dotTextures ?? [])];
+  // An editor stamp (bare, or `editor:<stamp>`), or any sticker ref `provider:id` from the sticker library.
+  const texture = (t: unknown): ParticleSettings['dotTextures'][number] | null => {
+    if (typeof t !== 'string') return null;
+    const bare = t.startsWith('editor:') ? t.slice(7) : t;
+    if (STAMP_KINDS.includes(bare as StampKind)) return bare as StampKind;
+    return /^[^:\s]+:\S+$/.test(t) && t.length <= 200 ? (t as `${string}:${string}`) : null;
+  };
+  const textures = Array.isArray(raw.dotTextures) ? raw.dotTextures.map(texture).filter((t): t is NonNullable<typeof t> => t !== null).slice(0, MAX_DOT_TEXTURES) : [...(base.dotTextures ?? [])];
   return {
     kind: oneOf(raw.kind, PARTICLE_KINDS, base.kind),
     render: oneOf(raw.render, PARTICLE_RENDERS, base.render),

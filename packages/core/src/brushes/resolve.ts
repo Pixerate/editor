@@ -27,21 +27,28 @@ export interface BrushField {
   map?: { toEngine(v: unknown): unknown; toFacet(v: unknown): unknown };
   /** Read only on these tip shapes. */
   shapes?: readonly string[];
+  /** Read only with these marks kinds (default any). */
+  marks?: readonly string[];
 }
 
 /** `dirty` is the Mixer Brush's `!cleanEachStroke`. */
 const NOT = { toEngine: (v: unknown) => !v, toFacet: (v: unknown) => !v };
-/** Particles lay the editor's own stamps: refs (`editor:star`) in the facet, bare stamps (`star`) in the engine. */
+/** Textured particle dots: refs in the facet (`editor:star`, `host:id`); the editor's stamps are bare in the engine (`star`), other stickers stay refs. */
 const EDITOR_STAMPS = {
   toEngine: (v: unknown) => (v as string[]).flatMap((ref) => {
     try {
       const stamp = editorStampOf(ref);
-      return stamp ? [stamp] : [];
+      return stamp ? [stamp] : ref.includes(':') ? [ref] : [];
     } catch {
       return [];
     }
   }),
-  toFacet: (v: unknown) => (v as string[]).map((stamp) => `editor:${stamp}`),
+  toFacet: (v: unknown) => (v as string[]).map((stamp) => (stamp.includes(':') ? stamp : `editor:${stamp}`)),
+};
+/** A continuous stamp tip lays one sticker: the first of `tip.stamps`. */
+const ONE_STAMP = {
+  toEngine: (v: unknown) => (v as string[])[0] ?? null,
+  toFacet: (v: unknown) => (v ? [v as string] : undefined),
 };
 
 const f = (facet: string, engine: string, engines: readonly PaintBrushEngine[] = ALL, extra: Partial<BrushField> = {}): BrushField => ({ facet, engine, engines, ...extra });
@@ -88,6 +95,9 @@ export const BRUSH_FIELDS: readonly BrushField[] = [
   f('tip.stamps', 'particle.dotTextures', ['particle'], { shapes: ['stamp'], map: EDITOR_STAMPS }),
   f('motion.waveSpeed', 'particle.waveSpeed', ['particle']),
   f('tip.stamps', 'sticker.stamps', ['sticker'], { shapes: ['stamp'] }),
+  f('tip.stamps', 'stamp', ['dab'], { shapes: ['stamp'], map: ONE_STAMP }),
+  f('marks.density', 'spray.density', ['dab'], { marks: ['scatter'] }),
+  f('marks.size', 'spray.size', ['dab'], { marks: ['scatter'] }),
   ...each('marks', 'sticker', ['density', 'sizeJitter', 'rotationJitter', 'scatter'], ['sticker']),
   f('marks.colourJitter', 'sticker.colorJitter', ['sticker']),
   ...each('tip.bristle', 'bristle', ['count', 'stiffness', 'splay', 'thickness', 'load', 'jitter'], ['bristle']),
@@ -140,6 +150,8 @@ const VARIETY_CATEGORY: Readonly<Record<string, PaintBrushCategory>> = {
   pastel: 'pastel',
   'soft-pastel': 'pastel',
   'oil-pastel': 'pastel',
+  crayon: 'pastel',
+  chalk: 'pastel',
   charcoal: 'charcoal',
   airbrush: 'airbrush',
   marker: 'marker',
@@ -192,10 +204,12 @@ export function resolveBrush(brush: Brush, options: ResolveBrushOptions = {}): R
   const engine = resolveEngine(brush);
   const input: Record<string, unknown> = { id: brush.id, name: brush.name, category: resolveCategory(brush, engine), engine };
   for (const field of BRUSH_FIELDS) {
-    if (!field.engines.includes(engine) || (field.shapes && !field.shapes.includes(brush.tip.shape))) continue;
+    if (!field.engines.includes(engine) || (field.shapes && !field.shapes.includes(brush.tip.shape)) || (field.marks && !field.marks.includes(brush.marks?.kind ?? 'continuous'))) continue;
     const v = getPath(brush, field.facet);
     if (v !== undefined) setPath(input, field.engine, field.map ? field.map.toEngine(v) : copy(v));
   }
+  // Spray marks: the dab engine with droplets (their settings come from the fields above).
+  if (engine === 'dab' && brush.marks?.kind === 'scatter') input.spray = { ...((input.spray as object | undefined) ?? {}) };
   if (engine === 'wet') {
     setPath(input, 'wet.tool', brush.kind === 'tool' ? WET_TOOL_OF[brush.tool!] : 'paint');
     const medium = resolveWetMedium(brush);

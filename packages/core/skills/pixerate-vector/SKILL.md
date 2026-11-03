@@ -373,7 +373,7 @@ contents whole while you work, without losing the mask.
 
 | Command | Use it to |
 | --- | --- |
-| `vector.listBrushes` | List the brushes a brushstroke can use: the dry presets (pencils, pastels, charcoal, markers, inks), then saved brushes from the brush library the vector profile admits, with their sizes and `builtin`. Brushes it refuses (wet, thick, particles, stickers, tools) are refused by `vector.addBrushstroke` with the reason. A saved brush is kept in the layer, so the document renders without the library. |
+| `vector.listBrushes` | List the brushes a brushstroke can use: the dry presets (pencils, pastels, charcoal, crayon, chalk, markers, inks, ballpoint, gel pen, fineliner), then saved brushes from the brush library the vector profile admits, with their sizes and `builtin`. Brushes it refuses (wet, thick, particles, stickers, tools) are refused by `vector.addBrushstroke` with the reason. A saved brush is kept in the layer, so the document renders without the library. |
 | `vector.addBrushstroke` | Paint paths with a brush along their outline (`brushId`, `size`, `pressure` profile such as [0.2, 1, 0.2] for a taper, `color`): sketchy, hand-drawn or inked lines that stay editable. Pass a `seed` (any integer) so the brush gets its character, the seeded jitter and paper grain that make pencil, pastel and charcoal look real; `paper` picks the grain (`{ pattern, seed, scale, depth }`) or `null` turns it off. Returns the stroke stacks. |
 | `vector.setBrushstroke` | Change brushstroke layer `index` of path `id`: brush, size, pressure, colour, opacity, `seed` (a new seed is a new take on the same stroke; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default sanded paper). Remove it with `vector.removeStroke`. |
 

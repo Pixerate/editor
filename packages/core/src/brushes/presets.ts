@@ -289,6 +289,7 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     tip: { shape: 'round', size: 10, hardness: 0.9, spacing: 0.04 },
     dynamics: { smoothing: 0.45, pressureSize: false },
     light: { amount: 1 },
+    colour: { palette: ['#f0abfc', '#22d3ee', '#a3e635', '#fb7185', '#fde047'] },
   },
   {
     id: 'light-airbrush', name: 'Light airbrush', kind: 'mark', medium: 'spray', variety: 'airbrush',
@@ -432,5 +433,52 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     tip: { shape: 'round', size: 40, hardness: 0.5, spacing: 0.12 },
     dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
     behaviour: { strength: 0.7 },
+  },
+  // --- Pens, crayon, chalk and the spray can -------------------------------------------
+  // A ballpoint: a fine, hard, even line that lightens with a light touch.
+  {
+    id: 'ballpoint', name: 'Ballpoint', kind: 'mark', medium: 'ink', variety: 'ballpoint',
+    tip: { shape: 'round', size: 3, hardness: 0.95, spacing: 0.05, opacity: 0.9 },
+    dynamics: { smoothing: 0.35, pressureSmoothing: 0.3, pressureOpacity: true, minSize: 0.7, opacityJitter: 0.08 },
+    behaviour: { grain: 0.15 },
+    colour: { default: '#1e3a8a', palette: ['#1e3a8a', '#111827', '#b91c1c', '#166534'] },
+  },
+  // A gel pen: an even, opaque, saturated line.
+  {
+    id: 'gel-pen', name: 'Gel pen', kind: 'mark', medium: 'ink', variety: 'gel',
+    tip: { shape: 'round', size: 4, spacing: 0.04 },
+    dynamics: { smoothing: 0.3, pressureSmoothing: 0.3, minSize: 0.8 },
+    colour: { default: '#111827', palette: ['#111827', '#7c3aed', '#db2777', '#0891b2', '#16a34a', '#f59e0b'] },
+  },
+  // A fineliner: one width, whatever the pressure.
+  {
+    id: 'fineliner', name: 'Fineliner', kind: 'mark', medium: 'ink', variety: 'fineliner',
+    tip: { shape: 'round', size: 2, spacing: 0.05 },
+    dynamics: { smoothing: 0.4, pressureSize: false },
+    colour: { default: '#111827' },
+  },
+  // A wax crayon: waxy, catching the paper's peaks, a little uneven.
+  {
+    id: 'crayon', name: 'Crayon', kind: 'mark', medium: 'dry', variety: 'crayon',
+    tip: { shape: 'round', size: 14, hardness: 0.7, spacing: 0.06, opacity: 0.9, flow: 0.85 },
+    dynamics: { smoothing: 0.2, minSize: 0.6, tiltSize: 0.6, sizeJitter: 0.1, opacityJitter: 0.1 },
+    behaviour: { grain: 0.9 },
+    colour: { default: '#dc2626', palette: ['#dc2626', '#f59e0b', '#facc15', '#16a34a', '#2563eb', '#7c3aed'] },
+  },
+  // Chalk: broad, powdery and grainy. Its default colour is light on dark paper and dark on light.
+  {
+    id: 'chalk', name: 'Chalk', kind: 'mark', medium: 'dry', variety: 'chalk',
+    tip: { shape: 'round', size: 18, hardness: 0.6, spacing: 0.05, opacity: 0.95, flow: 0.8 },
+    dynamics: { smoothing: 0.2, minSize: 0.5, tiltSize: 0.8, sizeJitter: 0.12, scatter: 0.05 },
+    behaviour: { grain: 1 },
+    colour: { default: { light: '#475569', dark: '#f8fafc' }, palette: [{ light: '#475569', dark: '#f8fafc' }, '#fca5a5', '#fde68a', '#93c5fd'] },
+  },
+  // A spray can: a mist of hard droplets, denser the slower it passes.
+  {
+    id: 'spray-can', name: 'Spray can', kind: 'mark', medium: 'spray', variety: 'spraycan',
+    tip: { shape: 'round', size: 60, hardness: 0.9, spacing: 0.08, opacity: 0.9 },
+    marks: { kind: 'scatter', density: 0.7, size: 0.04 },
+    dynamics: { smoothing: 0.2, pressureSize: false, pressureOpacity: true },
+    colour: { palette: ['#ef4444', '#f97316', '#facc15', '#22c55e', '#3b82f6', '#a855f7', '#111827', '#f8fafc'] },
   },
 ];

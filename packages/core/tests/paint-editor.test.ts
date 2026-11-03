@@ -671,7 +671,7 @@ describe('paint editor agent tools', () => {
     expect(ok(await r.callTool('load_mixer_brush', { color: '#ff0000' }))).toEqual({ reservoir: '#ff0000', amount: 1, pickup: null });
     expect(ok(await r.callTool('get_mixer_brush', {})).reservoir).toBe('#ff0000');
     expect(ok(await r.callTool('clean_mixer_brush', { emptyReservoir: true })).reservoir).toBeNull();
-    expect(ok(await r.callTool('set_color', { color: '#112233' }))).toEqual({ color: '#112233', secondaryColor: '#ffffff' });
+    expect(ok(await r.callTool('set_color', { color: '#112233' }))).toEqual({ color: '#112233', secondaryColor: '#ffffff', locked: false });
     expect(ok(await r.callTool('pick_color', { x: 1, y: 1 })).alpha).toBe(1);
     expect(ok(await r.callTool('mix_colors', { colors: [{ color: '#0000ff', weight: 1 }, { color: '#ffff00', weight: 1 }] })).model).toBe('kubelka-munk');
   });

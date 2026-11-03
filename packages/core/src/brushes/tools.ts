@@ -7,6 +7,8 @@
  */
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
+import { describeStickerRef } from '../stickers/tools';
+import type { StickerProvider } from '../stickers/types';
 import type { JsonSchema } from '../tools/schema';
 import { BrushLibraryError, closest, type BrushLibrary, type BrushLibraryEntry } from './library';
 import { normalizeBrushSpec } from './normalize';
@@ -35,6 +37,12 @@ export interface BrushLibraryToolProviderOptions {
   renderPreview?: BrushPreviewRenderer;
   /** Only the read tools (list, describe, export, check, preview). */
   readOnly?: boolean;
+  /**
+   * The host's sticker library (an editor's `StickersSlot` provider), read on every call: stamp
+   * tips naming a sticker it can't load are refused with the reason and the closest ones. Without
+   * it, sticker refs are not checked.
+   */
+  stickers?: () => StickerProvider;
   /** Provider id (default `brushes`), also the tool namespace unless `namespace` is set. */
   id?: string;
   namespace?: string;
@@ -96,6 +104,22 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     const ids = (await library.list()).map((e) => e.brush.id);
     throw new BrushLibraryError('unknown_brush', `No brush "${id}". ${closest(id, ids)}list_brush_presets lists them.`);
   };
+  /** `checkBrush`, plus a stamp tip's stickers checked against the host's sticker library. */
+  const checkFor = async (brush: Brush, p: BrushHostProfile): Promise<BrushCheck> => {
+    const check = checkBrush(brush, p);
+    const provider = options.stickers?.();
+    if (!provider || brush.tip.shape !== 'stamp') return check;
+    const issues = [...check.issues];
+    for (const ref of brush.tip.stamps ?? []) {
+      if (ref.startsWith('editor:')) continue;
+      try {
+        await describeStickerRef(provider, ref);
+      } catch (e) {
+        issues.push({ facet: 'tip.stamps', severity: 'error', reason: `${p.name} can't load sticker "${ref}": ${(e as Error).message}`, fix: 'Use a ref from find_stickers, or an editor stamp (editor:star, editor:dot…).' });
+      }
+    }
+    return { ok: !issues.some((i) => i.severity === 'error'), issues };
+  };
   /** Normalises and checks a brush for this host, then stores it. */
   const store = async (raw: Record<string, unknown>, overwrite: boolean) => {
     const problems: string[] = [];
@@ -105,7 +129,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     } catch (e) {
       throw new BrushLibraryError('invalid', (e as Error).message);
     }
-    const check = checkBrush(brush, profile);
+    const check = await checkFor(brush, profile);
     if (!check.ok) throw new BrushLibraryError('invalid', refusal(check, profile));
     const saved = await library.save(brush, { overwrite });
     return { ...saved, problems, check };
@@ -150,7 +174,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     handler: async ({ id }) => {
       const e = await entry(id as string);
       const engine = resolveEngine(e.brush);
-      return { brush: e.brush, builtin: e.builtin, engine, category: resolveCategory(e.brush, engine), check: checkBrush(e.brush, profile) };
+      return { brush: e.brush, builtin: e.builtin, engine, category: resolveCategory(e.brush, engine), check: await checkFor(e.brush, profile) };
     },
   };
 
@@ -181,7 +205,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
           throw new BrushLibraryError('invalid', (e as Error).message);
         }
       }
-      const result = checkBrush(b, p);
+      const result = await checkFor(b, p);
       return { host: p.id, ...result, ...(problems.length ? { problems } : {}), ...(!result.ok ? { degraded: degrade(b, p) } : {}) };
     },
   };

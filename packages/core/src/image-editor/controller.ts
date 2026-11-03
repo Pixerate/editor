@@ -4717,21 +4717,23 @@ export class ImageEditorController {
 
   /**
    * Paints with a brush from the brush library: sets the paint tool it needs (brush, Mixer Brush
-   * or eraser), its brush and mixer settings and, for a brush with its own gradient, the paint.
-   * View state, no undo. Throws for an unknown id (with the closest ones) or a brush the image
-   * editor can't paint (wet, thick, particles, stickers, light), saying why.
+   * or eraser), its brush and mixer settings and, for a brush with its own gradient, the paint. A
+   * solid or light / dark default colour (resolved for `colorScheme`, default light) becomes the
+   * foreground unless `keepColour`. View state, no undo. Throws for an unknown id (with the
+   * closest ones) or a brush the image editor can't paint (wet, thick, particles, stickers,
+   * light), saying why.
    */
-  public async setBrushPreset(id: string): Promise<ImageBrushPreset> {
+  public async setBrushPreset(id: string, options: { keepColour?: boolean; colorScheme?: 'light' | 'dark' } = {}): Promise<ImageBrushPreset> {
     const entry = await this.brushLibrary.get(id);
     const ids = (await this.listBrushPresets()).map((e) => e.brush.id);
     if (!entry) throw new LayerOperationError(`Unknown brush "${id}". ${closest(id, ids)}list_brush_presets lists the brushes the image editor can paint with.`);
     let preset: ImageBrushPreset;
     try {
-      preset = imageBrushPreset(entry.brush, ids);
+      preset = imageBrushPreset(entry.brush, ids, options.colorScheme ?? 'light');
     } catch (e) {
       throw new LayerOperationError((e as Error).message);
     }
-    this.setPaintOptions({ brush: preset.brush, ...(preset.mixer ? { mixer: preset.mixer } : {}), ...(preset.paint ? { paint: preset.paint } : {}) });
+    this.setPaintOptions({ brush: preset.brush, ...(preset.mixer ? { mixer: preset.mixer } : {}), ...(preset.color && !options.keepColour && !preset.paint ? { foreground: preset.color } : {}), ...(preset.paint ? { paint: preset.paint } : {}) });
     this.state.paint = { ...this.state.paint, brushPreset: preset.id };
     if (this.state.activeTool !== preset.tool) this.setTool(preset.tool);
     else this.notify();

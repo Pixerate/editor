@@ -147,7 +147,7 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
   if (rawMarks !== undefined) {
     const k = isObject(rawMarks) ? rawMarks.kind : undefined;
     const schema = BRUSH_FACET_SCHEMAS.marks[k as keyof typeof BRUSH_FACET_SCHEMAS.marks];
-    if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, particles or objects. marks dropped.`);
+    if (!schema) problems.push(`marks.kind ${JSON.stringify(k)} is not valid; use continuous, scatter, particles or objects. marks dropped.`);
     else brush.marks = readObject(rawMarks, schema, 'brush.marks', problems) as unknown as Brush['marks'];
   }
 
@@ -188,6 +188,15 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
       delete brush.marks;
     }
   }
+  if (brush.marks?.kind === 'scatter') {
+    // Spray droplets are dabs of a dry round or stamp tip: not bristles, wet or thick paint, or a brush that picks paint up.
+    const surface = brush.behaviour?.surface;
+    const why = brush.tip.shape === 'bristle' ? 'bristle tips lay their own marks' : surface === 'wet' || surface === 'thick' ? `${surface} paint is not sprayed` : brush.behaviour?.exchange ? 'a spray does not pick paint up' : null;
+    if (why) {
+      drop('marks', why);
+      delete brush.marks;
+    }
+  }
   if (brush.marks?.kind === 'objects' && brush.tip.shape !== 'stamp') {
     problems.push('marks objects lay stamps: tip.shape set to stamp.');
     brush.tip.shape = 'stamp';
@@ -201,16 +210,9 @@ export function normalizeBrushSpec(raw: unknown, problems: string[] = []): Brush
     delete brush.tip.stamps;
   }
   if (brush.tip.stamps) {
-    // Stamps are sticker refs: a bare editor stamp becomes `editor:<stamp>`; particles lay only the editor's own.
-    const particles = brush.marks?.kind === 'particles';
-    const stamps = brush.tip.stamps.flatMap((s) => {
-      const ref = normalizeStickerRef(s);
-      if (particles && !editorStampOf(ref)) {
-        problems.push(`brush.tip.stamps "${ref}" dropped: particle marks lay only the editor's stamps (editor:star, editor:dot…).`);
-        return [];
-      }
-      return [ref];
-    });
+    // Stamps are sticker refs: a bare editor stamp becomes `editor:<stamp>`. Any sticker the host's
+    // sticker library can load works (its art is loaded before painting).
+    const stamps = brush.tip.stamps.map((s) => normalizeStickerRef(s));
     if (stamps.length) brush.tip.stamps = stamps;
     else {
       drop('tip.stamps', 'none of the stamps can be laid');
