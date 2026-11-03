@@ -178,10 +178,16 @@ describe('live stroke agent tools', () => {
     expect(r.data.strokes).toHaveLength(2);
     expect(r.data.strokes[0]).toMatchObject({ layerId: layer.id, live: true });
     const [a, b] = r.data.strokes;
-    r = await call('update_stroke', { id: a.id, color: '#16a34a', brush: { particle: { count: 5 } } });
+    r = await call('update_stroke', { id: a.id, color: '#16a34a', brush: { marks: { kind: 'particles', count: 5 } } });
     expect(r.error).toBeNull();
     expect(r.data.stroke).toMatchObject({ id: a.id, color: '#16a34a' });
+    // The facet patch changed only the particle count; the rest of the stroke's brush is kept.
+    const edited = c.listLiveStrokes(layer.id).find((s) => s.id === a.id)!.brush;
+    expect(edited).toMatchObject({ id: 'hair-strands', engine: 'particle', particle: { count: 5 } });
+    expect(edited.particle.kind).toBe(c.getBrush('hair-strands')!.particle.kind);
     expect(r.data.bounds.width).toBeGreaterThan(0);
+    r = await call('update_stroke', { id: a.id, brush: { particle: { count: 5 } } });
+    expect(r.error).toMatch(/particle/);
     r = await call('update_stroke', { id: a.id, brushId: 'eraser-soft' });
     expect(r.error).toMatch(/Erasers/);
     r = await call('update_stroke', { id: a.id });

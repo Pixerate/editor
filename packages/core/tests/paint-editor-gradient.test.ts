@@ -144,16 +144,17 @@ describe('gradient paint agent tools', () => {
     expect(parse(r).paint).toEqual(BLUE_YELLOW);
     r = await call('get_brush', {});
     expect(parse(r).strokePaint).toEqual(BLUE_YELLOW);
-    expect(parse(r).paint).toBeNull();
+    expect(parse(r).brush.colour).toBeUndefined();
     r = await call('get_brush', { id: 'gradient-round' });
-    expect(parse(r).paint.map).toEqual({ by: 'distance', length: 300, repeat: 'mirror', unit: 'px' });
+    expect(parse(r).brush.colour.default.map).toEqual({ by: 'distance', length: 300, repeat: 'mirror', unit: 'px' });
+    expect(parse(r).strokePaint.map).toEqual({ by: 'distance', length: 300, repeat: 'mirror', unit: 'px' });
     r = await call('paint_stroke', { points: line(160), brushId: 'ink-pen', paint: { type: 'gradient', stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }], map: { by: 'across-tip' } } });
     expect(r.isError).toBeFalsy();
     expect(c.getStrokes().at(-1)!.paint!.map.by).toBe('across-tip');
     r = await call('set_paint', { paint: { type: 'color', color: '#c0392b' } });
     expect(parse(r)).toMatchObject({ paint: { type: 'color', color: '#c0392b' }, color: '#c0392b' });
-    r = await call('list_brushes', {});
-    expect(parse(r).brushes.find((b: { id: string }) => b.id === 'rainbow-marker').gradient).toBe(true);
+    r = await call('get_brush', { id: 'rainbow-marker' });
+    expect(parse(r).brush.colour.default.type).toBe('gradient');
   });
 
   it('refuses bad gradients with what is wrong', async () => {
@@ -166,7 +167,7 @@ describe('gradient paint agent tools', () => {
     expect(r.isError).toBe(true);
     r = await call('set_paint', { paint: { type: 'gradient', stops: [{ offset: 0, color: '#000' }, { offset: 1, color: '#fff' }], map: { by: 'speed' } } });
     expect(r.isError).toBe(true);
-    r = await call('set_brush', { paint: unsorted });
+    r = await call('set_brush', { colour: { default: unsorted } });
     expect(r.isError).toBe(true);
     expect(JSON.stringify(r.content)).toMatch(/sorted by offset/);
     r = await call('paint_stroke', { points: line(100), paint: unsorted });
@@ -177,10 +178,12 @@ describe('gradient paint agent tools', () => {
 
   it('set_brush gives a brush its own gradient; add_swatch keeps a gradient', async () => {
     const { c, call, parse } = setup();
-    let r = await call('set_brush', { id: 'ink-pen', paint: { ...BLUE_YELLOW, map: { by: 'velocity' } } });
-    expect(parse(r).paint.map).toEqual({ by: 'velocity' });
-    r = await call('set_brush', { paint: null });
-    expect(parse(r).paint).toBeNull();
+    let r = await call('set_brush', { id: 'ink-pen', colour: { default: { ...BLUE_YELLOW, map: { by: 'velocity' } } } });
+    expect(parse(r).brush.colour.default.map).toEqual({ by: 'velocity' });
+    expect(c.getState().brush.paint!.map).toEqual({ by: 'velocity' });
+    r = await call('set_brush', { unset: ['colour'] });
+    expect(parse(r).brush.colour).toBeUndefined();
+    expect(c.getState().brush.paint).toBeNull();
     r = await call('add_swatch', { paint: BLUE_YELLOW, name: 'Sky' });
     const sw = parse(r).swatches.at(-1);
     expect(sw).toMatchObject({ name: 'Sky', color: '#1d4ed8', paint: BLUE_YELLOW });

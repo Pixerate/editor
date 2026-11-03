@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PaintEditorController, createPaintEditorToolProvider, replayPainting, type PaintPixelLayer } from '../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, replayPainting, type PaintPixelLayer } from '../src/paint-editor';
 import { readPixel } from '../src/raster/surface';
 import { ToolRegistry } from '../src/tools/registry';
 
@@ -181,14 +181,16 @@ describe('light paint', () => {
     const c = editor();
     const reg = new ToolRegistry();
     reg.register(createPaintEditorToolProvider(c));
+    reg.register(createPaintBrushLibraryToolProvider(c));
     const call = async (name: string, args: Record<string, unknown> = {}) => {
       const r = await reg.callTool(name, args);
       return { error: r.isError ? (r.content[0] as { text: string }).text : null, data: r.structuredContent as any };
     };
     let r = await call('get_light', {});
     expect(r.data).toMatchObject({ hasLight: false, bounds: null, peak: 0, spill: { radius: 24, strength: 1 } });
-    r = await call('set_brush', { id: 'glow-gel', light: { amount: 0.5, pressure: true }, impasto: { rim: 0.3, clarity: 0.2 } });
-    expect(r.data).toMatchObject({ light: { amount: 0.5, pressure: true }, impasto: { rim: 0.3, clarity: 0.2 } });
+    r = await call('set_brush', { id: 'glow-gel', light: { amount: 0.5, pressure: true }, behaviour: { thick: { rim: 0.3, clarity: 0.2 } } });
+    expect(r.data).toMatchObject({ engine: 'impasto', brush: { light: { amount: 0.5, pressure: true }, behaviour: { surface: 'thick', thick: { rim: 0.3, clarity: 0.2 } } } });
+    expect(c.getState().brush).toMatchObject({ light: { amount: 0.5, pressure: true }, impasto: { rim: 0.3, clarity: 0.2 } });
     await call('paint_stroke', { points: LINE, color: '#a855f7' });
     r = await call('get_light', {});
     expect(r.data.hasLight).toBe(true);
@@ -201,7 +203,7 @@ describe('light paint', () => {
     expect(r.data.cleared).toBe(true);
     r = await call('clear_light', {});
     expect(r.data.cleared).toBe(false);
-    r = await call('list_brushes', {});
+    r = await call('list_brush_presets', {});
     expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['light-ribbon', 0.8], ['flame-ribbon', 1], ['neon-strand', 1], ['smoke-ribbon', 0.3], ['bokeh-dots', 0.9], ['twinkle-sparks', 1], ['glow-wash', 0.7], ['highlighter', 0.5]]);
   });
 });

@@ -19,13 +19,17 @@ import {
 } from '../image-editor/layers/serialize';
 import type { ImageLayer } from '../image-editor/layers/model';
 import { findLayer, flattenLayers } from '../raster/layers';
-import { normalizeBrushStroke, type RecordedStroke } from './strokes';
+import { normalizeBrushStroke, strokeToJSON } from './strokes';
 import { normalizeCanvas, type PaintDocumentState, type PaintEvent, type PaintLayer } from './document';
 import { normalizePaper, type PaperSettings } from './paper';
 import type { WetEvent } from './wet';
 
 export const PAINT_FORMAT = 'pixerate-paint' as const;
-export const PAINT_SCHEMA_VERSION = 1 as const;
+/** 2: recorded strokes keep facet brushes (version 1 documents, with flat engine brushes, still load). */
+export const PAINT_SCHEMA_VERSION = 2 as const;
+
+/** A recorded stroke as a document stores it (`strokeToJSON`). */
+export type SerializedStroke = ReturnType<typeof strokeToJSON>;
 
 /** Where a host keeps layer PNGs outside the JSON (the image editor's asset store contract). */
 export type PaintAssetStore = ImageEditorAssetStore;
@@ -49,8 +53,8 @@ export interface SerializedPaintDocument {
   /** Asset id → PNG data URL (or an external reference). */
   assets: Record<string, string>;
   activeLayerId: string | null;
-  /** Recorded strokes (strokes are data), oldest first; missing when saved without them. */
-  strokes?: RecordedStroke[];
+  /** Recorded strokes (strokes are data), oldest first, each brush a facet `Brush`; missing when saved without them. */
+  strokes?: SerializedStroke[];
   /** Everything else (document-level state of later phases), written back as read. */
   [extension: string]: unknown;
 }
@@ -89,7 +93,7 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
     paper: { ...state.paper, dry: { ...state.paper.dry }, wet: { ...state.paper.wet } },
     activeLayerId: state.activeLayerId,
   };
-  if (options.strokes !== false && state.strokes.length) out.strokes = JSON.parse(JSON.stringify(state.strokes));
+  if (options.strokes !== false && state.strokes.length) out.strokes = state.strokes.map(strokeToJSON);
   if (options.guides !== undefined) out.guides = JSON.parse(JSON.stringify(options.guides));
   if (options.swatches !== undefined) out.swatches = JSON.parse(JSON.stringify(options.swatches));
   if (options.mixingPad !== undefined) (out as Record<string, unknown>).mixingPad = JSON.parse(JSON.stringify(options.mixingPad));
@@ -141,9 +145,9 @@ function paintLayersOnly(layers: ImageLayer[], problems: string[]): PaintLayer[]
   return out;
 }
 
-function readStrokes(raw: unknown, problems: string[]): RecordedStroke[] {
+function readStrokes(raw: unknown, problems: string[]): PaintDocumentState['strokes'] {
   if (!Array.isArray(raw)) return [];
-  const out: RecordedStroke[] = [];
+  const out: PaintDocumentState['strokes'][number][] = [];
   raw.forEach((s, i) => {
     const stroke = normalizeBrushStroke(s);
     if (stroke) out.push(stroke);

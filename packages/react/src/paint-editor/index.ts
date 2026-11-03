@@ -2,6 +2,8 @@ export * from './usePaintEditor';
 export * from './PaintCanvas';
 export * from './PaintToolbar';
 export * from './BrushPanel';
+export * from './BrushEditor';
+export * from './BrushLibraryBrowser';
 export * from './PaperPanel';
 export * from './ColorPanel';
 export * from './PaintLayersPanel';

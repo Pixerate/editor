@@ -1,12 +1,15 @@
 # Particle brushes
 
-Particle brushes (`engine: 'particle'`) make marks with a small simulation driven by the pen. They
+Particle brushes (`marks` kind `particles`; engine `particle`) make marks with a small simulation driven by the pen. They
 are seeded and stepped by distance, so the same points and `seed` paint the same pixels and
 replays are exact. Their marks are ordinary coverage: opacity, blend modes, locks, stencils,
 symmetry, gradient paint, effect paint and light paint all work as for a dab brush. Change them
-with `set_brush` `particle` (missing fields keep their values); `get_brush` returns them all.
+with `set_brush` `marks` `{ kind: 'particles', … }` (missing fields keep their values; the
+engine's `particle.kind` is `marks.physics`, its textured dots `tip.stamps` on a `stamp` tip,
+`dotTextureOrder` / `dotRotation` are `marks.stampOrder` / `marks.stampRotation`, `waveSpeed` is
+`motion.waveSpeed`); `get_brush` returns them all.
 
-## Kinds (`particle.kind`)
+## Kinds (`marks.physics`)
 
 | Kind | Motion | Good for |
 | --- | --- | --- |
@@ -21,7 +24,7 @@ with `set_brush` `particle` (missing fields keep their values); `get_brush` retu
 `elastic` and `fuzzy` damp their strands enough to stay together at any setting; a `string` with
 low damping and high stiffness can still swing wildly, which is part of its look.
 
-## Renders (`particle.render`)
+## Renders (`marks.render`)
 
 - `dot`: a mark at every step; `line`: each particle's path as a line; `sequence`: beads spaced
   by `interval` along each path.
@@ -59,7 +62,7 @@ light paint; see [light-paint.md](light-paint.md) for spill and the light-painti
 
 ## Best practice
 
-- Check a setting with `render_brush_thumbnail` before painting with it.
+- Check a setting with `preview_brush` (the brush library) before painting with it.
 - Change one thing at a time: kind for the motion, render for the look, then waves and textures.
 - Many `flow` particles with long `life` in a `ribbon` are slow (every pair of live particles is
   a band each step): keep `count` × `life` low (count 3..6, life ≤ 0.4).

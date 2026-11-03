@@ -13,7 +13,7 @@ import {
 } from '../../src/agent';
 import { CommandRegistry, createCommandToolProvider } from '../../src/commands';
 import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider } from '../../src/image-editor';
-import { PaintEditorController, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../../src/paint-editor';
+import { PaintEditorController, createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../../src/generation';
 import { createMemoryStorage } from '../../src/persistence';
 import { ChartController, createChartToolProvider, createOfficeChartToolProvider } from '../../src/chart';
@@ -51,6 +51,7 @@ export function createToolCatalogue(): { registry: ToolRegistry; dispose(): void
 		createImageEffectsToolProvider(new ImageEditorController({ effects: createFakeEffectProvider() })),
 		createPaintEditorToolProvider(new PaintEditorController({ width: 64, height: 64 })),
 		createPaintEffectsToolProvider(painter),
+		createPaintBrushLibraryToolProvider(painter),
 		createChartToolProvider(new ChartController()),
 		createOfficeChartToolProvider({ files: () => [], controller: new ChartController() }),
 		createDiagramToolProvider(new DiagramController(), { renderSvg: () => ({ svg: '<svg/>', width: 1, height: 1 }) }),

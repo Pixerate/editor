@@ -1163,7 +1163,7 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { say: "Dark paper, so the light reads.", tool: "paint__set_paper", args: { preset: "smooth", color: "#0b1020" } },
       { say: "Light ribbon: strands dragged behind the pen on slow waves, the bands between them filled with light.", tool: "paint__add_layer", args: { name: "Ribbons" }, as: "ribbons" },
       { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbons.id, brushId: "light-ribbon", color: "#22d3ee", points: wave(300, 110, 96) }) },
-      { say: "A second ribbon crossing it, waving faster and out of step.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbons.id, brushId: "light-ribbon", brush: { particle: { waveLength: 120, waveSpeed: 0.6, wavePhaseJitter: 0.8 } }, color: "#e879f9", points: wave(360, -90, 96) }) },
+      { say: "A second ribbon crossing it, waving faster and out of step.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.ribbons.id, brushId: "light-ribbon", brush: { marks: { kind: "particles", waveLength: 120, wavePhaseJitter: 0.8 }, motion: { waveSpeed: 0.6 } }, color: "#e879f9", points: wave(360, -90, 96) }) },
       { say: "Flames rise off a line along the bottom: short-lived ribbons thrown into the flow.", tool: "paint__add_layer", args: { name: "Flames" }, as: "flames" },
       { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.flames.id, brushId: "flame-ribbon", brush: { tip: { size: 60 } }, color: "#f97316", points: wave(640, 20, 96, 120, 1080) }) },
       { say: "Bokeh accents last, with a wider, softer spill.", tool: "paint__add_layer", args: { name: "Bokeh" }, as: "bokeh" },
@@ -1186,11 +1186,23 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-brush-library",
+    prompt: "Make a pink highlighter brush and use it",
+    steps: [
+      { say: "The nearest preset is the highlighter: fluorescent ink that multiplies, with no light spill.", tool: "brushes__describe_brush", args: { id: "highlighter" } },
+      { say: "A copy in pink, saved in the brush library: only the colour and tip change.", tool: "brushes__create_brush", args: { id: "pink-highlighter", name: "Pink highlighter", basedOn: "highlighter", tip: { shape: "chisel", size: 36 }, colour: { default: "#ff6ec7" } } },
+      { say: "A look at it before painting.", tool: "brushes__preview_brush", args: { id: "pink-highlighter", width: 320, height: 96 } },
+      { say: "Now the editor paints with it.", tool: "paint__set_brush", args: { id: "pink-highlighter" } },
+      { tool: "paint__paint_stroke", args: { color: "#ff6ec7", points: wave(400, 40, 48, 160, 1040) } },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-library-stickers",
     prompt: "Spray stickers from the host's sticker library",
     steps: [
       { say: "The sticker library has the editor's stamps and the host's own; find some weather.", tool: "paint__find_stickers", args: { query: "weather", limit: 6 }, as: "found" },
-      { say: "A sticker brush with three of them; their art loads first.", tool: "paint__set_brush", args: (ctx) => ({ id: "sticker-stars", sticker: { stamps: (ctx.results.found as unknown as { items: { ref: string }[] }).items.slice(0, 3).map((s) => s.ref), colorJitter: 0.1 } }) },
+      { say: "A sticker brush with three of them; their art loads first.", tool: "paint__set_brush", args: (ctx) => ({ id: "sticker-stars", tip: { stamps: (ctx.results.found as unknown as { items: { ref: string }[] }).items.slice(0, 3).map((s) => s.ref) }, marks: { kind: "objects", colourJitter: 0.1 } }) },
       { tool: "paint__add_layer", args: { name: "Weather" }, as: "weather" },
       { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.weather.id, color: "#0ea5e9", points: wave(400, 120, 64) }) },
       { say: "One badge placed exactly; tintable, so it takes the colour given.", tool: "paint__add_stickers", args: (ctx) => ({ layerId: ctx.results.weather.id, stickers: [{ ref: "fake:badge-new", x: 1040, y: 150, size: 120, color: "#16a34a" }] }) },
@@ -1203,9 +1215,9 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     steps: [
       { say: "Stained glass paper: smooth, with warm light behind it.", tool: "paint__set_paper", args: { preset: "stained-glass" } },
       { say: "Transparent watercolour glazes let the light through in their own colour.", tool: "paint__add_layer", args: { name: "Glass" }, as: "glass" },
-      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#dc2626", points: pane(180, 190, 580, 380) }) },
-      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#2563eb", points: pane(620, 190, 1020, 380) }) },
-      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#f59e0b", points: pane(180, 420, 1020, 610) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, behaviour: { wet: { pigment: 1 } } }, color: "#dc2626", points: pane(180, 190, 580, 380) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, behaviour: { wet: { pigment: 1 } } }, color: "#2563eb", points: pane(620, 190, 1020, 380) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, behaviour: { wet: { pigment: 1 } } }, color: "#f59e0b", points: pane(180, 420, 1020, 610) }) },
       { tool: "paint__dry_paint", args: {} },
       { say: "Opaque black lead lines block the light.", tool: "paint__add_layer", args: { name: "Lead" }, as: "lead" },
       ...[
@@ -1341,12 +1353,12 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       {
         say: "Blending the horizon: the blender mixes neighbouring colours like paint, so blue into yellow goes green, not grey.",
         tool: "paint__paint_stroke",
-        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "blender", brush: { tip: { size: 120 }, blender: { strength: 0.6, distance: 0.4 } }, points: wave(330, 25) }),
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "blender", brush: { tip: { size: 120 }, behaviour: { strength: 0.6, distance: 0.4 } }, points: wave(330, 25) }),
       },
       {
         say: "A two-colour ribbon of light along the hills with the multi-colour flat.",
         tool: "paint__paint_stroke",
-        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "multicolor-flat", brush: { tip: { size: 70 }, behavior: { multicolor: { colors: ["#fff2b3", "#f29e4c"] } } }, points: wave(450, 30) }),
+        args: (ctx) => ({ layerId: ctx.results.under.id, brushId: "multicolor-flat", brush: { tip: { size: 70 }, colour: { default: { type: "gradient", stops: [{ offset: 0, color: "#fff2b3" }, { offset: 1, color: "#f29e4c" }], space: "pigment", map: { by: "across-tip" }, softness: 0.7 } } }, points: wave(450, 30) }),
       },
       { say: "An evening glaze on its own layer, in watercolour mode: it darkens like a transparent wash.", tool: "paint__add_layer", args: { name: "Glaze" }, as: "glaze" },
       { tool: "paint__fill_layer", args: (ctx) => ({ layerId: ctx.results.glaze.id, color: "#9a7fd1" }) },
@@ -1378,7 +1390,7 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__set_wet_settings", args: (ctx) => ({ layerId: ctx.results.hills.id, granulation: 0.9, edgeDarkening: 0.8 }) },
       {
         tool: "paint__paint_stroke",
-        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "watercolor-wash", brush: { tip: { size: 150 }, wet: { pigment: 0.6 } }, color: "#3f5f4a", points: wave(560, 45) }),
+        args: (ctx) => ({ layerId: ctx.results.hills.id, brushId: "watercolor-wash", brush: { tip: { size: 150 }, behaviour: { wet: { pigment: 0.6 } } }, color: "#3f5f4a", points: wave(560, 45) }),
       },
       { say: "Tilting the board so the wet hills bead and run down a little.", tool: "paint__set_canvas_tilt", args: { angle: 35, direction: 0 } },
       { tool: "paint__advance_wet_paint", args: { seconds: 3 } },

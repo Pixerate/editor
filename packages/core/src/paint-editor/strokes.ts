@@ -2,9 +2,17 @@
  * Strokes as data. Every committed stroke is recorded with the brush, colour, raw pen samples,
  * jitter seed and symmetry copies it was painted with, so it replays to the same pixels, and can
  * be replayed moved, scaled, rotated, recoloured or with another brush (`replay_strokes`).
+ *
+ * In memory a stroke keeps its brush as the engine painted it. Saved, the brush is a facet brush
+ * (`strokeToJSON`, documents of version 2); strokes saved with the flat engine brush (version 1)
+ * still read, and both replay to the same pixels.
  */
 
 import { normalizePaintBrush, type PaintBrushInput, type PaintBrush } from './brushes';
+import { migrateBrushV1 } from '../brushes/migrate';
+import { normalizeBrushSpec } from '../brushes/normalize';
+import { resolveBrush } from '../brushes/resolve';
+import type { Brush } from '../brushes/types';
 import type { Linear2, PenPoint, StrokeCopy } from './engine';
 import type { MixerLoad } from '../paint/exchange';
 import { normalizeStencil, type Stencil } from './stencils';
@@ -106,7 +114,25 @@ function readLoad(raw: unknown): MixerLoad | null {
   return { reservoir, amount: reservoir && finite(r.amount) ? Math.min(1, Math.max(0, r.amount)) : 0, pickup };
 }
 
-/** A recorded stroke read from JSON, or `null` when it is not one. */
+/** A saved stroke's brush: a facet brush (version 2), else the flat engine brush of version 1. */
+function readStrokeBrush(raw: unknown): PaintBrush {
+  if (raw && typeof raw === 'object' && 'kind' in raw && !('engine' in raw)) {
+    try {
+      return resolveBrush(normalizeBrushSpec(raw));
+    } catch {
+      // Not a facet brush after all: read it as a flat one.
+    }
+  }
+  return normalizePaintBrush((raw as PaintBrushInput) ?? {});
+}
+
+/** A recorded stroke as saved: plain JSON with its brush as a facet brush. */
+export function strokeToJSON(stroke: RecordedStroke): Omit<RecordedStroke, 'brush'> & { brush: Brush } {
+  const { brush, ...rest } = stroke;
+  return { ...(JSON.parse(JSON.stringify(rest)) as Omit<RecordedStroke, 'brush'>), brush: migrateBrushV1(brush) };
+}
+
+/** A recorded stroke read from JSON (its brush version 1 or 2), or `null` when it is not one. */
 export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -116,7 +142,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   const out: RecordedStroke = {
     id: r.id,
     layerId: r.layerId,
-    brush: normalizePaintBrush((r.brush as PaintBrushInput) ?? {}),
+    brush: readStrokeBrush(r.brush),
     color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color.toLowerCase() : '#000000',
     points,
     seed: finite(r.seed) ? r.seed | 0 : 0,

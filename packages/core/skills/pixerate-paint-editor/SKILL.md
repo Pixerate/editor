@@ -11,25 +11,27 @@ seed: its grain is a height map (peaks and valleys) that grain-responsive brushe
 is never part of a layer. Coordinates are document pixels, (0, 0) top-left, y down. See
 `pixerate-agent-tools` for errors, namespacing and batching.
 
-- **Brushes** are library presets (`list_brushes`): a tip from the shared engine (size,
-  hardness, spacing, angle, roundness, opacity, flow, blend), a **grain** response, pen dynamics
-  (pressure, tilt, velocity, jitter), a **rotation** mode (`fixed`, `stroke`, `barrel`) and an
-  engine: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
+- **Brushes** come from the shared brush library (`pixerate-brushes`: `list_brush_presets`,
+  `create_brush`, `preview_brush`…) and are made of facets: a tip (size, hardness, spacing, angle,
+  roundness, opacity, flow, blend), dynamics (pressure, tilt, velocity, jitter, a **rotation**
+  mode `fixed`, `stroke` or `barrel`), behaviour (paper **grain** response, pick-up, wet or thick
+  surface), marks, light, motion and colour. `set_brush` chooses one and lays facet changes over
+  it; `get_brush` reads it with the engine it paints with: `dab` (most media), `eraser`, `mixer` (the Mixer Brush: a reservoir of paint plus paint
   it picks up), `blender` (mixes the colours under and near the tip) or `smudge` (drags paint
   along the stroke), `wet` (watercolour, gouache, oil and the wet tools, below), `impasto`
   (thick paint with relief and material, below), `particle` (procedural particle brushes),
   `bristle` (a tuft of bristles) or `sticker` (sprays editable stickers).
-- **Wet media** (`engine: "wet"`, categories `watercolor` and `wet-tool`): a stroke lays water
+- **Wet media** (engine `wet`: `behaviour.surface` `wet`, and the wet tools; categories `watercolor` and `wet-tool`): a stroke lays water
   and pigment on the layer's **wet layer**, a fluid simulation that keeps running after the
   stroke: the water spreads until its edge is pinned by the paper, carries pigment out to the
   rim as it dries (edge darkening), drops pigment into the paper's valleys (granulation), pushes
   pigment back where new water flows in (blooms), bleeds between touching wet colours and runs
   downhill on a tilted canvas. Paint stays wet until it dries by itself (a few thousand steps)
   or `dry_paint` dries it; a dried wash is fixed, so the next wash **glazes** over it. A wet
-  brush's `wet.tool` is `paint`, `water`, `dry`, `blow`, `blend`, `smudge` or `blot`; `water`,
-  `pigment` (concentration), `body` (0 transparent watercolour .. 1 opaque gouache), `strength`
-  and `rewet` set it up. Every result says whether paint is still wet (`wet` / `stillWet`).
-- **Behaviour** (`behavior`, dab and mixer brushes) is how a brush treats paint already on the
+  brush paints, or is a tool (`tool` `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`);
+  `behaviour.wet` `water`, `pigment` (concentration), `body` (0 transparent watercolour .. 1
+  opaque gouache) and `rewet`, and `behaviour.strength`, set it up. Every result says whether paint is still wet (`wet` / `stillWet`).
+- **Behaviour** (`behaviour.exchange`, dab and mixer brushes) is how a brush treats paint already on the
   canvas: a **pick-up ratio** (how much paint each dab lifts and carries), a **mix ratio** (how
   much of the carried paint goes into what it lays down), **dirty** (keep the carried colour into
   the next stroke) and **multi-colour** (`tip`: several colours side by side across the tip;
@@ -147,8 +149,12 @@ the pitfalls, and uses the tools below.
   painted moves relative to anything else). Adding `left` or `top` shifts every coordinate you
   hold by (+left, +top): re-read `list_layers` or use the returned `rect`. Dry wet paint first.
   `set_canvas` only crops or grows at the bottom-right.
-- **Save brushes you build** (`set_brush` then `save_brush`), and share them with
-  `export_brushes` / `import_brushes`.
+- **Save brushes you build** in the brush library: `create_brush` with `basedOn` and the facets
+  you changed (or `get_brush` then `create_brush` with its `brush`), and share them with
+  `export_brushes` / `import_brushes`. A saved brush shows in every editor that shares the
+  library; `set_brush` its id to paint with it.
+
+Which facet sets which engine setting: [references/brush-facets.md](references/brush-facets.md).
 
 ## Wet media
 
@@ -178,12 +184,12 @@ inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
 
 - **Particle brushes** (category `procedural`; ribbons, flames and bokeh are in `light`):
   `hair-strands`, `spring-ink`, `orbit-curls`, `flow-fur`, `sparkle-dust`, `bead-trail`. Tune
-  with `particle`: kind (string, spring, orbit, flow, elastic, fuzzy), render (dot, line,
-  sequence, ribbon), waves and textured dots; read [references/particle-brushes.md](references/particle-brushes.md).
+  with `marks` (kind `particles`): physics (string, spring, orbit, flow, elastic, fuzzy), render
+  (dot, line, sequence, ribbon), waves and textured dots (`tip.stamps`); read [references/particle-brushes.md](references/particle-brushes.md).
   Draw slowly and with varying direction: the particles react to movement.
 - **Bristle brushes** (category `bristle`): `bristle-round`, `bristle-flat`, `dry-brush`. Every
   bristle draws its own line: press harder to splay the tuft, tilt to flatten it; soft bristles
-  bend into curves at turns; a low `bristle.load` runs dry into broken streaks.
+  bend into curves at turns; a low `tip.bristle.load` runs dry into broken streaks.
 - **Sticker spray** (category `sticker`): stickers by ref (`editor:star`, `editor:leaf`… or any
   from the host's library: `find_stickers`; tintable ones take the paint colour) sprayed onto an
   **empty layer**, each staying an object:
@@ -289,16 +295,12 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 
 ### Brushes
 
+Listing, saving, sharing and previewing brushes are the brush library's tools (`pixerate-brushes`), registered by the host next to these.
+
 | Tool | Use |
 | --- | --- |
-| `list_brushes` | Read the library (built-in and saved): id, name, category, engine, size, grain response, rotation, `wetCapable`, `pickup`, `dirty`, `gradient` (has its own gradient paint), `multicolor` mode, `builtin`; plus the active brush id and whether it is edited. |
-| `get_brush` | Read every setting of a brush, or of the active brush as edited (no `id`), including `paint` (its own gradient, or null) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
-| `set_brush` | Choose the active brush (`id`) and / or change it: `tip` (size px, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressureSize, pressureOpacity, blend), `grain`, `pressureSmoothing`, `rotation`, `dynamics` (minSize, pressureFlow, tiltSize, tiltRoundness, tiltOpacity, velocitySize, velocityOpacity, jitters, scatter), `engine`, `mixer`, `loadsColor`, `behavior` (pickup, mix, dirty, mixing; multicolor is the older form of `paint`), `paint` (the brush's own gradient, or null for the editor's paint), `blender` (strength, distance, mixing), `smudge` (strength, length, mixing). Editor state. Returns the brush. |
-| `save_brush` | Store the active brush in the user library under `id` (lowercase, digits, dashes) and `name`. Built-in ids are refused. |
-| `remove_brush` | Delete a user brush. Built-in brushes cannot be removed. |
-| `export_brushes` | Get a brush library file (JSON) of `ids`, or of every user brush. |
-| `import_brushes` | Add the brushes of a library file to the user library; taken ids are skipped unless `replace`. Returns `added`, `skipped`, `problems`. |
-| `render_brush_thumbnail` | See what a brush does: a PNG of a test stroke (S-curve, pressure swelling and fading) on the current paper. Cheaper than painting and undoing. |
+| `get_brush` | Read a brush as facets (`brush`), or the active brush as edited (no `id`), with the `engine` and `category` it paints with, `builtin` (an unchanged preset) and `strokePaint` (what its next stroke paints). Read before changing a brush you did not build. |
+| `set_brush` | Choose the active brush (`id`, from `list_brush_presets`) and / or lay facets over it: `tip`, `marks`, `dynamics`, `behaviour`, `light`, `motion`, `colour` (objects merge, lists replace; marks of another kind replace the marks), `unset` facets to drop. Editor state, not saved: `create_brush` stores a brush. Returns `brush` (facets), `engine` and `problems` (values clamped). The old flat fields (`particle`, `impasto`, `behavior`…) are refused. |
 
 ### Colour
 
@@ -329,10 +331,10 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 
 | Tool | Use |
 | --- | --- |
-| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` changes, `color` or `paint` (a gradient for this stroke), `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
+| `paint_stroke` | Paint one stroke through `points` (document px; `pressure` 0..1, `t` ms, `tiltX` / `tiltY` or `altitude` / `azimuth`, `twist`) with `brushId` (default the active brush), optional per-stroke `brush` facet changes (as `set_brush` takes), `color` or `paint` (a gradient for this stroke), `layerId`, `seed`, `snapToPerspective`. The symmetry guide adds its copies; a sampling tracing image supplies the colour when `color` is missing. Returns `layerId`, `bounds`, `dabs`, `strokeId` and, for brushes that pick up paint, `mixerLoad` (what the brush carries now). Refused on locked, hidden or group layers, with the fix in the message. |
 | `list_strokes` | Read the recorded strokes, oldest first (default the last 100): id, layer, brush, colour, point count, seed, bounds, `live`. With `ids`, their points too; with `layerId`, one layer's. With `live: true`, the editable strokes of stroke layers as they are now, bottom first: the ids for the stroke layer tools. |
 | `stroke_at` | Read the top-most stroke of a stroke layer that painted the pixel at `x`, `y`, or null. Use it to pick one stroke among overlapping ones. |
-| `update_stroke` | Change a stroke on a stroke layer: `brushId` (keeps its size), `brush` settings, `color`, `paint` (null drops a gradient), `seed`. Redraws exactly. One undo step. Returns the stroke and the changed `bounds`. |
+| `update_stroke` | Change a stroke on a stroke layer: `brushId` (keeps its size), `brush` facets (as `set_brush` takes), `color`, `paint` (null drops a gradient), `seed`. Redraws exactly. One undo step. Returns the stroke and the changed `bounds`. |
 | `edit_stroke_points` | Replace a stroke's `points`, or `transform` it (`dx`, `dy`, `scale`, `rotate`, `flipX`, about its centre or `origin`). One undo step. Returns the stroke with its points and the changed `bounds`. |
 | `reorder_stroke` | Move a stroke to `index` in its stroke layer (0 = bottom). One undo step. Returns the order. |
 | `remove_strokes` | Delete strokes from stroke layers (their eraser). One undo step. Returns the ids and `bounds`. |

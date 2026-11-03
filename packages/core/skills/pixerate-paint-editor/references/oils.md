@@ -11,7 +11,7 @@
   (azimuth, elevation, relief). Tools: `impasto-brush` (bristle ridges), `paint-tube` (blobs),
   `palette-knife` (scrapes the relief flat and smears the paint), `paint-roller` (flat stippled
   band), `gloop-pen` (glossy bead), `metallic-paint` (highlights in the paint's colour).
-- **Loading and thinner**: `wet.load` / `impasto.load` below 1 make the brush run out along a
+- **Loading and thinner**: `behaviour.wet.load` / `behaviour.thick.load` below 1 make the brush run out along a
   long stroke (dry-brush ends); `thinner` makes paint flatter and more transparent.
 - **Light** is a view of the relief, not paint: move it (`set_lighting`) to read the texture
   (a low elevation, 15..30°, shows brushwork best) and pick the final light before exporting.

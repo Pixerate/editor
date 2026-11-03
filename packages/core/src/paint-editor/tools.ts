@@ -1,7 +1,7 @@
 /**
  * Agent tools for the paint editor (`createPaintEditorToolProvider`). Strict schemas, every
  * argument described, all four annotations. Each write is one undo step (or editor state, said so)
- * and returns what it changed; ids come from the read tools (`list_layers`, `list_brushes`,
+ * and returns what it changed; ids come from the read tools (`list_layers`, the brush library's `list_brush_presets`,
  * `list_papers`, `list_strokes`).
  */
 
@@ -9,17 +9,15 @@ import { withPaintPlayback } from './playback';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { fromDocument, hostedSchema, hostedText, lazyController, toDocument, type PaintAgentTool, type PaintOrigin } from './hosted';
 import { createPigmentTools } from '../paint/pigment-tools';
-import { MIXING_MODELS, type MixerLoad } from '../paint/mixer';
-import { PAINT_GRADIENT_JSON_SCHEMA, PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
+import type { MixerLoad } from '../paint/mixer';
+import { PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
-import { bytesToBase64, encodePng } from '../raster/png';
-import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS } from './procedural';
-import { MAX_STICKER_STAMPS, STAMP_KINDS } from './stickers';
+import { bytesToBase64 } from '../raster/png';
 import { createStickerTools } from '../stickers/tools';
 import { createPaintStickerTools } from './sticker-tools';
-import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
 import { PaintEditorError, type PaintEditorController } from './controller';
+import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, type BrushPatch, type UnsettableBrushFacet } from '../brushes/patch';
 import type { PenPoint } from './engine';
 import type { RecordedStroke } from './strokes';
 import { GRAIN_PATTERNS, PAPER_FAMILIES, PAPER_LIBRARY } from './paper';
@@ -71,271 +69,6 @@ export interface PaintEditorToolProviderOptions {
   onChange?: (info: { tool: string }) => void;
 }
 
-const TIP = {
-  type: 'object',
-  description: 'The tip (the shared brush engine). Missing fields keep their current values.',
-  properties: {
-    size: { type: 'number', minimum: 1, maximum: MAX_BRUSH_SIZE, description: 'Diameter in pixels.' },
-    hardness: { type: 'number', minimum: 0, maximum: 1, description: 'Edge hardness, 0 (soft) .. 1 (hard).' },
-    spacing: { type: 'number', minimum: 0.01, maximum: 10, description: 'Dab spacing as a fraction of the diameter (0.05 is smooth, 1 is dotted).' },
-    angle: { type: 'number', minimum: -360, maximum: 360, description: 'Tip angle in degrees, counter-clockwise; with rotation stroke or barrel it is added to the stroke direction or pen rotation.' },
-    roundness: { type: 'number', minimum: 0.01, maximum: 1, description: 'Tip roundness: 1 round, lower is a flat ellipse (a pastel or chisel tip).' },
-    opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity ceiling: overlapping dabs never exceed it.' },
-    flow: { type: 'number', minimum: 0, maximum: 1, description: 'Build-up per dab towards the opacity (low flow builds up softly, like an airbrush).' },
-    smoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Position smoothing of the input, 0..0.95.' },
-    pressureSize: { type: 'boolean', description: 'Pressure scales the size (down to dynamics.minSize).' },
-    pressureOpacity: { type: 'boolean', description: 'Pressure scales the opacity.' },
-    blend: {
-      type: 'string',
-      enum: BLEND_MODES.map((m) => m.id),
-      description: 'How paint combines with the layer. pigment mixes it in like real paint (blue into yellow gives green); multiply darkens like marker ink; watercolor glazes like a transparent wash; tint, highlight and shadow recolour, light and shade (see list_blend_modes).',
-    },
-  },
-  additionalProperties: false,
-} as const;
-
-const DYNAMICS = {
-  type: 'object',
-  description: 'Pen dynamics and jitter. Missing fields keep their current values.',
-  properties: {
-    minSize: { type: 'number', minimum: 0, maximum: 1, description: 'Size at zero pressure as a fraction of the full size (when pressureSize).' },
-    pressureFlow: { type: 'number', minimum: 0, maximum: 1, description: 'How much pressure scales flow.' },
-    tiltSize: { type: 'number', minimum: 0, maximum: 1, description: 'Laying the pen down widens the tip (up to 2.5×).' },
-    tiltRoundness: { type: 'number', minimum: 0, maximum: 1, description: 'Laying the pen down flattens the tip along the tilt (side-of-the-pencil shading).' },
-    tiltOpacity: { type: 'number', minimum: 0, maximum: 1, description: 'Laying the pen down lightens the mark.' },
-    velocitySize: { type: 'number', minimum: -1, maximum: 1, description: 'Positive grows the tip on fast strokes, negative thins it (needs point times t).' },
-    velocityOpacity: { type: 'number', minimum: -1, maximum: 1, description: 'Positive darkens fast marks, negative lightens them (needs point times t).' },
-    sizeJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random size change per dab.' },
-    angleJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random angle per dab, as a fraction of ±180°.' },
-    opacityJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random opacity drop per dab.' },
-    scatter: { type: 'number', minimum: 0, maximum: 4, description: 'Random offset across the stroke, in diameters.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const MIXER = {
-  type: 'object',
-  description: 'Mixer engine settings (the Mixer Brush). Missing fields keep their current values.',
-  properties: {
-    wet: { type: 'number', minimum: 0, maximum: 1, description: 'Pick-up ratio: how much canvas colour each dab picks up, 0 (dry) .. 1.' },
-    load: { type: 'number', minimum: 0, maximum: 1, description: 'How much paint the reservoir holds; below 1 it drains per dab, so long strokes run dry.' },
-    mix: { type: 'number', minimum: 0, maximum: 1, description: "Mix ratio: how far each dab's paint moves from the reservoir towards the picked-up colour." },
-    loadEachStroke: { type: 'boolean', description: 'Refill the reservoir with the colour before each stroke.' },
-    cleanEachStroke: { type: 'boolean', description: 'Empty the pickup well after each stroke.' },
-    mixing: { type: 'string', enum: [...MIXING_MODELS], description: 'rgb: RGB averages. pigment: mixes like paint (Kubelka-Munk).' },
-  },
-  additionalProperties: false,
-} as const;
-
-const MIXING = { type: 'string', enum: [...MIXING_MODELS], description: 'pigment: mixes like paint (Kubelka-Munk, blue and yellow make green); rgb: straight RGB averages.' } as const;
-
-const BEHAVIOR = {
-  type: 'object',
-  description:
-    'How the brush handles paint on the canvas (dab and mixer engines; on a mixer brush pickup, mix, dirty and mixing are its mixer wet, mix, !cleanEachStroke and mixing). Missing fields keep their current values.',
-  properties: {
-    pickup: { type: 'number', minimum: 0, maximum: 1, description: 'Pick-up ratio 0..1: how much of the paint under each dab the brush lifts and carries along (0: none, a dry brush).' },
-    mix: { type: 'number', minimum: 0, maximum: 1, description: "Mix ratio 0..1: how much of the carried paint goes into what the brush lays down, against the brush's own colour (scaled by pickup)." },
-    dirty: { type: 'boolean', description: 'Dirty brush: keep the carried paint after the stroke, so the next stroke starts with the last colour it touched (needs pickup above 0). clean_mixer_brush wipes it.' },
-    mixing: MIXING,
-    multicolor: {
-      type: 'object',
-      description: 'Multi-coloured brush (the older form of paint, the brush\'s own gradient: tip is across-tip, dab is distance in dabs or random). Read back from paint when it has a multi-colour equivalent. Missing fields keep their current values.',
-      properties: {
-        mode: { type: 'string', enum: [...MULTI_COLOR_MODES], description: 'off; tip: the colours lie side by side across the tip (stripes along the stroke, like a brush loaded with several paints); dab: the colour changes along the stroke.' },
-        colors: { type: 'array', maxItems: 8, items: { ...COLOR }, description: '2..8 colours #rrggbb; fewer than 2 uses the paint colour and the secondary colour.' },
-        order: { type: 'string', enum: ['sequence', 'random'], description: 'dab mode: sequence runs through the colours in order, blending between them; random picks one per run of dabs (seeded).' },
-        length: { type: 'integer', minimum: 1, maximum: 500, description: 'dab mode: dabs per colour (default 12).' },
-        softness: { type: 'number', minimum: 0, maximum: 1, description: 'How softly neighbouring colours blend: 0 hard stripes or steps, 1 a smooth gradient.' },
-      },
-      additionalProperties: false,
-    },
-  },
-  additionalProperties: false,
-} as const;
-
-const BRUSH_PAINT = {
-  description: "The brush's own gradient paint, used instead of the editor's paint (null: the editor's paint). It is what the multi-colour settings became; stops may be \"paint\" / \"secondary\" for the editor's two colours.",
-  anyOf: [PAINT_GRADIENT_JSON_SCHEMA, { type: 'null', description: "No gradient of its own: the editor's paint." }],
-} as const;
-
-const BLENDER = {
-  type: 'object',
-  description: 'Blender engine settings. Missing fields keep their current values.',
-  properties: {
-    strength: { type: 'number', minimum: 0, maximum: 1, description: 'How far each pixel under the tip moves towards the mix of the paint near it, per dab.' },
-    distance: { type: 'number', minimum: 0, maximum: 1, description: 'Blend distance: how far away colours are mixed in, as a fraction of the tip diameter (0.35 default; higher blends wider and softer).' },
-    mixing: MIXING,
-  },
-  additionalProperties: false,
-} as const;
-
-const SMUDGE = {
-  type: 'object',
-  description: 'Smudge engine settings. Missing fields keep their current values.',
-  properties: {
-    strength: { type: 'number', minimum: 0, maximum: 1, description: 'How strongly the dragged paint covers what is under the tip, per dab.' },
-    length: { type: 'number', minimum: 0, maximum: 1, description: 'How far paint is dragged: the share of the carried paint kept from dab to dab (0.85 default; 1 drags it the whole stroke).' },
-    mixing: { ...MIXING, description: 'rgb (default): smeared colours average; pigment: they mix like paint.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const WET_BRUSH = {
-  type: 'object',
-  description: 'Wet engine settings (watercolour, gouache and the wet tools). Missing fields keep their current values.',
-  properties: {
-    tool: {
-      type: 'string',
-      enum: [...WET_TOOLS],
-      description:
-        'paint: water and pigment (picks up and mixes wet paint by behavior.pickup / mix); water: clear water (with rewet it lifts dried paint); dry: a hair dryer, takes water; blow: pushes the water along the stroke; blend: evens out wet pigment; smudge: drags wet paint; blot: a tissue, takes wet paint up (erase wet).',
-    },
-    medium: { type: 'string', enum: [...WET_MEDIA], description: "The medium: watercolor, gouache or oil. A layer takes the medium's wet settings the first time it holds wet paint (oil: thick, barely flows, stays wet long and blends into the wet paint it meets)." },
-    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint loading: 1 never runs out; lower, the brush runs dry along a long stroke (each stroke reloads).' },
-    thinner: { type: 'number', minimum: 0, maximum: 1, description: 'Thinner (water or solvent): more transparent, runnier paint.' },
-    water: { type: 'number', minimum: 0, maximum: 1, description: 'Wetness: water laid per stroke, 0.2 a damp brush .. 1 a dripping one.' },
-    pigment: { type: 'number', minimum: 0, maximum: 1, description: 'Pigment concentration: 0 clear water .. 1 straight from the tube.' },
-    body: { type: 'number', minimum: 0, maximum: 1, description: 'Body: 0 a transparent watercolour (glazes) .. 1 opaque gouache (hides what is under it).' },
-    strength: { type: 'number', minimum: 0, maximum: 1, description: 'Strength of dry, blow, blend, smudge and blot.' },
-    rewet: { type: 'number', minimum: 0, maximum: 1, description: 'How much dried paint the water lifts again: 0 none (staining) .. 1.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const IMPASTO_BRUSH = {
-  type: 'object',
-  description: 'Impasto engine settings (thick paint with relief, lit by set_lighting). Missing fields keep their current values.',
-  properties: {
-    tool: {
-      type: 'string',
-      enum: [...IMPASTO_TOOLS],
-      description: 'brush: thick paint with bristle ridges along the stroke; tube: blobs squeezed from the tube; knife: a palette knife that scrapes the relief flat and smears the paint; roller: a flat stippled band; gloop: a thick, glossy, rounded bead.',
-    },
-    thickness: { type: 'number', minimum: 0, maximum: 1, description: 'How far the paint stands up.' },
-    gloss: { type: 'number', minimum: 0, maximum: 1, description: 'Shine: 0 matte .. 1 wet-looking gloss.' },
-    metallic: { type: 'number', minimum: 0, maximum: 1, description: 'Metallic paint: highlights take the paint colour (gold, copper, silver).' },
-    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint loading: 1 never runs out; lower, the stroke thins and fades as the brush empties.' },
-    thinner: { type: 'number', minimum: 0, maximum: 1, description: 'Thinner: flatter, more transparent paint.' },
-    drag: { type: 'number', minimum: 0, maximum: 1, description: 'Knife and brush: how much of the paint under the tool is dragged along.' },
-    rim: { type: 'number', minimum: 0, maximum: 1, description: 'Light paint (with light.amount): the bead\'s light is stronger where its surface turns away, as on backlit glass (default 0).' },
-    clarity: { type: 'number', minimum: 0, maximum: 1, description: 'Glassy paint: the middle of a bead lets the layers below show through while its edges stay solid (default 0). flatten_relief clears it.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const LIGHT_BRUSH = {
-  type: 'object',
-  description: 'Light paint: the light the brush lays with its colour, glowing in the paint\'s own colour and spilling onto its surroundings (set_light_spill). Dab, particle, bristle, Mixer Brush, impasto and wet paint brushes take it (wet light flows, pools, granulates and blooms with the pigment until the paint dries, then is ordinary light paint); wet tools other than paint lay none, and sticker brushes refuse light above 0. Missing fields keep their current values.',
-  properties: {
-    amount: { type: 'number', minimum: 0, maximum: 1, description: 'Light each dab lays, scaled by its coverage and flow (0 none, default; 1 full).' },
-    pressure: { type: 'boolean', description: 'Pressure scales the light (default false).' },
-  },
-  additionalProperties: false,
-} as const;
-
-const PARTICLE_BRUSH = {
-  type: 'object',
-  description: 'Particle engine settings (procedural brushes). Missing fields keep their current values.',
-  properties: {
-    kind: {
-      type: 'string',
-      enum: [...PARTICLE_KINDS],
-      description:
-        'string: strands of masses on springs dragged behind the pen (hair, fur, wet string); spring: particles on springs to the pen, overshooting and wobbling; orbit: particles circling the pen (curls); flow: particles thrown off the pen into a swirling flow until they fade; elastic: strands whose links keep a rest length, stretching when the pen is fast and snapping back; fuzzy: winding strings, each strand waving out of step with the others (always waves by at least 0.12 of the tip size).',
-    },
-    render: {
-      type: 'string',
-      enum: [...PARTICLE_RENDERS],
-      description: 'dot: a mark at each step (round, or dotTextures); line: each particle draws a continuous line; sequence: beads spaced along each path (round, or dotTextures); ribbon: the band between neighbouring particles\' paths filled (ribbonFill), with the paths drawn as its edges at the mark size (flame, silk, smoke).',
-    },
-    count: { type: 'integer', minimum: 1, maximum: 64, description: 'Particles (flow: how many are thrown per tip of travel).' },
-    size: { type: 'number', minimum: 0, maximum: 1, description: 'Mark size as a fraction of the tip size (ribbon: the width of its edges).' },
-    spread: { type: 'number', minimum: 0, maximum: 1, description: 'How far apart the particles start, as a fraction of the tip size (ribbon: how wide it is).' },
-    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Spring, string and elastic stiffness: stiff follows closely (elastic: snaps back faster), soft swings wide.' },
-    damping: { type: 'number', minimum: 0, maximum: 1, description: 'How quickly motion dies down.' },
-    speed: { type: 'number', minimum: 0, maximum: 1, description: 'Orbit and flow speed.' },
-    gravity: { type: 'number', minimum: -1, maximum: 1, description: 'Pull downwards (negative: upwards).' },
-    life: { type: 'number', minimum: 0, maximum: 1, description: 'Flow particles: how long they live.' },
-    interval: { type: 'number', minimum: 0, maximum: 1, description: 'Sequence: spacing of the beads.' },
-    ribbonFill: { type: 'number', minimum: 0, maximum: 1, description: 'Ribbon: opacity of the fill between the paths, relative to their edges (default 0.5; 0 draws only the edges).' },
-    ribbonPairs: { type: 'string', enum: [...RIBBON_PAIRS], description: 'Ribbon: adjacent (default) joins each particle to its neighbour around the pen; first-last makes one band between the outermost two.' },
-    waveAmplitude: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how far each particle\'s drawn place swings sideways to the stroke, as a fraction of the tip size (default 0: no wave). Works with every kind and render.' },
-    waveLength: { type: 'number', minimum: 4, maximum: 2000, description: 'Wave: wavelength in px of pen travel (default 60).' },
-    waveSpeed: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how fast the waves run, by stroke time (0 default: they stand still on the path; 1: about four a second, so slow strokes wave more). Strokes without times run at a nominal 0.5 px/ms.' },
-    wavePhaseJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Wave: how far out of step the particles\' waves are (default 0: all in step, a wavy band; 1: random phases, tangled strands).' },
-    dotTextures: {
-      type: 'array',
-      maxItems: MAX_DOT_TEXTURES,
-      items: { type: 'string', enum: [...STAMP_KINDS], description: 'A stamp.' },
-      description: `Dot and sequence renders: up to ${MAX_DOT_TEXTURES} sticker stamps (list_stickers) drawn instead of round marks; repeats are allowed (they weight the order). Empty (default): round marks.`,
-    },
-    dotTextureOrder: { type: 'string', enum: [...DOT_TEXTURE_ORDERS], description: 'Textured dots: sequence (default) uses the stamps in turn; random picks one per dot (seeded, so replays are exact).' },
-    dotRotation: { type: 'string', enum: [...DOT_ROTATIONS], description: 'Textured dots: follow turns each with its particle\'s motion; random (default) turns each at random; fixed uses the tip angle.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const BRISTLE_BRUSH = {
-  type: 'object',
-  description: 'Bristle engine settings: a tuft of bristles, each its own line. Missing fields keep their current values.',
-  properties: {
-    count: { type: 'integer', minimum: 3, maximum: 128, description: 'Bristles in the tuft.' },
-    stiffness: { type: 'number', minimum: 0, maximum: 1, description: 'Stiff bristles follow the tip; soft ones lag and bend into curves at turns.' },
-    splay: { type: 'number', minimum: 0, maximum: 1, description: 'How far pressure spreads the tuft.' },
-    thickness: { type: 'number', minimum: 0, maximum: 1, description: "Each bristle's line width as a fraction of the tip size." },
-    load: { type: 'number', minimum: 0, maximum: 1, description: 'Paint per bristle: 1 never runs dry; lower, bristles run out along the stroke (dry brush).' },
-    jitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random variation between bristles.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const STICKER_BRUSH = {
-  type: 'object',
-  description: 'Sticker engine settings: stamps sprayed along the stroke as editable stickers. Missing fields keep their current values.',
-  properties: {
-    stamps: {
-      type: 'array',
-      minItems: 1,
-      maxItems: MAX_STICKER_STAMPS,
-      items: { type: 'string', minLength: 1, description: 'A sticker ref provider:id from find_stickers (e.g. editor:star); a bare editor stamp (star) means editor:star.' },
-      description: `The stickers to spray, one picked at random per sticker: refs from find_stickers (the editor's own: ${STAMP_KINDS.map((k) => `editor:${k}`).join(', ')}). Each is checked against the sticker library and an unknown ref is refused with the closest ones. A provider's sticker is drawn from its art (tinted to the paint colour when tintable), loaded before the stroke.`,
-    },
-    density: { type: 'number', minimum: 0, maximum: 1, description: 'How closely stickers follow each other: about density × 4 stickers per tip diameter of travel (0.25 ≈ one per diameter, 1 ≈ four). Default 0.4.' },
-    sizeJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random size change.' },
-    rotationJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random turn as a fraction of ±180°.' },
-    scatter: { type: 'number', minimum: 0, maximum: 2, description: 'How far from the path stickers land, in tip diameters.' },
-    colorJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random colour change around the paint colour: at 1, up to ±40° of hue and ±0.15 OKLab lightness, kept in gamut. Default 0.2.' },
-  },
-  additionalProperties: false,
-} as const;
-
-const BRUSH_FIELDS = {
-  name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name.' },
-  category: { type: 'string', enum: [...PAINT_BRUSH_CATEGORIES], description: 'Library category.' },
-  engine: {
-    type: 'string',
-    enum: [...PAINT_BRUSH_ENGINES],
-    description: 'dab: paints dabs (with behavior.pickup or gradient paint it paints dab by dab, lifting and mixing paint); eraser: removes paint; mixer: the Mixer Brush (a reservoir plus picked-up paint); blender: mixes the colours under and near the tip; smudge: drags paint along the stroke; wet: watercolour, gouache, oil and the wet tools on a simulated wet layer (see wet); impasto: thick paint with relief (see impasto); particle: procedural particle brushes (see particle); bristle: a tuft of bristles that bend and splay (see bristle); sticker: sprays editable sticker stamps (see sticker).',
-  },
-  tip: TIP,
-  grain: { type: 'number', minimum: 0, maximum: 1, description: 'Paper grain response: 0 ignores the grain, 1 catches only its peaks at light pressure (pencil, pastel, charcoal). Multiplied by the paper depth.' },
-  pressureSmoothing: { type: 'number', minimum: 0, maximum: 0.95, description: 'Pressure smoothing, separate from the tip position smoothing.' },
-  rotation: { type: 'string', enum: [...BRUSH_ROTATIONS], description: 'What turns the tip: fixed (tip.angle), stroke (follows the direction of travel) or barrel (the pen barrel rotation, twist).' },
-  dynamics: DYNAMICS,
-  mixer: MIXER,
-  loadsColor: { type: 'boolean', description: 'Mixer engine: load the colour each stroke (false for a mixer that only moves paint).' },
-  behavior: BEHAVIOR,
-  blender: BLENDER,
-  smudge: SMUDGE,
-  wet: WET_BRUSH,
-  impasto: IMPASTO_BRUSH,
-  particle: PARTICLE_BRUSH,
-  bristle: BRISTLE_BRUSH,
-  sticker: STICKER_BRUSH,
-  light: LIGHT_BRUSH,
-  paint: BRUSH_PAINT,
-} as const;
 
 /** The moment of live effect paint to export at. */
 const TIME = { type: 'number', minimum: 0, description: 'Draw live effect paint (strokes on stroke layers painted with live effect paint) this many ms into its animation (default: as painted, its own time).' } as const;
@@ -368,26 +101,6 @@ function loadResult(load: MixerLoad) {
   return { reservoir: hex(load.reservoir), amount: Math.round(load.amount * 1000) / 1000, pickup: hex(load.pickup) };
 }
 
-function brushSummary(b: PaintBrush) {
-  return {
-    gradient: b.paint !== null,
-    id: b.id,
-    name: b.name,
-    category: b.category,
-    engine: b.engine,
-    size: b.tip.size,
-    grain: b.grain,
-    rotation: b.rotation,
-    wetCapable: isWetCapable(b),
-    pickup: b.behavior.pickup,
-    dirty: b.behavior.dirty,
-    multicolor: b.behavior.multicolor.mode,
-    ...(b.engine === 'wet' ? { wetTool: b.wet.tool, medium: b.wet.medium } : {}),
-    ...(b.engine === 'impasto' ? { impastoTool: b.impasto.tool } : {}),
-    ...(b.light.amount > 0 ? { light: b.light.amount } : {}),
-    builtin: Boolean(b.builtin),
-  };
-}
 
 /**
  * Agent tools for one paint editor. Pass a getter to create the document lazily: it is first
@@ -744,33 +457,22 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   });
 
   // --- Brushes -----------------------------------------------------------------
-
-  add({
-    name: 'list_brushes',
-    title: 'List brushes',
-    description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks, glow wash, highlighter; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
-    inputSchema: EMPTY,
-    annotations: { title: 'List brushes', ...READ },
-    handler: () => {
-      const s = c.getState();
-      return { activeBrushId: s.brush.id, activeEdited: !s.brush.builtin && Boolean(c.getBrush(s.brush.id)?.builtin), brushes: s.brushes.map(brushSummary) };
-    },
-  });
+  // Listing, saving, sharing and previewing brushes are the brush library's tools
+  // (createPaintBrushLibraryToolProvider); these two choose and change the brush strokes use.
 
   add({
     name: 'get_brush',
     title: 'Get a brush',
     description:
-      "Reads every setting of a brush (tip, grain, pressure smoothing, rotation, dynamics, mixer, behavior: pick-up / mix / dirty, blender, smudge, its own gradient paint as paint, null when it paints the editor's paint). Without id, the active brush as edited. Also returns strokePaint: what a stroke with it would paint now (its gradient, else the editor's paint from set_paint).",
-    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' } }, additionalProperties: false },
+      "Reads a brush as facets (kind, medium, variety or tool, tip, marks, dynamics, behaviour, light, motion, colour: the brush library's form, as describe_brush returns it), with the engine it paints with and whether it is an unchanged built-in preset. Without id, the active brush as edited. Also returns strokePaint: what a stroke with it would paint now (its gradient colour, else the editor's paint from set_paint). Changes nothing.",
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brush_presets (default the active brush).' } }, additionalProperties: false },
     annotations: { title: 'Get a brush', ...READ },
     handler: ({ id }) => {
       const st = c.getState();
-      if (id === undefined) return { ...brushToJSON(st.brush), strokePaint: st.brush.paint ?? st.paint };
-      const b = c.getBrush(id);
-      if (!b) throw new Error(`Unknown brush "${id}". Call list_brushes for the ids.`);
-      return { ...brushToJSON(b), builtin: Boolean(b.builtin), strokePaint: b.paint ?? st.paint };
+      const b = id === undefined ? st.brush : c.getBrush(id);
+      if (!b) c.setBrushFacets({}, id); // throws the unknown-id error with the closest ids
+      const brush = b!;
+      return { brush: c.getBrushSpec(id), engine: brush.engine, category: brush.category, builtin: Boolean(brush.builtin), strokePaint: brush.paint ?? st.paint };
     },
   });
 
@@ -778,99 +480,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'set_brush',
     title: 'Set the brush',
     description:
-      'Chooses the active brush (id) and / or changes its settings; strokes without a brush use it. Editor state, not an undo step. Changes stay on the active brush until save_brush stores them. Returns the active brush.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brushes to start from.' }, ...BRUSH_FIELDS }, additionalProperties: false },
+      "Chooses the active brush (id, from list_brush_presets) and / or changes it with facets laid over it (objects merge, lists and values replace, marks of another kind replace the marks; the brush library's create_brush fields); unset removes whole facets first (unset colour drops a brush's own gradient). Strokes without a brush use it. Editor state, not an undo step: the changes stay on the active brush until the library's create_brush or update_brush stores a brush. Returns the active brush as facets, the engine it paints with, and problems (values clamped or dropped).",
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brush_presets to start from (default the active brush).' }, name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name.' }, ...BRUSH_PATCH_PROPERTIES, unset: BRUSH_UNSET_PROPERTY }, additionalProperties: false },
     annotations: { title: 'Set the brush', ...SET },
-    handler: async (a) => {
-      const stamps = (a.sticker as { stamps?: string[] } | undefined)?.stamps;
+    handler: async ({ id, unset, ...patch }) => {
+      const stamps = (patch.tip as { stamps?: string[] } | undefined)?.stamps;
       if (stamps) await c.prepareStickers(stamps);
-      return brushToJSON(c.setBrush(a));
-    },
-  });
-
-  add({
-    name: 'save_brush',
-    title: 'Save a brush',
-    description: 'Saves the active brush (with its changes) into the user library under a new or existing user id. Built-in ids are refused. Library state, not an undo step. Returns the saved brush.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'Library id: lowercase letters, digits and dashes.' },
-        name: { type: 'string', minLength: 1, maxLength: 80, description: 'Display name (default the brush name).' },
-      },
-      required: ['id'],
-      additionalProperties: false,
-    },
-    annotations: { title: 'Save a brush', ...SET },
-    handler: ({ id, name }) => brushToJSON(c.saveBrush({ id, name })),
-  });
-
-  add({
-    name: 'remove_brush',
-    title: 'Remove a saved brush',
-    description: 'Removes a user brush from the library (built-in brushes cannot be removed). Library state, not an undo step. Returns the removed id.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'User brush id from list_brushes.' } }, required: ['id'], additionalProperties: false },
-    annotations: { title: 'Remove a saved brush', ...DESTRUCTIVE },
-    handler: ({ id }) => {
-      c.removeBrush(id);
-      return { removed: id };
-    },
-  });
-
-  add({
-    name: 'export_brushes',
-    title: 'Export brushes',
-    description: 'Returns a brush library file (JSON: format pixerate-brushes, version 1, brushes) of the given brushes, or of every user brush. Changes nothing.',
-    inputSchema: {
-      type: 'object',
-      properties: { ids: { type: 'array', items: { type: 'string', description: 'Brush id.' }, description: 'Brush ids from list_brushes (default every user brush).' } },
-      additionalProperties: false,
-    },
-    annotations: { title: 'Export brushes', ...READ },
-    handler: ({ ids }) => c.exportBrushes(ids),
-  });
-
-  add({
-    name: 'import_brushes',
-    title: 'Import brushes',
-    description:
-      'Adds the brushes of a brush library file (as export_brushes returns) to the user library. Taken ids are skipped unless replace is true; built-in ids are always skipped. Library state, not an undo step. Returns the ids added and skipped and any problems.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        library: { type: 'object', description: 'The library file: {format: "pixerate-brushes", version: 1, brushes: [...]}.' },
-        replace: { type: 'boolean', description: 'Replace user brushes with the same id (default false).' },
-      },
-      required: ['library'],
-      additionalProperties: false,
-    },
-    annotations: { title: 'Import brushes', ...WRITE },
-    handler: ({ library, replace }) => c.importBrushes(library, { replace }),
-  });
-
-  add({
-    name: 'render_brush_thumbnail',
-    title: 'Render a brush thumbnail',
-    description: 'Renders a brush as a PNG: a test stroke (an S-curve swelling and fading in pressure) on the current paper, so you can see what it does before painting. Changes nothing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' },
-        width: { type: 'integer', minimum: 16, maximum: 512, description: 'Width in pixels (default 160).' },
-        height: { type: 'integer', minimum: 16, maximum: 512, description: 'Height in pixels (default 48).' },
-        color: { ...COLOR, description: 'Stroke colour (default the paint colour).' },
-      },
-      additionalProperties: false,
-    },
-    annotations: { title: 'Render a brush thumbnail', ...READ },
-    handler: ({ id, width, height, color }) => {
-      const t = c.brushThumbnail(id ?? c.getState().brush.id, { width, height, color });
-      return {
-        content: [
-          { type: 'image', data: bytesToBase64(encodePng(t.width, t.height, t.data)), mimeType: 'image/png' },
-          { type: 'text', text: `Brush ${id ?? c.getState().brush.id} ${t.width}×${t.height}` },
-        ],
-      };
+      const r = c.setBrushFacets(patch as BrushPatch, id as string | undefined, unset as UnsettableBrushFacet[] | undefined);
+      return { brush: r.spec, engine: r.brush.engine, problems: r.problems };
     },
   });
 
@@ -961,14 +578,14 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer of the canvas with a library brush or the active one, optionally changed (by facets) for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {
         points: POINTS,
         layerId: LAYER_ID,
-        brushId: { type: 'string', description: 'Brush id from list_brushes (default the active brush).' },
-        brush: { type: 'object', description: 'Brush changes for this stroke only.', properties: BRUSH_FIELDS, additionalProperties: false },
+        brushId: { type: 'string', description: 'Brush id from list_brush_presets (default the active brush).' },
+        brush: { type: 'object', description: 'Facets to change for this stroke only, laid over brushId or the active brush (as set_brush takes them).', properties: BRUSH_PATCH_PROPERTIES, additionalProperties: false },
         color: { ...COLOR, description: 'Paint colour #rrggbb (default the paint colour).' },
         paint: { ...PAINT_SOURCE_JSON_SCHEMA, description: "What this stroke paints with instead of the editor's paint: a colour, or gradient paint that changes colour as the stroke goes (by distance, pressure, tilt, speed, direction, time, across the tip or at random). Wins over the brush's own gradient." },
         seed: { type: 'integer', minimum: 0, description: 'Jitter seed (default a new one); the same seed and points give the same marks.' },
@@ -983,9 +600,9 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       await c.wetIdle();
       // Sticker brushes: load the stickers' art first, so the spray draws every one.
       const base = a.brushId ? c.getBrush(a.brushId as string) : c.getState().brush;
-      const over = a.brush as { engine?: string; sticker?: { stamps?: string[] } } | undefined;
-      if ((over?.engine ?? base?.engine) === 'sticker') await c.prepareStickers(over?.sticker?.stamps ?? base?.sticker.stamps ?? []);
-      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
+      const brush = a.brush ? c.brushChanges(a.brush as BrushPatch, a.brushId as string | undefined) : undefined;
+      if ((brush?.engine ?? base?.engine) === 'sticker') await c.prepareStickers(brush?.sticker?.stamps ?? base?.sticker.stamps ?? []);
+      const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
@@ -1051,8 +668,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Stroke id from list_strokes {live: true}.' },
-        brushId: { type: 'string', description: 'Brush preset id from list_brushes; the stroke keeps its size.' },
-        brush: { type: 'object', properties: BRUSH_FIELDS, additionalProperties: false, description: 'Brush settings to change on top of brushId or the stroke’s brush; missing fields keep their values.' },
+        brushId: { type: 'string', description: 'Brush id from list_brush_presets; the stroke keeps its size.' },
+        brush: { type: 'object', properties: BRUSH_PATCH_PROPERTIES, additionalProperties: false, description: 'Facets to change on top of brushId or the stroke’s brush (as set_brush takes them); missing fields keep their values.' },
         color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'New colour #rrggbb (replaces gradient paint).' },
         paint: { anyOf: [PAINT_SOURCE_JSON_SCHEMA, { type: 'null', description: 'Back to the stroke’s plain colour.' }], description: 'A colour or gradient paint for the stroke; null drops its gradient.' },
         seed: { type: 'integer', minimum: 0, description: 'Another jitter seed: particles, scatter and texture fall differently.' },
@@ -1064,6 +681,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     coordinates: { out: ['bounds', 'stroke.bounds'] },
     handler: ({ id, ...update }) => {
       if (!Object.keys(update).length) throw new Error('Pass at least one change: brushId, brush, color, paint or seed.');
+      if (update.brush) {
+        const stroke = Object.values(c.document.liveStrokes ?? {}).flat().find((s) => s.id === id);
+        if (!stroke) throw new Error(`Unknown stroke "${id}" on a stroke layer. Call list_strokes {live: true} for the ids.`);
+        update.brush = c.brushChanges(update.brush as BrushPatch, (update.brushId as string | undefined) ?? stroke.brush);
+      }
       const r = c.updateStroke(id, update);
       return { stroke: strokeSummary(r.stroke, false, true), bounds: r.bounds };
     },
@@ -1176,7 +798,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
         },
         pressureScale: { type: 'number', minimum: 0, maximum: 4, description: 'Multiply every pressure (default 1).' },
         color: { ...COLOR, description: 'Recolour (default each stroke’s colour).' },
-        brushId: { type: 'string', description: 'Replay with this brush from list_brushes (default each stroke’s brush).' },
+        brushId: { type: 'string', description: 'Replay with this brush from list_brush_presets (default each stroke’s brush).' },
         layerId: { type: 'string', description: 'Paint on this layer (default each stroke’s layer).' },
         repeat: { type: 'integer', minimum: 1, maximum: 100, description: 'How many copies (default 1).' },
       },

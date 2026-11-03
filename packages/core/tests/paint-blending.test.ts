@@ -400,13 +400,13 @@ describe('paint editor brushes', () => {
     });
   });
 
-  it('keeps the library list stable while the active brush changes, so panels do not redraw thumbnails', () => {
+  it('keeps the library list stable while the active brush changes, so panels do not redraw thumbnails', async () => {
     const c = new PaintEditorController();
     const list = c.getState().brushes;
     c.setBrush({ id: 'blender', blender: { strength: 0.9 } });
     c.setColor('#123456');
     expect(c.getState().brushes).toBe(list);
-    c.saveBrush({ id: 'mine', name: 'Mine' });
+    await c.saveBrush({ id: 'mine', name: 'Mine' });
     expect(c.getState().brushes).not.toBe(list);
     expect(c.getState().brushes.map((b) => b.id)).toContain('mine');
   });
@@ -466,23 +466,23 @@ describe('agent tools for blending and behaviours', () => {
   it('set_brush validates and applies the new blocks', async () => {
     const { c, r } = setup();
     expect((await r.callTool('set_brush', { id: 'nope' })).isError).toBe(true);
-    const brush = ok(await r.callTool('set_brush', { id: 'pencil-6b', behavior: { pickup: 0.5, mix: 0.6, dirty: true, multicolor: { mode: 'dab', colors: ['#ff0000', '#00ff00'], order: 'random', length: 5 } } }));
-    expect(brush.behavior).toMatchObject({ pickup: 0.5, mix: 0.6, dirty: true, multicolor: { mode: 'dab', order: 'random', length: 5, colors: ['#ff0000', '#00ff00'] } });
-    expect(c.getState().brush.behavior.pickup).toBe(0.5);
-    const blender = ok(await r.callTool('set_brush', { id: 'blender', blender: { strength: 0.8, distance: 0.2, mixing: 'rgb' } }));
-    expect(blender.blender).toEqual({ strength: 0.8, distance: 0.2, mixing: 'rgb' });
-    const smudge = ok(await r.callTool('set_brush', { id: 'smudge', smudge: { mixing: 'pigment', length: 0.95 } }));
-    expect(smudge.smudge).toMatchObject({ mixing: 'pigment', length: 0.95 });
-    const mixer = ok(await r.callTool('set_brush', { id: 'mixer-brush', behavior: { pickup: 0.2 } }));
-    expect(mixer.mixer.wet).toBe(0.2);
-    for (const bad of [{ behavior: { pickup: 2 } }, { behavior: { multicolor: { mode: 'stripes' } } }, { behavior: { multicolor: { colors: ['red'] } } }, { blender: { distance: -1 } }, { smudge: { mixing: 'oil' } }, { behavior: { wet: 1 } }]) {
+    const brush = ok(await r.callTool('set_brush', { id: 'pencil-6b', behaviour: { exchange: { pickup: 0.5, mix: 0.6, dirty: true } } }));
+    expect(brush.brush.behaviour.exchange).toEqual({ pickup: 0.5, mix: 0.6, dirty: true });
+    expect(c.getState().brush.behavior).toMatchObject({ pickup: 0.5, mix: 0.6, dirty: true });
+    const blender = ok(await r.callTool('set_brush', { id: 'blender', behaviour: { strength: 0.8, distance: 0.2, mixing: 'rgb' } }));
+    expect(blender).toMatchObject({ engine: 'blender', brush: { kind: 'tool', tool: 'blender' } });
+    expect(c.getState().brush.blender).toEqual({ strength: 0.8, distance: 0.2, mixing: 'rgb' });
+    ok(await r.callTool('set_brush', { id: 'smudge', behaviour: { mixing: 'pigment', length: 0.95 } }));
+    expect(c.getState().brush.smudge).toMatchObject({ mixing: 'pigment', length: 0.95 });
+    const mixer = ok(await r.callTool('set_brush', { id: 'mixer-brush', behaviour: { exchange: { pickup: 0.2 } } }));
+    expect(mixer.engine).toBe('mixer');
+    expect(c.getState().brush.mixer.wet).toBe(0.2);
+    // Out of range, unknown values, and the old flat engine fields are refused.
+    for (const bad of [{ behaviour: { exchange: { pickup: 2 } } }, { behaviour: { mixing: 'oil' } }, { behaviour: { distance: -1 } }, { behavior: { pickup: 0.5 } }, { blender: { strength: 0.5 } }]) {
       const res = await r.callTool('set_brush', bad);
       expect(res.isError, JSON.stringify(bad)).toBe(true);
     }
-    const list = ok(await r.callTool('list_brushes', {}));
-    const dirty = list.brushes.find((x: { id: string }) => x.id === 'dirty-round');
-    expect(dirty).toMatchObject({ engine: 'dab', category: 'paint', wetCapable: true, dirty: true, multicolor: 'off' });
-    expect(list.brushes.find((x: { id: string }) => x.id === 'blender').wetCapable).toBe(false);
+    expect(ok(await r.callTool('get_brush', { id: 'dirty-round' }))).toMatchObject({ engine: 'dab', category: 'paint', brush: { behaviour: { exchange: { dirty: true } } } });
   });
 
   it('paint_stroke with a dirty brush returns what it carries; get and clean the load', async () => {

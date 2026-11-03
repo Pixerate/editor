@@ -48,7 +48,7 @@ export const TOOL_SELECTION_CASES: ToolSelectionCase[] = [
 	{ task: 'Is the white wall in the top left still neutral after the colour fix?', expect: ['image-editor__measure_region'] },
 	// Paint editor
 	{ task: 'Switch to watercolour paper with heavy grain', expect: ['paint-editor__set_paper'] },
-	{ task: 'Choose a soft charcoal brush', expect: ['paint-editor__set_brush', 'paint-editor__list_brushes'] },
+	{ task: 'Choose a soft charcoal brush', expect: ['paint-editor__set_brush', 'brushes__list_brush_presets'] },
 	{ task: 'Paint a stroke across the canvas', expect: ['paint-editor__paint_stroke'] },
 	{ task: 'Let the wet watercolour bleed and spread for a moment', expect: ['paint-editor__advance_wet_paint'] },
 	{ task: 'Paint with mirror symmetry', expect: ['paint-editor__set_symmetry'] },
@@ -107,7 +107,7 @@ export const HELD_OUT_CASES: ToolSelectionCase[] = [
 	{ task: 'Duplicate the background layer of the image', expect: ['image-editor__duplicate_layer'] },
 	{ task: 'Copy texture from one area of the photo to another', expect: ['image-editor__clone_stamp'] },
 	{ task: 'Trace over a reference photo while painting', expect: ['paint-editor__set_tracing_image', 'paint-editor__add_reference_image'] },
-	{ task: 'Save my current brush settings as a new brush', expect: ['paint-editor__save_brush'] },
+	{ task: 'Save my current brush settings as a new brush', expect: ['brushes__create_brush'] },
 	{ task: 'Rename the "Series 1" series in the bar chart to Revenue', expect: ['chart__update_chart_series'] },
 	{ task: 'Apply the minimal style to the chart', expect: ['chart__apply_chart_preset', 'chart__list_chart_presets'] },
 	{ task: 'Put the payment nodes of the diagram in a group', expect: ['diagram__group_diagram_nodes'] },

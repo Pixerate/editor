@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/tools";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
-import { createPaintEditorToolProvider, createPaintEffectsToolProvider, PaintEditorController } from "@pixerate/editor/paint-editor";
+import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintEffectsToolProvider, PaintEditorController } from "@pixerate/editor/paint-editor";
 import { combineStickerProviders, createFakeStickerProvider, editorStickers } from "@pixerate/editor/stickers";
 import { runAgentScript } from "./agentScript";
 import { PAINT_SCRIPTS } from "./agentScripts";
@@ -36,6 +36,7 @@ function setup() {
   controller.setEffectsProvider(createFakeEffectProvider());
   const registry = new ToolRegistry();
   registry.register(createPaintEditorToolProvider(controller, { id: "paint", namespace: "paint" }));
+  registry.register(createPaintBrushLibraryToolProvider(controller));
   registry.register(createPaintEffectsToolProvider(controller, { id: "paint-effects", namespace: "paintfx" }));
   return { controller, registry };
 }

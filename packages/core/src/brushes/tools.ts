@@ -10,6 +10,7 @@ import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema';
 import { BrushLibraryError, closest, type BrushLibrary, type BrushLibraryEntry } from './library';
 import { normalizeBrushSpec } from './normalize';
+import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch } from './patch';
 import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, type BrushCheck, type BrushHostProfile } from './profiles';
 import { resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
@@ -41,32 +42,12 @@ export interface BrushLibraryToolProviderOptions {
 
 const FACETS = BRUSH_JSON_SCHEMA.properties!;
 const ID: JsonSchema = { type: 'string', pattern: String(FACETS.id!.pattern), description: 'Brush id from list_brush_presets (lowercase letters, digits and dashes).' };
-const FACET_PROPS: Record<string, JsonSchema> = (({ id: _id, name: _name, ...rest }) => rest)(FACETS as Record<string, JsonSchema>);
-// A patch may change the tip without restating its shape (a new brush without one gets a round tip).
-FACET_PROPS.tip = (({ required: _r, ...tip }) => ({ ...tip, description: `${tip.description} In a patch, shape may be left out to keep it.` }))(FACET_PROPS.tip!);
-const UNSETTABLE = ['description', 'tags', 'medium', 'variety', 'marks', 'dynamics', 'behaviour', 'light', 'motion', 'colour'] as const;
+const FACET_PROPS = BRUSH_PATCH_PROPERTIES;
 const HOSTS = Object.keys(BRUSH_HOST_PROFILES);
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
-
-/** `base` with `patch` laid over it: objects merge, everything else (lists included) is replaced. Marks of another kind replace the marks. */
-function merge(base: Record<string, unknown>, patch: Record<string, unknown>, path = ''): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === undefined) continue;
-    const old = out[k];
-    const replaceMarks = path === '' && k === 'marks' && isObject(old) && isObject(v) && old.kind !== v.kind;
-    out[k] = isObject(v) && isObject(old) && !replaceMarks ? merge(old, v, `${path}${k}.`) : copy(v);
-  }
-  return out;
-}
-
-/** Leaf paths whose values differ between two brushes. */
-function changedPaths(a: unknown, b: unknown, path = ''): string[] {
-  if (isObject(a) && isObject(b)) return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => changedPaths(a[k], b[k], path ? `${path}.${k}` : k));
-  return JSON.stringify(a) === JSON.stringify(b) ? [] : [path];
-}
+const merge = mergeBrushPatch;
+const changedPaths = changedBrushPaths;
 
 function summary(entry: BrushLibraryEntry, profile: BrushHostProfile, withCheck: boolean) {
   const b = entry.brush;
@@ -250,8 +231,8 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
   tools.push(
     {
       name: 'create_brush',
-      title: 'Create a brush',
-      description: `Saves a new brush made of facets, optionally basedOn an existing brush (its facets are copied and the ones given here laid over them: objects merge, lists and values replace). Values are normalised (out-of-range numbers clamped, unused facets dropped, each reported in problems) and checked against this host (${profile.name}): a brush it can't render is refused with the facet and fix, and nothing is saved. Returns the new id, the stored brush, the engine it resolves to, problems and warnings (settings this host paints without). Start from the nearest preset (list_brush_presets) rather than from nothing.`,
+      title: 'Save a new brush',
+      description: `Saves a new brush made of facets (to save an editor's current brush settings, pass the brush get_brush returns), optionally basedOn an existing brush (its facets are copied and the ones given here laid over them: objects merge, lists and values replace). Values are normalised (out-of-range numbers clamped, unused facets dropped, each reported in problems) and checked against this host (${profile.name}): a brush it can't render is refused with the facet and fix, and nothing is saved. Returns the new id, the stored brush, the engine it resolves to, problems and warnings (settings this host paints without). Start from the nearest preset (list_brush_presets) rather than from nothing.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -263,7 +244,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
         required: ['id', 'name'],
         additionalProperties: false,
       },
-      annotations: { title: 'Create a brush', ...WRITE },
+      annotations: { title: 'Save a new brush', ...WRITE },
       handler: async ({ basedOn, ...spec }) => {
         if (library.isBuiltin(spec.id as string)) throw new BrushLibraryError('builtin', `"${spec.id}" is a built-in brush id; pick another id (or basedOn "${spec.id}" with a new id).`);
         if (await library.get(spec.id as string)) throw new BrushLibraryError('exists', `A brush "${spec.id}" exists already; pick another id, or change it with update_brush.`);
@@ -283,7 +264,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
           id: { ...ID, description: 'The saved brush to change (not a built-in).' },
           name: FACETS.name!,
           ...FACET_PROPS,
-          unset: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', enum: [...UNSETTABLE], description: 'A facet to remove.' }, description: 'Facets to remove (applied before the facets given).' },
+          unset: BRUSH_UNSET_PROPERTY,
         },
         required: ['id'],
         additionalProperties: false,
