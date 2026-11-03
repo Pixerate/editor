@@ -202,6 +202,6 @@ describe('light paint', () => {
     r = await call('clear_light', {});
     expect(r.data.cleared).toBe(false);
     r = await call('list_brushes', {});
-    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['glow-wash', 0.7], ['highlighter', 0.5]]);
+    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['light-ribbon', 0.8], ['flame-ribbon', 1], ['neon-strand', 1], ['smoke-ribbon', 0.3], ['bokeh-dots', 0.9], ['twinkle-sparks', 1], ['glow-wash', 0.7], ['highlighter', 0.5]]);
   });
 });

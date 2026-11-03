@@ -17,7 +17,7 @@ import type { PaintEditorController } from './controller';
 import type { PenPoint } from './engine';
 import { perspectiveGuideLines, symmetryAxisSegments, type Point2 } from './guides';
 import { stencilOutline, type StencilInput } from './stencils';
-import type { ParticleKind, ParticleRender } from './procedural';
+import { MAX_DOT_TEXTURES, type DotRotation, type DotTextureOrder, type ParticleKind, type ParticleRender, type RibbonPairs } from './procedural';
 import type { StampKind } from './stickers';
 import type { WetEngineInfo, WetGpuMode } from './wet';
 import { isPalmTouch, pointerToPenPoint, type PointerSample } from './input';
@@ -547,7 +547,11 @@ export interface BrushEngineControls {
   wetTool?: boolean;
   /** The impasto tool menu (`impasto.tool`, `IMPASTO_TOOLS`). */
   impastoTool?: boolean;
-  /** The particle kind and render menus (`particle.kind`, `particle.render`). */
+  /**
+   * The particle menus: kind and render (`particle.kind`, `particle.render`), ribbon pairs
+   * (`particle.ribbonPairs`), and the textured-dot stamps, order and rotation
+   * (`particle.dotTextures` up to `MAX_DOT_TEXTURES` of `STAMP_KINDS`, `dotTextureOrder`, `dotRotation`).
+   */
   particleMenus?: boolean;
   /** The sticker stamp toggles (`sticker.stamps`, `STAMP_KINDS`). */
   stickerStamps?: boolean;
@@ -594,6 +598,11 @@ function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['
           { path: 'particle.gravity', label: 'Gravity', min: -1, max: 1, step: 0.01 },
           { path: 'particle.life', label: 'Life', min: 0, max: 1, step: 0.01 },
           { path: 'particle.interval', label: 'Bead spacing', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.ribbonFill', label: 'Ribbon fill', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.waveAmplitude', label: 'Wave', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.waveLength', label: 'Wavelength', min: 4, max: 400, step: 1 },
+          { path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 },
+          { path: 'particle.wavePhaseJitter', label: 'Wave scatter', min: 0, max: 1, step: 0.01 },
         ],
         mixingPath: null,
         dirty: false,
@@ -856,8 +865,12 @@ export const LIGHT_SLIDERS: readonly SliderControl[] = [
 ];
 
 /** Labels of the particle kinds and renders. */
-export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow' };
-export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = { dot: 'Dots', line: 'Lines', sequence: 'Beads' };
+export const PARTICLE_KIND_LABELS: Readonly<Record<ParticleKind, string>> = { string: 'Strings', spring: 'Springs', orbit: 'Orbits', flow: 'Flow', elastic: 'Elastic', fuzzy: 'Fuzzy' };
+export const PARTICLE_RENDER_LABELS: Readonly<Record<ParticleRender, string>> = { dot: 'Dots', line: 'Lines', sequence: 'Beads', ribbon: 'Ribbon' };
+/** Labels of the ribbon pairings, textured-dot orders and textured-dot rotations. */
+export const RIBBON_PAIR_LABELS: Readonly<Record<RibbonPairs, string>> = { adjacent: 'Neighbours', 'first-last': 'Outermost' };
+export const DOT_TEXTURE_ORDER_LABELS: Readonly<Record<DotTextureOrder, string>> = { sequence: 'In turn', random: 'Random' };
+export const DOT_ROTATION_LABELS: Readonly<Record<DotRotation, string>> = { follow: 'Follow motion', random: 'Random', fixed: 'Tip angle' };
 
 /** Labels of the sticker stamps. */
 export const STAMP_LABELS: Readonly<Record<StampKind, string>> = { dot: 'Dot', star: 'Star', heart: 'Heart', leaf: 'Leaf', flower: 'Flower', confetti: 'Confetti', splat: 'Splat', sparkle: 'Sparkle', ring: 'Ring' };
@@ -866,6 +879,15 @@ export const STAMP_LABELS: Readonly<Record<StampKind, string>> = { dot: 'Dot', s
 export function toggleStamp(stamps: readonly StampKind[], stamp: StampKind): StampKind[] {
   const next = stamps.includes(stamp) ? stamps.filter((s) => s !== stamp) : [...stamps, stamp];
   return next.length ? next : [stamp];
+}
+
+/**
+ * Toggles a textured-dot stamp (`particle.dotTextures`): removes it (every copy) when present,
+ * else adds it while there are fewer than `MAX_DOT_TEXTURES`. Empty means round dots.
+ */
+export function toggleDotTexture(textures: readonly StampKind[], stamp: StampKind): StampKind[] {
+  if (textures.includes(stamp)) return textures.filter((s) => s !== stamp);
+  return textures.length < MAX_DOT_TEXTURES ? [...textures, stamp] : [...textures];
 }
 
 /** The sticker panel's sliders for the selected sticker. */

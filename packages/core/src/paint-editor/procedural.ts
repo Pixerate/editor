@@ -6,8 +6,12 @@
  *   rules. `string`: strands of masses on springs, dragged behind the pen like hair or wet string;
  *   `spring`: each particle tied to the pen by a spring, overshooting and wobbling; `orbit`:
  *   particles circling the pen (spirograph curls); `flow`: particles thrown off the pen and carried
- *   by a swirling flow field until they fade. Each is drawn as `dot`s, a continuous `line`, or a
- *   `sequence` of beads spaced along its path.
+ *   by a swirling flow field until they fade; `elastic`: strands whose masses keep a rest length,
+ *   stretching when the pen is fast and snapping back; `fuzzy`: strings that wind, each strand
+ *   waving out of step with the others. Each is drawn as `dot`s (round, or stamped with up to four
+ *   textures), a continuous `line`, a `sequence` of beads spaced along its path, or a `ribbon`:
+ *   the area between neighbouring particles' paths filled, with their paths as its edges. Any kind
+ *   can wave: each particle's drawn place moves sideways on a sine along the pen's path.
  * - **Bristle brushes** (`engine: 'bristle'`): a tuft of bristles, each its own thin line. Pressure
  *   splays the tuft, tilt flattens it, and bristles lag behind the tip by their stiffness, so they
  *   bend into curves at turns; each bristle carries its own paint and runs dry at its own pace, so
@@ -20,12 +24,13 @@
 
 import { CoverageMap, dabRect, rasterizeDab, TIP_GRADIENT_STEPS, type Dab } from '../paint/brush';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
-import type { RasterRect } from '../raster/surface';
+import { TILE, tileKey, type RasterRect, type TileKey } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
+import { STAMP_KINDS, stampCoverage, type StampKind } from './stickers';
 
 export interface ProceduralStrokeOptions {
   grain: PaperGrain | null;
@@ -139,9 +144,60 @@ abstract class MarkStroke implements CoverageStroke {
     const rect = dabRect(dab, hardness);
     const n = rect.width * rect.height;
     if (n <= 0) return;
+    const vals = this.scratch(n);
+    rasterizeDab(dab, hardness, rect, vals);
+    this.lay(rect, vals, dab.opacity, pressure, x, y, rects);
+  }
+
+  /**
+   * Stamps a textured mark: `kind` from the sticker stamps over a square of half-size `r`, turned
+   * `rotation` radians clockwise, with flow `alpha` towards `opacity`. Small marks are supersampled.
+   */
+  protected stamp(x: number, y: number, r: number, kind: StampKind, rotation: number, seed: number, alpha: number, opacity: number, pressure: number, rects: RasterRect[]): void {
+    if (!(r > 0.05) || !(alpha > 0)) return;
+    const reach = Math.max(0.5, r) * Math.SQRT2 + 1;
+    const rect: RasterRect = { x: Math.floor(x - reach), y: Math.floor(y - reach), width: 0, height: 0 };
+    rect.width = Math.ceil(x + reach) - rect.x;
+    rect.height = Math.ceil(y + reach) - rect.y;
+    const n = rect.width * rect.height;
+    const vals = this.scratch(n);
+    const ss = r < 10 ? 3 : 1;
+    const c = Math.cos(rotation);
+    const s = Math.sin(rotation);
+    const inv = 1 / Math.max(0.5, r);
+    const a = Math.min(1, alpha);
+    for (let yy = 0, k = 0; yy < rect.height; yy++) {
+      for (let xx = 0; xx < rect.width; xx++, k++) {
+        let sum = 0;
+        for (let sy = 0; sy < ss; sy++) {
+          for (let sx = 0; sx < ss; sx++) {
+            const dx = rect.x + xx + (sx + 0.5) / ss - x;
+            const dy = rect.y + yy + (sy + 0.5) / ss - y;
+            // Into the stamp's square: undo the turn (clockwise on screen, y down).
+            sum += stampCoverage(kind, (dx * c + dy * s) * inv, (dy * c - dx * s) * inv, seed);
+          }
+        }
+        vals[k] = (sum / (ss * ss)) * a;
+      }
+    }
+    this.lay(rect, vals, Math.min(1, opacity), pressure, x, y, rects);
+  }
+
+  /** A scratch buffer of `n` values (reused; valid until the next mark). */
+  protected scratch(n: number): Float32Array {
     if (this.buf.length < n) this.buf = new Float32Array(n);
     const vals = this.buf.subarray(0, n);
-    rasterizeDab(dab, hardness, rect, vals);
+    vals.fill(0);
+    return vals;
+  }
+
+  /**
+   * Lays coverage `vals` over `rect` towards `opacity`: paper grain, then effect paint or the
+   * colour of a mark at (x, y) (gradient paint), into the stroke's coverage.
+   */
+  protected lay(rect: RasterRect, vals: Float32Array, opacity: number, pressure: number, x: number, y: number, rects: RasterRect[]): void {
+    const n = rect.width * rect.height;
+    if (n <= 0) return;
     const grain = this.options.grain;
     if (this.depth > 0 && grain) {
       for (let yy = 0, k = 0; yy < rect.height; yy++)
@@ -151,11 +207,11 @@ abstract class MarkStroke implements CoverageStroke {
       if (this.field.length < n * 3) this.field = new Float32Array(n * 3);
       const field = this.field.subarray(0, n * 3);
       sampleEffectField(this.options.effect, rect, vals, field, this.pen);
-      this.coverage.accumulate(rect, vals, dab.opacity, null, field);
+      this.coverage.accumulate(rect, vals, opacity, null, field);
     } else {
       const color = this.markColor(x, y);
       if (color && color.alpha < 1) for (let k = 0; k < n; k++) vals[k] *= color.alpha;
-      this.coverage.accumulate(rect, vals, dab.opacity, color ? color.rgb : null);
+      this.coverage.accumulate(rect, vals, opacity, color ? color.rgb : null);
     }
     rects.push(rect);
     this.dabCount++;
@@ -174,10 +230,21 @@ abstract class MarkStroke implements CoverageStroke {
 // Particle brushes
 // ---------------------------------------------------------------------------
 
-export type ParticleKind = 'string' | 'spring' | 'orbit' | 'flow';
-export const PARTICLE_KINDS: readonly ParticleKind[] = ['string', 'spring', 'orbit', 'flow'];
-export type ParticleRender = 'dot' | 'line' | 'sequence';
-export const PARTICLE_RENDERS: readonly ParticleRender[] = ['dot', 'line', 'sequence'];
+export type ParticleKind = 'string' | 'spring' | 'orbit' | 'flow' | 'elastic' | 'fuzzy';
+export const PARTICLE_KINDS: readonly ParticleKind[] = ['string', 'spring', 'orbit', 'flow', 'elastic', 'fuzzy'];
+export type ParticleRender = 'dot' | 'line' | 'sequence' | 'ribbon';
+export const PARTICLE_RENDERS: readonly ParticleRender[] = ['dot', 'line', 'sequence', 'ribbon'];
+/** Ribbon: which particles' paths are joined (`adjacent`: each to its neighbour; `first-last`: one band between the outermost two). */
+export type RibbonPairs = 'adjacent' | 'first-last';
+export const RIBBON_PAIRS: readonly RibbonPairs[] = ['adjacent', 'first-last'];
+/** Textured dots: the stamps in turn, or one picked at random (seeded) per dot. */
+export type DotTextureOrder = 'sequence' | 'random';
+export const DOT_TEXTURE_ORDERS: readonly DotTextureOrder[] = ['sequence', 'random'];
+/** Textured dots: turned with the particle's motion, at random, or at the tip angle. */
+export type DotRotation = 'follow' | 'random' | 'fixed';
+export const DOT_ROTATIONS: readonly DotRotation[] = ['follow', 'random', 'fixed'];
+/** Textured dots: at most this many stamps. */
+export const MAX_DOT_TEXTURES = 4;
 
 /** Particle engine settings (each 0..1 unless noted). */
 export interface ParticleSettings {
@@ -201,16 +268,55 @@ export interface ParticleSettings {
   life: number;
   /** Sequence: spacing of the beads along each path. */
   interval: number;
+  /** Ribbon: opacity of the fill between the paths, relative to their edges. */
+  ribbonFill: number;
+  /** Ribbon: which paths are joined. */
+  ribbonPairs: RibbonPairs;
+  /** Wave: how far each particle's drawn place swings sideways, as a fraction of the tip size (0: no wave). */
+  waveAmplitude: number;
+  /** Wave: wavelength in px of pen travel, 4..2000. */
+  waveLength: number;
+  /** Wave: how fast the waves run (0: they stand still on the path; 1: about four a second while the pen moves). */
+  waveSpeed: number;
+  /** Wave: how far out of step the particles' waves are (0: all in step; 1: random phases). */
+  wavePhaseJitter: number;
+  /** Dots and beads: up to four sticker stamps drawn instead of round marks (empty: round). */
+  dotTextures: StampKind[];
+  dotTextureOrder: DotTextureOrder;
+  dotRotation: DotRotation;
 }
 
-export const DEFAULT_PARTICLE: Readonly<ParticleSettings> = { kind: 'spring', render: 'line', count: 12, size: 0.08, spread: 0.5, stiffness: 0.4, damping: 0.25, speed: 0.5, gravity: 0, life: 0.5, interval: 0.3 };
+export const DEFAULT_PARTICLE: Readonly<ParticleSettings> = {
+  kind: 'spring',
+  render: 'line',
+  count: 12,
+  size: 0.08,
+  spread: 0.5,
+  stiffness: 0.4,
+  damping: 0.25,
+  speed: 0.5,
+  gravity: 0,
+  life: 0.5,
+  interval: 0.3,
+  ribbonFill: 0.5,
+  ribbonPairs: 'adjacent',
+  waveAmplitude: 0,
+  waveLength: 60,
+  waveSpeed: 0,
+  wavePhaseJitter: 0,
+  dotTextures: [],
+  dotTextureOrder: 'sequence',
+  dotRotation: 'random',
+};
 
 const unit = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
+const oneOf = <T extends string>(v: unknown, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
 
 export function normalizeParticle(raw: Partial<ParticleSettings> = {}, base: ParticleSettings = DEFAULT_PARTICLE): ParticleSettings {
+  const textures = Array.isArray(raw.dotTextures) ? raw.dotTextures.filter((t): t is StampKind => STAMP_KINDS.includes(t as StampKind)).slice(0, MAX_DOT_TEXTURES) : [...(base.dotTextures ?? [])];
   return {
-    kind: PARTICLE_KINDS.includes(raw.kind as ParticleKind) ? (raw.kind as ParticleKind) : base.kind,
-    render: PARTICLE_RENDERS.includes(raw.render as ParticleRender) ? (raw.render as ParticleRender) : base.render,
+    kind: oneOf(raw.kind, PARTICLE_KINDS, base.kind),
+    render: oneOf(raw.render, PARTICLE_RENDERS, base.render),
     count: typeof raw.count === 'number' && Number.isFinite(raw.count) ? Math.min(64, Math.max(1, Math.round(raw.count))) : base.count,
     size: unit(raw.size, base.size),
     spread: unit(raw.spread, base.spread),
@@ -220,7 +326,33 @@ export function normalizeParticle(raw: Partial<ParticleSettings> = {}, base: Par
     gravity: typeof raw.gravity === 'number' && Number.isFinite(raw.gravity) ? Math.min(1, Math.max(-1, raw.gravity)) : base.gravity,
     life: unit(raw.life, base.life),
     interval: unit(raw.interval, base.interval),
+    ribbonFill: unit(raw.ribbonFill, base.ribbonFill ?? DEFAULT_PARTICLE.ribbonFill),
+    ribbonPairs: oneOf(raw.ribbonPairs, RIBBON_PAIRS, base.ribbonPairs ?? DEFAULT_PARTICLE.ribbonPairs),
+    waveAmplitude: unit(raw.waveAmplitude, base.waveAmplitude ?? 0),
+    waveLength: typeof raw.waveLength === 'number' && Number.isFinite(raw.waveLength) ? Math.min(2000, Math.max(4, raw.waveLength)) : (base.waveLength ?? DEFAULT_PARTICLE.waveLength),
+    waveSpeed: unit(raw.waveSpeed, base.waveSpeed ?? 0),
+    wavePhaseJitter: unit(raw.wavePhaseJitter, base.wavePhaseJitter ?? 0),
+    dotTextures: textures,
+    dotTextureOrder: oneOf(raw.dotTextureOrder, DOT_TEXTURE_ORDERS, base.dotTextureOrder ?? DEFAULT_PARTICLE.dotTextureOrder),
+    dotRotation: oneOf(raw.dotRotation, DOT_ROTATIONS, base.dotRotation ?? DEFAULT_PARTICLE.dotRotation),
   };
+}
+
+/** Fuzzy strands always wave, by at least this fraction of the tip size. */
+const FUZZY_AMPLITUDE = 0.12;
+/** Ms of travel per px for strokes without times (the wave runs as if the pen moved at 0.5 px/ms). */
+const NOMINAL_MS_PER_PX = 2;
+/** Ribbon fill: sub-rows per pixel row (coverage is exact across each sub-row). */
+const RIBBON_SUB = 4;
+
+/**
+ * Velocity kept per step by a mass in a strand with spring `k`: at most a little under critical
+ * damping (critical is 1 / (1 + √k)² for this update). Each mass chases the one before it, so the
+ * strand is a chain of springs; lightly damped, each link resonates and the chain multiplies it
+ * until the strand flies apart. Used by the elastic and fuzzy kinds (string keeps its old motion).
+ */
+function chainDamp(damp: number, k: number): number {
+  return Math.min(damp, 1 / (1 + 0.8 * Math.sqrt(Math.max(0, k))) ** 2);
 }
 
 interface Particle {
@@ -238,8 +370,62 @@ interface Particle {
   run: number;
   bead: number;
   alive: boolean;
-  /** string: the masses of the strand, pen end first. */
+  /** string, elastic, fuzzy: the masses of the strand, pen end first. */
   strand?: Array<{ x: number; y: number; vx: number; vy: number }>;
+  /** Wave: this particle's phase (radians) and wavelength factor. */
+  wavePhase: number;
+  waveScale: number;
+  /** Where it was last drawn (its place plus its wave); where it started before that. */
+  dx: number;
+  dy: number;
+  /** Where it was drawn before that step (ribbons join these to the new places). */
+  px: number;
+  py: number;
+  /** Fade when last drawn (flow). */
+  fade: number;
+}
+
+/**
+ * Adds the area polygon `pts` (x, y pairs, even-odd) covers in each pixel of `rect`, times `weight`, to `out`,
+ * exactly across each of `RIBBON_SUB` sub-rows per row. Points on an edge two polygons share
+ * count for exactly one of them, so polygons that tile a region add up to it with no seams.
+ */
+export function addPolygonArea(pts: readonly number[], rect: RasterRect, out: Float32Array, weight = 1): void {
+  const n = pts.length >> 1;
+  if (n < 3) return;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (let i = 1; i < pts.length; i += 2) {
+    if (pts[i] < y0) y0 = pts[i];
+    if (pts[i] > y1) y1 = pts[i];
+  }
+  const r0 = Math.max(0, Math.floor(y0) - rect.y);
+  const r1 = Math.min(rect.height - 1, Math.floor(y1) - rect.y);
+  const xs: number[] = [];
+  const w = weight / RIBBON_SUB;
+  for (let row = r0; row <= r1; row++) {
+    const base = row * rect.width;
+    for (let sub = 0; sub < RIBBON_SUB; sub++) {
+      const y = rect.y + row + (sub + 0.5) / RIBBON_SUB;
+      xs.length = 0;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const yi = pts[i * 2 + 1];
+        const yj = pts[j * 2 + 1];
+        if (yi <= y !== yj <= y) xs.push(pts[i * 2] + ((y - yi) / (yj - yi)) * (pts[j * 2] - pts[i * 2]));
+      }
+      if (xs.length < 2) continue;
+      xs.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        const a = Math.max(rect.x, xs[k]);
+        const b = Math.min(rect.x + rect.width, xs[k + 1]);
+        if (!(b > a)) continue;
+        for (let px = Math.floor(a); px < b; px++) {
+          const cover = Math.min(b, px + 1) - Math.max(a, px);
+          if (cover > 0) out[base + px - rect.x] += cover * w;
+        }
+      }
+    }
+  }
 }
 
 /** Curl of a value-noise field (a swirling, divergence-free flow), deterministic. */
@@ -265,13 +451,54 @@ function curl(x: number, y: number, seed: number): [number, number] {
 /** A particle-brush stroke. */
 export class ParticleStroke extends MarkStroke {
   private readonly sets: Particle[][];
+  /** Ribbon pairs per copy: particles in their order around the pen (non-flow kinds). */
+  private readonly orders: number[][];
   private readonly s: ParticleSettings;
   private spawn = 0;
+  /** Textured dots drawn so far, per copy (sequence order, random picks). */
+  private readonly dots: number[];
+  /** Ribbon fill: the area each pixel has had so far this stroke (telescoped into the coverage). */
+  private readonly filled = new Map<TileKey, Float32Array>();
+  private pts: number[] = [];
 
   constructor(brush: PaintBrush, options: ProceduralStrokeOptions) {
     super(brush, options);
     this.s = brush.particle;
     this.sets = this.copies.map(() => []);
+    this.orders = this.copies.map(() => []);
+    this.dots = this.copies.map(() => 0);
+  }
+
+  /** Strand kinds: a chain of masses behind each particle. */
+  private get strands(): boolean {
+    return this.s.kind === 'string' || this.s.kind === 'elastic' || this.s.kind === 'fuzzy';
+  }
+
+  private newParticle(x: number, y: number, ox: number, oy: number, k: number, phase: number, i: number, copy: number): Particle {
+    const s = this.s;
+    const fuzzy = s.kind === 'fuzzy';
+    const jitter = fuzzy ? 1 : s.wavePhaseJitter;
+    return {
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      ox,
+      oy,
+      k,
+      phase,
+      age: 0,
+      run: 0,
+      bead: 0,
+      alive: true,
+      wavePhase: jitter > 0 ? jitter * Math.PI * 2 * rand01(this.seed, i, 43 + copy) : 0,
+      waveScale: fuzzy ? 0.6 + 0.8 * rand01(this.seed, i, 47 + copy) : 1,
+      dx: x,
+      dy: y,
+      px: NaN,
+      py: NaN,
+      fade: 1,
+    };
   }
 
   private init(copy: number, d: PenDab): void {
@@ -283,19 +510,32 @@ export class ParticleStroke extends MarkStroke {
       const a = rand01(this.seed, i, 5 + copy) * Math.PI * 2;
       const ox = Math.cos(a) * r;
       const oy = Math.sin(a) * r;
-      const p: Particle = { x: d.x + ox, y: d.y + oy, vx: 0, vy: 0, ox, oy, k: 0.6 + 0.8 * rand01(this.seed, i, 7), phase: a, age: 0, run: 0, bead: 0, alive: true };
-      if (s.kind === 'string') p.strand = Array.from({ length: 6 }, () => ({ x: d.x + ox, y: d.y + oy, vx: 0, vy: 0 }));
+      const p = this.newParticle(d.x + ox, d.y + oy, ox, oy, 0.6 + 0.8 * rand01(this.seed, i, 7), a, i, copy);
+      if (this.strands) p.strand = Array.from({ length: 6 }, () => ({ x: d.x + ox, y: d.y + oy, vx: 0, vy: 0 }));
       if (s.kind === 'orbit') {
         p.ox = Math.max(1, r + size * 0.15);
         p.oy = 0;
       }
       list.push(p);
     }
+    // Ribbons join neighbours around the pen, so the bands do not cross each other at rest.
+    this.orders[copy] = list.map((_, i) => i).sort((i, j) => list[i].phase - list[j].phase || i - j);
+  }
+
+  /** The sideways wave of particle `p` at pen dab `d` (px along the normal to the pen's direction). */
+  private wave(p: Particle, d: PenDab, size: number): number {
+    const s = this.s;
+    const amp = s.kind === 'fuzzy' ? Math.max(FUZZY_AMPLITUDE, s.waveAmplitude) : s.waveAmplitude;
+    if (!(amp > 0)) return 0;
+    const ms = d.time ?? d.travel * NOMINAL_MS_PER_PX;
+    // About four waves a second at full speed, running back along the path.
+    const phase = (2 * Math.PI * d.travel) / (s.waveLength * p.waveScale) - s.waveSpeed * 0.025 * ms + p.wavePhase;
+    return amp * size * Math.sin(phase);
   }
 
   protected advance(copy: number, d: PenDab, rects: RasterRect[]): void {
     const s = this.s;
-    const list = this.sets[copy];
+    let list = this.sets[copy];
     if (d.index === 0 && !list.length) this.init(copy, d);
     const size = Math.max(1, d.radius * 2);
     const markR = Math.max(0.5, (size * s.size) / 2);
@@ -304,6 +544,9 @@ export class ParticleStroke extends MarkStroke {
     const g = s.gravity * 0.15;
     const op = d.opacity;
     const al = Math.max(0.05, d.alpha);
+    // The normal to the pen's direction (dab directions are counter-clockwise with y up).
+    const nx = Math.sin(d.direction);
+    const ny = Math.cos(d.direction);
     if (s.kind === 'flow') {
       // Throw off particles at the pen while it moves.
       this.spawn += s.count / 8;
@@ -312,15 +555,13 @@ export class ParticleStroke extends MarkStroke {
         const i = this.dabCount + list.length * 31 + Math.floor(d.index);
         const a = rand01(this.seed, i, 11 + copy) * Math.PI * 2;
         const r = rand01(this.seed, i, 13 + copy) * s.spread * size * 0.5;
-        list.push({ x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r, vx: 0, vy: 0, ox: 0, oy: 0, k: 1, phase: a, age: 0, run: 0, bead: 0, alive: true });
+        list.push(this.newParticle(d.x + Math.cos(a) * r, d.y + Math.sin(a) * r, 0, 0, 1, a, i, copy));
       }
     }
     const lifeSteps = 8 + 120 * s.life;
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       if (!p.alive) continue;
-      const px = p.x;
-      const py = p.y;
       switch (s.kind) {
         case 'spring': {
           p.vx = (p.vx + (d.x + p.ox - p.x) * k * p.k) * damp;
@@ -329,14 +570,41 @@ export class ParticleStroke extends MarkStroke {
           p.y += p.vy;
           break;
         }
-        case 'string': {
+        case 'string':
+        case 'fuzzy': {
           // A strand of masses: the first tied to the pen, each to the one before.
           const strand = p.strand!;
+          const dm = s.kind === 'fuzzy' ? chainDamp(damp, k * p.k) : damp;
           let ax = d.x + p.ox;
           let ay = d.y + p.oy;
           for (const m of strand) {
-            m.vx = (m.vx + (ax - m.x) * k * p.k + 0) * damp;
-            m.vy = (m.vy + (ay - m.y) * k * p.k + g) * damp;
+            m.vx = (m.vx + (ax - m.x) * k * p.k + 0) * dm;
+            m.vy = (m.vy + (ay - m.y) * k * p.k + g) * dm;
+            m.x += m.vx;
+            m.y += m.vy;
+            ax = m.x;
+            ay = m.y;
+          }
+          p.x = strand[strand.length - 1].x;
+          p.y = strand[strand.length - 1].y;
+          break;
+        }
+        case 'elastic': {
+          // A strand whose links have a rest length: they go slack when pushed together, stretch
+          // when the pen pulls and snap back, so the tail keeps its distance behind the pen.
+          const strand = p.strand!;
+          const rest = size * 0.12;
+          const ke = Math.min(0.9, (0.1 + 0.6 * s.stiffness) * p.k);
+          const dm = chainDamp(damp, ke);
+          let ax = d.x + p.ox;
+          let ay = d.y + p.oy;
+          for (const m of strand) {
+            const ex = ax - m.x;
+            const ey = ay - m.y;
+            const len = Math.hypot(ex, ey);
+            const pull = len > rest ? (len - rest) / len : 0;
+            m.vx = (m.vx + ex * pull * ke) * dm;
+            m.vy = (m.vy + ey * pull * ke + g) * dm;
             m.x += m.vx;
             m.y += m.vy;
             ax = m.x;
@@ -366,11 +634,22 @@ export class ParticleStroke extends MarkStroke {
           break;
         }
       }
+      // Where it is drawn: its place, moved sideways by its wave.
+      const w = this.wave(p, d, size);
+      const qx = w ? p.x + nx * w : p.x;
+      const qy = w ? p.y + ny * w : p.y;
+      const px = p.dx;
+      const py = p.dy;
+      p.px = p.dx;
+      p.py = p.dy;
+      p.dx = qx;
+      p.dy = qy;
       const fade = s.kind === 'flow' ? 1 - p.age / lifeSteps : 1;
-      const moved = Math.hypot(p.x - px, p.y - py);
+      p.fade = fade;
+      const moved = Math.hypot(qx - px, qy - py);
       if (d.index === 0 && s.kind !== 'flow') continue;
-      if (s.render === 'dot') this.mark(p.x, p.y, markR * fade, al * fade, op, d.pressure, rects);
-      else if (s.render === 'line') this.segment(px, py, p.x, p.y, markR * fade, al * fade, op, d.pressure, rects);
+      if (s.render === 'dot') this.dot(copy, qx, qy, qx - px, qy - py, markR * fade, al * fade, op, d, rects);
+      else if (s.render === 'line' || s.render === 'ribbon') this.segment(px, py, qx, qy, markR * fade, al * fade, op, d.pressure, rects);
       else {
         // Beads along the path, each a little larger in the middle of its run.
         p.run += moved;
@@ -379,13 +658,112 @@ export class ParticleStroke extends MarkStroke {
           p.run -= gap;
           p.bead++;
           const t = moved > 0 ? 1 - p.run / Math.max(moved, 1e-6) : 1;
-          const bx = px + (p.x - px) * Math.min(1, Math.max(0, t));
-          const by = py + (p.y - py) * Math.min(1, Math.max(0, t));
-          this.mark(bx, by, markR * (0.7 + 0.6 * ((p.bead % 3) / 2)) * fade, al * fade, op, d.pressure, rects);
+          const bx = px + (qx - px) * Math.min(1, Math.max(0, t));
+          const by = py + (qy - py) * Math.min(1, Math.max(0, t));
+          this.dot(copy, bx, by, qx - px, qy - py, markR * (0.7 + 0.6 * ((p.bead % 3) / 2)) * fade, al * fade, op, d, rects);
         }
       }
     }
-    if (s.kind === 'flow' && list.length > 512) this.sets[copy] = list.filter((p) => p.alive);
+    if (s.render === 'ribbon' && !(d.index === 0 && s.kind !== 'flow')) this.ribbon(copy, list, op, al, d, rects);
+    if (s.kind === 'flow' && list.length > 512) {
+      list = list.filter((p) => p.alive);
+      this.sets[copy] = list;
+    }
+  }
+
+  /** A dot (or bead): round, or a textured stamp turned by the particle's motion (mx, my), at random or to the tip angle. */
+  private dot(copy: number, x: number, y: number, mx: number, my: number, r: number, alpha: number, opacity: number, d: PenDab, rects: RasterRect[]): void {
+    const s = this.s;
+    const textures = s.dotTextures;
+    if (!textures.length) return this.mark(x, y, r, alpha, opacity, d.pressure, rects);
+    const n = this.dots[copy]++;
+    const pick = s.dotTextureOrder === 'random' ? Math.min(textures.length - 1, Math.floor(rand01(this.seed, n, 31 + copy) * textures.length)) : n % textures.length;
+    const rotation =
+      s.dotRotation === 'random'
+        ? rand01(this.seed, n, 37 + copy) * Math.PI * 2
+        : s.dotRotation === 'follow'
+          ? mx || my
+            ? Math.atan2(my, mx)
+            : -d.direction
+          : (-this.brush.tip.angle * Math.PI) / 180;
+    this.stamp(x, y, r, textures[pick], rotation, (this.seed + n * 2654435761) >>> 0, alpha, opacity, d.pressure, rects);
+  }
+
+  /**
+   * Ribbon fill for one step: the band between each pair of joined particles, from where they
+   * were drawn last step to where they are drawn now. Bands of one step, and of consecutive steps,
+   * share edges exactly, so the fill has no seams; it is telescoped into the coverage
+   * (`telescope`), so it does not build up at the joins.
+   */
+  private ribbon(copy: number, list: Particle[], opacity: number, alpha: number, d: PenDab, rects: RasterRect[]): void {
+    const s = this.s;
+    if (!(s.ribbonFill > 0)) return;
+    const live = (p: Particle | undefined): p is Particle => !!p && p.alive && !Number.isNaN(p.px);
+    let order: Particle[];
+    if (s.kind === 'flow') order = list.filter(live);
+    else order = this.orders[copy].map((i) => list[i]).filter(live);
+    if (order.length < 2) return;
+    const pairs: Array<[Particle, Particle]> = [];
+    if (s.ribbonPairs === 'first-last') pairs.push([order[0], order[order.length - 1]]);
+    else for (let i = 0; i + 1 < order.length; i++) pairs.push([order[i], order[i + 1]]);
+    const pts = this.pts;
+    const ceil = Math.min(1, opacity * s.ribbonFill);
+    for (const [a, b] of pairs) {
+      pts.length = 0;
+      pts.push(a.px, a.py, a.dx, a.dy, b.dx, b.dy, b.px, b.py);
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (let i = 0; i < 8; i += 2) {
+        x0 = Math.min(x0, pts[i]);
+        x1 = Math.max(x1, pts[i]);
+        y0 = Math.min(y0, pts[i + 1]);
+        y1 = Math.max(y1, pts[i + 1]);
+      }
+      const rect: RasterRect = { x: Math.floor(x0), y: Math.floor(y0), width: Math.floor(x1) - Math.floor(x0) + 1, height: Math.floor(y1) - Math.floor(y0) + 1 };
+      const area = this.scratch(rect.width * rect.height);
+      // Flow ribbons fade with their particles.
+      addPolygonArea(pts, rect, area, Math.min(a.fade, b.fade) * alpha);
+      if (this.telescope(rect, area)) this.lay(rect, area, ceil, d.pressure, (a.dx + b.dx) / 2, (a.dy + b.dy) / 2, rects);
+    }
+  }
+
+  /**
+   * Turns the area newly filled over `rect` into coverage to lay towards the fill's ceiling: the
+   * share of what was left unfilled, so after any number of bands (in any grouping) a pixel's
+   * coverage is the ceiling times the area filled there. False when nothing was added.
+   */
+  private telescope(rect: RasterRect, area: Float32Array): boolean {
+    let any = false;
+    for (let yy = 0, k = 0; yy < rect.height; yy++) {
+      const gy = rect.y + yy;
+      const ty = Math.floor(gy / TILE);
+      let t: Float32Array | undefined;
+      let tx = NaN;
+      for (let xx = 0; xx < rect.width; xx++, k++) {
+        const add = area[k];
+        if (!(add > 0)) continue;
+        const gx = rect.x + xx;
+        const ntx = Math.floor(gx / TILE);
+        if (ntx !== tx || !t) {
+          tx = ntx;
+          const key = tileKey(tx, ty);
+          t = this.filled.get(key);
+          if (!t) {
+            t = new Float32Array(TILE * TILE);
+            this.filled.set(key, t);
+          }
+        }
+        const ti = (gy - ty * TILE) * TILE + (gx - tx * TILE);
+        const before = t[ti];
+        const after = Math.min(1, before + add);
+        t[ti] = after;
+        area[k] = before < 1 ? (after - before) / (1 - before) : 0;
+        any = true;
+      }
+    }
+    return any;
   }
 }
 

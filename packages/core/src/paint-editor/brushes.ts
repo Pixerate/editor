@@ -808,6 +808,48 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     light: { amount: 1 },
   }),
   builtin({
+    // Silk of light: strands dragged behind the pen on slow waves, the bands between them filled.
+    id: 'light-ribbon', name: 'Light ribbon', category: 'light', engine: 'particle',
+    tip: { size: 80, hardness: 0.8, opacity: 0.9, flow: 1, smoothing: 0.35, pressureSize: false, pressureOpacity: false },
+    particle: { kind: 'string', render: 'ribbon', count: 5, size: 0.015, spread: 1, stiffness: 0.05, damping: 0.3, ribbonFill: 0.45, waveAmplitude: 0.25, waveLength: 220, wavePhaseJitter: 0.25 },
+    light: { amount: 0.8 },
+  }),
+  builtin({
+    // Flames: short-lived bands thrown off the pen, rising and curling in the flow.
+    id: 'flame-ribbon', name: 'Flame ribbon', category: 'light', engine: 'particle',
+    tip: { size: 50, hardness: 0.6, opacity: 0.85, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'flow', render: 'ribbon', count: 4, size: 0.012, spread: 0.5, speed: 0.6, gravity: -0.6, life: 0.2, ribbonFill: 0.5 },
+    light: { amount: 1 },
+  }),
+  builtin({
+    // A neon tube that lags and snaps back, with a slow shimmer.
+    id: 'neon-strand', name: 'Neon strand', category: 'light', engine: 'particle',
+    tip: { size: 40, hardness: 0.9, opacity: 1, flow: 1, smoothing: 0.4, pressureSize: false, pressureOpacity: false },
+    particle: { kind: 'elastic', render: 'line', count: 3, size: 0.05, spread: 0.25, stiffness: 0.6, damping: 0.3, waveAmplitude: 0.06, waveLength: 120 },
+    light: { amount: 1 },
+  }),
+  builtin({
+    // Smoke lit from within: thin bands thrown into a slow, rising flow.
+    id: 'smoke-ribbon', name: 'Smoke ribbon', category: 'light', engine: 'particle',
+    tip: { size: 70, hardness: 0.3, opacity: 0.45, flow: 1, smoothing: 0.3, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'flow', render: 'ribbon', count: 3, size: 0.005, spread: 0.5, speed: 0.15, gravity: -0.15, life: 0.35, ribbonFill: 0.25, waveAmplitude: 0.1, waveLength: 140, wavePhaseJitter: 1 },
+    light: { amount: 0.3 },
+  }),
+  builtin({
+    // Out-of-focus lights: soft discs and rings spaced along springy paths.
+    id: 'bokeh-dots', name: 'Bokeh dots', category: 'light', engine: 'particle',
+    tip: { size: 80, hardness: 0.7, opacity: 0.6, flow: 1, smoothing: 0.3, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'spring', render: 'sequence', count: 3, size: 0.3, spread: 1, stiffness: 0.15, damping: 0.4, interval: 1, dotTextures: ['dot', 'dot', 'ring'], dotTextureOrder: 'random' },
+    light: { amount: 0.9 },
+  }),
+  builtin({
+    // Sparks: twinkles and stars thrown into the flow, spaced along it.
+    id: 'twinkle-sparks', name: 'Twinkle sparks', category: 'light', engine: 'particle',
+    tip: { size: 50, hardness: 0.8, opacity: 1, flow: 1, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'flow', render: 'sequence', count: 3, size: 0.25, spread: 0.8, speed: 0.9, life: 0.35, interval: 0.6, dotTextures: ['sparkle', 'sparkle', 'star'], dotTextureOrder: 'random', dotRotation: 'random' },
+    light: { amount: 1 },
+  }),
+  builtin({
     id: 'glow-wash', name: 'Glow wash', category: 'light', engine: 'wet',
     tip: { size: 40, hardness: 0.55, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: true },
     dynamics: { minSize: 0.35 },
