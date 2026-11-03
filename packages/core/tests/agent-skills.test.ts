@@ -39,6 +39,7 @@ import {
 } from '../src/commands';
 import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider, createImageSegmentationToolProvider } from '../src/image-editor';
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
+import { createCanvasStickerHost } from '../src/canvas';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
 import { createDocumentToolProvider, createEditorDocumentStore, createMemoryStorage } from '../src/persistence';
@@ -235,7 +236,7 @@ function expectedBySkill(): Record<string, string[]> {
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
 		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
-		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers() }))
+		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) }))
 	};
 	doc.destroy();
 	return result;

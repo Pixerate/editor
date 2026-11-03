@@ -47,7 +47,7 @@ import {
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
-import { createCanvasGestureRecorder, type CanvasEdge } from "@pixerate/editor/canvas";
+import { createCanvasGestureRecorder, createCanvasStickerHost, type CanvasEdge } from "@pixerate/editor/canvas";
 import { createOriginMiddleware } from "@pixerate/editor/tools";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
@@ -87,7 +87,11 @@ import {
   Network,
   Plus,
   Sparkles,
+  Sticker as StickerIcon,
 } from "lucide-react";
+import { StickerInsertPanel } from "@pixerate/editor-react/stickers";
+import { createStickerToolProvider } from "@pixerate/editor/stickers";
+import { demoStickers } from "../demoStickers";
 import {
   type ShapeDescription,
   CANVAS_GRADIENT_PRESETS,
@@ -316,6 +320,10 @@ const CanvasDemo: React.FC = () => {
     transitions: { provider: effects, element: () => agentStage.current },
   });
   const canvasEffects = useCanvasEffects<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager, scenes: scenes.store, effects });
+  // Stickers go in as shape nodes from their outline (canvasstickers__insert_sticker), one undo step each.
+  const stickerHost = useMemo(() => createCanvasStickerHost<BoxNode>({ getNodes: () => effectNodesRef.current, setNodes, history: history.manager }), [setNodes, history.manager]);
+  const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "canvas-stickers", namespace: "canvasstickers" }), [stickerHost]);
+  useAgentToolProvider(demoToolRegistry, stickerTools);
   useCanvasEffectsTools(demoToolRegistry, canvasEffects, { id: "canvas-effects", namespace: "canvasfx" });
   // Switching libraries re-fills the demo star with one of the new library's generators, as long as
   // it still holds the effect the demo gave it (an effect someone applied stays, drawn as a hatch).
@@ -983,6 +991,9 @@ const CanvasDemo: React.FC = () => {
         ))}
       </div>
 
+      <EditorPanel id="stickers" label="Stickers" icon={StickerIcon}>
+        <StickerInsertPanel provider={demoStickers} host={stickerHost} />
+      </EditorPanel>
       <EditorPanel id="tips" label="Tips">
       <p className="text-xs leading-relaxed text-slate-400">
         Drag a node near another to see smart guides (edges, centres, equal spacing) and snapping; resize a selected node

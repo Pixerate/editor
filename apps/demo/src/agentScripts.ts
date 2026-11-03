@@ -674,6 +674,20 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "image-sticker-effects",
+    prompt: "Put a set of badge stickers on the photo and give each the same effect",
+    steps: [
+      { say: "Badges from the sticker library.", tool: "imagestickers__find_stickers", args: { category: "badges" }, as: "badges" },
+      { say: "Each goes in as its own pixel layer, along the top.", tool: "imagestickers__insert_sticker", args: (ctx) => ({ ref: (ctx.results.badges as unknown as { items: { ref: string }[] }).items[0].ref, x: 120, y: 90, width: 110 }), as: "a" },
+      { tool: "imagestickers__insert_sticker", args: (ctx) => ({ ref: (ctx.results.badges as unknown as { items: { ref: string }[] }).items[1].ref, x: 260, y: 90, width: 110 }), as: "b" },
+      { tool: "imagestickers__insert_sticker", args: (ctx) => ({ ref: (ctx.results.badges as unknown as { items: { ref: string }[] }).items[2].ref, x: 400, y: 90, width: 110 }), as: "c" },
+      { say: "The same treatment on each: the sticker is the effect's picture.", tool: "imagefx__apply_effect", args: (ctx) => ({ target: ctx.results.a.id, effect: "fake.tint", values: { color: "#a855f7", amount: 0.4 } }) },
+      { tool: "imagefx__apply_effect", args: (ctx) => ({ target: ctx.results.b.id, effect: "fake.tint", values: { color: "#a855f7", amount: 0.4 } }) },
+      { tool: "imagefx__apply_effect", args: (ctx) => ({ target: ctx.results.c.id, effect: "fake.tint", values: { color: "#a855f7", amount: 0.4 } }) },
+      { tool: "image__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "image-effects",
     prompt: "Add a colour wash and a lower-third bar from the effects library",
     steps: [

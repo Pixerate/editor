@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
 import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools } from '@pixerate/editor-react/paint-editor';
 import { createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
-import { combineStickerProviders, createFakeStickerProvider, editorStickers } from '@pixerate/editor/stickers';
+import { demoStickers } from '../demoStickers';
 import { Brush } from 'lucide-react';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
 import { EditorDocumentAutosave, useDemoDocumentTools } from './EditorDocumentAutosave';
@@ -16,7 +16,7 @@ import { EditorPage, EditorPanel } from './EditorPage';
 function PaintView() {
   // The sticker library: the editor's own stamps plus a stand-in host library (the fake provider),
   // so the sticker brush, the sticker panel and find_stickers show both.
-  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: combineStickerProviders([editorStickers(), createFakeStickerProvider()], { name: 'Demo stickers' }) });
+  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: demoStickers });
   // The agent paints on the canvas itself: its cursor draws each stroke live, rubs fills across the sheet and starts replays.
   const { presence, director } = usePaintDirector(editor.controller, { speed: demoAgentSpeed() });
   // Agents get the paint__* tools (paper, brushes, strokes, guides, colour, layers, export).

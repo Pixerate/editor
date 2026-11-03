@@ -12,7 +12,7 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { isEffectError } from './errors.js';
-import { countEffectTags, effectOffered, hasEffectTags, normaliseEffectTag, pathControlsOf } from './helpers.js';
+import { countEffectTags, effectOffered, hasEffectTags, layerImageInput, normaliseEffectTag, pathControlsOf } from './helpers.js';
 import { EFFECT_ACCEPTS, EFFECT_KINDS, EFFECT_USES, type EffectAccept, type EffectDescription, type EffectProvider, type EffectSummary, type EffectUse } from './types.js';
 
 /** One effect applied to a target, as the tools report it. */
@@ -64,6 +64,12 @@ export interface EffectToolHost {
 	target: { noun: string; id: string };
 	/** The uses `apply_effect` takes on a target (others go through `extraTools`). */
 	applyUses: readonly EffectUse[];
+	/**
+	 * `apply_effect` also takes any effect with a picture input (the target is the picture), of any
+	 * use: a holo-foil treatment of a sticker. Summaries don't list inputs, so its effect id is then
+	 * any id, checked when applied.
+	 */
+	applyImageInputs?: boolean;
 	/** Text added to `apply_effect`'s description: where the effect goes and how it is drawn. */
 	applyDetails: string;
 	/** The current provider, or `null`. */
@@ -195,8 +201,9 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 		description: `${what}: control name → value, as listed by describe_effect (its "controls" schema: types, ranges, units and defaults). Only the given controls change; colours are "#rrggbb".${keyframes ? ' A number control may instead be keyframes { keys: [{ t: ms from the start, v, ease }] }.' : ''} Unknown controls and out-of-range values are refused with the valid ones.`
 	});
 	const effectIdSchema = (uses: readonly EffectUse[]): JsonSchema => {
-		const effects = catalogFor(host.provider())?.filter((e) => effectOffered(e, uses));
-		const base = `An effect id from search_effects (use ${uses.map((u) => `"${u}"`).join(' or ')}).`;
+		const open = host.applyImageInputs && uses === host.applyUses;
+		const effects = open ? undefined : catalogFor(host.provider())?.filter((e) => effectOffered(e, uses));
+		const base = `An effect id from search_effects (use ${uses.map((u) => `"${u}"`).join(' or ')}${open ? `, or any effect whose describe_effect inputs take an image: the ${host.target.noun} is its picture` : ''}).`;
 		return effects && effects.length && effects.length <= ENUM_LIMIT
 			? { type: 'string', enum: effects.map((e) => e.id), description: `${base} One of: ${effects.map((e) => `${e.id} (${e.name})`).join(', ')}.` }
 			: { type: 'string', minLength: 1, description: base };
@@ -263,7 +270,7 @@ export function createEffectToolProvider(host: EffectToolHost): AgentToolProvide
 				if (!p) return { available: false, reason: NO_PROVIDER };
 				const d: EffectDescription = await explain(async () => p.describe(args.effect as string));
 				const pathControls = pathControlsOf(d);
-				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: effectOffered(d, host.applyUses), ...(pathControls.length ? { pathControls } : {}) };
+				return { available: true, ...summaryOut(d), controls: d.controls, defaults: d.defaults, presets: d.presets, inputs: d.inputs, appliesHere: effectOffered(d, host.applyUses) || (!!host.applyImageInputs && d.kind !== 'motion' && layerImageInput(d) !== null), ...(pathControls.length ? { pathControls } : {}) };
 			}
 		},
 		{
