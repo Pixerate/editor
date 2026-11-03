@@ -12,7 +12,7 @@ export type FreehandTool = 'select' | 'pen' | 'highlighter' | 'eraser';
 
 import type { CanvasGradientDef } from './gradient.js';
 import { brushstrokeSeed, profileAlongPolyline } from './brushstroke.js';
-import type { CanvasBrush, CanvasBrushPaint, CanvasBrushstroke } from './brushTypes.js';
+import type { CanvasBrush, CanvasBrushPaint, CanvasBrushSpec, CanvasBrushstroke } from './brushTypes.js';
 
 export interface FreehandStrokeStyle {
 	/** Stroke color (any CSS color string) or gradient definition. */
@@ -43,6 +43,11 @@ export interface FreehandStrokeStyle {
 	 * along the path; `color` still gives the alpha and fills `paint` stops. Only with `brush`.
 	 */
 	paint?: CanvasBrushPaint;
+	/**
+	 * The saved brush `brush` names, when it is one from a brush library rather than a preset:
+	 * strokes embed it so they render without the library. A brush picker sets it with `brush`.
+	 */
+	brushSpec?: CanvasBrushSpec;
 }
 
 /** Pen data for one freehand point (Pointer Events: pressure 0..1, tilt in degrees). */
@@ -279,6 +284,7 @@ export function strokeToShapeNode(
 							brush: {
 								...freehandBrushstroke(stroke.style.brush, localPoints, stroke.samples, options.profileLength),
 								...(stroke.style.paint !== undefined ? { paint: stroke.style.paint } : {}),
+								...(stroke.style.brushSpec && typeof stroke.style.brush === 'string' && stroke.style.brushSpec.id === stroke.style.brush ? { spec: stroke.style.brushSpec } : {}),
 								// New strokes carry a character seed (jitter and grain) and their size, if chosen.
 								seed: brushstrokeSeed(options.id ?? stroke.id),
 								...(stroke.style.brushSize !== undefined && stroke.style.brushSize > 0 ? { size: stroke.style.brushSize } : {})

@@ -12,7 +12,6 @@ import {
   type VectorFiltersPanelItem,
   type VectorStrokeAlign,
   randomVectorBrushstrokeSeed,
-  vectorBrushstrokeBrushes,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
 
@@ -52,7 +51,7 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
             <input type="checkbox" aria-label={`${name} visible`} title="Show" checked={l.visible} onChange={(e) => update(l, { visible: e.target.checked })} />
             <input type="color" aria-label={`${name} colour`} className="h-7 w-10 cursor-pointer rounded border border-border bg-background" value={l.color ?? '#000000'} onChange={(e) => controller.setBrushstroke(l.index, { color: e.target.value }, { ids, merge: true })} onBlur={end} />
             <select aria-label={`${name} brush`} className={selectClass} value={l.brushstroke.brushId} onChange={(e) => controller.setBrushstroke(l.index, { brushId: e.target.value }, { ids })}>
-              {vectorBrushstrokeBrushes().map((b) => (
+              {controller.listBrushstrokeBrushes().map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
@@ -200,7 +199,7 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
           +
         </button>
         {kind === 'stroke' && (
-          <button type="button" className={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onClick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>
+          <button type="button" className={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onClick={() => controller.addBrushstroke({ brushId: controller.listBrushstrokeBrushes()[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>
             ✎+
           </button>
         )}

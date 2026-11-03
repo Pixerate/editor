@@ -10,6 +10,7 @@ import {
 	type CanvasBrushstrokeImage,
 	type ShapeDescription
 } from '@pixerate/editor/canvas';
+import type { BrushLibrary } from '@pixerate/editor/brushes';
 
 /** The canvas zoom bucket brushed shape nodes render at (1 without a provider). */
 export const ShapeNodeZoomContext = createContext<number>(1);
@@ -66,24 +67,31 @@ export function useShapeBrushstroke(shape: ShapeDescription | null | undefined, 
 }
 
 /**
- * The dry paint presets a freehand stroke can be brushed with (loads the paint engine on mount);
- * with `swatches`, each with a preview image (`renderCanvasBrushSwatch`) for a brush menu.
+ * The brushes a freehand stroke can be brushed with (loads the paint engine on mount): the dry
+ * presets and, with `library`, its saved brushes the canvas can paint (each with its `spec`; pass
+ * it as the stroke style's `brushSpec`), read again when the library changes. With `swatches`,
+ * each has a preview image (`renderCanvasBrushSwatch`) for a brush menu.
  */
-export function useCanvasBrushes(options: { swatches?: CanvasBrushSwatchOptions } = {}): { brushes: Array<CanvasBrushPreset & { swatch?: string }>; loading: boolean; error: string | null } {
+export function useCanvasBrushes(options: { swatches?: CanvasBrushSwatchOptions; library?: Pick<BrushLibrary, 'list' | 'subscribe'> | null } = {}): { brushes: Array<CanvasBrushPreset & { swatch?: string }>; loading: boolean; error: string | null } {
 	const [state, setState] = useState<{ brushes: Array<CanvasBrushPreset & { swatch?: string }>; loading: boolean; error: string | null }>({ brushes: [], loading: true, error: null });
 	const swatches = options.swatches ? JSON.stringify(options.swatches) : '';
+	const library = options.library ?? null;
 	useEffect(() => {
 		let live = true;
 		const opts = swatches ? (JSON.parse(swatches) as CanvasBrushSwatchOptions) : null;
-		listCanvasBrushes()
-			.then(async (list) => (opts ? Promise.all(list.map(async (b) => ({ ...b, swatch: await renderCanvasBrushSwatch(b.id, opts) }))) : list))
-			.then(
-			(brushes) => live && setState({ brushes, loading: false, error: null }),
-			(error) => live && setState({ brushes: [], loading: false, error: error instanceof Error ? error.message : String(error) })
-			);
+		const read = () =>
+			listCanvasBrushes(library ?? undefined)
+				.then(async (list) => (opts ? Promise.all(list.map(async (b) => ({ ...b, swatch: await renderCanvasBrushSwatch(b.id, opts, b.spec) }))) : list))
+				.then(
+					(brushes) => live && setState({ brushes, loading: false, error: null }),
+					(error) => live && setState({ brushes: [], loading: false, error: error instanceof Error ? error.message : String(error) })
+				);
+		void read();
+		const unsubscribe = library?.subscribe(() => void read());
 		return () => {
 			live = false;
+			unsubscribe?.();
 		};
-	}, [swatches]);
+	}, [swatches, library]);
 	return useMemo(() => state, [state]);
 }

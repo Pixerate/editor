@@ -226,7 +226,7 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
 
   const paintView = () => {
     const p = controller.getState().paint;
-    return { paint: p.paint, foreground: p.foreground, background: p.background, brush: p.brush };
+    return { paint: p.paint, foreground: p.foreground, background: p.background, brush: p.brush, brushPreset: p.brushPreset ?? null };
   };
   const setPaint: AgentTool = {
     name: 'set_paint',
@@ -243,7 +243,7 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
   const getPaint: AgentTool = {
     name: 'get_paint',
     title: 'Get the paint',
-    description: 'Reads what the brush paints (paint: the foreground colour or gradient paint), the foreground and background colours and the brush settings (size, hardness, spacing, opacity, flow …). Changes nothing.',
+    description: 'Reads what the brush paints (paint: the foreground colour or gradient paint), the foreground and background colours, the brush settings (size, hardness, spacing, opacity, flow …) and brushPreset (the set_brush_preset id they came from, null once changed by hand). Changes nothing.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'Get the paint', ...READ },
     handler: () => paintView(),
@@ -315,5 +315,14 @@ export function createImagePaintTools(controller: ImageEditorController): AgentT
       return { gradient, css: gradientToCss(gradient), pointsRead: read };
     },
   };
-  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor, sampleGradient];
+  const setBrushPreset: AgentTool = {
+    name: 'set_brush_preset',
+    title: 'Paint with a brush preset',
+    description:
+      'Chooses a brush from the brush library (a built-in preset or a saved brush; list_brush_presets lists the ones the image editor can paint, describe_brush reads one) for the brush tools: it sets the paint tool the brush needs (brush, mixer for a Mixer Brush, eraser), its brush settings (size, hardness, spacing, angle, roundness, opacity, flow, smoothing, pressure, blend), its Mixer Brush settings and, for a brush with its own gradient, the paint. paint_stroke with that tool then paints with it. Brushes the image editor cannot paint (wet or thick paint, particles, stickers, light, the wet tools) are refused with the reason. View state, not an undo step. Returns the id, name, tool, brush, mixer, paint and warnings (settings it paints without, such as paper grain).',
+    inputSchema: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 64, description: 'Brush id from list_brush_presets (e.g. "pencil-hb", "marker", "mixer-brush", "eraser-soft").' } }, required: ['id'], additionalProperties: false },
+    annotations: { title: 'Paint with a brush preset', ...SET },
+    handler: async ({ id }) => controller.setBrushPreset(id as string),
+  };
+  return [paintStroke, fill, clear, getMixer, loadMixerTool, cleanMixerTool, setPaint, getPaint, sampleColor, sampleGradient, setBrushPreset];
 }

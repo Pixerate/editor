@@ -9,6 +9,7 @@ import type { ImageLayer, LayerTarget } from './layers/model';
 import type { SerializedLayeredImageEditorState } from './layers/serialize';
 import type { PaintOptions } from './controller';
 import type { TextShaper } from './layers/text';
+import type { BrushLibrary } from '../brushes/library';
 
 export interface ImageDimensions {
   width: number;
@@ -535,6 +536,12 @@ import type { EffectProvider } from '../effects/types';
 import type { SegmentationProvider } from './selection/segmentation';
 
 export interface ImageEditorOptions {
+  /**
+   * The brush library the brush presets come from (`setBrushPreset`): built-in presets and saved
+   * brushes, filtered by `IMAGE_PROFILE`. Share one with the paint editor so a brush saved there
+   * paints here (default: a library in memory).
+   */
+  brushLibrary?: BrushLibrary;
   /**
    * What lays out and draws type layers. Default: the browser's fonts through Canvas 2D
    * (`createCanvasTextShaper`) where there is a 2D canvas; `null` (or no canvas) keeps type layers'

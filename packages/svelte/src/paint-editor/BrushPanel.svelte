@@ -4,7 +4,7 @@
   import { PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
   import BrushEditor from './BrushEditor.svelte';
-  import BrushLibraryBrowser from './BrushLibraryBrowser.svelte';
+  import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
 

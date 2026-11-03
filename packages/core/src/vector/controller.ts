@@ -1,4 +1,6 @@
-import { sanitizeVectorBrushstroke, vectorBrushstrokeBrush, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
+import { sanitizeVectorBrushstroke, vectorBrushstrokeBrushError, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
+import { snapshotBrushLibrary, type BrushLibrary, type BrushLibrarySnapshot } from '../brushes/library.js';
+import type { PaintBrush } from '../paint-editor/brushes.js';
 import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, stylizeVectorImage, type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
 import { isVectorMasterPage, resolveVectorMasterPages, stripVectorMasterArt, vectorMasterPages, vectorPages } from './pages.js';
@@ -410,6 +412,11 @@ export const VECTOR_PENCIL_STRING_PX = 100;
 
 export interface VectorEditorOptions {
 	document?: VectorDocument;
+	/**
+	 * The brush library whose saved brushes brushstrokes may use besides the presets (the vector
+	 * profile decides which). Share one with the paint editor so a brush saved there paints here.
+	 */
+	brushLibrary?: Pick<BrushLibrary, 'list' | 'subscribe'>;
 	/** History to record into, e.g. one shared with the rest of the app (default: a new one). */
 	history?: HistoryManager;
 	/** Starting tool (default `select`). */
@@ -1573,6 +1580,7 @@ export class VectorEditorController {
 	private state!: VectorEditorState;
 
 	constructor(options: VectorEditorOptions = {}) {
+		this.brushes = options.brushLibrary ? snapshotBrushLibrary(options.brushLibrary, () => this.notify()) : null;
 		this.history = options.history ?? new HistoryManager();
 		this.doc = options.document ? loadedDocument(options.document) : { width: 800, height: 600, nodes: [] };
 		this.doc = this.refreshed(this.doc);
@@ -1612,7 +1620,21 @@ export class VectorEditorController {
 	 * Stops listening to the history and drops all listeners. A later `subscribe` reconnects, so a
 	 * controller torn down by React StrictMode's double effect keeps working when it is reused.
 	 */
+	/** The saved brushes of the brush library as last read (empty without one). */
+	private brushes: BrushLibrarySnapshot | null;
+
+	/** The brushes a brushstroke can use: the presets, then the brush library's saved brushes the vector profile admits. */
+	listBrushstrokeBrushes(): PaintBrush[] {
+		return vectorBrushstrokeBrushes(this.brushes?.user ?? []);
+	}
+
+	/** Resolves once the brush library has been read (its saved brushes can be used from then on). */
+	whenBrushesLoaded(): Promise<void> {
+		return this.brushes?.ready ?? Promise.resolve();
+	}
+
 	destroy(): void {
+		// The brush library stays followed: a controller reused after destroy still lists its brushes.
 		if (this.dwellTimer) clearTimeout(this.dwellTimer);
 		this.dwellTimer = null;
 		this.cleanups.splice(0).forEach((fn) => fn());
@@ -3066,15 +3088,17 @@ export class VectorEditorController {
 
 	/**
 	 * Adds a brushstroke to the selected (or given) paths: a stroke layer that paints the path with
-	 * brush `brushId` from the paint editor's library (`vectorBrushstrokeBrushes`), `size` document
+	 * brush `brushId` (a preset, or a saved brush of the brush library: `listBrushstrokeBrushes`), `size` document
 	 * units across (default the brush's own), an optional `pressure` profile along the length, in
 	 * `color` (default the top stroke's paint, else black) at `opacity`. At the top of the stroke
 	 * stack or at `index`. A `seed` gives it the brush's character (jitter and the grain of `paper`,
 	 * `null` for none); without one it renders plain. One undo step.
 	 */
 	addBrushstroke(brush: VectorBrushstroke, options: { ids?: readonly string[]; index?: number; color?: string; opacity?: number } = {}): VectorActionResult {
-		const clean = sanitizeVectorBrushstroke(brush);
-		if (!clean) return { ok: false, message: `Unknown brush "${brush?.brushId}": use one of ${vectorBrushstrokeBrushes().map((b) => b.id).join(', ')}.` };
+		const user = this.brushes?.user ?? [];
+		const brushError = typeof brush?.brushId === 'string' ? vectorBrushstrokeBrushError(brush.brushId, user) : 'brushId must be a brush id (vector.listBrushes lists them).';
+		const clean = brushError ? null : sanitizeVectorBrushstroke(brush, user);
+		if (!clean) return { ok: false, message: brushError ?? `Brush "${brush.brushId}" can't paint a brushstroke (vector.listBrushes lists the ones that can).` };
 		if (brush.size !== undefined && !(brush.size > 0 && brush.size <= 500)) return { ok: false, message: 'size must be above 0 and at most 500 (document units).' };
 		const characterError = vectorBrushstrokeCharacterError(brush);
 		if (characterError) return { ok: false, message: characterError };
@@ -3101,7 +3125,9 @@ export class VectorEditorController {
 		patch: { brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null },
 		options: { ids?: readonly string[]; merge?: boolean | string } = {}
 	): VectorActionResult {
-		if (patch.brushId !== undefined && !vectorBrushstrokeBrush(patch.brushId)) return { ok: false, message: `Unknown brush "${patch.brushId}": use one of ${vectorBrushstrokeBrushes().map((b) => b.id).join(', ')}.` };
+		const user = this.brushes?.user ?? [];
+		const brushError = patch.brushId !== undefined ? vectorBrushstrokeBrushError(patch.brushId, user) : null;
+		if (brushError) return { ok: false, message: brushError };
 		if (patch.size !== undefined && patch.size !== null && !(patch.size > 0 && patch.size <= 500)) return { ok: false, message: 'size must be above 0 and at most 500 (document units).' };
 		if (patch.color !== undefined && !parseVectorColor(patch.color)) return { ok: false, message: `"${patch.color}" is not a colour.` };
 		if (patch.opacity !== undefined && !(patch.opacity >= 0 && patch.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
@@ -3115,7 +3141,8 @@ export class VectorEditorController {
 			(stack, path) => {
 				const layer = stack[index];
 				if (!layer || layer.kind !== 'brushstroke' || !layer.brush) return `Path "${path.id}" has no brushstroke at stroke ${index} (vector.getAppearance lists its strokes; 0 is the bottom).`;
-				const brush = { ...layer.brush, ...(patch.brushId ? { brushId: patch.brushId } : {}) };
+				// Another brush drops the embedded saved brush (the new one is looked up again).
+				const brush = patch.brushId && patch.brushId !== layer.brush.brushId ? { ...layer.brush, brushId: patch.brushId, spec: undefined } : { ...layer.brush };
 				if (patch.size === null) delete brush.size;
 				else if (patch.size !== undefined) brush.size = patch.size;
 				if (patch.pressure === null) delete brush.pressure;
@@ -3123,7 +3150,7 @@ export class VectorEditorController {
 				if (patch.seed === null) delete brush.seed;
 				else if (patch.seed !== undefined) brush.seed = patch.seed;
 				if (patch.paper !== undefined) brush.paper = patch.paper;
-				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush) ?? layer.brush, ...(patch.color ? { paint: patch.color } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
+				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush, user) ?? layer.brush, ...(patch.color ? { paint: patch.color } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
 				return stack.map((l, i) => (i === index ? next : l));
 			},
 			merge

@@ -330,3 +330,51 @@ export function closest(id: string, ids: readonly string[], max = 3): string {
     .map(([c]) => c);
   return near.length ? `Closest: ${near.join(', ')}. ` : '';
 }
+
+/** A synchronous copy of a library's brushes, for hosts whose reads are synchronous (renderers, controllers). */
+export interface BrushLibrarySnapshot {
+  /** The brushes as last read: built-in presets, then saved brushes (empty until the first read). */
+  readonly entries: readonly BrushLibraryEntry[];
+  /** The saved brushes as last read. */
+  readonly user: readonly Brush[];
+  /** Resolves once the library has been read (again, after `refresh`). */
+  readonly ready: Promise<void>;
+  refresh(): Promise<void>;
+  /** Stops following the library. */
+  dispose(): void;
+}
+
+/**
+ * Follows `library`: reads it now and after every change, keeping the result for synchronous
+ * reads, and calls `onChange` after each read.
+ */
+export function snapshotBrushLibrary(library: Pick<BrushLibrary, 'list' | 'subscribe'>, onChange?: () => void): BrushLibrarySnapshot {
+  let entries: readonly BrushLibraryEntry[] = [];
+  let user: readonly Brush[] = [];
+  const refresh = () =>
+    library.list().then(
+      (list) => {
+        entries = list;
+        user = list.filter((e) => !e.builtin).map((e) => e.brush);
+        onChange?.();
+      },
+      () => undefined,
+    );
+  let ready = refresh();
+  const unsubscribe = library.subscribe(() => {
+    ready = refresh();
+  });
+  return {
+    get entries() {
+      return entries;
+    },
+    get user() {
+      return user;
+    },
+    get ready() {
+      return ready;
+    },
+    refresh: () => (ready = refresh()),
+    dispose: unsubscribe,
+  };
+}

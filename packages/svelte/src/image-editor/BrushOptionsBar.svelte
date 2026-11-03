@@ -24,6 +24,9 @@
   import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import ControlSlider from './ControlSlider.svelte';
+  import { IMAGE_PROFILE } from '@pixerate/editor/brushes';
+  import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
+  import { brushLibraryState } from '../brushes/brushLibrary.svelte.js';
 
   interface Props {
     controller: ImageEditorController;
@@ -46,6 +49,10 @@
     return { tool: s.activeTool, sourceLabel: cloneSourceLabel(controller), cloneView: cloneTransformView(controller), ...s.paint };
   });
   let error = $state<string | null>(null);
+  let presetsOpen = $state(false);
+  // Read only while open: the list follows the library, so a brush saved in another editor shows up.
+  const presets = brushLibraryState(() => (presetsOpen ? controller.brushLibrary : null), () => ({ profile: IMAGE_PROFILE }));
+  const presetName = $derived(presets.entries.find((e) => e.brush.id === view.brushPreset)?.brush.name ?? view.brushPreset);
 
   
 
@@ -70,6 +77,23 @@
           class={imageChipClass(view.tool === t.id)}
           onclick={() => controller.setTool(t.id)}>{t.label}</button>
       {/each}
+    </div>
+  {/if}
+
+  {#if view.tool === 'brush' || view.tool === 'mixer' || view.tool === 'eraser'}
+    <div class="flex flex-col gap-1" data-testid="brush-presets">
+      <button type="button" aria-expanded={presetsOpen} class={imageChipClass(presetsOpen)} onclick={() => (presetsOpen = !presetsOpen)} title="Paint with a brush from the brush library">Brush presets{presetName ? `: ${presetName}` : ''}</button>
+      {#if presetsOpen}
+        <BrushLibraryBrowser
+          entries={presets.entries}
+          activeId={view.brushPreset ?? undefined}
+          profile={IMAGE_PROFILE}
+          onselect={(id) => {
+            error = null;
+            controller.setBrushPreset(id).catch((err) => (error = userErrorMessage(err)));
+          }}
+        />
+      {/if}
     </div>
   {/if}
 

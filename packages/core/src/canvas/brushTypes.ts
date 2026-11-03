@@ -26,11 +26,18 @@ export interface CanvasBrushSettings {
 }
 
 /**
- * A brush for a freehand stroke: the id of a dry paint preset (`ink-pen`, `pencil-hb`, `marker`, …;
- * `listCanvasBrushes` lists them) or tip settings. The stroke width sets the brush size unless
- * tip settings give one.
+ * A brush for a freehand stroke: the id of a dry paint preset (`ink-pen`, `pencil-hb`, `marker`, …)
+ * or of a saved brush in the host's brush library (`listCanvasBrushes` lists both), or tip
+ * settings. The stroke width sets the brush size unless tip settings give one.
  */
 export type CanvasBrush = string | CanvasBrushSettings;
+
+/**
+ * A saved brush from a brush library, as the facet brush of `@pixerate/editor/brushes` (plain
+ * JSON, described loosely so these types stay import-free). A stroke drawn with a saved brush
+ * keeps a copy, so the document renders the same without the library.
+ */
+export type CanvasBrushSpec = { id: string; name: string; kind: string; tip: { shape: string } & Record<string, unknown> } & Record<string, unknown>;
 
 /** A gradient stop of brushed stroke paint (the paint engine's `PaintGradientStop`). */
 export interface CanvasBrushPaintStop {
@@ -83,6 +90,8 @@ export type CanvasBrushPaint =
  */
 export interface CanvasBrushstroke {
 	brush: CanvasBrush;
+	/** The saved brush `brush` names, embedded (strokes drawn with a library brush that is not a preset). */
+	spec?: CanvasBrushSpec;
 	/** Gradient paint (or one colour) instead of the stroke colour. */
 	paint?: CanvasBrushPaint;
 	/** Pressure 0..1 along the length (default full pressure). */
@@ -123,6 +132,10 @@ export interface CanvasBrushPreset {
 	id: string;
 	name: string;
 	category: string;
+	/** A built-in preset (false: a saved brush from the brush library). */
+	builtin?: boolean;
+	/** A saved brush's facets: set `brushSpec` to it with `brush` when picking it. */
+	spec?: CanvasBrushSpec;
 	/** The preset's own tip diameter in canvas units: a new brushed stroke's default size. */
 	size: number;
 }

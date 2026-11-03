@@ -26,7 +26,7 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect(shape.brush.pressure[0]).toBeCloseTo(0.2, 2);
 		const drawn = await draw.drawStroke({ points: [[0, 50], [50, 60]], style: { brush: 'pencil-hb' } });
 		expect(nodes.map((n) => n.id)).toContain(drawn.id);
-		await expect(draw.drawStroke({ points: [[0, 0]], style: { brush: 'watercolor-round' } })).rejects.toThrow(/not a dry brush/);
+		await expect(draw.drawStroke({ points: [[0, 0]], style: { brush: 'watercolor-round' } })).rejects.toThrow(/can't brush a canvas stroke: Canvas has no wet surface/);
 		expect((await draw.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 

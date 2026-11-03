@@ -1,6 +1,6 @@
 <script lang="ts">
   import { brushLibraryGroups, type BrushHostProfile, type BrushLibraryEntry } from '@pixerate/editor/brushes';
-  import PixelCanvas from './PixelCanvas.svelte';
+  import Thumbnail from './Thumbnail.svelte';
 
   interface Props {
     /** The library's brushes (built-in presets and saved ones), as facets. */
@@ -10,8 +10,8 @@
     onselect: (id: string) => void;
     /** Only brushes this host renders. */
     profile?: BrushHostProfile;
-    /** A thumbnail for a brush (a test stroke). */
-    thumbnail?: (id: string) => { width: number; height: number; data: Uint8ClampedArray } | null;
+    /** A thumbnail for a brush (a test stroke): pixels, or an image URL. */
+    thumbnail?: (id: string) => { width: number; height: number; data: Uint8ClampedArray } | string | null | undefined;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
     class?: string;
@@ -40,7 +40,7 @@
                 onclick={() => onselect(e.brush.id)}
               >
                 {#if thumbnail}
-                  <PixelCanvas pixels={thumbnail(e.brush.id)} label={`${e.brush.name} thumbnail`} class="rounded" style={`width: 100%; aspect-ratio: ${thumbnailWidth} / ${thumbnailHeight}`} />
+                  <Thumbnail image={thumbnail(e.brush.id) ?? null} label={`${e.brush.name} thumbnail`} style={`width: 100%; aspect-ratio: ${thumbnailWidth} / ${thumbnailHeight}`} />
                 {/if}
                 <span class="truncate text-[10px] text-slate-300">{e.brush.name}</span>
               </button>

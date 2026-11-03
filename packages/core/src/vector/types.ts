@@ -2,6 +2,7 @@ import type { GenerationProvenance } from '../generation/provenance.js';
 import type { CanvasGradientDef } from '../canvas/gradient.js';
 import type { WarpMesh, WarpStyle } from '../geom/types.js';
 import type { GrainPattern } from '../paint/grain.js';
+import type { Brush } from '../brushes/types.js';
 
 /** An affine matrix `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (SVG order). */
 export type VectorMatrix = readonly [number, number, number, number, number, number];
@@ -343,7 +344,13 @@ export interface VectorBrushstrokePaper {
  * renders plain dabs, as before, and `paper` is ignored.
  */
 export interface VectorBrushstroke {
+	/** A preset id, or a saved brush's id from the brush library. */
 	brushId: string;
+	/**
+	 * The saved brush `brushId` names (a facet brush of `@pixerate/editor/brushes`), embedded when it
+	 * is not a preset, so the document renders without the library.
+	 */
+	spec?: Brush;
 	size?: number;
 	pressure?: number[];
 	/** Jitter seed, an integer 0–2147483647. Turns the brush's character on. */

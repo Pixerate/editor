@@ -8,12 +8,20 @@
  * pen stroke. A layer with a `seed` also gets the brush's character (seeded jitter and paper grain,
  * `renderBrushstroke`'s `character` option); one without renders exactly as it always has.
  *
- * Only dry dab-engine brushes render (wet, mixer and smudge brushes need paint under them).
+ * The brushes are the ones `VECTOR_PROFILE` admits: dry dab-engine brushes (wet, mixer and smudge
+ * brushes need paint under them), presets or saved brushes from a brush library. A saved brush is
+ * embedded in the layer (`spec`), so the document renders without the library.
  * Images are rendered at `VECTOR_BRUSHSTROKE_SCALE` pixels per unit, the same at every zoom.
  */
 import { BrushstrokeCache, brushstrokeDataUrl, isBrushstrokeBrush, type BrushstrokeImage } from '../paint/brushstroke.js';
 import { GRAIN_PATTERNS, type GrainPattern } from '../paint/grain.js';
 import { BUILTIN_BRUSHES, type PaintBrush } from '../paint-editor/brushes.js';
+import { closest } from '../brushes/library.js';
+import { normalizeBrushSpec } from '../brushes/normalize.js';
+import { BRUSH_PRESETS } from '../brushes/presets.js';
+import { checkBrush, listPresets, VECTOR_PROFILE } from '../brushes/profiles.js';
+import { resolveBrush } from '../brushes/resolve.js';
+import type { Brush } from '../brushes/types.js';
 import { closeContour, flattenChain, pathToContours } from '../canvas/pathops/bezier.js';
 import { parseVectorColor } from './gradient.js';
 import { subpathsToBezier } from './geometry.js';
@@ -23,22 +31,80 @@ import type { VectorBrushstroke, VectorBrushstrokePaper, VectorPathNode, VectorS
 /** Image pixels per document unit brushstrokes are rendered at. */
 export const VECTOR_BRUSHSTROKE_SCALE = 2;
 
-/** The brushes a brushstroke can use: the library's dry dab-engine brushes. */
-export function vectorBrushstrokeBrushes(): PaintBrush[] {
-	return BUILTIN_BRUSHES.filter((b) => isBrushstrokeBrush(b));
+const PRESETS: readonly PaintBrush[] = listPresets(VECTOR_PROFILE).map((spec) => BUILTIN_BRUSHES.find((b) => b.id === spec.id)!);
+
+/** A saved brush the vector profile admits, normalised, or null. */
+function admitted(spec: unknown): Brush | null {
+	try {
+		const brush = normalizeBrushSpec(spec);
+		return checkBrush(brush, VECTOR_PROFILE).ok && isBrushstrokeBrush(resolveBrush(brush)) ? brush : null;
+	} catch {
+		return null;
+	}
 }
 
-/** A brush from the library by id, or null. */
+/**
+ * The brushes a brushstroke can use, as the engine paints them: the presets `VECTOR_PROFILE`
+ * admits (dry dab-engine brushes), then the saved brushes given (facet brushes, e.g. a brush
+ * library's) it admits.
+ */
+export function vectorBrushstrokeBrushes(user: readonly Brush[] = []): PaintBrush[] {
+	const out = [...PRESETS];
+	for (const raw of user) {
+		const brush = admitted(raw);
+		if (brush && !out.some((b) => b.id === brush.id)) out.push(resolveBrush(brush));
+	}
+	return out;
+}
+
+/** A preset by id, or null. */
 export function vectorBrushstrokeBrush(id: string): PaintBrush | null {
-	return vectorBrushstrokeBrushes().find((b) => b.id === id) ?? null;
+	return PRESETS.find((b) => b.id === id) ?? null;
 }
 
-/** Reads brushstroke settings from untrusted data; null when the brush is unknown. */
-export function sanitizeVectorBrushstroke(value: unknown): VectorBrushstroke | null {
+/** The engine brush a brushstroke paints with: its embedded saved brush, else the preset; null when neither renders. */
+export function vectorBrushstrokeBrushOf(brush: Pick<VectorBrushstroke, 'brushId' | 'spec'>): PaintBrush | null {
+	if (brush.spec) {
+		const saved = admitted(brush.spec);
+		return saved && saved.id === brush.brushId ? resolveBrush(saved) : null;
+	}
+	return vectorBrushstrokeBrush(brush.brushId);
+}
+
+/**
+ * Why a brush id can't paint a brushstroke (with the ids that can), or null when it can.
+ * `user` are the saved brushes on offer.
+ */
+export function vectorBrushstrokeBrushError(id: string, user: readonly Brush[] = []): string | null {
+	if (vectorBrushstrokeBrush(id)) return null;
+	const saved = user.find((b) => b.id === id);
+	const ids = vectorBrushstrokeBrushes(user).map((b) => b.id);
+	const reasons = (b: Brush) =>
+		checkBrush(b, VECTOR_PROFILE)
+			.issues.filter((i) => i.severity === 'error')
+			.map((i) => `${i.reason} ${i.fix}`)
+			.join(' ') || 'it is not a dry dab brush.';
+	if (saved) return admitted(saved) ? null : `Brush "${id}" (${saved.name}) can't paint a brushstroke: ${reasons(saved)} Use one of: ${ids.join(', ')}.`;
+	const preset = BRUSH_PRESETS.find((b) => b.id === id);
+	if (preset) return `Brush "${id}" (${preset.name}) can't paint a brushstroke: ${reasons(preset)} Use one of: ${ids.join(', ')}.`;
+	return `Unknown brush "${id}". ${closest(id, ids)}Use one of: ${ids.join(', ')} (vector.listBrushes lists them).`;
+}
+
+/**
+ * Reads brushstroke settings from untrusted data; null when the brush is unknown. A saved brush is
+ * taken from `value.spec` (a stored layer) or from `user` (the brush library's saved brushes) and
+ * kept in `spec`.
+ */
+export function sanitizeVectorBrushstroke(value: unknown, user: readonly Brush[] = []): VectorBrushstroke | null {
 	if (!value || typeof value !== 'object') return null;
 	const r = value as Record<string, unknown>;
-	if (typeof r.brushId !== 'string' || !vectorBrushstrokeBrush(r.brushId)) return null;
+	if (typeof r.brushId !== 'string') return null;
 	const out: VectorBrushstroke = { brushId: r.brushId };
+	if (!vectorBrushstrokeBrush(r.brushId)) {
+		const spec = admitted(r.spec ?? user.find((b) => b.id === r.brushId));
+		if (!spec || spec.id !== r.brushId) return null;
+		out.spec = spec;
+	}
 	if (typeof r.size === 'number' && Number.isFinite(r.size) && r.size > 0) out.size = Math.min(500, r.size);
 	if (Array.isArray(r.pressure)) {
 		const p = r.pressure.filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).map((v) => Math.min(1, Math.max(0, v)));
@@ -99,13 +165,13 @@ export function randomVectorBrushstrokeSeed(): number {
 
 /** A brushstroke stroke layer (kind `brushstroke` with a known brush). */
 export function isVectorBrushstrokeLayer(layer: VectorStrokeLayer): layer is VectorStrokeLayer & { kind: 'brushstroke'; brush: VectorBrushstroke } {
-	return layer.kind === 'brushstroke' && !!layer.brush && !!vectorBrushstrokeBrush(layer.brush.brushId);
+	return layer.kind === 'brushstroke' && !!layer.brush && !!vectorBrushstrokeBrushOf(layer.brush);
 }
 
 /** How far a brushstroke layer reaches past the path (half its brush size). */
 export function vectorBrushstrokeReach(layer: VectorStrokeLayer): number {
 	if (!isVectorBrushstrokeLayer(layer)) return 0;
-	return (layer.brush.size ?? vectorBrushstrokeBrush(layer.brush.brushId)!.tip.size) / 2;
+	return (layer.brush.size ?? vectorBrushstrokeBrushOf(layer.brush)!.tip.size) / 2;
 }
 
 /** One rendered piece of a brushstroke: a PNG data URL drawn stretched over `x, y, width, height` (path units). */
@@ -132,7 +198,7 @@ export function vectorBrushstrokeImages(node: VectorPathNode, layer: VectorStrok
 	let byLayer = layerCache.get(node);
 	const hit = byLayer?.get(layer);
 	if (hit) return hit;
-	const preset = vectorBrushstrokeBrush(layer.brush.brushId)!;
+	const preset = vectorBrushstrokeBrushOf(layer.brush)!;
 	const brush = layer.brush.size ? { ...preset, tip: { ...preset.tip, size: layer.brush.size } } : preset;
 	const solid = vectorPaintSolid(layer.paint) ?? '#000000';
 	const c = parseVectorColor(solid) ?? [0, 0, 0, 1];
