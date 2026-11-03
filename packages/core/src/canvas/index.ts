@@ -44,3 +44,4 @@ export * from './explosion-tools.js';
 export * from './proposals.js';
 export * from './changeFeed.js';
 export * from './proposal-tools.js';
+export * from './stickers.js';
