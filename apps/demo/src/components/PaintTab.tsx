@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
 import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools } from '@pixerate/editor-react/paint-editor';
-import { createPaintEditorToolProvider, renderBrushThumbnail } from '@pixerate/editor/paint-editor';
-import { createBrushLibrary, createBrushLibraryToolProvider, resolveBrush } from '@pixerate/editor/brushes';
-import { bytesToBase64, encodePng } from '@pixerate/editor/raster';
+import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider } from '@pixerate/editor/paint-editor';
+import { demoBrushLibrary } from '../demoBrushes';
 import { demoStickers } from '../demoStickers';
 import { Brush } from 'lucide-react';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
@@ -18,7 +17,8 @@ import { EditorPage, EditorPanel } from './EditorPage';
 function PaintView() {
   // The sticker library: the editor's own stamps plus a stand-in host library (the fake provider),
   // so the sticker brush, the sticker panel and find_stickers show both.
-  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: demoStickers });
+  // Brushes come from the demo's shared brush library: saved here, they show in every tab that paints.
+  const editor = usePaintEditor({ width: 1200, height: 800, paper: 'cold-pressed', stickers: demoStickers, brushLibrary: demoBrushLibrary });
   // The agent paints on the canvas itself: its cursor draws each stroke live, rubs fills across the sheet and starts replays.
   const { presence, director } = usePaintDirector(editor.controller, { speed: demoAgentSpeed() });
   // Agents get the paint__* tools (paper, brushes, strokes, guides, colour, layers, export).
@@ -27,19 +27,9 @@ function PaintView() {
     [editor.controller, director]
   );
   useAgentToolProvider(demoToolRegistry, provider);
-  // The shared brush library (brushes__* tools): find, create, check and share facet brushes;
-  // previews are test strokes on the current paper. The editor itself reads it from phase 3 on.
-  const brushLibrary = useMemo(() => createBrushLibrary(), []);
-  const brushTools = useMemo(
-    () =>
-      createBrushLibraryToolProvider(brushLibrary, {
-        renderPreview: (brush, { width, height, color }) => {
-          const t = renderBrushThumbnail(resolveBrush(brush), { paper: editor.controller.getState().document.paper, width, height, color });
-          return { data: bytesToBase64(encodePng(t.width, t.height, t.data)), mimeType: 'image/png' };
-        },
-      }),
-    [brushLibrary, editor.controller]
-  );
+  // The brush library the editor paints from (brushes__* tools): find, create, check and share
+  // facet brushes, then paint__set_brush picks one; previews are test strokes on the current paper.
+  const brushTools = useMemo(() => createPaintBrushLibraryToolProvider(editor.controller), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, brushTools);
   // Save / load (the editor's own tools have undo), with layer pixels kept as assets; and autosave.
   useDemoDocumentTools(editor.editorDocument, { namespace: 'paint', skill: 'pixerate-paint-editor', history: false });

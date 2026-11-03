@@ -423,7 +423,7 @@ const FEATURES: ParityRow[] = [
   },
   row("Paint Editor (canvas, layers, one undo step per stroke)", "PaintEditorController", "<PaintEditor>, <PaintCanvas> & usePaintEditor", "<PaintEditor>, <PaintCanvas> & createReactivePaintEditor", "Shared raster stack and compositor; the paper is the compositor's bottom layer; view rotation and mirroring never resample"),
   row("Paper & Grain-Responsive Dry Media", "PAPER_LIBRARY, grainCatch", "<PaperPanel>", "<PaperPanel>", "Twelve generated papers in six families; pencils, pastels and charcoal catch the peaks at light pressure"),
-  row("Brushes, Pen Input & Brush Library", "BUILTIN_BRUSHES, PenDabWalker, PaintGesture", "<BrushPanel> & <PaintCanvas>", "<BrushPanel> & <PaintCanvas>", "Pressure, tilt, barrel rotation and velocity, separate pressure smoothing, rotation modes, coalesced and predicted events, palm rejection, JSON library, thumbnails"),
+  row("Brushes, Pen Input & Brush Library", "brushLibrary, setBrushFacets, brushEditorSections, PenDabWalker, PaintGesture", "<BrushPanel>, <BrushLibraryBrowser>, <BrushEditor> & <PaintCanvas>", "<BrushPanel>, <BrushLibraryBrowser>, <BrushEditor> & <PaintCanvas>", "Pressure, tilt, barrel rotation and velocity, separate pressure smoothing, rotation modes, coalesced and predicted events, palm rejection; a shared facet brush library with an editor and live preview, JSON library, thumbnails; brushes__* tools"),
   row("Painting Guides (symmetry, perspective, tracing, references)", "setSymmetry, PerspectiveSnapper, setTracingImage", "<PaintToolbar> & <PaintCanvas>", "<PaintToolbar> & <PaintCanvas>", "Mirror and kaleidoscope as one stroke; 1–3 vanishing points; tracing in the view only with colour sampling; floating references to pick from"),
   row("Paint Colour (wheel, harmonies, swatches, mixing pad)", "colorHarmony, MixingPad", "<ColorPanel>", "<ColorPanel>", "RYB or RGB wheel; a mixing pad with a pigment Mixer Brush and palette knife"),
   row("Paint Layers", "addLayer, updateLayer, mergeDown", "<PaintLayersPanel>", "<PaintLayersPanel>", "Pixel layers and groups, opacity, blend, clipping, locks"),
@@ -436,7 +436,7 @@ const FEATURES: ParityRow[] = [
   row("Stencils", "addStencil, StencilSnapper & stencilMask", "<PaintToolbar> Ruler / Circle / Mask", "<PaintToolbar> Ruler / Circle / Mask", "Ruler and arc guides, line and shape masks; 3 agent tools"),
   row("Paint Agent Cursors", "PaintDirector & PaintPresence", "usePaintDirector & <PaintEditor presence>", "createPaintDirector & <PaintEditor presence>", "Agent strokes painted live by a cursor on the canvas; one undo step per call"),
   row("Paint Provider Effects (effect paper, effect layers, fills, light on dried paint)", "setPaperEffect, addEffectLayer, applyLightEffect & createPaintEffectsToolProvider", "<PaintEffectsPanel> & usePaintEffectsTools", "<PaintEffectsPanel> & usePaintEffectsTools", "Optional EffectProvider; effect paper multiplied over the grain; light baked onto dried paint; 9 agent tools"),
-  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "89 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
+  row("Strokes as Data & Paint Agent Tools", "replayStrokes, createPaintEditorToolProvider", "useAgentToolProvider", "useAgentToolProvider", "103 tools; strokes replay exactly or varied; pixerate-paint-editor skill"),
   ...PRODUCTIVITY_FEATURES,
 ];
 
