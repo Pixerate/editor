@@ -26,6 +26,7 @@ import { ThickStrokeDriver, type ThickChannels } from './thick';
 import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
+import type { StickerArtLookup } from './sticker-art';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -68,7 +69,7 @@ export interface StrokeSessionInit {
   /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
   selection?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Sticker brushes: the next sticker number on the layer. */
-  sticker?: { nextId: number };
+  sticker?: { nextId: number; art?: StickerArtLookup };
   /** Gradient paint (resolved: concrete colours), or `null` for the one colour. Recorded with the stroke. */
   paint?: PaintGradientSource | null;
   /**
@@ -94,6 +95,8 @@ export interface PaintStrokeResult {
   mixerLoad?: MixerLoad;
   /** Wet brushes: the paint is wet (it keeps moving until it dries; see dry_paint / advance_wet_paint). */
   wet?: boolean;
+  /** Sticker brushes: refs the spray picked but skipped because their art had not loaded yet. */
+  skippedStickers?: string[];
 }
 
 function defaultTile(surface: TiledSurface): Uint8ClampedArray {
@@ -166,7 +169,7 @@ export class PaintStrokeSession {
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
     } else if (init.sticker) {
-      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect });
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect });
@@ -363,6 +366,7 @@ export class PaintStrokeSession {
     const surface = changed ? new TiledSurface(ch, tiles, this.base.defaultValue) : null;
     const dabs = this.dry ? this.dry.dabCount : this.thickDriver ? this.thickDriver.dabCount : this.stickerSpray ? this.stickerSpray.dabCount : this.wet!.dabCount;
     this.result = { layerId: this.layerId, bounds: changed ? this.bounds : null, dabs, strokeId: null };
+    if (this.stickerSpray?.skipped.size) this.result.skippedStickers = [...this.stickerSpray.skipped];
     const carried = this.wet?.load ?? this.thickDriver?.load;
     if (carried) this.result.mixerLoad = this.init.brush.behavior.dirty ? carried : cleanMixer(carried);
     this.host.commit(this, surface, false);

@@ -29,6 +29,7 @@ model and its general practice.
 | [`pixerate-effect-authoring`](pixerate-effect-authoring/SKILL.md) | Authoring shaders and procedural effects: inspecting parameters and source code, setting values and presets, keyframing animation tracks, playback timing, and previewing. |
 | [`pixerate-color`](pixerate-color/SKILL.md) | Colour inspection, WCAG accessibility and contrast optimization, CVD simulation, palette audits, harmonies, and OKLab/OKLCH blends. |
 | [`pixerate-typography`](pixerate-typography/SKILL.md) | Fonts and fallback stacks, font loading, modular type scales and hierarchies, fluid sizes, readability and type-aware contrast audits, text segmentation, the font picker. |
+| [`pixerate-stickers`](pixerate-stickers/SKILL.md) | Sticker libraries: finding stickers by ref (`provider:id`), categories, tags, tintable art and licences, for the editors that spray or place them. |
 
 ## Workflow skills
 

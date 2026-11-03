@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { STAMP_KINDS, STAMP_LABELS, STICKER_SLIDERS, readPath, type PaintEditorController, type StampKind } from '@pixerate/editor/paint-editor';
+  import { STICKER_SLIDERS, readPath, stickerRefLabel, type PaintEditorController } from '@pixerate/editor/paint-editor';
+  import StickerPicker from './StickerPicker.svelte';
   import PaintSlider from './PaintSlider.svelte';
   import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
 
@@ -23,17 +24,25 @@
     <span class="font-medium text-slate-300">Stickers ({stickers.length})</span>
     <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto" role="listbox" aria-label="Stickers">
       {#each stickers as s (s.id)}
-        <button type="button" role="option" aria-selected={s.id === picked} title={`${STAMP_LABELS[s.stamp]} ${s.id}`} class={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={`background: ${s.color}`} onclick={() => controller.selectSticker(s.id)}></button>
+        <button type="button" role="option" aria-selected={s.id === picked} title={`${stickerRefLabel(s.ref)} ${s.id}`} class={`h-5 w-5 rounded ring-1 ${s.id === picked ? 'ring-indigo-400' : 'ring-slate-700'}`} style={`background: ${s.color}`} onclick={() => controller.selectSticker(s.id)}></button>
       {/each}
     </div>
     {#if sel}
       <div class="flex flex-col gap-1.5" data-testid="sticker-edit">
-        <label class="flex items-center justify-between gap-2">
-          <span class="text-slate-400">Stamp</span>
-          <select aria-label="Sticker stamp" value={sel.stamp} onchange={(e) => { const stamp = e.currentTarget.value as StampKind; run(() => controller.updateSticker(layerId, sel.id, { stamp })); }} class="rounded bg-slate-800 px-1 py-0.5">
-            {#each STAMP_KINDS as k (k)}<option value={k}>{STAMP_LABELS[k]}</option>{/each}
-          </select>
-        </label>
+        <span class="text-slate-400">Sticker</span>
+        <!-- The layer is redrawn, so the new sticker's art (and every other's) loads first. -->
+        <StickerPicker
+          {controller}
+          label="Sticker art"
+          selected={[sel.ref]}
+          onpick={(ref) => {
+            const id = sel.id;
+            void controller
+              .prepareStickers([ref, ...stickers.map((x) => x.ref)])
+              .then(() => run(() => controller.updateSticker(layerId, id, { ref })))
+              .catch((e: unknown) => run(() => { throw e; }));
+          }}
+        />
         <div class="flex items-center justify-between gap-2">
           <span class="text-slate-400">Position</span>
           <span class="flex gap-1">

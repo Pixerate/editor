@@ -95,7 +95,11 @@ import {
 } from './guides';
 import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad';
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
-import { normalizeStickerUpdate, STAMP_KINDS, stickerAt as hitSticker, stickerRect, stickerSurface, type Sticker } from './stickers';
+import { normalizeStickerUpdate, stickerAt as hitSticker, stickerRect, stickerStamp, stickerSurface, type Sticker } from './stickers';
+import { defaultStickerRasterizer, StickerArtCache, type StickerRasterizer } from './sticker-art';
+import { editorStickers } from '../stickers/editor';
+import { editorStampOf, normalizeStickerRef, StickersSlot } from '../stickers/helpers';
+import type { StickerProvider, StickerRef } from '../stickers/types';
 import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
 import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
@@ -149,6 +153,13 @@ export interface PaintEditorOptions extends Partial<PaintCanvas> {
   historyLimit?: number;
   /** Wet media: kernel, threads, speed (steps per second) and the memory kept for undoing wet strokes. */
   wet?: PaintWetOptions;
+  /** The sticker library (default the editor's own stamps, `editorStickers()`); see `setStickersProvider`. */
+  stickers?: StickerProvider;
+  /**
+   * Draws a provider sticker's SVG or `https:` art to RGBA (default: PNG data URLs anywhere, the
+   * rest with the browser's `createImageBitmap` and `OffscreenCanvas`).
+   */
+  rasterizeSticker?: StickerRasterizer;
 }
 
 /** Wet media as panels show it. */
@@ -489,11 +500,17 @@ export class PaintEditorController {
   private wetOp: { before: WetSnapshot | null } | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
   readonly effects = new EffectsSlot();
+  /** The sticker library slot (see `setStickersProvider`). */
+  readonly stickers = new StickersSlot(editorStickers());
+  private readonly stickerArt = new StickerArtCache();
+  private readonly rasterizeSticker: StickerRasterizer;
   private readonly effectsRenderer = new PaintEffectsRenderer();
   private paperEffectNodeCache: ImageNode | null = null;
 
   constructor(options: PaintEditorOptions = {}) {
     this.historyLimit = Math.max(1, options.historyLimit ?? 200);
+    this.rasterizeSticker = options.rasterizeSticker ?? defaultStickerRasterizer;
+    if (options.stickers) this.stickers.set(options.stickers);
     this.doc = createPaintDocument({ width: options.width, height: options.height, dpi: options.dpi, paper: this.resolvePaper(options.paper) });
     this.userBrushes = (options.brushes ?? []).map((b) => normalizePaintBrush({ ...b, builtin: false }));
     const start = this.findBrush(options.brushId ?? DEFAULT_BRUSH_ID) ?? this.findBrush(DEFAULT_BRUSH_ID)!;
@@ -1768,6 +1785,8 @@ export class PaintEditorController {
     else delete next.builtin;
     this.brush = next;
     this.emit([]);
+    // Provider stickers are loaded now, so the spray can draw them by the time the stroke starts.
+    if (next.engine === 'sticker' && next.sticker.stamps.some((r) => !editorStampOf(r))) void this.prepareStickers(next.sticker.stamps).catch(() => this.emit([]));
     return this.brush;
   }
 
@@ -2123,7 +2142,7 @@ export class PaintEditorController {
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
-      sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc) } : undefined,
+      sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get } : undefined,
       paint: effect ? null : this.strokeGradient(init, brush, color),
       effect,
     });
@@ -2996,9 +3015,20 @@ export class PaintEditorController {
       const stickers: Record<string, Sticker[]> = {};
       for (const [id, list] of Object.entries(ext.stickers as Record<string, unknown>)) {
         if (!findLayer(state.layers, id) || !Array.isArray(list)) continue;
-        const ok = (list as Sticker[]).filter((x) => x && typeof x.id === 'string' && STAMP_KINDS.includes(x.stamp) && Number.isFinite(x.x) && Number.isFinite(x.y) && x.size > 0);
+        // Older documents name an editor stamp (stamp: "star"); newer ones a ref (ref: "editor:star").
+        const ok = (list as Sticker[]).flatMap((x) => {
+          if (!x || typeof x.id !== 'string' || !Number.isFinite(x.x) || !Number.isFinite(x.y) || !(x.size > 0)) return [];
+          try {
+            const ref = normalizeStickerRef(x.ref ?? (x.stamp as string));
+            const stamp = editorStampOf(ref);
+            const { stamp: _old, ...rest } = x;
+            return [{ ...rest, ref, ...(stamp ? { stamp } : {}) } as Sticker];
+          } catch {
+            return [];
+          }
+        });
         if (ok.length !== list.length) problems.push(`Some stickers of layer "${id}" could not be read; they were dropped.`);
-        stickers[id] = ok.map((x) => ({ ...x }));
+        stickers[id] = ok;
       }
       if (Object.keys(stickers).length) state = { ...state, stickers };
     }
@@ -3105,6 +3135,9 @@ export class PaintEditorController {
     delete this.extensions.paperEffect;
     this.viewCompositor.clear();
     this.emit();
+    // Provider stickers keep their saved pixels; their art loads now so they can be edited.
+    const refs = Object.values(this.doc.stickers ?? {}).flatMap((list) => list.map((x) => x.ref));
+    if (refs.some((r) => !editorStampOf(r))) void this.prepareStickers(refs).catch(() => this.emit([]));
     return loaded.problems;
   }
 
@@ -3464,6 +3497,63 @@ export class PaintEditorController {
     return { layer: l, stickers };
   }
 
+  // --- The sticker library ---------------------------------------------------------
+
+  /** The sticker library: the editor's own stamps unless a host set its own. */
+  get stickersProvider(): StickerProvider {
+    return this.stickers.provider;
+  }
+
+  /**
+   * Sets the sticker library (`null` goes back to the editor's own stamps, `editorStickers()`);
+   * to offer both, pass `combineStickerProviders([editorStickers(), yours])`. Loaded art is
+   * forgotten. Not an edit: no undo step.
+   */
+  setStickersProvider(provider: StickerProvider | null): void {
+    if ((provider ?? this.stickers.fallback) === this.stickers.provider) return;
+    this.stickers.set(provider);
+    this.stickerArt.clear();
+    this.emit([]);
+  }
+
+  /**
+   * Loads the art of `refs` (provider stickers; editor stamps need none) so sprays and placements
+   * can draw them. Rejects with a `PaintEditorError` naming an unknown ref and the closest known
+   * ones, or a sticker whose art failed. Emits when art arrives, so views redraw.
+   */
+  async prepareStickers(refs: readonly StickerRef[]): Promise<void> {
+    const list = [...new Set(refs.map((r) => this.readStickerRef(r)))].filter((r) => !editorStampOf(r));
+    try {
+      await Promise.all(list.map((r) => this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker)));
+    } catch (e) {
+      throw new PaintEditorError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (list.length) this.emit([]);
+    }
+  }
+
+  /** Whether a sticker's art is ready to draw: `ready` (always for editor stamps), `loading`, `failed` (with why) or `none`. */
+  stickerArtStatus(ref: StickerRef): { status: 'ready' | 'loading' | 'failed' | 'none'; error?: string } {
+    return this.stickerArt.status(this.readStickerRef(ref));
+  }
+
+  private readStickerRef(ref: StickerRef): StickerRef {
+    try {
+      return normalizeStickerRef(ref);
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+  }
+
+  /** Refuses to redraw stickers whose art has not loaded (they would vanish), naming them and what to call. */
+  private requireStickerArt(stickers: readonly Sticker[]): void {
+    const missing = [...new Set(stickers.filter((s) => !stickerStamp(s) && !this.stickerArt.get(s.ref)).map((s) => s.ref))];
+    if (missing.length) {
+      for (const r of missing) void this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker).then(() => this.emit([]), () => this.emit([]));
+      throw new PaintEditorError(`The art for ${missing.map((r) => `"${r}"`).join(', ')} has not loaded yet; it is loading now (prepareStickers), so try again when it has.`);
+    }
+  }
+
   /** A layer's stickers, bottom first. */
   listStickers(layerId?: string): Sticker[] {
     const id = layerId ?? this.doc.activeLayerId;
@@ -3478,6 +3568,7 @@ export class PaintEditorController {
    */
   private commitStickers(label: string, layer: PaintPixelLayer, stickers: Sticker[], dirty?: RasterRect[]): void {
     if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
+    this.requireStickerArt(stickers);
     const before = this.previewBase() ?? this.doc;
     this.stickerPreview = null;
     const surface = this.redrawStickers(layer, stickers, dirty);
@@ -3487,7 +3578,7 @@ export class PaintEditorController {
 
   private redrawStickers(layer: PaintPixelLayer, stickers: readonly Sticker[], dirty?: RasterRect[]): TiledSurface {
     const partial = dirty && !layer.offset.x && !layer.offset.y;
-    return partial ? stickerSurface(stickers, layer.surface, dirty) : stickerSurface(stickers);
+    return partial ? stickerSurface(stickers, layer.surface, dirty, this.stickerArt.get) : stickerSurface(stickers, undefined, undefined, this.stickerArt.get);
   }
 
   /** The document from before the sticker preview on screen, or `null` when none is (anything else changed the document since). */
@@ -3509,7 +3600,7 @@ export class PaintEditorController {
     const id = layerId ?? this.doc.activeLayerId;
     if (!id) return null;
     this.requireLayer(id);
-    const hit = hitSticker(this.doc.stickers?.[id] ?? [], x, y);
+    const hit = hitSticker(this.doc.stickers?.[id] ?? [], x, y, this.stickerArt.get);
     return hit ? { ...hit } : null;
   }
 
@@ -3566,9 +3657,9 @@ export class PaintEditorController {
    * which becomes one. Missing fields: size 48 px, rotation 0, the paint colour, opacity 1, a seed
    * from the new id. Returns the new stickers with their ids.
    */
-  addStickers(layerId: string | undefined, input: readonly (Partial<Omit<Sticker, 'id'>> & Pick<Sticker, 'stamp' | 'x' | 'y'>)[]): Sticker[] {
+  addStickers(layerId: string | undefined, input: readonly (Partial<Omit<Sticker, 'id'>> & Pick<Sticker, 'x' | 'y'>)[]): Sticker[] {
     const layer = this.wetLayer(layerId, 'add stickers to');
-    if (!input.length) throw new PaintEditorError('Pass at least one sticker (stamp, x, y).');
+    if (!input.length) throw new PaintEditorError('Pass at least one sticker (ref, x, y).');
     if (input.length > MAX_ADD_STICKERS) throw new PaintEditorError(`At most ${MAX_ADD_STICKERS} stickers per call; split them over several calls.`);
     const existing = this.doc.stickers?.[layer.id];
     if (!existing?.length) {
@@ -3576,7 +3667,8 @@ export class PaintEditorController {
     }
     let n = this.nextStickerNumber();
     const added = input.map((raw, i) => {
-      for (const k of ['stamp', 'x', 'y'] as const) if (raw[k] === undefined) throw new PaintEditorError(`Sticker ${i} needs ${k}.`);
+      if (raw.ref === undefined && raw.stamp === undefined) throw new PaintEditorError(`Sticker ${i} needs ref (a sticker ref from find_stickers, e.g. "editor:star").`);
+      for (const k of ['x', 'y'] as const) if (raw[k] === undefined) throw new PaintEditorError(`Sticker ${i} needs ${k}.`);
       let u: Partial<Omit<Sticker, 'id'>>;
       try {
         u = this.readStickerUpdate(raw);

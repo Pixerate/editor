@@ -66,7 +66,7 @@ describe('PaintGesture', () => {
     // Pressing empty canvas places the brush's first stamp and picks it; nothing to drag.
     expect(g.down(ev(50, 50))).toBe(false);
     const [placed] = c.listStickers();
-    expect(placed).toMatchObject({ stamp: c.getState().brush.sticker.stamps[0], x: 50, y: 50, size: 30, color: '#2563eb' });
+    expect(placed).toMatchObject({ ref: c.getState().brush.sticker.stamps[0], stamp: 'star', x: 50, y: 50, size: 30, color: '#2563eb' });
     expect(c.getState().selectedSticker).toBe(placed.id);
     // Pressing a sticker picks it and dragging moves it; the drop is one undo step.
     c.selectSticker(null);

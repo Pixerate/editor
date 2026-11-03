@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
+import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
@@ -416,7 +417,34 @@ describe('Svelte paint editor', () => {
     HTMLAnchorElement.prototype.click = click;
   });
 
-  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', () => {
+  it('picks stickers from a host library: brush stamps by category, and restickering a placed sticker', async () => {
+    const c = new PaintEditorController({ width: 300, height: 200, stickers: createFakeStickerProvider() });
+    show(PaintEditor, { controller: c });
+    c.setBrush({ id: 'sticker-stars' });
+    const settle = async () => {
+      for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
+      flushSync();
+    };
+    await settle();
+    setValue(target.querySelector('select[aria-label="Sticker category"]') as HTMLSelectElement, 'food');
+    await settle();
+    const names = [...target.querySelectorAll('[aria-label="Sticker stamps"] button')].map((b) => b.textContent?.trim());
+    expect(names).toEqual(['Apple', 'Pear', 'Cherry', 'Lemon', 'Grape']);
+    click(byText('Apple'));
+    expect(c.getState().brush.sticker.stamps).toContain('fake:fruit-apple');
+    await c.prepareStickers(['fake:fruit-apple']);
+    c.addLayer();
+    const [placed] = c.addStickers(undefined, [{ ref: 'fake:fruit-apple', x: 60, y: 60, size: 40 }]);
+    c.selectSticker(placed.id);
+    click(byText('Layers'));
+    await settle();
+    const art = target.querySelector('[aria-label="Sticker art"]')!;
+    click([...art.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Pear')!);
+    await settle();
+    expect(c.listStickers()[0].ref).toBe('fake:fruit-pear');
+  });
+
+  it('procedural, bristle and sticker controls, stencils in the toolbar, and the sticker panel', async () => {
     const c = new PaintEditorController({ width: 300, height: 200 });
     show(PaintEditor, { controller: c });
     c.setBrush({ id: 'hair-strands' });
@@ -445,8 +473,19 @@ describe('Svelte paint editor', () => {
     expect(target.querySelector('input[aria-label="Splay"]')).not.toBeNull();
     c.setBrush({ id: 'sticker-stars' });
     flushSync();
+    // The picker lists the sticker library (the editor's own stamps here) once its first page lands.
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
     click(target.querySelector('[aria-label="Sticker stamps"] button[aria-pressed="false"]'));
     expect(c.getState().brush.sticker.stamps.length).toBe(3);
+    expect(c.getState().brush.sticker.stamps.every((r) => r.startsWith('editor:'))).toBe(true);
+    // Searching narrows the list.
+    const search = target.querySelector('input[aria-label="Search sticker stamps"]') as HTMLInputElement;
+    search.value = 'heart';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect([...target.querySelectorAll('[aria-label="Sticker stamps"] button')].map((b) => b.textContent?.trim())).toEqual(['Heart']);
     click(byText('Ruler'));
     expect(c.listStencils()[0].kind).toBe('ruler');
     expect(target.querySelectorAll('svg line[stroke="#fbbf24"]').length).toBeGreaterThan(0);

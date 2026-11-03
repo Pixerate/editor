@@ -14,7 +14,8 @@ import { PAINT_GRADIENT_JSON_SCHEMA, PAINT_SOURCE_JSON_SCHEMA } from '../paint/g
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
 import { bytesToBase64, encodePng } from '../raster/png';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS } from './procedural';
-import { STAMP_KINDS } from './stickers';
+import { MAX_STICKER_STAMPS, STAMP_KINDS } from './stickers';
+import { createStickerTools } from '../stickers/tools';
 import { createPaintStickerTools } from './sticker-tools';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, MULTI_COLOR_MODES, PAINT_BRUSH_CATEGORIES, PAINT_BRUSH_ENGINES, WET_MEDIA, WET_TOOLS, brushToJSON, isWetCapable, type PaintBrush } from './brushes';
 import { MAX_CANVAS_SIDE } from './document';
@@ -293,7 +294,13 @@ const STICKER_BRUSH = {
   type: 'object',
   description: 'Sticker engine settings: stamps sprayed along the stroke as editable stickers. Missing fields keep their current values.',
   properties: {
-    stamps: { type: 'array', minItems: 1, maxItems: 9, items: { type: 'string', enum: [...STAMP_KINDS], description: 'A stamp.' }, description: 'The stamps to spray (one picked at random per sticker).' },
+    stamps: {
+      type: 'array',
+      minItems: 1,
+      maxItems: MAX_STICKER_STAMPS,
+      items: { type: 'string', minLength: 1, description: 'A sticker ref provider:id from find_stickers (e.g. editor:star); a bare editor stamp (star) means editor:star.' },
+      description: `The stickers to spray, one picked at random per sticker: refs from find_stickers (the editor's own: ${STAMP_KINDS.map((k) => `editor:${k}`).join(', ')}). Each is checked against the sticker library and an unknown ref is refused with the closest ones. A provider's sticker is drawn from its art (tinted to the paint colour when tintable), loaded before the stroke.`,
+    },
     density: { type: 'number', minimum: 0, maximum: 1, description: 'How closely stickers follow each other: about density × 4 stickers per tip diameter of travel (0.25 ≈ one per diameter, 1 ≈ four). Default 0.4.' },
     sizeJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random size change.' },
     rotationJitter: { type: 'number', minimum: 0, maximum: 1, description: 'Random turn as a fraction of ±180°.' },
@@ -774,7 +781,11 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       'Chooses the active brush (id) and / or changes its settings; strokes without a brush use it. Editor state, not an undo step. Changes stay on the active brush until save_brush stores them. Returns the active brush.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Brush id from list_brushes to start from.' }, ...BRUSH_FIELDS }, additionalProperties: false },
     annotations: { title: 'Set the brush', ...SET },
-    handler: (a) => brushToJSON(c.setBrush(a)),
+    handler: async (a) => {
+      const stamps = (a.sticker as { stamps?: string[] } | undefined)?.stamps;
+      if (stamps) await c.prepareStickers(stamps);
+      return brushToJSON(c.setBrush(a));
+    },
   });
 
   add({
@@ -970,6 +981,10 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     coordinates: { in: ['points[]'], out: ['bounds'] },
     handler: async (a) => {
       await c.wetIdle();
+      // Sticker brushes: load the stickers' art first, so the spray draws every one.
+      const base = a.brushId ? c.getBrush(a.brushId as string) : c.getState().brush;
+      const over = a.brush as { engine?: string; sticker?: { stamps?: string[] } } | undefined;
+      if ((over?.engine ?? base?.engine) === 'sticker') await c.prepareStickers(over?.sticker?.stamps ?? base?.sticker.stamps ?? []);
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush: a.brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
@@ -1301,6 +1316,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   tools.push(...createPaintReplayTools(c));
   tools.push(...createPaintStickerTools(c));
   tools.push(...createPigmentTools());
+  // The sticker library (the editor's own stamps unless the host set one): refs for sticker brushes and add_stickers.
+  tools.push(...createStickerTools({ provider: () => c.stickersProvider }));
   // Layer styles: the image editor's tools, schemas and defaults on paint layers (no global light of its own).
   tools.push(
     ...createLayerEffectTools(
