@@ -3,21 +3,22 @@ import type { ImageEditorController } from './controller';
 import { BLEND_MODES } from './blend';
 import { LayerOperationError, requireLayer } from './layers/ops';
 import {
+  DEFAULT_GLOBAL_LIGHT,
   effectsMargin,
   isLayerEffectKind,
   layerEffectLabel,
   LAYER_EFFECT_KINDS,
   type LayerEffectKind,
+  type GlobalLight,
   type LayerEffects,
 } from '../raster/effects/model';
-import { builtinPattern, builtinPatternIds } from '../raster/effects/patterns';
+import { builtinPattern, builtinPatternIds, type EffectPattern } from '../raster/effects/patterns';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const WRITE_IDEMPOTENT = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } as const;
 
-const LAYER_ID = { type: 'string', description: 'Layer id from list_layers (a pixel, shape, smart object, annotation or group layer).' } as const;
 const EFFECT_ID = { type: 'string', description: 'Effect id from list_layer_effects or add_layer_effect.' } as const;
 const BLEND_IDS = BLEND_MODES.map((m) => m.id).filter((id) => id !== 'pigment');
 
@@ -219,8 +220,8 @@ function settingsSchema(forUpdate: boolean): Record<string, unknown> {
 }
 
 /** The patterns pattern effects can use: the document's (from a PSD), then the built-in ones. */
-function patternList(controller: ImageEditorController): Array<{ id: string; name: string; width: number; height: number; builtin: boolean }> {
-  const doc = controller.getDocumentPatterns().map((p) => ({ id: p.id, name: p.name, width: p.width, height: p.height, builtin: false }));
+function patternList(documentPatterns: readonly EffectPattern[]): Array<{ id: string; name: string; width: number; height: number; builtin: boolean }> {
+  const doc = documentPatterns.map((p) => ({ id: p.id, name: p.name, width: p.width, height: p.height, builtin: false }));
   const builtins = builtinPatternIds().map((id) => {
     const p = builtinPattern(id)!;
     return { id, name: p.name, width: p.width, height: p.height, builtin: true };
@@ -240,17 +241,66 @@ export function describeLayerEffects(effects: LayerEffects): Record<string, unkn
 }
 
 /**
- * Agent tools for layer effects: `list_layer_effects`, `add_layer_effect`, `update_layer_effect`,
- * `remove_layer_effect`, `set_layer_effects_enabled` and `set_global_light`. Each write validates
- * every setting first, is one undo step and returns the layer's effects after the change.
+ * What the layer effect tools need of an editor. The image and paint editors both provide it, so
+ * both get the same tools, schemas and defaults (`../raster/effects/model`).
  */
+export interface LayerEffectsHost {
+  /** Throws a helpful error when `id` is not a layer that can take effects. */
+  requireLayer(id: string): void;
+  getLayerEffects(id: string): LayerEffects;
+  addLayerEffect(id: string, kind: LayerEffectKind, settings: Record<string, unknown>, index?: number): { effect: { id: string } };
+  updateLayerEffect(id: string, effectId: string, changes: Record<string, unknown>): unknown;
+  removeLayerEffect(id: string, effectId: string): unknown;
+  setLayerEffectsEnabled(id: string, enabled: boolean, scale?: number): unknown;
+  /** The light shadows and bevels with useGlobalLight follow; without it, the default 120° / 30°. */
+  getGlobalLight?(): GlobalLight;
+  /** With it, the `set_global_light` tool is offered. */
+  setGlobalLight?(light: Partial<GlobalLight>): GlobalLight;
+  /** Document patterns beside the built-in ones (from a PSD). */
+  getDocumentPatterns?(): readonly EffectPattern[];
+}
+
+export interface LayerEffectToolsOptions {
+  /** What a layerId may name, for its description (e.g. "a pixel, shape, smart object, annotation or group layer"). */
+  layers: string;
+  /** Turns a refusal into the host's error type (default LayerOperationError). */
+  error?: (message: string) => Error;
+}
+
+/** The image editor's layer effect tools (see `createLayerEffectTools`). */
 export function createImageEffectTools(controller: ImageEditorController): AgentTool[] {
+  return createLayerEffectTools(
+    {
+      requireLayer: (id) => void requireLayer(controller.getLayers(), id),
+      getLayerEffects: (id) => controller.getLayerEffects(id),
+      addLayerEffect: (id, kind, settings, index) => controller.addLayerEffect(id, kind, settings, index),
+      updateLayerEffect: (id, effectId, changes) => controller.updateLayerEffect(id, effectId, changes),
+      removeLayerEffect: (id, effectId) => controller.removeLayerEffect(id, effectId),
+      setLayerEffectsEnabled: (id, enabled, scale) => controller.setLayerEffectsEnabled(id, enabled, scale),
+      getGlobalLight: () => controller.getGlobalLight(),
+      setGlobalLight: (light) => controller.setGlobalLight(light),
+      getDocumentPatterns: () => controller.getDocumentPatterns(),
+    },
+    { layers: 'a pixel, shape, type, smart object, annotation or group layer' }
+  );
+}
+
+/**
+ * Agent tools for layer effects: `list_layer_effects`, `add_layer_effect`, `update_layer_effect`,
+ * `remove_layer_effect`, `set_layer_effects_enabled` and, when the host has a global light to set,
+ * `set_global_light`. Each write validates every setting first, is one undo step and returns the
+ * layer's effects after the change.
+ */
+export function createLayerEffectTools(host: LayerEffectsHost, options: LayerEffectToolsOptions): AgentTool[] {
+  const error = options.error ?? ((m: string) => new LayerOperationError(m));
+  const LAYER_ID = { type: 'string', description: `Layer id from list_layers (${options.layers}).` } as const;
   const layerArg = (id: unknown) => {
-    if (typeof id !== 'string' || !id) throw new LayerOperationError('layerId is required (a layer id from list_layers).');
-    requireLayer(controller.getLayers(), id);
+    if (typeof id !== 'string' || !id) throw error('layerId is required (a layer id from list_layers).');
+    host.requireLayer(id);
     return id;
   };
-  const result = (layerId: string, extra: Record<string, unknown> = {}) => ({ layerId, ...extra, ...describeLayerEffects(controller.getLayerEffects(layerId)) });
+  const result = (layerId: string, extra: Record<string, unknown> = {}) => ({ layerId, ...extra, ...describeLayerEffects(host.getLayerEffects(layerId)) });
+  const globalLight = () => host.getGlobalLight?.() ?? { ...DEFAULT_GLOBAL_LIGHT };
 
   const list: AgentTool = {
     name: 'list_layer_effects',
@@ -259,14 +309,14 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
       "Returns a layer's effects: the master switch (enabled), Scale Effects (scale, 1 = 100 %), margin (px the effects reach beyond the shape), whether they came from a PSD, and every effect with its id, kind, label and all settings. Also returns the document global light and the pattern ids pattern effects can use.",
     inputSchema: { type: 'object', properties: { layerId: LAYER_ID }, required: ['layerId'], additionalProperties: false },
     annotations: { title: 'List layer effects', ...READ },
-    handler: ({ layerId }) => result(layerArg(layerId), { globalLight: controller.getGlobalLight(), patterns: patternList(controller), kinds: [...LAYER_EFFECT_KINDS] }),
+    handler: ({ layerId }) => result(layerArg(layerId), { globalLight: globalLight(), patterns: patternList(host.getDocumentPatterns?.() ?? []), kinds: [...LAYER_EFFECT_KINDS] }),
   };
 
   const add: AgentTool = {
     name: 'add_layer_effect',
     title: 'Add a layer effect',
     description:
-      "Adds a live effect to a pixel, shape, type, smart object, annotation or group layer with Photoshop's defaults, changed by settings: drop-shadow, inner-shadow, outer-glow, inner-glow, bevel-emboss, satin, color-overlay, gradient-overlay, pattern-overlay or stroke. Several of one kind are allowed (the first listed is on top). One undo step. Returns the new effect's id and the layer's effects.",
+      `Adds a live effect to ${options.layers} with Photoshop's defaults, changed by settings: drop-shadow, inner-shadow, outer-glow, inner-glow, bevel-emboss, satin, color-overlay, gradient-overlay, pattern-overlay or stroke. Several of one kind are allowed (the first listed is on top). The effect is drawn from the layer's pixels, so it follows later changes. One undo step. Returns the new effect's id and the layer's effects.`,
     inputSchema: {
       type: 'object',
       $defs: DEFS,
@@ -282,8 +332,8 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     annotations: { title: 'Add a layer effect', ...WRITE },
     handler: ({ layerId, kind, settings, index }) => {
       const id = layerArg(layerId);
-      if (!isLayerEffectKind(kind)) throw new LayerOperationError(`kind must be one of ${LAYER_EFFECT_KINDS.join(', ')}.`);
-      const { effect } = controller.addLayerEffect(id, kind as LayerEffectKind, (settings as Record<string, unknown>) ?? {}, index as number | undefined);
+      if (!isLayerEffectKind(kind)) throw error(`kind must be one of ${LAYER_EFFECT_KINDS.join(', ')}.`);
+      const { effect } = host.addLayerEffect(id, kind as LayerEffectKind, (settings as Record<string, unknown>) ?? {}, index as number | undefined);
       return result(id, { effectId: effect.id });
     },
   };
@@ -304,8 +354,8 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     handler: ({ layerId, effectId, settings }) => {
       const id = layerArg(layerId);
       const changes = (settings as Record<string, unknown>) ?? {};
-      if (!Object.keys(changes).length) throw new LayerOperationError('Give at least one setting to change.');
-      controller.updateLayerEffect(id, effectId as string, changes);
+      if (!Object.keys(changes).length) throw error('Give at least one setting to change.');
+      host.updateLayerEffect(id, effectId as string, changes);
       return result(id);
     },
   };
@@ -318,7 +368,7 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     annotations: { title: 'Remove a layer effect', ...DESTRUCTIVE },
     handler: ({ layerId, effectId }) => {
       const id = layerArg(layerId);
-      controller.removeLayerEffect(id, effectId as string);
+      host.removeLayerEffect(id, effectId as string);
       return result(id);
     },
   };
@@ -341,7 +391,7 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     annotations: { title: 'Switch layer effects on or off', ...WRITE_IDEMPOTENT },
     handler: ({ layerId, enabled, scale }) => {
       const id = layerArg(layerId);
-      controller.setLayerEffectsEnabled(id, enabled as boolean, scale as number | undefined);
+      host.setLayerEffectsEnabled(id, enabled as boolean, scale as number | undefined);
       return result(id);
     },
   };
@@ -361,13 +411,13 @@ export function createImageEffectTools(controller: ImageEditorController): Agent
     },
     annotations: { title: 'Set the global light', ...WRITE_IDEMPOTENT },
     handler: ({ angle, altitude }) => {
-      if (angle === undefined && altitude === undefined) throw new LayerOperationError('Give angle, altitude or both.');
+      if (angle === undefined && altitude === undefined) throw error('Give angle, altitude or both.');
       const next: { angle?: number; altitude?: number } = {};
       if (angle !== undefined) next.angle = angle as number;
       if (altitude !== undefined) next.altitude = altitude as number;
-      return { globalLight: controller.setGlobalLight(next) };
+      return { globalLight: host.setGlobalLight!(next) };
     },
   };
 
-  return [list, add, update, remove, setEnabled, light];
+  return host.setGlobalLight ? [list, add, update, remove, setEnabled, light] : [list, add, update, remove, setEnabled];
 }

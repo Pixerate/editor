@@ -614,6 +614,13 @@ describe('light paint', () => {
     click(byText('Clear light'));
     expect(c.lightOf().hasLight).toBe(false);
     expect(container.querySelector('[data-testid="layer-light"]')).toBeNull();
+    // The layer style section (the image editor's panel): add a glow, then remove it.
+    const fx = container.querySelector('[data-testid="paint-layer-effects"]')!;
+    setValue(fx.querySelector('select[aria-label="Add style"]') as HTMLSelectElement, 'outer-glow');
+    const id = c.getActiveLayer()!.id;
+    expect(c.getLayerEffects(id).items.map((e) => e.kind)).toEqual(['outer-glow']);
+    click(fx.querySelector('button[aria-label^="Remove "]')!);
+    expect(c.getLayerEffects(id).items).toHaveLength(0);
   });
 });
 

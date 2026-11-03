@@ -116,6 +116,16 @@ describe("paint agent scripts", () => {
     expect(controller.lightOf(layers.find((l) => l.name === "Bokeh")!.id).spill).toEqual({ radius: 40, strength: 1.2 });
   }, 120_000);
 
+  it("paints a neon sign whose glow is a layer style, recoloured after painting", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-neon-glow-style")!, { control: { speed: Infinity, stopped: false } });
+    const neon = controller.listLayers().find((l) => l.name === "Neon")!;
+    const fx = controller.getLayerEffects(neon.id).items;
+    expect(fx.map((e) => e.kind)).toEqual(["outer-glow", "inner-glow"]);
+    expect(fx[0]).toMatchObject({ size: 64, blend: "linear-dodge", fill: { type: "color", color: "#22d3ee" } });
+    expect(neon.effects).toBe(2);
+  }, 120_000);
+
   it("paints stained glass on backlit paper: glazes and lead lines", async () => {
     const { controller, registry } = setup();
     await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-stained-glass")!, { control: { speed: Infinity, stopped: false } });

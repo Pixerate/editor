@@ -18,6 +18,20 @@ import { cleanMixer, EMPTY_MIXER_LOAD, loadMixer, type MixerLoad } from '../pain
 import { paintSourceColor, parsePaintSource, PaintSourceError, resolvePaintGradient, type PaintGradientSource, type PaintSource } from '../paint/gradient-paint';
 import { BLEND_MODES, isBlendMode, standardBlendMode, type BlendMode } from '../raster/blend';
 import { findLayer, flattenLayers, insertLayer, isLayerLocked, mapLayer, type LayerLocks } from '../raster/layers';
+import {
+  defaultLayerEffect,
+  isLayerEffectKind,
+  LAYER_EFFECT_KINDS,
+  LayerEffectError,
+  layerEffectLabel,
+  mergeLayerEffect,
+  newEffectId,
+  validateLayerEffects,
+  type LayerEffect,
+  type LayerEffectKind,
+  type LayerEffects,
+} from '../raster/effects/model';
+import type { EffectPattern } from '../raster/effects/patterns';
 import { bytesToBase64, decodePng, encodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import {
   translateSurface,
@@ -102,6 +116,16 @@ import { checkPaintEffectPlace, effectLayersToJSON, mixPixels, nextPaperEffectVe
 import { DEFAULT_LIGHTING, emptyThickChannels, LitCache, normalizeLighting, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type ThickChannels } from './thick';
 
 /** A refusal with a message that says what is wrong and how to fix it. */
+/** Runs `fn`, turning an effect validation error into a `PaintEditorError` with the same message. */
+function effectGuard<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof LayerEffectError) throw new PaintEditorError(e.message);
+    throw e;
+  }
+}
+
 export class PaintEditorError extends Error {
   constructor(message: string) {
     super(message);
@@ -233,6 +257,8 @@ export interface PaintLayerInfo {
   depth: number;
   /** A live stroke layer (its pixels are drawn from its strokes, which stay editable): how many strokes it has. */
   liveStrokes?: number;
+  /** How many live layer effects (glows, shadows, strokes…) it has, when any (`getLayerEffects`). */
+  effects?: number;
 }
 
 export interface PaintStrokeInit {
@@ -929,6 +955,7 @@ export class PaintEditorController {
       active: l.id === this.doc.activeLayerId,
       bounds,
       ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: this.doc.liveStrokes[l.id].length } : {}),
+      ...(l.effects?.items.length ? { effects: l.effects.items.length } : {}),
       parentId,
       depth,
     };
@@ -1008,6 +1035,105 @@ export class PaintEditorController {
     }
     this.commit('Layer properties', { ...this.doc, layers: mapLayer(this.doc.layers, id, () => next) });
     return this.describeLayer(next);
+  }
+
+  // --- Layer effects (layer styles) ---------------------------------------------
+
+  /** A layer's live effects (an empty, enabled list when it has none). */
+  getLayerEffects(id: string): LayerEffects {
+    return this.requireLayer(id).effects ?? { enabled: true, items: [] };
+  }
+
+  /**
+   * Adds a live effect of `kind` (outer and inner glow, drop and inner shadow, stroke, bevel &
+   * emboss, satin, colour / gradient / pattern overlay) with Photoshop's defaults and `settings`
+   * applied, at `index` in the layer's list (default the end). The effect is drawn from the
+   * layer's pixels when it is composited, so it follows later painting. One undo step.
+   */
+  addLayerEffect(id: string, kind: LayerEffectKind, settings: Record<string, unknown> = {}, index?: number): { effect: LayerEffect; effects: LayerEffects } {
+    if (!isLayerEffectKind(kind)) throw new PaintEditorError(`Unknown effect kind "${String(kind)}". Kinds: ${LAYER_EFFECT_KINDS.join(', ')}.`);
+    const current = this.effectsLayer(id, 'add effects').effects ?? { enabled: true, items: [] };
+    const ids = new Set(current.items.map((e) => e.id));
+    let effectId = newEffectId();
+    while (ids.has(effectId)) effectId = newEffectId();
+    const { id: _id, kind: _kind, ...rest } = settings;
+    const effect = effectGuard(() => mergeLayerEffect(defaultLayerEffect(kind, effectId), rest));
+    const items = [...current.items];
+    const at = index === undefined ? items.length : Math.max(0, Math.min(items.length, Math.floor(index)));
+    items.splice(at, 0, effect);
+    this.writeLayerEffects(id, { ...current, items }, `Add ${layerEffectLabel(kind)}`, true);
+    return { effect, effects: this.getLayerEffects(id) };
+  }
+
+  /**
+   * Changes one effect: only the given settings (nested objects replace whole; `null` removes an
+   * optional contour or texture). One undo step, or with `commitToHistory` false folded into the
+   * last change of this effect (a slider drag). Returns the layer's effects.
+   */
+  updateLayerEffect(id: string, effectId: string, changes: Record<string, unknown>, commitToHistory = true): LayerEffects {
+    const current = this.effectsLayer(id, 'change its effects').effects;
+    const i = this.requireEffect(id, effectId);
+    const items = [...current!.items];
+    items[i] = effectGuard(() => mergeLayerEffect(items[i], changes));
+    this.writeLayerEffects(id, { ...current!, items }, `Change ${layerEffectLabel(items[i].kind)}`, commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** Removes one effect (one undo step). Returns the layer's remaining effects. */
+  removeLayerEffect(id: string, effectId: string): LayerEffects {
+    const current = this.effectsLayer(id, 'change its effects').effects;
+    const i = this.requireEffect(id, effectId);
+    this.writeLayerEffects(id, { ...current!, items: current!.items.filter((e) => e.id !== effectId) }, `Remove ${layerEffectLabel(current!.items[i].kind)}`, true);
+    return this.getLayerEffects(id);
+  }
+
+  /** Turns all of a layer's effects on or off and, when given, sets Scale Effects (0.01..10). One undo step. */
+  setLayerEffectsEnabled(id: string, enabled: boolean, scale?: number, commitToHistory = true): LayerEffects {
+    const current = this.effectsLayer(id, 'change its effects').effects ?? { enabled: true, items: [] };
+    if (scale !== undefined && !(Number.isFinite(scale) && scale >= 0.01 && scale <= 10)) throw new PaintEditorError(`scale must be from 0.01 to 10 (1 = 100 %), got ${scale}.`);
+    const next: LayerEffects = { ...current, enabled };
+    if (scale !== undefined) {
+      if (scale === 1) delete next.scale;
+      else next.scale = scale;
+    }
+    this.writeLayerEffects(id, next, 'Layer effects', commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** Replaces a layer's effects, validated (`null` removes them). One undo step. Returns the effects. */
+  setLayerEffects(id: string, effects: LayerEffects | null, commitToHistory = true): LayerEffects {
+    this.effectsLayer(id, 'change its effects');
+    if (effects) effectGuard(() => validateLayerEffects(effects));
+    this.writeLayerEffects(id, effects, 'Layer effects', commitToHistory);
+    return this.getLayerEffects(id);
+  }
+
+  /** Document patterns for pattern effects besides the built-in ones: none (paint documents bring none). */
+  getDocumentPatterns(): EffectPattern[] {
+    return [];
+  }
+
+  private effectsLayer(id: string, action: string): PaintLayer {
+    this.requireIdle('changing layer effects');
+    const l = this.requireLayer(id);
+    if (isLayerLocked(l, 'all')) throw new PaintEditorError(`Layer "${l.name}" is fully locked, so it can't ${action}; unlock it first (locks {all: false}).`);
+    return l;
+  }
+
+  private requireEffect(id: string, effectId: string): number {
+    const l = this.requireLayer(id);
+    const items = l.effects?.items ?? [];
+    const i = items.findIndex((e) => e.id === effectId);
+    if (i === -1) throw new PaintEditorError(`Layer "${l.name}" has no effect "${effectId}". Effects: ${items.map((e) => `${e.id} (${e.kind})`).join(', ') || 'none'}; call list_layer_effects.`);
+    return i;
+  }
+
+  /** Writes a layer's effects (dropped when empty, enabled and unscaled), as an undo step or folded into the last one. */
+  private writeLayerEffects(id: string, effects: LayerEffects | null, label: string, commitToHistory: boolean): void {
+    const next = { ...this.requireLayer(id) } as PaintLayer;
+    if (effects && (effects.items.length || effects.psd || effects.scale !== undefined || !effects.enabled)) next.effects = effects;
+    else delete next.effects;
+    this.commitOrAmend(label, { ...this.doc, layers: mapLayer(this.doc.layers, id, () => next) }, commitToHistory);
   }
 
   removeLayer(id: string): { removed: string; activeLayerId: string | null } {

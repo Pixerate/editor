@@ -2,6 +2,7 @@
   import { BLEND_MENU_GROUPS, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
   import { untrack } from 'svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';
+  import LayerEffectsPanel from '../image-editor/LayerEffectsPanel.svelte';
 
   interface Props {
     controller: PaintEditorController;
@@ -128,6 +129,9 @@
           </label>
         </div>
       {/if}
+      <div class="border-t border-slate-800 pt-1.5" data-testid="paint-layer-effects" title="Live layer styles drawn from this layer's paint: glows, shadows, strokes">
+        <LayerEffectsPanel {controller} layerId={active.id} />
+      </div>
     </div>
   {/if}
   {#if error}<p role="alert" class="text-[11px] text-rose-400">{error}</p>{/if}

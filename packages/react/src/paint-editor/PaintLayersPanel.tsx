@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BLEND_MENU_GROUPS, type BlendMode, type PaintEditorController, type PaintLayerInfo } from '@pixerate/editor/paint-editor';
 import { usePaintEditorState } from './usePaintEditor';
 import { ErrorLine, button, chip, panel, useAttempt } from './shared';
+import { LayerEffectsPanel } from '../image-editor/LayerEffectsPanel';
 
 export interface PaintLayersPanelProps {
   controller: PaintEditorController;
@@ -16,7 +17,8 @@ function siblingIndex(layers: PaintLayerInfo[], l: PaintLayerInfo): { index: num
 
 /**
  * The layer stack, top first: visibility, names (double-click to rename), the active layer's
- * opacity, blend mode and locks, and new layer / group, duplicate, move up / down, merge down and
+ * opacity, blend mode and locks, its light and its layer style (the image editor's
+ * `LayerEffectsPanel`), and new layer / group, duplicate, move up / down, merge down and
  * delete. Every change is one undo step.
  */
 export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, className }) => {
@@ -171,6 +173,9 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
               </label>
             </div>
           )}
+          <div className="border-t border-slate-800 pt-1.5" data-testid="paint-layer-effects" title="Live layer styles drawn from this layer's paint: glows, shadows, strokes">
+            <LayerEffectsPanel controller={controller} layerId={active.id} />
+          </div>
         </div>
       )}
       <ErrorLine error={error} />

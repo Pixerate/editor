@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { EffectControl, ImageEditorController, LayerEffectKind } from '@pixerate/editor/image-editor';
-import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/image-editor';
+// From the raster entry, not the image editor's: the paint editor shows this panel too.
+import type { EffectControl, LayerEffectKind, LayerEffectsController } from '@pixerate/editor/raster';
+import { LAYER_EFFECT_MENU, effectControlChange, layerEffectControls, layerEffectsPanel } from '@pixerate/editor/raster';
 import { imageIconButtonClass, imageSelectClass } from './styles';
 import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
 
 export interface LayerEffectsPanelProps {
-  controller: ImageEditorController;
+  /** The image editor's controller, the paint editor's, or anything else with layer effects. */
+  controller: LayerEffectsController;
   /** The layer whose effects to show (default: the active layer). */
   layerId?: string | null;
   /**

@@ -13,9 +13,32 @@ import {
   type EffectFill,
   type LayerEffect,
   type LayerEffectKind,
-} from '../../raster/effects/model';
-import { builtinPattern, builtinPatternIds, type EffectPattern } from '../../raster/effects/patterns';
-import type { ImageLayer } from './model';
+  type LayerEffects,
+} from './model';
+import { builtinPattern, builtinPatternIds, type EffectPattern } from './patterns';
+/** What the effects section reads of a layer (image and paint layers both fit). */
+export interface LayerEffectsTarget {
+  id: string;
+  type: string;
+  effects?: LayerEffects;
+  locks?: { all?: boolean };
+}
+
+/**
+ * What the layer effects panels need of an editor: the image and paint editor controllers both
+ * provide it, so both show the same panel.
+ */
+export interface LayerEffectsController {
+  subscribe(listener: () => void): () => void;
+  getLayer(id: string): LayerEffectsTarget | null | undefined;
+  getActiveLayer(): LayerEffectsTarget | null | undefined;
+  getLayerEffects(id: string): LayerEffects;
+  getDocumentPatterns(): readonly EffectPattern[];
+  addLayerEffect(id: string, kind: LayerEffectKind, settings?: Record<string, unknown>, index?: number): { effect: { id: string } };
+  updateLayerEffect(id: string, effectId: string, changes: Record<string, unknown>, commitToHistory?: boolean): unknown;
+  removeLayerEffect(id: string, effectId: string): unknown;
+  setLayerEffectsEnabled(id: string, enabled: boolean, scale?: number, commitToHistory?: boolean): unknown;
+}
 
 export interface LayerEffectRow {
   id: string;
@@ -37,7 +60,7 @@ export interface LayerEffectsPanelModel {
 }
 
 /** The effects section for `layer`. */
-export function layerEffectsPanel(layer: ImageLayer | null | undefined): LayerEffectsPanelModel {
+export function layerEffectsPanel(layer: LayerEffectsTarget | null | undefined): LayerEffectsPanelModel {
   const empty = { readOnly: true, enabled: true, scale: 1, rows: [] };
   if (!layer) return { ...empty, available: false, reason: 'Select a layer to add a layer style.' };
   if (layer.type === 'adjustment') return { ...empty, available: false, reason: 'Adjustment layers cannot have a layer style.' };
@@ -54,7 +77,7 @@ export function layerEffectsPanel(layer: ImageLayer | null | undefined): LayerEf
 }
 
 /** The fx badge of a layer row: `on` (effects render), `off` (effects but switched off), or `null`. */
-export function layerEffectsBadge(layer: ImageLayer): 'on' | 'off' | null {
+export function layerEffectsBadge(layer: Pick<LayerEffectsTarget, 'effects'>): 'on' | 'off' | null {
   if (!layer.effects?.items.length) return null;
   return hasActiveEffects(layer.effects) ? 'on' : 'off';
 }

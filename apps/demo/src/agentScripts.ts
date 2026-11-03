@@ -1159,6 +1159,19 @@ export const PAINT_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "paint-neon-glow-style",
+    prompt: "Paint a neon sign with a glow I can change afterwards",
+    steps: [
+      { say: "Dark paper, so the glow shows.", tool: "paint__set_paper", args: { preset: "smooth", color: "#0b1020" } },
+      { say: "The tube on its own layer, so its glow is a layer style.", tool: "paint__add_layer", args: { name: "Neon" }, as: "neon" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.neon.id, brushId: "neon-marker", brush: { tip: { size: 14 } }, color: "#f0abfc", points: wave(400, 120, 64, 160, 1040) }) },
+      { say: "An outer glow, added as light: one colour and size around everything on the layer.", tool: "paint__add_layer_effect", args: (ctx) => ({ layerId: ctx.results.neon.id, kind: "outer-glow", settings: { fill: { type: "color", color: "#d946ef" }, size: 48, spread: 0.1, blend: "linear-dodge", opacity: 0.9 } }), as: "glow" },
+      { say: "Changed my mind: a cyan glow, wider. No repainting.", tool: "paint__update_layer_effect", args: (ctx) => ({ layerId: ctx.results.neon.id, effectId: (ctx.results.glow as unknown as { effectId: string }).effectId, settings: { fill: { type: "color", color: "#22d3ee" }, size: 64 } }) },
+      { say: "An inner glow keeps the tube's core hot.", tool: "paint__add_layer_effect", args: (ctx) => ({ layerId: ctx.results.neon.id, kind: "inner-glow", settings: { fill: { type: "color", color: "#ffffff" }, size: 6, blend: "screen" } }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
     id: "paint-stained-glass",
     prompt: "Paint a stained-glass window on backlit paper",
     steps: [

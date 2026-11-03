@@ -165,27 +165,14 @@ Wet oil blends where the brush meets it; impasto adds relief lit by `set_lightin
 
 ## Gradient paint
 
-Paint that changes colour as the stroke goes: give a gradient where a colour would go.
+Paint that changes colour as the stroke goes (`set_paint` with a gradient, a brush's own `paint`,
+or `paint_stroke` `paint`): read [references/gradient-paint.md](references/gradient-paint.md).
 
-1. **`set_paint`** with `{ type: "gradient", stops, map }` makes it the paint for every following
-   stroke (`set_color` goes back to one colour); `paint_stroke` `paint` overrides it for one stroke;
-   a brush can carry its own (`set_brush` `paint`, presets `gradient-round`, `pressure-ombre`,
-   `rainbow-marker`, `gradient-wash`).
-2. **Choose the mapping by what the stroke should do**: `distance` (default, 300 px then
-   `mirror` back) for "drag it out" colour; `pressure` for light-to-heavy shading in one stroke;
-   `direction` for strokes coloured by their heading; `across-tip` for a brush loaded with several
-   colours side by side; `random` (`every` dabs) for speckled or confetti colour; `time` and
-   `velocity` need timed points (`t`). Set `length` to about the stroke length you will paint.
-3. **Stops**: 2..16, sorted by `offset`; `"paint"` / `"secondary"` follow the two editor colours;
-   `opacity` multiplies flow (fade a stroke out); `midpoint` shifts where two colours meet;
-   `softness` 0 makes hard bands. `space` `pigment` (default) mixes like paint (blue to yellow
-   through green), `oklab` keeps rainbows bright.
-4. **It works with every colour engine**: dab, Mixer Brush (each dab reloads its reservoir),
-   watercolour and gouache (each deposit carries its pigment into the wet layer, which then flows
-   and mixes), oil and impasto (the colour varies along the relief), particles, bristles and
-   stickers. Erasers, blenders and smudges ignore it; the eyedropper picks one colour.
-5. Strokes record the gradient (with concrete colours), so replays, time-lapses, high-res
-   re-renders and drying are exact. `get_brush` `strokePaint` says what the next stroke paints.
+## Layer effects
+
+Live layer styles on a paint layer, drawn from its pixels so they follow later painting: outer and
+inner glow, shadows, stroke, bevel, satin and overlays, as in the image editor
+(`add_layer_effect` and the rows below). Read [references/layer-effects.md](references/layer-effects.md).
 
 ## Procedural brushes, bristles, stickers and stencils
 
@@ -282,9 +269,14 @@ is a canvas coordinate: read [references/canvas-hosted.md](references/canvas-hos
 
 | Tool | Use |
 | --- | --- |
-| `list_layers` | Read the layers top first: id, name, type (`pixel` / `group`), visible, opacity, blend, clipped, locks, `active`, painted `bounds` (null when empty), parent and depth. |
+| `list_layers` | Read the layers top first: id, name, type (`pixel` / `group`), visible, opacity, blend, clipped, locks, `active`, painted `bounds` (null when empty), parent, depth and `effects` (how many layer effects). |
 | `add_layer` | Add an empty pixel layer (or `type: "group"`, or `type: "strokes"` for a stroke layer whose strokes stay editable) above the active layer, above `aboveId`, or at the top of group `parentId`; it becomes active. Returns the layer. Put each pass of a painting on its own layer. |
 | `update_layer` | Change `name`, `visible`, `opacity` (0..1), `blend`, `clipped` (clip to the layer below) or `locks` (`pixels`, `transparency`: paint only where there is paint, `position`, `all`). Returns the layer. |
+| `list_layer_effects` | Read a layer's effects: the master switch, Scale Effects, margin, and each effect with its id, kind and settings, plus the pattern ids. Call before changing one. |
+| `add_layer_effect` | Add a live effect (`outer-glow`, `inner-glow`, `drop-shadow`, `stroke`, …) with Photoshop's defaults changed by `settings`. One undo step. Returns its `effectId` and the layer's effects. |
+| `update_layer_effect` | Change settings of one effect (by `effectId`) after painting: glow colour, size, opacity, blend. One undo step. Returns the layer's effects. |
+| `remove_layer_effect` | Remove one effect (`update_layer_effect` `enabled: false` hides it instead). One undo step. |
+| `set_layer_effects_enabled` | Turn all of a layer's effects on or off and set Scale Effects. One undo step. |
 | `list_blend_modes` | Read every blend mode: id, label, group (`standard`, `pigment`, `painterly`), what the pigment and painterly modes do, and the `psd` mode export writes instead. Read before choosing a painterly mode. Changes nothing. |
 | `set_active_layer` | Make a layer the default target of strokes, fills and clears. Editor state. |
 | `remove_layer` | Delete a layer (a group with its children). Prefer hiding it when the user may want it back. |
