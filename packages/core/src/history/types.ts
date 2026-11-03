@@ -10,6 +10,24 @@ export interface Command {
    * Counted against `HistoryManagerOptions.maxBytes` when no `sizeOf` hook is set.
    */
   byteSize?: number;
+  /**
+   * Who made the change: `user` (the default) or `agent:<id>` for an agent. Falls back to the
+   * origin set with `HistoryManager.withOrigin`, then to `user`.
+   */
+  origin?: string;
+}
+
+/** The origin of changes no one has claimed: the person at the keyboard. */
+export const USER_ORIGIN = "user";
+
+/** The origin of an agent's changes: `agent:<id>`. */
+export function agentOrigin(agentId: string): string {
+  return `agent:${agentId}`;
+}
+
+/** The agent id of an `agent:<id>` origin, or `null` for any other origin. */
+export function originAgentId(origin: string | undefined): string | null {
+  return origin?.startsWith("agent:") ? origin.slice("agent:".length) || null : null;
 }
 
 export interface HistoryState {
@@ -76,6 +94,28 @@ export interface HistoryEntry {
   current: boolean;
   /** True for steps on the redo stack (undone, can be redone). */
   undone: boolean;
+  /** Who made the step: `user` or `agent:<id>` (see `Command.origin`). */
+  origin: string;
+}
+
+/**
+ * What a `HistoryManager.onCommit` listener hears:
+ * - `execute`: a new step was recorded (also a `batch`).
+ * - `merge`: a change folded into the top step (a gesture or a coalesced `executeMerged`).
+ * - `undo` / `redo`: one step was taken back or re-applied (`goTo` reports one per step).
+ * - `revert`: `revertTo` took steps back for good.
+ * - `clear`: the history was emptied.
+ */
+export type HistoryCommitKind = "execute" | "merge" | "undo" | "redo" | "revert" | "clear";
+
+export interface HistoryCommitEvent {
+  kind: HistoryCommitKind;
+  /** The step recorded, merged into, undone or redone. Absent for `revert` and `clear`. */
+  entry?: HistoryEntry;
+  /** Who made the change: the step's origin for `execute` / `merge`, else the origin in effect. */
+  origin: string;
+  /** `HistoryManager.getRevision()` after the change. */
+  revision: number;
 }
 
 /**

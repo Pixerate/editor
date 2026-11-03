@@ -41,3 +41,6 @@ export * from './editorDocument.js';
 export * from './explosionLayout.js';
 export * from './explosionState.js';
 export * from './explosion-tools.js';
+export * from './proposals.js';
+export * from './changeFeed.js';
+export * from './proposal-tools.js';

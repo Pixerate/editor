@@ -337,6 +337,9 @@ Every feature is available from core and from both framework packages, except wh
 | Canvas Node Explosion: Displacement (directional with `minY` / `maxY`, row lanes, dagre reflow) | `calculateDirectionalDisplacement`, `calculateReflowDisplacement` & `computeCanvasExplosionLayout` | Via core | Via core |
 | Canvas Node Explosion: Declarative State (active / collapsing, collapse timer) | `createCanvasExplosionStateController` | `useCanvasExplosionState` | `createCanvasExplosionState` |
 | Canvas Node Explosion: Animated Coordinator & Agent Tools (`explode_node`, `collapse_node`) | `createCanvasExplosionToolProvider` | `useCanvasExplosion` | `createCanvasExplosion` |
+| Canvas Proposals: agent-suggested ghost nodes the user accepts (one undo step, made by the agent) or rejects, with agent tools (`propose_nodes`, `list_proposals`, `accept_proposal`, `reject_proposal`) | `createCanvasProposals` & `createCanvasProposalToolProvider` | `useCanvasProposals` | `createCanvasProposalState` |
+| Canvas Change Feed: nodes, edges and selection added / removed / edited, with who made each change (`user` or `agent:<id>`) | `createCanvasChangeFeed` | `useCanvasChangeFeed` | `createCanvasChangeWatcher` |
+| History Origin: who made each undo step (`Command.origin`, `withOrigin`, `onCommit`), and a tool middleware that stamps agent tool calls (`createOriginMiddleware`) | `HistoryManager` & `createOriginMiddleware` | Via core | Via core |
 
 </details>
 

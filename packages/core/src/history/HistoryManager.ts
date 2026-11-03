@@ -3,12 +3,15 @@
 // See THIRD_PARTY_NOTICES.md.
 import {
   Command,
+  HistoryCommitEvent,
+  HistoryCommitKind,
   HistoryEntry,
   HistoryManagerOptions,
   HistoryMark,
   HistoryState,
   MergedExecutionOptions,
   SnapshotCommandOptions,
+  USER_ORIGIN,
 } from "./types";
 
 /** One reversible piece of a step. A gesture step holds one part per distinct command. */
@@ -27,6 +30,7 @@ interface Entry {
   timestamp: number;
   parts: Part[];
   bytes: number;
+  origin: string;
 }
 
 const sumBytes = (parts: Part[]) => parts.reduce((n, p) => n + p.bytes, 0);
@@ -54,6 +58,9 @@ export class HistoryManager {
   private batchDepth = 0;
   private currentBatch: Command[] | null = null;
   private listeners: Set<(state: HistoryState) => void> = new Set();
+  private commitListeners: Set<(event: HistoryCommitEvent) => void> = new Set();
+  /** Origins set by `withOrigin`, innermost last. */
+  private origins: string[] = [];
   private onStateChange?: (state: HistoryState) => void;
   private cachedState: HistoryState;
   private cachedEntries: HistoryEntry[] | null = null;
@@ -141,6 +148,7 @@ export class HistoryManager {
       timestamp,
       parts: [part],
       bytes: part.bytes,
+      origin: command.origin ?? this.getOrigin(),
     };
   }
 
@@ -196,14 +204,17 @@ export class HistoryManager {
       this.currentBatch.push({
         ...command,
         timestamp: command.timestamp ?? Date.now(),
+        origin: command.origin ?? this.getOrigin(),
       });
       return;
     }
 
     command.execute();
-    this.record(this.makeEntry(command, command.timestamp ?? Date.now()));
+    const entry = this.makeEntry(command, command.timestamp ?? Date.now());
+    this.record(entry);
     this.resetGesture();
     this.notify();
+    this.emit("execute", entry.id, entry.origin);
   }
 
   /**
@@ -222,6 +233,8 @@ export class HistoryManager {
   ): void {
     const now = Date.now();
     const key = this.heldKey ?? options.key;
+    const origin = command.origin ?? this.getOrigin();
+    command = { ...command, origin };
 
     if (key !== undefined) {
       if (this.isApplying || this.batchDepth > 0) {
@@ -229,7 +242,8 @@ export class HistoryManager {
         return;
       }
       const top = this.undoStack[this.undoStack.length - 1];
-      if (top && this.gestureKey === key && this.gestureEntryId === top.id) {
+      // A gesture never folds in someone else's change: another origin starts a new step.
+      if (top && this.gestureKey === key && this.gestureEntryId === top.id && top.origin === origin) {
         command.execute();
         const redo = command.redo ?? command.execute;
         const bytes = this.measure(command);
@@ -245,6 +259,7 @@ export class HistoryManager {
         this.redoStack = [];
         this.trim();
         this.notify();
+        this.emit("merge", top.id, origin);
         return;
       }
       this.execute({ ...command, timestamp: now });
@@ -267,7 +282,7 @@ export class HistoryManager {
       const top = this.undoStack[this.undoStack.length - 1];
       const elapsed = top.timestamp ? now - top.timestamp : Infinity;
 
-      if (top.tag === command.tag && elapsed <= windowMs) {
+      if (top.tag === command.tag && elapsed <= windowMs && top.origin === origin) {
         command.execute();
         // Replace top with merged command keeping the original initial undo
         const initialParts = top.parts;
@@ -286,11 +301,13 @@ export class HistoryManager {
             },
           ],
           bytes,
+          origin,
         };
         this.redoStack = [];
         this.resetGesture();
         this.trim();
         this.notify();
+        this.emit("merge", top.id, origin);
         return;
       }
     }
@@ -360,8 +377,11 @@ export class HistoryManager {
         }
       };
       const bytes = batchCommands.reduce((n, c) => n + this.measure(c), 0);
+      const id = this.nextId++;
+      const origin = batchCommands[0].origin ?? this.getOrigin();
       this.record({
-        id: this.nextId++,
+        id,
+        origin,
         name,
         timestamp: Date.now(),
         parts: [
@@ -379,6 +399,7 @@ export class HistoryManager {
       });
       this.resetGesture();
       this.notify();
+      this.emit("execute", id, origin);
     }
   }
 
@@ -406,18 +427,20 @@ export class HistoryManager {
   }
 
   /** Undoes the top step (caller holds `isApplying`). Throws leave it on the stack. */
-  private undoOne(): void {
+  private undoOne(): number {
     const entry = this.undoStack[this.undoStack.length - 1];
     undoParts(entry.parts);
     this.undoStack.pop();
     this.redoStack.push(entry);
+    return entry.id;
   }
 
-  private redoOne(): void {
+  private redoOne(): number {
     const entry = this.redoStack[this.redoStack.length - 1];
     redoParts(entry.parts);
     this.redoStack.pop();
     this.undoStack.push(entry);
+    return entry.id;
   }
 
   /**
@@ -431,13 +454,15 @@ export class HistoryManager {
 
     this.isApplying = true;
     this.resetGesture();
+    let id: number | null = null;
     try {
       // If undo throws, the command stays on the undo stack and the error propagates.
-      this.undoOne();
+      id = this.undoOne();
       return true;
     } finally {
       this.isApplying = false;
       this.notify();
+      if (id !== null) this.emit("undo", id);
     }
   }
 
@@ -452,13 +477,15 @@ export class HistoryManager {
 
     this.isApplying = true;
     this.resetGesture();
+    let id: number | null = null;
     try {
       // If redo throws, the command stays on the redo stack and the error propagates.
-      this.redoOne();
+      id = this.redoOne();
       return true;
     } finally {
       this.isApplying = false;
       this.notify();
+      if (id !== null) this.emit("redo", id);
     }
   }
 
@@ -510,7 +537,10 @@ export class HistoryManager {
       // Steps made after the mark are gone for good, including undone ones.
       this.redoStack =
         n > 0 ? [] : this.redoStack.filter((e) => e.id < mark.nextId);
-      if (n > 0 || this.redoStack.length !== redoBefore) this.notify();
+      if (n > 0 || this.redoStack.length !== redoBefore) {
+        this.notify();
+        this.emit("revert");
+      }
     }
     return n;
   }
@@ -528,6 +558,7 @@ export class HistoryManager {
       index,
       current: index === u - 1,
       undone: false,
+      origin: e.origin,
     }));
     for (let i = this.redoStack.length - 1; i >= 0; i--) {
       const e = this.redoStack[i];
@@ -537,6 +568,7 @@ export class HistoryManager {
         index: entries.length,
         current: false,
         undone: true,
+        origin: e.origin,
       });
     }
     this.cachedEntries = entries;
@@ -553,20 +585,22 @@ export class HistoryManager {
     const target = Math.max(0, Math.min(total, Math.floor(index) + 1));
     if (target === this.undoStack.length) return 0;
     let n = 0;
+    const steps: [HistoryCommitKind, number][] = [];
     this.isApplying = true;
     this.resetGesture();
     try {
       while (this.undoStack.length > target) {
-        this.undoOne();
+        steps.push(["undo", this.undoOne()]);
         n++;
       }
       while (this.undoStack.length < target) {
-        this.redoOne();
+        steps.push(["redo", this.redoOne()]);
         n++;
       }
     } finally {
       this.isApplying = false;
       this.notify();
+      for (const [kind, id] of steps) this.emit(kind, id);
     }
     return n;
   }
@@ -580,6 +614,7 @@ export class HistoryManager {
     this.epoch++;
     this.resetGesture();
     this.notify();
+    this.emit("clear");
   }
 
   /**
@@ -593,6 +628,69 @@ export class HistoryManager {
     return () => {
       this.listeners.delete(listener);
     };
+  }
+
+  /**
+   * Listens to each change as it lands: what happened (`execute`, `merge`, `undo`, `redo`,
+   * `revert`, `clear`), the step and who made it. Unlike `subscribe`, it is not called at once
+   * and it hears every step of a `goTo`. Returns an unsubscribe function.
+   */
+  public onCommit(listener: (event: HistoryCommitEvent) => void): () => void {
+    this.commitListeners.add(listener);
+    return () => {
+      this.commitListeners.delete(listener);
+    };
+  }
+
+  private emit(kind: HistoryCommitKind, entryId?: number, origin?: string): void {
+    if (this.commitListeners.size === 0) return;
+    const entry =
+      entryId === undefined
+        ? undefined
+        : this.getEntries().find((e) => e.id === entryId);
+    const event: HistoryCommitEvent = {
+      kind,
+      ...(entry ? { entry } : {}),
+      origin: origin ?? this.getOrigin(),
+      revision: this.revision,
+    };
+    this.commitListeners.forEach((listener) => {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error("[HistoryManager] Error in commit listener:", err);
+      }
+    });
+  }
+
+  /** The origin a change is recorded with when its command names none (see `withOrigin`). */
+  public getOrigin(): string {
+    return this.origins[this.origins.length - 1] ?? USER_ORIGIN;
+  }
+
+  /**
+   * Records the changes `fn` makes as made by `origin` (`agent:<id>` for an agent), unless a
+   * command names its own. When `fn` returns a promise, the origin holds until it settles, so
+   * anything else recorded on this history meanwhile (the user's own edits) is stamped with it
+   * too: give those commands an explicit `origin`, or keep agent work synchronous.
+   */
+  public withOrigin<T>(origin: string, fn: () => T): T {
+    this.origins.push(origin);
+    let pending = false;
+    const pop = () => {
+      const i = this.origins.lastIndexOf(origin);
+      if (i >= 0) this.origins.splice(i, 1);
+    };
+    try {
+      const result = fn();
+      if (result && typeof (result as { then?: unknown }).then === "function") {
+        pending = true;
+        return Promise.resolve(result).finally(pop) as T;
+      }
+      return result;
+    } finally {
+      if (!pending) pop();
+    }
   }
 
   /**

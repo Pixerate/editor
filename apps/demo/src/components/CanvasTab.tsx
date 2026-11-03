@@ -38,6 +38,8 @@ import {
   useCanvasPlaybackSurface,
   useCanvasExplosion,
   createCanvasExplosionToolProvider,
+  createCanvasProposalToolProvider,
+  useCanvasProposals,
   PresenceLayer,
   type CanvasBrushPaint,
   DEFAULT_ARRANGE_SHORTCUTS,
@@ -46,6 +48,7 @@ import {
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
 import { createCanvasGestureRecorder, type CanvasEdge } from "@pixerate/editor/canvas";
+import { createOriginMiddleware } from "@pixerate/editor/tools";
 import { useAgentToolProvider, useHistory, useHistoryShortcuts, useRegisterCommands } from "@pixerate/editor-react";
 import { createArrangeCommands, createDrawCommands, createHistoryCommands } from "@pixerate/editor/commands";
 import { createEditorMcpToolProvider, type AgentStep } from "@pixerate/editor/agent";
@@ -547,6 +550,20 @@ const CanvasDemo: React.FC = () => {
   );
   useAgentToolProvider(demoToolRegistry, provider, { playback: demoPlayback });
 
+  // Agent suggestions: canvas__propose_nodes stages ghost nodes that the user accepts (one undo
+  // step, recorded as the agent's) or dismisses in the strip under the canvas.
+  const proposals = useCanvasProposals<BoxNode, Edge>({ nodes, edges, setNodes, setEdges, history: history.manager, defaultNodeType: "box" });
+  const proposalTools = useMemo(
+    () => createCanvasProposalToolProvider(proposals.store, { id: "canvas-proposals", namespace: "canvas" }),
+    [proposals.store]
+  );
+  useAgentToolProvider(demoToolRegistry, proposalTools);
+  // Steps the canvas tools make are recorded as the calling agent's (agent:<id>), not the user's.
+  useEffect(
+    () => demoToolRegistry.use(createOriginMiddleware({ histories: (call) => (call.provider.id.startsWith("canvas") ? history.manager : undefined) })),
+    [history.manager]
+  );
+
   const agentStage = useRef<HTMLDivElement>(null);
   // canvas__capture_view: screenshots of the viewport, all nodes, the selection, nodes by id or a rect.
   const capture = useCanvasCapture<BoxNode>({
@@ -868,8 +885,8 @@ const CanvasDemo: React.FC = () => {
         <CanvasEffectsProvider provider={effects}>
         <ShapeNodeZoomProvider zoom={viewport.zoom}>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={proposals.view.nodes}
+          edges={proposals.view.edges}
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -891,6 +908,26 @@ const CanvasDemo: React.FC = () => {
         </CanvasEffectsProvider>
         <PresenceLayer presence={agentPresence} viewport={viewport} />
       </div>
+      {proposals.proposals.length > 0 && (
+        <div className="bg-violet-950/40 border border-violet-800/60 rounded-xl p-3 flex flex-col gap-2" aria-label="Suggestions">
+          <span className="text-xs font-semibold uppercase tracking-wider text-violet-300">Suggestions</span>
+          {proposals.proposals.map((p) => (
+            <div key={p.id} className="flex items-center gap-2 text-xs text-slate-200" data-proposal-id={p.id}>
+              <span className="font-medium">{p.title}</span>
+              {p.rationale && <span className="text-slate-400 truncate">{p.rationale}</span>}
+              <span className="text-slate-500">({p.origin})</span>
+              <span className="ml-auto flex gap-1.5">
+                <button type="button" className="px-2 py-0.5 rounded border border-violet-600 bg-violet-600/30 hover:bg-violet-600/50" onClick={() => proposals.accept(p.id)}>
+                  Accept
+                </button>
+                <button type="button" className="px-2 py-0.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700" onClick={() => proposals.reject(p.id)}>
+                  Dismiss
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <EffectsProviderSwitch />
       {(() => {
         const selectedShape = nodes.find((n) => n.selected && (n.data as { shape?: unknown }).shape);
