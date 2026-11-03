@@ -30,7 +30,7 @@ function reachablePackages(entry: string): Set<string> {
 }
 
 describe("subpath entry isolation", () => {
-  it.each(["spreadsheet/index.js", "raster/index.js", "cms/index.js", "paint/index.js", "image-editor/index.js", "paint-editor/index.js", "history/index.js", "animation/index.js", "animation-editor/index.js", "video-editor/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "color/index.js", "typography/index.js", "gradient/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js", "chart-maps/index.js", "diagram/index.js", "effects/index.js", "stickers/index.js"])(
+  it.each(["spreadsheet/index.js", "raster/index.js", "cms/index.js", "paint/index.js", "image-editor/index.js", "paint-editor/index.js", "brushes/index.js", "history/index.js", "animation/index.js", "animation-editor/index.js", "video-editor/index.js", "grammar/index.js", "commands/index.js", "persistence/index.js", "generation/index.js", "tokens/index.js", "color/index.js", "typography/index.js", "gradient/index.js", "export/index.js", "parameters/index.js", "vector/index.js", "chart/index.js", "chart-maps/index.js", "diagram/index.js", "effects/index.js", "stickers/index.js"])(
     "%s pulls in no third-party packages",
     (entry) => {
       expect([...reachablePackages(entry)]).toEqual([]);
@@ -51,7 +51,7 @@ describe("subpath entry isolation", () => {
       for (const m of source.matchAll(/(?<![\w$."'])(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"](\.[^'"]+)['"]/g)) visit(path.resolve(path.dirname(file), m[1]));
     };
     visit(path.join(dist, "canvas/index.js"));
-    const paint = [...seen].filter((f) => /function renderBrushstroke\b|BUILTIN_BRUSHES/.test(readFileSync(f, "utf8")));
+    const paint = [...seen].filter((f) => /function renderBrushstroke\b|BUILTIN_BRUSHES|BRUSH_PRESETS/.test(readFileSync(f, "utf8")));
     expect(paint).toEqual([]);
     // ... and is reached once the dynamic imports are followed too.
     const all = new Set<string>();
@@ -62,6 +62,27 @@ describe("subpath entry isolation", () => {
     };
     visitAll(path.join(dist, "canvas/index.js"));
     expect([...all].some((f) => /function renderBrushstroke\b/.test(readFileSync(f, "utf8")))).toBe(true);
+  });
+
+  it("brushes/index.js reaches no renderer", () => {
+    // The brush model is read by every host (and later the library tools), so it must not bundle
+    // the paint engine's strokes: only settings, defaults and normalisers. (It still reaches the
+    // paint editor's v1 BUILTIN_BRUSHES, which share a module with normalizePaintBrush, until the
+    // paint editor reads its presets from the brush model.)
+    const reached = (entry: string) => {
+      const seen = new Set<string>();
+      const visit = (file: string) => {
+        if (seen.has(file)) return;
+        seen.add(file);
+        for (const m of readFileSync(file, "utf8").matchAll(/(?:from\s*|import\(\s*|import\s+)["'](\.\.?\/[\w./-]+\.js)["']/g)) visit(path.resolve(path.dirname(file), m[1]));
+      };
+      visit(path.join(dist, entry));
+      return [...seen];
+    };
+    // esbuild writes `class ParticleStroke` as `ParticleStroke = class`.
+    const renderer = /function renderBrushstroke\b|\b(?:ParticleStroke|BristleStroke|StickerSpray|MarkStroke) = class\b/;
+    expect(reached("paint-editor/index.js").some((f) => renderer.test(readFileSync(f, "utf8")))).toBe(true);
+    expect(reached("brushes/index.js").filter((f) => renderer.test(readFileSync(f, "utf8")))).toEqual([]);
   });
 
   it("color/index.js does not pull in gradient", () => {

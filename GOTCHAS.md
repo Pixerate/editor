@@ -3478,3 +3478,20 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `swift build` refused `ToolRegistry.callTool` ("sending 'call' risks causing data races"), and a dropped `onCommit` result would have unsubscribed at once.
 - **Root Cause**: Under Swift 6, a nonisolated `async` function runs on the generic executor, so calling non-`Sendable` handlers, histories and registries from it crosses isolation. Separately, a `Cancellable` that cancels in `deinit` (as Combine's `AnyCancellable` does) ends a subscription as soon as its result is ignored, unlike the TS unsubscribe functions.
 - **Solution / Workaround**: `Package.swift` enables `NonisolatedNonsendingByDefault`, so async code runs on its caller's executor, as JavaScript's does. Keep new targets on the same `settings`. `PixerateCore.Cancellable` only cancels when `cancel()` is called.
+### [core/brushes] Facet Defaults Depend on the Engine: Migrate by Diffing Against a Skeleton of the Same Engine
+
+- **Issue / Symptom**: Migrating v1 brushes (`PaintBrush`) to facet brushes by "store the field when it differs from its default", with one default per facet field, resolves Mixer Brushes, smudges and blenders back wrong: their pick-up, mixing or strength come back changed.
+- **Root Cause**: One facet field lands in a different engine field per engine, with a different default. `behaviour.exchange.pickup` is `behavior.pickup` (default 0) on a dab brush but `mixer.wet` (default 0.5) on a Mixer Brush; `behaviour.mixing` defaults to `pigment` except on the Mixer Brush and the smudge (`rgb`); `behaviour.strength` is the blender's, the smudge's (0.7) or the wet tool's. A single default table can't describe that.
+- **Solution / Workaround**: `BRUSH_FIELDS` in `brushes/resolve.ts` lists each facet field with the engine field it sets and the engines that read it. `resolveBrush` writes through it; `migrateBrushV1` builds a skeleton facet brush that resolves to the same engine (kind, tool, tip shape, marks kind, surface, an empty reservoir), resolves it, and stores only the fields that differ from that. Add a new engine setting as one `BRUSH_FIELDS` row, and both directions follow. `tests/brushes.test.ts` round-trips every preset and hand-built edge cases. Settings of blocks the engine never reads are dropped on migration, and the v1 `category` is derived again (`resolveCategory`), so those two are the only lossy parts.
+
+### [core/brushes] Keep the Brush Model Off the Renderers: Import Mark Settings From `mark-settings.ts`
+
+- **Issue / Symptom**: `@pixerate/editor/brushes` needs the sticker, particle and bristle settings (types, defaults, normalisers), which lived in `stickers.ts` and `procedural.ts` next to the stroke renderers. esbuild splits chunks by module, so importing them would put the renderers in every host that only reads brushes.
+- **Root Cause**: Code splitting assigns whole modules to chunks; tree-shaking does not split a module's unused classes into a chunk the entry never loads.
+- **Solution / Workaround**: The settings live in `paint-editor/mark-settings.ts`, which has no imports. `stickers.ts` and `procedural.ts` re-export them, so existing imports still work. Inside `brushes/` (and any future dependency-light module), import from `mark-settings.ts`. `entry-isolation.test.ts` checks that `brushes/index.js` reaches no stroke renderer. It does still reach the v1 `BUILTIN_BRUSHES` list, which shares `paint-editor/brushes.ts` with `normalizePaintBrush`, until the paint editor reads its presets from `BRUSH_PRESETS`.
+
+### [core/brushes] Particle Stamp Lists Keep Repeats
+
+- **Issue / Symptom**: `uniqueItems` on `tip.stamps` rejected the `bokeh-dots` and `twinkle-sparks` presets.
+- **Root Cause**: For particle marks, repeated stamps weight the order (`['dot', 'dot', 'ring']` is two dots per ring). Only sticker (`objects`) marks count each stamp once, and `normalizeStickerSettings` dedupes those itself.
+- **Solution / Workaround**: The schema allows repeats in `tip.stamps`. Don't dedupe stamp lists in shared code.
