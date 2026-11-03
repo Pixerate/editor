@@ -17,6 +17,7 @@ export default defineConfig({
     "chart/index": "src/chart/index.ts",
     "video-editor/index": "src/video-editor/index.ts",
     "effects/index": "src/effects/index.ts",
+    "stickers/index": "src/stickers/index.ts",
     "color/index": "src/color/index.ts",
     "typography/index": "src/typography/index.ts",
     "gradient/index": "src/gradient/index.ts"

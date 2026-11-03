@@ -80,8 +80,9 @@ export function createImageEffectsToolProvider(controller: ImageEditorController
     skill: 'pixerate-image-editor',
     target: { noun: 'layer', id: 'A layer id from list_layers.' },
     applyUses: ['filter'],
+    applyImageInputs: true,
     applyDetails:
-      'The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. It keeps the layer\'s transparency by default (preserveTransparency: the result only changes the layer\'s own pixels, never fills transparent ones); preserveTransparency false lets it draw over the whole canvas. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). With a selection, the filter mask is set from it in the same step, so the filter only changes the selected area (the result says masked); deselect first to filter the whole layer. Generators and overlays go on their own layer through add_effect_layer.',
+      'Any effect that takes a picture also applies (an inserted sticker into a holo-foil treatment): the layer is its picture. The effect becomes a smart filter: it runs on the layer\'s pixels after the smart filters below it, with its own blend and opacity, under the smart filter mask, and can be changed or removed later. It keeps the layer\'s transparency by default (preserveTransparency: the result only changes the layer\'s own pixels, never fills transparent ones); preserveTransparency false lets it draw over the whole canvas. A pixel, shape or type layer (or a group) is converted to a smart object first, in the same undo step (one layer keeps its id; the result says converted). With a selection, the filter mask is set from it in the same step, so the filter only changes the selected area (the result says masked); deselect first to filter the whole layer. Generators and overlays go on their own layer through add_effect_layer.',
     provider: () => controller.effectsProvider,
     readOnlyReason,
     applyOptions: {

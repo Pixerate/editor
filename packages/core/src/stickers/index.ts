@@ -13,5 +13,5 @@ export { editorStickers, stampOutline, stampPixels } from './editor';
 export { createFakeStickerProvider, type FakeStickerProviderOptions } from './fake';
 export { combineStickerProviders } from './combine';
 export { checkStickerProvider, type StickerConformanceIssue, type StickerConformanceOptions } from './conformance';
-export { createStickerTools, createStickerToolProvider, describeStickerRef, stickerForAgent, type StickerToolsOptions } from './tools';
+export { createInsertStickerTool, insertSticker, createStickerTools, createStickerToolProvider, describeStickerRef, stickerForAgent, type StickerInsertHost, type StickerPlacement, type StickerToolsOptions } from './tools';
 export { StickerBrowser, type StickerBrowserItem, type StickerBrowserState } from './browser';

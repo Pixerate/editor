@@ -23,6 +23,11 @@
       "svelte": "./dist/effects/index.js",
       "default": "./dist/effects/index.js"
     },
+    "./stickers": {
+      "types": "./dist/stickers/index.d.ts",
+      "svelte": "./dist/stickers/index.js",
+      "default": "./dist/stickers/index.js"
+    },
     "./spreadsheet": {
       "types": "./dist/spreadsheet/index.d.ts",
       "svelte": "./dist/spreadsheet/index.js",

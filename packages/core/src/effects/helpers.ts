@@ -189,6 +189,16 @@ export function applyEffectMask(result: EffectPixels, mask: EffectPixels, source
 	return result;
 }
 
+/**
+ * The image input an editor feeds a layer, node or sticker to when it applies `d` to it:
+ * `source` (a filter's picture) when the effect has it, else its first required image input,
+ * else its first image input; `null` when it takes no picture.
+ */
+export function layerImageInput(d: Pick<EffectDescription, 'inputs'>): string | null {
+	const images = d.inputs.filter((i) => i.kind === 'image');
+	return (images.find((i) => i.name === 'source') ?? images.find((i) => i.required) ?? images[0])?.name ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // The slot an editor keeps
 // ---------------------------------------------------------------------------

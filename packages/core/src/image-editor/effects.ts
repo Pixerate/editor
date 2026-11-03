@@ -9,7 +9,7 @@
  * the controller renders the smart object again (a cache refresh, not an undo step).
  */
 
-import { EffectsSlot, createEffectPixels, linearToSrgb } from '../effects/helpers.js';
+import { EffectsSlot, createEffectPixels, layerImageInput, linearToSrgb } from '../effects/helpers.js';
 import { EffectUnsupportedError } from '../effects/errors.js';
 import { EffectRendererPool } from '../effects/pool.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectRenderRequest, EffectUse, EffectValue } from '../effects/types.js';
@@ -20,7 +20,7 @@ import type { SmartEffectResolver } from './layers/smart.js';
 
 /** Which uses each place in the image editor takes. */
 export const IMAGE_EFFECT_PLACES = {
-  /** A smart filter: the effect changes the pixels below it. */
+  /** A smart filter: the effect changes the pixels below it (and any effect that takes a picture: the layer is its input). */
   filter: ['filter'],
   /** An effect layer: drawn at the document's size. */
   layer: ['generator', 'overlay', 'title']
@@ -31,7 +31,9 @@ export type ImageEffectPlace = keyof typeof IMAGE_EFFECT_PLACES;
 /** Refuses an effect that cannot go in `place`, saying what to use instead. */
 export function checkImageEffectPlace(d: EffectDescription, place: ImageEffectPlace): void {
   const allowed: readonly EffectUse[] = IMAGE_EFFECT_PLACES[place];
-  if (d.kind === 'motion' || !d.uses.some((u) => allowed.includes(u))) {
+  // Any effect that takes a picture can filter a layer: the layer is its picture (a sticker into holo foil).
+  const takesLayer = place === 'filter' && layerImageInput(d) !== null;
+  if (d.kind === 'motion' || (!takesLayer && !d.uses.some((u) => allowed.includes(u)))) {
     const instead = place === 'filter' && d.uses.some((u) => (IMAGE_EFFECT_PLACES.layer as readonly string[]).includes(u)) ? '; add it as an effect layer with add_effect_layer instead' : place === 'layer' && d.uses.includes('filter') ? '; apply it to a layer as a smart filter with apply_effect instead' : '';
     throw new EffectUnsupportedError(
       `"${d.id}" (${d.name}) is a ${d.uses.join(' / ')} effect, and ${place === 'filter' ? 'a smart filter takes filter effects' : 'an effect layer takes generator, overlay or title effects'}${instead}.`,
@@ -155,9 +157,10 @@ export class ImageEffectsEngine implements SmartEffectResolver {
   /** A filter effect over `source`: its result, or (for an overlay) the effect drawn over it. */
   private async filter(provider: EffectProvider, effect: string, values: Record<string, EffectValue>, source: EffectPixels): Promise<Uint8ClampedArray> {
     const d = await this.describe(provider, effect);
-    const takesSource = d.inputs.some((i) => i.name === 'source');
-    const out = await this.render(provider, effect, source.width, source.height, 8, { time: 0, values, ...(takesSource ? { inputs: { source } } : {}) });
-    return takesSource ? out.data : over(source.data, out.data);
+    // The layer goes to the effect's picture input, whatever it is called (`source`, `image`, …).
+    const input = layerImageInput(d);
+    const out = await this.render(provider, effect, source.width, source.height, 8, { time: 0, values, ...(input ? { inputs: { [input]: source } } : {}) });
+    return input ? out.data : over(source.data, out.data);
   }
 
   /**

@@ -34,6 +34,16 @@
         "default": "./dist/effects/index.cjs"
       }
     },
+    "./stickers": {
+      "import": {
+        "types": "./dist/stickers/index.d.ts",
+        "default": "./dist/stickers/index.js"
+      },
+      "require": {
+        "types": "./dist/stickers/index.d.cts",
+        "default": "./dist/stickers/index.cjs"
+      }
+    },
     "./spreadsheet": {
       "import": {
         "types": "./dist/spreadsheet/index.d.ts",
