@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { createVectorEditorDocument, createOutlineTextShaper, createVectorEffect, ellipseSubpath, loadOpenTypeFont, rectSubpath, setSubpathCorners, starSubpath, type OpenTypeFont, type VectorDocument, type VectorEffect } from "@pixerate/editor/vector";
 import { EditorDocumentAutosave, useDemoEditorDocument } from "./EditorDocumentAutosave";
 import { VectorEditor, VectorGeneratePanel, useVectorCommands, useVectorEditorController, useVectorEditorState, useVectorEffectsTools, useVectorGenerationTools } from "@pixerate/editor-react/vector";
 import { DEMO_VECTOR_MODELS, demoVectorGenerate } from "../vectorGeneration";
 import { useDemoEffects } from "../demoEffects";
 import { EffectsProviderSwitch } from "./EffectsProviderSwitch";
-import { ArrowDownUp, PenTool, Sparkles } from "lucide-react";
+import { ArrowDownUp, PenTool, Sparkles, Sticker as StickerIcon } from "lucide-react";
+import { useAgentToolProvider } from "@pixerate/editor-react";
+import { StickerInsertPanel } from "@pixerate/editor-react/stickers";
+import { createStickerToolProvider } from "@pixerate/editor/stickers";
+import { createVectorStickerHost } from "@pixerate/editor/vector";
+import { demoStickers } from "../demoStickers";
 import { EditorPage, EditorPanel } from "./EditorPage";
 import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentTools";
 import { AgentScriptPanel } from "./AgentScriptPanel";
@@ -323,6 +328,10 @@ function VectorDemo() {
   useVectorEffectsTools(demoToolRegistry, controller, { id: "vector-effects", namespace: "vectorfx" });
   // Generative prompts through a pretend offline backend (a host sends them to its models).
   useVectorGenerationTools(demoToolRegistry, controller, { id: "vector-generation", namespace: "vectorgen", models: DEMO_VECTOR_MODELS, generate: demoVectorGenerate });
+  // Stickers from the demo's sticker library go in as groups of editable paths (vectorstickers__insert_sticker).
+  const stickerHost = useMemo(() => createVectorStickerHost(controller), [controller]);
+  const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: "vector-stickers", namespace: "vectorstickers" }), [stickerHost]);
+  useAgentToolProvider(demoToolRegistry, stickerTools);
   const editorDocument = useDemoEditorDocument(controller, createVectorEditorDocument, { namespace: "vector", skill: "pixerate-vector", history: true });
   const [svg, setSvg] = useState<string | null>(null);
   // Fonts read from files make text draw as glyph outlines (Create Outlines, effects on text).
@@ -355,6 +364,9 @@ function VectorDemo() {
       <div className="text-xs text-slate-400">
         {state.document.nodes.length} nodes · {state.selection.length} selected · {Math.round(state.viewport.zoom * 100)}%
       </div>
+      <EditorPanel id="stickers" label="Stickers" icon={StickerIcon}>
+        <StickerInsertPanel provider={demoStickers} host={stickerHost} />
+      </EditorPanel>
       <EditorPanel id="files" label="Import & export" icon={ArrowDownUp}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <button type="button" className="rounded border border-slate-700 px-2 py-1 hover:bg-slate-800" onClick={() => setSvg(controller.toSvg())}>

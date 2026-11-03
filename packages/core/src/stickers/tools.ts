@@ -7,9 +7,40 @@
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { StickerError } from './errors';
 import { closestStickerRefs, MAX_STICKER_PAGE, parseStickerRef, stickerIdFor, stickerRefOf } from './helpers';
-import type { StickerDescription, StickerProvider, StickerRef, StickerSummary } from './types';
+import type { MaybePromise, StickerAsset, StickerDescription, StickerFormat, StickerProvider, StickerRef, StickerSummary } from './types';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+
+/** Where and how big an inserted sticker goes, with its art. */
+export interface StickerPlacement {
+  ref: StickerRef;
+  description: StickerDescription;
+  asset: StickerAsset;
+  /** Centre, in the editor's document units. */
+  x: number;
+  y: number;
+  /** Size of its box (the natural aspect kept). */
+  width: number;
+  height: number;
+  /** #rrggbb it was tinted to, when tintable and asked for. */
+  colour?: string;
+}
+
+/**
+ * An editor that can take an inserted sticker (`insert_sticker`): the vector editor (editable
+ * paths), the image editor (a pixel layer), the canvas (a shape node) or any other.
+ */
+export interface StickerInsertHost {
+  /** What the editor calls the thing it makes ("group", "layer", "node"), for descriptions. */
+  noun: string;
+  /** The format it wants first (it gets the other when the sticker has only that). */
+  format: StickerFormat;
+  /** The default centre when the call gives none (the middle of the view or document). */
+  defaultCentre(): { x: number; y: number };
+  /** Adds the sticker as one undo step; returns what it made (its id at least) for later tools. */
+  insert(placement: StickerPlacement): MaybePromise<{ id: string } & Record<string, unknown>>;
+}
 
 /** A summary as the tools return it: `ref` instead of the provider's id. */
 export function stickerForAgent(provider: StickerProvider, s: StickerSummary): Record<string, unknown> {
@@ -48,6 +79,8 @@ export async function describeStickerRef(provider: StickerProvider, ref: Sticker
 export interface StickerToolsOptions {
   /** The provider to use, read on every call (an editor's `StickersSlot`). */
   provider: () => StickerProvider;
+  /** With it, `insert_sticker` puts a sticker into this editor. */
+  insert?: StickerInsertHost;
 }
 
 /** `find_stickers` and `describe_sticker` over the provider `options.provider()` returns. */
@@ -97,7 +130,56 @@ export function createStickerTools(options: StickerToolsOptions): AgentTool[] {
       return { ref: stickerRefOf(p, id), ...rest };
     },
   };
-  return [find, describe];
+  return options.insert ? [find, describe, createInsertStickerTool(options.provider, options.insert)] : [find, describe];
+}
+
+/** Loads a sticker's art in the host's format (or the other one it has), tinted when asked and tintable. */
+async function loadForHost(provider: StickerProvider, ref: StickerRef, d: StickerDescription, host: StickerInsertHost, colour: string | undefined, size: number): Promise<StickerAsset> {
+  const id = stickerIdFor(provider, ref)!;
+  const format: StickerFormat = d.formats.includes(host.format) ? host.format : (d.formats[0] ?? host.format);
+  return provider.load(id, { format, ...(format === 'png' ? { size: Math.max(8, Math.min(provider.capabilities.maxSize ?? 1024, Math.round(size))) } : {}), ...(colour && d.tintable ? { colour } : {}) });
+}
+
+/**
+ * Puts one sticker into an editor through its host (the panels and `insert_sticker` both use it):
+ * checks the ref, loads the art in the host's format, tinted when asked and tintable, and places
+ * it centred at (`x`, `y`) (default the host's centre), `width` wide (default its natural width).
+ * Returns what the host made, the ref, the size and the licence.
+ */
+export async function insertSticker(provider: StickerProvider, host: StickerInsertHost, options: { ref: StickerRef; x?: number; y?: number; width?: number; color?: string }): Promise<{ id: string; ref: StickerRef; width: number; height: number; licence: StickerDescription['licence'] } & Record<string, unknown>> {
+  const d = await describeStickerRef(provider, options.ref);
+  if (options.color !== undefined && !d.tintable) throw new StickerError('invalid_argument', `"${options.ref}" is not tintable (its art has its own colours); leave color out, or pick a tintable sticker (find_stickers lists tintable).`);
+  if (options.width !== undefined && !(options.width > 0)) throw new StickerError('invalid_argument', `width must be a positive size, got ${options.width}.`);
+  const w = options.width ?? d.width;
+  const h = (w * d.height) / d.width;
+  const centre = host.defaultCentre();
+  const asset = await loadForHost(provider, options.ref, d, host, options.color, Math.max(w, h));
+  const ref = stickerRefOf(provider, d.id);
+  const made = await host.insert({ ref, description: d, asset, x: options.x ?? centre.x, y: options.y ?? centre.y, width: w, height: h, ...(options.color ? { colour: options.color.toLowerCase() } : {}) });
+  return { ...made, ref, width: w, height: h, licence: d.licence };
+}
+
+/** `insert_sticker`: one sticker by ref into an editor, at a place and size, as one undo step. */
+export function createInsertStickerTool(provider: () => StickerProvider, host: StickerInsertHost): AgentTool {
+  return {
+    name: 'insert_sticker',
+    title: 'Insert a sticker',
+    description: `Puts one sticker from the sticker library (ref from find_stickers) into the document as a new ${host.noun}, centred at x, y and width wide (its natural aspect kept; default its natural size), tinted to color when the sticker is tintable. Its art is loaded first; an unknown ref is refused with the closest ones. One undo step. Returns the new ${host.noun}'s id (for the editor's own tools, such as effects on it), the ref and its licence (credit any attribution it asks for).`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ref: { type: 'string', minLength: 1, description: 'Sticker ref provider:id from find_stickers (e.g. editor:star).' },
+        x: { type: 'number', description: 'Centre x in document units (default the middle of the view or document).' },
+        y: { type: 'number', description: 'Centre y in document units (default the middle of the view or document).' },
+        width: { type: 'number', exclusiveMinimum: 0, maximum: 10000, description: 'Width in document units (default the natural width); the height follows the aspect.' },
+        color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Tint #rrggbb for tintable stickers (default the sticker\'s own colour); refused for stickers that are not tintable.' },
+      },
+      required: ['ref'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Insert a sticker', ...WRITE },
+    handler: ({ ref, x, y, width, color }) => insertSticker(provider(), host, { ref: ref as string, x: x as number | undefined, y: y as number | undefined, width: width as number | undefined, color: color as string | undefined }),
+  };
 }
 
 /** The sticker library tools as a provider (id `stickers` by default). */

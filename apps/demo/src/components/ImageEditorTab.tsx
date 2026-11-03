@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import SelectionWorker from '@pixerate/editor/image-editor/selection-worker?worker';
 import { ImageEditor, ImageEditorCanvas, useAgentToolProvider, useImageEditor, type ImageEditorCanvasMode } from '@pixerate/editor-react';
-import { createImageEditorToolProvider, createImageEffectsToolProvider } from '@pixerate/editor/image-editor';
+import { createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost } from '@pixerate/editor/image-editor';
+import { createStickerToolProvider } from '@pixerate/editor/stickers';
+import { StickerInsertPanel } from '@pixerate/editor-react/stickers';
+import { demoStickers } from '../demoStickers';
 import { useDemoEffects } from '../demoEffects';
 import { EffectsProviderSwitch } from './EffectsProviderSwitch';
 import { demoPlayback, demoToolRegistry } from '../agentTools';
@@ -9,7 +12,7 @@ import { EditorDocumentAutosave, useDemoDocumentTools } from './EditorDocumentAu
 import { AgentScriptPanel } from './AgentScriptPanel';
 import { EditorPage, EditorPanel, useOpenPanel } from './EditorPage';
 import { IMAGE_SCRIPTS } from '../agentScripts';
-import { Image as ImageIcon, Download, Sparkles, Upload, Wand2 } from 'lucide-react';
+import { Image as ImageIcon, Download, Sparkles, Sticker as StickerIcon, Upload, Wand2 } from 'lucide-react';
 
 /**
  * A stand-in for an AI segmentation: a blocky, slightly offset ellipse at 1/16 resolution, the
@@ -118,9 +121,15 @@ function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (
   // The demo-wide effects provider (the built-in test effects, or Flair once it is published).
   const { provider: effects, source: effectsSource } = useDemoEffects();
   // The effects turn names effect ids, so play the one written for the selected provider.
-  const scripts = useMemo(() => IMAGE_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "image-effects" : "image-effects-flair")), [effectsSource]);
+  // The sticker script uses the built-in test effects, so it is left out with Flair.
+  const scripts = useMemo(() => IMAGE_SCRIPTS.filter((s) => s.id !== (effectsSource === "flair" ? "image-effects" : "image-effects-flair") && !(effectsSource === "flair" && s.id === "image-sticker-effects")), [effectsSource]);
   const effectTools = useMemo(() => createImageEffectsToolProvider(editor.controller, { id: 'image-effects', namespace: 'imagefx' }), [editor.controller]);
   useAgentToolProvider(demoToolRegistry, effectTools);
+  // Stickers go in as pixel layers (imagestickers__insert_sticker); any effect that takes a picture
+  // can then treat one (imagefx__apply_effect: the layer is its input).
+  const stickerHost = useMemo(() => createImageStickerHost(editor.controller), [editor.controller]);
+  const stickerTools = useMemo(() => createStickerToolProvider({ provider: () => demoStickers, insert: stickerHost, id: 'image-stickers', namespace: 'imagestickers' }), [stickerHost]);
+  useAgentToolProvider(demoToolRegistry, stickerTools);
 
   useEffect(() => {
     void editor.controller.loadImage(image);
@@ -159,6 +168,10 @@ function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (
         />
       </div>
       <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
+
+      <EditorPanel id="stickers" label="Stickers" icon={StickerIcon}>
+        <StickerInsertPanel provider={demoStickers} host={stickerHost} />
+      </EditorPanel>
 
       {/* Selection demo: simulate an AI segmentation and refine it to the image edges */}
       <EditorPanel id="mask" label="AI mask" icon={Wand2}>

@@ -3461,6 +3461,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Sticker brushes and placed stickers name any sticker from any library by ref (`provider:id`). `normalizeStickerSettings` and document loading turn a bare editor stamp into its `editor:` ref, and `Sticker.ref` replaces `stamp`, which is kept (optional) only for editor stamps.
 - **Solution / Workaround**: Compare refs (`normalizeStickerRef`, `editorStampOf`, `stickerStamp(sticker)`). `toggleStickerRef` replaces `toggleStamp` for brush lists. The editor's stamps still draw procedurally, so old brushes and documents paint the same pixels (checked by a digest in `tests/stickers.test.ts`). A combined provider (`combineStickerProviders`) is `namespaced`: its ids are already refs, so use `stickerRefOf` / `stickerIdFor` rather than joining ids by hand.
 
+### [core/stickers] Only the Image Editor Feeds an Inserted Sticker to an Effect; Vector and Canvas Have No Image Node
+
+- **Issue / Symptom**: `insert_sticker` works in the vector, image and canvas editors, but treating the inserted sticker with an effect that takes a picture (a holo foil) only works in the image editor. On the canvas, a multi-colour sticker comes in as its outline in one colour.
+- **Root Cause**: The image editor's smart filters render an effect with a layer as its picture. The vector editor has no raster image node (its provider effects draw vector art and take no picture), and the canvas has no image node either (its effects fill or overlay shape nodes). So a sticker goes into the vector editor as editable paths (it needs SVG art) and onto the canvas as a path shape from its `silhouette`.
+- **Solution / Workaround**: In the image editor, `apply_effect` takes any effect with a picture input as well as filter effects (`applyImageInputs` on the shared effect tools), and the layer goes to `layerImageInput(d)`: `source`, else the first required image input. Effect summaries don't list inputs, so its `effect` argument is then any id, checked when applied. Effects on stickers in the vector editor and on the canvas need image nodes there first (follow-up to #488).
+
 ### [swift] The Swift Core Must Read and Write JSON the Way JavaScript Does
 
 - **Issue / Symptom**: Ported code that used `JSONSerialization` or `Codable` produced schema validation messages in a different order, `Unknown property` errors for the wrong key first, and serialised documents that differed from the TS core's (`1e-07` for `1e-7`, keys reordered).

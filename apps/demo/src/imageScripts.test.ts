@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "@pixerate/editor/agent";
 import { createFakeEffectProvider } from "@pixerate/editor/effects";
-import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider, type PixelLayer, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
+import { ImageEditorController, createImageEditorToolProvider, createImageEffectsToolProvider, createImageStickerHost, type PixelLayer, type SmartObjectLayer, createOutlineTextShaper, type OutlineFontFace, type TypeLayer } from "@pixerate/editor/image-editor";
+import { createStickerToolProvider } from "@pixerate/editor/stickers";
+import { demoStickers } from "./demoStickers";
 import { runAgentScript } from "./agentScript";
 import { IMAGE_SCRIPTS } from "./agentScripts";
 
@@ -31,6 +33,21 @@ describe("image agent scripts", () => {
       ["Sunset wash", "fake.gradient", "soft-light"],
       ["Lower third", "fake.bar", "normal"],
     ]);
+  });
+
+  it("the sticker script puts three badges in as layers and treats each with the same effect", async () => {
+    const fake = { width: 520, height: 300, naturalWidth: 520, naturalHeight: 300, src: "data:fake" } as unknown as HTMLImageElement;
+    const c = new ImageEditorController({ image: fake, effects: createFakeEffectProvider() });
+    const reg = new ToolRegistry();
+    reg.register(createImageEditorToolProvider(c, { id: "image", namespace: "image" }));
+    reg.register(createImageEffectsToolProvider(c, { id: "image-effects", namespace: "imagefx" }));
+    reg.register(createStickerToolProvider({ provider: () => demoStickers, insert: createImageStickerHost(c), id: "image-stickers", namespace: "imagestickers" }));
+    const script = IMAGE_SCRIPTS.find((s) => s.id === "image-sticker-effects")!;
+    const steps = script.steps.filter((s) => s.tool !== "image__render_preview");
+    const { ok } = await runAgentScript(reg, { ...script, steps }, { wait: () => Promise.resolve() });
+    expect(ok).toBe(true);
+    const treated = c.getLayers().filter((l) => (l as SmartObjectLayer).smartFilters?.filters.length);
+    expect(treated.map((l) => l.name)).toEqual(["New badge", "Sale badge", "Hot badge"]);
   });
 
   it("the poster script adds a banner, a badge and a styled headline with the shape and type tools", async () => {

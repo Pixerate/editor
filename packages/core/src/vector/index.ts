@@ -56,3 +56,4 @@ export * from './effect-tools.js';
 export * from './playback.js';
 export * from './editorDocument.js';
 export * from './layers.js';
+export * from './stickers.js';
