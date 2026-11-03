@@ -224,7 +224,7 @@ const IMPASTO_BRUSH = {
 
 const LIGHT_BRUSH = {
   type: 'object',
-  description: 'Light paint: the light the brush lays with its colour, glowing in the paint\'s own colour and spilling onto its surroundings (set_light_spill). Dab, particle, bristle, Mixer Brush and impasto brushes take it; wet and sticker brushes refuse light above 0. Missing fields keep their current values.',
+  description: 'Light paint: the light the brush lays with its colour, glowing in the paint\'s own colour and spilling onto its surroundings (set_light_spill). Dab, particle, bristle, Mixer Brush, impasto and wet paint brushes take it (wet light flows, pools, granulates and blooms with the pigment until the paint dries, then is ordinary light paint); wet tools other than paint lay none, and sticker brushes refuse light above 0. Missing fields keep their current values.',
   properties: {
     amount: { type: 'number', minimum: 0, maximum: 1, description: 'Light each dab lays, scaled by its coverage and flow (0 none, default; 1 full).' },
     pressure: { type: 'boolean', description: 'Pressure scales the light (default false).' },
@@ -485,7 +485,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'get_paper',
     title: 'Get the paper',
-    description: 'Reads every setting of the current paper (preset, pattern, seed, colour, scale, tiling, depth, shading, dry and wet tuning, absorption, permeability, roughness).',
+    description: 'Reads every setting of the current paper (preset, pattern, seed, colour, scale, tiling, depth, shading, dry and wet tuning, absorption, permeability, roughness, and metallic, backlight and backlightColor when set).',
     inputSchema: EMPTY,
     annotations: { title: 'Get the paper', ...READ },
     handler: () => JSON.parse(JSON.stringify(c.document.paper)),
@@ -504,7 +504,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'set_paper',
     title: 'Set the paper',
     description:
-      'Changes the paper under the whole painting: a preset from list_papers and / or its settings. Grain depth decides how much grain-responsive brushes (pencil, pastel, charcoal) skip the valleys; changing it re-renders the paper but not strokes already painted. One undo step. Returns the paper.',
+      'Changes the paper under the whole painting: a preset from list_papers and / or its settings. Grain depth decides how much grain-responsive brushes (pencil, pastel, charcoal) skip the valleys; changing it re-renders the paper but not strokes already painted. backlight lights the paper from behind (the stained-glass preset has it on). One undo step. Returns the paper.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -522,6 +522,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
         permeability: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how freely water flows over the fibres (low: more ragged, slower spreading).' },
         roughness: { type: 'number', minimum: 0, maximum: 1, description: 'Wet media: how much the grain pins wet edges and catches granulating pigment.' },
         metallic: { type: 'number', minimum: 0, maximum: 1, description: 'Metallic paper (gold or silver leaf, pearlescent card): the grain catches the light (see set_lighting). 0 by default.' },
+        backlight: { type: 'number', minimum: 0, maximum: 1, description: 'Backlit paper (a lightbox, stained glass): light from behind the paper, 0 (none, the default) .. 1. Transparent glazes (watercolour, airbrush, thin marker) glow in their own colour; opaque paint (gouache, oil, solid ink) and thick paint block it; the light through paint spills softly around it. Nothing is repainted.' },
+        backlightColor: { ...COLOR, description: 'The backlight’s colour #rrggbb (default #fff1d6, warm white).' },
         name: { type: 'string', minLength: 1, description: 'Display name.' },
       },
       additionalProperties: false,
@@ -716,7 +718,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_brushes',
     title: 'List brushes',
     description:
-      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
+      'Lists the brush library: built-in dry media (pencils, pastels, charcoal, airbrush, marker, ink, erasers), paint brushes (dirty round, multi-colour flat, palette dabber), blending tools (blender, smudge, pigment smudge, Mixer Brush), light paint (category light: glow gel, neon marker, light airbrush, spark trail, glow wash; light is the amount they lay) and saved user brushes, with id, name, category, engine, size, grain response, rotation mode, whether it can pick up paint (wetCapable), its pick-up ratio, dirty and multi-colour mode, plus the active brush id.',
     inputSchema: EMPTY,
     annotations: { title: 'List brushes', ...READ },
     handler: () => {
@@ -924,7 +926,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'paint_stroke',
     title: 'Paint a brush stroke',
     description:
-      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
+      'Paints one stroke through points (document pixels, with optional pressure, time, tilt and barrel rotation) on a pixel layer with a library brush or the active one, optionally changed for this stroke. Grain-responsive brushes follow the paper; the mixer engine (mixer-brush) picks up and mixes paint already on the layer, the blender mixes nearby colours, the smudge drags paint, and dab brushes with behavior.pickup lift and carry paint, and wet brushes (engine wet: watercolour, gouache, add water, dry, blow, wet blend, wet smudge, blot) paint on the layer’s wet layer, where the paint keeps moving until it dries (the result says wet: true while it is; see advance_wet_paint and dry_paint; a dry brush on wet paint dries it first; wet oil brushes blend into the wet oil they meet; with light.amount, as glow-wash has, their light flows with the paint), impasto brushes (engine impasto: impasto brush, paint tube, palette knife, roller, gloop pen, metallic paint) lay thick paint whose relief is lit by set_lighting, particle and bristle brushes draw procedural marks, and sticker brushes spray editable stickers onto an empty or sticker layer (list_stickers). Guide stencils make strokes that start near them follow them; mask stencils keep paint inside them. The symmetry guide adds its mirror copies; with a tracing image that samples colours, a stroke without color takes the image colour at its first point. With an agent cursor (a director), the stroke is painted live along the points at the pace of their times. One undo step. Returns the layer id, changed bounds, dab count, the recorded strokeId (for replay_strokes), for wet brushes wet (paint still wet) and, for brushes that pick up paint, mixerLoad: what the brush carries after the stroke.',
     inputSchema: {
       type: 'object',
       properties: {

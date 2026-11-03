@@ -22,6 +22,10 @@
  *   `S = Σ cᵢSᵢ`) and transparent washes multiply like glazes. A colour becomes `K` and `S` with the
  *   same two-flux formulas as the shipped pigment model (`K/S = (1 − R)² / 2R`).
  *
+ * - **Light** (light paint, a fifth mass channel) rides with the pigment: suspended and settled,
+ *   advected, bled, settled and lifted exactly as pigment is, so a glowing wash flows, pools at
+ *   its edges, granulates and blooms with its colour.
+ *
  * `stepCellsTs` in `kernel.ts` is the specification of one step, in exact f32 arithmetic. The
  * WebAssembly SIMD kernel (`assembly/wet.ts`) is a lane-for-lane port of it and gives the same bits,
  * so the simulation is deterministic across browsers, kernels and worker counts.
@@ -35,26 +39,37 @@ export const SLOT_SIDE = 258;
 export const PLANE = SLOT_SIDE * SLOT_SIDE;
 export const PLANE_BYTES = PLANE * 4;
 
-/** Planes in each ping-ponged set: f0..f8, depth, velocity, paper water, 4 pigment channels, edge. */
-export const SET_PLANES = 18;
+/**
+ * Planes in each ping-ponged set: f0..f8, depth, velocity, paper water, 4 pigment channels,
+ * suspended light, edge.
+ */
+export const SET_PLANES = 19;
 export const P_RHO = 9;
 export const P_UX = 10;
 export const P_UY = 11;
 /** Water held in the paper. */
 export const P_SW = 12;
-/** Suspended pigment: K red, K green, K blue, S. */
+/** Suspended pigment: K red, K green, K blue, S; then suspended light (`P_P0 + 4`). */
 export const P_P0 = 13;
+/** Suspended light paint: light carried by the water, moving exactly as pigment mass does. */
+export const P_L = P_P0 + 4; // 17
 /** Edge: 1 at the wet front, fading over a few cells into the wet area (0 where dry). */
-export const P_EDGE = 17;
+export const P_EDGE = 18;
 /** Single (not ping-ponged) planes, after the two sets. */
-export const P_D0 = 2 * SET_PLANES; // 36..39: deposited pigment K r, g, b, S
-export const P_H = P_D0 + 4; // 40: paper height (−1 marks the off-canvas halo)
-export const P_FX = P_H + 1; // 41: flow map x
-export const P_FY = P_H + 2; // 42: flow map y
-export const SLOT_PLANES = P_FY + 1; // 43
+export const P_D0 = 2 * SET_PLANES; // 38..41: deposited pigment K r, g, b, S
+export const P_DL = P_D0 + 4; // 42: settled light
+export const P_H = P_D0 + 5; // 43: paper height (−1 marks the off-canvas halo)
+export const P_FX = P_H + 1; // 44: flow map x
+export const P_FY = P_H + 2; // 45: flow map y
+export const SLOT_PLANES = P_FY + 1; // 46
 export const SLOT_BYTES = SLOT_PLANES * PLANE_BYTES;
 /** Pigment channels per cell. */
 export const PIGMENT_CHANNELS = 4;
+/**
+ * Mass channels per cell: the 4 pigment channels and light. Light is a property of the paint, so
+ * the step advects, bleeds, settles and lifts it with the same flux and rates as pigment.
+ */
+export const MASS_CHANNELS = 5;
 
 /** D2Q9 lattice velocities: 0 rest, 1–4 axis (E, S, W, N in screen space), 5–8 diagonals. */
 export const EX = [0, 1, 0, -1, 0, 1, -1, -1, 1] as const;

@@ -59,7 +59,7 @@ export function createPaintWetTools(c: PaintEditorController): PaintAgentTool[] 
       name: 'advance_wet_paint',
       title: 'Let the wet paint flow',
       description:
-        'Lets time pass for wet paint: the water spreads, runs downhill on a tilted canvas, granulates, blooms and evaporates, and pigment settles. Give steps (simulation steps; at the default 120 per second, 120 steps is one second) or seconds (default 1). Not an undo step, as time passing never is. Returns the steps run, the clock, stillWet and each wet layer’s state. Paint dries by itself after a few thousand steps; dry_paint dries it at once.',
+        'Lets time pass for wet paint: the water spreads, runs downhill on a tilted canvas, granulates, blooms and evaporates, and pigment settles. Give steps (simulation steps; at the default 120 per second, 120 steps is one second) or seconds (default 1). Not an undo step, as time passing never is. Returns the steps run, the clock, stillWet and each wet layer’s state. Paint dries by itself after a few thousand steps; dry_paint dries it at once. Wet light paint (wet brushes with light.amount) flows with the pigment and settles where it dries into the layer’s light (get_light).',
       inputSchema: {
         type: 'object',
         properties: {

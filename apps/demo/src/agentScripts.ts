@@ -1061,6 +1061,14 @@ export const VIDEO_SCRIPTS: AgentScript[] = [
 
 /** A wavy line across the paint canvas, `n` samples with a pressure swell and times for velocity. */
 /** An ellipse of points (a closed loop) around (cx, cy). */
+/** A straight stroke, densely sampled (so smoothing never cuts it short). */
+const segment = (x0: number, y0: number, x1: number, y1: number, n = 40) => Array.from({ length: n + 1 }, (_, i) => ({ x: x0 + ((x1 - x0) * i) / n, y: y0 + ((y1 - y0) * i) / n, pressure: 0.8 }));
+/** A zigzag that fills a rectangle with overlapping passes. */
+const pane = (x0: number, y0: number, x1: number, y1: number, rows = 4) =>
+  Array.from({ length: rows }, (_, r) => {
+    const y = y0 + ((y1 - y0) * (r + 0.5)) / rows;
+    return r % 2 ? segment(x1, y, x0, y, 24) : segment(x0, y, x1, y, 24);
+  }).flat();
 const loop = (cx: number, cy: number, rx: number, ry: number, n = 72) => Array.from({ length: n + 1 }, (_, i) => ({ x: cx + Math.cos((i / n) * Math.PI * 2) * rx, y: cy + Math.sin((i / n) * Math.PI * 2) * ry, pressure: 0.8 }));
 const wave = (y: number, amp: number, n = 48, x0 = 40, x1 = 1160) =>
   Array.from({ length: n + 1 }, (_, i) => {
@@ -1117,6 +1125,43 @@ export const PAINT_SCRIPTS: AgentScript[] = [
       { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.b.id, brushId: "glow-gel", brush: { tip: { size: 40 } }, points: loop(660, 320, 220, 170) }) },
       { say: "A wider, stronger spill on the top loop.", tool: "paint__set_light_spill", args: (ctx) => ({ layerId: ctx.results.b.id, radius: 48, strength: 1.4 }) },
       { tool: "paint__get_light", args: (ctx) => ({ layerId: ctx.results.b.id }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-glow-wash",
+    prompt: "Paint a glowing watercolour wash on dark paper",
+    steps: [
+      { say: "Dark watercolour paper, so the glow shows.", tool: "paint__set_paper", args: { preset: "cold-pressed", color: "#101626" } },
+      { say: "Glow wash lays light with its pigment; the light flows with the water.", tool: "paint__add_layer", args: { name: "Glow" }, as: "glow" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glow.id, brushId: "glow-wash", brush: { tip: { size: 90 } }, color: "#22d3ee", points: wave(260, 50, 32, 120, 700) }) },
+      { say: "A second colour that meets the first while both are wet: they bleed, and so does their light.", tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glow.id, brushId: "glow-wash", brush: { tip: { size: 90 } }, color: "#c026d3", points: wave(330, 50, 32, 500, 1080) }) },
+      { say: "Letting it flow: the light pools and blooms with the pigment.", tool: "paint__advance_wet_paint", args: { seconds: 2 } },
+      { tool: "paint__dry_paint", args: {} },
+      { say: "Dried, it is ordinary light paint: glow and spill.", tool: "paint__get_light", args: (ctx) => ({ layerId: ctx.results.glow.id }) },
+      { tool: "paint__render_preview", args: { maxSide: 420 } },
+    ],
+  },
+  {
+    id: "paint-stained-glass",
+    prompt: "Paint a stained-glass window on backlit paper",
+    steps: [
+      { say: "Stained glass paper: smooth, with warm light behind it.", tool: "paint__set_paper", args: { preset: "stained-glass" } },
+      { say: "Transparent watercolour glazes let the light through in their own colour.", tool: "paint__add_layer", args: { name: "Glass" }, as: "glass" },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#dc2626", points: pane(180, 190, 580, 380) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#2563eb", points: pane(620, 190, 1020, 380) }) },
+      { tool: "paint__paint_stroke", args: (ctx) => ({ layerId: ctx.results.glass.id, brushId: "watercolor-wash", brush: { tip: { size: 120 }, wet: { pigment: 1 } }, color: "#f59e0b", points: pane(180, 420, 1020, 610) }) },
+      { tool: "paint__dry_paint", args: {} },
+      { say: "Opaque black lead lines block the light.", tool: "paint__add_layer", args: { name: "Lead" }, as: "lead" },
+      ...[
+        [150, 160, 1050, 160],
+        [1050, 160, 1050, 640],
+        [1050, 640, 150, 640],
+        [150, 640, 150, 160],
+        [150, 400, 1050, 400],
+        [600, 160, 600, 400],
+      ].map(([x0, y0, x1, y1]) => ({ tool: "paint__paint_stroke", args: (ctx: { results: Record<string, { id: string }> }) => ({ layerId: ctx.results.lead.id, brushId: "ink-pen", brush: { tip: { size: 16 } }, color: "#111111", points: segment(x0, y0, x1, y1) }) })),
+      { tool: "paint__get_paper", args: {} },
       { tool: "paint__render_preview", args: { maxSide: 420 } },
     ],
   },

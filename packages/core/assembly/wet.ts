@@ -3,27 +3,28 @@
 // in src/paint/wet/kernel.ts, 4 cells per f32x4, with the same f32 operations in the same order,
 // so both give identical bits. Change them together; tests/paint-wet-kernel.test.ts compares them.
 //
-// A slot is 43 planes of 258 × 258 f32 (see src/paint/wet/model.ts):
-//   set A: f0..f8, rho, ux, uy, paper water, pigment K r/g/b, S, edge   (planes 0..17)
-//   set B: the same                                                      (planes 18..35)
-//   deposit K r/g/b, S 36..39, paper height 40 (−1 off the canvas), flow x 41, flow y 42
+// A slot is 46 planes of 258 × 258 f32 (see src/paint/wet/model.ts):
+//   set A: f0..f8, rho, ux, uy, paper water, pigment K r/g/b, S, light, edge   (planes 0..18)
+//   set B: the same                                                             (planes 19..37)
+//   deposit K r/g/b, S, light 38..42, paper height 43 (−1 off the canvas), flow x 44, flow y 45
+// Light is a fifth mass channel with exactly the pigment channels' maths.
 // `step` reads set `parity` and writes the interior of the other set; `halo` copies the edges of
 // a slot's neighbours (same lane) into its one-cell border.
 
 const S: i32 = 258;
 const PLANE: usize = 258 * 258 * 4;
-const SETP: usize = 18 * PLANE;
+const SETP: usize = 19 * PLANE;
 const P_RHO: usize = 9;
 const P_UX: usize = 10;
 const P_UY: usize = 11;
 const P_SW: usize = 12;
 const P_P0: usize = 13;
-const P_EDGE: usize = 17;
-const P_D0: usize = 36;
-const P_H: usize = 40;
-const P_FX: usize = 41;
-const P_FY: usize = 42;
-const SLOT_BYTES: usize = 43 * PLANE;
+const P_EDGE: usize = 18;
+const P_D0: usize = 38;
+const P_H: usize = 43;
+const P_FX: usize = 44;
+const P_FY: usize = 45;
+const SLOT_BYTES: usize = 46 * PLANE;
 const DRY_EPS: f32 = 1e-3;
 const U_MAX: f32 = 0.25;
 const STRIP: i32 = 64;
@@ -200,7 +201,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       v128.store(dst + 7 * PLANE + c, collide(fin7, wr2, f32x4.neg(f32x4.add(ux, uy)), usq, omega, scale));
       v128.store(dst + 8 * PLANE + c, collide(fin8, wr2, f32x4.sub(ux, uy), usq, omega, scale));
 
-      // 5. pigment: upwind advection with the last step's velocities, plus bleed
+      // 5. pigment and light: upwind advection with the last step's velocities, plus bleed
       const rxWet = v128.not(rxDry);
       const uxc = ld(uxS + c);
       const uyc = ld(uyS + c);
@@ -208,10 +209,12 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       const pc1 = ld(pS + PLANE + c);
       const pc2 = ld(pS + 2 * PLANE + c);
       const pc3 = ld(pS + 3 * PLANE + c);
+      const pc4 = ld(pS + 4 * PLANE + c);
       let p0 = pc0;
       let p1 = pc1;
       let p2 = pc2;
       let p3 = pc3;
+      let p4 = pc4;
       let nb: usize;
       let open: v128;
       let uf: v128;
@@ -226,6 +229,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
       pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
       pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
       // west (incoming): p + (uf > 0 ? uf·pn : uf·pc) + bleed·(pn − pc)
       nb = c - 4;
       open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
@@ -235,6 +239,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
       pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
       pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
       // south (y + 1, outgoing)
       nb = c + row;
       open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
@@ -244,6 +249,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
       pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
       pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
       // north (y − 1, incoming)
       nb = c - row;
       open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
@@ -253,6 +259,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
       pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
       pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
 
       // 6. deposition and pickup
       const dryNow = f32x4.lt(rhoNew, eps);
@@ -263,6 +270,7 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       settle(dst + (P_P0 + 1) * PLANE + c, dP + PLANE + c, f32x4.max(zero, p1), rate, lift, dryNow);
       settle(dst + (P_P0 + 2) * PLANE + c, dP + 2 * PLANE + c, f32x4.max(zero, p2), rate, lift, dryNow);
       settle(dst + (P_P0 + 3) * PLANE + c, dP + 3 * PLANE + c, f32x4.max(zero, p3), rate, lift, dryNow);
+      settle(dst + (P_P0 + 4) * PLANE + c, dP + 4 * PLANE + c, f32x4.max(zero, p4), rate, lift, dryNow);
       const mean4 = f32x4.mul(f32x4.add(f32x4.add(f32x4.add(ld(eS + c + 4), ld(eS + c - 4)), ld(eS + c + row)), ld(eS + c - row)), quarter);
       const eNew = f32x4.min(one, f32x4.max(f32x4.min(one, f32x4.mul(dryNb, quarter)), f32x4.mul(decay, mean4)));
       v128.store(dst + P_EDGE * PLANE + c, sel(zero, eNew, dryNow));
@@ -322,7 +330,7 @@ export function halo(table: usize, slots: usize, key: i32, tilesPerLane: i32, ti
   const se = slotOf(table, laneBase, tilesX, tilesY, tx + 1, ty + 1);
   const row: usize = <usize>S * 4;
   const setOff: usize = <usize>set * SETP;
-  for (let k: usize = 0; k < 18; k++) {
+  for (let k: usize = 0; k < 19; k++) {
     const mp = me + k * PLANE;
     const off = setOff + k * PLANE;
     if (n >= 0) memory.copy(mp + 4, slots + <usize>n * SLOT_BYTES + off + 256 * row + 4, 1024);

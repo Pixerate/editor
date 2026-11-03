@@ -20,7 +20,7 @@
  *  3. Absorption into the paper until it holds its capacity, and evaporation (faster in the edge
  *     band); the collided populations are scaled by the depth ratio.
  *  4. BGK collision towards the D2Q9 equilibrium.
- *  5. Pigment (4 channels): upwind flux through the 4 faces with the previous step's velocities,
+ *  5. Pigment (4 channels) and light (a fifth mass channel, the same maths): upwind flux through the 4 faces with the previous step's velocities,
  *     plus bleed (diffusion) between wet cells; never below 0.
  *  6. Deposition (more in valleys and in the edge band) and pickup (more where water arrives);
  *     where a cell dries, all its suspended pigment settles.
@@ -32,6 +32,7 @@ import {
   DRY_EPS,
   FLAG_ALIVE,
   FLAG_WET,
+  MASS_CHANNELS,
   P_D0,
   P_EDGE,
   P_FX,
@@ -67,7 +68,7 @@ const NB = [0, -1, -S, 1, S, -S - 1, -S + 1, S + 1, S - 1];
 const OPP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
 
 const fin = new Float32Array(9);
-const pNew = new Float32Array(4);
+const pNew = new Float32Array(MASS_CHANNELS);
 
 /**
  * Steps one slot. `f` views the whole memory; `base` is the slot's first float; `prm` is the
@@ -199,14 +200,14 @@ export function stepSlotTs(f: Float32Array, base: number, parity: number, prm: F
       const rxWet = !rxDry;
       const uxc = f[uxS + c];
       const uyc = f[uyS + c];
-      for (let q = 0; q < 4; q++) pNew[q] = f[pS + q * PLANE + c];
+      for (let q = 0; q < MASS_CHANNELS; q++) pNew[q] = f[pS + q * PLANE + c];
       // east, west, south (y + 1), north (y − 1)
       for (let face = 0; face < 4; face++) {
         const nb = c + (face === 0 ? 1 : face === 1 ? -1 : face === 2 ? S : -S);
         const open = rxWet && f[rhoS + nb] >= EPS;
         const uf = face === 0 ? F(mobility * F(uxc + f[uxS + nb])) : face === 1 ? F(mobility * F(f[uxS + nb] + uxc)) : face === 2 ? F(mobility * F(uyc + f[uyS + nb])) : F(mobility * F(f[uyS + nb] + uyc));
         const out = face === 0 || face === 2;
-        for (let q = 0; q < 4; q++) {
+        for (let q = 0; q < MASS_CHANNELS; q++) {
           const pc = f[pS + q * PLANE + c];
           const pn = f[pS + q * PLANE + nb];
           // outgoing faces (east, south): flux = uf > 0 ? uf·pc : uf·pn, subtracted;
@@ -222,7 +223,7 @@ export function stepSlotTs(f: Float32Array, base: number, parity: number, prm: F
       const dryNow = rhoNew < EPS;
       const rate = F(F(depRate * F(1 + F(gran * F(1 - hx)))) * F(1 + F(edgeDep * ex)));
       const lift = dryNow ? 0 : F(F(pickup * Math.min(rhoNew, 1)) * F(1 + F(bloom * Math.max(0, F(rhoNew - rx)))));
-      for (let q = 0; q < 4; q++) {
+      for (let q = 0; q < MASS_CHANNELS; q++) {
         const pq = Math.max(0, pNew[q]);
         const dq = f[dP + q * PLANE + c];
         const dep = dryNow ? pq : Math.min(pq, F(pq * rate));

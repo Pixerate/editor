@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
+  import { DEFAULT_BACKLIGHT_COLOR, LIGHT_SLIDERS, PAPER_FAMILIES, PAPER_LIBRARY, PAPER_SLIDERS, patchPath, readPath, renderPaper, type PaintEditorController } from '@pixerate/editor/paint-editor';
   import PaintSlider from './PaintSlider.svelte';
   import PixelCanvas from './PixelCanvas.svelte';
   import { attempt, button, paintEditorState, panel } from './paintEditorRune.svelte.js';
@@ -50,6 +50,10 @@
   {#each PAPER_SLIDERS as c (c.path)}
     <PaintSlider control={c} value={readPath(paper, c.path)} oncommit={(v) => run(() => controller.setPaper(patchPath(paper as never, c.path, v) as never))} />
   {/each}
+  <label class="flex items-center justify-between">
+    <span class="text-slate-400">Backlight colour</span>
+    <input type="color" aria-label="Backlight colour" value={paper.backlightColor ?? DEFAULT_BACKLIGHT_COLOR} onchange={(e) => run(() => controller.setPaper({ backlightColor: e.currentTarget.value }))} class="h-6 w-10 rounded bg-transparent" />
+  </label>
   <label class="flex items-center gap-2">
     <input type="checkbox" checked={paper.tiling === 'mirror'} onchange={(e) => run(() => controller.setPaper({ tiling: e.currentTarget.checked ? 'mirror' : 'repeat' }))} /> Mirror tiling
   </label>

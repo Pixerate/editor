@@ -56,9 +56,8 @@ describe('light paint', () => {
     expect(lightAt(c, 80, 50)).toBe(255);
   });
 
-  it('refuses wet and sticker brushes with light, naming what to use', () => {
+  it('refuses sticker brushes with light, naming what to use (wet brushes take it: see paint-wet-light.test.ts)', () => {
     const c = editor();
-    expect(() => c.paintStroke({ brushId: 'watercolor-round', brush: { light: { amount: 1 } }, points: LINE })).toThrow(/wet media.*#494.*category light/);
     expect(() => c.paintStroke({ brushId: 'sticker-stars', brush: { light: { amount: 1 } }, points: LINE })).toThrow(/stickers.*light.amount to 0/);
   });
 
@@ -189,6 +188,6 @@ describe('light paint', () => {
     r = await call('clear_light', {});
     expect(r.data.cleared).toBe(false);
     r = await call('list_brushes', {});
-    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1]]);
+    expect(r.data.brushes.filter((b: { category: string }) => b.category === 'light').map((b: { id: string; light: number }) => [b.id, b.light])).toEqual([['glow-gel', 0.85], ['neon-marker', 1], ['light-airbrush', 0.7], ['spark-trail', 1], ['glow-wash', 0.7]]);
   });
 });

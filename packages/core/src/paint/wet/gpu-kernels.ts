@@ -75,7 +75,7 @@ function collide(): string {
   return out;
 }
 
-/** Pigment faces (east, west, south, north), unrolled. */
+/** Pigment (a vec4) and light (`lNew`) through the faces (east, west, south, north), unrolled. */
 function faces(): string {
   const nbs = ['c + 1u', 'c - 1u', 'c + S', 'c - S'];
   let out = '';
@@ -89,7 +89,10 @@ function faces(): string {
     let pn = vec4<f32>(st[pS + nb], st[pS + PL + nb], st[pS + 2u * PL + nb], st[pS + 3u * PL + nb]);
     let flux = ${outF ? 'select(uf * pn, uf * pc, uf > 0.0)' : 'select(uf * pc, uf * pn, uf > 0.0)'};
     let v = pNew ${outF ? '-' : '+'} flux + bleed * (pn - pc);
-    if (rxWet && st[rhoS + nb] >= EPS) { pNew = v; }
+    let ln = st[pS + 4u * PL + nb];
+    let fluxL = ${outF ? 'select(uf * ln, uf * lc, uf > 0.0)' : 'select(uf * lc, uf * ln, uf > 0.0)'};
+    let vL = lNew ${outF ? '-' : '+'} fluxL + bleed * (ln - lc);
+    if (rxWet && st[rhoS + nb] >= EPS) { pNew = v; lNew = vL; }
   }`;
   });
   return out;
@@ -212,12 +215,14 @@ ${stream()}
   st[dst + c] = (f0 + omega * (wr0 * (1.0 - usq) - f0)) * scale;
 ${collide()}
 
-  // 5. pigment: upwind advection with the last step's velocities, plus bleed
+  // 5. pigment and light: upwind advection with the last step's velocities, plus bleed
   let rxWet = !rxDry;
   let uxc = st[uxS + c];
   let uyc = st[uyS + c];
   var pNew = vec4<f32>(st[pS + c], st[pS + PL + c], st[pS + 2u * PL + c], st[pS + 3u * PL + c]);
   let pc = pNew;
+  var lNew = st[pS + 4u * PL + c];
+  let lc = lNew;
 ${faces()}
 
   // 6. deposition and pickup
@@ -233,6 +238,15 @@ ${faces()}
     let lq = dq * lift;
     st[dst + (${P_P0}u + q) * PL + c] = pq - dep + lq;
     st[dP + q * PL + c] = dq + dep - lq;
+  }
+  {
+    let pq = max(0.0, lNew);
+    let dq = st[dP + 4u * PL + c];
+    var dep = min(pq, pq * rate);
+    if (dryNow) { dep = pq; }
+    let lq = dq * lift;
+    st[dst + ${P_P0 + 4}u * PL + c] = pq - dep + lq;
+    st[dP + 4u * PL + c] = dq + dep - lq;
   }
   let mean4 = (st[eS + c + 1u] + st[eS + c - 1u] + st[eS + c + S] + st[eS + c - S]) * 0.25;
   let eNew = min(1.0, max(min(1.0, dryNb * 0.25), DECAY * mean4));
@@ -367,12 +381,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (s > 1e-9) { inv = 1.0 / s; }
   var film = keep * exp(-2.0 * k.xyz) * below;
   if (hide > 0.0) { film = film + hide * vec3<f32>(rinf(k.x * inv), rinf(k.y * inv), rinf(k.z * inv)); }
+  // Light paint: glowing paint shows its own hue (the film over white), as shadeTile does.
+  let l = min(1.0, st[d + 4u * PL + c] + st[p + 4u * PL + c]);
+  if (l > 1e-7) {
+    var w = keep * exp(-2.0 * k.xyz);
+    if (hide > 0.0) { w = w + hide * vec3<f32>(rinf(k.x * inv), rinf(k.y * inv), rinf(k.z * inv)); }
+    film = film + l * (w - film);
+  }
   let dark = 1.0 - 0.07 * wet;
   let e = vec3<f32>(toByte(film.x * dark), toByte(film.y * dark), toByte(film.z * dark));
-  var alpha = a;
-  alpha = needAlpha(e.x, paper.x, alpha);
-  alpha = needAlpha(e.y, paper.y, alpha);
-  alpha = needAlpha(e.z, paper.z, alpha);
+  var alpha = needAlpha(e.z, paper.z, needAlpha(e.y, paper.y, needAlpha(e.x, paper.x, 0.0)));
+  if (hide > 0.0 && alpha < 1.0) { alpha = alpha + hide * (1.0 - alpha); }
+  alpha = max(alpha, a);
   if (alpha <= 0.0) { outTiles[o] = px & 0x00ffffffu; return; }
   let a8 = max(round(min(1.0, alpha) * 255.0), pr.w);
   let al = a8 / 255.0;

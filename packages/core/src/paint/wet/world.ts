@@ -17,6 +17,10 @@
  * - **Display.** Each lane has a `base` surface: the layer's pixels under the wet paint. `display`
  *   gives the base with every live tile shaded (`filmPixel`), as an ordinary RGBA surface for the
  *   compositor. Tiles that dry are baked into the base and their slots freed.
+ * - **Light paint.** Light is a fifth mass channel (suspended and settled), moving exactly as
+ *   pigment does. A lane's `light` surface (one channel, see `paint-editor/light.ts`) is the
+ *   light under the wet paint; `lightDisplay` shades the live light over it and drying bakes it
+ *   in, as the colour is.
  * - **Engine B (WebGPU).** With a GPU engine attached (`attachGpu`) and at least `gpuMinTiles` live
  *   tiles, the GPU keeps a mirror of the slots: each edit uploads the rows it changed, each batch
  *   runs on the GPU too, and `displayGpu` shades every stale tile there at once. In lead mode
@@ -26,7 +30,7 @@
  */
 
 import { TILE, TiledSurface, finishTile, tileKey, type RasterRect, type Tile } from '../../raster/surface';
-import { filmPixel, pixelPigment, shadeTile } from './film';
+import { filmPixel, pixelPigment, shadeLightTile, shadeTile } from './film';
 import { stepSlotTs } from './kernel';
 import {
   DEFAULT_WET_PAPER,
@@ -42,10 +46,13 @@ import {
   FLAT,
   FREE_INTERVAL,
   MAX_BATCH,
+  MASS_CHANNELS,
   P_D0,
+  P_DL,
   P_FX,
   P_FY,
   P_H,
+  P_L,
   P_P0,
   P_RHO,
   P_SW,
@@ -73,13 +80,13 @@ import type { WetGpuEngine, WetGpuJob } from './gpu';
 
 /** Wet layers a world can hold at once. */
 export const MAX_WET_LANES = 8;
-/** Tile slots at most (about 3.8 GB, inside wasm32's 4 GB). Water reaching a tile past this is lost. */
-export const MAX_WET_SLOTS = 352;
+/** Tile slots at most (about 3.75 GB, inside wasm32's 4 GB). Water reaching a tile past this is lost. */
+export const MAX_WET_SLOTS = 328;
 /** Floats per slot. */
 const SLOT_FLOATS = SLOT_PLANES * PLANE;
 const S = SLOT_SIDE;
-/** Planes a snapshot keeps per slot: the current set and the deposit. */
-const SNAP_PLANES = SET_PLANES + 4;
+/** Planes a snapshot keeps per slot: the current set and the deposit (pigment and light). */
+const SNAP_PLANES = SET_PLANES + MASS_CHANNELS;
 
 /** A flow map: a vector per document pixel, in cells per step² at strength 1. */
 export type WetFlowField = (x: number, y: number) => readonly [number, number];
@@ -116,6 +123,8 @@ export interface WetLaneOptions {
   flow?: WetFlowField | null;
   /** Flow map strength (default 1 when a flow map is given). */
   flowStrength?: number;
+  /** The layer's light paint under the wet paint (one channel; default none). */
+  light?: TiledSurface | null;
 }
 
 interface Lane {
@@ -135,6 +144,21 @@ interface Lane {
   /** Bumped whenever `shaded` changes; with the base id it keys the cached display. */
   shadedVersion: number;
   displayKey: string;
+  /** Light paint under the wet paint (one channel). */
+  light: TiledSurface;
+  /** The lane has light (under it, or laid since): only then is light shaded. */
+  lit: boolean;
+  /** Shaded light tiles by tile key, with the stamp they were shaded at. */
+  lightShaded: Map<number, { stamp: number; tile: Tile | null }>;
+  lightDisplay: TiledSurface | null;
+  lightKey: string;
+}
+
+const noLight = () => new TiledSurface(1, new Map(), 0);
+
+function newLane(id: string, index: number, params: WetParams, flow: WetFlowField | null, flowStrength: number, base: TiledSurface, light: TiledSurface | null | undefined): Lane {
+  const l = light ?? noLight();
+  return { id, index, params, flow, flowStrength, base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '', light: l, lit: l.tiles.size > 0, lightShaded: new Map(), lightDisplay: null, lightKey: '' };
 }
 
 /** Totals for one wet layer. */
@@ -155,7 +179,7 @@ export interface WetLaneStats {
 export interface WetSnapshot {
   readonly clock: number;
   readonly tilt: WetTilt;
-  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface }>;
+  readonly lanes: ReadonlyArray<{ id: string; index: number; params: WetParams; flow: WetFlowField | null; flowStrength: number; base: TiledSurface; light?: TiledSurface; lit?: boolean }>;
   /** Per active key: the current set and the deposit planes; and its last flags. */
   readonly slots: ReadonlyMap<number, { planes: Float32Array; last: number }>;
   /** Bytes held. */
@@ -342,24 +366,12 @@ export class WetWorld {
     if (existing) {
       if (options.params) this.setParams(id, options.params);
       if (options.base) this.setBase(id, options.base);
+      if (options.light) this.setLight(id, options.light);
       return;
     }
     const index = this.lanes.indexOf(null);
     if (index < 0) throw new WetWorldError(`At most ${MAX_WET_LANES} layers can hold wet paint at once; dry one (dry_paint) first.`);
-    this.lanes[index] = {
-      id,
-      index,
-      params: normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS),
-      flow: options.flow ?? null,
-      flowStrength: options.flow ? (options.flowStrength ?? 1) : 0,
-      base: options.base ?? new TiledSurface(4, new Map(), 0),
-      shaded: new Map(),
-      urgent: new Set(),
-      stamp: 1,
-      display: null,
-      shadedVersion: 0,
-      displayKey: '',
-    };
+    this.lanes[index] = newLane(id, index, normalizeWetParams(options.params ?? {}, DEFAULT_WET_PARAMS), options.flow ?? null, options.flow ? (options.flowStrength ?? 1) : 0, options.base ?? new TiledSurface(4, new Map(), 0), options.light);
     this.pack(this.lanes[index]!);
   }
 
@@ -434,6 +446,26 @@ export class WetWorld {
     lane.base = base;
     lane.shaded.clear();
     lane.shadedVersion++;
+    lane.stamp++;
+  }
+
+  /** The light paint under a layer's wet paint (one channel). */
+  getLight(id: string): TiledSurface {
+    return this.laneOf(id).light;
+  }
+
+  /** Whether a layer has light paint, under its wet paint or in it. */
+  isLit(id: string): boolean {
+    return this.laneOf(id).lit;
+  }
+
+  /** Replaces the light paint under a layer's wet paint. */
+  setLight(id: string, light: TiledSurface): void {
+    const lane = this.laneOf(id);
+    if (light === lane.light) return;
+    lane.light = light;
+    if (light.tiles.size) lane.lit = true;
+    lane.lightShaded.clear();
     lane.stamp++;
   }
 
@@ -897,11 +929,13 @@ export class WetWorld {
 
   /**
    * Lays paint: `water` depth and pigment mass `pigment` (K r, g, b, S) per unit of coverage, or
-   * per pixel from `field` (4 values per pixel of `rect`). Pigment without water lands straight in
-   * the paper (settled).
+   * per pixel from `field` (4 values per pixel of `rect`), and `light` (light paint mass) per unit
+   * of coverage. Pigment and light without water land straight in the paper (settled).
    */
-  paint(id: string, rect: RasterRect, cov: ArrayLike<number> | null, water: number, pigment: ArrayLike<number> | null, field: ArrayLike<number> | null = null): void {
+  paint(id: string, rect: RasterRect, cov: ArrayLike<number> | null, water: number, pigment: ArrayLike<number> | null, field: ArrayLike<number> | null = null, light = 0): void {
     if (!(water >= 0)) throw new WetWorldError(`water ${water} must be 0 or more.`);
+    if (!(light >= 0)) throw new WetWorldError(`light ${light} must be 0 or more.`);
+    if (light > 0) this.laneOf(id).lit = true;
     this.footprint(id, rect, cov, (c, w, x, y) => {
       const dw = Math.fround(water * w);
       if (dw > 0) this.addWaterAt(c, dw);
@@ -910,6 +944,7 @@ export class WetWorld {
         const o = ((y - rect.y) * rect.width + (x - rect.x)) * 4;
         for (let q = 0; q < 4; q++) this.f32[into + q * PLANE] += field[o + q] * w;
       } else if (pigment) for (let q = 0; q < 4; q++) this.f32[into + q * PLANE] += pigment[q] * w;
+      if (light > 0) this.f32[into + 4 * PLANE] += light * w;
     });
   }
 
@@ -945,10 +980,10 @@ export class WetWorld {
           f[c + P_RHO * PLANE] *= kw;
         }
         if (ks < 1) f[c + P_SW * PLANE] *= ks;
-        if (kp < 1) for (let q = 0; q < 4; q++) f[c + (P_P0 + q) * PLANE] *= kp;
+        if (kp < 1) for (let q = 0; q < MASS_CHANNELS; q++) f[c + (P_P0 + q) * PLANE] *= kp;
         if (kd < 1) {
           const d = this.single(c) + P_D0 * PLANE;
-          for (let q = 0; q < 4; q++) f[d + q * PLANE] *= kd;
+          for (let q = 0; q < MASS_CHANNELS; q++) f[d + q * PLANE] *= kd;
         }
       },
       false
@@ -980,10 +1015,10 @@ export class WetWorld {
     );
   }
 
-  /** Blends wet paint: each wet cell's suspended pigment moves `strength` × coverage towards the footprint's mean. */
+  /** Blends wet paint: each wet cell's suspended pigment (and light) moves `strength` × coverage towards the footprint's mean. */
   blend(id: string, rect: RasterRect, cov: ArrayLike<number> | null, strength: number): void {
     const lane = this.laneOf(id);
-    const sums = [0, 0, 0, 0];
+    const sums = [0, 0, 0, 0, 0];
     let wsum = 0;
     const cells: Array<[number, number]> = [];
     this.footprint(
@@ -994,13 +1029,13 @@ export class WetWorld {
         if (!(this.f32[c + P_RHO * PLANE] >= DRY_EPS)) return;
         cells.push([c, w]);
         wsum += w;
-        for (let q = 0; q < 4; q++) sums[q] += this.f32[c + (P_P0 + q) * PLANE] * w;
+        for (let q = 0; q < MASS_CHANNELS; q++) sums[q] += this.f32[c + (P_P0 + q) * PLANE] * w;
       },
       false
     );
     if (!(wsum > 0)) return;
     const k = Math.min(1, Math.max(0, strength));
-    for (const [c, w] of cells) for (let q = 0; q < 4; q++) {
+    for (const [c, w] of cells) for (let q = 0; q < MASS_CHANNELS; q++) {
       const i = c + (P_P0 + q) * PLANE;
       this.f32[i] += k * w * (sums[q] / wsum - this.f32[i]);
     }
@@ -1010,7 +1045,7 @@ export class WetWorld {
 
   /**
    * Drags wet paint by (`dx`, `dy`) cells: each footprint cell takes `strength` × coverage of the
-   * water and suspended pigment of the cell it came from (a smudge through wet paint).
+   * water and suspended pigment (and light) of the cell it came from (a smudge through wet paint).
    */
   drag(id: string, rect: RasterRect, cov: ArrayLike<number> | null, dx: number, dy: number, strength: number): void {
     const lane = this.laneOf(id);
@@ -1032,14 +1067,14 @@ export class WetWorld {
     const f = this.f32;
     // Take from the sources first (so a chain of moves never moves paint twice), then lay it down.
     const taken = moves.map(([from, , a]) => {
-      const t = new Float32Array(14);
+      const t = new Float32Array(10 + MASS_CHANNELS);
       for (let k = 0; k < 9; k++) {
         t[k] = f[from + k * PLANE] * a;
         f[from + k * PLANE] -= t[k];
       }
       t[9] = f[from + P_RHO * PLANE] * a;
       f[from + P_RHO * PLANE] -= t[9];
-      for (let q = 0; q < 4; q++) {
+      for (let q = 0; q < MASS_CHANNELS; q++) {
         t[10 + q] = f[from + (P_P0 + q) * PLANE] * a;
         f[from + (P_P0 + q) * PLANE] -= t[10 + q];
       }
@@ -1050,20 +1085,23 @@ export class WetWorld {
       // Arriving water carries the drag direction a little.
       for (let k = 0; k < 9; k++) f[to + k * PLANE] += t[k];
       f[to + P_RHO * PLANE] += t[9];
-      for (let q = 0; q < 4; q++) f[to + (P_P0 + q) * PLANE] += t[10 + q];
+      for (let q = 0; q < MASS_CHANNELS; q++) f[to + (P_P0 + q) * PLANE] += t[10 + q];
     });
     this.refreshHalos();
   }
 
   /**
    * Re-wetting: lifts `amount` × coverage of the dried paint in the layer's pixels (`base`) back into
-   * the paper as settled pigment, so water can move it again. Only where there is surface water.
+   * the paper as settled pigment, so water can move it again, and the same share of its light
+   * paint (`light`) as settled light. Only where there is surface water.
    */
   rewet(id: string, rect: RasterRect, cov: ArrayLike<number> | null, amount: number, paper: readonly [number, number, number]): void {
     const lane = this.laneOf(id);
     const pig = [0, 0, 0, 0];
     const tiles = new Map(lane.base.tiles);
     const written = new Set<number>();
+    const lightTiles = lane.lit ? new Map(lane.light.tiles) : null;
+    const lightWritten = new Set<number>();
     const scratch = new Uint8ClampedArray(4);
     this.footprint(
       id,
@@ -1074,6 +1112,22 @@ export class WetWorld {
         const a = Math.min(1, Math.max(0, amount * w));
         if (!(a > 0)) return;
         const key = tileKey(x >> 8, y >> 8);
+        const li = (y & 255) * TILE + (x & 255);
+        let lt = lightTiles?.get(key);
+        if (lt && (lt.uniform ?? 1) !== 0) {
+          if (!lightWritten.has(key)) {
+            const data = lt.data.length ? new Uint8ClampedArray(lt.data) : new Uint8ClampedArray(TILE * TILE).fill(lt.uniform ?? 0);
+            lt = { data, uniform: null };
+            lightTiles!.set(key, lt);
+            lightWritten.add(key);
+          }
+          const lv = lt.data[li];
+          if (lv > 0) {
+            const lifted = Math.round(lv * a);
+            lt.data[li] = lv - lifted;
+            this.f32[this.single(c) + P_DL * PLANE] += Math.fround(lifted / 255);
+          }
+        }
         let tile = tiles.get(key);
         if (!tile) return;
         if (!written.has(key)) {
@@ -1101,6 +1155,14 @@ export class WetWorld {
         else tiles.delete(key);
       }
       this.setBase(id, new TiledSurface(4, tiles, 0));
+    }
+    if (lightWritten.size) {
+      for (const key of lightWritten) {
+        const t = finishTile(lightTiles!.get(key)!.data, 1, 0);
+        if (t) lightTiles!.set(key, t);
+        else lightTiles!.delete(key);
+      }
+      this.setLight(id, new TiledSurface(1, lightTiles!, 0));
     }
   }
 
@@ -1135,7 +1197,7 @@ export class WetWorld {
         for (let x = x0; x < x1; x++) {
           const c = this.cell(lane, x, y);
           const d = this.single(c) + P_D0 * PLANE;
-          for (let q = 0; q < 4; q++) {
+          for (let q = 0; q < MASS_CHANNELS; q++) {
             f[d + q * PLANE] += f[c + (P_P0 + q) * PLANE];
             f[c + (P_P0 + q) * PLANE] = 0;
           }
@@ -1163,15 +1225,42 @@ export class WetWorld {
     const lane = this.lanes[this.laneIndexOf(key)]!;
     const [tx, ty] = this.tileXY(key);
     const tk = tileKey(tx, ty);
+    // Light first: its dimming reads the pigment over it, which the colour bake leaves in place.
+    let lightChanged = false;
+    if (lane.lit) {
+      const lout = this.shadeLightSlot(key, lane.light.tiles.get(tk) ?? null, all ? 'bake-all' : 'bake');
+      if (lout) {
+        const tiles = new Map(lane.light.tiles);
+        const t = finishTile(lout, 1, 0);
+        if (t) tiles.set(tk, t);
+        else tiles.delete(tk);
+        this.setLight(lane.id, new TiledSurface(1, tiles, 0));
+        lightChanged = true;
+      }
+    }
     const src = lane.base.tiles.get(tk)?.data ?? null;
     const out = this.shadeSlot(key, src, all ? 'bake-all' : 'bake');
-    if (!out) return false;
+    if (!out) return lightChanged;
     const tiles = new Map(lane.base.tiles);
     const t = finishTile(out, 4, 0);
     if (t) tiles.set(tk, t);
     else tiles.delete(tk);
     this.setBase(lane.id, new TiledSurface(4, tiles, 0));
     return true;
+  }
+
+  /** `shadeSlot` for light paint: one channel over a light tile (see `shadeLightTile`); `null` when nothing would change. */
+  private shadeLightSlot(key: number, src: Tile | null, mode: 'display' | 'bake' | 'bake-all'): Uint8ClampedArray | null {
+    const [tx, ty] = this.tileXY(key);
+    const b = this.slotBase(this.slotOf(key));
+    const cur = b + this.parity * SET_PLANES * PLANE;
+    const full = src ? (src.data.length ? src.data : new Uint8ClampedArray(TILE * TILE).fill(src.uniform ?? 0)) : null;
+    const out = full ? new Uint8ClampedArray(full) : new Uint8ClampedArray(TILE * TILE);
+    const w = Math.min(WET_TILE, this.width - tx * WET_TILE);
+    const h = Math.min(WET_TILE, this.height - ty * WET_TILE);
+    const live = mode !== 'bake';
+    const changed = shadeLightTile(this.f32, PLANE, S, b + P_D0 * PLANE, live ? cur + P_P0 * PLANE : -1, b + P_DL * PLANE, live ? cur + P_L * PLANE : -1, full, out, w, h);
+    return changed ? out : null;
   }
 
   /**
@@ -1186,6 +1275,7 @@ export class WetWorld {
     const out = src ? new Uint8ClampedArray(src) : new Uint8ClampedArray(TILE * TILE * 4);
     const w = Math.min(WET_TILE, this.width - tx * WET_TILE);
     const h = Math.min(WET_TILE, this.height - ty * WET_TILE);
+    const lit = this.lanes[this.laneIndexOf(key)]!.lit;
     const changed = shadeTile(
       this.f32,
       PLANE,
@@ -1198,7 +1288,10 @@ export class WetWorld {
       out,
       w,
       h,
-      this.paperBytes
+      this.paperBytes,
+      // Glowing paint shows its own hue (see shadeTile).
+      lit ? b + P_DL * PLANE : -1,
+      lit && mode !== 'bake' ? cur + P_L * PLANE : -1
     );
     return changed ? out : null;
   }
@@ -1218,6 +1311,24 @@ export class WetWorld {
       else tiles.delete(tk);
     }
     return new TiledSurface(4, tiles, 0);
+  }
+
+  /** The layer's light paint with all its wet paint dried where it is (`bakedSurface` for light); changes nothing. */
+  bakedLight(id: string): TiledSurface {
+    this.requireIdle();
+    const lane = this.laneOf(id);
+    if (!lane.lit) return lane.light;
+    const tiles = new Map(lane.light.tiles);
+    for (const key of this.active) {
+      if (this.laneIndexOf(key) !== lane.index) continue;
+      const tk = this.tileKeyOf(key);
+      const out = this.shadeLightSlot(key, lane.light.tiles.get(tk) ?? null, 'bake-all');
+      if (!out) continue;
+      const t = finishTile(out, 1, 0);
+      if (t) tiles.set(tk, t);
+      else tiles.delete(tk);
+    }
+    return new TiledSurface(1, tiles, 0);
   }
 
   // --- Reading -------------------------------------------------------------------
@@ -1358,6 +1469,39 @@ export class WetWorld {
     lane.display = new TiledSurface(4, tiles, 0);
     lane.displayKey = displayKey;
     return { surface: lane.display, changed, pending: stale.length - done };
+  }
+
+  /**
+   * The layer's light paint with its live light shaded in (`null` when the layer has none): the
+   * light under the wet paint with each live tile's light over it. Like `display`, every stale
+   * tile is reshaded (light tiles are cheap: one channel, no colour maths).
+   */
+  lightDisplay(id: string): TiledSurface | null {
+    const lane = this.laneOf(id);
+    if (!lane.lit) return null;
+    const keys = this.active.filter((k) => this.laneIndexOf(k) === lane.index);
+    let changed = false;
+    const live = new Set<number>();
+    for (const key of keys) {
+      const tk = this.tileKeyOf(key);
+      live.add(tk);
+      if (lane.lightShaded.get(tk)?.stamp === lane.stamp) continue;
+      const src = lane.light.tiles.get(tk) ?? null;
+      const out = this.shadeLightSlot(key, src, 'display');
+      lane.lightShaded.set(tk, { stamp: lane.stamp, tile: out ? finishTile(out, 1, 0) : src });
+      changed = true;
+    }
+    for (const tk of [...lane.lightShaded.keys()]) if (!live.has(tk) && lane.lightShaded.delete(tk)) changed = true;
+    const key = `${lane.light.id}`;
+    if (!changed && lane.lightDisplay && lane.lightKey === key) return lane.lightDisplay;
+    const tiles = new Map(lane.light.tiles);
+    for (const [tk, { tile }] of lane.lightShaded) {
+      if (tile) tiles.set(tk, tile);
+      else tiles.delete(tk);
+    }
+    lane.lightDisplay = new TiledSurface(1, tiles, 0);
+    lane.lightKey = key;
+    return lane.lightDisplay;
   }
 
   /**
@@ -1506,7 +1650,7 @@ export class WetWorld {
       }
       const from = y0 * SLOT_SIDE;
       const to = (y1 + 1) * SLOT_SIDE;
-      const planes = [...Array(SET_PLANES).keys()].map((k) => this.parity * SET_PLANES + k).concat([P_D0, P_D0 + 1, P_D0 + 2, P_D0 + 3]);
+      const planes = [...Array(SET_PLANES).keys()].map((k) => this.parity * SET_PLANES + k).concat([...Array(MASS_CHANNELS).keys()].map((q) => P_D0 + q));
       for (const plane of planes) gpu.writeSlot(slot, plane * PLANE + from, this.f32.subarray(b + plane * PLANE + from, b + plane * PLANE + to));
     }
     this.gpuDirty.clear();
@@ -1599,11 +1743,11 @@ export class WetWorld {
       const b = this.slotBase(this.slotOf(key));
       const planes = new Float32Array(SNAP_PLANES * PLANE);
       planes.set(this.f32.subarray(b + this.parity * SET_PLANES * PLANE, b + (this.parity + 1) * SET_PLANES * PLANE), 0);
-      planes.set(this.f32.subarray(b + P_D0 * PLANE, b + (P_D0 + 4) * PLANE), SET_PLANES * PLANE);
+      planes.set(this.f32.subarray(b + P_D0 * PLANE, b + (P_D0 + MASS_CHANNELS) * PLANE), SET_PLANES * PLANE);
       slots.set(key, { planes, last: this.u32[(this.layout.last >> 2) + key] });
       bytes += planes.byteLength;
     }
-    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base }));
+    const lanes = this.lanes.filter((l): l is Lane => Boolean(l)).map((l) => ({ id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, light: l.light, lit: l.lit }));
     return { clock: this.clock, tilt: { ...this.tilt }, lanes, slots, bytes };
   }
 
@@ -1614,7 +1758,9 @@ export class WetWorld {
     this.lanes.fill(null);
     this.tilt = { ...snap.tilt };
     for (const l of snap.lanes) {
-      this.lanes[l.index] = { id: l.id, index: l.index, params: { ...l.params }, flow: l.flow, flowStrength: l.flowStrength, base: l.base, shaded: new Map(), urgent: new Set(), stamp: 1, display: null, shadedVersion: 0, displayKey: '' };
+      const lane = newLane(l.id, l.index, { ...l.params }, l.flow, l.flowStrength, l.base, l.light);
+      lane.lit = lane.lit || Boolean(l.lit);
+      this.lanes[l.index] = lane;
       this.pack(this.lanes[l.index]!);
     }
     for (const [key, { planes, last }] of snap.slots) {
@@ -1661,6 +1807,7 @@ export class WetWorld {
 /** A layer's base and flow map in a moved snapshot (see `moveWetSnapshot`). */
 export interface WetSnapshotLaneMove {
   base?: TiledSurface;
+  light?: TiledSurface;
   flow?: WetFlowField | null;
 }
 
@@ -1697,7 +1844,7 @@ export function moveWetSnapshot(
   }
   const lanes = snap.lanes.map((l) => {
     const moved = lane(l);
-    return { ...l, base: moved.base ?? l.base, flow: moved.flow === undefined ? l.flow : moved.flow };
+    return { ...l, base: moved.base ?? l.base, light: moved.light ?? l.light, flow: moved.flow === undefined ? l.flow : moved.flow };
   });
   return { clock: snap.clock, tilt: { ...snap.tilt }, lanes, slots, bytes };
 }

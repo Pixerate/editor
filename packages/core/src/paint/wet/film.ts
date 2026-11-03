@@ -15,6 +15,9 @@
  * bits differ between JavaScript engines), so "dry on save" gives the same pixels everywhere.
  * The layer pixel is the film expressed as colour plus alpha over the paper colour (exact over the
  * paper, a normal-blend approximation over other layers), with alpha never below the pixel's own.
+ * Any alpha from the least the colour needs (`aMin`) up to 1 shows the same over the paper, so the
+ * film's hiding is kept in it: `alpha = aMin + hide·(1 − aMin)`. A transparent wash (hide 0) gets
+ * the least alpha; gouache and oil are more opaque, which backlit paper reads back (`backlight.ts`).
  */
 
 /** Pigment mass of a full-strength wash of a colour. */
@@ -237,10 +240,9 @@ export function filmPixel(
   const e0 = linearToSrgb8(scratch[0] * dark);
   const e1 = linearToSrgb8(scratch[1] * dark);
   const e2 = linearToSrgb8(scratch[2] * dark);
-  let alpha = a;
-  alpha = needAlpha(e0, p0, alpha);
-  alpha = needAlpha(e1, p1, alpha);
-  alpha = needAlpha(e2, p2, alpha);
+  let alpha = needAlpha(e2, p2, needAlpha(e1, p1, needAlpha(e0, p0, 0)));
+  if (s > 0 && alpha < 1) alpha += (1 - expNeg(HIDE * s)) * (1 - alpha);
+  if (a > alpha) alpha = a;
   if (alpha <= 0) {
     out[o] = px[i];
     out[o + 1] = px[i + 1];
@@ -286,6 +288,11 @@ export function pixelPigment(px: ArrayLike<number>, i: number, paper: ArrayLike<
  * Cell (x, y) of the tile is at offset `(y + 1)·side + x + 1` of each plane. `src` is the base tile
  * (or `null` for transparent); writes `out` (a copy of `src` where nothing changes). Returns
  * whether any pixel was shaded.
+ *
+ * Light paint (settled light at `dl`, plus suspended at `pl`; −1 for none): glowing paint gives off
+ * its own hue whatever is under it, so where a cell holds light `l` its film moves towards the film
+ * over white by `min(1, l)`. On dark paper a glowing glaze then shows its colour, which its glow
+ * (`paint-editor/light.ts`) brightens.
  */
 export function shadeTile(
   f: Float32Array,
@@ -299,7 +306,9 @@ export function shadeTile(
   out: Uint8ClampedArray,
   w: number,
   h: number,
-  paper: Uint8Array
+  paper: Uint8Array,
+  dl = -1,
+  pl = -1
 ): boolean {
   const p0 = paper[0];
   const p1 = paper[1];
@@ -354,14 +363,32 @@ export function shadeTile(
         r1 += hide * rinf(k1 * inv);
         r2 += hide * rinf(k2 * inv);
       }
+      if (dl >= 0) {
+        let l = f[dl + c];
+        if (pl >= 0) l += f[pl + c];
+        if (l > 1e-7) {
+          if (l > 1) l = 1;
+          let w0 = keep * expT(tab, 2 * k0);
+          let w1 = keep * expT(tab, 2 * k1);
+          let w2 = keep * expT(tab, 2 * k2);
+          if (hide > 0) {
+            w0 += hide * rinf(k0 * inv);
+            w1 += hide * rinf(k1 * inv);
+            w2 += hide * rinf(k2 * inv);
+          }
+          r0 += l * (w0 - r0);
+          r1 += l * (w1 - r1);
+          r2 += l * (w2 - r2);
+        }
+      }
       const dark = 1 - 0.07 * wet;
       const e0 = encode(enc, r0 * dark);
       const e1 = encode(enc, r1 * dark);
       const e2 = encode(enc, r2 * dark);
-      let alpha = a;
-      alpha = needAlpha(e0, p0, alpha);
-      alpha = needAlpha(e1, p1, alpha);
-      alpha = needAlpha(e2, p2, alpha);
+      let alpha = needAlpha(e2, p2, needAlpha(e1, p1, needAlpha(e0, p0, 0)));
+      // The film's hiding, kept in the alpha above the least it needs (see the top of this file).
+      if (hide > 0 && alpha < 1) alpha += hide * (1 - alpha);
+      if (a > alpha) alpha = a;
       if (alpha <= 0) {
         out[i + 3] = 0;
         continue;
@@ -394,4 +421,62 @@ function encode(enc: Uint8Array, v: number): number {
   if (!(v > 0)) return 0;
   if (v >= 1) return 255;
   return enc[Math.round(v * ENC_STEPS)];
+}
+
+/**
+ * Light paint in a wet layer as an 8-bit light tile (one channel, 0..255; see `paint-editor/light.ts`).
+ * Light mass `L` (settled at `dl`, plus suspended at `pl` unless it is −1) shows as `min(1, L)`;
+ * the light already in the layer (`src`, or `null`) shows through the film over it by the film's
+ * transmission, `(1 − hide)·mean(e^(−2K))`, using the same planes as `shadeTile` (`d` settled
+ * pigment, `p` suspended or −1), so plain wet paint over glowing paint dims it. Deterministic
+ * (table `exp`, + − × only). Writes `out` (a copy of `src` where nothing changes); returns whether
+ * any pixel changed.
+ */
+export function shadeLightTile(
+  f: Float32Array,
+  plane: number,
+  side: number,
+  d: number,
+  p: number,
+  dl: number,
+  pl: number,
+  src: Uint8ClampedArray | null,
+  out: Uint8ClampedArray,
+  w: number,
+  h: number
+): boolean {
+  const tab = EXP_TABLE;
+  let any = false;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = (y + 1) * side + x + 1;
+      let l = f[dl + c];
+      if (pl >= 0) l += f[pl + c];
+      const i = y * 256 + x;
+      const old = src ? src[i] : 0;
+      if (!(l > 1e-7) && old === 0) continue;
+      let keep = 1;
+      if (old > 0) {
+        let k0 = f[d + c];
+        let k1 = f[d + plane + c];
+        let k2 = f[d + 2 * plane + c];
+        let s = f[d + 3 * plane + c];
+        if (p >= 0) {
+          k0 += f[p + c];
+          k1 += f[p + plane + c];
+          k2 += f[p + 2 * plane + c];
+          s += f[p + 3 * plane + c];
+        }
+        if (k0 > 1e-7 || k1 > 1e-7 || k2 > 1e-7 || s > 1e-7) {
+          const hide = s > 0 ? 1 - expT(tab, HIDE * s) : 0;
+          keep = ((1 - hide) * (expT(tab, 2 * k0) + expT(tab, 2 * k1) + expT(tab, 2 * k2))) / 3;
+        }
+      }
+      const v = Math.round(Math.min(255, 255 * Math.min(1, l > 0 ? l : 0) + old * keep));
+      if (v === old) continue;
+      out[i] = v;
+      any = true;
+    }
+  }
+  return any;
 }

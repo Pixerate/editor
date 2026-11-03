@@ -41,6 +41,8 @@ import { grainCatch, hexToRgb8, PaperGrain, type PaperGrain as PaperGrainType, t
 const STROKE_WATER = 0.9;
 /** Pigment mass a stroke lays at the tip's centre at `pigment` 1: a little more than a full-strength wash. */
 const STROKE_MASS = PIGMENT_UNIT * 2.5;
+/** Light paint mass a stroke lays at the tip's centre at `light.amount` 1 (light shows as min(1, mass)). */
+const STROKE_LIGHT = 1.5;
 /** Coverage quantum: dab coverage is rounded to this before it reaches the simulation. */
 const COVERAGE_STEPS = 4096;
 
@@ -116,6 +118,7 @@ export class WetStrokeDriver {
   private readonly paint: RgbTriple = [0, 0, 0];
   private readonly centre: RgbTriple = [0, 0, 0];
   private readonly depth: number;
+  private readonly lightBase: number;
 
   constructor(readonly init: WetStrokeInit) {
     const brush = init.brush;
@@ -131,7 +134,10 @@ export class WetStrokeDriver {
       water: STROKE_WATER * Math.min(1, wet.water * (1 + thin)) * perDab,
       mass: STROKE_MASS * wet.pigment * (1 - 0.6 * thin) * perDab,
       body: wet.body * (1 - thin),
+      light: 0,
     });
+    // Light paint: wet paint brushes lay light with their pigment (thinned with it); it then flows with the paint.
+    this.lightBase = wet.tool === 'paint' ? STROKE_LIGHT * brush.light.amount * (1 - 0.6 * thin) * perDab : 0;
     // Loading: below 1 the reservoir drains along the stroke, so the paint runs out.
     const rates = exchangeRates(brush.behavior.pickup, brush.behavior.mix, wet.load, brush.behavior.mixing);
     this.states = copies.map((c, i) => ({
@@ -254,6 +260,7 @@ export class WetStrokeDriver {
     switch (wet.tool) {
       case 'paint': {
         const ex = st.exchange!;
+        this.medium.options.light = this.lightBase * (brush.light.pressure ? d.pressure : 1);
         let flow = 1;
         const effect = this.init.effect;
         if (effect) {
@@ -353,6 +360,10 @@ export interface PaintWetHost {
   layerSurface(id: string): TiledSurface | null;
   /** Shows new pixels for wet layers (not an undo step); `rects` are where they changed. */
   updateSurfaces(surfaces: ReadonlyMap<string, TiledSurface>, rects: RasterRect[]): void;
+  /** The layer's light paint (one channel), or `null` without any. */
+  layerLight(id: string): TiledSurface | null;
+  /** Shows new light paint for wet layers (not an undo step); the next `updateSurfaces` redraws. */
+  updateLights(lights: ReadonlyMap<string, TiledSurface>): void;
   /** The paint dried while time passed (the editor records nothing, it just redraws). */
   changed(): void;
 }
@@ -548,6 +559,7 @@ export class PaintWetLayers {
       const flow = this.settings.get(l.id)?.flow;
       return {
         base: translateSurface(l.base, left, top),
+        ...(l.light ? { light: translateSurface(l.light, left, top) } : {}),
         flow: l.flow && flow && flow.kind !== 'none' ? flowField(flow, width, height) : l.flow,
       };
     });
@@ -593,7 +605,7 @@ export class PaintWetLayers {
     if (!w.hasLane(layerId)) {
       const base = this.host.layerSurface(layerId) ?? new TiledSurface(4, new Map(), 0);
       const s = this.settingsOf(layerId, medium);
-      w.ensureLane(layerId, { params: s.params, base });
+      w.ensureLane(layerId, { params: s.params, base, light: this.host.layerLight(layerId) });
       const { width, height } = this.host.canvas();
       if (s.flow.kind !== 'none') w.setFlow(layerId, flowField(s.flow, width, height), s.flow.strength);
     }
@@ -658,6 +670,7 @@ export class PaintWetLayers {
       if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
       rects.push(...d.changed);
     }
+    this.syncLights();
     if (surfaces.size) this.host.updateSurfaces(surfaces, rects);
     return rects;
   }
@@ -674,8 +687,21 @@ export class PaintWetLayers {
       if (this.host.layerSurface(id) !== d.surface) surfaces.set(id, d.surface);
       rects.push(...d.changed);
     }
+    this.syncLights();
     if (surfaces.size) this.host.updateSurfaces(surfaces, rects);
     return rects;
+  }
+
+  /** Shows each wet layer's live light paint (the light under it with the wet light shaded in). */
+  private syncLights(): void {
+    const w = this.world;
+    if (!w) return;
+    const lights = new Map<string, TiledSurface>();
+    for (const id of w.laneIds()) {
+      const l = w.lightDisplay(id);
+      if (l && this.host.layerLight(id) !== l) lights.set(id, l);
+    }
+    if (lights.size) this.host.updateLights(lights);
   }
 
   /** Drops the wet layers whose paint has all dried (they become ordinary pixel layers). */
@@ -685,7 +711,9 @@ export class PaintWetLayers {
     for (const id of w.laneIds()) {
       if (w.isActive(id) || this.driver?.init.laneId === id) continue;
       const base = w.getBase(id);
+      const light = w.isLit(id) ? w.getLight(id) : null;
       w.removeLane(id);
+      if (light && this.host.layerLight(id) !== light) this.host.updateLights(new Map([[id, light]]));
       this.host.updateSurfaces(new Map([[id, base]]), []);
     }
   }
@@ -813,6 +841,13 @@ export class PaintWetLayers {
     this.syncDisplays();
     this.retireDry();
     return out;
+  }
+
+  /** The layer's light paint with all its wet paint dried (`null` without a wet layer or light), without changing anything. */
+  bakedLight(layerId: string): TiledSurface | null {
+    const w = this.world;
+    if (!w?.hasLane(layerId) || !w.isLit(layerId)) return null;
+    return w.bakedLight(layerId);
   }
 
   /** The layer's pixels with all its wet paint dried (deterministic), without changing anything. */

@@ -808,6 +808,14 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     light: { amount: 1 },
   }),
   builtin({
+    id: 'glow-wash', name: 'Glow wash', category: 'light', engine: 'wet',
+    tip: { size: 40, hardness: 0.55, spacing: 0.12, opacity: 1, flow: 1, smoothing: 0.25, pressureSize: true, pressureOpacity: true },
+    dynamics: { minSize: 0.35 },
+    behavior: { pickup: 0.4, mix: 0.5, mixing: 'pigment' },
+    wet: { tool: 'paint', water: 0.65, pigment: 0.75, body: 0, rewet: 0.1 },
+    light: { amount: 0.7 },
+  }),
+  builtin({
     id: 'sticker-stars', name: 'Star stickers', category: 'sticker', engine: 'sticker',
     tip: { size: 36, opacity: 1, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
     dynamics: { minSize: 0.5 },
