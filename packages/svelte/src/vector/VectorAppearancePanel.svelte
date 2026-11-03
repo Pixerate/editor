@@ -10,8 +10,7 @@
     type VectorFilterType,
     type VectorFiltersPanelItem,
     type VectorStrokeAlign,
-    randomVectorBrushstrokeSeed,
-    vectorBrushstrokeBrushes
+    randomVectorBrushstrokeSeed
   } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
 
@@ -32,6 +31,8 @@
   const store = vectorStateOf(() => controller);
   const view = $derived(store.current);
   const panel = $derived(getVectorAppearancePanel(view));
+  // Follows the editor state, which changes when the brush library is read again.
+  const brushes = $derived.by(() => (void view, controller.listBrushstrokeBrushes()));
 
   const buttonClass =
     'inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border bg-background px-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40';
@@ -72,7 +73,7 @@
         <input type="checkbox" aria-label="{name} visible" title="Show" checked={l.visible} onchange={(e) => update(l, { visible: e.currentTarget.checked })} />
         <input type="color" aria-label="{name} colour" class="h-7 w-10 cursor-pointer rounded border border-border bg-background" value={l.color ?? '#000000'} oninput={(e) => controller.setBrushstroke(l.index, { color: e.currentTarget.value }, { ids, merge: true })} onblur={() => controller.endMergedEdit()} />
         <select aria-label="{name} brush" class={selectClass} value={bs.brushId} onchange={(e) => controller.setBrushstroke(l.index, { brushId: e.currentTarget.value }, { ids })}>
-          {#each vectorBrushstrokeBrushes() as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+          {#each brushes as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
         </select>
         <input type="number" min="0.5" step="0.5" aria-label="{name} brush size" title="Brush size" class={numberClass} value={bs.size} oninput={(e) => {
           const n = parseFloat(e.currentTarget.value);
@@ -169,7 +170,7 @@
         onclick={() => controller.addPaintLayer(kind, {}, { ids })}>+</button
       >
       {#if kind === 'stroke'}
-        <button type="button" class={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onclick={() => controller.addBrushstroke({ brushId: vectorBrushstrokeBrushes()[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>✎+</button>
+        <button type="button" class={buttonClass} title="Add a brushstroke (a natural-media brush along the path)" aria-label="Add brushstroke" data-vector-add-brushstroke="" disabled={!ids.length} onclick={() => controller.addBrushstroke({ brushId: brushes[0].id, seed: randomVectorBrushstrokeSeed() }, { ids })}>✎+</button>
       {/if}
     </div>
     <!-- Top layer first, as it draws. -->
