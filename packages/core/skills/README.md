@@ -30,6 +30,7 @@ model and its general practice.
 | [`pixerate-color`](pixerate-color/SKILL.md) | Colour inspection, WCAG accessibility and contrast optimization, CVD simulation, palette audits, harmonies, and OKLab/OKLCH blends. |
 | [`pixerate-typography`](pixerate-typography/SKILL.md) | Fonts and fallback stacks, font loading, modular type scales and hierarchies, fluid sizes, readability and type-aware contrast audits, text segmentation, the font picker. |
 | [`pixerate-stickers`](pixerate-stickers/SKILL.md) | Sticker libraries: finding stickers by ref (`provider:id`), categories, tags, tintable art and licences, for the editors that spray or place them. |
+| [`pixerate-brushes`](pixerate-brushes/SKILL.md) | The shared brush library: brushes made of facets (medium, tip, marks, dynamics, behaviour, light, motion, colour), the presets, host profiles for paint, image, canvas and vector, and creating, checking and sharing brushes. |
 
 ## Workflow skills
 
@@ -51,6 +52,7 @@ request like "clean up this export" finds it.
 | [`pixerate-paint-watercolour`](pixerate-paint-watercolour/SKILL.md) | Paint (`pixerate-paint-editor`) | Watercolour paper, light to dark with the paper's white kept, wet-in-wet and wet-on-dry washes, drying before glazing, steering the water. |
 | [`pixerate-paint-oil-impasto`](pixerate-paint-oil-impasto/SKILL.md) | Paint (`pixerate-paint-editor`) | A toned ground, thin block-in to thick paint, pigment mixing, impasto relief and its light. |
 | [`pixerate-paint-sketch-to-finish`](pixerate-paint-sketch-to-finish/SKILL.md) | Paint (`pixerate-paint-editor`) | Sketch, ink, flats under the lines, clipped shading and light, one named layer per pass. |
+| [`pixerate-brushes-design`](pixerate-brushes-design/SKILL.md) | Brushes (`pixerate-brushes`) | From a description to a saved brush: the nearest preset, only the facets that change, checked for the host that will use it, previewed. |
 | [`pixerate-video-social-cut`](pixerate-video-social-cut/SKILL.md) | Video (`pixerate-video-editor`) | Vertical or square reframes that fill the frame, the hook first, platform lengths, titles in the safe area. |
 | [`pixerate-video-colour-grade`](pixerate-video-colour-grade/SKILL.md) | Video (`pixerate-video-editor`) | Correct and match shots, then one look on an adjustment clip; LUTs at moderate strength with skin protected. |
 | [`pixerate-video-montage`](pixerate-video-montage/SKILL.md) | Video (`pixerate-video-editor`) | Selects on the beat, varied pacing, short transitions with handles, music under everything and a clean ending. |

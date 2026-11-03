@@ -3502,3 +3502,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `uniqueItems` on `tip.stamps` rejected the `bokeh-dots` and `twinkle-sparks` presets.
 - **Root Cause**: For particle marks, repeated stamps weight the order (`['dot', 'dot', 'ring']` is two dots per ring). Only sticker (`objects`) marks count each stamp once, and `normalizeStickerSettings` dedupes those itself.
 - **Solution / Workaround**: The schema allows repeats in `tip.stamps`. Don't dedupe stamp lists in shared code.
+
+### [core/brushes] Host Filters Admit Brushes Whose Settings They Ignore: Profiles Need an "Ignored" Level
+
+- **Issue / Symptom**: A host profile with only "supported / refused" couldn't reproduce the canvas and vector brush lists. Brushstrokes don't pick paint up and have no timing, yet `dirty-round` (pick-up), the gradient brushes and `ink-pen` (velocity thinning) are all in today's lists, and vector lists the light brushes too.
+- **Root Cause**: The hand-written filters check the engine (`dab`) and, on canvas, light. They don't check the settings a brushstroke silently paints without.
+- **Solution / Workaround**: Each capability in `BrushHostProfile` is `full`, `ignored` or `none`. `ignored` lets the brush through with a warning ("paints this brush without picking paint up"); `none` refuses it with a fix. Canvas has light `none` and vector light `ignored`. `tests/brush-library.test.ts` checks that `listPresets(CANVAS_PROFILE)` and `listPresets(VECTOR_PROFILE)` match `listCanvasBrushes()` and `vectorBrushstrokeBrushes()`. Keep them matching until phase 4 switches those editors to the profiles.
+
+### [core/skills] Every Table Row Starting With a Backticked Word Counts as a Documented Tool
+
+- **Issue / Symptom**: A reference skill's explanatory tables (a facet table whose first cells were `` `kind` ``, `` `tip` ``…) made `agent-skills.test.ts` report them as stale tools.
+- **Root Cause**: The test reads every table row whose first cell is a backticked name (`^| \`name\` |`) as a documented tool, whatever table it is in.
+- **Solution / Workaround**: Only tool and command tables start their rows with a backticked name. Start other tables' first cells with plain words ("Kind", "Canvas (`canvas`)").
+
+### [core/brushes] The Stored-Brush Schema Is Too Strict for Patches
+
+- **Issue / Symptom**: `update_brush { id, tip: { size: 20 } }` was refused with "Missing required property shape".
+- **Root Cause**: `BRUSH_JSON_SCHEMA` requires `tip.shape`, which is right for a stored brush. The tools reused its facet schemas, and the registry validates arguments against the input schema before the handler runs.
+- **Solution / Workaround**: `brushes/tools.ts` uses a copy of the facet schemas with `tip.required` removed. A patch keeps the brush's shape, and a new brush without one gets a round tip (reported in `problems`). Keep the stored-brush schema strict; relax only the tool inputs that merge.

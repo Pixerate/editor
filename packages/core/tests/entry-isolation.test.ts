@@ -83,6 +83,8 @@ describe("subpath entry isolation", () => {
     const renderer = /function renderBrushstroke\b|\b(?:ParticleStroke|BristleStroke|StickerSpray|MarkStroke) = class\b/;
     expect(reached("paint-editor/index.js").some((f) => renderer.test(readFileSync(f, "utf8")))).toBe(true);
     expect(reached("brushes/index.js").filter((f) => renderer.test(readFileSync(f, "utf8")))).toEqual([]);
+    // The library takes any StorageAdapter but imports its types only.
+    expect(reached("brushes/index.js").filter((f) => /function createIndexedDbAdapter\b|function createOpfsAdapter\b/.test(readFileSync(f, "utf8")))).toEqual([]);
   });
 
   it("color/index.js does not pull in gradient", () => {

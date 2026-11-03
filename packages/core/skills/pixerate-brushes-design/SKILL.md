@@ -1,0 +1,88 @@
+---
+name: pixerate-brushes-design
+description: The brush design workflow in the Pixerate brush library - turning a description ("a soft pink highlighter", "chalk for canvas strokes", "make this brush work in the vector editor") into a saved brush, by picking the nearest preset, changing only the facets that matter, checking it against the host that will use it and previewing it. Use when asked to make, design, customise, adapt or port a brush, or when create_brush, check_brush or list_brush_presets are available. Load with pixerate-brushes, which lists every tool.
+metadata:
+  kind: workflow
+  reference: pixerate-brushes
+---
+
+# Designing a brush
+
+A brush is a preset with a few facets changed. The presets already hold good settings for each
+medium (pencil grain, ink velocity, watercolour water), so the fastest good brush starts from
+the nearest one and changes two or three facets: the colour, the tip, how it feels. What a brush
+may use depends on the editor that will paint with it: check it against that host before saving.
+
+This skill is the method. `pixerate-brushes` has the full tool reference.
+
+## Goal and quality bar
+
+- The brush is saved under a clear `id` and `name`, with a truthful `medium` and `variety`.
+- `check_brush` for the host it is for returns `ok: true`; any warnings are understood.
+- It differs from its base preset only where the request asks (`describe_brush` shows it).
+- Built-in presets are untouched.
+
+## Inputs to confirm
+
+Ask when you cannot tell from the request; say what you assumed when you can.
+
+- **Host:** which editor will use it (paint by default; canvas and vector strokes take only dry
+  dab brushes, the image editor no wet, thick or particle brushes).
+- **Medium and character:** what it imitates (pencil, ink, chalk, watercolour, marker…), and
+  the size, softness and texture.
+- **Colour:** a default colour or palette, or the user's own colour (the default).
+
+## Working method
+
+1. **Find the base.** `list_brush_presets` with `medium` or `variety`, or `text`. Pick the
+   closest; `describe_brush` it to read its facets.
+   **Check:** the base's `check` is `ok` for the target host (or `check_brush` with `host`).
+2. **Create from it.** `create_brush` with a new `id`, `name`, `basedOn` and only the facets
+   that change: `variety` for what it is now, `colour.default` / `colour.palette`, `tip`
+   (size, hardness, roundness, angle), `dynamics`, `behaviour.grain`.
+   **Check:** `problems` is empty or understood; nothing refused.
+3. **Check it for the host.** `check_brush` with `id` and `host`. A refusal names the facet and
+   fix; its `degraded` brush is a good next spec.
+   **Check:** `ok: true`.
+4. **Look at it.** `preview_brush` when available; then `update_brush` to tune (each call
+   returns the paths `changed`).
+   **Check:** `describe_brush` shows the intended facets.
+
+## Decision table
+
+| Situation | Approach |
+| --- | --- |
+| A colour variant of a preset | `basedOn` it, set `colour.default` (and a `palette`), keep everything else. |
+| For canvas or vector strokes | Base on a dry preset (pencil, pastel, charcoal, marker, ink); no wet surface, particles, stickers or tools; no light on canvas. |
+| A brush that must work in another editor | `check_brush` with that `host`, then `create_brush` from its `degraded` brush under a new id. |
+| A texture (chalk, charcoal, dry brush) | Raise `behaviour.grain` (0.8..1) and add `dynamics.sizeJitter`; test on rough paper. |
+| A light brush (neon, glow) | `light.amount`, and paint it on dark paper; a highlighter keeps `light.spill.radius` 0. |
+| A change to a built-in | `duplicate_brush`, then `update_brush` the copy. |
+
+## Recipes
+
+**A pink highlighter.** `create_brush` `{ id: "pink-highlighter", name: "Pink highlighter",
+basedOn: "highlighter", colour: { default: "#ff6ec7" } }`, then `check_brush`.
+
+**Chalk for canvas strokes.** On the canvas host, `create_brush` `{ id: "chalk", name: "Chalk",
+basedOn: "soft-pastel", variety: "chalk", behaviour: { grain: 1 }, dynamics: { sizeJitter: 0.12 } }`.
+
+**Port a wet brush to vector.** `check_brush` `{ id, host: "vector" }`; `create_brush` from the
+`degraded` brush with `id` `<id>-vector`; `check_brush` again.
+
+## Pitfalls
+
+- **Starting from nothing.** A brush without `basedOn` gets engine defaults (a hard round dab);
+  it rarely looks like the medium asked for.
+- **A host that refuses the base.** A wet or particle preset can't be the base of a canvas
+  brush; set `behaviour.surface` to `dry` or start from a dry preset.
+- **Lists replace.** Giving `colour.palette` or `tip.stamps` replaces the whole list; include
+  every entry you want.
+- **Changing a built-in.** `update_brush` refuses built-ins; duplicate first.
+
+## Tools used
+
+- `list_brush_presets`, `describe_brush`: find the base preset and read its facets.
+- `create_brush`, `update_brush`, `duplicate_brush`: make and tune the brush.
+- `check_brush`: prove it works for the host, and get a degraded spec when it doesn't.
+- `preview_brush`: look at a sample stroke when the host renders previews.
