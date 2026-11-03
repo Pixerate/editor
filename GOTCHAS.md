@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/video-editor] A Clip Effect's Path Is in Its Source's Pixels, Not the Frame's
+
+- **Issue / Symptom**: A path drawn on the preview, given to a clip effect as frame points, ran in the wrong place on a clip that was contained, moved, scaled or turned.
+- **Root Cause**: Clip effects render over the clip's picture as it comes from the source (a media clip's own size), before placement. Effect clips render at the project frame and are placed over it. A path control's points are "frame pixels" of the picture the effect renders.
+- **Solution / Workaround**: `setEffectPath` maps frame points through `videoClipPicture` / `framePointsToPicture` (undo the clip's rotation about its placed rect's centre, then scale into the source size) at the clip's first frame. Mask outlines (`videoClipMaskOutline`) are turned with their clip first. Animated placement uses the first frame's; give the path again after big moves.
+
+### [core/animation-editor] A Path-Fitted Vector Effect Is Placed at Its viewBox Origin, Not Fitted
+
+- **Issue / Symptom**: A vector effect run along a path node (`add_vector_effect` `path: { node }`) landed off the node when fitted into a box: straight paths have a zero-height box (scale 0), and the effect's own padding shifted it.
+- **Root Cause**: `parseVectorSvg` moves the viewBox origin to 0, and `motionPartsFromVectorEffect` fitted the picture into a box. An effect given a path in artwork units already draws in artwork units, with its viewBox around the path.
+- **Solution / Workaround**: `motionPartsFromVectorEffect(…, 'viewBox')` places the picture at scale 1 with its viewBox origin where the SVG says. `addVectorEffect` uses it for `path: { node }` unless a box is given.
+
 ### [core/paint-editor] Live Effect Paint Plays in the View, Not the Document
 
 - **Issue / Symptom**: Animating effect paint by writing each frame into the document would make every frame an undo step (or none of them exact), change what saving and exporting see as the clock runs, and fight a stroke in progress.

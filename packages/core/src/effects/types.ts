@@ -84,6 +84,33 @@ export interface EffectSummary {
 	backgroundOpacity?: string;
 	/** How a `camera` effect moves. Present exactly when `kind` is `camera`. */
 	camera?: EffectCameraMove;
+	/**
+	 * What it takes besides pictures, for search: `path` when a control draws along a path given at
+	 * run time (`pathControlsOf` names them). Present exactly when it takes one.
+	 */
+	accepts?: readonly EffectAccept[];
+}
+
+/** What an effect can take besides pictures: `path`, a control that draws along a path given at run time. */
+export type EffectAccept = 'path';
+export const EFFECT_ACCEPTS: readonly EffectAccept[] = ['path'];
+
+/**
+ * The JSON Schema `format` of a path control: a string of SVG path data (fitted into the frame as
+ * the control's description says), a flat list of numbers `[x0, y0, x1, y1, …]` in frame pixels
+ * from the top left (used as given), or `""` for no path.
+ */
+export const EFFECT_PATH_FORMAT = 'svg-path';
+
+/** A path control's value: SVG path data, points in frame pixels, or `""` for none. */
+export type EffectPathValue = string | readonly number[];
+
+/** How `pathFromText` writes words. */
+export interface EffectTextPathOptions {
+	/** A font the provider offers for single-stroke writing (its own names, e.g. `script`, `sans`); default its first. */
+	font?: string;
+	/** Where the line sits in its box (default `start`). */
+	align?: 'start' | 'middle' | 'end';
 }
 
 export interface EffectSearchOptions {
@@ -94,6 +121,8 @@ export interface EffectSearchOptions {
 	tags?: readonly string[];
 	/** Most results to return. */
 	limit?: number;
+	/** Only effects that take every one of these (e.g. `['path']`: effects that draw along a path). */
+	accepts?: readonly EffectAccept[];
 }
 
 /** One control value: a number, a `#rrggbb` colour or other string, a switch, or a vector of numbers. */
@@ -573,6 +602,12 @@ export interface EffectProvider {
 	 * effect cannot use with `EffectUnsupportedError`.
 	 */
 	applyVectorEffect?(id: string, target: EffectVectorTarget, values?: EffectValues): MaybePromise<EffectVectorMotion>;
+	/**
+	 * Words as single-stroke SVG path data, for a path control (an effect that writes a name along
+	 * its path). Optional: editors refuse words when it is missing. Throws `EffectUnsupportedError`
+	 * for a font it does not have.
+	 */
+	pathFromText?(text: string, options?: EffectTextPathOptions): MaybePromise<string>;
 	/**
 	 * Opens an effect for editing. Present when `capabilities.supportsAuthoring`. Unknown ids throw
 	 * `UnknownEffectError`; an effect the provider cannot edit throws `EffectUnsupportedError`.

@@ -92,6 +92,7 @@
           {disabled}
           onchange={(k, v, g) => report(controller.updateEffectValues(c.id, 'generator', { [k]: v } as VideoEffectValues, merge(g)))}
           onpreset={(values) => report(controller.updateEffectValues(c.id, 'generator', values as VideoEffectValues))}
+          path={{ controller, clip: c, instance: 'generator', report }}
         />
       </div>
     {/if}
@@ -165,6 +166,7 @@
                   {disabled}
                   onchange={(k, v, g) => report(controller.updateClipEffect(clip!.id, e.id, { values: { [k]: v as never } }, merge(g)))}
                   onpreset={(values) => report(controller.updateClipEffect(clip!.id, e.id, { values: values as never }))}
+                  path={{ controller, clip: clip!, instance: e.id, report }}
                 />
               </div>
             {/if}

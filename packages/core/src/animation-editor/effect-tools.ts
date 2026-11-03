@@ -98,7 +98,7 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 				name: 'add_vector_effect',
 				title: 'Add a vector effect',
 				description:
-					'Adds a provider vector effect that brings its own picture (search_effects with kind vector: lower thirds, loaders, stickers): its SVG becomes an artwork group, fitted into box (default the whole artwork), and its motion becomes shots after the last one. Change it with update_effect (target and effect: the returned instance) or remove it with remove_effect. One undo step. Returns the instance, the group id and any notes on what could not be carried over.',
+					'Adds a provider vector effect that brings its own picture (search_effects with kind vector: lower thirds, loaders, stickers): its SVG becomes an artwork group, fitted into box (default the whole artwork), and its motion becomes shots after the last one. For an effect that draws along a path (search_effects accepts ["path"]: a signature, a route), pass path: { node } to run it along a path node (its outline with every transform applied; the picture then lands on the node at scale 1 unless box is given) or { text } for words the provider writes. Use it instead of follow or draw-on when the effect itself should trace the path. The path is copied when added; add it again after reshaping the node. Change it with update_effect (target and effect: the returned instance) or remove it with remove_effect. One undo step. Returns the instance, the group id and any notes on what could not be carried over.',
 				inputSchema: {
 					type: 'object',
 					properties: {
@@ -114,8 +114,21 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 							},
 							required: ['x', 'y', 'width', 'height'],
 							additionalProperties: false,
-							description: 'Where the picture goes in the artwork, fitted keeping its proportions (default the whole artwork).'
-						}
+							description: 'Where the picture goes in the artwork, fitted keeping its proportions (default the whole artwork; with path { node }, on the node at scale 1).'
+						},
+						path: {
+							type: 'object',
+							description: 'The path the effect draws along (only for effects with a path control): { node } or { text }.',
+							properties: {
+								node: { type: 'string', minLength: 1, description: 'A path node id (find_animation_elements).' },
+								text: { type: 'string', minLength: 1, description: 'Words the provider writes as a single-stroke path.' },
+								font: { type: 'string', minLength: 1, description: 'With text: a single-stroke font the provider offers (default its first).' },
+								align: { type: 'string', enum: ['start', 'middle', 'end'], description: 'With text: where the line sits (default start).' }
+							},
+							oneOf: [{ required: ['node'] }, { required: ['text'] }],
+							additionalProperties: false
+						},
+						control: { type: 'string', minLength: 1, description: 'Which path control takes the path (default the effect\'s only one; describe_effect pathControls lists them).' }
 					},
 					required: ['effect'],
 					additionalProperties: false
@@ -123,7 +136,9 @@ export function createAnimationEffectsToolProvider(controller: AnimationEditorCo
 				annotations: { title: 'Add a vector effect', ...ctx.annotations.write },
 				handler: async (args) => {
 					ctx.requireProvider();
-					const r = await controller.addVectorEffect(args.effect, { values: args.values, box: args.box });
+					const path = args.path ? (args.path.node !== undefined ? { node: args.path.node } : { text: args.path.text, font: args.path.font, align: args.path.align }) : undefined;
+					if (args.path && args.path.node !== undefined && args.path.text !== undefined) throw new Error('Pass path as { node } or { text }, not both.');
+					const r = await controller.addVectorEffect(args.effect, { values: args.values, box: args.box, path, control: args.control });
 					if (!r.ok) throw new Error(r.error);
 					return { instance: r.effect.instance, group: r.effect.group, effect: info(r.effect), ...(r.notes.length ? { notes: r.notes } : {}) };
 				}

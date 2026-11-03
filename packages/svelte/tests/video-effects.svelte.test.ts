@@ -107,7 +107,7 @@ describe("effects (Svelte)", () => {
     render(EffectsBrowser, { provider: createFakeEffectProvider(), uses: ["filter", "overlay"], onpick, thumbnails: false });
     await flush();
     const ids = () => [...target.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"));
-    expect(ids()).toEqual(["fake.invert", "fake.tint", "fake.bar"]);
+    expect(ids()).toEqual(["fake.invert", "fake.tint", "fake.bar", "fake.trail"]);
     const search = q<HTMLInputElement>('input[type="search"]');
     search.value = "tint";
     search.dispatchEvent(new Event("input", { bubbles: true }));
@@ -178,3 +178,42 @@ describe("effects (Svelte)", () => {
     expect(c.getState().selection).toEqual([added.id]);
   });
 });
+
+describe("effects along a path", () => {
+  it("draws a path on the preview, writes words, clears it, and Escape stops drawing", async () => {
+    const c = make(createFakeEffectProvider());
+    await c.applyClipEffect("a", "fake.trail");
+    const instance = c.getProject().tracks[0].clips[0].effects![0].id;
+    c.select(["a"]);
+    render(VideoEditor, { controller: c });
+    await flush();
+    await click(q('[data-effect-part="stack"] button[aria-expanded]'));
+    const part = q('[data-effect-part="path"]');
+    expect([...part.querySelectorAll("button")].find((b) => b.textContent === "Use mask outline")!.disabled).toBe(true);
+    await click(button("Draw path"));
+    expect(c.getState().pathDrawing).toEqual({ clip: "a", instance });
+    const svg = q<SVGSVGElement>("[data-video-path-drawing]");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 64, height: 36, right: 64, bottom: 36, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const ptr = (type: string, x: number, y: number) => svg.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+    ptr("pointerdown", 4, 4);
+    ptr("pointermove", 30, 20);
+    ptr("pointermove", 60, 30);
+    ptr("pointerup", 60, 30);
+    await flush();
+    expect(c.getState().pathDrawing).toBeNull();
+    expect(c.getProject().tracks[0].clips[0].effects![0].values!.path).toEqual([4, 4, 30, 20, 60, 30]);
+    const words = q<HTMLInputElement>('input[aria-label="Words to write along the path"]');
+    words.value = "hi";
+    words.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    await click(button("Write"));
+    expect(String(c.getProject().tracks[0].clips[0].effects![0].values!.path)).toMatch(/^M0 10/);
+    await click(button("Clear path"));
+    expect(c.getProject().tracks[0].clips[0].effects![0].values!.path).toBe("");
+    await click(button("Draw path"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    flushSync();
+    expect(c.getState().pathDrawing).toBeNull();
+  });
+});
+

@@ -82,7 +82,9 @@ the pitfalls, and uses the tools below.
     controls, then `apply_effect` (filters and overlays on a clip), `set_video_effect_transition`
     or `add_video_effect_clip` (generators and titles). Tune with `update_effect` and
     `set_video_effect_keyframes`; check with `get_video_frame` (layers list `effects`) and
-    `list_applied_effects`.
+    `list_applied_effects`. **An effect along a path** (a beam along a border, a trail, words
+    written on): `search_effects` with `accepts: ["path"]`, add it as a clip or clip effect, then
+    `set_video_effect_path` with frame `points`, path data `d`, a clip's `mask` outline or `text`.
 12. **Camera moves** (a provider with camera moves, such as Flair): a clip is the shot.
     `list_video_camera_moves` with a `role`, then `set_clip_camera_move`: `transition` moves
     from `from` to `framing` from the clip's start (a glide, whip pan, punch zoom); `hold`
@@ -298,7 +300,7 @@ and every write tool is refused with the reason.
 
 | Tool | Use it to |
 | --- | --- |
-| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category` or `use` (filter, overlay for clips; transition; generator, title). Returns ids, names, uses, whether they are transparent or loop, and their length. Camera moves (`kind` camera) are listed but go on clips with `set_clip_camera_move`, not `apply_effect`. Call `describe_effect` next. |
+| `search_effects` | Find effects: words in `query`, filtered by `kind`, `category`, `use` (filter, overlay for clips; transition; generator, title) or `accepts: ["path"]` (effects that draw along a path you give). Returns ids, names, uses, whether they are transparent or loop, and their length. Camera moves (`kind` camera) are listed but go on clips with `set_clip_camera_move`, not `apply_effect`. Call `describe_effect` next. |
 | `describe_effect` | Read one effect's `controls` (a strict JSON Schema: names, types, ranges, units), `defaults`, `presets` and `inputs`, and whether it `appliesHere` (as a clip effect). Use the names and ranges for values. |
 | `list_applied_effects` | See the effects in the project per clip, in order: clip effects (`fx1`...), an effect clip's own effect (`generator`) and an effect transition (`transition`), with their saved values and `available` (false when the provider lacks it: drawn as a placeholder). |
 | `apply_effect` | Add a filter or overlay effect to a clip's stack (`target` clip id, `effect`, `values`, `index`, `enabled`, `opacity`). Effects run in order on the clip's picture before its grade and placement. Returns the effect's new id and the clip's effects. |
@@ -306,6 +308,7 @@ and every write tool is refused with the reason.
 | `remove_effect` | Take an effect off a clip (`transition` removes an effect transition; an effect clip is deleted with `delete_video_clips`). Returns what was removed and what is left. |
 | `add_video_effect_clip` | Put a generator, title or overlay effect on a video `track` as a clip filling the frame (`start`, `duration` default the effect's own length, `values`, `mode`). Transparent effects show the tracks beneath. Returns the clip id. |
 | `set_video_effect_transition` | Use a transition effect from the effects provider into a `clip` from the one ending where it starts (`duration` centred on the cut, `values`). Needs handles like a crossfade. For a cross dissolve, dip, wipe, push, slide or iris use the built-in `set_video_transition` instead. |
+| `set_video_effect_path` | Give an effect that draws along a path (`describe_effect` `pathControls`) its path, on an effect clip (`instance` "generator") or a clip effect: frame `points` `[x0, y0, …]` (mapped into the picture the effect renders, so a clip effect follows its moved or scaled clip), path data `d` (`""` clears), a clip's `mask` outline, or `text` the provider writes. One undo step. Returns the control and the value it took. |
 | `set_video_effect_keyframes` | Animate one number `control` of a clip effect (or an effect clip's `generator`) with `keys` in clip ms, or `null` to stop animating it. |
 | `list_video_camera_moves` | List the provider's camera moves for a `role` (`transition` into a clip, `hold` across it) with `durationMs` and `cut`. Returns `available: false` without camera moves. Call before `set_clip_camera_move`. |
 | `set_clip_camera_move` | Play a camera move on a clip's picture (`clip`, `role`, `move`, `ms` for a transition, `preset`, `values`, `from` and `framing` as `{ zoom, x, y }`): baked into its transform keys, one per frame, two at a cut. Returns the camera, key counts, `cuts`, `windows` and `notes` (tilt, turn and blur cannot be baked). Refuses a clip keyed by hand. |
@@ -327,6 +330,10 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A video
 | `open_saved_video_document` | Replace the video project with a saved one by `key`. One undo step. Ask before opening over changes the user has not saved. |
 
 ## Pitfalls
+
+- **Path points are frame pixels**, as on the preview: `set_video_effect_path` maps them into the
+  picture the effect renders. Do not pass a clip effect points in its source's pixels yourself, and
+  give it the path again after moving or scaling the clip a lot (it maps the clip's first frame).
 
 - **Camera moves are baked keys.** After trimming or splitting a clip, `check_video_project`
   reports `camera-stale`: set the move again to re-bake it. Editing the clip's x, y, scale or

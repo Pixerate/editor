@@ -53,7 +53,7 @@ describe("ShotLayers (Svelte)", () => {
     render(ShotLayers, { controller: c, shot: "intro" });
     await settle();
     const add = q<HTMLSelectElement>('select[aria-label="Add a layer"]');
-    expect([...add.options].map((o) => o.value)).toEqual(["", ":picture", ":words", "fake.invert", "fake.tint", "fake.gradient", "fake.bar", "fake.badge"]);
+    expect([...add.options].map((o) => o.value)).toEqual(["", ":picture", ":words", "fake.invert", "fake.tint", "fake.gradient", "fake.bar", "fake.badge", "fake.trail", "fake.route"]);
     await change(add, "fake.gradient");
     expect(c.getState().scene.shots[0].layers).toEqual([{ id: "layer1", effect: "fake.gradient", provider: "fake", name: "Gradient" }]);
     expect(q('[data-shot-layer-controls="layer1"]')).not.toBeNull();
