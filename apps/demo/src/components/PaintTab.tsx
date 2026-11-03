@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAgentToolProvider } from '@pixerate/editor-react';
 import { PaintEditor, usePaintDirector, usePaintEditor, usePaintEffectsTools, usePaintProposals } from '@pixerate/editor-react/paint-editor';
 import { createPaintBrushLibraryToolProvider, createPaintEditorToolProvider, createPaintProposalToolProvider } from '@pixerate/editor/paint-editor';
@@ -55,12 +55,24 @@ function PaintView() {
     const ids = new Set(PAINT_SCRIPTS.map((s) => s.id));
     return PAINT_SCRIPTS.filter((s) => (effectsSource === 'flair' ? !ids.has(`${s.id}-flair`) : !s.id.endsWith('-flair')));
   }, [effectsSource]);
+  // Brush colours that come as light / dark pairs (the chalk) resolve for this scheme: it starts
+  // from the system setting, and the toggle above the editor switches it.
+  const [scheme, setScheme] = useState<'light' | 'dark'>(() => (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  useEffect(() => editor.controller.setColorScheme(scheme), [editor.controller, scheme]);
   // Stop the wet-media worker threads when the tab goes away.
   useEffect(() => () => editor.controller.dispose(), [editor.controller]);
 
   return (
     <div className="space-y-4">
       <EditorDocumentAutosave doc={editor.editorDocument} name="Painting" />
+      <div className="flex items-center gap-2 text-xs text-slate-400" role="group" aria-label="Colour scheme">
+        <span>Brush colours for</span>
+        {(['light', 'dark'] as const).map((s) => (
+          <button key={s} type="button" aria-pressed={scheme === s} onClick={() => setScheme(s)} className={`rounded px-2 py-0.5 ${scheme === s ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`}>
+            {s === 'light' ? 'Light mode' : 'Dark mode'}
+          </button>
+        ))}
+      </div>
       <div className="relative">
         {/* The director's presence is the editor's playback cursor too: strokes and panel edits share it. */}
         <PaintEditor controller={editor.controller} height={760} presence={presence} proposals={proposals.store} playback={demoPlayback} />
