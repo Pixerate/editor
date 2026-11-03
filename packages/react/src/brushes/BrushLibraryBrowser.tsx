@@ -1,8 +1,24 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { brushLibraryGroups, type BrushHostProfile, type BrushLibraryEntry } from '@pixerate/editor/brushes';
-import { PixelCanvas } from './shared';
 
 type Pixels = { width: number; height: number; data: Uint8ClampedArray };
+
+/** A thumbnail: RGBA pixels drawn on a canvas, or an image URL (e.g. a brushstroke swatch's data URL). */
+const Thumbnail: React.FC<{ image: Pixels | string | null; label: string; style: React.CSSProperties }> = ({ image, label, style }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || !image || typeof image === 'string' || typeof ctx.createImageData !== 'function') return;
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const img = ctx.createImageData(image.width, image.height);
+    img.data.set(image.data);
+    ctx.putImageData(img, 0, 0);
+  }, [image]);
+  if (typeof image === 'string') return <img src={image} alt={label} className="rounded object-contain" style={style} />;
+  return <canvas ref={ref} role="img" aria-label={label} className="rounded" style={style} width={image?.width} height={image?.height} />;
+};
 
 export interface BrushLibraryBrowserProps {
   /** The library's brushes (built-in presets and saved ones), as facets. */
@@ -12,8 +28,8 @@ export interface BrushLibraryBrowserProps {
   onSelect: (id: string) => void;
   /** Only brushes this host renders. */
   profile?: BrushHostProfile;
-  /** A thumbnail for a brush (a test stroke). */
-  thumbnail?: (id: string) => Pixels | null;
+  /** A thumbnail for a brush (a test stroke): pixels, or an image URL. */
+  thumbnail?: (id: string) => Pixels | string | null | undefined;
   thumbnailWidth?: number;
   thumbnailHeight?: number;
   className?: string;
@@ -42,7 +58,7 @@ export const BrushLibraryBrowser: React.FC<BrushLibraryBrowserProps> = ({ entrie
                     className={`flex flex-col items-start gap-0.5 rounded p-1 text-left ${activeId === e.brush.id ? 'bg-indigo-600/30 ring-1 ring-indigo-500' : 'bg-slate-900 hover:bg-slate-800'}`}
                     onClick={() => onSelect(e.brush.id)}
                   >
-                    {thumbnail && <PixelCanvas pixels={thumbnail(e.brush.id)} label={`${e.brush.name} thumbnail`} className="rounded" style={{ width: '100%', aspectRatio: `${thumbnailWidth} / ${thumbnailHeight}` }} />}
+                    {thumbnail && <Thumbnail image={thumbnail(e.brush.id) ?? null} label={`${e.brush.name} thumbnail`} style={{ width: '100%', aspectRatio: `${thumbnailWidth} / ${thumbnailHeight}` }} />}
                     <span className="truncate text-[10px] text-slate-300">{e.brush.name}</span>
                   </button>
                 ))
