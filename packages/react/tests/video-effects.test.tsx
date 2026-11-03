@@ -125,6 +125,19 @@ describe("effects (React)", () => {
     expect(container.querySelector('[data-effect-thumbnail="fake.whip"]')?.textContent).toBe("Camera");
   });
 
+  it("EffectsBrowser leaves timing effects out unless asked for the timing use, and labels their thumbnails", async () => {
+    const provider = createFakeEffectProvider({ timing: true });
+    act(() => root.render(<EffectsBrowser provider={provider} onPick={vi.fn()} thumbnails={false} />));
+    await flush();
+    const ids = () => [...container.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"));
+    expect(ids()).not.toContain("fake.speed");
+    expect(ids()).toContain("fake.tint");
+    act(() => root.render(<EffectsBrowser provider={provider} uses={["timing"]} onPick={vi.fn()} />));
+    await flush();
+    expect(ids()).toEqual(["fake.speed", "fake.freeze", "fake.echo"]);
+    expect(container.querySelector('[data-effect-thumbnail="fake.echo"]')?.textContent).toBe("Timing");
+  });
+
   it("EffectParameters builds controls from the JSON Schema and reports changes", async () => {
     const provider = createFakeEffectProvider();
     const description = await provider.describe("fake.crossfade");

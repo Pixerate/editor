@@ -12,10 +12,10 @@ export interface EffectThumbnailProps {
 
 /**
  * A preview of an effect drawn by the provider's own renderer (filters on a sample picture,
- * transitions half way, generators mid-way through). Motion effects, camera moves and failures
- * show a label.
+ * transitions half way, generators mid-way through). Motion effects, camera moves, timing
+ * effects and failures show a label.
  */
-const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera' };
+const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing' };
 
 export function EffectThumbnail({ provider, effect, width = 96, height = 54, className = '' }: EffectThumbnailProps) {
   const ref = useRef<HTMLCanvasElement>(null);

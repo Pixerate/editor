@@ -11,7 +11,7 @@
     class?: string;
   }
 
-  const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera' };
+  const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing' };
 
   let { provider, effect: item, width = 96, height = 54, class: className = '' }: Props = $props();
   let canvas = $state<HTMLCanvasElement | null>(null);
@@ -40,7 +40,7 @@
   });
 </script>
 
-<!-- A preview of an effect drawn by the provider's own renderer; motion effects, camera moves and failures show a label. -->
+<!-- A preview of an effect drawn by the provider's own renderer; motion effects, camera moves, timing effects and failures show a label. -->
 <div
   class="relative overflow-hidden rounded border border-border bg-[repeating-conic-gradient(#8884_0_25%,transparent_0_50%)] bg-[length:12px_12px] {className}"
   style="aspect-ratio: {width} / {height}"

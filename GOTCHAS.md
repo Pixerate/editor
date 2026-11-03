@@ -137,9 +137,9 @@ All contributors and AI assistants should check this file before starting work a
 
 ### [core/effects] Effects That Draw No Pixels Must Be Kept Out of Pixel Pickers
 
-- **Issue / Symptom**: A new effect kind that draws no pixels (a `motion` effect, a `camera` move) shows up in editors' effect browsers, `apply_effect` enums and thumbnails, where creating a renderer for it fails ("No preview", or an `unsupported` error after the agent picked it).
+- **Issue / Symptom**: A new effect kind that draws no pixels (a `motion` effect, a `camera` move, a `timing` effect) shows up in editors' effect browsers, `apply_effect` enums and thumbnails, where creating a renderer for it fails ("No preview", or an `unsupported` error after the agent picked it).
 - **Root Cause**: Editors choose effects by `uses`, and each browser and tool used to repeat its own `kind !== 'motion'` check. A camera move whose use was `transition` would have matched every editor that offers transitions.
-- **Solution / Workaround**: Camera effects carry exactly the use `camera` (`checkEffectProvider` enforces it), and every picker calls `effectOffered(effect, uses)` from `@pixerate/editor/effects`, which offers motion and camera effects only where their use is named. A future kind without pixels goes into `effectOffered` and the thumbnails' label map, not into another inline check.
+- **Solution / Workaround**: Camera and timing effects carry exactly the use `camera` or `timing` (`checkEffectProvider` enforces it), and every picker calls `effectOffered(effect, uses)` from `@pixerate/editor/effects`, which offers motion, camera and timing effects only where their use is named. A future kind without pixels goes into `effectOffered` and the thumbnails' label map, not into another inline check.
 
 ### [core/selection] GrabCut From a Click Selected the Whole Image; Its Seeds Decide What It Finds
 

@@ -5,7 +5,7 @@
  */
 
 import { isEffectError } from './errors.js';
-import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf } from './helpers.js';
+import { createEffectPixels, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf, timingSampleProblems } from './helpers.js';
 import { checkEffectSequence, effectSequenceSlots, isSubjectTemplateSlot, templateValueProblem } from './templates.js';
 import {
 	CAMERA_MOVE_ROLES,
@@ -18,7 +18,8 @@ import {
 	type EffectPixels,
 	type EffectProvider,
 	type EffectSummary,
-	type EffectTemplateSlot
+	type EffectTemplateSlot,
+	type TimingSampleRequest
 } from './types.js';
 
 export interface EffectConformanceIssue {
@@ -80,6 +81,10 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 		if (e.uses?.includes('camera')) at('only camera effects may have the use "camera"');
 		if (e.camera !== undefined) at('only camera effects may have camera');
 	}
+	if (e.kind === 'timing') {
+		if (e.uses?.length !== 1 || e.uses[0] !== 'timing') at('a timing effect must have exactly the use "timing"');
+		if (e.duration !== undefined) at('a timing effect has no duration: its length depends on its footage (timingLength)');
+	} else if (e.uses?.includes('timing')) at('only timing effects may have the use "timing"');
 }
 
 function checkDescription(id: string, d: EffectDescription, issues: EffectConformanceIssue[]) {
@@ -126,8 +131,8 @@ async function checkRender(provider: EffectProvider, d: EffectDescription, size:
 	try {
 		renderer = await provider.createRenderer(d.id, { width: size, height: size });
 	} catch (e) {
-		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG); a camera move has none.
-		if (!((d.kind === 'vector' || d.kind === 'camera') && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
+		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG); camera and timing effects have none.
+		if (!((d.kind === 'vector' || d.kind === 'camera' || d.kind === 'timing') && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
 		else if (!(e instanceof Error && e.message.trim())) at('createRenderer refused without saying why');
 		return;
 	}
@@ -195,7 +200,56 @@ async function checkCamera(provider: EffectProvider, d: EffectDescription, issue
 	}
 }
 
-/** Runs the contract checks against `provider` and returns every issue found (empty when it conforms). */
+/** Probe footage: three seconds at the default rate, then a second at 24 fps. */
+const FOOTAGE: readonly { footage: number; fps?: number }[] = [{ footage: 3000 }, { footage: 1000, fps: 24 }];
+
+/** True for a Promise or other thenable (timing methods must be synchronous). */
+const isPromise = (v: unknown) => !!v && typeof (v as { then?: unknown }).then === 'function';
+
+async function checkTiming(provider: EffectProvider, d: EffectDescription, issues: EffectConformanceIssue[]) {
+	const at = (message: string) => issues.push({ effectId: d.id, message });
+	if (d.inputs.length) at('a timing effect takes no inputs: the host decodes its footage');
+	for (const probe of FOOTAGE) {
+		const fpsText = probe.fps ? ` at ${probe.fps} fps` : '';
+		let length: number;
+		try {
+			length = provider.timingLength!(d.id, probe.footage);
+			if (isPromise(length)) return at('timingLength must be synchronous; it returned a Promise');
+			if (!(typeof length === 'number' && Number.isFinite(length) && length > 0)) {
+				at(`timingLength for ${probe.footage} ms of footage is ${String(length)}; it must be a number of ms > 0`);
+				continue;
+			}
+			if (provider.timingLength!(d.id, probe.footage) !== length) at(`timingLength is not pure: two calls for ${probe.footage} ms gave different lengths`);
+		} catch (e) {
+			at(`timingLength for ${probe.footage} ms of footage failed: ${codeOf(e)}`);
+			continue;
+		}
+		for (const share of [0, 0.25, 0.5, 0.75, 1]) {
+			const request: TimingSampleRequest = { time: share * length, ...probe };
+			try {
+				const sample = provider.timingSample!(d.id, request);
+				if (isPromise(sample)) return at('timingSample must be synchronous; it returned a Promise');
+				const problems = timingSampleProblems(sample, request);
+				for (const p of problems) at(`timingSample at ${+request.time.toFixed(3)} ms of ${probe.footage} ms footage${fpsText}: ${p}`);
+				if (!problems.length && JSON.stringify(provider.timingSample!(d.id, request)) !== JSON.stringify(sample)) at(`timingSample is not pure: two calls at ${+request.time.toFixed(3)} ms gave different samples`);
+			} catch (e) {
+				at(`timingSample at ${+request.time.toFixed(3)} ms of ${probe.footage} ms footage${fpsText} failed: ${codeOf(e)}`);
+			}
+		}
+	}
+	const request = { time: 0, footage: 1000 };
+	const badLength = await rejectsWith('invalid_values', () => provider.timingLength!(d.id, 1000, { __not_a_control__: 1 }));
+	if (badLength) at(`timingLength with an unknown control ${badLength}`);
+	const badSample = await rejectsWith('invalid_values', () => provider.timingSample!(d.id, request, { __not_a_control__: 1 }));
+	if (badSample) at(`timingSample with an unknown control ${badSample}`);
+	const noFootage = await rejectsWith('unsupported', () => provider.timingLength!(d.id, 0));
+	if (noFootage) at(`timingLength of 0 ms of footage ${noFootage}`);
+	const badFps = await rejectsWith('unsupported', () => provider.timingSample!(d.id, { ...request, fps: 0 }));
+	if (badFps) at(`timingSample at 0 fps ${badFps}`);
+	const badTime = await rejectsWith('unsupported', () => provider.timingSample!(d.id, { ...request, time: Number.NaN }));
+	if (badTime) at(`timingSample at time NaN ${badTime}`);
+}
+
 /** A value of the wrong type for a slot, to probe that `instantiateTemplate` refuses it. */
 const wrongValue = (slot: EffectTemplateSlot): unknown => (slot.type === 'number' ? 'not a number' : slot.type === 'text' ? 42 : slot.type === 'color' ? 'blue' : 42);
 
@@ -281,6 +335,7 @@ async function checkTemplates(provider: EffectProvider, list: readonly EffectSum
 	}
 }
 
+/** Runs the contract checks against `provider` and returns every issue found (empty when it conforms). */
 export async function checkEffectProvider(provider: EffectProvider, options: EffectConformanceOptions = {}): Promise<EffectConformanceIssue[]> {
 	const issues: EffectConformanceIssue[] = [];
 	const top = (message: string) => issues.push({ message });
@@ -295,6 +350,8 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (caps?.supportsCamera !== undefined && typeof caps.supportsCamera !== 'boolean') top('capabilities.supportsCamera is not a boolean');
 	if (caps?.supportsCamera && typeof provider.cameraView !== 'function') top('supportsCamera is set but cameraView is missing');
 	if (provider.sampleCameraMove && typeof provider.cameraView !== 'function') top('sampleCameraMove is present but cameraView is missing');
+	if (caps?.supportsTiming !== undefined && typeof caps.supportsTiming !== 'boolean') top('capabilities.supportsTiming is not a boolean');
+	for (const m of ['timingLength', 'timingSample'] as const) if (caps?.supportsTiming && typeof provider[m] !== 'function') top(`supportsTiming is set but ${m} is missing`);
 	if (caps?.supportsTemplates !== undefined && typeof caps.supportsTemplates !== 'boolean') top('capabilities.supportsTemplates is not a boolean');
 	const templateMethods = ['listTemplates', 'describeTemplate', 'instantiateTemplate'] as const;
 	if (caps?.supportsTemplates) for (const m of templateMethods) if (typeof provider[m] !== 'function') top(`supportsTemplates is set but ${m} is missing`);
@@ -308,6 +365,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		checkSummary(e, issues);
 	}
 	if (!caps?.supportsCamera && list.some((e) => e.kind === 'camera')) top('the catalog lists camera effects but capabilities.supportsCamera is not set');
+	if (!caps?.supportsTiming && list.some((e) => e.kind === 'timing')) top('the catalog lists timing effects but capabilities.supportsTiming is not set');
 	const all = await provider.search('');
 	if (all.length !== list.length) top(`search("") returned ${all.length} effects, list() ${list.length}`);
 	const firstUse = list[0]?.uses[0];
@@ -327,6 +385,21 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		const wrongKind = notCamera && (await rejectsWith('unsupported', () => provider.cameraView!(notCamera.id, probe)));
 		if (wrongKind) issues.push({ effectId: notCamera!.id, message: `cameraView of a ${notCamera!.kind} effect ${wrongKind}` });
 	}
+	const timing = caps?.supportsTiming && provider.timingLength && provider.timingSample;
+	if (timing) {
+		const request = { time: 0, footage: 1000 };
+		const unknownLength = await rejectsWith('unknown_effect', () => provider.timingLength!('__no_such_effect__', 1000));
+		if (unknownLength) top(`timingLength of an unknown id ${unknownLength}`);
+		const unknownSample = await rejectsWith('unknown_effect', () => provider.timingSample!('__no_such_effect__', request));
+		if (unknownSample) top(`timingSample of an unknown id ${unknownSample}`);
+		const notTiming = list.find((e) => e.kind !== 'timing');
+		if (notTiming) {
+			const wrongLength = await rejectsWith('unsupported', () => provider.timingLength!(notTiming.id, 1000));
+			if (wrongLength) issues.push({ effectId: notTiming.id, message: `timingLength of a ${notTiming.kind} effect ${wrongLength}` });
+			const wrongSample = await rejectsWith('unsupported', () => provider.timingSample!(notTiming.id, request));
+			if (wrongSample) issues.push({ effectId: notTiming.id, message: `timingSample of a ${notTiming.kind} effect ${wrongSample}` });
+		}
+	}
 
 	const size = options.size ?? 8;
 	for (const id of options.ids ?? [...ids]) {
@@ -340,6 +413,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		checkDescription(id, d, issues);
 		if (options.render !== false && d.kind !== 'motion') await checkRender(provider, d, size, issues);
 		if (d.kind === 'camera' && d.camera && caps.supportsCamera && provider.cameraView) await checkCamera(provider, d, issues);
+		if (d.kind === 'timing' && timing) await checkTiming(provider, d, issues);
 		if ((d.kind === 'vector' || d.kind === 'motion') && caps.supportsVector && provider.applyVectorEffect) {
 			try {
 				const m = await provider.applyVectorEffect(id, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect id="r" width="10" height="10"/></svg>');
@@ -356,7 +430,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 
 	if (caps?.supportsAuthoring && options.authoring !== false && typeof provider.openAuthoring === 'function') {
 		const targetEffect = (await Promise.all((options.ids ?? [...ids]).map((id) => provider.describe(id)))).find(
-			(d) => d.kind !== 'motion' && d.kind !== 'vector' && d.kind !== 'camera'
+			(d) => d.kind !== 'motion' && d.kind !== 'vector' && d.kind !== 'camera' && d.kind !== 'timing'
 		);
 		if (targetEffect) {
 			try {

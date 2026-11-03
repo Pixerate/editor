@@ -132,6 +132,19 @@ describe("effects (Svelte)", () => {
     expect(target.querySelector('[data-effect-thumbnail="fake.whip"]')?.textContent?.trim()).toBe("Camera");
   });
 
+  it("EffectsBrowser leaves timing effects out unless asked for the timing use, and labels their thumbnails", async () => {
+    const provider = createFakeEffectProvider({ timing: true });
+    render(EffectsBrowser, { provider, onpick: vi.fn(), thumbnails: false });
+    await flush();
+    const ids = () => [...target.querySelectorAll("[data-effect-id]")].map((b) => b.getAttribute("data-effect-id"));
+    expect(ids()).not.toContain("fake.speed");
+    expect(ids()).toContain("fake.tint");
+    render(EffectsBrowser, { provider, uses: ["timing"], onpick: vi.fn() });
+    await flush();
+    expect(ids()).toEqual(["fake.speed", "fake.freeze", "fake.echo"]);
+    expect(target.querySelector('[data-effect-thumbnail="fake.echo"]')?.textContent?.trim()).toBe("Timing");
+  });
+
   it("EffectParameters builds controls from the JSON Schema and reports changes", async () => {
     const provider = createFakeEffectProvider();
     const onchange = vi.fn();

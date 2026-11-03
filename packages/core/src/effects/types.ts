@@ -13,9 +13,10 @@ import type { EffectAuthoringSession, EffectAuthoringSource } from './authoring.
 
 /**
  * How an effect is drawn: a pixel shader, an animated vector picture, motion applied to someone
- * else's vector art, or a camera move, which moves a scene's camera and draws no pixels.
+ * else's vector art, a camera move, which moves a scene's camera and draws no pixels, or a
+ * timing effect, which retimes video footage and draws no pixels of its own.
  */
-export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera';
+export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera' | 'timing';
 
 /**
  * What an effect is for. An effect may have several uses.
@@ -29,11 +30,13 @@ export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera';
  * - `interactive`: reacts to pointer, scroll or audio input at run time.
  * - `camera`: moves a scene's camera (`cameraView`). Only `camera` effects have it, and they have
  *   no other use, so editors that draw pixels never offer them.
+ * - `timing`: retimes video footage (`timingSample`): slow motion, a reverse, a freeze, a long
+ *   exposure. Only `timing` effects have it, and they have no other use.
  */
-export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive' | 'camera';
+export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive' | 'camera' | 'timing';
 
-export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion', 'camera'];
-export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive', 'camera'];
+export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion', 'camera', 'timing'];
+export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive', 'camera', 'timing'];
 
 /**
  * What a camera move does to a shot.
@@ -74,7 +77,10 @@ export interface EffectSummary {
 	transparent: boolean;
 	/** True when the effect loops; its `duration` is then one cycle. */
 	loop: boolean;
-	/** Length of one play (ms). Absent for effects that do not change over time. */
+	/**
+	 * Length of one play (ms). Absent for effects that do not change over time, and for `timing`
+	 * effects, whose length depends on their footage (`timingLength`).
+	 */
 	duration?: number;
 	/**
 	 * The control (a number from 0 to 1) setting how opaque the effect's own background is: at 0
@@ -332,6 +338,71 @@ export interface CameraMoveSample {
 }
 
 // ---------------------------------------------------------------------------
+// Timing effects
+// ---------------------------------------------------------------------------
+
+/** The frame rate footage is taken to have when a timing request does not say. */
+export const TIMING_DEFAULT_FPS = 30;
+
+/** Most footage frames one retimed frame blends (`TimingSample.frames`). */
+export const TIMING_MAX_FRAMES = 128;
+
+/** Highest footage frame rate a timing request may give. */
+export const TIMING_MAX_FPS = 240;
+
+/**
+ * How a retimed frame's footage frames combine (straight-alpha RGBA in, straight alpha out;
+ * `blendTimingFrames` is the reference):
+ *
+ * - `average`: the weighted mean in premultiplied alpha, so transparent edges do not darken.
+ *   Colour is Σ(c·a·w) / Σ(a·w) and alpha Σ(a·w) / Σw, with `a` the frame's alpha (0–1).
+ * - `lighten`: each channel's brightest. Every frame is first scaled by `weight / maxWeight`
+ *   (`k`): colour by `a·k`, alpha by `k`. The result keeps the largest scaled colour and the
+ *   largest scaled alpha, and its colour is not divided back up by its alpha, so a faded trail
+ *   stays dimmer.
+ *
+ * A single frame is shown as it is either way.
+ */
+export type TimingBlend = 'average' | 'lighten';
+
+export const TIMING_BLENDS: readonly TimingBlend[] = ['average', 'lighten'];
+
+/** Where a retimed frame is: what `timingSample` takes. */
+export interface TimingSampleRequest {
+	/** Ms into the retimed clip (any finite number; frames are held within the footage). */
+	time: number;
+	/** Length of the footage (ms); > 0. */
+	footage: number;
+	/** Footage frames per second, > 0 and at most `TIMING_MAX_FPS`. Default `TIMING_DEFAULT_FPS`. */
+	fps?: number;
+}
+
+/** One footage frame of a retimed frame. */
+export interface TimingFrame {
+	/** Footage time (ms): the start of a frame, `index * 1000 / fps`. */
+	time: number;
+	/** Share of the blend, > 0; a sample's weights add up to 1. */
+	weight: number;
+}
+
+/**
+ * The footage frames one retimed frame is made of, and how to blend them. The host decodes the
+ * frames from its own footage and blends them (`blendTimingFrames` does it for `EffectPixels`).
+ *
+ * - Each `time` is a footage frame's start, `index * 1000 / fps` with a whole `index` from 0 to
+ *   the footage's last frame (`ceil(footage * fps / 1000) - 1`): a time before the footage is held
+ *   on its first frame and one after it on its last.
+ * - Times are distinct (frames that land on the same footage frame are merged, their weights
+ *   added), sorted earliest first, and at most `TIMING_MAX_FRAMES` (spaced evenly when an effect
+ *   wants more).
+ * - Weights are > 0 and add up to 1.
+ */
+export interface TimingSample {
+	frames: readonly TimingFrame[];
+	blend: TimingBlend;
+}
+
+// ---------------------------------------------------------------------------
 // Sequences and templates
 // ---------------------------------------------------------------------------
 
@@ -567,6 +638,8 @@ export interface EffectProviderCapabilities {
 	supportsAuthoring?: boolean;
 	/** Lists `camera` effects and implements `cameraView` (and maybe `sampleCameraMove`). */
 	supportsCamera?: boolean;
+	/** Lists `timing` effects and implements `timingLength` and `timingSample`. */
+	supportsTiming?: boolean;
 	/** Implements `listTemplates`, `describeTemplate` and `instantiateTemplate`. */
 	supportsTemplates?: boolean;
 }
@@ -592,7 +665,8 @@ export interface EffectProvider {
 	describe(id: string): MaybePromise<EffectDescription>;
 	/**
 	 * A pixel renderer. A `vector` effect may refuse with `EffectUnsupportedError` where it cannot
-	 * lay out SVG (a Worker); a `camera` effect draws no pixels and may refuse with one saying so.
+	 * lay out SVG (a Worker); `camera` and `timing` effects draw no pixels of their own and may
+	 * refuse with one saying so.
 	 */
 	createRenderer(id: string, options: EffectRendererOptions): MaybePromise<EffectRenderer>;
 	/**
@@ -626,6 +700,23 @@ export interface EffectProvider {
 	 * `sampleEffectCameraMove` falls back to `cameraView` per frame. Errors as for `cameraView`.
 	 */
 	sampleCameraMove?(id: string, request: CameraMoveSampleRequest): MaybePromise<CameraMoveSample>;
+	/**
+	 * Ms a timing effect's retimed clip lasts for footage `footageMs` long (a speed change stretches
+	 * or squeezes it, a freeze adds its hold, a boomerang goes there and back); > 0. Present when
+	 * `capabilities.supportsTiming`. Synchronous and pure. Unknown ids throw `UnknownEffectError`,
+	 * invalid values `EffectControlError`, and an effect that is not a timing effect (or a footage
+	 * length that is not a number of ms > 0) `EffectUnsupportedError`, each with a sentence naming
+	 * what is valid.
+	 */
+	timingLength?(id: string, footageMs: number, values?: EffectValues): number;
+	/**
+	 * The footage frames retimed frame `request.time` shows and how to blend them (see
+	 * `TimingSample` for exactly what it holds). Present when `capabilities.supportsTiming`.
+	 * Synchronous and pure: a frame can be drawn on its own, in any order, and the same id,
+	 * request and values always give the same sample. Errors as for `timingLength`; a time that is
+	 * not finite or an `fps` outside 0–`TIMING_MAX_FPS` also throw `EffectUnsupportedError`.
+	 */
+	timingSample?(id: string, request: TimingSampleRequest, values?: EffectValues): TimingSample;
 	/** Sequence templates, best match first. Present when `capabilities.supportsTemplates`. */
 	listTemplates?(options?: EffectTemplateSearchOptions): MaybePromise<readonly EffectTemplateSummary[]>;
 	/** A template with its slots. Unknown ids throw `UnknownTemplateError`. */
