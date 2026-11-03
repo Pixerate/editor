@@ -39,6 +39,7 @@ import {
 } from '../src/commands';
 import { ImageEditorController, createImageEditorDocument, createImageEditorToolProvider, createImageEffectsToolProvider, createImageSegmentationToolProvider } from '../src/image-editor';
 import { createStickerToolProvider, editorStickers } from '../src/stickers';
+import { createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { createCanvasStickerHost } from '../src/canvas';
 import { PaintEditorController, createPaintEditorDocument, createPaintEditorToolProvider, createPaintEffectsToolProvider } from '../src/paint-editor';
 import { createGenerationToolProvider, createGenerationHistoryToolProvider, createGenerationRecordStore } from '../src/generation';
@@ -181,6 +182,7 @@ function expectedBySkill(): Record<string, string[]> {
 		'pixerate-bgm-alignment': toolNames(createVideoMusicToolProvider(new VideoEditorController(), { id: 'video-music' })),
 		// Workflow skills own no provider (see WORKFLOWS); they have no tool table.
 		'pixerate-image-selection-masking': [],
+		'pixerate-brushes-design': [],
 		'pixerate-spreadsheet-clean-import': [],
 		'pixerate-image-photo-correction': [],
 		'pixerate-image-product-photo': [],
@@ -236,7 +238,9 @@ function expectedBySkill(): Record<string, string[]> {
 		})(),
 		'pixerate-color': [...toolNames(createColorToolProvider()), ...toolNames(createGradientToolProvider(new GradientController()))],
 		'pixerate-typography': [...toolNames(createTypographyToolProvider()), ...toolNames(createFontPickerToolProvider(new FontPickerModel()))],
-		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) }))
+		'pixerate-stickers': toolNames(createStickerToolProvider({ provider: () => editorStickers(), insert: createCanvasStickerHost({ getNodes: () => [], setNodes: () => {} }) })),
+		// preview_brush registers only with a host renderer.
+		'pixerate-brushes': toolNames(createBrushLibraryToolProvider(createBrushLibrary(), { renderPreview: () => ({ data: '', mimeType: 'image/png' }) }))
 	};
 	doc.destroy();
 	return result;
@@ -291,6 +295,7 @@ const FACTORIES: Record<string, string> = {
 	createGenerationHistoryToolProvider: 'pixerate-generation',
 	createParameterCommands: 'pixerate-parameters',
 	createStickerToolProvider: 'pixerate-stickers',
+	createBrushLibraryToolProvider: 'pixerate-brushes',
 	createColorToolProvider: 'pixerate-color',
 	createGradientToolProvider: 'pixerate-color',
 	createTypographyToolProvider: 'pixerate-typography',
@@ -319,6 +324,7 @@ const WORKFLOWS: Record<string, string> = {
 	'pixerate-vector-icon-set': 'pixerate-vector',
 	'pixerate-vector-logo': 'pixerate-vector',
 	'pixerate-vector-illustration': 'pixerate-vector',
+	'pixerate-brushes-design': 'pixerate-brushes',
 	'pixerate-paint-watercolour': 'pixerate-paint-editor',
 	'pixerate-paint-oil-impasto': 'pixerate-paint-editor',
 	'pixerate-paint-sketch-to-finish': 'pixerate-paint-editor',

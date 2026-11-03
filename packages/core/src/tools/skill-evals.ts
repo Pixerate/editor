@@ -23,7 +23,7 @@ export interface SkillEvalCheck extends SkillEvalToolCall {
 
 export interface SkillEval {
 	prompt: string;
-	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture | CanvasEvalFixture;
+	fixture: SpreadsheetEvalFixture | ImageEvalFixture | VectorEvalFixture | PaintEvalFixture | VideoEvalFixture | ChartEvalFixture | DiagramEvalFixture | RichTextEvalFixture | AnimationEvalFixture | GenerationEvalFixture | EffectEvalFixture | CanvasEvalFixture | BrushesEvalFixture;
 	checks: SkillEvalCheck[];
 	solution: SkillEvalToolCall[];
 }
@@ -115,6 +115,14 @@ export interface CanvasEvalFixture {
 	/** The starting nodes (React Flow style: `id`, `type`, `position`, `width`, `height`, `data`, `parentId`). */
 	nodes: Array<Record<string, unknown>>;
 	/** Tool calls that prepare the canvas (components, instances), run in order. */
+	setup?: SkillEvalToolCall[];
+}
+
+export interface BrushesEvalFixture {
+	editor: 'brushes';
+	/** The host profile the brush library tools run for: paint (default), image, canvas or vector. */
+	host?: 'paint' | 'image' | 'canvas' | 'vector';
+	/** Tool calls that prepare the library (saved or imported brushes), run in order. */
 	setup?: SkillEvalToolCall[];
 }
 

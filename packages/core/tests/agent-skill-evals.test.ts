@@ -34,8 +34,10 @@ import {
 	type AnimationEvalFixture as AnimationFixture,
 	type GenerationEvalFixture as GenerationFixture,
 	type EffectEvalFixture as EffectFixture,
-	type CanvasEvalFixture as CanvasFixture
+	type CanvasEvalFixture as CanvasFixture,
+	type BrushesEvalFixture as BrushesFixture
 } from '../src/tools';
+import { BRUSH_HOST_PROFILES, createBrushLibrary, createBrushLibraryToolProvider } from '../src/brushes';
 import { ImageEditorController, createImageEditorToolProvider } from '../src/image-editor';
 import { CommandRegistry, createCommandToolProvider } from '../src/commands';
 import { VectorEditorController, createVectorCommands } from '../src/vector';
@@ -203,7 +205,15 @@ async function canvas(f: CanvasFixture): Promise<ToolRegistry> {
 	return registry;
 }
 
-const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect, canvas } as const;
+/** The brush library tools for a host, over a library on the memory adapter. */
+async function brushes(f: BrushesFixture): Promise<ToolRegistry> {
+	const registry = new ToolRegistry();
+	registry.register(createBrushLibraryToolProvider(createBrushLibrary({ storage: createMemoryStorage() }), { profile: BRUSH_HOST_PROFILES[f.host ?? 'paint'] }));
+	for (const step of f.setup ?? []) await call(registry, step);
+	return registry;
+}
+
+const FIXTURES = { spreadsheet, image, vector, paint, video, chart, diagram, 'rich-text': richText, animation, generation, effect, canvas, brushes } as const;
 const build = async (fixture: SkillEval['fixture']): Promise<ToolRegistry> => FIXTURES[fixture.editor](fixture as never);
 
 /** Read-only tools, and `run_command` with a read-only command (`vector.list`), may check. */

@@ -1,0 +1,104 @@
+---
+name: pixerate-brushes
+description: How to find, describe, create, change, check and share brushes in the Pixerate brush library through list_brush_presets, describe_brush, create_brush, update_brush, duplicate_brush, remove_brush, check_brush, export_brushes, import_brushes and preview_brush - brushes made of facets (kind, medium and variety or tool, tip, marks, dynamics, behaviour, light, motion, colour), the built-in presets, and the host profiles that say what the paint editor, image editor, canvas and vector strokes can render. Use when asked to make, design, tweak, save, copy, delete, export, import or check a brush, find a brush for a medium (pencil, ink, watercolour, oil, airbrush, highlighter), or make a brush work in another editor.
+---
+
+# Brushes
+
+A brush is made of **facets** that say what it is and how it behaves, not which engine draws it.
+Only `id`, `name`, `kind` and `tip.shape` are required; every other field takes the default of
+the engine the facets pick, so a brush stores only what makes it what it is. The library holds the
+built-in presets (read-only) and the user's brushes, shared by every editor that paints.
+
+| Facet (field) | What it holds |
+| --- | --- |
+| Kind | `mark` lays a material; `tool` works on paint already down. |
+| Medium and variety | Marks: what it lays (`paint`, `ink`, `dry`, `spray`) and what kind (`oil`, `watercolor`, `gouache`, `pencil`, `charcoal`, `airbrush`, `marker`, `highlighter`…). Descriptive, for finding brushes; a wet brush whose variety is `watercolor`, `gouache` or `oil` paints that medium. |
+| Tool | Tools: `eraser`, `blender`, `smudge`, and on wet paint `water`, `dryer`, `blow`, `blot`, `wet-blend`, `wet-drag`. |
+| Tip | `shape` (`round`, `flat`, `chisel` are ellipses set by `roundness` and `angle`; `bristle` has a tuft; `stamp` lays stickers), size in px, hardness, spacing, opacity, flow, blend mode. |
+| Marks | `continuous` dabs (default), `particles` (strands, springs, ribbons, sparks) or `objects` (each mark an editable sticker). |
+| Dynamics | Pen feel: pressure to size and opacity, smoothing, tilt, velocity, jitter, rotation. |
+| Behaviour | `surface` `dry`, `wet` (`wet` settings) or `thick` (`thick` impasto settings); paper `grain`; `exchange` (pick-up and mix; a `reservoir` makes a Mixer Brush); tool `strength`. |
+| Light | Light the brush gives off (`amount`), plus suggested layer `spill` and `glow`. |
+| Motion | Animation after painting (live effect paint, particle `waveSpeed`). |
+| Colour | A `default` colour, a `palette` of up to 16, `own` (always its own colour). A gradient default is always painted; a solid one is a suggestion. |
+
+How media map to facets: a **pencil** or **charcoal** is `dry` with high `grain` and tilt;
+**ink** is a hard round tip with pressure to size (a pen thins with velocity); **watercolour**
+and **wet oil** are `paint` on `surface: 'wet'`; **impasto** is `surface: 'thick'`; an
+**airbrush** is `spray`, soft and low flow; a **highlighter** is `ink` / `highlighter`, a
+multiply chisel tip with a little light and `spill` radius 0; **particle** and **sticker**
+brushes are `marks` particles or objects on a `stamp` tip.
+
+## Host profiles
+
+Each host renders a part of this. `check_brush` says what a host refuses (errors) and what it
+paints without (warnings), each with a fix; lists and writes use the current host.
+
+| Host | Renders |
+| --- | --- |
+| Paint editor (`paint`) | Everything. |
+| Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, light or motion. |
+| Canvas (`canvas`) | Dry dab brushes along a path (no tools, wet, thick, particles, objects or light); velocity is ignored. |
+| Vector strokes (`vector`) | As canvas, but light brushes paint as plain colour. |
+
+## Working method
+
+1. **Find the nearest brush.** `list_brush_presets` with `medium`, `variety`, `kind` or `text`.
+   It lists only what this host can render (`all: true` lists the rest with `renderable`).
+2. **Read it.** `describe_brush` for the full spec, the engine it resolves to and its check.
+3. **Make a brush.** `create_brush` with a new `id`, a `name`, `basedOn` the nearest preset and
+   only the facets that change (objects merge; lists replace). Read `problems` (values clamped or
+   dropped) and `warnings`. A brush the host can't render is refused and nothing is saved.
+4. **Look at it.** `preview_brush` when the host has a renderer; otherwise paint a test stroke
+   in the editor (`set_brush` with the new id, then `paint_stroke`).
+5. **Tune it.** `update_brush` with the facets to change, or `unset` to drop whole facets. It
+   returns the leaf paths `changed`. Built-in presets can't be changed: `duplicate_brush` first.
+6. **Share it.** `export_brushes` writes a library file; `import_brushes` adds one (version 1
+   files of the paint editor's older brushes are migrated). `check_brush` with `host` before
+   handing a brush to another editor.
+
+## Best practices
+
+- Start from the nearest preset and change two or three facets; a brush from nothing gets
+  engine defaults that rarely suit a medium.
+- Test on the paper and colour the brush will be used on: grain response and glazes look
+  different on smooth and rough paper.
+- Give light brushes dark paper, and give highlighters a `light.spill` radius of 0 so the
+  glow stays on the stroke.
+- Keep `variety` truthful (it is how people find the brush) and add `tags` for the job
+  (`lettering`, `foliage`).
+- Use `colour.palette` for suggested colours and `colour.own` only for brushes that must
+  always paint their own (a rainbow marker).
+
+## Pitfalls
+
+- **A facet the host refuses.** `create_brush` and `update_brush` refuse it with the facet and
+  fix; `check_brush` returns `degraded`, the brush with those facets stripped, to start from.
+- **Ids.** Built-in ids can't be reused or changed; a taken id is refused (update it instead).
+- **Stamps.** Particle marks lay only the editor's stamps (`editor:star`…); sticker (`objects`)
+  marks take any sticker ref from `find_stickers`.
+- **Out-of-range values** are refused by the schema (`tip.size` is 1..2500 px); a stored brush
+  is clamped on import and reported in `problems`.
+- **The paint editor's own brush tools** (`set_brush`, `save_brush`, its `export_brushes`)
+  still work on its brushes; this library's tools are namespaced apart.
+
+## Workflow skills
+
+- `pixerate-brushes-design`: from a description ("a soft pink highlighter", "chalk for the
+  canvas") to a saved, checked brush.
+
+## Tool reference
+
+| Tool | Use |
+| --- | --- |
+| `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, engine, tip, size, marks, surface, light) and `total`. Call first. |
+| `describe_brush` | One brush by `id`: its full facet `brush`, `builtin`, `engine`, `category` and `check` for this host. Unknown ids are refused with the closest ones. |
+| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets. Normalised and checked for this host; refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
+| `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes the host can't render. Returns `brush`, `changed` paths, `problems`, `warnings`. |
+| `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |
+| `remove_brush` | Delete a saved brush for good (export it first to keep a copy). Built-ins are refused. Returns `removed`. |
+| `check_brush` | Check a brush (`id`, or an unsaved `brush` spec) for a `host` (paint, image, canvas, vector). Returns `ok`, `issues` (facet, severity, reason, fix) and, when refused, `degraded`. |
+| `export_brushes` | Library file (pixerate-brushes v2) of the saved brushes or the `ids` given. Returns `file`, for `import_brushes`. |
+| `import_brushes` | Add a library `file` (v2, v1 migrated, or a bare list): built-in ids and taken ids are skipped unless `overwrite`. Returns `added`, `replaced`, `skipped`, `problems`. |
+| `preview_brush` | Only when the host renders previews: a sample stroke with a brush (`id`, `width`, `height`, `color`) as an image. |

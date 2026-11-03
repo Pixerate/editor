@@ -1,0 +1,15 @@
+{
+	"prompt": "Make me a pink highlighter brush, saved as pink-highlighter, that behaves like the built-in highlighter but starts out pink.",
+	"fixture": { "editor": "brushes" },
+	"checks": [
+		{ "why": "a saved brush, not a built-in", "tool": "describe_brush", "args": { "id": "pink-highlighter" }, "expect": { "builtin": false, "check": { "ok": true } } },
+		{ "why": "still a highlighter: multiply chisel ink with no spill", "tool": "describe_brush", "args": { "id": "pink-highlighter" }, "expect": { "brush": { "medium": "ink", "variety": "highlighter", "tip": { "shape": "chisel", "blend": "multiply" }, "light": { "spill": { "radius": 0 } } } } },
+		{ "why": "it starts out pink", "tool": "describe_brush", "args": { "id": "pink-highlighter" }, "expect": { "brush": { "colour": { "default": { "$expr": "(([r, g, b]) => r > 200 && b > 120 && g < r - 60)([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))" } } } } },
+		{ "why": "the built-in highlighter is untouched", "tool": "describe_brush", "args": { "id": "highlighter" }, "expect": { "brush": { "colour": { "default": "#fff200" } } } }
+	],
+	"solution": [
+		{ "tool": "list_brush_presets", "args": { "variety": "highlighter" } },
+		{ "tool": "create_brush", "args": { "id": "pink-highlighter", "name": "Pink highlighter", "basedOn": "highlighter", "colour": { "default": "#ff6ec7" } } },
+		{ "tool": "check_brush", "args": { "id": "pink-highlighter" } }
+	]
+}
