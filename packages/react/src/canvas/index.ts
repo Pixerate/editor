@@ -742,3 +742,33 @@ export { MermaidThumbnail, type MermaidThumbnailProps } from './MermaidThumbnail
 export { useDiagramDirector, usePresenceState, type UseDiagramDirectorOptions } from './useDiagramDirector.js';
 export { DiagramPresenceLayer, type DiagramPresenceLayerProps } from './DiagramPresenceLayer.js';
 export * from './CanvasEffects';
+
+// Agent proposals (ghost nodes the user accepts or rejects), the canvas change feed and their agent tools
+export {
+	useCanvasProposals,
+	useCanvasChangeFeed,
+	type UseCanvasProposalsOptions,
+	type CanvasProposalsHandle,
+	type UseCanvasChangeFeedOptions
+} from './useCanvasProposals.js';
+
+export {
+	CANVAS_PROPOSAL_CLASS,
+	createCanvasProposals,
+	createCanvasChangeFeed,
+	createCanvasProposalToolProvider,
+	type CanvasProposal,
+	type CanvasProposals,
+	type CanvasProposalsOptions,
+	type CanvasProposalsState,
+	type CanvasProposalInput,
+	type CanvasProposalNodeInput,
+	type CanvasProposalEdgeInput,
+	type CanvasProposalAcceptResult,
+	type CanvasProposalToolProviderOptions,
+	type CanvasChange,
+	type CanvasChangeFeed,
+	type CanvasChangeFeedOptions,
+	type CanvasNodeChange,
+	type CanvasEdgeChange
+} from '@pixerate/editor/canvas';

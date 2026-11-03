@@ -45,7 +45,7 @@ import { TokenStore, createTokensEditorDocument, createTokensStyleToolProvider, 
 import { createSpreadsheetEditorDocument } from '../src/spreadsheet';
 import { ChartController, createChartEditorDocument, createChartToolProvider, createOfficeChartToolProvider, createChartCommands, createChartStyleToolProvider, chartStyleDomain } from '../src/chart';
 import { DiagramController, createDiagramEditorDocument, createDiagramToolProvider } from '../src/diagram';
-import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider } from '../src/canvas';
+import { canvasExplosionToolTarget, createCanvasCaptureToolProvider, createCanvasEditorDocument, createCanvasEffectsController, createCanvasEffectsToolProvider, createCanvasExplosionStateController, createCanvasExplosionToolProvider, createCanvasProposalToolProvider, createCanvasProposals } from '../src/canvas';
 import { HistoryManager } from '../src/history';
 import { AnimationEditorController, createAnimationEditorDocument, createAnimationEditorToolProvider, createAnimationEffectsToolProvider } from '../src/animation-editor';
 import { VideoEditorController, createVideoEditorDocument, createVideoEditorToolProvider, createVideoEffectsToolProvider, createVideoDialogueToolProvider, createVideoMusicToolProvider } from '../src/video-editor';
@@ -132,6 +132,7 @@ function expectedBySkill(): Record<string, string[]> {
 			...toolNames(createCanvasEffectsToolProvider(createCanvasEffectsController({ getNodes: () => [], setNodes: () => {} }))),
 			...toolNames(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => [] })),
 			...toolNames(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }))),
+			...toolNames(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }))),
 			...commandIds(createArrangeCommands(stub)),
 			...commandIds(createShapeCommands(stub)),
 			...commandIds(createDrawCommands(stub)),
@@ -295,7 +296,8 @@ const FACTORIES: Record<string, string> = {
 	createCaptureToolProvider: 'pixerate-canvas, pixerate-image-editor',
 	createCanvasCaptureToolProvider: 'pixerate-canvas',
 	createCanvasEffectsToolProvider: 'pixerate-canvas',
-	createCanvasExplosionToolProvider: 'pixerate-canvas'
+	createCanvasExplosionToolProvider: 'pixerate-canvas',
+	createCanvasProposalToolProvider: 'pixerate-canvas'
 };
 
 /**

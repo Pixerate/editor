@@ -50,6 +50,14 @@ the pitfalls, and uses the tools below.
    `scope: "canvas"` for the whole drawing. Fix overlaps, misalignment and clipped text, then show
    the user with `canvas_select` or `canvas_highlight`.
 
+**Working alongside the user** (they are building and you add to it unasked): suggest instead of
+editing. `propose_nodes` shows ghosts the user accepts or dismisses, and nothing reaches the canvas
+or its history until then. Keep each proposal small and about one idea (a caption, the next card in
+a series, a missing connector), give it a `title` and a one-sentence `rationale`, and anchor it to
+the node it complements with `nearNodeId`. Never accept your own proposals unless the user asked
+you to. Withdraw stale ones with `reject_proposal`: when the user changes what a proposal builds on,
+`list_proposals` shows it under `missing`.
+
 ## Best practices
 
 - **Design-system thinking.** Anything that appears twice should be a component: build one main,
@@ -142,6 +150,19 @@ undo step and is not saved with the document. The host decides what the children
 | `list_explodable_nodes` | List the nodes that can explode (`id`, `label`, `exploded`, `collapsing`), the ids `exploded` and `collapsing` now, whether several can be open at once (`multiple`), and the `readOnly` reason if exploding is disabled. Call it first: it is the only source of explodable ids. |
 | `explode_node` | Explode `node` (an id from `list_explodable_nodes`). Unless `multiple`, the node exploded before collapses (it comes back in `collapsed`). Exploding an exploded node changes nothing (`changed: false`). Returns the ids now `exploded`. Then use `get_editor_state` or `capture_view` to read or see the children. |
 | `collapse_node` | Collapse an exploded `node`. Returns the ids still `exploded` and those still `collapsing` (their children leave when the collapse animation ends). Fails when the node is not exploded. |
+
+### Proposals (suggest, don't edit)
+
+Hosts that let agents suggest additions add these. A proposal is new nodes and edges shown as ghosts
+(not draggable, selectable or saved). Accepting adds them as one undo step, recorded as made by
+whoever proposed it (`agent:<id>`); rejecting leaves the canvas and its history untouched.
+
+| Tool | Use it to |
+| --- | --- |
+| `propose_nodes` | Suggest nodes and edges without adding them: `title` (also the undo step name), `rationale`, `nodes` (each optional `id`, `type`, `data`, `position`, `width`, `height`, `nearNodeId`, `side`), `edges` (`source`, `target`, `label`). A node with `nearNodeId` (a canvas node or an earlier node of the proposal) is placed beside it and connected from it. Returns `proposalId`, the planned node ids and positions, edge ids and `anchors` (the canvas nodes it builds on). Read ids with `get_editor_state` first. |
+| `list_proposals` | List pending proposals: `id`, `title`, `rationale`, `origin`, nodes, edges, `anchors`, `missing` (anchors since removed: it can no longer be accepted) and the `readOnly` reason if accepting is disabled. Call it before `accept_proposal` or `reject_proposal`. |
+| `accept_proposal` | Add a pending proposal (`proposalId`) to the canvas as one undo step and drop it from the list. Returns the added `nodeIds`, `edgeIds` and `historyLabel`. Refuses, changing nothing, when the canvas is read-only or an anchor is `missing`. Only when the user asked. |
+| `reject_proposal` | Dismiss a pending proposal (`proposalId`): its ghosts go and nothing else changes. Use it to withdraw a suggestion that no longer fits. Returns the `proposalId` and `title`. |
 
 ### Write: components
 
@@ -319,6 +340,10 @@ effects provider (for example Flair); without one the read tools say so and the 
 | `set_scene_transition` | Set (or with `effect` null, remove) the transition effect played when moving to a scene, with its `duration` in ms. |
 
 ## Pitfalls
+
+- **Proposals are not on the canvas.** Their ids are not in `get_editor_state` until accepted, and
+  `canvas_connect` or `canvas_update_node` on them fails. Put the whole idea in one proposal (an
+  edge between two proposed nodes goes in its `edges`), or wait for the user to accept it.
 
 - **A shape node holds one effect.** `apply_effect` replaces the effect that is there. Effects draw on shape nodes only (nodes with `data.shape`).
 - **Effects belong to the provider they came from.** Each saved effect keeps its provider id. After the provider changes (another effects library), check `list_applied_effects` for `available: false` and re-apply those effects with ids from the new provider's `search_effects`; the old effect ids mean nothing to it.

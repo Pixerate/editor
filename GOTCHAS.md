@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/canvas] Proposal Ghosts Stay Hidden in React Flow Unless They Carry a Size
+
+- **Issue / Symptom**: Ghost nodes from `useCanvasProposals().view` were in the DOM with their label but never showed (`visibility: hidden`), and their edges did not draw.
+- **Root Cause**: React Flow (and Svelte Flow) hide a node until it has dimensions. In controlled mode the size arrives as a `dimensions` change through `onNodesChange`, which the host applies to its own state. Ghosts are drawn from the proposal store, not the host's state, so that change is applied to nothing and the ghost stays unmeasured.
+- **Solution / Workaround**: `withGhosts` gives each ghost `measured` from the size it was placed with (`width` / `height`, else `defaultNodeSize`). The proposal's own nodes keep no `measured`, so an accepted node is measured normally. Any other overlay that renders nodes outside the host's state needs the same.
+
+### [react/canvas] A History Listener Created in `useMemo` Dies Under StrictMode
+
+- **Issue / Symptom**: `useCanvasChangeFeed` reported agent changes as `user` under `<StrictMode>`.
+- **Root Cause**: StrictMode runs effect cleanups and then the effects again on the same memoised objects. Disposing the feed in a cleanup removed its `history.onCommit` listener, and the remount reused the disposed feed.
+- **Solution / Workaround**: The feed is created without `history`; an effect subscribes `history.onCommit(feed.noteCommit)` and returns the unsubscribe, so the remount subscribes again. Keep subscriptions in effects, not in objects built by `useMemo` / `useRef`.
+
+### [core/history] An Async `withOrigin` Stamps Everything Recorded Until It Settles
+
+- **Issue / Symptom**: With `createOriginMiddleware`, a user edit made while an agent's tool call was running could be recorded as `agent:<id>`.
+- **Root Cause**: There is no async context in browsers: `withOrigin` keeps the origin on a stack until the handler's promise settles, so every command recorded on that history in the meantime takes it.
+- **Solution / Workaround**: Register the middleware after agent playback (`registry.use` order), so it wraps only the handler and not the time a call waits in an actor's queue. Where it matters, give commands an explicit `origin` (proposals do: `accept` records the proposer's origin on the command itself).
+
 ### [core/paint-editor] Light Paint Moves With Paint Because Every Stroke Has a Grey Twin
 
 - **Issue / Symptom**: Laying light by each engine's coverage meant special code in every engine, and smudges, blenders, the knife, the Mixer Brush and pick-up brushes left light where it was laid, so a smeared neon line looked like lit paper, not paint.
