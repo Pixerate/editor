@@ -106,6 +106,16 @@ describe("paint agent scripts", () => {
     expect(controller.getStrokes().filter((s) => s.brush.id === "glow-wash")).toHaveLength(2);
   }, 120_000);
 
+  it("paints light ribbons, flames and bokeh on dark paper, each layer lighting its surroundings", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-light-ribbons")!, { control: { speed: Infinity, stopped: false } });
+    const layers = controller.listLayers();
+    for (const name of ["Ribbons", "Flames", "Bokeh"]) expect(controller.lightOf(layers.find((l) => l.name === name)!.id).hasLight, name).toBe(true);
+    expect(controller.getStrokes().filter((s) => s.brush.id === "light-ribbon")).toHaveLength(2);
+    expect(controller.getStrokes().find((s) => s.brush.id === "light-ribbon" && s.brush.particle.waveSpeed > 0)).toBeDefined();
+    expect(controller.lightOf(layers.find((l) => l.name === "Bokeh")!.id).spill).toEqual({ radius: 40, strength: 1.2 });
+  }, 120_000);
+
   it("paints a neon sign whose glow is a layer style, recoloured after painting", async () => {
     const { controller, registry } = setup();
     await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-neon-glow-style")!, { control: { speed: Infinity, stopped: false } });

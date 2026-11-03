@@ -3,8 +3,9 @@
 Light paint is paint that gives off light: neon, light painting, glow-in-the-dark, glowing glassy
 tubes, glowing watercolour. Any dab, particle, bristle, Mixer Brush, impasto or wet paint brush
 lays it with `light.amount` above 0 (`set_brush`); the Light category presets are ready-made
-(`glow-gel`, `neon-marker`, `light-airbrush`, `spark-trail`, `glow-wash`,
-`highlighter`).
+(`glow-gel`, `neon-marker`, `light-airbrush`, `spark-trail`, `light-ribbon`, `flame-ribbon`,
+`neon-strand`, `smoke-ribbon`, `bokeh-dots`, `twinkle-sparks`, `glow-wash`, `highlighter`; the
+particle ones are tuned in [particle-brushes.md](particle-brushes.md)).
 
 - **What it does.** Each layer keeps a light channel next to its colour. The light's colour is the
   paint's colour at that pixel, so recolouring paint recolours its light. It glows (the paint
@@ -28,6 +29,13 @@ lays it with `light.amount` above 0 (`set_brush`); the Light category presets ar
   layer that holds the text (a tip blend works within its layer), and turn that layer's spill off
   (`set_light_spill` `radius` 0): fluorescent ink does not light its surroundings, and spill would
   wash the text out.
+- **Light painting** (long-exposure trails, neon signs, fire): set dark paper (`set_paper`
+  `color`, e.g. `#0b1020`), then paint with the Light presets in bright, saturated colours;
+  white light reads as a hot core, so lay a coloured stroke first and a thinner, lighter one over
+  it. Ribbons (`light-ribbon`, `flame-ribbon`) read best in long sweeping strokes with times;
+  `neon-strand` in steady strokes; `bokeh-dots` and `twinkle-sparks` as accents last. Put each
+  colour family on its own layer so you can tune its spill (`set_light_spill`: larger radius for
+  haze, 0 for crisp). Check with `export_image` before adding more: light adds up fast.
 - **Spill vs a glow layer style.** Spill takes each stroke's colour and strength. For a one-colour
   halo around everything on a layer, use a blend or an effect layer instead.
 - **Glowing watercolour** (wet paint brushes with `light.amount`, e.g. `glow-wash`): the light is

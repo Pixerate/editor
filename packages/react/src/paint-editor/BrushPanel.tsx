@@ -20,11 +20,21 @@ import {
   PARTICLE_KIND_LABELS,
   PARTICLE_RENDERS,
   PARTICLE_RENDER_LABELS,
+  RIBBON_PAIRS,
+  RIBBON_PAIR_LABELS,
+  DOT_TEXTURE_ORDERS,
+  DOT_TEXTURE_ORDER_LABELS,
+  DOT_ROTATIONS,
+  DOT_ROTATION_LABELS,
+  toggleDotTexture,
   STAMP_KINDS,
   STAMP_LABELS,
   toggleStamp,
   type ParticleKind,
   type ParticleRender,
+  type RibbonPairs,
+  type DotTextureOrder,
+  type DotRotation,
   type ImpastoTool,
   type WetMediumKind,
   type BlendMode,
@@ -174,6 +184,59 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
                   ))}
                 </select>
               </label>
+              {brush.particle.render === 'ribbon' && (
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-slate-400">Ribbon joins</span>
+                  <select aria-label="Ribbon pairs" value={brush.particle.ribbonPairs} onChange={(e) => controller.setBrush({ particle: { ribbonPairs: e.target.value as RibbonPairs } })} className="rounded bg-slate-800 px-1 py-0.5">
+                    {RIBBON_PAIRS.map((k) => (
+                      <option key={k} value={k}>
+                        {RIBBON_PAIR_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {(brush.particle.render === 'dot' || brush.particle.render === 'sequence') && (
+                <>
+                  <div className="flex flex-wrap gap-1" role="group" aria-label="Dot textures" title="Stamps drawn instead of round dots (up to 4; none: round)">
+                    {STAMP_KINDS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={brush.particle.dotTextures.includes(k)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] ${brush.particle.dotTextures.includes(k) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                        onClick={() => controller.setBrush({ particle: { dotTextures: toggleDotTexture(brush.particle.dotTextures, k) } })}
+                      >
+                        {STAMP_LABELS[k]}
+                      </button>
+                    ))}
+                  </div>
+                  {brush.particle.dotTextures.length > 0 && (
+                    <>
+                      <label className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400">Texture order</span>
+                        <select aria-label="Dot texture order" value={brush.particle.dotTextureOrder} onChange={(e) => controller.setBrush({ particle: { dotTextureOrder: e.target.value as DotTextureOrder } })} className="rounded bg-slate-800 px-1 py-0.5">
+                          {DOT_TEXTURE_ORDERS.map((k) => (
+                            <option key={k} value={k}>
+                              {DOT_TEXTURE_ORDER_LABELS[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400">Texture turn</span>
+                        <select aria-label="Dot rotation" value={brush.particle.dotRotation} onChange={(e) => controller.setBrush({ particle: { dotRotation: e.target.value as DotRotation } })} className="rounded bg-slate-800 px-1 py-0.5">
+                          {DOT_ROTATIONS.map((k) => (
+                            <option key={k} value={k}>
+                              {DOT_ROTATION_LABELS[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </>
+              )}
             </>
           )}
           {engine.stickerStamps && (

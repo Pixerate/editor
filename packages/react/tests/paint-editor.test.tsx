@@ -482,6 +482,18 @@ describe('React paint editor', () => {
     expect(c.getState().brush.particle.kind).toBe('orbit');
     setValue(container.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'sequence');
     expect(c.getState().brush.particle.render).toBe('sequence');
+    // Textured dots (sequence beads), then ribbons and waves.
+    click(container.querySelector('[aria-label="Dot textures"] button[aria-pressed="false"]')!);
+    expect(c.getState().brush.particle.dotTextures).toHaveLength(1);
+    setValue(container.querySelector('select[aria-label="Dot texture order"]') as HTMLSelectElement, 'random');
+    setValue(container.querySelector('select[aria-label="Dot rotation"]') as HTMLSelectElement, 'follow');
+    expect(c.getState().brush.particle).toMatchObject({ dotTextureOrder: 'random', dotRotation: 'follow' });
+    setValue(container.querySelector('select[aria-label="Particle render"]') as HTMLSelectElement, 'ribbon');
+    expect(container.querySelector('[aria-label="Dot textures"]')).toBeNull();
+    setValue(container.querySelector('select[aria-label="Ribbon pairs"]') as HTMLSelectElement, 'first-last');
+    expect(c.getState().brush.particle.ribbonPairs).toBe('first-last');
+    expect(container.querySelector('input[aria-label="Wave"]')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Ribbon fill"]')).not.toBeNull();
     act(() => {
       c.setBrush({ id: 'bristle-round' });
     });
