@@ -550,7 +550,12 @@ export interface BrushEngineControls {
   particleMenus?: boolean;
   /** The sticker stamp toggles (`sticker.stamps`, `STAMP_KINDS`). */
   stickerStamps?: boolean;
+  /** Light paint: the "light follows pressure" toggle (`light.pressure`); the Light slider is in `sliders`. */
+  light?: boolean;
 }
+
+/** The light paint slider (every engine that lays colour but wet and sticker brushes). */
+const LIGHT_SLIDER: SliderControl = { path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 };
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
   { path: 'behavior.pickup', label: 'Pick-up', min: 0, max: 1, step: 0.01 },
@@ -565,6 +570,14 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  * and mix always go through `behavior`, which keeps a Mixer Brush's `mixer` block in sync.
  */
 export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
+  const c = engineControls(brush);
+  if (!c || !['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine)) return c;
+  // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
+  const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
+  return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra], light: true };
+}
+
+function engineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
   switch (brush.engine) {
     case 'particle':
       return {

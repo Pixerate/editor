@@ -25,6 +25,7 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
   const [renaming, setRenaming] = useState<string | null>(null);
   const layers = controller.listLayers();
   const active = layers.find((l) => l.active) ?? null;
+  const light = active?.type === 'pixel' ? controller.lightOf(active.id) : null;
   const move = (delta: number) => {
     if (!active) return;
     const { index, count } = siblingIndex(layers, active);
@@ -152,6 +153,24 @@ export const PaintLayersPanel: React.FC<PaintLayersPanelProps> = ({ controller, 
               Clip
             </button>
           </div>
+          {light?.hasLight && (
+            <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-1.5" data-testid="layer-light">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-300" title="This layer's paint gives off light">Light</span>
+                <button type="button" className={button} onClick={() => attempt(() => controller.clearLight(active.id))}>
+                  Clear light
+                </button>
+              </div>
+              <label className="flex items-center gap-2" title="How far the light spills onto the paint and paper around it (0 turns it off)">
+                <span className="w-14 text-slate-400">Spill</span>
+                <input type="range" aria-label="Light spill radius" min={0} max={120} step={1} value={light.spill.radius} onChange={(e) => attempt(() => controller.setLightSpill(active.id, { radius: Number(e.target.value) }))} className="flex-1 accent-indigo-500" />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-slate-400">Strength</span>
+                <input type="range" aria-label="Light spill strength" min={0} max={2} step={0.05} value={light.spill.strength} onChange={(e) => attempt(() => controller.setLightSpill(active.id, { strength: Number(e.target.value) }))} className="flex-1 accent-indigo-500" />
+              </label>
+            </div>
+          )}
         </div>
       )}
       <ErrorLine error={error} />

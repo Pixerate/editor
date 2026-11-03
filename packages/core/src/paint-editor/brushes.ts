@@ -22,9 +22,9 @@ export type PaintBrushEngine = 'dab' | 'eraser' | 'mixer' | 'blender' | 'smudge'
 
 export const PAINT_BRUSH_ENGINES: readonly PaintBrushEngine[] = ['dab', 'eraser', 'mixer', 'blender', 'smudge', 'wet', 'impasto', 'particle', 'bristle', 'sticker'];
 
-export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'custom';
+export type PaintBrushCategory = 'pencil' | 'pastel' | 'charcoal' | 'airbrush' | 'marker' | 'ink' | 'paint' | 'eraser' | 'blender' | 'smudge' | 'mixer' | 'watercolor' | 'wet-tool' | 'oil' | 'impasto' | 'procedural' | 'bristle' | 'sticker' | 'light' | 'custom';
 
-export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'procedural', 'bristle', 'sticker', 'custom'];
+export const PAINT_BRUSH_CATEGORIES: readonly PaintBrushCategory[] = ['pencil', 'pastel', 'charcoal', 'airbrush', 'marker', 'ink', 'paint', 'eraser', 'blender', 'smudge', 'mixer', 'watercolor', 'wet-tool', 'oil', 'impasto', 'procedural', 'bristle', 'sticker', 'light', 'custom'];
 
 /**
  * What a wet brush does to the wet layer: `paint` (water and pigment), `water` (clear water;
@@ -108,9 +108,27 @@ export interface ImpastoSettings {
   thinner: number;
   /** Knife and brush: how much of the paint under the tool is dragged along (0..1). */
   drag: number;
+  /** Light paint: the bead's light is stronger where its surface turns away, as on backlit glass (0..1, default 0). */
+  rim: number;
+  /** Light paint: the middle of a bead lets the layers below show through, its edges stay solid (0..1, default 0). */
+  clarity: number;
 }
 
-export const DEFAULT_IMPASTO: Readonly<ImpastoSettings> = { tool: 'brush', thickness: 0.6, gloss: 0.4, metallic: 0, load: 0.9, thinner: 0, drag: 0.4 };
+export const DEFAULT_IMPASTO: Readonly<ImpastoSettings> = { tool: 'brush', thickness: 0.6, gloss: 0.4, metallic: 0, load: 0.9, thinner: 0, drag: 0.4, rim: 0, clarity: 0 };
+
+/** Light paint: how much light a brush lays with its colour (see `doc.light`). */
+export interface LightSettings {
+  /** Light each dab lays, scaled by its coverage and flow (0..1, default 0: none). */
+  amount: number;
+  /** Pressure scales the light (default false). */
+  pressure: boolean;
+}
+
+export const DEFAULT_LIGHT: Readonly<LightSettings> = { amount: 0, pressure: false };
+
+export function normalizeLight(raw: Partial<LightSettings> = {}, base: LightSettings = DEFAULT_LIGHT): LightSettings {
+  return { amount: unit(raw.amount, base.amount), pressure: typeof raw.pressure === 'boolean' ? raw.pressure : base.pressure };
+}
 
 export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: ImpastoSettings = DEFAULT_IMPASTO): ImpastoSettings {
   return {
@@ -121,6 +139,8 @@ export function normalizeImpasto(raw: Partial<ImpastoSettings> = {}, base: Impas
     load: unit(raw.load, base.load),
     thinner: unit(raw.thinner, base.thinner),
     drag: unit(raw.drag, base.drag),
+    rim: unit(raw.rim, base.rim ?? 0),
+    clarity: unit(raw.clarity, base.clarity ?? 0),
   };
 }
 
@@ -243,6 +263,8 @@ export interface PaintBrush {
   bristle: BristleSettings;
   /** Sticker engine only: the stamps and how they are sprayed. */
   sticker: StickerSettings;
+  /** Light paint: the light it lays with its colour (amount 0: none). */
+  light: LightSettings;
   /**
    * The brush's own gradient paint (`@pixerate/editor/paint` `PaintGradientSource`), used instead
    * of the editor's paint; `null` (default): the editor's paint. Stops may be `paint` / `secondary`
@@ -301,7 +323,8 @@ export function normalizeBehavior(raw: BrushBehaviorInput = {}, base: BrushBehav
 }
 
 /** Brush settings to change or read: any subset of a brush and of its blocks. */
-export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint'>> & {
+export type PaintBrushInput = Partial<Omit<PaintBrush, 'tip' | 'dynamics' | 'mixer' | 'behavior' | 'blender' | 'smudge' | 'wet' | 'impasto' | 'particle' | 'bristle' | 'sticker' | 'paint' | 'light'>> & {
+  light?: Partial<LightSettings>;
   /** A gradient (or `null` for the editor's paint); a plain colour source clears it. */
   paint?: PaintSource | null;
   tip?: Partial<BrushSettings>;
@@ -447,6 +470,7 @@ export function normalizePaintBrush(raw: PaintBrushInput = {}, base?: PaintBrush
     particle: normalizeParticle(raw.particle ?? {}, b.particle ?? DEFAULT_PARTICLE),
     bristle: normalizeBristle(raw.bristle ?? {}, b.bristle ?? DEFAULT_BRISTLE),
     sticker: normalizeStickerSettings(raw.sticker ?? {}, b.sticker ?? DEFAULT_STICKER),
+    light: normalizeLight(raw.light ?? {}, b.light ?? DEFAULT_LIGHT),
     paint,
     ...(raw.builtin ? { builtin: true } : {}),
   };
@@ -472,6 +496,7 @@ const BASE_BRUSH: PaintBrush = {
   particle: { ...DEFAULT_PARTICLE },
   bristle: { ...DEFAULT_BRISTLE },
   sticker: { ...DEFAULT_STICKER, stamps: [...DEFAULT_STICKER.stamps] },
+  light: { ...DEFAULT_LIGHT },
   paint: null,
 };
 
@@ -755,6 +780,32 @@ export const BUILTIN_BRUSHES: readonly PaintBrush[] = [
     tip: { size: 44, hardness: 0.9, angle: 90, roundness: 0.45, opacity: 1, flow: 0.8, smoothing: 0.2, pressureSize: true, pressureOpacity: false },
     grain: 0.6,
     bristle: { count: 48, stiffness: 0.35, splay: 0.7, thickness: 0.05, load: 0.15, jitter: 0.8 },
+  }),
+  // Light paint: brushes that lay light with their colour (glow and spill; see light.ts).
+  builtin({
+    id: 'glow-gel', name: 'Glow gel', category: 'light', engine: 'impasto',
+    tip: { size: 16, hardness: 0.9, spacing: 0.05, opacity: 1, flow: 1, smoothing: 0.5, pressureSize: true, pressureOpacity: false },
+    dynamics: { minSize: 0.6 },
+    impasto: { tool: 'gloop', thickness: 1, gloss: 0.95, load: 1, drag: 0, rim: 0.8, clarity: 0.5 },
+    light: { amount: 0.85 },
+  }),
+  builtin({
+    id: 'neon-marker', name: 'Neon marker', category: 'light',
+    tip: { size: 10, hardness: 0.9, spacing: 0.04, opacity: 1, flow: 1, smoothing: 0.45, pressureSize: false, pressureOpacity: false },
+    light: { amount: 1 },
+  }),
+  builtin({
+    id: 'light-airbrush', name: 'Light airbrush', category: 'light',
+    tip: { size: 90, hardness: 0, spacing: 0.04, opacity: 1, flow: 0.06, smoothing: 0.3, pressureSize: false, pressureOpacity: false },
+    pressureSmoothing: 0.3,
+    dynamics: { pressureFlow: 1 },
+    light: { amount: 0.7, pressure: true },
+  }),
+  builtin({
+    id: 'spark-trail', name: 'Spark trail', category: 'light', engine: 'particle',
+    tip: { size: 50, hardness: 0.7, opacity: 1, flow: 1, smoothing: 0.1, pressureSize: true, pressureOpacity: false },
+    particle: { kind: 'flow', render: 'dot', count: 8, size: 0.06, spread: 0.7, speed: 0.9, life: 0.3 },
+    light: { amount: 1 },
   }),
   builtin({
     id: 'sticker-stars', name: 'Star stickers', category: 'sticker', engine: 'sticker',

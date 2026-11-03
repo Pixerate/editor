@@ -83,6 +83,7 @@ import { MixingPad, type MixingPadTool, type PadMixOptions } from './mixing-pad'
 import { normalizeStencil, StencilSnapper, stencilMask, translateStencil, type Stencil, type StencilInput } from './stencils';
 import { normalizeStickerUpdate, STAMP_KINDS, stickerAt as hitSticker, stickerRect, stickerSurface, type Sticker } from './stickers';
 import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
+import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
 import { brushTakesPaint } from './brushes';
 import { PaintWetLayers, WET_GPU_MODES, WetStrokeDriver, type PaintWetOptions, type WetEngineInfo, type WetEvent, type WetGpuMode, type WetLayerInfo, type WetLayerSettings } from './wet';
@@ -421,6 +422,9 @@ export class PaintEditorController {
   private dirty: RasterRect[] | 'all' = 'all';
   private seedCounter = 1;
   private strokeCounter = 1;
+  /** Light paint: each layer's spill settings (saved with the document, not undo steps; missing = the defaults). */
+  private lightSpills: Record<string, LightSpill> = {};
+  private readonly lightCaches = new Map<string, LightCache>();
   /** Live effect paint: playing and the frame rate cap (editor state), and the time the view shows. */
   private effectPlaybackState = { playing: true, fps: 30 };
   private effectTime = 0;
@@ -1007,7 +1011,7 @@ export class PaintEditorController {
     const layers = mapLayer(this.doc.layers, id, () => null);
     let active = this.doc.activeLayerId;
     if (active && !findLayer(layers, active)) active = flattenLayers(layers).filter((x) => x.type === 'pixel').pop()?.id ?? null;
-    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)), ...this.liveStrokesWithout(flattenLayers([l]).map((x) => x.id)) });
+    this.commit('Remove layer', { ...this.doc, layers, activeLayerId: active, ...this.thickWithout(flattenLayers([l]).map((x) => x.id)), ...this.stickersWithout(flattenLayers([l]).map((x) => x.id)), ...this.liveStrokesWithout(flattenLayers([l]).map((x) => x.id)), ...this.lightWithout(flattenLayers([l]).map((x) => x.id)) });
     return { removed: id, activeLayerId: active };
   }
 
@@ -1022,8 +1026,11 @@ export class PaintEditorController {
     const thick: Record<string, ThickChannels> = { ...(this.doc.thick ?? {}) };
     const stickers: Record<string, Sticker[]> = { ...(this.doc.stickers ?? {}) };
     const liveStrokes: Record<string, RecordedStroke[]> = { ...(this.doc.liveStrokes ?? {}) };
+    const light: Record<string, TiledSurface> = { ...(this.doc.light ?? {}) };
     const copy = (l: PaintLayer): PaintLayer => {
       const id = newPaintLayerId();
+      if (light[l.id]) light[id] = light[l.id];
+      if (this.lightSpills[l.id]) this.lightSpills[id] = { ...this.lightSpills[l.id] };
       if (thick[l.id]) thick[id] = thick[l.id];
       if (stickers[l.id]) stickers[id] = stickers[l.id].map((x) => ({ ...x }));
       // Stroke ids are unique across the document: the copies get new ones.
@@ -1032,7 +1039,7 @@ export class PaintEditorController {
     };
     const dup = { ...copy(loc.layer), name: `${loc.layer.name} copy` };
     const layers = insertLayer(this.doc.layers, dup, loc.parent?.id ?? null, loc.index + 1);
-    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}) }));
+    this.commit('Duplicate layer', this.withWetEvents({ ...this.doc, layers, activeLayerId: dup.id, ...(this.doc.thick ? { thick } : {}), ...(this.doc.stickers ? { stickers } : {}), ...(this.doc.liveStrokes ? { liveStrokes } : {}), ...(this.doc.light ? { light } : {}) }));
     return this.describeLayer(dup);
   }
 
@@ -1081,7 +1088,12 @@ export class PaintEditorController {
     }
     const merged: PaintPixelLayer = { ...below, surface, offset: { x: 0, y: 0 } };
     const layers = mapLayer(mapLayer(this.doc.layers, upper.id, () => null), below.id, () => merged);
-    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]) }));
+    // Light: the upper layer's over the lower's (where the upper paint is transparent), in the merged layer's space.
+    const toDoc = (t: TiledSurface | undefined, l: PaintPixelLayer) => (t ? translateSurface(t, l.offset.x, l.offset.y) : undefined);
+    const mergedLight = this.doc.light?.[upper.id] || this.doc.light?.[below.id] ? mergeLight(toDoc(this.doc.light?.[below.id], below), upper.visible ? toDoc(this.doc.light?.[upper.id], upper) : undefined, translateSurface(upper.surface, upper.offset.x, upper.offset.y)) : undefined;
+    const lightAfter = this.lightWithout([upper.id, below.id]).light ?? (this.doc.light ? { ...this.doc.light } : undefined);
+    const light = mergedLight ? { ...(lightAfter ?? {}), [below.id]: mergedLight } : lightAfter;
+    this.commit('Merge down', this.withWetEvents({ ...this.doc, layers, activeLayerId: below.id, ...this.thickWithout([upper.id]), ...this.stickersWithout([upper.id, below.id]), ...this.liveStrokesWithout([upper.id, below.id]), ...(light ? { light } : {}) }));
     return this.describeLayer(merged);
   }
 
@@ -1094,7 +1106,7 @@ export class PaintEditorController {
       this.wet.world!.removeLane(l.id);
     }
     const bounds = this.describeLayer(l).bounds;
-    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}) }, { kind: 'clear', layerId: l.id }));
+    this.commit('Clear layer', this.withPaintEvent({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface: emptySurface(4) })), ...this.thickWithout([l.id]), ...this.stickersWithout([l.id]), ...(this.doc.liveStrokes?.[l.id] ? { liveStrokes: { ...this.doc.liveStrokes, [l.id]: [] } } : {}), ...this.lightWithout([l.id]) }, { kind: 'clear', layerId: l.id }));
     return { layerId: l.id, bounds };
   }
 
@@ -1139,7 +1151,10 @@ export class PaintEditorController {
       offset: l.offset,
     };
     const surface = this.applyCoverage(l, coverage, rect, apply);
-    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
+    // A fill covers the paint, and its light with it.
+    const lit = this.doc.light?.[l.id];
+    const light = lit ? withLayerLight(this.doc.light, l.id, scaleLight(lit, 1 - opacity)) : undefined;
+    this.commit('Fill layer', this.withPaintEvent(this.withWetEvents({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), ...(light ? { light } : {}) }), { kind: 'fill', layerId: l.id, data: { color, opacity, grain: grainAmount, pressure, blend } }));
     return { layerId: l.id, bounds: rect };
   }
 
@@ -1866,6 +1881,10 @@ export class PaintEditorController {
     })();
     const brush = this.strokeBrush(init);
     const effect = this.strokeEffect(init, brush);
+    if (brush.light.amount > 0) {
+      if (brush.engine === 'wet') throw new PaintEditorError(`The ${brush.name} brush paints wet media, which doesn't take light yet (glowing watercolour is planned in #494); paint light with a dab or impasto light brush (list_brushes category light), or set light.amount to 0 (set_brush).`);
+      if (brush.engine === 'sticker') throw new PaintEditorError(`The ${brush.name} brush sprays stickers, which don't take light yet; paint light with a dab or particle light brush (list_brushes category light), or set light.amount to 0 (set_brush).`);
+    }
     if (doc.liveStrokes?.[layer.id]) {
       const why = liveStrokeRefusal(brush);
       if (why) throw new PaintEditorError(`Layer "${layer.name}" is a stroke layer. ${why}`);
@@ -1966,6 +1985,8 @@ export class PaintEditorController {
       secondary: rgbaOf(this.secondaryColor),
       wet,
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
+      // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
+      light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
       sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc) } : undefined,
       paint: effect ? null : this.strokeGradient(init, brush, color),
       effect,
@@ -2052,7 +2073,8 @@ export class PaintEditorController {
         const thick = ch ? { ...(this.doc.thick ?? {}), [l.id]: ch } : this.doc.thick;
         const sprayed = s.stickers();
         const stickers = sprayed ? { ...(this.doc.stickers ?? {}), [l.id]: [...(this.doc.stickers?.[l.id] ?? []), ...sprayed] } : this.doc.stickers;
-        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}) }, stroke)), wetStroke ? before : this.doc);
+        const light = withLayerLight(this.doc.light, l.id, s.lightChannel());
+        this.commit(`${brush.name} stroke`, this.withWetEvents(withLiveStroke({ ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => ({ ...l, surface })), strokes: [...this.doc.strokes, stroke], ...(thick ? { thick } : {}), ...(stickers ? { stickers } : {}), ...(light ? { light } : {}) }, stroke)), wetStroke ? before : this.doc);
       },
     };
     let session: PaintStrokeSession;
@@ -2092,6 +2114,7 @@ export class PaintEditorController {
           strokes: [...out.strokes, stroke],
           ...(ch ? { thick: { ...(out.thick ?? {}), [l.id]: ch } } : {}),
           ...(sprayed ? { stickers: { ...(out.stickers ?? {}), [l.id]: [...(out.stickers?.[l.id] ?? []), ...sprayed] } } : {}),
+          ...(s.lightChannel() ? { light: withLayerLight(out.light, l.id, s.lightChannel()) } : {}),
         }, stroke);
       },
     };
@@ -2211,6 +2234,51 @@ export class PaintEditorController {
     }
     if (doc !== this.doc) this.commit(strokes.length === 1 && repeat === 1 ? 'Replay stroke' : 'Replay strokes', doc);
     return { strokeIds: ids, bounds, layerIds: [...layerIds] };
+  }
+
+  // --- Light paint --------------------------------------------------------------------
+
+  /** The document's `light` without these layers (as a spread: `{}` when unchanged). */
+  private lightWithout(ids: readonly string[]): { light?: Record<string, TiledSurface> } {
+    const t = this.doc.light;
+    if (!t || !ids.some((id) => t[id])) return {};
+    const out = { ...t };
+    for (const id of ids) delete out[id];
+    return { light: out };
+  }
+
+  private lightSpillOf(layerId: string): LightSpill {
+    return this.lightSpills[layerId] ?? DEFAULT_LIGHT_SPILL;
+  }
+
+  /** A layer's light paint: whether it has any, where (document pixels), its brightest value 0..255, and its spill. */
+  lightOf(layerId?: string): { layerId: string; hasLight: boolean; bounds: RasterRect | null; peak: number; spill: LightSpill } {
+    const l = this.wetLayer(layerId, 'read the light of');
+    const info = lightInfo(this.doc.light?.[l.id]);
+    const bounds = info.bounds ? { ...info.bounds, x: info.bounds.x + l.offset.x, y: info.bounds.y + l.offset.y } : null;
+    return { layerId: l.id, hasLight: info.peak > 0, bounds, peak: info.peak, spill: { ...this.lightSpillOf(l.id) } };
+  }
+
+  /** How far a layer's light spills (px; 0 turns it off) and how strongly (0..2). Saved with the document, not an undo step; nothing is repainted. */
+  setLightSpill(layerId: string | undefined, update: Partial<LightSpill>): LightSpill {
+    const l = this.wetLayer(layerId, 'set the light spill of');
+    try {
+      this.lightSpills[l.id] = normalizeLightSpill(update, this.lightSpillOf(l.id));
+    } catch (e) {
+      throw new PaintEditorError((e as Error).message);
+    }
+    this.emit('all');
+    return { ...this.lightSpills[l.id] };
+  }
+
+  /** Takes a layer's light away; its paint keeps its colour. One undo step. Returns whether there was any. */
+  clearLight(layerId?: string): { layerId: string; cleared: boolean } {
+    this.requireIdle('clearing light');
+    const l = this.paintTarget(layerId, 'clear the light of');
+    const t = this.lightWithout([l.id]);
+    if (!t.light) return { layerId: l.id, cleared: false };
+    this.commit('Clear light', { ...this.doc, light: t.light });
+    return { layerId: l.id, cleared: true };
   }
 
   // --- Thick paint and light -------------------------------------------------------
@@ -2604,8 +2672,32 @@ export class PaintEditorController {
     return out;
   }
 
+  /**
+   * Light paint over the (lit) layers: glow, rim and clarity in each layer's pixels, and its spill
+   * as a Linear Dodge (Add) layer directly above it (from the painting as committed, so a stroke in
+   * progress does not redraw the blur every frame).
+   */
+  private lightLayers(layers: PaintLayer[]): PaintLayer[] {
+    const light = this.doc.light ?? {};
+    const ids = new Set([...Object.keys(light), ...Object.keys(this.doc.thick ?? {})]);
+    if (!ids.size) return layers;
+    let out = layers;
+    for (const id of ids) {
+      const l = findLayer(out, id)?.layer;
+      if (!isPixelLayer(l)) continue;
+      let cache = this.lightCaches.get(id);
+      if (!cache) this.lightCaches.set(id, (cache = new LightCache()));
+      const glowed = cache.glow(l.surface, light[id], this.liveThick?.layerId === id ? this.liveThick.channels : this.doc.thick?.[id]);
+      if (glowed !== l.surface) out = mapLayer(out, id, () => ({ ...l, surface: glowed }));
+      const committed = findLayer(this.doc.layers, id)?.layer;
+      const spill = light[id] && isPixelLayer(committed) ? cache.spill(committed.surface, light[id], this.lightSpillOf(id)) : null;
+      if (spill) out = insertAfter(out, id, { type: 'pixel', id: `${id}${SPILL_SUFFIX}`, name: `${l.name} light`, visible: l.visible, opacity: l.opacity, blend: 'linear-dodge', surface: spill, offset: { ...l.offset } } as PaintPixelLayer);
+    }
+    return out;
+  }
+
   private renderLayers(options: RenderOptions, view = false): ViewLayer[] {
-    let layers: PaintLayer[] = this.litLayers((options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers());
+    let layers: PaintLayer[] = this.lightLayers(this.litLayers((options.wet ?? 'display') === 'dried' ? this.driedLayers() : this.currentLayers()));
     if (options.layerIds) {
       const picked: PaintLayer[] = [];
       for (const id of options.layerIds) picked.push(findLayer(layers, id)?.layer ?? this.requireLayer(id));
@@ -2700,6 +2792,17 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map((x) => JSON.parse(JSON.stringify(x)));
     if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
     else delete ext.liveStrokes;
+    const light: Record<string, unknown> = {};
+    for (const [id, t] of Object.entries(this.doc.light ?? {})) {
+      if (!findLayer(this.doc.layers, id)) continue;
+      const saved = lightToJSON(t);
+      if (saved) light[id] = saved;
+    }
+    if (Object.keys(light).length) ext.light = light;
+    else delete ext.light;
+    const spills = Object.fromEntries(Object.entries(this.lightSpills).filter(([id]) => findLayer(this.doc.layers, id)));
+    if (Object.keys(spills).length) ext.lightSpill = spills;
+    else delete ext.lightSpill;
     const effectLayers = effectLayersToJSON(this.doc.effectLayers ?? {}, (id) => isPixelLayer(findLayer(this.doc.layers, id)?.layer));
     if (effectLayers) ext.effectLayers = effectLayers;
     else delete ext.effectLayers;
@@ -2751,6 +2854,29 @@ export class PaintEditorController {
         problems.push(`The effect paper could not be read (${(e as Error).message}); the plain paper shows.`);
       }
     }
+    this.lightSpills = {};
+    this.lightCaches.clear();
+    if (ext.lightSpill && typeof ext.lightSpill === 'object') {
+      for (const [id, v] of Object.entries(ext.lightSpill as Record<string, Partial<LightSpill>>)) {
+        try {
+          if (findLayer(state.layers, id)) this.lightSpills[id] = normalizeLightSpill(v ?? {});
+        } catch {
+          problems.push(`The light spill of layer "${id}" could not be read; it takes the defaults.`);
+        }
+      }
+    }
+    if (ext.light && typeof ext.light === 'object') {
+      const light: Record<string, TiledSurface> = {};
+      for (const [id, v] of Object.entries(ext.light as Record<string, unknown>)) {
+        if (!isPixelLayer(findLayer(state.layers, id)?.layer)) continue;
+        try {
+          light[id] = lightFromJSON(v);
+        } catch (e) {
+          problems.push(`The light paint of layer "${id}" could not be read (${(e as Error).message}); it loads without light.`);
+        }
+      }
+      if (Object.keys(light).length) state = { ...state, light };
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -2795,6 +2921,8 @@ export class PaintEditorController {
     }
     this.docRevision++;
     delete this.extensions.layerChannels;
+    delete this.extensions.light;
+    delete this.extensions.lightSpill;
     delete this.extensions.lighting;
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
@@ -2863,7 +2991,8 @@ export class PaintEditorController {
    * pixels), and the composite as the merged image.
    */
   exportPsd(): PsdExportResult {
-    const dried = this.litLayers(this.driedLayers(this.doc.layers));
+    // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
+    const dried = this.lightLayers(this.litLayers(this.driedLayers(this.doc.layers)));
     const { width, height, dpi } = this.doc.canvas;
     const paperPixels = this.compositePixels({ layerIds: [], paper: true });
     const paperLayer: PaintPixelLayer = {
@@ -2895,6 +3024,9 @@ export class PaintEditorController {
       const list = names.map((n) => `"${n}"`).join(', ');
       const one = names.length === 1;
       result.warnings.push(`${label} blending has no PSD equivalent; ${list} ${one ? 'was' : 'were'} written as ${std}, the nearest Photoshop mode, so ${one ? 'it looks' : 'they look'} different in Photoshop (the merged image is exact).`);
+    }
+    if (Object.values(this.doc.light ?? {}).some((l) => l.tiles.size)) {
+      result.warnings.push('Light paint is written as pixels: each layer with its glow, and its spill as a "‹layer› light" Linear Dodge (Add) layer above it. Opening the PSD again gives plain pixel layers, not editable light.');
     }
     return result;
   }
@@ -4010,6 +4142,25 @@ export const MAX_IMAGE_SIDE = 8192;
 
 const movePoint = (p: { x: number; y: number }, dx: number, dy: number) => ({ x: p.x + dx, y: p.y + dy });
 const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: number): R => ({ ...r, x: r.x + dx, y: r.y + dy });
+
+/** The id suffix of a layer's spill pass in the compositor (and PSD export). */
+const SPILL_SUFFIX = '::light';
+
+/** The document's light with one layer's set (removed when it is empty), or the same map when `next` is `null`. */
+function withLayerLight(light: PaintDocumentState['light'], layerId: string, next: TiledSurface | null): Record<string, TiledSurface> | undefined {
+  if (!next) return light ? { ...light } : undefined;
+  const out = { ...(light ?? {}) };
+  if (next.tiles.size) out[layerId] = next;
+  else delete out[layerId];
+  return out;
+}
+
+/** `layers` with `node` inserted directly above layer `id`, in the same group. */
+function insertAfter(layers: PaintLayer[], id: string, node: PaintLayer): PaintLayer[] {
+  const i = layers.findIndex((l) => l.id === id);
+  if (i >= 0) return [...layers.slice(0, i + 1), node, ...layers.slice(i + 1)];
+  return layers.map((l) => (l.type === 'group' ? { ...l, children: insertAfter(l.children, id, node) } : l));
+}
 
 /** Whether a stroke plays a live effect (its paint is effect paint with `live`). */
 function isLiveEffect(s: RecordedStroke): boolean {

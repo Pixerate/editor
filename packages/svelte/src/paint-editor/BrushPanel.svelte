@@ -182,6 +182,11 @@
           </select>
         </label>
       {/if}
+      {#if engine.light && brush.light.amount > 0}
+        <label class="flex items-center gap-2" title="Pressure scales the light the brush lays">
+          <input type="checkbox" aria-label="Light follows pressure" checked={brush.light.pressure} onchange={(e) => controller.setBrush({ light: { pressure: e.currentTarget.checked } })} /> Light follows pressure
+        </label>
+      {/if}
       {#if engine.dirty}
         <label class="flex items-center gap-2" title="Keep the colour the brush picked up for the next stroke (needs Pick-up above 0)">
           <input type="checkbox" aria-label="Dirty brush" checked={brush.behavior.dirty} onchange={(e) => controller.setBrush({ behavior: { dirty: e.currentTarget.checked } })} /> Dirty brush

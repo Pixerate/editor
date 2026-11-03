@@ -196,7 +196,9 @@ describe('panel helpers', () => {
     const by = (id: string) => BUILTIN_BRUSHES.find((b) => b.id === id)!;
     expect(brushEngineControls(by('blender'))!.sliders.map((s) => s.path)).toEqual(['blender.strength', 'blender.distance']);
     expect(brushEngineControls(by('smudge'))).toMatchObject({ mixingPath: 'smudge.mixing', dirty: false, multicolor: false });
-    expect(brushEngineControls(by('mixer-brush'))!.sliders.map((s) => s.path)).toEqual(['behavior.pickup', 'behavior.mix', 'mixer.load']);
+    expect(brushEngineControls(by('mixer-brush'))!.sliders.map((s) => s.path)).toEqual(['behavior.pickup', 'behavior.mix', 'mixer.load', 'light.amount']);
+    expect(brushEngineControls(by('glow-gel'))!.sliders.map((s) => s.path).slice(-3)).toEqual(['light.amount', 'impasto.rim', 'impasto.clarity']);
+    expect(brushEngineControls(by('blender'))!.light).toBeUndefined();
     expect(brushEngineControls(by('pencil-6b'))).toMatchObject({ mixingPath: 'behavior.mixing', dirty: true, multicolor: true, load: true });
     expect(brushEngineControls(by('eraser-soft'))).toBeNull();
     expect(multiColorSliders('off')).toEqual([]);

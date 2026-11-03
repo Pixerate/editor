@@ -23,6 +23,7 @@ import type { PaperGrain } from './paper';
 import type { Affine } from './strokes';
 import type { WetStrokeDriver } from './wet';
 import { ThickStrokeDriver, type ThickChannels } from './thick';
+import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
 
@@ -75,6 +76,11 @@ export interface StrokeSessionInit {
    * dab, particle and bristle brushes sample per pixel and mixer / pickup brushes per dab.
    */
   effect?: { source: PaintEffectPaint; pixels: EffectPaintPixels } | null;
+  /**
+   * Light paint: the layer's light channel before the stroke. With it, a twin of the stroke paints
+   * the light channel as grey (see `light.ts`); `lightChannel()` returns the result.
+   */
+  light?: { surface: TiledSurface } | null;
 }
 
 export interface PaintStrokeResult {
@@ -124,6 +130,9 @@ export class PaintStrokeSession {
   private readonly wetDriver: WetStrokeDriver | null = null;
   private readonly thickDriver: ThickStrokeDriver | null = null;
   private readonly stickerSpray: StickerSpray | null = null;
+  /** Light paint: the stroke's twin over the light channel, and what it left there. */
+  private readonly lightTwin: PaintStrokeSession | null = null;
+  private lightResult: TiledSurface | null = null;
   /** A wet stroke that ended while the simulation was mid-batch: it commits when the driver catches up. */
   private wetEndPending = false;
   private readonly apply: StrokeApply;
@@ -142,6 +151,7 @@ export class PaintStrokeSession {
     this.copies = init.copies.length ? init.copies : [IDENTITY_COPY];
     const brush = init.brush;
     if (init.wet) this.wetDriver = init.wet.driver;
+    if (init.light && !init.wet && !init.sticker) this.lightTwin = this.makeLightTwin(init.light.surface);
     const effect = init.effect?.pixels ?? null;
     this.apply = {
       mode: brush.engine === 'eraser' ? 'erase' : 'paint',
@@ -180,6 +190,43 @@ export class PaintStrokeSession {
     }
   }
 
+  /** The stroke's twin over the light channel: the same marks in grey at the brush's light amount (see `light.ts`). */
+  private makeLightTwin(light: TiledSurface): PaintStrokeSession {
+    const init = this.init;
+    const grey = Math.round(init.brush.light.amount * 255);
+    const g = grey / 255;
+    const hex = '#' + grey.toString(16).padStart(2, '0').repeat(3);
+    const host: StrokeSessionHost = {
+      update: () => {},
+      commit: (_s, surface) => {
+        this.lightResult = surface ? shadowToLight(surface) : null;
+      },
+    };
+    // Effect alpha and gradient stop opacity limit where colour lands: keep them, in grey.
+    const effect = init.effect ? { source: init.effect.source, pixels: { ...init.effect.pixels, data: greyPixels(init.effect.pixels.data, grey) } } : null;
+    const paint = init.paint ? { ...init.paint, stops: init.paint.stops.map((st) => ({ ...st, color: hex })) } : null;
+    return new PaintStrokeSession(host, {
+      ...init,
+      surface: lightToShadow(light),
+      lockTransparency: false,
+      brush: lightTwinBrush(init.brush),
+      color: [grey, grey, grey, 255],
+      colorHex: hex,
+      secondary: [grey, grey, grey, 255],
+      inputFilter: undefined,
+      mixerLoad: { reservoir: init.mixerLoad.reservoir ? [g, g, g] : null, amount: init.mixerLoad.amount, pickup: null },
+      thick: init.thick,
+      paint,
+      effect,
+      light: null,
+    });
+  }
+
+  /** Light paint: the layer's light channel after the stroke, or `null` when the stroke has no twin or left it unchanged. */
+  lightChannel(): TiledSurface | null {
+    return this.lightResult;
+  }
+
   private tileTarget(): PaintTileTarget {
     return {
       offset: this.init.offset,
@@ -210,6 +257,7 @@ export class PaintStrokeSession {
     if (filter) points = points.map(filter);
     for (const p of points) this.points.push(p);
     this.lastRaw = points[points.length - 1];
+    this.lightTwin?.push(points);
     if (this.wetDriver) {
       this.wetUpdate(this.wetDriver.push(points));
       return;
@@ -299,6 +347,7 @@ export class PaintStrokeSession {
     }
     this.update(this.dry ? this.dry.finish() : this.thickDriver ? this.thickDriver.finish() : this.stickerSpray ? this.stickerSpray.finish() : this.wet!.finish());
     this.closed = true;
+    if (this.lightTwin?.open) this.lightTwin.end();
     const ch = this.base.channels;
     const tiles = new Map(this.base.tiles);
     let changed = false;
@@ -324,8 +373,20 @@ export class PaintStrokeSession {
   cancel(): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.lightTwin?.open) this.lightTwin.cancel();
+    this.lightResult = null;
     this.host.commit(this, null, true);
   }
+}
+
+/** Pixels with their colour set to one grey (alpha kept). */
+function greyPixels(data: ArrayLike<number>, grey: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    out[i] = out[i + 1] = out[i + 2] = grey;
+    out[i + 3] = data[i + 3];
+  }
+  return out;
 }
 
 /** The Mixer Brush load a stroke starts with. */
