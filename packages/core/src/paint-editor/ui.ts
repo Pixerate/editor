@@ -452,6 +452,7 @@ export const PAPER_SLIDERS: readonly SliderControl[] = [
   { path: 'permeability', label: 'Permeability', min: 0, max: 1, step: 0.01 },
   { path: 'roughness', label: 'Roughness', min: 0, max: 1, step: 0.01 },
   { path: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.01 },
+  { path: 'backlight', label: 'Backlight', min: 0, max: 1, step: 0.01 },
 ];
 
 /** Reads `a.b` from an object. */
@@ -554,7 +555,7 @@ export interface BrushEngineControls {
   light?: boolean;
 }
 
-/** The light paint slider (every engine that lays colour but wet and sticker brushes). */
+/** The light paint slider (every engine that lays colour but sticker brushes; wet brushes when they paint). */
 const LIGHT_SLIDER: SliderControl = { path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 };
 
 const PICKUP_SLIDERS: readonly SliderControl[] = [
@@ -571,7 +572,8 @@ const PICKUP_SLIDERS: readonly SliderControl[] = [
  */
 export function brushEngineControls(brush: Pick<PaintBrush, 'engine'> & { wet?: PaintBrush['wet'] }): BrushEngineControls | null {
   const c = engineControls(brush);
-  if (!c || !['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine)) return c;
+  const wetPaint = brush.engine === 'wet' && brush.wet?.tool === 'paint';
+  if (!c || !(wetPaint || ['dab', 'mixer', 'particle', 'bristle', 'impasto'].includes(brush.engine))) return c;
   // Light paint: how much light the brush lays (and, for impasto, rim and clarity).
   const extra: SliderControl[] = brush.engine === 'impasto' ? [{ path: 'impasto.rim', label: 'Rim', min: 0, max: 1, step: 0.01 }, { path: 'impasto.clarity', label: 'Clarity', min: 0, max: 1, step: 0.01 }] : [];
   return { ...c, sliders: [...c.sliders, LIGHT_SLIDER, ...extra], light: true };

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { WetWorld, flowField, moveWetSnapshot, normalizeFlow, pigmentOf, type WetPaperInput } from '../src/paint';
-import { WET_TILE } from '../src/paint/wet/model';
+import { MASS_CHANNELS, P_D0, SET_PLANES, WET_TILE } from '../src/paint/wet/model';
 import { WET_KERNEL_SOURCE_HASH } from '../src/paint/wet/kernel-wasm';
 
 const paper: WetPaperInput = {
@@ -43,7 +43,7 @@ const FULL: Spots = { cx: 250, cy: 250, corner: [590, 410], late: [300, 200] };
 /** 2 × 1 tiles, the second one partial: the wet patch straddles the x = 256 seam. */
 const SMALL: Spots = { cx: 250, cy: 90, corner: [290, 170], late: [270, 60] };
 
-/** A scene that exercises every term: dabs of two colours, clear water, tilt, a flow map, damp paper, a push. */
+/** A scene that exercises every term: dabs of two colours (one with light paint), clear water, tilt, a flow map, damp paper, a push. */
 function scene(world: WetWorld, phase: number, at: Spots) {
   const { cx, cy } = at;
   const blue = pigmentOf([0.15, 0.3, 0.75], 0);
@@ -56,7 +56,7 @@ function scene(world: WetWorld, phase: number, at: Spots) {
     const w = disc(cx - 10, cy, 40);
     world.wetPaper('a', w.rect, w.cov, 1);
     const d = disc(cx, cy - 10, 30);
-    world.paint('a', d.rect, d.cov, 0.4, scale(blue, 0.06));
+    world.paint('a', d.rect, d.cov, 0.4, scale(blue, 0.06), null, 0.6);
     const e = disc(cx + 20, cy + 10, 25);
     world.paint('a', e.rect, e.cov, 0.35, scale(yellow, 0.05));
     // at the right and bottom canvas edges, inside partial tiles
@@ -81,9 +81,9 @@ function digest(world: WetWorld): string {
       for (let tx = 0; tx < world.layout.tilesX; tx++) {
         const b = world.slotIndex(id, tx, ty);
         if (b < 0) continue;
-        // the current set and the deposit planes, interiors only
+        // the current set and the deposit planes (pigment and light), interiors only
         const p = world.currentParity;
-        for (const plane of [...Array(18).keys()].map((k) => p * 18 + k).concat([36, 37, 38, 39]))
+        for (const plane of [...Array(SET_PLANES).keys()].map((k) => p * SET_PLANES + k).concat([...Array(MASS_CHANNELS).keys()].map((q) => P_D0 + q)))
           for (let y = 1; y <= 256; y++) h.update(new Uint8Array(f.buffer, f.byteOffset + (b + plane * 258 * 258 + y * 258 + 1) * 4, 256 * 4));
       }
     const base = world.getBase(id);

@@ -96,4 +96,21 @@ describe("paint agent scripts", () => {
     for (const l of loops) expect(controller.lightOf(l.id).hasLight).toBe(true);
     expect(controller.lightOf(loops.find((l) => l.name === "Loop 2")!.id).spill).toEqual({ radius: 48, strength: 1.4 });
   }, 120_000);
+
+  it("paints a glowing watercolour wash whose light flows and dries into the layer", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-glow-wash")!, { control: { speed: Infinity, stopped: false } });
+    const glow = controller.listLayers().find((l) => l.name === "Glow")!;
+    expect(controller.getState().wet.wet).toBe(false);
+    expect(controller.lightOf(glow.id).hasLight).toBe(true);
+    expect(controller.getStrokes().filter((s) => s.brush.id === "glow-wash")).toHaveLength(2);
+  }, 120_000);
+
+  it("paints stained glass on backlit paper: glazes and lead lines", async () => {
+    const { controller, registry } = setup();
+    await runAgentScript(registry, PAINT_SCRIPTS.find((s) => s.id === "paint-stained-glass")!, { control: { speed: Infinity, stopped: false } });
+    expect(controller.document.paper).toMatchObject({ preset: "stained-glass", backlight: 0.8 });
+    expect(controller.listLayers().map((l) => l.name)).toEqual(expect.arrayContaining(["Glass", "Lead"]));
+    expect(controller.exportPsd().warnings.some((w) => /Backlit paper/.test(w))).toBe(true);
+  }, 120_000);
 });

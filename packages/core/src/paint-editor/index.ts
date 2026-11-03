@@ -33,6 +33,7 @@ export { BLEND_MODES, PAINTERLY_BLEND_MODES, isBlendMode, isPainterlyBlendMode, 
 export * from './wet';
 export * from './wet-tools';
 export * from './thick';
+export { BACKLIGHT_SPILL, DEFAULT_BACKLIGHT_COLOR, backlightOf } from './backlight';
 export * from './thick-tools';
 export * from './replay';
 export * from './replay-tools';

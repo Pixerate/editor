@@ -1,0 +1,22 @@
+{
+	"prompt": "Paint a glowing cyan watercolour wash across this dark sheet, and leave it dry.",
+	"fixture": {
+		"editor": "paint",
+		"width": 64,
+		"height": 64,
+		"setup": [{ "tool": "set_paper", "args": { "preset": "cold-pressed", "color": "#101626" } }]
+	},
+	"checks": [
+		{ "why": "a wet paint brush laid the wash", "tool": "list_strokes", "expect": { "strokes": { "$some": { "brushId": { "$in": ["glow-wash", "watercolor-round", "watercolor-wash", "gradient-wash", "watercolor-detail"] } } } } },
+		{ "why": "the wash glows: its layer has light paint", "tool": "get_light", "expect": { "hasLight": true } },
+		{ "why": "it is dry", "tool": "get_wet_paint", "expect": { "wet": false } }
+	],
+	"solution": [
+		{ "tool": "set_brush", "args": { "id": "glow-wash" } },
+		{ "tool": "set_color", "args": { "color": "#22d3ee" } },
+		{ "tool": "paint_stroke", "args": { "points": [{ "x": 4, "y": 20 }, { "x": 60, "y": 20 }, { "x": 60, "y": 40 }, { "x": 4, "y": 40 }] } },
+		{ "tool": "advance_wet_paint", "args": { "seconds": 1 } },
+		{ "tool": "dry_paint" },
+		{ "tool": "get_light" }
+	]
+}

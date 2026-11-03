@@ -7,7 +7,7 @@
  *   lift. Its colour is the suspended pigment's hue at full strength; contact is how much of the
  *   footprint is wet with pigment in it.
  * - `deposit` lays water and pigment: the colour becomes Kubelka-Munk pigment (`pigmentOf` at the
- *   brush's body), at `mass` per unit of coverage, with `water` depth.
+ *   brush's body), at `mass` per unit of coverage, with `water` depth, and `light` paint with it.
  */
 
 import type { PaintMedium, PaintSample, RgbTriple } from '../exchange';
@@ -23,6 +23,8 @@ export interface WetMediumOptions {
   mass: number;
   /** 0 transparent watercolour .. 1 opaque gouache. */
   body: number;
+  /** Light paint mass laid per unit of coverage (at deposit weight 1); 0 or missing lays none. */
+  light?: number;
 }
 
 /** The strongest absorption (K) a sampled colour is scaled to: its hue at full strength. */
@@ -55,6 +57,7 @@ export class WetMedium implements PaintMedium {
 
   deposit(rect: RasterRect, cov: ArrayLike<number>, dep: number, paint: Readonly<RgbTriple>, _pigment: Pigment | null, field: Float32Array | null = null): void {
     const { water, mass, body } = this.options;
+    const light = (this.options.light ?? 0) * dep;
     if (field) {
       const n = rect.width * rect.height;
       const out = new Float32Array(n * 4);
@@ -63,11 +66,11 @@ export class WetMedium implements PaintMedium {
         pigmentOf([field[p * 3], field[p * 3 + 1], field[p * 3 + 2]], body, one);
         for (let q = 0; q < 4; q++) out[p * 4 + q] = one[q] * mass * dep;
       }
-      this.world.paint(this.laneId, rect, cov, water * dep, null, out);
+      this.world.paint(this.laneId, rect, cov, water * dep, null, out, light);
       return;
     }
     pigmentOf(paint, body, this.pig);
     const pig = [0, 1, 2, 3].map((q) => this.pig[q] * mass * dep);
-    this.world.paint(this.laneId, rect, cov, water * dep, mass > 0 ? pig : null);
+    this.world.paint(this.laneId, rect, cov, water * dep, mass > 0 ? pig : null, null, light);
   }
 }

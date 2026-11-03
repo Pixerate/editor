@@ -1,6 +1,6 @@
 ---
 name: pixerate-paint-watercolour
-description: The watercolour workflow in the Pixerate paint editor - choosing the paper, planning light to dark and keeping the paper's white for highlights, wet-in-wet and wet-on-dry washes, letting water flow and drying before glazing, steering water with the wet tools, granulation, blooms and edge darkening, and finishing detail with a small brush. Use when asked to paint in watercolour or gouache, lay a wash, paint a sky, glaze, paint wet-in-wet, make blooms or granulation, or paint a loose or botanical watercolour, or when wet_paper, advance_wet_paint, dry_paint or set_wet_settings are available. Load with pixerate-paint-editor, which lists every tool.
+description: The watercolour workflow in the Pixerate paint editor - choosing the paper, planning light to dark and keeping the paper's white for highlights, wet-in-wet and wet-on-dry washes, letting water flow and drying before glazing, steering water with the wet tools, granulation, blooms and edge darkening, finishing detail with a small brush, and glowing washes and backlit (stained-glass) glazes. Use when asked to paint in watercolour or gouache, lay a wash, paint a sky, glaze, paint wet-in-wet, make blooms or granulation, paint a loose or botanical watercolour, or paint glowing watercolour or stained glass, or when wet_paper, advance_wet_paint, dry_paint or set_wet_settings are available. Load with pixerate-paint-editor, which lists every tool.
 metadata:
   kind: workflow
   reference: pixerate-paint-editor
@@ -57,6 +57,12 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
    run, `set_wet_settings` tunes `granulation`, `edgeDarkening` and `bloom` for the layer.
 8. **Finish.** `dry_paint` everything; `render_preview` to look; export.
 
+**Glowing washes and backlit glazes.** A wet paint brush with `light.amount` (`glow-wash`) lays
+light that flows and dries with its pigment: paint it on dark paper, let it flow, dry, and check
+`get_light` `hasLight`. For a lightbox or stained glass, `set_paper` `stained-glass` (or
+`backlight` on any paper) before painting: strong transparent glazes glow, gouache and solid ink
+block the light. See `references/light-paint.md` in `pixerate-paint-editor`.
+
 ## Decision table
 
 | Want | Approach |
@@ -69,6 +75,8 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference an
 | Grainy, textured washes | `rough-watercolor` paper and `granulation` up in `set_wet_settings` |
 | Fine lines and detail | `hot-pressed` paper, `watercolor-detail`, on dry paper |
 | Cauliflower blooms | Add water into a drying wash; `bloom` up |
+| A glowing (neon) wash | Dark paper (`set_paper` `color`), `glow-wash` or `light.amount` on a wet brush; flow, dry, `get_light` |
+| Stained glass, a lightbox | `set_paper` `stained-glass` (or `backlight`); strong glazes for panes, opaque black lines above |
 
 ## Recipes
 
@@ -102,5 +110,6 @@ warm colour near the horizon → `advance_wet_paint` → `blot` a few clouds →
 - `paint_stroke`: washes, shapes and details, and the wet tools (water, dryer, blot)
 - `wet_paper`, `advance_wet_paint`, `dry_paint`, `get_wet_paint`: wet-in-wet, flow, drying and checking
 - `set_wet_settings`, `set_canvas_tilt`, `set_flow_map`: tune and steer the water
+- `get_light`: check a glowing wash's light once it dries
 - `undo_paint`: take back a step
 - `export_image`: deliver

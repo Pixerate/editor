@@ -526,3 +526,23 @@ describe('light paint', () => {
   });
 });
 
+
+describe('wet light paint and backlit paper', () => {
+  it('wet paint brushes get the Light slider; the paper panel sets the backlight and its colour', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    show(BrushPanel, { controller: c });
+    c.setBrush({ id: 'glow-wash' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Light"]')).not.toBeNull();
+    c.setBrush({ id: 'add-water' });
+    flushSync();
+    expect(target.querySelector('input[aria-label="Light"]')).toBeNull();
+    show(PaperPanel, { controller: c });
+    click(target.querySelector('[role="option"][title="Stained glass (backlit)"]'));
+    expect(c.document.paper).toMatchObject({ preset: 'stained-glass', backlight: 0.8 });
+    setValue(target.querySelector('input[aria-label="Backlight"]') as HTMLInputElement, '0.4', true);
+    expect(c.document.paper.backlight).toBe(0.4);
+    setValue(target.querySelector('input[aria-label="Backlight colour"]') as HTMLInputElement, '#ffccaa', true);
+    expect(c.document.paper.backlightColor).toBe('#ffccaa');
+  });
+});
