@@ -26,11 +26,15 @@ export function stickerVectorGroup(placement: StickerPlacement, id = 'sticker'):
   return transformVectorNode(group, [s, 0, 0, s, placement.x - (box.width * s) / 2, placement.y - (box.height * s) / 2]);
 }
 
-/** `insert_sticker` for a vector editor: a group of editable paths, one undo step, selected. */
-export function createVectorStickerHost(controller: VectorEditorController): StickerInsertHost {
+/**
+ * `insert_sticker` for a vector editor: a group of editable paths, one undo step, selected. With
+ * `dark` (the host's dark theme or artboard), stickers that have a dark variant use it.
+ */
+export function createVectorStickerHost(controller: VectorEditorController, options: { dark?: () => boolean } = {}): StickerInsertHost {
   return {
     noun: 'group of editable paths',
     format: 'svg',
+    ...(options.dark ? { dark: options.dark } : {}),
     defaultCentre: () => {
       const d = controller.getDocument();
       return { x: d.width / 2, y: d.height / 2 };
