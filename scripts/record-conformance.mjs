@@ -32,11 +32,13 @@ async function core(entry) {
 const { runConformanceScenario } = await core("tools/index.js");
 const { encodePng } = await core("raster/index.js");
 const { createPaintConformanceHost } = await core("paint-editor/index.js");
+const { createVectorConformanceHost } = await core("vector/index.js");
 const { createFakeEffectProvider } = await core("effects/index.js");
 
 /** How each domain builds a fresh host for a scenario. */
 const DOMAINS = {
   paint: (scenario) => createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }),
+  vector: (scenario) => createVectorConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }),
 };
 
 /** Default pixel tolerances another implementation is held to (this core matches exactly). */

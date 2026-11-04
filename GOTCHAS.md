@@ -3835,3 +3835,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
+
+### [core/vector] Regenerating Vector Art Without a Seed Picks a Random One
+- **Issue / Symptom**: The vector scenario recorder refused `effects-and-generation`: the document after `regenerate_vector_art` differed between its two runs, in the generation provenance's `seed`.
+- **Root Cause**: Without a `seed`, generation and regeneration draw a fresh random seed (so a new take looks different), and record it in the provenance.
+- **Solution / Workaround**: Scenarios pass a `seed` to both `generate_vector_art` and `regenerate_vector_art`. The provenance's `createdAt` is normalised to `"<time>"` by the runner, so it needs nothing.
