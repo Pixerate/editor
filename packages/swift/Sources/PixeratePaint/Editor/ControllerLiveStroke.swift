@@ -37,7 +37,7 @@ public final class PaintLiveStroke {
         guard open, !points.isEmpty else { return }
         try? session.push(points)
         // The wet layer's display is the layer's pixels: show it (not an undo step).
-        if isWet { controller?.wet.syncDisplays(DISPLAY_TILES_PER_TICK) }
+        if isWet { controller?.wet.syncDisplays() }
         controller?.emit()
     }
 

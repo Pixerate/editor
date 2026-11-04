@@ -250,6 +250,8 @@ public final class PaintEditorController {
     var wetOp: WetOperation?
     /// Wet events (for replays) for the document being built.
     var pendingWetEvents: [WetEvent] = []
+    /// The wet options this editor was made with (replay targets get the same).
+    var wetOptions = PaintWetOptions()
     /// Lit tiles of thick layers, per layer.
     var litCaches: [String: LitCache] = [:]
 
@@ -259,7 +261,7 @@ public final class PaintEditorController {
         deinit { c.cancel() }
     }
 
-    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil) throws {
+    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions()) throws {
         self.historyLimit = Swift.max(1, historyLimit ?? 200)
         var paperRaw = paper ?? [:]
         if let presetId {
@@ -295,7 +297,8 @@ public final class PaintEditorController {
                 doc = d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } }
             },
             changed: { [unowned self] in emit() }
-        ))
+        ), wetOptions)
+        self.wetOptions = wetOptions
     }
 
     // MARK: - History

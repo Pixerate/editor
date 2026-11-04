@@ -133,8 +133,7 @@ extension PaintEditorController {
      */
     @discardableResult
     public func tickWet(_ now: Double) -> Int {
-        if liveStroke != nil { return 0 }
-        return wet.tick(now)
+        wet.tick(now)
     }
 
     /// Lets the CPU engine run alone (`off`) or allows a GPU engine (`auto`; this port has none). Not an undo step.

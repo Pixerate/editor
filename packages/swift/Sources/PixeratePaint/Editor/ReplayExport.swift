@@ -13,7 +13,8 @@ import PixerateRaster
  *   scaled), so the picture is painted again with more pixels instead of upscaled.
  *
  * What was not recorded as data (merges, transforms of layers) is not repeated: those layers start
- * empty. Wet-media events are not ported (#545).
+ * empty. Wet strokes apply each point at the simulation clock it was recorded at, with the wet
+ * events (tilt, settings, flow maps, wet paper, drying) at theirs, so wet paint flows the same.
  */
 
 /// The layer tree with every pixel layer empty (what a replay paints into).
@@ -133,7 +134,7 @@ extension PaintEditorController {
         let width = doc.canvas.width, height = doc.canvas.height
         let w = JS.round(Double(width) * scale), h = JS.round(Double(height) * scale)
         if w > 16384 || h > 16384 { throw PaintEditorError("At scale \(jsText(scale)) the canvas would be \(jsText(w))×\(jsText(h)); the limit is 16384 px per side. Use a smaller scale.") }
-        let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary)
+        let target = try PaintEditorController(width: w, height: h, dpi: doc.canvas.dpi * scale, brushLibrary: brushLibrary, wet: wetOptions)
         target.brushEntries = brushEntries
         var paper = doc.paper
         paper.scale = Swift.min(8, paper.scale * scale)
@@ -146,20 +147,60 @@ extension PaintEditorController {
     }
 
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
-    func replayPainting(into target: PaintEditorController, scale s: Double = 1, onStroke: ((Int) throws -> Void)? = nil) async throws {
+    func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
         let source = doc
         // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be).
         try await target.prepareEffectPaints(source.strokes.compactMap(\.effect))
         let m: Affine = [s, 0, 0, s, 0, 0]
-        enum Item { case stroke(RecordedStroke), paint(PaintEvent) }
+        enum Item { case stroke(RecordedStroke), paint(PaintEvent), wet(WetEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
         var order = 0
         for (i, st) in source.strokes.enumerated() { items.append((.stroke(st), Double(i) + 0.5, order)); order += 1 }
         for e in source.paintEvents ?? [] { items.append((.paint(e), Double(e.at), order)); order += 1 }
+        for e in source.wetEvents ?? [] { items.append((.wet(e), Double(e.at ?? 0), order)); order += 1 }
         items.sort { $0.at != $1.at ? $0.at < $1.at : $0.order < $1.order }
+        let chunk = wetChunk > 0 ? wetChunk : Int.max
+        func advanceTo(_ clock: Int) throws {
+            var left = clock - (target.wet.world?.clock ?? 0)
+            while left > 0 {
+                let n = Swift.min(left, chunk)
+                _ = try target.advanceWet(steps: n, seconds: nil)
+                left -= n
+                if chunk != Int.max { try onWetSteps?() }
+            }
+        }
+        func sr(_ r: JSONValue?) -> JSONValue? {
+            guard let o = r?.objectValue else { return nil }
+            var out = o
+            for k in ["x", "y", "width", "height"] { if let v = o[k]?.numberValue { out[k] = .number(v * s) } }
+            return .object(out)
+        }
         var strokes = 0
         for entry in items {
             switch entry.item {
+            case .wet(let e):
+                try advanceTo(e.clock)
+                // An event that no longer applies (its layer went away) is skipped.
+                switch e.kind {
+                case "dry":
+                    let ids = e.layerId?.split(separator: ",").map(String.init).filter { !$0.isEmpty } ?? []
+                    if !ids.isEmpty { for id in ids { _ = try? target.dryPaint(layerId: id, rect: sr(e.data)) } } else { _ = try? target.dryPaint(rect: sr(e.data)) }
+                case "tilt":
+                    let d = e.data?.objectValue ?? [:]
+                    _ = try? target.setCanvasTilt(angle: d["angle"]?.numberValue, direction: d["direction"]?.numberValue)
+                case "params":
+                    if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.setWetParams(id, e.data?.objectValue ?? [:]) }
+                case "flow":
+                    var f = e.data?.objectValue ?? [:]
+                    if let c = f["center"]?.objectValue, let x = c["x"]?.numberValue, let y = c["y"]?.numberValue { f["center"] = pointJSON(x * s, y * s) }
+                    if let sc = f["scale"]?.numberValue, sc != 0 { f["scale"] = .number(Swift.min(1024, sc * s)) }
+                    if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.setFlowMap(id, f) }
+                case "wet-paper":
+                    let d = e.data?.objectValue ?? [:]
+                    if let id = e.layerId, target.getLayer(id) != nil { _ = try? target.wetPaper(layerId: id, rect: sr(d["rect"]), amount: d["amount"]?.numberValue) }
+                default:
+                    break
+                }
             case .paint(let e):
                 if target.getLayer(e.layerId) == nil { continue }
                 let d = e.data ?? [:]
@@ -187,6 +228,8 @@ extension PaintEditorController {
                         return y
                     }
                     try target.replaceStickers(e.layerId, list)
+                case "flatten":
+                    _ = try target.flattenRelief(e.layerId)
                 default:
                     continue
                 }
@@ -200,7 +243,19 @@ extension PaintEditorController {
                 i.snapToPerspective = false
                 i.stencils = false
                 i.maskStencils = (st.stencils ?? []).map { s == 1 ? $0 : scaleStencil($0, s) }
-                _ = try target.paintStroke(i, points: st.points)
+                if st.brush.engine == "wet", let steps = st.steps, steps.count == st.points.count, !steps.isEmpty {
+                    // Each point at the clock it was recorded at, the simulation stepped in between.
+                    try advanceTo(steps[0])
+                    i.start = Point2(x: st.points[0].x, y: st.points[0].y)
+                    let session = try target.beginStroke(i)
+                    for (k, p) in st.points.enumerated() {
+                        try advanceTo(steps[k])
+                        session.push([p])
+                    }
+                    _ = try session.end()
+                } else {
+                    _ = try target.paintStroke(i, points: st.points)
+                }
                 try onStroke?(strokes)
             }
         }
@@ -211,7 +266,7 @@ extension PaintEditorController {
      * strokes, a video project of the frames as stills and the ffmpeg command that renders it.
      * Changes nothing here.
      */
-    public func timeLapse(frames framesWanted: Int? = nil, strokesPerFrame: Int? = nil, maxSide maxSideIn: Double? = nil, fps fpsIn: Double? = nil, holdMs: Double? = nil) async throws -> PaintTimeLapse {
+    public func timeLapse(frames framesWanted: Int? = nil, strokesPerFrame: Int? = nil, maxSide maxSideIn: Double? = nil, fps fpsIn: Double? = nil, holdMs: Double? = nil, wetStepsPerFrame: Int? = nil) async throws -> PaintTimeLapse {
         let target = try createReplayTarget(scale: 1)
         let maxSide = Swift.max(32, Swift.min(4096, JS.round(maxSideIn ?? 720)))
         let total = doc.strokes.count
@@ -226,7 +281,8 @@ extension PaintEditorController {
             frames.append(encodePng(f.width, f.height, f.data))
         }
         shoot()
-        try await replayPainting(into: target) { i in if i % perFrame == 0 || i == total { shoot() } }
+        let wetEvery = wetStepsPerFrame ?? 60
+        try await replayPainting(into: target, wetChunk: wetEvery > 0 ? wetEvery : 0, onWetSteps: wetEvery > 0 ? { shoot() } : nil) { i in if i % perFrame == 0 || i == total { shoot() } }
         let (video, ffmpeg, durationMs) = try timeLapseVideo(frames.count, width, height, fps, holdMs ?? 1500)
         return PaintTimeLapse(fps: fps, width: width, height: height, frames: frames, video: video, ffmpeg: ffmpeg, durationMs: durationMs)
     }
@@ -247,7 +303,7 @@ extension PaintEditorController {
 func paintReplayExportContentHandlers(_ c: PaintEditorController) -> [String: (JSONObject) async throws -> ToolOutput] {
     var h: [String: (JSONObject) async throws -> ToolOutput] = [:]
     h["export_time_lapse"] = { a in
-        let tl = try await c.timeLapse(frames: a["frames"]?.numberValue.map { Int($0) }, maxSide: a["maxSide"]?.numberValue, fps: a["fps"]?.numberValue, holdMs: a["holdMs"]?.numberValue)
+        let tl = try await c.timeLapse(frames: a["frames"]?.numberValue.map { Int($0) }, maxSide: a["maxSide"]?.numberValue, fps: a["fps"]?.numberValue, holdMs: a["holdMs"]?.numberValue, wetStepsPerFrame: a["wetStepsPerFrame"]?.numberValue.map { Int($0) })
         let n = tl.frames.count
         var pick: [Int] = []
         for v in [0, n / 3, (2 * n) / 3, n - 1] where !pick.contains(v) { pick.append(v) }

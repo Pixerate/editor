@@ -361,6 +361,24 @@ struct PaintWetHost {
     var changed: () -> Void
 }
 
+/// Wet-media options of an editor (`PaintWetOptions`): only the CPU engine exists here.
+public struct PaintWetOptions: Sendable {
+    /// Steps per second while time runs (default 120).
+    public var speed: Double?
+    /// Bytes of wet snapshots kept for undo (default 512 MB).
+    public var undoMemory: Int?
+    /// `auto` (default) or `off`: whether a GPU engine may run (this port has none, so the CPU always does).
+    public var gpu: String?
+    /// Live 256 px tiles at which a GPU would take over (default 16).
+    public var gpuMinTiles: Int?
+    public init(speed: Double? = nil, undoMemory: Int? = nil, gpu: String? = nil, gpuMinTiles: Int? = nil) {
+        self.speed = speed
+        self.undoMemory = undoMemory
+        self.gpu = gpu
+        self.gpuMinTiles = gpuMinTiles
+    }
+}
+
 /// The paint editor's wet layers (`PaintWetLayers`): one `WetWorld` per canvas, its settings and time.
 public final class PaintWetLayers {
     public private(set) var world: WetWorld?
@@ -380,10 +398,12 @@ public final class PaintWetLayers {
     public internal(set) var gpuMinTiles = 16
     private let host: PaintWetHost
 
-    init(_ host: PaintWetHost, speed: Double? = nil, undoMemory: Int? = nil) {
+    init(_ host: PaintWetHost, _ options: PaintWetOptions = PaintWetOptions()) {
         self.host = host
-        self.speed = Swift.max(1, Swift.min(2000, speed ?? 120))
-        self.undoMemory = Swift.max(0, undoMemory ?? 512 * 1024 * 1024)
+        speed = Swift.max(1, Swift.min(2000, options.speed ?? 120))
+        undoMemory = Swift.max(0, options.undoMemory ?? 512 * 1024 * 1024)
+        gpuMode = options.gpu == "off" ? "off" : "auto"
+        gpuMinTiles = Swift.max(1, options.gpuMinTiles ?? 16)
     }
 
     /// `auto`: use the GPU for large wet areas when there is one; `off`: the CPU only. This port has no GPU, so either way the CPU runs.

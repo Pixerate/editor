@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "The wet media simulation (paint/wet with the TypeScript kernel, paint-editor/wet.ts) and its tools are not ported yet (#545)."
-  },
   "steps": [
     {
       "tool": "set_wet_engine",
