@@ -945,12 +945,22 @@ final class RasterVectorTests: XCTestCase {
 
     private func floats(_ v: JSONValue) -> [Float] {
         let b = bytes(v)
-        return stride(from: 0, to: b.count, by: 4).map { i in Float(bitPattern: UInt32(b[i]) | UInt32(b[i + 1]) << 8 | UInt32(b[i + 2]) << 16 | UInt32(b[i + 3]) << 24) }
+        return stride(from: 0, to: b.count, by: 4).map { (i: Int) -> Float in
+            // Split up: the one-line OR of four shifted bytes timed out the CI type checker.
+            let b0 = UInt32(b[i])
+            let b1: UInt32 = UInt32(b[i + 1]) << 8
+            let b2: UInt32 = UInt32(b[i + 2]) << 16
+            let b3: UInt32 = UInt32(b[i + 3]) << 24
+            return Float(bitPattern: b0 | b1 | b2 | b3)
+        }
     }
 
     private func shorts(_ v: JSONValue) -> [UInt16] {
         let b = bytes(v)
-        return stride(from: 0, to: b.count, by: 2).map { UInt16(b[$0]) | UInt16(b[$0 + 1]) << 8 }
+        return stride(from: 0, to: b.count, by: 2).map { (i: Int) -> UInt16 in
+            let high: UInt16 = UInt16(b[i + 1]) << 8
+            return UInt16(b[i]) | high
+        }
     }
 
     private func rect(_ v: JSONValue) -> RasterRect? {

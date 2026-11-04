@@ -8,7 +8,7 @@ The SwiftPM manifest is [`Package.swift`](../../Package.swift) at the repository
 package works as a git dependency); its sources are here.
 
 ```swift
-.package(url: "https://github.com/Pixerate/editor.git", from: "…")
+.package(url: "https://github.com/Pixerate/editor.git", .upToNextMinor(from: "0.1.0"))
 // target dependency:
 .product(name: "PixerateCore", package: "editor")
 ```
@@ -37,6 +37,15 @@ scenario, and every recorded PNG must decode to its recorded hash.
 The Swift CI workflow (`.github/workflows/swift.yml`) runs `gen-swift --check`, then builds and
 tests on macOS and in an iOS simulator, whenever the Swift code, the contracts or their scripts
 change.
+
+## Releases
+
+The Swift package has its own version, `@pixerate/swift` in `packages/swift/package.json`, bumped
+by changesets like the npm packages. When a release changes it, the release workflow tags that
+release commit `v<version>`. SwiftPM only treats `1.2.3` and `v1.2.3` tags as versions (any other
+prefix is ignored, so there are no `swift-v…` tags), and changesets' own tags are
+`@pixerate/editor@…`, so the plain `v…` tags only ever mean the Swift package. While it is 0.x, a
+minor bump can break, so depend on it with `.upToNextMinor(from:)`.
 
 ## Keeping parity
 
