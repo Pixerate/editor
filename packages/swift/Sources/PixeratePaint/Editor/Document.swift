@@ -32,6 +32,10 @@ public struct PaintEvent: Equatable {
     public var kind: String
     public var layerId: String
     public var data: JSONObject?
+    /// A `live-strokes` event's strokes as painted (in memory only; saved, they are `data.strokes`).
+    var strokes: [RecordedStroke]?
+
+    public static func == (a: PaintEvent, b: PaintEvent) -> Bool { a.at == b.at && a.kind == b.kind && a.layerId == b.layerId && a.data == b.data }
 
     public var json: JSONValue {
         var o: JSONObject = ["at": .number(Double(at)), "kind": .string(kind), "layerId": .string(layerId)]

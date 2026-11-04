@@ -216,9 +216,13 @@ public final class PaintEditorModel {
     // MARK: - Export
 
     /// The painting as a file (`export_image` / `export_psd`): PNG with the paper, or an 8-bit RGB PSD with its layers.
-    public func exportFile(_ format: PaintExportFormat) -> PaintExportFile? {
+    /// `scale` above 1 repaints the recorded strokes larger (`export_high_res`) instead of upscaling.
+    public func exportFile(_ format: PaintExportFormat, scale: Double = 1) -> PaintExportFile? {
         attempt {
             switch format {
+            case .png where scale > 1:
+                let img = try controller.renderHighRes(scale: scale)
+                return PaintExportFile(format: .png, bytes: Data(encodePng(img.width, img.height, img.data)))
             case .png: return PaintExportFile(format: .png, bytes: Data(try controller.exportPng()))
             case .psd: return PaintExportFile(format: .psd, bytes: Data(try controller.exportPsd().bytes))
             }

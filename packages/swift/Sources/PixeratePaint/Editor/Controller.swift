@@ -295,8 +295,8 @@ public final class PaintEditorController {
     }
 
     /// The document with a paint event appended (for replays).
-    func withPaintEvent(_ d: PaintDocumentState, kind: String, layerId: String, data: JSONObject? = nil) -> PaintDocumentState {
-        d.with { $0.paintEvents = (d.paintEvents ?? []) + [PaintEvent(at: d.strokes.count, kind: kind, layerId: layerId, data: data)] }
+    func withPaintEvent(_ d: PaintDocumentState, kind: String, layerId: String, data: JSONObject? = nil, strokes: [RecordedStroke]? = nil) -> PaintDocumentState {
+        d.with { $0.paintEvents = (d.paintEvents ?? []) + [PaintEvent(at: d.strokes.count, kind: kind, layerId: layerId, data: data, strokes: strokes)] }
     }
 
     // MARK: - Canvas and paper

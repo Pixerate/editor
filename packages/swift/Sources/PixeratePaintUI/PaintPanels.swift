@@ -186,6 +186,7 @@ public struct PaintToolbarView: View {
                 Divider().frame(height: 16)
                 Menu("Export") {
                     Button("PNG image…") { exportFile = model.exportFile(.png) }
+                    Button("PNG at 2× (repainted)…") { exportFile = model.exportFile(.png, scale: 2) }
                     Button("Photoshop (PSD)…") { exportFile = model.exportFile(.psd) }
                 }
                 .fixedSize()

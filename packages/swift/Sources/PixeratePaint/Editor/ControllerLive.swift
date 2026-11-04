@@ -220,7 +220,21 @@ extension PaintEditorController {
             live.set(layer.id, list)
             o.liveStrokes = live
         }
-        return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))])
+        return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))], strokes: list)
+    }
+
+    /// Sets a stroke layer's strokes (a replay's `live-strokes` event); `nil` rasterizes it.
+    func replaceLiveStrokes(_ layerId: String, _ strokes: [RecordedStroke]?) throws {
+        let l = try pixelLayer(layerId, "set the strokes of")
+        guard let strokes else {
+            commit("Rasterize stroke layer", doc.with { d in
+                var live = d.liveStrokes ?? OrderedMap()
+                _ = live.delete(l.id)
+                d.liveStrokes = live.isEmpty ? nil : live
+            })
+            return
+        }
+        commit("Strokes", try withLiveStrokes(doc, l, strokes.map { var s = $0; s.layerId = l.id; return s }))
     }
 
     /// Draws one stroke onto `surface` of a plain copy of the layer; returns the result and the area it painted.
