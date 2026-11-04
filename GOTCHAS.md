@@ -3681,3 +3681,28 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The compositor's caches and tile maps rely on `Map` insertion order (LRU eviction, `changedTiles` order) and on object identity (`WeakMap`s keyed by layers, tiles and layer arrays; `compositeTiles` reporting whether a tile buffer is the cached one).
 - **Root Cause**: Swift dictionaries are unordered, and Swift arrays (the layer lists and pixel buffers) have no identity.
 - **Solution / Workaround**: `OrderedMap` reproduces `Map` order (set keeps the place, delete then set moves to the end), `IdentityCache` stands in for `WeakMap` (entries hold their key weakly and are found only while it lives), layers and tiles are classes, and a composited tile is a `TileResult` object so `changed` compares identity. The steps and effect reach the TS memoises per layer array are rebuilt per call (one pass over the layers).
+
+### [swift] Paint Coverage Maps Store `Float32` but the Maths Goes On in Doubles
+- **Issue / Symptom**: Dry strokes in Swift were one level off in a few pixels where dabs overlapped, though each dab matched on its own.
+- **Root Cause**: The TS stroke coverage is a `Float32Array`. `cov[i] = next` rounds what is stored, but the same statement then uses the unrounded `next` (a double) to weight the colour. Storing `Float(next)` and reading it back for the weight loses that bit.
+- **Solution / Workaround**: Store `Float(...)` exactly where the TS writes to a `Float32Array`, and keep using the local `Double` wherever the TS keeps using the JS number. `CoverageMap.accumulate` in `PixeratePaint/Paint/Brush.swift` follows this pattern.
+
+### [swift] Saved Paint Documents Hash the PNG Data URL, so PNG Bytes Must Be Exact
+- **Issue / Symptom**: Document comparisons failed on asset references (`pixerate-asset:<len>-<hash>`), not on pixels.
+- **Root Cause**: `createEditorDocument` externalizes every inline data URL under a cyrb53 hash of the whole string, so any difference in zlib or PNG chunk bytes changes the reference, even with identical pixels.
+- **Solution / Workaround**: Encode layers with `PixerateRaster`'s byte-exact `encodePng`, crop to `contentBounds` exactly as `serializeLayers` does, and hash UTF-16 code units (`hash53` in `Editor/Serialize.swift`).
+
+### [swift] TS Object Identity of Strokes and Document States
+- **Issue / Symptom**: Live stroke layers redrew the wrong strokes, and `paintedBounds` merged strokes that were different objects with equal content.
+- **Root Cause**: The TS code compares documents and recorded strokes with `!==` (a changed document is a new object; a live layer's strokes are found by identity). Swift structs have no identity, and equal copies compare equal.
+- **Solution / Workaround**: `PaintDocumentState` is a class that is never mutated in place (`with { }` makes the copy), so `!==` keeps its meaning. Every `RecordedStroke` carries a `key` from `newStrokeKey()` that copies keep and new strokes don't; code that compares strokes by identity compares keys.
+
+### [swift] Replayed and Brushed-Path Strokes Record the Active Brush's Id
+- **Issue / Symptom**: `replay_strokes` and `stroke_path` results had a different `brushId` from the TS recordings.
+- **Root Cause**: In TS, a replay paints each recorded brush through the controller's active brush session, so the stroke it records takes the active brush's id with the recorded settings. Building the brush straight from the record keeps the old id.
+- **Solution / Workaround**: Do what the TS does: normalize the recorded brush on top of the active one (`renormalized`) before painting, and record the active id.
+
+### [swift] Light Paint Lives in a Twin Session, Not in the Layer
+- **Issue / Symptom**: Glowing dry brushes changed the layer's pixels, or their light was lost on undo.
+- **Root Cause**: The TS keeps light in a separate per-layer channel (`document.light`). Each stroke runs a light twin of the paint session that lays `light.amount` into that channel, and the compositor adds glow and spill as extra view layers.
+- **Solution / Workaround**: `PaintStrokeSession` owns an optional light twin committed with the stroke into `PaintDocumentState.light` (an `OrderedMap`, in layer order). `lightLayers` draws it when rendering. Wet, thick and particle light (#545) are not ported.

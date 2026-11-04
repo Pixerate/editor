@@ -1,0 +1,187 @@
+import Foundation
+import PixerateCore
+import PixerateRaster
+
+/**
+ * The brush library's agent tools (`brushes/tools.ts`) for a paint editor
+ * (`createPaintBrushLibraryToolProvider`): list, describe, check, export, preview (a test stroke
+ * painted by this editor), create, update, duplicate, remove and import.
+ */
+
+/// A test stroke across a thumbnail: a wave, its pressure rising then falling.
+func thumbnailStroke(_ width: Int, _ height: Int) -> [PenPoint] {
+    var pts: [PenPoint] = []
+    let n = 64
+    let mx = Double(width) * 0.1, my = Double(height) * 0.5
+    for i in 0...n {
+        let t = Double(i) / Double(n)
+        let pressure = t < 0.5 ? 0.15 + 1.7 * t : 1 - 1.4 * (t - 0.5)
+        pts.append(PenPoint(x: mx + (Double(width) - 2 * mx) * t, y: my - JS.sin(t * Double.pi * 2) * Double(height) * 0.22, pressure: pressure, t: Double(i * 12)))
+    }
+    return pts
+}
+
+/// A thumbnail of a brush: a test stroke on the paper (`paint-editor/thumbnails.ts`, dry brushes).
+func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: Int?, height h: Int?, color: String) throws -> (width: Int, height: Int, data: [UInt8]) {
+    let width = Swift.max(16, Swift.min(512, w ?? 160))
+    let height = Swift.max(16, Swift.min(512, h ?? 48))
+    // Fit the tip in the thumbnail: big brushes are drawn smaller.
+    let maxSize = Double(height) * 0.42
+    let b = brush.tip.size > maxSize ? normalizePaintBrush(["tip": .object(brush.tip.json.objectValue!.merging(["size": .number(maxSize)]))], brush) : brush
+    let rgb = hexToRgb8(color)
+    let rgba = rgb + [255]
+    var surface = emptySurface(4)
+    let bytes = { (c: [Int]) in c.map { UInt8($0) } }
+    if b.engine == "eraser" {
+        surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: height), bytes(rgba))
+    } else if b.engine == "blender" || b.engine == "smudge" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
+        let half = Int(JS.ceil(Double(height) / 2))
+        surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: half), bytes(rgba))
+        surface = fillRect(surface, RasterRect(x: 0, y: half, width: width, height: height - half), [232, 196, 64, 255])
+    }
+    if b.light.amount > 0 { throw UnportedBrushError(message: "The \(b.name) brush lays light paint, which the Swift paint editor does not paint yet.") }
+    let session = try PaintStrokeSession(StrokeSessionInit(
+        layerId: "thumbnail", surface: surface, offset: LayerOffset(x: 0, y: 0), lockTransparency: false, brush: b, color: rgba,
+        background: hexToRgb8(paper.color) + [255], grain: paperGrain(paper), paperDepth: paper.depth, seed: 7, colorHex: color,
+        affineCopies: [], copies: [IDENTITY_COPY], mixerLoad: brushLoadForStroke(b, EMPTY_MIXER_LOAD, rgb.map { Double($0) / 255 }), secondary: nil, selection: nil, paint: nil
+    ))
+    session.push(thumbnailStroke(width, height))
+    _ = try session.end()
+    surface = session.surfaceAfter ?? surface
+    let layer = RasterLayer(id: "thumbnail", name: "thumbnail", content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
+    let data = createPaintCompositor().composite([ViewLayer.paper(paper), ViewLayer(layer)], RasterRect(x: 0, y: 0, width: width, height: height), BasicRasterSources(width: width, height: height))
+    return (width, height, data)
+}
+
+/// A brush library entry as `list_brush_presets` lists it.
+func brushSummary(_ e: BrushLibraryEntry, withCheck: Bool) -> JSONValue {
+    let b = e.brush
+    let engine = resolveEngine(b)
+    var o: JSONObject = ["id": b["id"] ?? .null, "name": b["name"] ?? .null, "builtin": .bool(e.builtin), "kind": b["kind"] ?? .null]
+    if let m = b["medium"] { o["medium"] = m }
+    if let v = b["variety"] { o["variety"] = v }
+    if let t = b["tool"] { o["tool"] = t }
+    o["category"] = .string(resolveCategory(b, engine))
+    o["engine"] = .string(engine)
+    o["tip"] = b.path("tip.shape") ?? .null
+    if let s = b.path("tip.size") { o["size"] = s }
+    o["marks"] = b.path("marks.kind") ?? "continuous"
+    o["surface"] = b.path("behaviour.surface") ?? "dry"
+    if let l = b.path("light.amount"), l != 0 { o["light"] = l }
+    if let tags = b["tags"]?.arrayValue, !tags.isEmpty { o["tags"] = .array(tags) }
+    if withCheck { o["renderable"] = .bool(checkBrush(b, PAINT_PROFILE).ok) }
+    return .object(o)
+}
+
+/// The handlers of the brush library provider's tools, by name.
+func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] {
+    let library = c.brushLibrary
+    let profile = PAINT_PROFILE
+    func entry(_ id: String) throws -> BrushLibraryEntry {
+        if let e = library.get(id) { return e }
+        throw BrushLibraryError(.unknownBrush, "No brush \"\(id)\". \(closestIds(id, library.list().compactMap { $0.brush["id"]?.stringValue }))list_brush_presets lists them.")
+    }
+    func hostOf(_ id: String?) throws -> BrushHostProfile {
+        guard let id else { return profile }
+        guard let p = BRUSH_HOST_PROFILES.first(where: { $0.id == id }) else { throw BrushLibraryError(.invalid, "No host \"\(id)\"; use one of: \(BRUSH_HOST_PROFILES.map(\.id).joined(separator: ", ")).") }
+        return p
+    }
+    func store(_ raw: JSONObject, _ overwrite: Bool) throws -> (brush: Brush, problems: [String], check: BrushCheck) {
+        var problems: [String] = []
+        let brush: Brush
+        do { brush = try normalizeBrushSpec(.object(raw), &problems) } catch { throw BrushLibraryError(.invalid, error.localizedDescription) }
+        let check = checkBrush(brush, profile)
+        if !check.ok {
+            let errors = check.issues.filter { $0.severity == "error" }.map { "\($0.facet): \($0.reason) \($0.fix)" }.joined(separator: " ")
+            throw BrushLibraryError(.invalid, "\(profile.name) can't use this brush: \(errors) (check_brush lists every issue; nothing was saved.)")
+        }
+        let saved = try library.save(.object(brush), overwrite: overwrite)
+        return (saved.brush, problems, check)
+    }
+    func warnings(_ check: BrushCheck) -> JSONValue { .array(check.issues.filter { $0.severity == "warning" }.map(\.json)) }
+
+    var h: [String: PaintToolHandler] = [:]
+    h["list_brush_presets"] = { a in
+        let source = a["source"]?.stringValue == "all" ? nil : a["source"]?.stringValue
+        let found = library.list(BrushFilter(kind: a["kind"]?.stringValue, medium: a["medium"]?.stringValue, variety: a["variety"]?.stringValue, tool: a["tool"]?.stringValue, tag: a["tag"]?.stringValue, text: a["text"]?.stringValue, source: source)).filter { a["all"] == .bool(true) || checkBrush($0.brush, profile).ok }
+        let offset = Int(a["offset"]?.numberValue ?? 0)
+        let page = found.dropFirst(offset).prefix(Int(a["limit"]?.numberValue ?? 100))
+        return ["host": .string(profile.id), "total": .number(Double(found.count)), "brushes": .array(page.map { brushSummary($0, withCheck: a["all"] == .bool(true)) })]
+    }
+    h["describe_brush"] = { a in
+        let e = try entry(a["id"]?.stringValue ?? "")
+        let engine = resolveEngine(e.brush)
+        return ["brush": .object(e.brush), "builtin": .bool(e.builtin), "engine": .string(engine), "category": .string(resolveCategory(e.brush, engine)), "check": .object(checkBrush(e.brush, profile).json)]
+    }
+    h["check_brush"] = { a in
+        if (a["id"] == nil) == (a["brush"] == nil) { throw BrushLibraryError(.invalid, "Give either id (a library brush) or brush (a spec), not both or neither.") }
+        let p = try hostOf(a["host"]?.stringValue)
+        var problems: [String] = []
+        let b: Brush
+        if let id = a["id"]?.stringValue { b = try entry(id).brush } else {
+            do { b = try normalizeBrushSpec(a["brush"]!, &problems) } catch { throw BrushLibraryError(.invalid, error.localizedDescription) }
+        }
+        let result = checkBrush(b, p)
+        var o: JSONObject = ["host": .string(p.id)]
+        for (k, v) in result.json { o[k] = v }
+        if !problems.isEmpty { o["problems"] = .array(problems.map { .string($0) }) }
+        if !result.ok { o["degraded"] = .object(degrade(b, p)) }
+        return .object(o)
+    }
+    h["export_brushes"] = { a in ["file": .object(try library.exportFile(a["ids"]?.arrayValue?.compactMap(\.stringValue)))] }
+    h["create_brush"] = { a in
+        let spec = a.without("basedOn")
+        let id = spec["id"]?.stringValue ?? ""
+        if library.isBuiltin(id) { throw BrushLibraryError(.builtin, "\"\(id)\" is a built-in brush id; pick another id (or basedOn \"\(id)\" with a new id).") }
+        if library.get(id) != nil { throw BrushLibraryError(.exists, "A brush \"\(id)\" exists already; pick another id, or change it with update_brush.") }
+        let base = try a["basedOn"]?.stringValue.map { try entry($0).brush }
+        let raw = base.map { mergeBrushPatch($0, spec) } ?? spec
+        let saved = try store(raw, false)
+        return ["id": saved.brush["id"] ?? .null, "brush": .object(saved.brush), "engine": .string(resolveEngine(saved.brush)), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
+    }
+    h["update_brush"] = { a in
+        let id = a["id"]?.stringValue ?? ""
+        let e = try entry(id)
+        if e.builtin { throw BrushLibraryError(.builtin, "\"\(id)\" is a built-in brush and can't be changed; duplicate_brush makes a copy you can change.") }
+        var base = e.brush
+        for k in a["unset"]?.arrayValue?.compactMap(\.stringValue) ?? [] { base[k] = nil }
+        var patch = a.without("id", "unset")
+        patch["id"] = .string(id)
+        let saved = try store(mergeBrushPatch(base, patch), true)
+        return ["id": .string(id), "brush": .object(saved.brush), "changed": .array(changedBrushPaths(.object(e.brush), .object(saved.brush)).map { .string($0) }), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
+    }
+    h["duplicate_brush"] = { a in
+        let brush = try library.duplicate(a["id"]?.stringValue ?? "", newId: a["newId"]?.stringValue, name: a["name"]?.stringValue)
+        return ["id": brush["id"] ?? .null, "brush": .object(brush)]
+    }
+    h["remove_brush"] = { a in
+        let id = a["id"]?.stringValue ?? ""
+        _ = try entry(id)
+        _ = try library.remove(id)
+        return ["removed": .string(id)]
+    }
+    h["import_brushes"] = { a in
+        let r = try library.importFile(a["file"] ?? .null, overwrite: a["overwrite"] == .bool(true))
+        return ["added": .array(r.added.map { .string($0) }), "replaced": .array(r.replaced.map { .string($0) }), "skipped": .array(r.skipped.map { .string($0) }), "problems": .array(r.problems.map { .string($0) })]
+    }
+    return h
+}
+
+/// The brush library's `preview_brush` (an image and its size).
+func brushLibraryContentHandlers(_ c: PaintEditorController) -> [String: (JSONObject) async throws -> ToolOutput] {
+    var h: [String: (JSONObject) async throws -> ToolOutput] = [:]
+    h["preview_brush"] = { a in
+        let id = a["id"]?.stringValue ?? ""
+        guard let e = c.brushLibrary.get(id) else {
+            throw BrushLibraryError(.unknownBrush, "No brush \"\(id)\". \(closestIds(id, c.brushLibrary.list().compactMap { $0.brush["id"]?.stringValue }))list_brush_presets lists them.")
+        }
+        var own: String? = nil
+        if let d = e.brush.path("colour.default")?.stringValue, d.range(of: "^#[0-9a-fA-F]{6}", options: .regularExpression) != nil { own = String(d.prefix(7)) }
+        let w = a["width"]?.numberValue.map { Int($0) } ?? 256
+        let h = a["height"]?.numberValue.map { Int($0) } ?? 96
+        let color = (a["color"]?.stringValue ?? own ?? "#1f2937").lowercased()
+        let img = try renderBrushThumbnail(resolveBrush(e.brush), paper: c.doc.paper, width: w, height: h, color: color)
+        return .result(McpToolResult(content: [.image(data: bytesToBase64(encodePng(img.width, img.height, img.data)), mimeType: "image/png")], structuredContent: ["id": .string(id), "width": .number(Double(w)), "height": .number(Double(h))]))
+    }
+    return h
+}

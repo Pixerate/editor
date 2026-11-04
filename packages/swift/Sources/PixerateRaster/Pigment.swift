@@ -303,8 +303,8 @@ public final class Pigment: @unchecked Sendable {
     public internal(set) var rgb: [Double] = [0, 0, 0]
     /// Tinting strength (default 1): how strongly it colours a mix, relative to its weight.
     public var strength: Double = 1
-    /// K/S per band.
-    public internal(set) var ks: [Float] = [Float](repeating: 0, count: N)
+    /// K/S per band (the blender writes a neighbourhood's mean spectrum into its scratch pigment).
+    public var ks: [Float] = [Float](repeating: 0, count: N)
     /// Scattering from the colour's luminance (floored), before strength.
     public var scatter: Double = 1
     init() {}

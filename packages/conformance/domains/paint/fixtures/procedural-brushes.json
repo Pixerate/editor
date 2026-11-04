@@ -7,7 +7,7 @@
     "height": 32
   },
   "skip": {
-    "swift": "The Swift paint editor is not ported yet (#540)."
+    "swift": "The particle and bristle engines are not ported yet (#540)."
   },
   "steps": [
     {

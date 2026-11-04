@@ -8,7 +8,7 @@ The SwiftPM manifest is [`Package.swift`](../../Package.swift) at the repository
 package works as a git dependency); its sources are here.
 
 ```swift
-.package(url: "https://github.com/Pixerate/editor.git", from: "…")
+.package(url: "https://github.com/Pixerate/editor.git", .upToNextMinor(from: "0.1.0"))
 // target dependency:
 .product(name: "PixerateCore", package: "editor")
 ```
@@ -20,7 +20,7 @@ package works as a git dependency); its sources are here.
 | `PixerateCore` | The `pixerate.editor-document` envelope with step-by-step migrations and load reports (`persistence/migrate.ts`, `editorDocument.ts`); undo / redo with gestures, marks, batches, origins (`user` / `agent:<id>`) and commit events (`history/`); the seeded RNG, bit-exact with `paint/rand.ts`; JSON Schema validation with the same messages (`tools/schema.ts`); `ToolRegistry` with MCP-shaped results, middleware and the origin middleware (`tools/registry.ts`, `tools/origin.ts`); `ToolBridgeClient`, which connects a registry to `pixerate-mcp-bridge` so MCP clients drive the editor (`tools/bridge-client.ts`, see `docs/mcp-bridge.md`); an order-preserving `JSONValue` whose `stringified()` matches `JSON.stringify` | Foundation only |
 | `PixerateContracts` | The files of `@pixerate/conformance` (`packages/conformance`), bundled as resources: each domain's contracts and recorded scenarios (`ConformanceContracts.url("domains/paint/tools.json")`) | Foundation only |
 | `PixerateRaster` | The raster module (`raster/`): tiled copy-on-write surfaces (`TiledSurface`, 256 px tiles, straight 8-bit RGBA or mask bytes) with 16- and 32-bit deep samples; every blend mode, pigment mixing and the painterly modes; Gaussian blur and curves; transforms and mesh warps; the cached per-tile `RasterCompositor` and the float `DeepCompositor`, with editor profiles; layer effects (model, validation, renderer, panel view model) and patterns; the PNG / zlib codec; viewport maths. Same pixels and bytes as the TS core; `JS` holds JavaScript's number semantics (`Math.round`, `Uint8ClampedArray` stores, V8's `exp`, `sin`, `cbrt`, …) | `PixerateCore` |
-| `PixeratePaint` | The paint editor. `PaintContracts` reads the paint contracts; `Generated/` holds what `scripts/gen-swift.mjs` writes from them: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts` |
+| `PixeratePaint` | The paint editor's dry engine (`paint-editor/`, `paint/`, the brush parts of `brushes/`): `PaintEditorController` with canvas, paper (`PaperSettings`, `renderPaper`), the shared layer stack, fills, undo / redo and groups; the dry brushes on the shared dab engine with paper grain, pen dynamics, smoothing, spray and seeded jitter; blenders, smudge and the Mixer Brush on `PaintExchange`; recorded strokes (`RecordedStroke`), replays, brushed SVG paths and live stroke layers; symmetry, perspective and stencils; tracing and reference images, harmonies, swatches and `MixingPad`; light paint from dry brushes; layer styles; saved documents and PNG export; proposals (`PaintProposals`); the brush library (`BrushLibrary`: presets, normalization, v1 migration, host profiles, thumbnails). Agent tools come from the contracts (`createPaintEditorToolProvider`, `createPaintBrushLibraryToolProvider`, `createPaintProposalToolProvider`); only implemented tools are registered. `PaintConformanceHost` runs the paint scenarios. Wet, thick and sticker media, particle and bristle engines, provider effects, PSD, time-lapse and high-res export are not ported yet. `Generated/` holds what `scripts/gen-swift.mjs` writes from the contracts: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts`, `PixerateRaster`, `PixerateConformance` |
 | `PixerateConformance` | The scenario runner: replays a domain's recorded scenarios (`ConformanceScenario.load(domain:)`) against a `ConformanceHost` with the same normalization rules as the TypeScript runner, and compares results, documents and pixels (`compareConformance`, `decodeConformancePNG`) | `PixerateCore`, `PixerateContracts` |
 
 UI targets (`PixeratePaintUI`, …) are the only ones that will import SwiftUI, AppKit or UIKit.
@@ -37,6 +37,27 @@ scenario, and every recorded PNG must decode to its recorded hash.
 The Swift CI workflow (`.github/workflows/swift.yml`) runs `gen-swift --check`, then builds and
 tests on macOS and in an iOS simulator, whenever the Swift code, the contracts or their scripts
 change.
+
+## Releases
+
+The Swift package has its own version, `@pixerate/swift` in `packages/swift/package.json`, bumped
+by changesets like the npm packages. When a release changes it, the release workflow tags that
+release commit `v<version>`. SwiftPM only treats `1.2.3` and `v1.2.3` tags as versions (any other
+prefix is ignored, so there are no `swift-v…` tags), and changesets' own tags are
+`@pixerate/editor@…`, so the plain `v…` tags only ever mean the Swift package. While it is 0.x, a
+minor bump can break, so depend on it with `.upToNextMinor(from:)`.
+
+## Keeping parity
+
+The TypeScript core is the specification (`Agents.md` §3.5). For each domain, `@pixerate/conformance`
+holds what the editor offers (tools, commands, UI tables, the document schema) and recorded
+scenarios of what its tools do, including pixels. The Swift code replays the scenarios and must get
+the same results; a scenario it can't pass yet is marked `"skip": { "swift": "… (#issue)" }`.
+
+| Domain | Contracts | Scenarios | Swift |
+| :--- | :--- | :--- | :--- |
+| Brushes | `domains/brushes` | — | Brush model ported for painting (presets, normalization, v1 migration, host profiles; `BrushModelTests`) (#540) |
+| Paint | `domains/paint` | `domains/paint/fixtures` | 16 of 23 scenarios pass, pixel-exact (#540); provider effects, high-res and time-lapse export, particle and bristle brushes and PSD export remain (#540), wet paint, thick paint and light, and stickers (#545) |
 
 ## Generated code
 

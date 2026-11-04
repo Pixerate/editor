@@ -901,7 +901,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createPaintProposals`, `previewPaint`, `createPaintProposalToolProvider`",
         "react": "`usePaintProposals`, `<PaintCanvas proposals>`",
         "svelte": "`createPaintProposalState`, `<PaintCanvas proposals>`",
-        "swift": "Planned (#533)"
+        "swift": "`PaintProposals`, `createPaintProposalToolProvider`"
       },
       {
         "feature": "Paint Change Feed: strokes, fills and layers added / removed / changed and each stroke's start and end, with who made it; paint history records origins (`withOrigin`, `onCommit`) and groups steps (`group`)",
@@ -1939,119 +1939,119 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`PaintEditorController`, `extendCanvas`, `beginStroke`, `paintStroke`, `compositeTiles`",
         "react": "`<PaintEditor>`, `<PaintCanvas>` & `usePaintEditor`",
         "svelte": "`<PaintEditor>`, `<PaintCanvas>` & `createReactivePaintEditor`",
-        "swift": "Planned (#540)"
+        "swift": "`PaintEditorController` (wet paint drying on `extendCanvas`: Planned (#545))"
       },
       {
         "feature": "Paper (generated grain height maps in eleven patterns, seed, scale, repeat or mirror tiling, colour and shading, grain depth, dry and wet tuning, absorption / permeability / roughness for later wet media; a library of twelve papers in six families; `list_papers`, `get_paper`, `set_paper` agent tools)",
         "core": "`PAPER_LIBRARY`, `PaperGrain`, `grainCatch`, `setPaper`",
         "react": "`<PaperPanel>`",
         "svelte": "`<PaperPanel>`",
-        "swift": "Planned (#540)"
+        "swift": "`PaperSettings`, `renderPaper`"
       },
       {
         "feature": "Dry Media Brushes (pencil, pastel, charcoal, crayon, chalk, airbrush, marker, ink pen, brush pen, ballpoint, gel pen, fineliner, erasers, blender, smudge, Mixer Brush on the shared engine; paper grain response that catches the peaks at light pressure; pressure, tilt, barrel rotation and velocity dynamics; separate position and pressure smoothing; fixed / follow-stroke / barrel rotation; seeded jitter that replays exactly; `paint_stroke` agent tool)",
         "core": "`BUILTIN_BRUSHES`, `PenDabWalker`, `DryStroke`, `PenSmoother`",
         "react": "`<BrushPanel>` & `<PaintCanvas>` (coalesced and predicted events, palm rejection)",
         "svelte": "`<BrushPanel>` & `<PaintCanvas>` (coalesced and predicted events, palm rejection)",
-        "swift": "Planned (#540)"
+        "swift": "`PaintEditorController.paintStroke`, `PaintBrush`"
       },
       {
         "feature": "Blending Tools & Brush Behaviours (a blender that mixes the colours under and near the tip through the pigment model, with strength and blend distance; a smudge that drags a patch of paint, with strength, length and RGB or pigment mixing; the Mixer Brush with full pen input and paper grain; pick-up and mix ratios for every wet-capable brush on the shared pick-up / mix exchange that wet media will reuse; dirty brushes that carry the last colour they touched; multi-coloured brushes with colours across the tip or per dab, in sequence or at random; recorded loads so pick-up strokes replay exactly; presets Blender, Smudge, Pigment smudge, Dirty round, Multi-colour flat, Palette dabber; `set_brush` `behaviour` (`exchange`, `strength`, `distance`, `length`, `mixing`), `get_mixer_brush`, `clean_mixer_brush`, `mix_colors` `model`)",
         "core": "`PaintExchange`, `TileMedium`, `blenderDab`, `SmudgeTip` (`/paint`) & `PaintDabStroke`, `brushEngineControls`",
         "react": "`<BrushPanel>` engine section (strength, blend distance, length, pick-up, mix, load, Pigment / RGB, dirty brush, multi-colour colours / order / softness, Load / Clean) and brush blend menu",
         "svelte": "`<BrushPanel>` engine section (strength, blend distance, length, pick-up, mix, load, Pigment / RGB, dirty brush, multi-colour colours / order / softness, Load / Clean) and brush blend menu",
-        "swift": "Planned (#540)"
+        "swift": "`PaintExchange`, `PaintEditorController`"
       },
       {
         "feature": "Brush Library & Brush Editor (the paint editor paints from the shared brush library (`brushLibrary` option; one library shared by every editor, on any storage): built-in presets and saved brushes as facets, a browser grouped by medium and variety with tools apart and a filter, a brush editor by facet (Medium, Shape, Marks, Feel, Behaviour, Light, Colour) with a live preview stroke and Save as, JSON import / export (v2; v1 read), thumbnails rendered from a test stroke on the current paper; recorded strokes and documents (version 2) keep facet brushes, v1 documents replay to the same pixels; `get_brush`, `set_brush` (facets, `unset`) and the brush library's `list_brush_presets`, `create_brush`, `update_brush`, `preview_brush`… agent tools through `createPaintBrushLibraryToolProvider`)",
         "core": "`setBrushFacets`, `setBrushSpec`, `getBrushSpec`, `saveBrush`, `importBrushes`, `exportBrushes`, `renderBrushThumbnail`, `brushEditorSections`",
         "react": "`<BrushPanel>` with `<BrushLibraryBrowser>` and `<BrushEditor>`",
         "svelte": "`<BrushPanel>` with `<BrushLibraryBrowser>` and `<BrushEditor>`",
-        "swift": "Planned (#540)"
+        "swift": "`BrushLibrary`, `createPaintBrushLibraryToolProvider` (the browser and brush editor views: with the UI target, #533)"
       },
       {
         "feature": "Brush Colours, Stamp Tips & Spray (a brush's default colour, palette of up to 16 and `own` colour: hex, `rgba()`, light / dark pairs, gradients or effect paint; choosing a brush with a default colour makes it the paint colour unless the colour is locked; light / dark colours resolve for the host's colour scheme when the brush is chosen and when a stroke starts, and the stroke records the colour, so replays stay exact; stamp tips (every dab a sticker's shape: an editor stamp or any sticker from the sticker library, in the paint colour), textured particle dots from library stickers, a spray can (`marks` scatter: seeded droplets across the tip); presets ballpoint, gel pen, fineliner, crayon, chalk (a light / dark default) and spray can, the highlighter in fluorescent yellow with a palette; `set_color` `locked`, `create_brush` / `update_brush` `colour`, stickers checked against the host's sticker library, image `set_brush_preset` colour; the canvas and vector pickers take default colours too: canvas `selectBrush`, `canvas.drawFreehand` with a brush and no colour, `vector.addBrushstroke` / `setBrushstroke` with `keepColour`)",
         "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
         "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `useCanvasDraw` `selectBrush` and `colorScheme`",
         "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `createCanvasDraw` `selectBrush` and `setColorScheme`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#545) (stamp tips and textured particle dots need the sticker art)"
       },
       {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
         "core": "`getStrokes`, `replayStrokes`, `varyStroke`",
         "react": "Via core (`replayStrokes`); `useAgentToolProvider`",
         "svelte": "Via core (`replayStrokes`); `useAgentToolProvider`",
-        "swift": "Planned (#540)"
+        "swift": "`RecordedStroke`"
       },
       {
         "feature": "Brush a Path (SVG path data brushed with the active brush as if drawn by hand along it: each subpath one recorded stroke, sampled evenly, with an even pressure or a taper; grain, pick-up, wet and thick paint as in a hand stroke; one undo step; `stroke_path` agent tool, canvas coordinates on a hosted layer)",
         "core": "`strokePath`, `samplePath`, `PATH_STROKE_TAPERS`",
         "react": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
         "svelte": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
-        "swift": "Planned (#540)"
+        "swift": "`PaintEditorController.strokePath`"
       },
       {
         "feature": "Paint Layers & Fills (add, group, reorder, duplicate, merge down, remove; opacity, blend (pigment and the painterly watercolor, tint, highlight and shadow included), clipping, locks; flat or grain-following fills; clear; colour pick; `list_layers`, `add_layer`, `update_layer`, `list_blend_modes`, `set_active_layer`, `move_layer`, `duplicate_layer`, `merge_layer_down`, `remove_layer`, `fill_layer`, `clear_layer`, `pick_color` agent tools)",
         "core": "`addLayer`, `updateLayer`, `fillLayer`, `mergeDown`, `pickColor`",
         "react": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
         "svelte": "`<PaintLayersPanel>` (eyedropper in `<PaintCanvas>`)",
-        "swift": "Planned (#540)"
+        "swift": "`PaintEditorController`"
       },
       {
         "feature": "Paint View & Pen Input (zoom, pan, rotation and mirroring as view state only, pen azimuth and twist turned with the view; Pointer Events to pen samples with tilt, altitude / azimuth and twist, mouse pressure fix; palm rejection by drawing hand; `set_view`, `set_hand` agent tools)",
         "core": "`viewMatrix`, `screenToDocument`, `pointerToPenPoint`, `isPalmTouch`",
         "react": "`<PaintCanvas>` & `<PaintToolbar>` (R, M, Esc, wheel, Shift+wheel)",
         "svelte": "`<PaintCanvas>` & `<PaintToolbar>` (R, M, Esc, wheel, Shift+wheel)",
-        "swift": "Planned (#540)"
+        "swift": "`PaintView`, `PenPoint` (pointer input: with the UI target, #533)"
       },
       {
         "feature": "Painting Guides: Symmetry (vertical, horizontal, diagonal and dual mirrors and n-segment kaleidoscopes with mirrored segments, about a movable, rotatable centre; every stroke paints its copies as one stroke and one undo step, recorded with the stroke so replays keep them; axes clipped to the canvas for drawing; `set_symmetry`, `get_guides` agent tools)",
         "core": "`setSymmetry`, `symmetryCopies`, `symmetryAxisSegments`",
         "react": "`<PaintToolbar>` & guide overlay in `<PaintCanvas>`",
         "svelte": "`<PaintToolbar>` & guide overlay in `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "`SymmetryGuide` (axis drawing: with the UI target, #533)"
       },
       {
         "feature": "Perspective Guides (one to three vanishing points; pen strokes pick the guide line through their start that best fits their direction and snap to it, one-point keeping horizontals and verticals and two-point verticals; guide fans for drawing; `set_perspective_guide`, `paint_stroke` `snapToPerspective` agent tools)",
         "core": "`setPerspective`, `PerspectiveSnapper`, `perspectiveGuideLines`",
         "react": "`<PaintToolbar>` & guide overlay in `<PaintCanvas>`",
         "svelte": "`<PaintToolbar>` & guide overlay in `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "`PerspectiveGuide` (guide-line drawing: with the UI target, #533)"
       },
       {
         "feature": "Tracing & Reference Images, Colour Harmonies, Swatches & Mixing Pad (a tracing image under the paint in the view only, at an opacity, optionally the source of stroke colours; floating reference images to pick from; harmonies on the painter's RYB wheel or the RGB wheel; swatches saved with the document; a mixing pad painted with a pigment Mixer Brush and smeared with a pigment palette knife, picked with a sample size, measured mixes in parts with a fully mixed core, pads kept by name and saved with the document; `set_tracing_image`, `update_tracing_image`, `clear_tracing_image`, `add_reference_image`, `list_reference_images`, `update_reference_image`, `remove_reference_image`, `pick_reference_color`, `color_harmony`, `list_swatches`, `add_swatch`, `remove_swatch`, `mixing_pad_stroke`, `pick_mixing_pad_color`, `clear_mixing_pad`, `render_mixing_pad`, `mix_on_pad`, `save_mixing_pad`, `list_mixing_pads`, `load_mixing_pad`, `remove_mixing_pad` agent tools)",
         "core": "`setTracingImage`, `addReferenceImage`, `colorHarmony`, `MixingPad`, `mixOnPad`, `saveMixingPad`",
         "react": "`<ColorPanel>` (pad sample size, Mix in parts, Keep pad), `<PaintToolbar>` (tracing, references) & floating references in `<PaintCanvas>`",
         "svelte": "`<ColorPanel>` (pad sample size, Mix in parts, Keep pad), `<PaintToolbar>` (tracing, references) & floating references in `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "`MixingPad`, `colorHarmony`"
       },
       {
         "feature": "Paint Documents & Export (JSON with PNG layer assets through the image editor's layer serializer, external asset stores, unknown fields kept for later phases; PNG in pure TypeScript, JPEG / WebP through a canvas or a host encoder, PSD through the shared PSD writer with the paper as a locked layer; `render_preview`, `export_image`, `export_psd`, `get_paint_document`, `load_paint_document`, `new_canvas`, `set_canvas`, `undo_paint`, `redo_paint` agent tools)",
         "core": "`toJSON`, `loadJSON`, `exportPng`, `exportImage`, `exportPsd`",
         "react": "`<PaintToolbar>` Save / Open / PNG / JPEG / PSD",
         "svelte": "`<PaintToolbar>` Save / Open / PNG / JPEG / PSD",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#540) (JSON and PNG: `PaintEditorController.exportPng`; PSD, JPEG and WebP not yet)"
       },
       {
         "feature": "Wet Media (watercolour and gouache on a per-layer wet layer: D2Q9 lattice Boltzmann water pinned by the paper grain, absorption, evaporation and an edge band that carries pigment out to darken drying edges, Kubelka-Munk pigment in four channels that mixes linearly and glazes, granulation into the grain's valleys, blooms, colour bleed, re-wetting dried paint, pre-wetted paper, canvas tilt with drips, flow maps; brushes Watercolour round, Wash brush, Watercolour rigger, Gouache and the wet tools Add water, Dry, Blow, Wet blend, Wet smudge, Blot; pick-up and mix through the shared exchange; dry now, pause, speed, water overlay; dried deterministically on save and export; undo restores the wet state; WebAssembly SIMD in Web Workers, one thread without cross-origin isolation, TypeScript in Node, all bit-identical; `get_wet_paint`, `advance_wet_paint`, `dry_paint`, `wet_paper`, `set_wet_settings`, `set_flow_map`, `set_canvas_tilt`, `pause_wet_paint`, `set_water_overlay` agent tools)",
         "core": "`WetWorld`, `WetMedium`, `pigmentOf`, `filmPixel` (`/paint`) & `PaintWetLayers`, `WetStrokeDriver`, `tickWet`, `dryPaint`, `wetPaper`, `startWetClock`",
         "react": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
         "svelte": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#545)"
       },
       {
         "feature": "Wet Media GPU Accelerator (Engine B: the wet step and display shading in WebGPU compute shaders on the CPU engine's tile layout, used when `navigator.gpu` is there and at least 16 tiles of 256 px are wet; edits upload only the rows they change, each batch also runs on the GPU, and every stale tile is shaded and read back at once; between strokes the GPU shows up to 16 steps ahead while the CPU works through them; the CPU engine stays the authority, so the display is within 1/255 of it and drying, saving, export and replay are byte-identical with the GPU on or off; capability check with the reason it is unavailable; force CPU; `set_wet_engine` agent tool, `engine` in `get_wet_paint`)",
         "core": "`createWetGpuEngine`, `wetGpuSupport`, `WetWorld.attachGpu` / `displayGpu` (`/paint`) & `setWetEngine`, `wetEngine`, `wetEngineSummary`",
         "react": "Engine select and status in `<WetPanel>`",
         "svelte": "Engine select and status in `<WetPanel>`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#545)"
       },
       {
         "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
         "core": "`ThickStrokeDriver`, `LitCache`, `lightTile`, `setLighting`, `flattenRelief`, `WET_MEDIUM_PARAMS`",
         "react": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
         "svelte": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#545)"
       },
       {
         "feature": "Time-lapse & High-Res Replay (the painting repainted from its recorded strokes and events in a headless editor: fills, clears, flattened relief and wet events at their simulation clock, wet strokes point by point at the clock each point was painted, so wet paint flows as it did; time-lapse frames after strokes and while paint flows, as PNGs, a video project of stills and the ffmpeg command from the video editor's export path, zipped; a high-resolution export repainted at 2–8× with brush sizes, grain and wet events scaled; `export_time_lapse`, `export_high_res` agent tools)",
@@ -2065,28 +2065,28 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`ParticleStroke`, `BristleStroke`, `StickerSpray`, `addStickers`, `stickerAt`, `previewSticker`, `updateSticker`, `stickerSurface`",
         "react": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
         "svelte": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#540) (particle and bristle engines; sticker brushes: #545)"
       },
       {
         "feature": "Light Paint (a per-layer light channel any dab, particle, bristle, Mixer Brush or impasto brush lays with `light.amount`: the paint glows in its own colour and spills, blurred, onto its surroundings; it moves with paint (smudges, blenders, the knife and pick-up brushes carry it; plain paint dims it; erasers remove it); glassy impasto with rim and clarity; Light presets glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks; per-layer spill radius and strength; saved, undone and replayed; PSD spill layers in Linear Dodge (Add); `get_light`, `set_light_spill`, `clear_light`, `set_brush` `light` / `behaviour.thick.rim` / `behaviour.thick.clarity` agent tools)",
         "core": "`doc.light`, `LightCache`, `computeSpill`, `lightTwinBrush`, `setLightSpill`, `clearLight`, `lightOf`",
         "react": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
         "svelte": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
-        "swift": "Planned (#540)"
+        "swift": "Planned (#545)"
       },
       {
         "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
         "core": "`addLayer({ type: 'strokes' })`, `updateStroke`, `editStrokePoints`, `removeStrokes`, `reorderStroke`, `rasterizeLiveStrokes`, `liveStrokeAt`, `liveStrokeRefusal`",
         "react": "`<StrokePanel>`, New stroke layer in `<PaintLayersPanel>`, the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",
         "svelte": "`<StrokePanel>`, New stroke layer in `<PaintLayersPanel>`, the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "`PaintEditorController.updateStroke`"
       },
       {
         "feature": "Stencils (ruler and arc guides that strokes starting near them follow exactly; line and shape (rect, ellipse, polygon) masks with soft edges and invert; any stencil can guide or mask; masks recorded with strokes so replays keep them; saved with the document; `add_stencil`, `update_stencil`, `remove_stencils` agent tools)",
         "core": "`addStencil`, `StencilSnapper`, `stencilMask`",
         "react": "`<PaintToolbar>` Ruler, Circle, Mask & stencil outlines in `<PaintCanvas>`",
         "svelte": "`<PaintToolbar>` Ruler, Circle, Mask & stencil outlines in `<PaintCanvas>`",
-        "swift": "Planned (#540)"
+        "swift": "`Stencil`"
       },
       {
         "feature": "Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `fill_layer` and `replay_strokes` act out through a `director`)",
