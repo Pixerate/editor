@@ -1,7 +1,7 @@
 <script lang="ts">
   import StickerPicker from './StickerPicker.svelte';
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-  import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+  import { brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
   import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
@@ -28,7 +28,7 @@
   const thumbs = $derived.by(() => {
     const list = library;
     void paper;
-    return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])));
+    return untrack(() => new Map(list.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: brushPreviewColours(controller.getBrushSpec(b.id)!, { paper: controller.getState().document.paper.color }).color })])));
   });
   const entries = $derived.by<BrushLibraryEntry[]>(() => {
     const list = library;

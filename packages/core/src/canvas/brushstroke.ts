@@ -233,8 +233,13 @@ export interface CanvasBrushSwatchOptions {
 	/** Swatch size in pixels (default 96 × 24). */
 	width?: number;
 	height?: number;
-	/** CSS colour (default `#1f2937`). */
+	/** CSS colour (default: each brush's preview colour for `background`, else `#1f2937`). */
 	color?: string;
+	/**
+	 * What the swatch is shown on (#rrggbb; swatches are transparent): without a `color`, each
+	 * brush gets a colour that reads on it (`brushPreviewColours`, its own default when it has one).
+	 */
+	background?: string;
 	/** Image pixels per swatch pixel (default 2, for sharp swatches on high-density screens). */
 	scale?: number;
 }
@@ -254,6 +259,8 @@ export async function renderCanvasBrushSwatch(brush: CanvasBrush, options: Canva
  * a swatch of the brush as a canvas stroke paints it. Loads the renderer on first use.
  */
 export const renderCanvasBrushPreview: BrushPreviewRenderer = async (brush, { width, height, color }) => {
-	const url = await renderCanvasBrushSwatch(brush.id, { width, height, color, scale: 1 }, brush as unknown as CanvasBrushSpec);
+	// Vector brushstrokes paint light brushes as plain colour: preview them so (canvas strokes refuse light).
+	const { light: _light, ...plain } = brush;
+	const url = await renderCanvasBrushSwatch(brush.id, { width, height, color, scale: 1 }, plain as unknown as CanvasBrushSpec);
 	return { data: url.replace(/^data:image\/png;base64,/, ''), mimeType: 'image/png' };
 };

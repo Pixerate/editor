@@ -281,7 +281,7 @@ const CanvasDemo: React.FC = () => {
   const [brushEditorOpen, setBrushEditorOpen] = useState(false);
   // The presets and the demo library's saved brushes the canvas can paint (a brush saved in the
   // Paint tab shows here); a saved brush's facets go into the stroke style, so strokes keep a copy.
-  const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, color: "#e2e8f0" }, library: demoBrushLibrary });
+  const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, background: "#0f172a" }, library: demoBrushLibrary });
   const brushEntries = useBrushLibrary(demoBrushLibrary, { profile: CANVAS_PROFILE });
   const pickBrush = useCallback((id: string) => {
     setBrushId(id);
@@ -833,7 +833,7 @@ const CanvasDemo: React.FC = () => {
                   brushId={brushId || null}
                   profile={CANVAS_PROFILE}
                   renderPreview={renderCanvasBrushPreview}
-                  previewColor="#e2e8f0"
+                  previewPaper="#0f172a"
                   className="absolute right-0 z-50 mt-1 w-72 max-h-[32rem] overflow-auto rounded border border-slate-700 bg-slate-900 p-2 shadow-lg"
                   onSaved={(b) => pickBrush(b.id)}
                   onClose={() => setBrushEditorOpen(false)}

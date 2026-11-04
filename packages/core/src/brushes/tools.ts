@@ -28,7 +28,14 @@ export interface BrushPreviewImage {
 }
 
 /** Draws a sample stroke with a brush (the host's renderer: the paint engine, a canvas…). */
-export type BrushPreviewRenderer = (brush: Brush, options: { width: number; height: number; color: string }) => BrushPreviewImage | Promise<BrushPreviewImage>;
+export interface BrushPreviewRenderer {
+  (brush: Brush, options: { width: number; height: number; color: string }): BrushPreviewImage | Promise<BrushPreviewImage>;
+  /**
+   * What it draws on (#rrggbb), for `brushPreviewColours`: the paint engine's paper. Unset for a
+   * transparent preview, which shows whatever the UI puts behind it.
+   */
+  readonly paper?: string;
+}
 
 export interface BrushLibraryToolProviderOptions {
   /** What this host can render (default `PAINT_PROFILE`): lists are filtered by it and writes checked against it. */

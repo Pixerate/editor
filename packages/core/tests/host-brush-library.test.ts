@@ -197,7 +197,7 @@ describe('default colours in canvas and vector', () => {
 	it('lists default colours, takes them when a brush is picked or drawn with, and keeps a colour when asked', async () => {
 		const { draw } = canvas();
 		const list = await listCanvasBrushes();
-		expect(list.find((b) => b.id === 'ballpoint')!.defaultColor).toBe('#1e3a8a');
+		expect(list.find((b) => b.id === 'ballpoint')!.defaultColor).toEqual({ light: '#1e3a8a', dark: '#93c5fd' });
 		expect(list.find((b) => b.id === 'chalk')!.defaultColor).toEqual({ light: '#475569', dark: '#f8fafc' });
 		expect(list.find((b) => b.id === 'pencil-hb')!.defaultColor).toBeUndefined();
 		expect(await draw.selectBrush('ballpoint')).toMatchObject({ id: 'ballpoint' });
@@ -215,7 +215,8 @@ describe('default colours in canvas and vector', () => {
 		await expect(draw.selectBrush('watercolor-wash')).rejects.toThrow(/can't brush a canvas stroke/);
 		// Agents: a brush's default colour when no colour is given; theirs when it is.
 		const r = await draw.drawStroke({ points: [[0, 0], [30, 5]], style: { brush: 'gel-pen' } });
-		expect((r.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#111827');
+		// The draw controller is in the dark scheme here: the gel pen's near-white side.
+		expect((r.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#f3f4f6');
 		const own = await draw.drawStroke({ points: [[0, 0], [30, 5]], style: { brush: 'gel-pen', color: '#16a34a' } });
 		expect((own.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#16a34a');
 	});
@@ -225,7 +226,8 @@ describe('default colours in canvas and vector', () => {
 		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] }, colorScheme: 'dark' });
 		const top = () => (c.getNode('a') as VectorPathNode).strokes!.at(-1)!;
 		expect(c.addBrushstroke({ brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
-		expect(top().paint).toBe('#1e3a8a');
+		// The dark side of the ballpoint's light / dark default, for the dark scheme.
+		expect(top().paint).toBe('#93c5fd');
 		const index = (c.getNode('a') as VectorPathNode).strokes!.length - 1;
 		expect(c.setBrushstroke(index, { brushId: 'chalk' }, { ids: ['a'] }).ok).toBe(true);
 		expect(top().paint).toBe('#f8fafc');

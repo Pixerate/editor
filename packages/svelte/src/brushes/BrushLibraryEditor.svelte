@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { brushColourHex, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
+  import { brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
   import { button } from './styles.js';
   import BrushEditor from './BrushEditor.svelte';
 
@@ -12,7 +12,12 @@
     profile: BrushHostProfile;
     /** Draws the preview stroke (the host's renderer, as for `preview_brush`). Without it there is no preview. */
     renderPreview?: BrushPreviewRenderer;
-    /** The preview colour for brushes with no solid default colour (default slate). */
+    /**
+     * What a transparent preview is shown on (#rrggbb, default white); the renderer's own `paper`
+     * wins. The preview colour is chosen to read on it (`brushPreviewColours`).
+     */
+    previewPaper?: string;
+    /** A fixed preview colour instead (overrides the brush's own and the contrast check). */
     previewColor?: string;
     /** Called with the brush as saved (a copy has a new id): e.g. pick it in the host. */
     onsaved?: (brush: Brush) => void;
@@ -20,7 +25,7 @@
     onclose?: () => void;
     class?: string;
   }
-  let { library, brushId = null, profile, renderPreview, previewColor = '#64748b', onsaved, onclose, class: className = '' }: Props = $props();
+  let { library, brushId = null, profile, renderPreview, previewPaper = '#ffffff', previewColor, onsaved, onclose, class: className = '' }: Props = $props();
 
   let original = $state<Brush | null>(null);
   let builtin = $state(false);
@@ -46,7 +51,9 @@
     };
   });
 
-  const colour = $derived((draft && brushColourHex(draft.colour?.default ?? '', 'light')) || previewColor);
+  // The preview colour reads on what the preview is drawn on: the renderer's paper, or the box behind it.
+  const colours = $derived(draft ? brushPreviewColours($state.snapshot(draft) as Brush, { paper: renderPreview?.paper ?? previewPaper, profile }) : null);
+  const colour = $derived(previewColor ?? colours?.color ?? '#475569');
   $effect(() => {
     const d = draft;
     const render = renderPreview;
@@ -99,6 +106,7 @@
       brush={draft}
       {profile}
       preview={renderPreview ? preview : undefined}
+      previewBackground={colours?.background}
       onchange={(next) => {
         draft = next;
         status = null;

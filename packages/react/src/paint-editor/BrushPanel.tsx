@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
-import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
+import { brushColourHex, brushPreviewColours, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
 import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
@@ -30,7 +30,8 @@ export const BrushPanel: React.FC<BrushPanelProps> = ({ controller, thumbnailWid
   const { brush, brushes } = state;
   const paper = state.document.paper;
   const thumbs = useMemo(
-    () => new Map(brushes.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: '#26324a' })])),
+    // Each in a colour that reads on the paper (the brush's own default when it has one).
+    () => new Map(brushes.map((b) => [b.id, controller.brushThumbnail(b.id, { width: thumbnailWidth, height: thumbnailHeight, color: brushPreviewColours(controller.getBrushSpec(b.id)!, { paper: paper.color }).color })])),
     // Thumbnails follow the library and the paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [controller, brushes, paper, thumbnailWidth, thumbnailHeight]

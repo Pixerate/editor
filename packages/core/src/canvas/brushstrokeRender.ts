@@ -10,6 +10,7 @@ import { BUILTIN_BRUSHES } from '../paint-editor/brushes.js';
 import { closest } from '../brushes/library.js';
 import { normalizeBrushSpec } from '../brushes/normalize.js';
 import { BRUSH_PRESETS } from '../brushes/presets.js';
+import { brushPreviewColours } from '../brushes/preview.js';
 import { CANVAS_PROFILE, checkBrush, listPresets } from '../brushes/profiles.js';
 import { resolveBrush, resolveCategory } from '../brushes/resolve.js';
 import type { Brush } from '../brushes/types.js';
@@ -175,6 +176,12 @@ export function brushedShapeSvgNow(shape: BrushedPathShape, size: ShapeSize, sca
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${f(size.width)}" height="${f(size.height)}" viewBox="0 0 ${f(size.width)} ${f(size.height)}">${content}</svg>`;
 }
 
+/** A swatch's colour on `background`: the brush's preview colour (`brushPreviewColours`), or slate. */
+function swatchColour(brush: CanvasBrush, background: string | undefined, spec?: CanvasBrushSpec): string {
+	const facets = typeof brush !== 'string' ? null : spec ? readCanvasBrushSpec(spec) : BRUSH_PRESETS.find((b) => b.id === brush);
+	return background && facets ? brushPreviewColours(facets, { paper: background, profile: CANVAS_PROFILE, keepPaper: true }).color : '#1f2937';
+}
+
 export function brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOptions, spec?: CanvasBrushSpec): string {
 	const w = options.width && options.width > 8 ? options.width : 96;
 	const h = options.height && options.height > 4 ? options.height : 24;
@@ -186,7 +193,7 @@ export function brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOpt
 	const pts = Array.from({ length: 9 }, (_, i) => [pad + ((w - 2 * pad) * i) / 8, h / 2 + Math.sin((i / 8) * Math.PI * 2) * (h / 2 - pad) * 0.6] as const);
 	const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
 	const image = renderShapeBrushstrokeNow(
-		{ kind: 'path', d, stroke: options.color ?? '#1f2937', strokeWidth: size, brush: { brush, ...(spec ? { spec } : {}), seed: 7, size, pressure: [0.35, 1, 0.5] } },
+		{ kind: 'path', d, stroke: options.color ?? swatchColour(brush, options.background, spec), strokeWidth: size, brush: { brush, ...(spec ? { spec } : {}), seed: 7, size, pressure: [0.35, 1, 0.5] } },
 		options.scale && options.scale > 0 ? options.scale : 2
 	);
 	return image?.href ?? '';

@@ -5,6 +5,7 @@
 
 import { PAINT_PROFILE } from '../brushes/profiles';
 import { resolveBrush } from '../brushes/resolve';
+import type { Brush } from '../brushes/types';
 import { createBrushLibraryToolProvider, type BrushLibraryToolProviderOptions, type BrushPreviewRenderer } from '../brushes/tools';
 import type { AgentToolProvider } from '../tools/registry.js';
 import { bytesToBase64, encodePng } from '../raster/png';
@@ -20,10 +21,12 @@ export type PaintBrushLibraryToolProviderOptions = Omit<BrushLibraryToolProvider
  * the default paper). Any brush the paint editor renders, so also the image editor's.
  */
 export function paintBrushPreviewRenderer(paper: () => PaperSettings = () => DEFAULT_PAPER): BrushPreviewRenderer {
-  return (brush, { width, height, color }) => {
+  const render = (brush: Brush, { width, height, color }: { width: number; height: number; color: string }) => {
     const t = renderBrushThumbnail(resolveBrush(brush), { paper: paper(), width, height, color: color.toLowerCase() });
     return { data: bytesToBase64(encodePng(t.width, t.height, t.data)), mimeType: 'image/png' };
   };
+  // The paper it paints on, so preview colours are chosen against it.
+  return Object.defineProperty(render, 'paper', { get: () => paper().color, enumerable: true }) as BrushPreviewRenderer;
 }
 
 /**
