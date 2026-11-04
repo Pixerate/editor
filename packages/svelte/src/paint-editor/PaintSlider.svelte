@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { SliderControl } from '@pixerate/editor/paint-editor';
+  // Core's `SliderControl` (paint-editor), written out so the brush editor, which other entries
+  // use, does not reach the paint editor's entry (tests/entry-isolation.test.ts).
+  type SliderControl = { path: string; label: string; min: number; max: number; step: number };
 
   interface Props {
     control: SliderControl;
