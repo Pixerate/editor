@@ -89,7 +89,36 @@ jobs:
           print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
           ')
           echo "Simulator: $udid"
-          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet SWIFT_OPTIMIZATION_LEVEL=-O ENABLE_TESTABILITY=YES
+          # -quiet keeps the log short but hides why a test failed: the result bundle keeps it.
+          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet -resultBundlePath "$RUNNER_TEMP/ios.xcresult" SWIFT_OPTIMIZATION_LEVEL=-O ENABLE_TESTABILITY=YES
+
+      - name: Show iOS test failures
+        # Each failing test with its message, in the log and as an annotation on the run.
+        if: failure()
+        run: |
+          [ -d "$RUNNER_TEMP/ios.xcresult" ] || { echo "No result bundle: the build or the simulator failed before tests ran."; exit 0; }
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/ios.xcresult" --compact | python3 -c '
+          import json, sys
+          failures = json.load(sys.stdin).get("testFailures", [])
+          if not failures:
+              print("The result bundle records no test failures.")
+          for f in failures:
+              name = f.get("testIdentifierString") or f.get("testName", "?")
+              text = f.get("failureText", "")
+              print(f"--- {name}\n{text}\n")
+              escaped = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              title = name.replace("%", "%25").replace(",", "%2C").replace(":", "%3A")
+              print(f"::error title={title}::{escaped}")
+          '
+
+      - name: Keep the iOS result bundle
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xcresult
+          path: ${{ runner.temp }}/ios.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
 
   demo:
     name: Swift (demo app)
