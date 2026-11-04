@@ -62,14 +62,3 @@ Shipped behaviour with a documented gap.
 
 These tests are opt-in and don't run in CI: the PSD corpus (`pnpm test:corpus`), the wet-media GPU tests (`WET_GPU`, Dawn installed outside the repo), the ffmpeg render tests when ffmpeg is missing, the wet look renders (`OUT`), and the benchmarks (`IMAGE_LAYERS_BENCH`, `DEEP_BENCH`, `WET_BENCH`, `SPREADSHEET_BENCH`, transform bench). There are no unconditional skips or `todo` tests. Running the corpus and the GPU tests on a schedule would catch regressions there. S–M.
 
-## Skills with out-of-date prose
-
-`tests/agent-skills.test.ts` keeps the tool tables in step with the code, but it can't check advice. These need a reread:
-
-- **`pixerate-image-editor`:**
-  - The `export_psd` row says it saves "an RGB PSD". It writes CMYK or Lab channels after `set_color_mode`, as the skill says further down.
-  - It lists only Pigment blends as written as Normal; the painterly modes are too.
-  - The description doesn't mention Blur, Sharpen, History Brush, 16 / 32-bit, colour management or provider effects.
-  - The body is at the 500-line limit the test enforces, so the next tool rows need prose moved into `references/` first.
-- **`pixerate-paint-editor`:** accurate, but it doesn't say that wet media holds at most 352 tiles, or that multi-threaded wet media needs a cross-origin isolated page (COOP / COEP) and runs on one thread otherwise.
-- **`pixerate-vector`:** will need the brush-character rows once the in-flight vector change lands (that change includes the update).

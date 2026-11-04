@@ -35,3 +35,13 @@ How to work with smart objects in the image editor (see the main skill for the t
   the user may want to mask, blend or reorder them later.
 - **Linked or not**: duplicate a smart object `linked: true` for repeated elements that must stay
   identical (a logo placed twice); use `linked: false` when the copies will be edited apart.
+
+## Pitfalls
+
+- While contents are open (`edit_smart_object_contents`), `list_layers` and every tool see the
+  contents, not the document, and `export_psd` / saving write the document without the open
+  edits. Close with `close_smart_object_contents` before anything else.
+- Smart filters run over the canvas, like layer filters: a blur clamps at the canvas edge, and a
+  smart object is drawn only up to 512 px beyond the canvas. `get_transform_frame` on a smart
+  object returns the contents' rectangle (contents px) as the `frame`, and a warp `mesh` in
+  contents px.

@@ -40,7 +40,7 @@
    (kind `psd`): hide, reorder, re-blend or remove them, and `export_psd` writes them back.
 5. **`export_psd` writes the stack as it is**, in the source frame: crop and rotation are not
    applied, layer filters and depth masks are baked, annotation layers are rasterized (only in
-   a browser). Effects are written as Photoshop layer styles: an effects block opened from a PSD
+   a browser), and `pigment` or painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) are written as Normal (the merged image keeps their composited look; `pigment` warns naming the layers). Effects are written as Photoshop layer styles: an effects block opened from a PSD
    goes back byte for byte while its effects are unchanged, and the patterns effects use (the
    built-in ones too) are embedded. Only the first outer glow, inner glow, bevel, satin and
    pattern overlay of a layer fit in a PSD. Smart objects are written as smart objects (an

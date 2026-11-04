@@ -339,7 +339,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 
 | Tool | Use |
 | --- | --- |
-| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs slower than it could), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
+| `get_wet_paint` | Read the wet paint: `wet`, the clock, `paused`, `speed`, `tilt`, the kernel (`backend`, `message` when it runs on one thread because the page lacks cross-origin isolation / COOP + COEP for `SharedArrayBuffer`), the GPU accelerator (`engine`) and each wet layer (`wetCells`, `wetBounds`, `activeTiles`, settings, flow map). Call after wet strokes. |
 | `advance_wet_paint` | Let time pass: `steps` (120 = one second at the default speed) or `seconds`. The paint spreads, blooms, runs and dries. Not an undo step. Returns `steps`, `clock`, `stillWet`, `layers`. Call after a group of wet strokes, before `render_preview`. |
 | `dry_paint` | Dry wet paint at once where it is (one layer with `layerId` or all, optionally inside `rect`). One undo step. Returns `dried` (layer ids and rectangles) and `stillWet`. Dry before glazing over a wash. |
 | `wet_paper` | Pre-wet the paper with clear water over `rect` (default the canvas) on a layer, `amount` 0..1, for wet-in-wet. One undo step. Returns the rectangle and `wet`. Then paint into it. |
@@ -470,7 +470,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   flowed; `advance_wet_paint` first. Paint that should stay exactly where it was laid needs
   `dry_paint` (or a dry medium).
 - **Wet strokes on one layer interact**; washes that must not mix go on separate layers, or dry
-  the first before painting the second (glazing). At most 8 layers hold wet paint at once.
+  the first before painting the second (glazing). At most 8 layers hold wet paint at once, and the simulation holds at most 352 wet tiles (256 × 256 px each) across them; water that spreads past that limit is lost (`dry_paint` frees slots). Multi-threaded wet simulation needs a cross-origin isolated page (COOP / COEP for `SharedArrayBuffer`) and runs on one thread otherwise.
 - **Undoing far back** past the wet undo memory (512 MB by default) leaves that paint dry as it
   looked, rather than wet.
 - **Replays repeat what was recorded**: strokes, fills, clears, flattened relief and wet events.

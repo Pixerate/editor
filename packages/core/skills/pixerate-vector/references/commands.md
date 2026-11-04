@@ -180,3 +180,18 @@ inside the intended face.
 | transparency | 0–100 % see-through (50) | – | The lens's own fill, see-through. |
 
 The lens shows what is drawn before it (below it), follows edits there, and keeps its own bounds. Move it with `vector.transform` like any path. Remove it with `vector.removeLens`.
+
+## Brushstrokes (`vector.listBrushes`, `vector.addBrushstroke`, `vector.setBrushstroke`)
+
+A brushstroke is a stroke layer in a path's appearance stack that renders a dry brush along the path's outline.
+
+| Parameter | Meaning |
+| --- | --- |
+| `brushId` | Preset or saved brush id from `vector.listBrushes` (dry brushes only: pencils, pastels, charcoal, crayon, chalk, markers, inks, ballpoint, gel pen, fineliner). Wet, thick, particle, sticker and tool brushes are refused. |
+| `size` | Brush diameter in document units (defaults to the brush's own size). |
+| `pressure` | Pressure profile sampled along each subpath (`[0.2, 1, 0.2]` tapers both ends; default uniform `1`). |
+| `color` | Stroke colour (`#rrggbb`); defaults to the brush's default colour (e.g. ballpoint blue, chalk), else the path's stroke colour unless `keepColour: true`. |
+| `keepColour` | Keep the path's current stroke colour instead of applying the brush's default colour. |
+| `seed` | Integer seed for brush character (dab jitter and paper grain). Omit or pass `null` on `vector.setBrushstroke` for unseeded, even dabs. |
+| `paper` | `{ pattern?, seed?, scale?, depth? }` for paper grain in the path's own coordinate space (`{}` uses default sanded paper; `null` disables grain). |
+| `opacity`, `blendMode`, `visible` | Per-layer appearance settings in the stroke stack; `index` selects the stroke layer on `vector.setBrushstroke` (remove with `vector.removeStroke`). |

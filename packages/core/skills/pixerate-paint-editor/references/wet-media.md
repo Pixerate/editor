@@ -28,6 +28,15 @@
   dries it first (in the same undo step).
 - **Time** runs by itself in an editor on screen (`pause_wet_paint` stops it); for an agent with
   no screen, nothing moves until `advance_wet_paint` or `dry_paint`.
+- **Extent limit (8 wet layers, 352 tile slots).** `WetWorld` holds at most 8 wet layers and 352
+  tile slots (256 × 256 px each) in one `WebAssembly.Memory`. Water that spreads beyond the
+  available slots is lost (`get_wet_paint` reports `activeTiles` per layer); dry finished washes
+  with `dry_paint` to free their slots before painting another large wash.
+- **Multi-threading and COOP / COEP.** Stepping wet tiles across Web Workers needs
+  `SharedArrayBuffer`, which browsers only expose on cross-origin isolated pages
+  (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`).
+  Without cross-origin isolation the simulation runs deterministically on one thread and
+  `get_wet_paint` reports why in `kernel.message`.
 - **The GPU only draws.** With WebGPU and a large wet area (16 tiles of 256 px by default), Engine B
   shades the wet paint on the GPU; the CPU engine still computes every step, so the painting,
   `dry_paint`, saving, export and replay come out the same with it on or off. `get_wet_paint`
