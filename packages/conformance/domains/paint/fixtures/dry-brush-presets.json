@@ -7,7 +7,7 @@
     "height": 32
   },
   "skip": {
-    "swift": "The Swift paint editor is not ported yet (#540)."
+    "swift": "Light paint (the highlighter's glow and spill) is not ported yet (#545)."
   },
   "steps": [
     {

@@ -208,6 +208,8 @@ public final class PaintEditorController {
     var stencilCache: (key: [Stencil], size: String, mask: PaintSelection?)?
     /// The undo step `group` is building, if any.
     var grouping: (label: String, before: PaintDocumentState, changed: Bool)?
+    /// Where each stroke object painted (by `RecordedStroke.key`), as learnt when it was painted or drawn.
+    var paintedBounds: [Int: RasterRect?] = [:]
     var previewing = false
     /// The mixing pad and the pads kept by name.
     let pad = MixingPad()
@@ -716,6 +718,13 @@ public final class PaintEditorController {
         return engineChanges(base, resolveBrush(try readBrushPatch(spec, patch, &problems)))
     }
 
+    /// The engine settings a facet patch changes on a brush as painted (a stroke's brush).
+    public func brushChanges(_ patch: JSONObject, fromBrush: PaintBrush) throws -> JSONObject {
+        let base = renormalized(fromBrush)
+        var problems: [String] = []
+        return engineChanges(base, resolveBrush(try readBrushPatch(migrateBrushV1(base), patch, &problems)))
+    }
+
     func readBrushPatch(_ base: Brush, _ patch: JSONObject, _ problems: inout [String]) throws -> Brush {
         var rest = patch.without("id", "name")
         if let paint = rest.path("colour.default"), paint.objectValue?["type"] == "gradient" { _ = try readStrokePaint(paint) }
@@ -884,7 +893,7 @@ public final class PaintEditorController {
         if !layer.visible { throw PaintEditorError("Layer \"\(layer.name)\" is hidden; show it (update_layer visible true) to paint on it.") }
         let brush = try strokeBrush(i)
         if brush.light.amount > 0 { throw UnportedBrushError(message: "The \(brush.name) brush lays light paint, which the Swift paint editor does not paint yet.") }
-        if d.liveStrokes?.get(layer.id) != nil { throw UnportedBrushError(message: "Layer \"\(layer.name)\" is a stroke layer, which the Swift paint editor does not redraw yet.") }
+        if d.liveStrokes?.get(layer.id) != nil, let why = liveStrokeRefusal(brush) { throw PaintEditorError("Layer \"\(layer.name)\" is a stroke layer. \(why)") }
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
         if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
         let perspective = guides.perspective
@@ -941,9 +950,14 @@ public final class PaintEditorController {
         if let surface = session.surfaceAfter {
             let stroke = record(session)
             result.strokeId = stroke.id
+            paintedBounds[stroke.key] = .some(result.bounds)
             out = d.with { o in
                 o.layers = mapLayer(d.layers, session.layerId) { $0.withSurface(surface) }
                 o.strokes = d.strokes + [stroke]
+                if var live = o.liveStrokes, let list = live.get(stroke.layerId) {
+                    live.set(stroke.layerId, list + [stroke])
+                    o.liveStrokes = live
+                }
             }
         }
         return (out, result, session.initValues.brush)

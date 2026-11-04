@@ -7,7 +7,7 @@
     "height": 32
   },
   "skip": {
-    "swift": "The Swift paint editor is not ported yet (#540)."
+    "swift": "Thick paint and light are not ported yet (#545)."
   },
   "steps": [
     {

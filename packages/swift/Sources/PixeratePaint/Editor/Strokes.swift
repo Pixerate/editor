@@ -14,7 +14,14 @@ public typealias Affine = [Double]
 
 public let IDENTITY_AFFINE: Affine = [1, 0, 0, 1, 0, 0]
 
+private let nextStrokeKey = Locked(1)
+
+/// A key per stroke object: the TS core keys painted bounds and live-layer membership by object identity.
+func newStrokeKey() -> Int { nextStrokeKey.with { v -> Int in defer { v += 1 }; return v } }
+
 public struct RecordedStroke {
+    /// Which stroke object this is (a changed stroke is another object, with another key).
+    public var key = newStrokeKey()
     public var id: String
     public var layerId: String
     public var brush: PaintBrush
@@ -78,6 +85,13 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     return .object(o)
 }
 
+/// A recorded stroke as plain JSON with its engine brush (`JSON.parse(JSON.stringify(stroke))`), as paint events keep it.
+func recordedStrokeJSON(_ s: RecordedStroke) -> JSONValue {
+    var o = strokeToJSON(s).objectValue!
+    o["brush"] = .object(s.brush.json(builtin: false))
+    return .object(o)
+}
+
 /// The bounding box of points.
 func strokeBounds(_ points: [PenPoint]) -> (x: Double, y: Double, width: Double, height: Double) {
     guard let first = points.first else { return (0, 0, 0, 0) }
@@ -97,6 +111,7 @@ func varyStroke(_ stroke: RecordedStroke, _ m: Affine, pressureScale: Double = 1
     let det = abs(m[0] * m[3] - m[1] * m[2]).squareRoot()
     let s = abs(det - 1) < 1e-9 ? 1 : det
     var out = stroke
+    out.key = newStrokeKey()
     out.points = stroke.points.map { p in
         var q = mapPenPoint(m, p)
         if pressureScale != 1 { q.pressure = Swift.min(1, Swift.max(0, (p.pressure ?? 1) * pressureScale)) }

@@ -195,41 +195,6 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     return h
 }
 
-/// A brush library entry as `list_brush_presets` lists it.
-private func brushSummary(_ e: BrushLibraryEntry) -> JSONValue {
-    let b = e.brush
-    let engine = resolveEngine(b)
-    var o: JSONObject = ["id": b["id"] ?? .null, "name": b["name"] ?? .null, "builtin": .bool(e.builtin), "kind": b["kind"] ?? .null]
-    if let m = b["medium"] { o["medium"] = m }
-    if let v = b["variety"] { o["variety"] = v }
-    if let t = b["tool"] { o["tool"] = t }
-    o["category"] = .string(resolveCategory(b, engine))
-    o["engine"] = .string(engine)
-    o["tip"] = b.path("tip.shape") ?? .null
-    if let s = b.path("tip.size") { o["size"] = s }
-    o["marks"] = b.path("marks.kind") ?? "continuous"
-    o["surface"] = b.path("behaviour.surface") ?? "dry"
-    if let l = b.path("light.amount"), l != 0 { o["light"] = l }
-    if let tags = b["tags"]?.arrayValue, !tags.isEmpty { o["tags"] = .array(tags) }
-    return .object(o)
-}
-
-/// The handlers of the brush library provider's tools, by name.
-func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] {
-    var h: [String: PaintToolHandler] = [:]
-    h["list_brush_presets"] = { a in
-        let source = a["source"]?.stringValue == "all" ? nil : a["source"]?.stringValue
-        let found = c.brushLibrary.list(BrushFilter(kind: a["kind"]?.stringValue, medium: a["medium"]?.stringValue, variety: a["variety"]?.stringValue, tool: a["tool"]?.stringValue, tag: a["tag"]?.stringValue, text: a["text"]?.stringValue, source: source))
-        let offset = Int(a["offset"]?.numberValue ?? 0)
-        let limit = Int(a["limit"]?.numberValue ?? 100)
-        let page = found.dropFirst(offset).prefix(limit)
-        var summaries = page.map(brushSummary)
-        if a["all"] == .bool(true) { summaries = summaries.map { s in var o = s.objectValue!; o["renderable"] = true; return .object(o) } }
-        return ["host": "paint", "total": .number(Double(found.count)), "brushes": .array(summaries)]
-    }
-    return h
-}
-
 /// A provider of the contract's tools that this port implements.
 func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], content: [String: (JSONObject) async throws -> ToolOutput] = [:]) throws -> AgentToolProvider {
     guard let contract = try PaintContracts.toolProviders().first(where: { $0.id == id }) else { throw ContractError("tools.json has no provider \(id).") }
@@ -247,11 +212,11 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }
+    let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }
     return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller))
 }
 
 /// The brush library's tools for a paint editor (`createPaintBrushLibraryToolProvider`): the ones this port implements.
 public func createPaintBrushLibraryToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
-    try contractProvider("brushes", brushLibraryHandlers(controller))
+    try contractProvider("brushes", brushLibraryHandlers(controller), content: brushLibraryContentHandlers(controller))
 }

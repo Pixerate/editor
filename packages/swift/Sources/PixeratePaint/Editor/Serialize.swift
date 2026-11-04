@@ -69,7 +69,7 @@ private func serializeLayer(_ layer: RasterLayer, _ ctx: inout SerializeContext,
     if let mask = layer.mask { out["mask"] = .object(serializeMask(mask, "\(layer.id)-mask", &ctx)) }
     let locks = locksJSON(layer.locks)
     if locks.contains(where: { $0.value == .bool(true) }) { out["locks"] = .object(locks) }
-    if let e = effects(layer) { out["effects"] = e }
+    if let e = layer.effects { out["effects"] = serializeEffects(e) } else if let e = effects(layer) { out["effects"] = e }
     if let edge = layer.edge { out["edge"] = edge.json }
     switch layer.content {
     case .pixel(let surface, let offset, let fill):
