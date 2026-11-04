@@ -25,9 +25,11 @@
     void b.refresh();
     return off;
   });
+  /** A sticker's tooltip: name, ref, licence and credit, AI-generated, dark variant. */
+  const tooltip = (it: StickerBrowserItem) => `${it.name} (${it.ref}) · ${it.licence.name}${it.licence.attribution ? ` · ${it.licence.attribution}` : ''}${it.aiGenerated ? ' · AI-generated' : ''}${it.variants?.includes('dark') ? ' · light and dark' : ''}`;
 </script>
 
-<!-- Stickers from a sticker library: searchable, by category and a page at a time, each sticker's licence in its tooltip; clicking one calls onpick. -->
+<!-- Stickers from a sticker library: searchable, by category or collection and a page at a time, each sticker's licence in its tooltip and an AI label on AI-generated art; clicking one calls onpick. -->
 <div class={`flex flex-col gap-1 ${className}`} data-testid="sticker-picker">
   {#if s}
     <div class="flex items-center gap-1">
@@ -38,17 +40,23 @@
           {#each s.categories as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
         </select>
       {/if}
+      {#if s.collections.length > 0}
+        <select aria-label="Sticker collection" value={s.collection} onchange={(e) => void browser.setCollection(e.currentTarget.value)} class="rounded bg-slate-800 px-1 py-0.5">
+          <option value="">All collections</option>
+          {#each s.collections as c (c.id)}<option value={c.id} title={c.description}>{c.name} ({c.count})</option>{/each}
+        </select>
+      {/if}
     </div>
     <div class="flex max-h-32 flex-wrap gap-1 overflow-y-auto" role="group" aria-label={label}>
       {#each s.items as it (it.ref)}
         <button
           type="button"
           aria-pressed={selected.includes(it.ref)}
-          title={`${it.name} (${it.ref}) · ${it.licence.name}${it.licence.attribution ? ` · ${it.licence.attribution}` : ''}`}
+          title={tooltip(it)}
           class={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${selected.includes(it.ref) ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
           onclick={() => onpick(it)}
         >
-          {#if it.thumbnail}<img src={it.thumbnail} alt="" class="h-4 w-4" />{/if}{it.name}
+          {#if it.thumbnail}<img src={it.thumbnail} alt="" class="h-4 w-4" />{/if}{it.name}{#if it.aiGenerated}<span class="rounded bg-slate-700 px-0.5 text-[8px] text-slate-200" aria-label="AI-generated">AI</span>{/if}
         </button>
       {/each}
     </div>

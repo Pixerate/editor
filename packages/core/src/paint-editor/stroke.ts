@@ -27,6 +27,7 @@ import { lightToShadow, lightTwinBrush, shadowToLight } from './light';
 import { BristleStroke, ParticleStroke, type CoverageStroke } from './procedural';
 import { StickerSpray, type Sticker } from './stickers';
 import type { StickerArtLookup } from './sticker-art';
+import type { StickerRef, StickerVariant } from '../stickers/types';
 
 export interface StrokeSessionHost {
   /** Shows the layer's live surface (no history); `rects` are where it changed. */
@@ -71,7 +72,7 @@ export interface StrokeSessionInit {
   /** Where paint may land (canvas-sized coverage 0..255: the stencils' mask), or none. */
   selection?: { width: number; height: number; data: ArrayLike<number> } | null;
   /** Sticker brushes: the next sticker number on the layer. */
-  sticker?: { nextId: number; art?: StickerArtLookup };
+  sticker?: { nextId: number; art?: StickerArtLookup; variant?: (ref: StickerRef) => StickerVariant };
   /** Loaded sticker art for stamp tips and textured particle dots of stickers from the sticker library. */
   stampArt?: StickerArtLookup;
   /** Gradient paint (resolved: concrete colours), or `null` for the one colour. Recorded with the stroke. */
@@ -173,7 +174,7 @@ export class PaintStrokeSession {
     if (this.wetDriver) {
       // the wet layer paints; nothing else to set up
     } else if (init.sticker) {
-      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art });
+      this.stickerSpray = new StickerSpray({ brush, target: this.tileTarget(), color: init.colorHex, seed: init.seed, copies: this.copies, nextId: init.sticker.nextId, paint: init.paint ?? null, effect, art: init.sticker.art, variant: init.sticker.variant });
     } else if (init.thick) {
       const rgb = (c: readonly number[]): [number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255];
       this.thickDriver = new ThickStrokeDriver({ brush, target: this.tileTarget(), channels: init.thick.channels, color: rgb(init.color), load: init.mixerLoad, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect });

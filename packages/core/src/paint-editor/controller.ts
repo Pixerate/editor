@@ -110,7 +110,7 @@ import { normalizeStickerUpdate, stickerAt as hitSticker, stickerRect, stickerSt
 import { defaultStickerRasterizer, StickerArtCache, type StickerRasterizer } from './sticker-art';
 import { editorStickers } from '../stickers/editor';
 import { editorStampOf, normalizeStickerRef, StickersSlot } from '../stickers/helpers';
-import type { StickerProvider, StickerRef } from '../stickers/types';
+import type { StickerProvider, StickerRef, StickerVariant } from '../stickers/types';
 import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
 import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
@@ -2228,6 +2228,9 @@ export class PaintEditorController {
     this.colorScheme = next;
     const hex = this.brushColour ? brushColourHex(this.brushColour, next) : null;
     if (hex) this.color = hex;
+    // The sticker brush sprays dark variants on a dark scheme: load them now.
+    const refs = brushStickerRefs(this.brush);
+    if (refs.some((r) => !editorStampOf(r))) void this.prepareStickers(refs).catch(() => this.emit([]));
     this.emit([]);
   }
 
@@ -2539,7 +2542,7 @@ export class PaintEditorController {
       thick: brush.engine === 'impasto' ? { channels: doc.thick?.[layer.id] ?? emptyThickChannels() } : undefined,
       // Light paint: a twin of the stroke paints the light channel (laying, dimming, moving light).
       light: !wet && brush.engine !== 'sticker' && (brush.light.amount > 0 || doc.light?.[layer.id]) ? { surface: doc.light?.[layer.id] ?? emptyLight() } : null,
-      sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get } : undefined,
+      sticker: brush.engine === 'sticker' ? { nextId: this.nextStickerNumber(doc), art: this.stickerArt.get, variant: (ref) => this.stickerArt.variantFor(ref, this.colorScheme === 'dark') } : undefined,
       stampArt: this.stickerArt.get,
       paint: effect ? null : this.strokeGradient(init, brush, color),
       effect,
@@ -3468,8 +3471,8 @@ export class PaintEditorController {
           try {
             const ref = normalizeStickerRef(x.ref ?? (x.stamp as string));
             const stamp = editorStampOf(ref);
-            const { stamp: _old, ...rest } = x;
-            return [{ ...rest, ref, ...(stamp ? { stamp } : {}) } as Sticker];
+            const { stamp: _old, variant, ...rest } = x;
+            return [{ ...rest, ref, ...(stamp ? { stamp } : {}), ...(variant === 'dark' && !stamp ? { variant } : {}) } as Sticker];
           } catch {
             return [];
           }
@@ -3965,13 +3968,13 @@ export class PaintEditorController {
 
   /**
    * Loads the art of `refs` (provider stickers; editor stamps need none) so sprays and placements
-   * can draw them. Rejects with a `PaintEditorError` naming an unknown ref and the closest known
+   * can draw them: their dark variants when the colour scheme is dark and they have one. Rejects with a `PaintEditorError` naming an unknown ref and the closest known
    * ones, or a sticker whose art failed. Emits when art arrives, so views redraw.
    */
   async prepareStickers(refs: readonly StickerRef[]): Promise<void> {
     const list = [...new Set(refs.map((r) => this.readStickerRef(r)))].filter((r) => !editorStampOf(r));
     try {
-      await Promise.all(list.map((r) => this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker)));
+      await Promise.all(list.map((r) => this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker, this.colorScheme === 'dark')));
     } catch (e) {
       throw new PaintEditorError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -3979,9 +3982,20 @@ export class PaintEditorController {
     }
   }
 
-  /** Whether a sticker's art is ready to draw: `ready` (always for editor stamps), `loading`, `failed` (with why) or `none`. */
+  /** Whether a sticker's art is ready to draw in the variant the colour scheme picks: `ready` (always for editor stamps), `loading`, `failed` (with why) or `none`. */
   stickerArtStatus(ref: StickerRef): { status: 'ready' | 'loading' | 'failed' | 'none'; error?: string } {
-    return this.stickerArt.status(this.readStickerRef(ref));
+    const r = this.readStickerRef(ref);
+    return this.stickerArt.status(r, this.stickerArt.variantFor(r, this.colorScheme === 'dark'));
+  }
+
+  /**
+   * A sticker whose ref is new (placed or restamped) in the variant the colour scheme picks: `dark`
+   * on a dark scheme when its sticker has one (known once its art was asked for).
+   */
+  private withStickerVariant<T extends Partial<Sticker> & Pick<Sticker, 'ref'>>(s: T): T {
+    const { variant: _old, ...rest } = s;
+    const v: StickerVariant = editorStampOf(s.ref) ? 'light' : this.stickerArt.variantFor(s.ref, this.colorScheme === 'dark');
+    return (v === 'dark' ? { ...rest, variant: v } : rest) as T;
   }
 
   private readStickerRef(ref: StickerRef): StickerRef {
@@ -3994,10 +4008,18 @@ export class PaintEditorController {
 
   /** Refuses to redraw stickers whose art has not loaded (they would vanish), naming them and what to call. */
   private requireStickerArt(stickers: readonly Sticker[]): void {
-    const missing = [...new Set(stickers.filter((s) => !stickerStamp(s) && !this.stickerArt.get(s.ref)).map((s) => s.ref))];
+    const missing = stickers.filter((s) => !stickerStamp(s) && !this.stickerArt.get(s.ref, s.variant));
     if (missing.length) {
-      for (const r of missing) void this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker).then(() => this.emit([]), () => this.emit([]));
-      throw new PaintEditorError(`The art for ${missing.map((r) => `"${r}"`).join(', ')} has not loaded yet; it is loading now (prepareStickers), so try again when it has.`);
+      const dark = this.colorScheme === 'dark';
+      const loads = new Map<string, [StickerRef, boolean]>();
+      for (const s of missing) {
+        loads.set(`${s.ref}#${s.variant ?? 'light'}`, [s.ref, s.variant === 'dark']);
+        // On a dark scheme the dark art too, so placing it again picks that variant.
+        if (dark) loads.set(`${s.ref}#dark`, [s.ref, true]);
+      }
+      for (const [r, d] of loads.values()) void this.stickerArt.ensure(this.stickers.provider, r, this.rasterizeSticker, d).then(() => this.emit([]), () => this.emit([]));
+      const refs = [...new Set(missing.map((s) => s.ref))];
+      throw new PaintEditorError(`The art for ${refs.map((r) => `"${r}"`).join(', ')} has not loaded yet; it is loading now (prepareStickers), so try again when it has.`);
     }
   }
 
@@ -4068,7 +4090,8 @@ export class PaintEditorController {
     if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it first.`);
     const i = stickers.findIndex((s) => s.id === id);
     if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
-    const next = { ...stickers[i], ...this.readStickerUpdate(update) };
+    const u = this.readStickerUpdate(update);
+    const next = u.ref !== undefined ? this.withStickerVariant({ ...stickers[i], ...u }) : { ...stickers[i], ...u };
     const list = stickers.map((s, j) => (j === i ? next : s));
     const dirty = [stickerRect(stickers[i]), stickerRect(next)];
     const base = this.previewBase() ?? this.doc;
@@ -4094,7 +4117,7 @@ export class PaintEditorController {
     const i = stickers.findIndex((s) => s.id === id);
     if (i < 0) throw new PaintEditorError(`Layer "${layer.name}" has no sticker "${id}". Call list_stickers for the ids.`);
     const u = this.readStickerUpdate(update);
-    const next = { ...stickers[i], ...u };
+    const next = u.ref !== undefined ? this.withStickerVariant({ ...stickers[i], ...u }) : { ...stickers[i], ...u };
     this.commitStickers('Edit sticker', layer, stickers.map((s, j) => (j === i ? next : s)), [stickerRect(stickers[i]), stickerRect(next)]);
     return { ...next };
   }
@@ -4124,7 +4147,7 @@ export class PaintEditorController {
       }
       if (raw.seed !== undefined && !Number.isInteger(raw.seed)) throw new PaintEditorError(`Sticker ${i}: seed must be a whole number.`);
       const id = n++;
-      return { id: `st${id}`, size: 48, rotation: 0, color: this.color, opacity: 1, seed: raw.seed ?? (mix32((id * 0x9e3779b1) >>> 0) & 0x7fffffff), ...u } as Sticker;
+      return this.withStickerVariant({ id: `st${id}`, size: 48, rotation: 0, color: this.color, opacity: 1, seed: raw.seed ?? (mix32((id * 0x9e3779b1) >>> 0) & 0x7fffffff), ...u } as Sticker);
     });
     this.commitStickers('Add stickers', layer, [...(existing ?? []), ...added], existing?.length ? added.map(stickerRect) : undefined);
     return added.map((s) => ({ ...s }));

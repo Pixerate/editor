@@ -1,11 +1,13 @@
 import { StickerError } from './errors';
 import { checkStickerSearchOptions, DEFAULT_STICKER_PAGE, parseStickerRef, stickerRefOf } from './helpers';
-import type { StickerPage, StickerProvider, StickerSearchOptions, StickerSummary } from './types';
+import type { StickerCollection, StickerPage, StickerProvider, StickerSearchOptions, StickerSummary } from './types';
 
 /**
  * One provider over several, in order. Its ids are refs (`provider:id`, `namespaced`), so the
  * same id from two libraries stays two stickers. Pages run through the providers in turn; the
  * cursor is `<provider index>|<that provider's cursor>`. Capabilities are what any of them offers.
+ * Collections are namespaced the same way (`provider:collection`), so a picker can tell a
+ * provider's collections apart from another provider's.
  */
 export function combineStickerProviders(providers: readonly StickerProvider[], options: { id?: string; name?: string } = {}): StickerProvider {
   const ids = providers.map((p) => p.id);
@@ -18,10 +20,19 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
     if (!p) throw new StickerError('unknown_provider', `No sticker provider "${provider}"; the providers are ${ids.join(', ') || 'none'}.`);
     return { p, id };
   };
-  const prefix = (p: StickerProvider, s: StickerSummary): StickerSummary => ({ ...s, id: stickerRefOf(p, s.id) });
+  const collectionOf = (p: StickerProvider, c: string) => (p.namespaced ? c : `${p.id}:${c}`);
+  const prefix = <S extends StickerSummary>(p: StickerProvider, s: S): S => ({ ...s, id: stickerRefOf(p, s.id), ...(s.collection ? { collection: collectionOf(p, s.collection) } : {}) });
+  /** The provider a namespaced collection belongs to, and its own id for it. */
+  const collectionOwner = (c: string): { p: StickerProvider; collection: string } => {
+    const i = c.indexOf(':');
+    const p = i > 0 ? byId.get(c.slice(0, i)) : undefined;
+    if (!p) throw new StickerError('invalid_argument', `No collection "${c}"; collections here are "provider:collection" (listCollections lists them).`);
+    return { p, collection: p.namespaced ? c : c.slice(i + 1) };
+  };
   const page = async (query: string | null, o: StickerSearchOptions = {}): Promise<StickerPage> => {
-    const { after, limit = DEFAULT_STICKER_PAGE, ...filters } = o;
+    const { after, limit = DEFAULT_STICKER_PAGE, collection, ...filters } = o;
     checkStickerSearchOptions({ limit });
+    const only = collection !== undefined ? collectionOwner(collection) : null;
     let i = 0;
     let inner: string | undefined;
     if (after !== undefined) {
@@ -30,7 +41,11 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
       i = Number(m[1]);
       inner = m[2] || undefined;
     }
-    const get = (p: StickerProvider, opts: StickerSearchOptions) => (query === null ? p.list(opts) : p.search(query, opts));
+    const get = async (p: StickerProvider, opts: StickerSearchOptions): Promise<StickerPage> => {
+      if (only && only.p !== p) return { items: [], total: 0 };
+      const withCollection = only ? { ...opts, collection: only.collection } : opts;
+      return query === null ? p.list(withCollection) : p.search(query, withCollection);
+    };
     let total = 0;
     for (const p of providers) total += (await get(p, { ...filters, limit: 1 })).total;
     const items: StickerSummary[] = [];
@@ -71,7 +86,7 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
         return undefined;
       }
       const d = await o.p.describe(o.id);
-      return d ? { ...d, id: stickerRefOf(o.p, d.id) } : undefined;
+      return d ? prefix(o.p, d) : undefined;
     },
     async load(ref, o) {
       const { p, id } = owner(ref);
@@ -86,6 +101,11 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
         }
       }
       return [...counts.values()];
+    },
+    async listCollections() {
+      const out: StickerCollection[] = [];
+      for (const p of providers) for (const c of (await p.listCollections?.()) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
+      return out;
     },
   };
 }
