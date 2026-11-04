@@ -18,8 +18,10 @@ import PixerateRaster
  * - **Light paint** is a fifth mass channel; `lightDisplay` shades the live light over the lane's
  *   light surface and drying bakes it in.
  *
- * This port has no WebAssembly, worker or WebGPU engine: the CPU (the TS core's authority) is all
- * there is, so `backend()` always reports the TypeScript kernel on one thread.
+ * The CPU (the TS core's authority) runs every step: tiles on several threads (`threads`), four
+ * cells at a time (`wetStepSlotSIMD`), with the scalar kernel's bits. Metal can shade the display
+ * (`attachGpu`). `backend()` still reports the TypeScript kernel on one thread, the words the
+ * recorded scenarios expect.
  */
 
 /// Wet layers a world can hold at once.
@@ -43,7 +45,7 @@ public struct WetPaperInput {
     var paper: WetPaper { WetPaper(absorption: absorption, permeability: permeability, roughness: roughness) }
 }
 
-/// The kernel in use: always the TypeScript kernel's maths, on one thread, in this port.
+/// The kernel in use, in the TS core's words (this port reports the TypeScript kernel on one thread, which recorded scenarios compare).
 public struct WetBackendInfo: Equatable {
     public var kind: String
     public var threads: Int
@@ -181,6 +183,20 @@ private func unionRectWet(_ a: RasterRect?, _ b: RasterRect) -> RasterRect {
     return RasterRect(x: x, y: y, width: Swift.max(a.x + a.width, b.x + b.width) - x, height: Swift.max(a.y + a.height, b.y + b.height) - y)
 }
 
+/// Runs `body` for 0..<count on up to `workers` threads, in contiguous chunks (inline for one).
+private func wetParallel(_ count: Int, _ workers: Int, _ body: (Int) -> Void) {
+    if workers <= 1 || count <= 1 {
+        for i in 0..<count { body(i) }
+        return
+    }
+    let chunks = Swift.min(count, workers)
+    withoutActuallyEscaping(body) { body in
+        DispatchQueue.concurrentPerform(iterations: chunks) { c in
+            for i in stride(from: c, to: count, by: chunks) { body(i) }
+        }
+    }
+}
+
 /// Rounds a height to 1/65536 so tiny floating-point differences in the grain never reach the simulation.
 private func quantizeHeight(_ v: Double) -> Float {
     Float(JS.round(Swift.min(1, Swift.max(0, v)) * 65536) / 65536)
@@ -205,6 +221,10 @@ public final class WetWorld {
     private var tilt = FLAT_TILT
     private var paper: WetPaperInput
     private var paperBytes: [Int]
+    /// Threads that step tiles (1: the calling thread only). Any count gives the same bits.
+    public var threads = Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)
+    /// Steps with the scalar reference kernel (`wetStepSlot`) instead of the SIMD one: tests only (same bits, slower).
+    var scalarKernel = false
     // Metal shading (see `attachGpu`).
     private var gpu: WetMetalEngine?
     /// GPU shading starts at this many live tiles (all layers), and stops below half of it.
@@ -497,15 +517,31 @@ public final class WetWorld {
         return Swift.max(1, Swift.min(want, MAX_BATCH, toFree))
     }
 
+    /**
+     * Runs `n` steps of every live tile. Within a step each tile reads only its own slot (current
+     * set, halo included) and writes only its own next set and deposits, and each halo is filled
+     * from the neighbours' interiors after every tile has stepped, so tiles run on several threads
+     * (`threads`) and give the same bits as one.
+     */
     private func runHere(_ n: Int) {
+        let keys = active
+        let slotPtrs = keys.map { slotPtr(slotOf($0)) }
+        let prms = keys.map { lanes[laneIndexOf($0)]?.prm }
+        var stepped = [UInt32](repeating: 0, count: keys.count)
+        let workers = Swift.min(threads, keys.count)
+        let scalar = scalarKernel
         for _ in 0..<n {
-            for key in active {
-                guard let lane = lanes[laneIndexOf(key)] else { continue }
-                let fl = wetStepSlot(slotPtr(slotOf(key)), parity, lane.prm)
-                flags[key] |= fl
-                last[key] = fl
+            let par = parity
+            stepped.withUnsafeMutableBufferPointer { out in
+                wetParallel(keys.count, workers) { i in
+                    if let prm = prms[i] { out[i] = scalar ? wetStepSlot(slotPtrs[i], par, prm) : wetStepSlotSIMD(slotPtrs[i], par, prm) }
+                }
             }
-            for key in active { halo(key, 1 - parity) }
+            for (i, key) in keys.enumerated() where prms[i] != nil {
+                flags[key] |= stepped[i]
+                last[key] = stepped[i]
+            }
+            wetParallel(keys.count, workers) { i in self.halo(keys[i], 1 - par) }
             parity = 1 - parity
         }
     }

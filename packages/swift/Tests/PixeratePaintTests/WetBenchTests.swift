@@ -6,8 +6,9 @@ import PixerateRaster
 /**
  * Wet-media throughput (one thread): `WET_BENCH=1 swift test -c release --filter WetBenchTests`.
  * Compare with `tests/paint-wet.bench.test.ts` in the core. M4 Pro, fully wet 2048² canvas (64
- * tiles): the CPU steps at 3.5 ms per tile-step (223 ms a step) and shades at 1.9 ms per tile
- * (119 ms); Metal shades all 64 tiles, upload and read-back included, in 9.8 ms.
+ * tiles): a step takes 92 ms on one thread (1.4 ms per tile; the scalar kernel took 3.5) and 15 ms
+ * on 14; the CPU shades at 1.9 ms per tile (122 ms); Metal shades all 64 tiles, upload and
+ * read-back included, in 9 ms.
  */
 final class WetBenchTests: XCTestCase {
     func testThroughput() throws {
@@ -31,13 +32,16 @@ final class WetBenchTests: XCTestCase {
                 gpu.gpuMinTiles = 1
             }
             let tiles = cpu.activeTiles()
-            let step = try ms { cpu.step(4) } / 4
+            cpu.threads = 1
+            let oneThread = ms { cpu.step(2) } / 2
+            cpu.threads = ProcessInfo.processInfo.activeProcessorCount
+            let step = ms { cpu.step(4) } / 4
             let shadeCpu = try ms { _ = try cpu.display("a") }
             gpu.step(4)
             _ = try gpu.displayGpu("a")
             gpu.step(1)
             let shadeGpu = try ms { _ = try gpu.displayGpu("a") }
-            print(String(format: "wet %d²: %d tiles, step %.1f ms (%.2f ms/tile), CPU shading %.1f ms (%.2f ms/tile), Metal shading %@", side, tiles, step, step / Double(tiles), shadeCpu, shadeCpu / Double(tiles), engine == nil ? "unavailable" : String(format: "%.1f ms", shadeGpu)))
+            print(String(format: "wet %d²: %d tiles, one thread %.1f ms a step (%.2f ms/tile), %d threads %.1f ms (%.2f ms/tile), CPU shading %.1f ms (%.2f ms/tile), Metal shading %@", side, tiles, oneThread, oneThread / Double(tiles), cpu.threads, step, step / Double(tiles), shadeCpu, shadeCpu / Double(tiles), engine == nil ? "unavailable" : String(format: "%.1f ms", shadeGpu)))
         }
     }
 }

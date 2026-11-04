@@ -36,7 +36,11 @@ let package = Package(
         .target(name: "PixerateRaster", dependencies: ["PixerateCore"], path: "packages/swift/Sources/PixerateRaster", swiftSettings: settings),
         // The paint editor (`paint-editor`, `paint` and `brushes` in the TS core) on the raster module.
         // `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
-        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance", "PixerateWetKernel"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        // The wet-media step on four cells at a time, in C with clang vector extensions (the Swift
+        // compiler made the same SIMD code lane by lane). Bit-exact with `wetStepSlot`; used by
+        // `PixeratePaint` only.
+        .target(name: "PixerateWetKernel", path: "packages/swift/Sources/PixerateWetKernel"),
         // The paint editor's SwiftUI views (`PaintEditorView`, the canvas and panels) and their view
         // model on `PaintEditorController`. The only paint target that imports SwiftUI (AppKit / UIKit
         // for pen and trackpad input, behind `#if canImport`).
