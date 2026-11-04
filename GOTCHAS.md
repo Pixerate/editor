@@ -3635,3 +3635,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `paintContracts()` listed no effect tools, and bundling the fake effect provider into `@pixerate/editor/paint-editor` to fix that would ship test code to every paint host.
 - **Root Cause**: `createPaintEffectsToolProvider` lists its tools only once the controller has an effect provider.
 - **Solution / Workaround**: `paintContracts({ effects })` takes the provider. `scripts/export-contracts.mjs` and `tests/paint-contracts.test.ts` pass `createFakeEffectProvider()` from `effects/index.js`, so the committed `tools.json` doesn't depend on a real catalogue. Keyboard shortcuts live in `PAINT_SHORTCUTS`, which `handlePaintShortcut` dispatches from; add a key there, not in the handler, so `commands.json` stays true.
+
+### [swift] SwiftPM Ignores Prefixed Version Tags
+- **Issue / Symptom**: A tag like `swift-v0.1.0` (or changesets' `@pixerate/swift@0.1.0`) cannot be used with `.package(url:from:)`; SwiftPM finds no versions.
+- **Root Cause**: SwiftPM only reads tags of the form `1.2.3` or `v1.2.3` as versions and ignores every other prefix. Pixerate/schemas#70 hit the same thing.
+- **Solution / Workaround**: The release workflow tags the release commit `v<version>` when `@pixerate/swift` changes ("Tag the Swift package"). Changesets tags npm packages as `@pixerate/<name>@<version>`, so plain `v…` tags only ever mean the Swift package. Never add `swift-v…` tags.
