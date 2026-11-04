@@ -3654,3 +3654,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `omitConformancePaths` in Swift left `"backend": null` where the TypeScript version removed `backend`.
 - **Root Cause**: `JSONValue` is `ExpressibleByNilLiteral` (so `nil` can be written for JSON `null` in literals). In `o[key] = cond ? nil : value`, the `nil` is typed as `JSONValue` (`.null`), not as `Optional.none`, so the subscript stores a null member instead of removing it.
 - **Solution / Workaround**: Remove members with `o[key] = Optional<JSONValue>.none` (or a plain `o[key] = nil` statement where the right side is not inferred as `JSONValue`). The runner test compares the result with the TypeScript cases, which caught it.
+
+### [monorepo] Changesets Skips Private Packages Unless `privatePackages.version` Is On
+- **Issue / Symptom**: `@pixerate/swift` changesets (#559, #593) stayed in `.changeset/` after their releases, the package stayed at 0.0.0, and "Tag the Swift package" never tagged a version. `changeset version` printed "All files have been updated" and changed nothing.
+- **Root Cause**: `@changesets/config` 4 defaults `privatePackages` to `{ version: false, tag: false }`, so a private package's changesets are never applied.
+- **Solution / Workaround**: `.changeset/config.json` sets `"privatePackages": { "version": true, "tag": false }`: private packages are versioned (the release workflow tags `v<version>` for `@pixerate/swift` itself) and changesets adds no `name@version` tags for them. Check with `changeset status --verbose` that a private package's changeset shows up under "Packages to be bumped".
