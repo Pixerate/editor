@@ -30,3 +30,14 @@ enum SpecStructure {
         return problem
     }
 }
+
+/// Absolute time budgets in the checks are for optimised builds (Swash's `swiftc -O` runners).
+/// `swift test` builds without optimisation and runs suites in parallel, so they get more room
+/// there; the growth ratios, which catch quadratic paths, are the same in both.
+enum TimingBudget {
+    #if DEBUG
+    static let scale = 5.0
+    #else
+    static let scale = 1.0
+    #endif
+}

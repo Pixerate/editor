@@ -446,7 +446,7 @@ enum ParserChecks {
             let start = Date()
             _ = MarkdownDocument.parse(input)
             let ms = Date().timeIntervalSince(start) * 1000
-            let ok = ms < 2000
+            let ok = ms < 2000 * TimingBudget.scale
             if !ok { failures += 1 }
             print(String(format: "  %@ %-20@ %7.1f ms", ok ? "✓" : "❌", name as NSString, ms))
         }
@@ -492,7 +492,7 @@ enum ParserChecks {
         let start = Date()
         _ = formatting.activeBlockFormat(selection: NSRange(location: 0, length: (lines as NSString).length))
         let ms = Date().timeIntervalSince(start) * 1000
-        let ok = ms < 15
+        let ok = ms < 15 * TimingBudget.scale
         if !ok { failures += 1 }
         print(String(format: "  %@ activeBlockFormat, 400 lines selected %6.1f ms", ok ? "✓" : "❌", ms))
         return failures

@@ -161,7 +161,7 @@ enum CodeHighlighterChecks {
         let jsLine = "export async function load(id) { const r = await fetch(`/api/${id}?q=1`); /* c */ return r.ok ? /a+b/.test(s) : \"no\" } // end\n"
         let large = String(repeating: jsLine, count: 10_000)
         let largeMs = ms(.javascript, large)
-        let largeOK = largeMs < 400
+        let largeOK = largeMs < 400 * TimingBudget.scale
         if !largeOK { failures += 1 }
         print(String(format: "  %@ large block: %d lines, %.1f MB in %.1f ms", largeOK ? "✓" : "❌", 10_000, Double(large.utf16.count) / 1_000_000, largeMs))
 
