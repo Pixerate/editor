@@ -13,9 +13,9 @@ import { BLEND_MODES } from '../raster/blend';
 import { BRUSH_ROTATIONS, IMPASTO_TOOLS, MAX_BRUSH_SIZE, WET_MEDIA } from '../paint-editor/brushes';
 import { BRUSH_SLIDERS, brushEngineControls, type SliderControl } from '../paint-editor/brush-controls';
 import { DOT_ROTATIONS, DOT_TEXTURE_ORDERS, MAX_DOT_TEXTURES, MAX_STICKER_STAMPS, PARTICLE_KINDS, PARTICLE_RENDERS, RIBBON_PAIRS, STAMP_KINDS } from '../paint-editor/mark-settings';
-import type { BrushLibraryEntry } from './library';
+import { BrushLibraryError, type BrushLibrary, type BrushLibraryEntry, type SaveBrushResult } from './library';
 import { normalizeBrushSpec } from './normalize';
-import { checkBrush, PAINT_PROFILE, type BrushHostProfile } from './profiles';
+import { brushColourKind, checkBrush, checkBrushEdit, degrade, PAINT_PROFILE, type BrushHostProfile, type BrushIssue, type BrushSupport } from './profiles';
 import { BRUSH_FIELDS, getPath, resolveBrush, resolveEngine, setPath } from './resolve';
 import { MAX_BRUSH_PALETTE } from './schema';
 import { brushColourHex } from './colour';
@@ -90,8 +90,10 @@ const aria = (path: string, label: string) => ARIA[path] ?? `Brush ${label.toLow
 
 /**
  * Sections of controls for a brush, in order, as the host `profile` (default the paint editor)
- * can render them: sections and controls it refuses are left out, ones it paints without carry
- * a note. Values are the brush's own, else the defaults of the engine it resolves to.
+ * can render them: only the sections, controls and options the host uses are listed. Facets of
+ * the brush the host can't use (a paint brush's light opened in Canvas) get no control, so an
+ * edit keeps them as they are; `brushEditorScope` names them. Values are the brush's own, else
+ * the defaults of the engine it resolves to.
  */
 export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PAINT_PROFILE): BrushEditorSection[] {
   const resolved = resolveBrush(brush);
@@ -107,7 +109,12 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     const v = getPath(resolved, field.engine);
     return field.map ? field.map.toFacet(v) : v;
   };
-  const warned = new Map(checkBrush(brush, profile).issues.filter((i) => i.severity === 'warning').map((i) => [i.facet, i.reason]));
+  const issues = checkBrush(brush, profile).issues;
+  const warned = new Map(issues.filter((i) => i.severity === 'warning').map((i) => [i.facet, i.reason]));
+  const refused = new Set(issues.filter((i) => i.severity === 'error').map((i) => i.facet));
+  const full = (s: BrushSupport) => s === 'full';
+  // The brush paints with an engine this host has: that engine's own controls apply.
+  const engineOk = !['kind', 'tool', 'tip.shape', 'marks', 'behaviour.surface'].some((f) => refused.has(f));
   const noteFor = (path: string) => [...warned].find(([facet]) => path === facet || path.startsWith(`${facet}.`))?.[1];
   const withNote = <C extends BrushEditorControl>(c: C): C => {
     const note = noteFor(c.path);
@@ -129,25 +136,27 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   const isTool = brush.kind === 'tool';
   const shape = brush.tip.shape;
   const marks = brush.marks?.kind ?? 'continuous';
+  // Picking paint up: the Mixer Brush's reservoir carries it where the host has one.
+  const exchangeFull = full(brush.behaviour?.exchange?.reservoir ? profile.reservoir : profile.exchange);
 
   add('medium', 'Medium', [
-    profile.kinds.length > 1 && choice('kind', 'Kind', options(profile.kinds, { mark: 'Lays a material', tool: 'Works on paint' })),
+    profile.kinds.length > 1 && profile.kinds.includes(brush.kind) && choice('kind', 'Kind', options(profile.kinds, { mark: 'Lays a material', tool: 'Works on paint' })),
     !isTool && choice('medium', 'Medium', [{ value: '', label: 'Any' }, ...options(BRUSH_MEDIA, MEDIUM_LABELS)], ''),
     !isTool && withNote({ kind: 'text', path: 'variety', label: 'Variety', ariaLabel: 'Brush variety', value: brush.variety ?? '', placeholder: 'pencil, oil, highlighter…' }),
-    isTool && profile.tools.length > 0 && choice('tool', 'Tool', options(profile.tools, TOOL_LABELS)),
+    isTool && !!brush.tool && profile.tools.includes(brush.tool) && choice('tool', 'Tool', options(profile.tools, TOOL_LABELS)),
   ]);
 
   const engineControls = brushEngineControls(resolved);
   const tipSliders = BRUSH_SLIDERS.filter((c) => c.path.startsWith('tip.') && c.path !== 'tip.smoothing');
   add('shape', 'Shape', [
-    choice('tip.shape', 'Tip', options(profile.tipShapes.filter((s) => !isTool || s !== 'stamp'), SHAPE_LABELS)),
+    !refused.has('tip.shape') && choice('tip.shape', 'Tip', options(profile.tipShapes.filter((s) => !isTool || s !== 'stamp'), SHAPE_LABELS)),
     ...tipSliders.map((c) => slider(c)),
     engine === 'dab' && choice('tip.blend', 'Blend', BLEND_MODES.map((m) => ({ value: m.id, label: m.label })), 'normal'),
-    ...(shape === 'bristle' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('bristle.')).map((c) => slider(c)) : []),
-    shape === 'stamp' && withNote({ kind: 'stamps', path: 'tip.stamps', label: 'Stamps', ariaLabel: 'Brush stamps', value: [...((value('tip.stamps') as string[] | undefined) ?? [])], max: marks === 'particles' ? MAX_DOT_TEXTURES : MAX_STICKER_STAMPS, options: STAMP_OPTIONS }),
+    ...(shape === 'bristle' && engineOk && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('bristle.')).map((c) => slider(c)) : []),
+    shape === 'stamp' && engineOk && withNote({ kind: 'stamps', path: 'tip.stamps', label: 'Stamps', ariaLabel: 'Brush stamps', value: [...((value('tip.stamps') as string[] | undefined) ?? [])], max: marks === 'particles' ? MAX_DOT_TEXTURES : MAX_STICKER_STAMPS, options: STAMP_OPTIONS }),
   ]);
 
-  if (!isTool && profile.marks.length > 1) {
+  if (!isTool && profile.marks.length > 1 && engineOk) {
     const particles = marks === 'particles' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('particle.') && c.path !== 'particle.waveSpeed') : [];
     const objects = marks === 'objects' && engineControls ? engineControls.sliders.filter((c) => c.path.startsWith('sticker.')) : [];
     const render = value('marks.render');
@@ -163,7 +172,7 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
 
-  const feel = BRUSH_SLIDERS.filter((c) => ['tip.smoothing', 'pressureSmoothing', 'dynamics.minSize', 'dynamics.tiltSize', 'dynamics.velocitySize'].includes(c.path)).filter((c) => !(c.path === 'dynamics.tiltSize' && profile.tilt === 'none') && !(c.path === 'dynamics.velocitySize' && profile.velocity === 'none'));
+  const feel = BRUSH_SLIDERS.filter((c) => ['tip.smoothing', 'pressureSmoothing', 'dynamics.minSize', 'dynamics.tiltSize', 'dynamics.velocitySize'].includes(c.path)).filter((c) => !(c.path === 'dynamics.tiltSize' && !full(profile.tilt)) && !(c.path === 'dynamics.velocitySize' && !full(profile.velocity)));
   add('feel', 'Feel', [
     ...feel.map((c) => slider(c)),
     toggle('dynamics.pressureSize', 'Pressure → size'),
@@ -172,20 +181,20 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
   ]);
 
   const surfaces = profile.surfaces;
-  const engineSliders = (engineControls?.sliders ?? []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
-  const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? profile.reservoir !== 'none' : profile.exchange !== 'none');
+  const engineSliders = (engineOk ? (engineControls?.sliders ?? []) : []).filter((c) => !/^(bristle|particle|sticker)\./.test(c.path) && c.path !== 'light.amount' && c.path !== 'impasto.rim' && c.path !== 'impasto.clarity');
+  const exchangeOk = (path: string | undefined) => !path?.startsWith('behaviour.exchange') || (path.startsWith('behaviour.exchange.reservoir') ? full(profile.reservoir) : exchangeFull);
   add('behaviour', engineControls?.title ?? 'Behaviour', [
-    !isTool && surfaces.length > 1 && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
-    profile.grain !== 'none' && slider({ path: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 }, 'behaviour.grain'),
-    engine === 'wet' && !isTool && choice('behaviour.wet.medium', 'Medium', options(WET_MEDIA, WET_MEDIUM_LABELS), 'watercolor'),
-    engine === 'impasto' && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
+    !isTool && surfaces.length > 1 && !refused.has('behaviour.surface') && choice('behaviour.surface', 'Surface', options(surfaces, SURFACE_LABELS), 'dry'),
+    full(profile.grain) && slider({ path: 'grain', label: 'Grain', min: 0, max: 1, step: 0.01 }, 'behaviour.grain'),
+    engine === 'wet' && engineOk && !isTool && choice('behaviour.wet.medium', 'Medium', options(WET_MEDIA, WET_MEDIUM_LABELS), 'watercolor'),
+    engine === 'impasto' && engineOk && choice('behaviour.thick.applicator', 'Tool', options(IMPASTO_TOOLS, APPLICATOR_LABELS), 'brush'),
     ...engineSliders.map((c) => (exchangeOk(facetOf(c.path)) ? slider(c) : null)),
-    engineControls?.mixingPath && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
-    engineControls?.dirty && profile.exchange !== 'none' && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
-    engine === 'mixer' && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
+    engineOk && engineControls?.mixingPath && (engine === 'wet' || exchangeFull) && fieldOf('behaviour.mixing') && choice('behaviour.mixing', 'Mixing', options(['pigment', 'rgb'], { pigment: 'Pigment', rgb: 'RGB' })),
+    engineOk && engineControls?.dirty && exchangeFull && fieldOf('behaviour.exchange.dirty') && toggle('behaviour.exchange.dirty', 'Dirty brush'),
+    engine === 'mixer' && engineOk && full(profile.reservoir) && toggle('behaviour.exchange.reservoir.refill', 'Load each stroke'),
   ]);
 
-  if (!isTool && profile.light !== 'none' && engineControls?.light) {
+  if (!isTool && full(profile.light) && engineOk && engineControls?.light) {
     add('light', 'Light', [
       slider({ path: 'light.amount', label: 'Light', min: 0, max: 1, step: 0.01 }),
       toggle('light.pressure', 'Light follows pressure'),
@@ -195,14 +204,14 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
 
-  if (profile.motion !== 'none' && marks === 'particles') add('motion', 'Motion', [slider({ path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 })]);
+  if (full(profile.motion) && engineOk && marks === 'particles') add('motion', 'Motion', [slider({ path: 'particle.waveSpeed', label: 'Wave speed', min: 0, max: 1, step: 0.01 })]);
 
   if (!isTool) {
     const own = brush.colour?.default;
     const hex = (c: unknown) => (typeof c === 'string' ? (brushColourHex(c, 'light') ?? null) : null);
     const pair = isDualColor(own) ? own : null;
     add('colour', 'Colour', [
-      withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: pair ? (brushColourHex(pair, 'light') ?? null) : hex(own), dark: pair ? (brushColourHex(pair, 'dark') ?? null) : null, gradient: own !== undefined && typeof own === 'object' && !pair }),
+      !refused.has('colour.default') && withNote({ kind: 'colour', path: 'colour.default', label: 'Default colour', ariaLabel: 'Brush default colour', value: pair ? (brushColourHex(pair, 'light') ?? null) : hex(own), dark: pair ? (brushColourHex(pair, 'dark') ?? null) : null, gradient: own !== undefined && typeof own === 'object' && !pair }),
       withNote({
         kind: 'palette',
         path: 'colour.palette',
@@ -215,6 +224,143 @@ export function brushEditorSections(brush: Brush, profile: BrushHostProfile = PA
     ]);
   }
   return sections;
+}
+
+/** What a brush has that the host can't use: one facet, in words. */
+export interface BrushEditorHiddenFacet {
+  facet: string;
+  /** In words, for a sentence: `light`, `wet behaviour`, `a bristle tip`. */
+  label: string;
+}
+
+export interface BrushEditorScope {
+  /** Facets the brush has that the host can't use (refused or painted without): they get no control and an edit keeps them. */
+  hidden: BrushEditorHiddenFacet[];
+  /** A short note naming them ("Also has light and wet behaviour, which Canvas can't use."), or `null`. */
+  note: string | null;
+}
+
+const MARKS_WORDS: Readonly<Record<string, string>> = { particles: 'particle marks', objects: 'sticker marks', continuous: 'continuous marks' };
+
+function hiddenLabel(issue: BrushIssue, b: Brush): string | null {
+  switch (issue.facet) {
+    case 'kind':
+    case 'tool':
+      return b.kind === 'tool' ? `the ${(TOOL_LABELS[b.tool!] ?? b.tool ?? 'tool').toLowerCase()} tool` : 'its marks';
+    case 'tip.shape':
+      return `a ${b.tip.shape} tip`;
+    case 'marks':
+      return MARKS_WORDS[b.marks?.kind ?? 'continuous'] ?? 'its marks';
+    case 'behaviour.surface':
+      return `${b.behaviour?.surface ?? 'dry'} behaviour`;
+    case 'behaviour.exchange.reservoir':
+      return 'a Mixer Brush reservoir';
+    case 'behaviour.exchange':
+      return 'paint pick-up';
+    case 'behaviour.grain':
+      return 'paper grain';
+    case 'light':
+      return 'light';
+    case 'motion':
+      return 'motion';
+    case 'dynamics.velocity':
+      return 'velocity dynamics';
+    case 'dynamics.tilt':
+      return 'tilt dynamics';
+    case 'colour.default':
+      return `a ${brushColourKind(b.colour!.default!)} default colour`;
+    default:
+      // Palette colours the host skips keep their control (with a note); sticker refs are checked elsewhere.
+      return null;
+  }
+}
+
+const sentence = (words: readonly string[]) => (words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`);
+
+/**
+ * What the editor leaves out of a brush for this host: the facets the host refuses or paints
+ * without, which `brushEditorSections` gives no control, so saving an edit keeps them unchanged
+ * for the hosts that use them. `note` names them for the editor to show.
+ */
+export function brushEditorScope(brush: Brush, profile: BrushHostProfile = PAINT_PROFILE): BrushEditorScope {
+  const hidden: BrushEditorHiddenFacet[] = [];
+  for (const issue of checkBrush(brush, profile).issues) {
+    const label = hiddenLabel(issue, brush);
+    if (label && !hidden.some((h) => h.label === label)) hidden.push({ facet: issue.facet, label });
+  }
+  return { hidden, note: hidden.length ? `Also has ${sentence(hidden.map((h) => h.label))}, which ${profile.name} can't use.` : null };
+}
+
+/** A brush id from a name: lowercase letters, digits and dashes (`'brush'` when nothing is left). */
+export function brushIdFromName(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'brush'
+  );
+}
+
+/**
+ * A new brush for a host to start editing: `from` (the brush in use) with every facet the host
+ * can't use removed (`degrade` with `ignored`), else a plain round brush. It passes `checkBrush`
+ * for that host, and the editor then offers only what the host uses, so it stays that way.
+ */
+export function newBrushFor(profile: BrushHostProfile, from?: Brush | null, name = 'New brush'): Brush {
+  const id = brushIdFromName(name);
+  const base: Brush = { id, name, kind: profile.kinds.includes('mark') ? 'mark' : profile.kinds[0]!, ...(profile.kinds.includes('mark') ? {} : { tool: profile.tools[0] }), tip: { shape: profile.tipShapes.includes('round') ? 'round' : profile.tipShapes[0]! } };
+  if (from) {
+    const stripped = degrade(from, profile, { ignored: true });
+    if (!stripped.issues.length) return { ...stripped.brush, id, name };
+  }
+  return base;
+}
+
+export interface SaveBrushEditOptions {
+  /** The brush as it was before editing (`null`: a new brush). Facets of it the host can't use are kept. */
+  original: Brush | null;
+  /** The edited brush. */
+  brush: Brush;
+  /** The host the edit was made in. */
+  profile: BrushHostProfile;
+  /**
+   * Save as a new brush with this name (its id made from the name, `-2`… when taken). Without
+   * it the original is changed in place, or a copy is saved when it is built in or new.
+   */
+  name?: string;
+}
+
+/** What `saveBrushEdit` stored, plus the facets kept for other hosts. */
+export interface SaveBrushEditResult extends SaveBrushResult {
+  /** Facets this host can't use that the brush keeps (see `checkBrushEdit`). */
+  kept: BrushIssue[];
+}
+
+/**
+ * Saves a brush edited in a host's editor to the shared library, by the rule the library tools
+ * follow too: the edit may not add what the host can't use (a new brush must pass `checkBrush`),
+ * and what the original had for other hosts is kept. Built-in presets are never changed: the
+ * edit is saved as a copy (`<name> copy`). Refusals are `BrushLibraryError`s with the facet and fix.
+ */
+export async function saveBrushEdit(library: Pick<BrushLibrary, 'get' | 'save' | 'isBuiltin'>, options: SaveBrushEditOptions): Promise<SaveBrushEditResult> {
+  const { original, profile } = options;
+  const check = checkBrushEdit(original, options.brush, profile);
+  if (!check.ok) {
+    const errors = check.issues.filter((i) => i.severity === 'error').map((i) => `${i.facet}: ${i.reason} ${i.fix}`);
+    throw new BrushLibraryError('invalid', `${profile.name} can't use this brush: ${errors.join(' ')} Nothing was saved.`);
+  }
+  const inPlace = !!original && options.name === undefined && !library.isBuiltin(original.id) && original.id === options.brush.id && !!(await library.get(original.id));
+  let brush = options.brush;
+  if (!inPlace) {
+    const name = ((options.name ?? (original ? `${original.name} copy` : brush.name)).trim() || 'Brush').slice(0, 80);
+    const stem = brushIdFromName(name).slice(0, 56);
+    let id = stem;
+    for (let n = 2; library.isBuiltin(id) || (await library.get(id)); n++) id = `${stem}-${n}`;
+    brush = { ...brush, id, name };
+  }
+  const saved = await library.save(brush, { overwrite: inPlace });
+  return { ...saved, kept: check.kept };
 }
 
 /**

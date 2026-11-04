@@ -3,7 +3,7 @@ import type PaintEditorComponent from './PaintEditor.svelte';
 import type PaintCanvasComponent from './PaintCanvas.svelte';
 import type PaintToolbarComponent from './PaintToolbar.svelte';
 import type BrushPanelComponent from './BrushPanel.svelte';
-import type BrushEditorComponent from './BrushEditor.svelte';
+import type BrushEditorComponent from '../brushes/BrushEditor.svelte';
 import type BrushLibraryBrowserComponent from '../brushes/BrushLibraryBrowser.svelte';
 import type PaperPanelComponent from './PaperPanel.svelte';
 import type ColorPanelComponent from './ColorPanel.svelte';
@@ -20,7 +20,8 @@ export { default as PaintEditor } from './PaintEditor.svelte';
 export { default as PaintCanvas } from './PaintCanvas.svelte';
 export { default as PaintToolbar } from './PaintToolbar.svelte';
 export { default as BrushPanel } from './BrushPanel.svelte';
-export { default as BrushEditor } from './BrushEditor.svelte';
+// The brush editor moved to `@pixerate/editor-svelte/brushes`; it is exported here too.
+export { default as BrushEditor } from '../brushes/BrushEditor.svelte';
 // The library browser moved to `@pixerate/editor-svelte/brushes`; it is exported here too.
 export { default as BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser.svelte';
 export { default as PaperPanel } from './PaperPanel.svelte';

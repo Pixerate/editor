@@ -61,6 +61,7 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 | A shape as the tip (stars, leaves, a logo) | `tip.shape` stamp with `stamps` (an editor stamp or a ref from `find_stickers`), continuous marks; it paints in the user's colour. Keep the sticker's colours with `marks` objects. Paint editor only. |
 | A spray can or mist | `basedOn` `spray-can`, or `medium` spray with `marks` scatter (`density`, `size`). Paint editor only. |
 | A change to a built-in | `duplicate_brush`, then `update_brush` the copy. |
+| Tune a brush from a host that can't paint all of it | `update_brush` there: what the host can't use is kept (`kept`), not stripped; refused only if the change adds it. |
 
 ## Recipes
 

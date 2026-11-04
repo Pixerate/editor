@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { isBrushLibrary, VECTOR_PROFILE, type Brush, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
 import {
   VECTOR_BLEND_MODE_MENU,
   VECTOR_FILTER_MENU,
@@ -14,6 +15,9 @@ import {
   randomVectorBrushstrokeSeed,
 } from '@pixerate/editor/vector';
 import { useVectorEditorState } from './useVectorEditor';
+import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
+import { BrushLibraryEditor } from '../brushes/BrushLibraryEditor';
+import { useBrushLibrary } from '../brushes/useBrushLibrary';
 
 const buttonClass =
   'inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border bg-background px-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40';
@@ -24,6 +28,8 @@ const labelClass = 'w-full truncate text-[11px] text-muted-foreground';
 
 export interface VectorAppearancePanelProps {
   controller: VectorEditorController;
+  /** The brush editor's preview stroke (default: the controller's `brushPreview` option). */
+  renderBrushPreview?: BrushPreviewRenderer;
   className?: string;
 }
 
@@ -31,11 +37,18 @@ export interface VectorAppearancePanelProps {
  * The appearance of the selection: its fill and stroke stacks (listed top first; add, remove,
  * reorder, show / hide, paint, opacity and blend mode per layer, width and alignment per
  * stroke), the node blend mode, and for one selected node its filters (drop and inner shadows,
- * glows, blurs, feather). The pencil on a layer points the gradient editor and tool at it.
+ * glows, blurs, feather). The pencil on a layer points the gradient editor and tool at it. With
+ * the controller's `brushLibrary`, a brushstroke's "Brush…" picks from the library
+ * (`BrushLibraryBrowser`, `VECTOR_PROFILE`) and "Edit brush…" edits it (`BrushLibraryEditor`):
+ * saves go to the library and the stroke takes the saved brush.
  * Slider drags and typing are one undo step each.
  */
-export function VectorAppearancePanel({ controller, className }: VectorAppearancePanelProps) {
+export function VectorAppearancePanel({ controller, renderBrushPreview, className }: VectorAppearancePanelProps) {
   const state = useVectorEditorState(controller);
+  // The brushstroke whose brush is being picked or edited.
+  const [brushUi, setBrushUi] = useState<{ index: number; mode: 'pick' | 'edit' } | null>(null);
+  const library = controller.brushLibrary;
+  const entries = useBrushLibrary(brushUi ? library : null, { profile: VECTOR_PROFILE });
   const panel = getVectorAppearancePanel(state);
   if (!panel) return null;
   const end = () => controller.endMergedEdit();
@@ -85,6 +98,30 @@ export function VectorAppearancePanel({ controller, className }: VectorAppearanc
               ×
             </button>
           </div>
+          {library && (
+            <div className="flex gap-1">
+              <button type="button" className={buttonClass} aria-expanded={brushUi?.index === l.index && brushUi.mode === 'pick'} title="Pick a brush from the brush library" onClick={() => setBrushUi((u) => (u?.index === l.index && u.mode === 'pick' ? null : { index: l.index, mode: 'pick' }))}>
+                Brush…
+              </button>
+              {isBrushLibrary(library) && (
+                <button type="button" className={buttonClass} aria-expanded={brushUi?.index === l.index && brushUi.mode === 'edit'} title="Edit this brush, or make a new one, in the shared brush library" onClick={() => setBrushUi((u) => (u?.index === l.index && u.mode === 'edit' ? null : { index: l.index, mode: 'edit' }))}>
+                  Edit brush…
+                </button>
+              )}
+            </div>
+          )}
+          {brushUi?.index === l.index && brushUi.mode === 'pick' && <BrushLibraryBrowser entries={entries} activeId={l.brushstroke.brushId} profile={VECTOR_PROFILE} onSelect={(id) => controller.setBrushstroke(l.index, { brushId: id }, { ids })} />}
+          {brushUi?.index === l.index && brushUi.mode === 'edit' && isBrushLibrary(library) && (
+            <BrushLibraryEditor
+              library={library}
+              brushId={l.brushstroke.brushId}
+              profile={VECTOR_PROFILE}
+              renderPreview={renderBrushPreview ?? controller.brushPreview ?? undefined}
+              className="rounded border border-border bg-slate-950 p-2"
+              onSaved={(saved: Brush) => void controller.refreshBrushes().then(() => controller.setBrushstroke(l.index, { brushId: saved.id, keepColour: true }, { ids }))}
+              onClose={() => setBrushUi(null)}
+            />
+          )}
         </div>
       );
     if (l.unknownKind)

@@ -1,5 +1,6 @@
 import { sanitizeVectorBrushstroke, vectorBrushstrokeBrushError, vectorBrushstrokeDefaultColour, vectorBrushstrokeBrushes, vectorBrushstrokeCharacterError } from './brushstroke.js';
 import { snapshotBrushLibrary, type BrushLibrary, type BrushLibrarySnapshot } from '../brushes/library.js';
+import type { BrushPreviewRenderer } from '../brushes/tools.js';
 import type { PaintBrush } from '../paint-editor/brushes.js';
 import { VECTOR_STYLIZE_LABELS, VECTOR_STYLIZE_STYLES, stylizeVectorImage, type VectorStylizeOptions, type VectorStylizeStyle } from './stylize.js';
 import { VECTOR_DISTORT_BRUSH_MODES, distortVectorPath, type VectorDistortBrushMode, type VectorDistortDab } from './distortBrush.js';
@@ -417,6 +418,12 @@ export interface VectorEditorOptions {
 	 * profile decides which). Share one with the paint editor so a brush saved there paints here.
 	 */
 	brushLibrary?: Pick<BrushLibrary, 'list' | 'subscribe'>;
+	/**
+	 * Draws a brush's preview stroke for the brush editor ("Edit brush…"), e.g.
+	 * `renderCanvasBrushPreview` from `@pixerate/editor/canvas` (the renderer brushstrokes paint
+	 * with; not bundled here). Without it the brush editor has no preview.
+	 */
+	brushPreview?: BrushPreviewRenderer;
 	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */
 	colorScheme?: 'light' | 'dark';
 	/** History to record into, e.g. one shared with the rest of the app (default: a new one). */
@@ -1584,6 +1591,8 @@ export class VectorEditorController {
 
 	constructor(options: VectorEditorOptions = {}) {
 		this.colorScheme = options.colorScheme ?? 'light';
+		this.brushLibrary = options.brushLibrary ?? null;
+		this.brushPreview = options.brushPreview ?? null;
 		this.brushes = options.brushLibrary ? snapshotBrushLibrary(options.brushLibrary, () => this.notify()) : null;
 		this.history = options.history ?? new HistoryManager();
 		this.doc = options.document ? loadedDocument(options.document) : { width: 800, height: 600, nodes: [] };
@@ -1626,6 +1635,17 @@ export class VectorEditorController {
 	 */
 	/** The saved brushes of the brush library as last read (empty without one). */
 	private brushes: BrushLibrarySnapshot | null;
+
+	/** The brush library brushstrokes use (`brushLibrary` option), or `null`. A full `BrushLibrary` lets the UI edit brushes (`isBrushLibrary`). */
+	readonly brushLibrary: Pick<BrushLibrary, 'list' | 'subscribe'> | null;
+
+	/** The `brushPreview` option: draws the brush editor's preview stroke, or `null`. */
+	readonly brushPreview: BrushPreviewRenderer | null;
+
+	/** Reads the brush library again now (it is also read after every change to it); resolves once read. */
+	refreshBrushes(): Promise<void> {
+		return this.brushes?.refresh() ?? Promise.resolve();
+	}
 
 	/** The brushes a brushstroke can use: the presets, then the brush library's saved brushes the vector profile admits. */
 	listBrushstrokeBrushes(): PaintBrush[] {
@@ -3148,8 +3168,9 @@ export class VectorEditorController {
 			(stack, path) => {
 				const layer = stack[index];
 				if (!layer || layer.kind !== 'brushstroke' || !layer.brush) return `Path "${path.id}" has no brushstroke at stroke ${index} (vector.getAppearance lists its strokes; 0 is the bottom).`;
-				// Another brush drops the embedded saved brush (the new one is looked up again).
-				const brush = patch.brushId && patch.brushId !== layer.brush.brushId ? { ...layer.brush, brushId: patch.brushId, spec: undefined } : { ...layer.brush };
+				// Choosing a brush, even the same one, drops the embedded saved brush: it is looked up again,
+				// so a brush changed in the library since is taken as it is now.
+				const brush = patch.brushId ? { ...layer.brush, brushId: patch.brushId, spec: undefined } : { ...layer.brush };
 				if (patch.size === null) delete brush.size;
 				else if (patch.size !== undefined) brush.size = patch.size;
 				if (patch.pressure === null) delete brush.pressure;

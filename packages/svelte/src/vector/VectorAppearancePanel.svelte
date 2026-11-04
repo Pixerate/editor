@@ -12,21 +12,35 @@
     type VectorStrokeAlign,
     randomVectorBrushstrokeSeed
   } from '@pixerate/editor/vector';
+  import { isBrushLibrary, VECTOR_PROFILE, type Brush, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
   import { vectorStateOf } from './subscribe.svelte.js';
+  import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
+  import BrushLibraryEditor from '../brushes/BrushLibraryEditor.svelte';
+  import { brushLibraryState } from '../brushes/brushLibrary.svelte.js';
 
   /**
    * The appearance of the selection: its fill and stroke stacks (listed top first; add, remove,
    * reorder, show / hide, paint, opacity and blend mode per layer, width and alignment per
    * stroke), the node blend mode, and for one selected node its filters (drop and inner shadows,
-   * glows, blurs, feather). The pencil on a layer points the gradient editor and tool at it.
+   * glows, blurs, feather). The pencil on a layer points the gradient editor and tool at it. With
+   * the controller's `brushLibrary`, a brushstroke's "Brush…" picks from the library
+   * (`BrushLibraryBrowser`, `VECTOR_PROFILE`) and "Edit brush…" edits it (`BrushLibraryEditor`):
+   * saves go to the library and the stroke takes the saved brush.
    * Slider drags and typing are one undo step each.
    */
   interface Props {
     controller: VectorEditorController;
+    /** The brush editor's preview stroke (default: the controller's `brushPreview` option). */
+    renderBrushPreview?: BrushPreviewRenderer;
     class?: string;
   }
 
-  let { controller, class: className = '' }: Props = $props();
+  let { controller, renderBrushPreview, class: className = '' }: Props = $props();
+  // The brushstroke whose brush is being picked or edited.
+  let brushUi = $state<{ index: number; mode: 'pick' | 'edit' } | null>(null);
+  const library = $derived(controller.brushLibrary);
+  const brushEntries = brushLibraryState(() => (brushUi ? controller.brushLibrary : null), () => ({ profile: VECTOR_PROFILE }));
+  const toggleBrushUi = (index: number, mode: 'pick' | 'edit') => (brushUi = brushUi?.index === index && brushUi.mode === mode ? null : { index, mode });
 
   const store = vectorStateOf(() => controller);
   const view = $derived(store.current);
@@ -85,6 +99,28 @@
         </label>
         <button type="button" class={buttonClass} title="Remove" aria-label="Remove {name}" onclick={() => controller.removePaintLayer('stroke', l.index, { ids })}>×</button>
       </div>
+      {#if library}
+        <div class="flex gap-1">
+          <button type="button" class={buttonClass} aria-expanded={brushUi?.index === l.index && brushUi.mode === 'pick'} title="Pick a brush from the brush library" onclick={() => toggleBrushUi(l.index, 'pick')}>Brush…</button>
+          {#if isBrushLibrary(library)}
+            <button type="button" class={buttonClass} aria-expanded={brushUi?.index === l.index && brushUi.mode === 'edit'} title="Edit this brush, or make a new one, in the shared brush library" onclick={() => toggleBrushUi(l.index, 'edit')}>Edit brush…</button>
+          {/if}
+        </div>
+      {/if}
+      {#if brushUi?.index === l.index && brushUi.mode === 'pick'}
+        <BrushLibraryBrowser entries={brushEntries.entries} activeId={bs.brushId} profile={VECTOR_PROFILE} onselect={(id) => controller.setBrushstroke(l.index, { brushId: id }, { ids })} />
+      {/if}
+      {#if brushUi?.index === l.index && brushUi.mode === 'edit' && isBrushLibrary(library)}
+        <BrushLibraryEditor
+          {library}
+          brushId={bs.brushId}
+          profile={VECTOR_PROFILE}
+          renderPreview={renderBrushPreview ?? controller.brushPreview ?? undefined}
+          class="rounded border border-border bg-slate-950 p-2"
+          onsaved={(saved: Brush) => void controller.refreshBrushes().then(() => controller.setBrushstroke(l.index, { brushId: saved.id, keepColour: true }, { ids }))}
+          onclose={() => (brushUi = null)}
+        />
+      {/if}
     </div>
   {:else if l.unknownKind}
     <div class="text-[11px] text-muted-foreground" data-vector-layer="{l.kind}-{l.index}">{name}: {l.unknownKind} (not drawn by this version)</div>

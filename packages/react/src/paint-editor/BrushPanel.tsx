@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
 import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
-import { BrushEditor } from './BrushEditor';
+import { BrushEditor } from '../brushes/BrushEditor';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
 import { PaintGradientEditor } from './PaintGradientEditor';
 import { StickerPicker } from './StickerPicker';
