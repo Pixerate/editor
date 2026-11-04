@@ -429,6 +429,33 @@ export class AnimationEditorController {
 		});
 	}
 
+	private async resolveVectorPath(
+		artwork: VectorDocument,
+		d: EffectDescription,
+		path: MotionEffectPathInput,
+		controlName?: string
+	): Promise<{ control: string; value: string; place?: 'viewBox' }> {
+		const controls = pathControlsOf(d);
+		if (!controls.length) throw new Error(`"${d.id}" does not draw along a path. Find one that does with search_effects accepts ["path"] (kind vector).`);
+		const control = controlName ?? (controls.length === 1 ? controls[0] : undefined);
+		if (!control) throw new Error(`"${d.id}" has several path controls (${controls.join(', ')}); pass control.`);
+		if (!controls.includes(control)) throw new Error(`"${control}" is not a path control of "${d.id}"; its path controls are ${controls.join(', ')}.`);
+		if ('node' in path) {
+			const entry = indexMotionNodes(artwork.nodes).get(path.node);
+			if (!entry) throw new Error(`There is no node "${path.node}"; find_animation_elements lists the artwork's nodes.`);
+			if (entry.node.type !== 'path') throw new Error(`Node "${path.node}" is a ${entry.node.type}, not a path; pass a path node (find_animation_elements shows each node's type).`);
+			// The node's outline in artwork units, with every transform above it applied.
+			const value = bezierPathToSvg(vectorPathWorldBezier(entry.node, entry.parentWorld, { effects: false }));
+			// The effect fits its picture to the path, so it lands on the node at scale 1.
+			return { control, value, place: 'viewBox' };
+		}
+		const provider = this.effects.require();
+		if (!provider.pathFromText) throw new Error(`The effects provider "${provider.id}" cannot write words as a path; pass a path node instead.`);
+		if (typeof path.text !== 'string' || !path.text.trim()) throw new Error('text is empty; pass the words to write.');
+		const value = await provider.pathFromText(path.text, { ...(path.font ? { font: path.font } : {}), ...(path.align ? { align: path.align } : {}) });
+		return { control, value };
+	}
+
 	/**
 	 * Adds a provider vector effect (one with its own picture: a lower third, a loader): its SVG as
 	 * an artwork group (id: the instance) fitted into `box` (default the whole artwork), and its
@@ -443,27 +470,9 @@ export class AnimationEditorController {
 			let given = options.values;
 			let place: { x: number; y: number; width: number; height: number } | 'viewBox' | undefined = options.box;
 			if (options.path) {
-				const controls = pathControlsOf(d);
-				if (!controls.length) throw new Error(`"${d.id}" does not draw along a path. Find one that does with search_effects accepts ["path"] (kind vector).`);
-				const control = options.control ?? (controls.length === 1 ? controls[0] : undefined);
-				if (!control) throw new Error(`"${d.id}" has several path controls (${controls.join(', ')}); pass control.`);
-				if (!controls.includes(control)) throw new Error(`"${control}" is not a path control of "${d.id}"; its path controls are ${controls.join(', ')}.`);
-				let value: string;
-				if ('node' in options.path) {
-					const entry = indexMotionNodes(this.scene.artwork.nodes).get(options.path.node);
-					if (!entry) throw new Error(`There is no node "${options.path.node}"; find_animation_elements lists the artwork's nodes.`);
-					if (entry.node.type !== 'path') throw new Error(`Node "${options.path.node}" is a ${entry.node.type}, not a path; pass a path node (find_animation_elements shows each node's type).`);
-					// The node's outline in artwork units, with every transform above it applied.
-					value = bezierPathToSvg(vectorPathWorldBezier(entry.node, entry.parentWorld, { effects: false }));
-					// The effect fits its picture to the path, so it lands on the node at scale 1.
-					place ??= 'viewBox';
-				} else {
-					const provider = this.effects.require();
-					if (!provider.pathFromText) throw new Error(`The effects provider "${provider.id}" cannot write words as a path; pass a path node instead.`);
-					if (typeof options.path.text !== 'string' || !options.path.text.trim()) throw new Error('text is empty; pass the words to write.');
-					value = await provider.pathFromText(options.path.text, { ...(options.path.font ? { font: options.path.font } : {}), ...(options.path.align ? { align: options.path.align } : {}) });
-				}
-				given = { ...(given ?? {}), [control]: value };
+				const resolved = await this.resolveVectorPath(this.scene.artwork, d, options.path, options.control);
+				if (resolved.place) place ??= resolved.place;
+				given = { ...(given ?? {}), [resolved.control]: resolved.value };
 			}
 			const values = resolveEffectValues(d, given);
 			const instance = options.instance ?? nextMotionEffectInstance(this.scene);
@@ -471,6 +480,33 @@ export class AnimationEditorController {
 			const source: MotionEffectSource = { instance, effect: d.id, provider: this.effects.require().id, name: d.name, values };
 			const { group, shots, notes } = motionPartsFromVectorEffect(this.scene.artwork, motion, source, place);
 			return { scene: { ...this.scene, artwork: { ...this.scene.artwork, nodes: [...this.scene.artwork.nodes, group] }, shots: [...this.scene.shots, ...shots] }, label: `Add ${d.name}`, instance, notes };
+		});
+	}
+
+	/**
+	 * Sets an applied vector effect's path from a path node in the artwork (landing on the node at
+	 * scale 1) or words written by the provider. One undo step.
+	 */
+	setVectorEffectPath(instance: string, path: MotionEffectPathInput, options: { control?: string } = {}): Promise<MotionEffectResult> {
+		return this.effectEdit(async () => {
+			const was = motionSceneEffects(this.scene).find((e) => e.instance === instance);
+			if (!was) throw new Error(`There is no applied effect "${instance}"; list_applied_effects lists them.`);
+			if (was.kind !== 'vector') throw new Error(`"${instance}" is a motion effect, not a vector effect.`);
+			const d = await this.describeFor(was.effect, ['vector']);
+			const { scene: bare } = withoutMotionEffect(this.scene, instance);
+			const { control, value, place } = await this.resolveVectorPath(bare.artwork, d, path, options.control);
+			const merged = { ...was.values, [control]: value };
+			const provider = this.effects.require();
+			const source: MotionEffectSource = { instance, effect: d.id, provider: provider.id, name: d.name, values: merged };
+			const motion = await provider.applyVectorEffect!(d.id, motionArtworkSvg(bare.artwork), merged);
+			const { group, shots, notes } = motionPartsFromVectorEffect(bare.artwork, motion, source, place);
+			const index = this.scene.artwork.nodes.findIndex((n) => n.id === instance);
+			const nodes = [...bare.artwork.nodes];
+			nodes.splice(Math.max(0, index), 0, group);
+			const at = this.scene.shots.findIndex((s) => was.shots.includes(s.id));
+			const kept = bare.shots;
+			const nextShots = [...kept.slice(0, Math.max(0, at)), ...shots, ...kept.slice(Math.max(0, at))];
+			return { scene: { ...bare, artwork: { ...bare.artwork, nodes }, shots: nextShots }, label: `Set ${d.name} path`, instance, notes };
 		});
 	}
 

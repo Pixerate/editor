@@ -74,4 +74,27 @@ describe('motion effects (React)', () => {
     await click(button('Detach'));
     expect(c.vectorEffectGroups()).toEqual([]);
   });
+
+  it('AnimationEffectsPanel runs a vector effect along a path node, writes words and clears the path', async () => {
+    const c = anim();
+    act(() => root.render(<AnimationEffectsPanel controller={c} node="box" />));
+    await click(button('Vector effect…'));
+    await click(q('[data-effect-id="fake.route"]'));
+    expect(c.appliedEffects()[0]?.effect).toBe('fake.route');
+    await click(q('[data-motion-effect="fx1"] button[aria-expanded]'));
+    await settle();
+    const part = q('[data-effect-part="path"]');
+    expect(part).toBeTruthy();
+    await click(button('Use path node'));
+    expect(String(c.appliedEffects()[0]?.values.path)).toMatch(/^M10 10/);
+    const words = container.querySelector<HTMLInputElement>('input[aria-label="Words to write along the path"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(words, 'hi');
+      words.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(button('Write'));
+    expect(String(c.appliedEffects()[0]?.values.path)).toMatch(/^M0 10/);
+    await click(button('Clear path'));
+    expect(c.appliedEffects()[0]?.values.path).toBe('');
+  });
 });

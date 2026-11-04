@@ -173,10 +173,16 @@ describe('animation editor: provider effect tools', () => {
 			expect(b.height).toBeCloseTo(40, 3);
 		});
 
-		it('writes words, and refuses what cannot run along a path with the fix', async () => {
+		it('writes words, updates an applied vector effect path in place, and refuses what cannot run along a path with the fix', async () => {
 			const c = new AnimationEditorController({ scene: pathScene(), clock: new ManualClock(), effects: createFakeEffectProvider() });
 			expect(await c.addVectorEffect('fake.route', { path: { text: 'ab' } })).toMatchObject({ ok: true });
-			expect(String(c.appliedEffects().find((e) => e.effect === 'fake.route')!.values.path)).toMatch(/^M0 10 L3 0/);
+			const fx = c.appliedEffects().find((e) => e.effect === 'fake.route')!;
+			expect(String(fx.values.path)).toMatch(/^M0 10 L3 0/);
+			expect(await c.setVectorEffectPath(fx.instance, { node: 'line' })).toMatchObject({ ok: true });
+			expect(String(c.appliedEffects().find((e) => e.instance === fx.instance)!.values.path)).toMatch(/^M60 50\s*L160 90\s*L210 50/);
+			const b = vectorNodeBounds(c.getScene().artwork.nodes.find((n) => n.id === fx.instance)!)!;
+			expect(b.x).toBeCloseTo(60, 3);
+			expect(b.y).toBeCloseTo(50, 3);
 			expect(await c.addVectorEffect('fake.badge', { path: { node: 'line' } })).toMatchObject({ ok: false, error: expect.stringMatching(/does not draw along a path. Find one that does with search_effects accepts \["path"\]/) });
 			expect(await c.addVectorEffect('fake.route', { path: { node: 'nope' } })).toMatchObject({ ok: false, error: expect.stringMatching(/no node "nope"/) });
 			expect(await c.addVectorEffect('fake.route', { path: { node: 'g' } })).toMatchObject({ ok: false, error: expect.stringMatching(/is a group, not a path/) });
