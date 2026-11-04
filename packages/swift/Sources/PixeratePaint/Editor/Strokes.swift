@@ -40,6 +40,8 @@ public struct RecordedStroke {
     public var paint: PaintGradientSource?
     /// Effect paint (recorded instead of `paint`): strokes replay with the effect's pixels.
     public var effect: PaintEffectPaint?
+    /// Wet brushes: the wet simulation's clock (steps) at which each point was applied.
+    public var steps: [Int]?
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {
@@ -81,6 +83,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     var o: JSONObject = ["id": .string(s.id), "layerId": .string(s.layerId), "color": .string(s.color), "points": .array(s.points.map(\.json)), "seed": .number(Double(s.seed))]
     if let copies = s.copies { o["copies"] = .array(copies.map { .array($0.map { .number($0) }) }) }
     if let load = s.load { o["load"] = loadJSON(load) }
+    if let steps = s.steps { o["steps"] = .array(steps.map { .number(Double($0)) }) }
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
     if let effect = s.effect { o["paint"] = effect.json }

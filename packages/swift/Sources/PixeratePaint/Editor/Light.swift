@@ -8,7 +8,6 @@ import PixerateRaster
  * paint glows where its light is (its colour brightened in linear light), and the light spills
  * onto what is around it as a blurred Linear Dodge (Add) pass above the layer.
  *
- * This port draws light from dry brushes; thick paint's rim and clarity (and wet light) are #545.
  */
 
 /// How much the light brightens the paint (linear light × (1 + GLOW × light)).
@@ -110,27 +109,6 @@ func scaleLight(_ light: TiledSurface, _ k: Double) -> TiledSurface {
         }
     }
     return TiledSurface(channels: 1, tiles: tiles, defaultValue: 0)
-}
-
-/// The paint brightened where it has light (dry light paint: no rim or clarity).
-func glowSurface(_ color: TiledSurface, _ light: TiledSurface?) -> TiledSurface {
-    guard let light, !light.tiles.isEmpty else { return color }
-    var out = color.tiles
-    for (key, tile) in color.tiles {
-        guard let l = light.tiles.get(key) else { continue }
-        let ld = l.data
-        var d = tile.data
-        for i in 0..<(TILE * TILE) {
-            let j = i * 4
-            if d[j + 3] == 0 { continue }
-            let g = ld[i] != 0 ? Double(ld[i]) / 255 : 0
-            if g > 0 {
-                for ch in 0..<3 { d[j + ch] = JS.u8c(JS.round(colourFromLinear(Swift.min(1, colourToLinear(Double(d[j + ch]) / 255) * (1 + GLOW * g))) * 255)) }
-            }
-        }
-        out.set(key, Tile(data: d, uniform: nil))
-    }
-    return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
 }
 
 private func boxBlur(_ p: inout [Float], _ w: Int, _ h: Int, _ r: Int) {

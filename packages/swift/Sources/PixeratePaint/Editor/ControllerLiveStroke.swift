@@ -11,12 +11,18 @@ public final class PaintLiveStroke {
     private weak var controller: PaintEditorController?
     let session: PaintStrokeSession
     public let layerId: String
+    /// The document when the stroke began (a wet stroke changes the layer's pixels as it goes).
+    private let beforeDoc: PaintDocumentState
 
-    init(_ controller: PaintEditorController, _ session: PaintStrokeSession) {
+    init(_ controller: PaintEditorController, _ session: PaintStrokeSession, before: PaintDocumentState) {
         self.controller = controller
         self.session = session
         layerId = session.layerId
+        beforeDoc = before
     }
+
+    /// Whether the stroke paints wet media (its layer shows the wet simulation as it goes).
+    public var isWet: Bool { session.initValues.wet != nil }
 
     /// Whether samples can still be pushed.
     public var open: Bool { session.open && controller?.liveStroke === self }
@@ -29,7 +35,9 @@ public final class PaintLiveStroke {
     /// Adds pen samples and redraws the layer with them.
     public func push(_ points: [PenPoint]) {
         guard open, !points.isEmpty else { return }
-        session.push(points)
+        try? session.push(points)
+        // The wet layer's display is the layer's pixels: show it (not an undo step).
+        if isWet { controller?.wet.syncDisplays(DISPLAY_TILES_PER_TICK) }
         controller?.emit()
     }
 
@@ -38,14 +46,17 @@ public final class PaintLiveStroke {
     public func end() throws -> PaintStrokeResult {
         guard let c = controller, c.liveStroke === self else { throw PaintEditorError("This stroke has already ended.") }
         c.liveStroke = nil
-        let before = c.doc
+        let current = c.doc
+        let before = isWet ? beforeDoc : current
         let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
-        do { run = try c.endStroke(before, session) } catch {
+        do { run = try c.endStroke(current, session) } catch {
+            c.wetOp = nil
+            c.wet.driver = nil
             c.emit()
             throw error
         }
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
-        if run.doc !== before { c.commit("\(run.brush.name) stroke", run.doc, before: before) } else { c.emit() }
+        if run.doc !== current || c.wetOp != nil { c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before) } else { c.emit() }
         return run.result
     }
 
@@ -53,6 +64,16 @@ public final class PaintLiveStroke {
     public func cancel() {
         guard let c = controller, c.liveStroke === self else { return }
         c.liveStroke = nil
+        if isWet {
+            // Put the wet paint back as it was before the stroke.
+            c.wet.driver = nil
+            let snap = c.wetOp?.before
+            c.wetOp = nil
+            c.pendingWetEvents = []
+            try? c.wet.restore(snap)
+            c.doc = c.doc.with { $0.layers = beforeDoc.layers }
+            c.wet.syncDisplays()
+        }
         c.emit()
     }
 }
@@ -96,7 +117,13 @@ extension PaintEditorController {
         if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before starting another.") }
         var i = initIn
         if i.snapToPerspective == nil { i.snapToPerspective = true }
-        let stroke = PaintLiveStroke(self, try sessionFor(doc, i))
+        let before = doc
+        let session: PaintStrokeSession
+        do { session = try sessionFor(doc, i) } catch {
+            wetOp = nil
+            throw error
+        }
+        let stroke = PaintLiveStroke(self, session, before: before)
         liveStroke = stroke
         emit()
         return stroke

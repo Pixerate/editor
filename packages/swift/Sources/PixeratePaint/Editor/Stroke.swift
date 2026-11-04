@@ -44,6 +44,10 @@ struct StrokeSessionInit {
     var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
     /// Sticker brushes: the number of the first sticker id (`st<n>`) the spray makes.
     var stickerNextId: Int? = nil
+    /// Wet brushes: the driver that applies the stroke to the wet layer, and the layer's current pixels (the wet layer's display).
+    var wet: (driver: WetStrokeDriver, surface: () -> TiledSurface)? = nil
+    /// Impasto brushes: the layer's thick-paint channels before the stroke.
+    var thick: ThickChannels? = nil
 }
 
 public struct PaintStrokeResult {
@@ -55,6 +59,8 @@ public struct PaintStrokeResult {
     public var strokeId: String?
     /// Brushes that pick up paint: what the brush carries after the stroke.
     public var mixerLoad: MixerLoad?
+    /// Wet brushes: the paint is wet (it keeps moving until it dries).
+    public var wet: Bool?
 }
 
 private func sameTile(_ a: Tile?, _ b: Tile?) -> Bool {
@@ -83,6 +89,8 @@ final class PaintStrokeSession: PaintTileTarget {
     private let dry: CoverageStroke?
     private var wet: PaintDabStroke?
     private var spray: StickerSpray?
+    private var wetDriver: WetStrokeDriver?
+    private var thickDriver: ThickStrokeDriver?
     private let apply: StrokeApply
     private var bounds: RasterRect?
     private var closed = false
@@ -113,7 +121,7 @@ final class PaintStrokeSession: PaintTileTarget {
         layerId = i.layerId
         base = i.surface
         let brush = i.brush
-        if let light = i.light {
+        if let light = i.light, i.wet == nil, i.brush.engine != "sticker" {
             // The twin paints the light as grey at the brush's light amount (see `light.ts`).
             let grey = Int(JS.round(brush.light.amount * 255))
             let g = Double(grey) / 255
@@ -134,6 +142,16 @@ final class PaintStrokeSession: PaintTileTarget {
         }
         apply = StrokeApply(mode: brush.engine == "eraser" ? .erase : .paint, color: i.color, background: i.background, opacity: brush.tip.opacity, blend: brush.tip.blend, lockTransparency: i.lockTransparency, selection: i.selection, offset: i.offset)
         let copies = i.copies.isEmpty ? [IDENTITY_COPY] : i.copies
+        if let w = i.wet {
+            dry = nil
+            wetDriver = w.driver
+            return
+        }
+        if let ch = i.thick {
+            dry = nil
+            thickDriver = ThickStrokeDriver(ThickStrokeInit(brush: brush, target: self, channels: ch, color: i.color.prefix(3).map { Double($0) / 255 }, load: i.mixerLoad, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels))
+            return
+        }
         if brush.stamp != nil { throw UnportedBrushError(message: "The \(brush.name) brush has a stamp tip, which the Swift paint editor does not draw yet.") }
         if brush.engine == "sticker" {
             dry = nil
@@ -189,13 +207,20 @@ final class PaintStrokeSession: PaintTileTarget {
 
     var open: Bool { !closed }
 
+    /// Impasto strokes: the layer's thick-paint channels with the stroke so far.
+    func thickChannels() -> ThickChannels? { thickDriver?.channels() }
+
     /// Adds raw pen samples (document pixels).
-    func push(_ pts: [PenPoint]) {
+    func push(_ pts: [PenPoint]) throws {
         if closed || pts.isEmpty { return }
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
-        lightTwin?.push(filtered)
-        let rects = dry != nil ? dry!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
+        if let w = wetDriver {
+            for r in try w.push(filtered) { bounds = unionRect(bounds, r) }
+            return
+        }
+        try lightTwin?.push(filtered)
+        let rects = dry != nil ? dry!.push(filtered) : thickDriver != nil ? thickDriver!.push(filtered) : spray != nil ? spray!.push(filtered) : wet!.push(filtered)
         update(rects)
         markStale(rects)
     }
@@ -257,7 +282,18 @@ final class PaintStrokeSession: PaintTileTarget {
     /// Ends the stroke and returns what changed.
     func end() throws -> PaintStrokeResult {
         if closed { throw PaintEditorError("This stroke has already ended.") }
-        update(dry != nil ? dry!.finish() : spray != nil ? spray!.finish() : wet!.finish())
+        if let w = wetDriver {
+            for r in try w.finish() { bounds = unionRect(bounds, r) }
+            closed = true
+            let changed = w.dabCount > 0
+            surfaceAfter = changed ? initValues.wet!.surface() : nil
+            var r = PaintStrokeResult(layerId: layerId, bounds: changed ? w.bounds : nil, dabs: w.dabCount, strokeId: nil)
+            r.wet = true
+            if let carried = w.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
+            result = r
+            return r
+        }
+        update(dry != nil ? dry!.finish() : thickDriver != nil ? thickDriver!.finish() : spray != nil ? spray!.finish() : wet!.finish())
         closed = true
         if let twin = lightTwin, twin.open { _ = try twin.end() }
         let ch = base.channels
@@ -269,10 +305,12 @@ final class PaintStrokeSession: PaintTileTarget {
             if let tile { tiles.set(key, tile) } else { _ = tiles.delete(key) }
             if !sameTile(prev, tile) { changed = true }
         }
+        // An impasto stroke can change only the relief (a knife on dry colour).
+        if let t = thickDriver, t.dabCount > 0 { changed = true }
         surfaceAfter = changed ? TiledSurface(channels: ch, tiles: tiles, defaultValue: base.defaultValue) : nil
-        let dabs = dry?.dabCount ?? spray?.dabCount ?? wet!.dabCount
+        let dabs = dry?.dabCount ?? thickDriver?.dabCount ?? spray?.dabCount ?? wet!.dabCount
         var r = PaintStrokeResult(layerId: layerId, bounds: changed ? bounds : nil, dabs: dabs, strokeId: nil)
-        if let carried = wet?.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
+        if let carried = wet?.load ?? thickDriver?.load { r.mixerLoad = initValues.brush.behavior.dirty ? carried : cleanMixer(carried) }
         result = r
         return r
     }

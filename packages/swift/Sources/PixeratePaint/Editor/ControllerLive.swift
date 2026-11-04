@@ -256,7 +256,7 @@ extension PaintEditorController {
         i.stencils = false
         i.maskStencils = st.stencils ?? []
         let session = try sessionFor(d.with { $0.layers = mapLayer(d.layers, plain.id) { _ in plain.withSurface(surface) } }, i)
-        session.push(st.points)
+        try session.push(st.points)
         let result = try session.end()
         // Only ever grown.
         let had = paintedBounds[st.key] ?? nil

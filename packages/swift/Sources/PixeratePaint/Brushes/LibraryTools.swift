@@ -21,7 +21,43 @@ func thumbnailStroke(_ width: Int, _ height: Int) -> [PenPoint] {
     return pts
 }
 
-/// A thumbnail of a brush: a test stroke on the paper (`paint-editor/thumbnails.ts`, dry brushes).
+/// One small wet world reused for wet brush thumbnails (by size).
+private let thumbWorld = Locked<WetWorld?>(nil)
+
+/// A wet brush's test stroke: laid on a wet layer (over a wet band of colour for the tools that move paint), shown as painted, before any time passes.
+private func paintWetTestStroke(_ brush: PaintBrush, _ paper: PaperSettings, _ color: String, _ width: Int, _ height: Int) throws -> TiledSurface {
+    try thumbWorld.with { cached in
+        let w: WetWorld
+        if let c = cached, c.width == width, c.height == height {
+            c.setPaper(wetPaperInput(paper))
+            w = c
+        } else {
+            w = try WetWorld(width: width, height: height, paper: wetPaperInput(paper))
+            cached = w
+        }
+        if w.hasLane("thumb") { try w.removeLane("thumb") }
+        try w.ensureLane("thumb")
+        let c8 = hexToRgb8(color)
+        let rgb = [Double(c8[0]) / 255, Double(c8[1]) / 255, Double(c8[2]) / 255]
+        if brush.wet.tool != "paint" && brush.wet.tool != "water" {
+            // Wet paint to work in: the colour over ochre, as for the dry brushes that move paint.
+            let half = Int(JS.ceil(Double(height) / 2))
+            try w.paint("thumb", RasterRect(x: 0, y: 0, width: width, height: half), nil, water: 0.4, pigment: pigmentOf(rgb, 0).map { $0 * 0.05 })
+            try w.paint("thumb", RasterRect(x: 0, y: half, width: width, height: height - half), nil, water: 0.4, pigment: pigmentOf([232.0 / 255, 196.0 / 255, 64.0 / 255], 0).map { $0 * 0.05 })
+        }
+        let driver = WetStrokeDriver(WetStrokeInit(
+            world: w, laneId: "thumb", brush: brush, color: rgb, load: brushLoadForStroke(brush, EMPTY_MIXER_LOAD, rgb), grain: paperGrain(paper),
+            paperDepth: paper.depth, paperColor: hexToRgb8(paper.color), seed: 7, copies: [IDENTITY_COPY], mask: nil, paint: nil, effect: nil
+        ))
+        _ = try driver.push(thumbnailStroke(width, height))
+        _ = try driver.finish()
+        // Blowing only shows once the water has moved.
+        if brush.wet.tool == "blow" { w.step(4) }
+        return try w.display("thumb").surface
+    }
+}
+
+/// A thumbnail of a brush: a test stroke on the paper (`paint-editor/thumbnails.ts`).
 func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: Int?, height h: Int?, color: String) throws -> (width: Int, height: Int, data: [UInt8]) {
     let width = Swift.max(16, Swift.min(512, w ?? 160))
     let height = Swift.max(16, Swift.min(512, h ?? 48))
@@ -34,22 +70,43 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
     let bytes = { (c: [Int]) in c.map { UInt8($0) } }
     if b.engine == "eraser" {
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: height), bytes(rgba))
+    } else if b.engine == "wet" {
+        // the wet layer draws its own band
     } else if b.engine == "blender" || b.engine == "smudge" || (b.engine == "mixer" && !b.loadsColor) || b.behavior.pickup > 0 {
         let half = Int(JS.ceil(Double(height) / 2))
         surface = fillRect(surface, RasterRect(x: 0, y: 0, width: width, height: half), bytes(rgba))
         surface = fillRect(surface, RasterRect(x: 0, y: half, width: width, height: height - half), [232, 196, 64, 255])
     }
-    if b.light.amount > 0 { throw UnportedBrushError(message: "The \(b.name) brush lays light paint, which the Swift paint editor does not paint yet.") }
-    let session = try PaintStrokeSession(StrokeSessionInit(
-        layerId: "thumbnail", surface: surface, offset: LayerOffset(x: 0, y: 0), lockTransparency: false, brush: b, color: rgba,
-        background: hexToRgb8(paper.color) + [255], grain: paperGrain(paper), paperDepth: paper.depth, seed: 7, colorHex: color,
-        affineCopies: [], copies: [IDENTITY_COPY], mixerLoad: brushLoadForStroke(b, EMPTY_MIXER_LOAD, rgb.map { Double($0) / 255 }), secondary: nil, selection: nil, paint: nil
-    ))
-    session.push(thumbnailStroke(width, height))
-    _ = try session.end()
-    surface = session.surfaceAfter ?? surface
+    var light: TiledSurface? = nil
+    if b.engine == "wet" {
+        surface = try paintWetTestStroke(b, paper, color, width, height)
+    } else {
+        var i = StrokeSessionInit(
+            layerId: "thumbnail", surface: surface, offset: LayerOffset(x: 0, y: 0), lockTransparency: false, brush: b, color: rgba,
+            background: hexToRgb8(paper.color) + [255], grain: paperGrain(paper), paperDepth: paper.depth, seed: 7, colorHex: color,
+            affineCopies: [], copies: [IDENTITY_COPY], mixerLoad: brushLoadForStroke(b, EMPTY_MIXER_LOAD, rgb.map { Double($0) / 255 }), secondary: nil, selection: nil, paint: nil
+        )
+        if b.engine == "impasto" { i.thick = emptyThickChannels() }
+        if b.light.amount > 0 && b.engine != "sticker" { i.light = emptyLight() }
+        let session = try PaintStrokeSession(i)
+        try session.push(thumbnailStroke(width, height))
+        _ = try session.end()
+        surface = session.surfaceAfter ?? surface
+        let thick = session.thickChannels()
+        light = session.lightChannel
+        // Thick paint is shown lit, and light paint glowing, as on the canvas.
+        let lit = thick.map { LitCache().lit(surface, $0, DEFAULT_LIGHTING) } ?? surface
+        surface = light != nil || thick != nil ? glowSurface(lit, light, thick) : lit
+    }
     let layer = RasterLayer(id: "thumbnail", name: "thumbnail", content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
-    let data = createPaintCompositor().composite([ViewLayer.paper(paper), ViewLayer(layer)], RasterRect(x: 0, y: 0, width: width, height: height), BasicRasterSources(width: width, height: height))
+    // Light paint reads on dark paper, with its spill.
+    var shown = paper
+    if light != nil { shown.color = "#141414" }
+    var layers = [ViewLayer.paper(shown), ViewLayer(layer)]
+    if let light, let spill = computeSpill(surface, light, LightSpill(radius: Swift.max(4, Double(height) / 6), strength: 1)) {
+        layers.append(ViewLayer(RasterLayer(id: "thumbnail-light", name: "light", visible: true, opacity: 1, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))))
+    }
+    let data = createPaintCompositor().composite(layers, RasterRect(x: 0, y: 0, width: width, height: height), BasicRasterSources(width: width, height: height))
     return (width, height, data)
 }
 

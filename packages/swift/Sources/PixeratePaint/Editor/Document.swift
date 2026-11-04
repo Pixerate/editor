@@ -67,6 +67,10 @@ public final class PaintDocumentState {
     public var paperEffect: PaintPaperEffect?
     /// Sticker layers: each layer's stickers, bottom first (its pixels are drawn from them).
     public var stickers: OrderedMap<String, [Sticker]>?
+    /// Thick paint: each layer's height and material channels (layers without relief are missing).
+    public var thick: OrderedMap<String, ThickChannels>?
+    /// Wet-media events (tilt, settings, drying, wet paper) with the clock they happened at, for replays.
+    public var wetEvents: [WetEvent]?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -86,6 +90,8 @@ public final class PaintDocumentState {
         d.effectLayers = effectLayers
         d.paperEffect = paperEffect
         d.stickers = stickers
+        d.thick = thick
+        d.wetEvents = wetEvents
         change(d)
         return d
     }
