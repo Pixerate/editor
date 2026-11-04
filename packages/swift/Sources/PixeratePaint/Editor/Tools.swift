@@ -168,7 +168,7 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         let x = try StrokePathArguments(a)
         let changes = try x.brush.map { try c.brushChanges($0.objectValue ?? [:], from: x.brushId) }
         let i = PaintStrokeInit(layerId: x.layerId, color: x.color, paint: x.paint, brushId: x.brushId, brush: changes, seed: x.seed)
-        return .object(try c.strokePath(x.path, spacing: x.spacing, pressure: x.pressure, i))
+        return .object(try c.strokePath(x.path, spacing: x.spacing, pressure: x.pressure, speed: x.speed, i))
     }
     h["replay_strokes"] = { a in
         if a["color"] == nil {

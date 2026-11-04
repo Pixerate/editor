@@ -130,8 +130,15 @@ describe('paint tools with a director', () => {
     expect(stroke.structuredContent).toMatchObject({ strokeId: 's1', layerId: c.document.activeLayerId });
     const replay = await r.callTool('replay_strokes', { strokeIds: ['s1'], dx: 5, repeat: 2 });
     expect(replay.structuredContent).toMatchObject({ strokeIds: ['s2', 's3'] });
+    const path = await r.callTool('stroke_path', { path: 'M 10 20 L 60 20 M 10 50 L 60 50', speed: 0.5, brushId: 'soft-pastel', color: '#1d4ed8', seed: 9 });
+    expect(path.isError).toBeFalsy();
+    expect(path.structuredContent).toMatchObject({ strokeIds: ['s4', 's5'], layerId: c.document.activeLayerId });
+    expect(c.getStrokes()[3]!.points.at(-1)?.t).toBe(100);
     expect(seen.has('Bot')).toBe(true);
-    expect(c.historyLabels().undo.slice(-3)).toEqual(['Fill layer', 'Soft pastel stroke', 'Replay strokes']);
+    expect(c.historyLabels().undo.slice(-4)).toEqual(['Fill layer', 'Soft pastel stroke', 'Replay strokes', 'Soft pastel path stroke']);
+    // Undoing the path undoes both subpaths as one step.
+    c.undo();
+    expect(c.getStrokes().map((s) => s.id)).toEqual(['s1', 's2', 's3']);
   });
 
   it('turns director failures into tool errors that say what to fix', async () => {

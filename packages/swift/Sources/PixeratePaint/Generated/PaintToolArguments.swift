@@ -620,6 +620,8 @@ public struct StrokePathArguments: Sendable {
     public var spacing: Double?
     /// Pen pressure along each subpath, spread evenly from start to end (default full pressure); [0.2, 1, 0.2] tapers both ends.
     public var pressure: [Double]?
+    /// Drawing speed in document pixels per millisecond (optional; gives each sample a time t so playback has a pace and speed-sensitive brushes respond).
+    public var speed: Double?
     /// Layer id from list_layers (default the active layer).
     public var layerId: String?
     /// Brush id from list_brush_presets (default the active brush).
@@ -638,6 +640,7 @@ public struct StrokePathArguments: Sendable {
         path = try args.required(try args.string("path"), "path")
         spacing = try args.number("spacing")
         pressure = try args.numbers("pressure")
+        speed = try args.number("speed")
         layerId = try args.string("layerId")
         brushId = try args.string("brushId")
         brush = args.argument("brush")

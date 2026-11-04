@@ -13,8 +13,9 @@ import {
   type PresenceClock,
   type PresenceState,
 } from '../animation/presence';
+import type { MixerLoad } from '../paint/mixer';
 import type { RasterRect } from '../raster/surface';
-import type { FillLayerOptions, PaintEditorController, PaintStrokeInit, ReplayOptions } from './controller';
+import { PaintEditorError, type FillLayerOptions, type PaintEditorController, type PaintStrokeInit, type ReplayOptions } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeResult } from './stroke';
 
@@ -24,9 +25,20 @@ export type PaintPresenceState = PresenceState;
 /** Cursor positions (document pixels) and notes of agents painting, for an overlay. */
 export class PaintPresence extends PresenceStore {}
 
+/** Result of painting several strokes as one undo step (e.g. a path's subpaths). */
+export interface PaintStrokesResult {
+  layerId: string;
+  bounds: RasterRect | null;
+  dabs: number;
+  strokeIds: string[];
+  mixerLoad?: MixerLoad;
+  wet?: boolean;
+}
+
 /** What an agent asks for. Each command that paints commits as one undo step. */
 export type PaintAgentCommand =
   | { kind: 'stroke'; stroke: PaintStrokeInit & { points: readonly PenPoint[] }; note?: string }
+  | { kind: 'strokes'; strokes: ReadonlyArray<PaintStrokeInit & { points: readonly PenPoint[] }>; label?: string; note?: string }
   | { kind: 'fill'; fill: FillLayerOptions; note?: string }
   | { kind: 'replay'; replay: ReplayOptions; note?: string }
   | { kind: 'point'; at: { x: number; y: number }; note?: string }
@@ -168,6 +180,9 @@ export class PaintDirector {
       case 'stroke':
         await this.say(id, command.note, 500);
         return this.stroke(id, command.stroke);
+      case 'strokes':
+        await this.say(id, command.note, 500);
+        return this.strokes(id, command.strokes, command.label);
       case 'fill': {
         await this.say(id, command.note, 500);
         const { width, height } = c.getState().document.canvas;
@@ -227,4 +242,49 @@ export class PaintDirector {
       throw error;
     }
   }
+
+  /** Paints several strokes live in turn and commits them as one undo step (e.g. a path's subpaths). */
+  private async strokes(
+    id: string,
+    inits: ReadonlyArray<PaintStrokeInit & { points: readonly PenPoint[] }>,
+    label?: string
+  ): Promise<PaintStrokesResult> {
+    const c = this.controller;
+    if (!Array.isArray(inits) || !inits.length) throw new PaintEditorError('strokes is empty; give at least one stroke.');
+    const checked = inits.map((s) => ({ ...s, points: c.checkPoints(s.points) }));
+    const first = checked[0]!;
+    const base = first.brushId ? c.getBrush(first.brushId) : c.getState().brush;
+    const stepLabel = label ?? `${base?.name ?? 'Brush'} path stroke`;
+    return c.group(stepLabel, async () => {
+      let layerId = first.layerId ?? c.document.activeLayerId ?? '';
+      let bounds: RasterRect | null = null;
+      let dabs = 0;
+      const strokeIds: string[] = [];
+      let last: PaintStrokeResult | null = null;
+      for (const s of checked) {
+        const r = await this.stroke(id, s);
+        layerId = r.layerId;
+        bounds = unionRect(bounds, r.bounds);
+        dabs += r.dabs;
+        if (r.strokeId) strokeIds.push(r.strokeId);
+        last = r;
+      }
+      return {
+        layerId,
+        bounds,
+        dabs,
+        strokeIds,
+        ...(last?.mixerLoad ? { mixerLoad: last.mixerLoad } : {}),
+        ...(last?.wet !== undefined ? { wet: last.wet } : {}),
+      };
+    });
+  }
+}
+
+function unionRect(a: RasterRect | null, b: RasterRect | null): RasterRect | null {
+  if (!a) return b ? { ...b } : null;
+  if (!b) return { ...a };
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
 }
