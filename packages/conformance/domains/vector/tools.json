@@ -130,6 +130,7 @@
                   "vector.listBrushes",
                   "vector.addBrushstroke",
                   "vector.setBrushstroke",
+                  "vector.setColorLocked",
                   "vector.mosaicImage",
                   "vector.halftoneImage",
                   "vector.lowPolyImage",

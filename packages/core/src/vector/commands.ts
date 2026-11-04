@@ -1573,7 +1573,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 					size: { type: 'number', exclusiveMinimum: 0, maximum: 500, description: 'Brush diameter in document units (default: the brush\'s own).' },
 					pressure: { type: 'array', items: { type: 'number', minimum: 0, maximum: 1 }, minItems: 1, maxItems: 64, description: 'Pressure 0–1 along the length, spread evenly from start to end (default: full pressure).' },
 					color: { type: 'string', description: 'CSS colour (default: the brush\'s own default colour, such as the ballpoint\'s blue, unless keepColour; else the path\'s stroke colour, else black).' },
-					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and use the path\'s stroke colour (default false).' },
+					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and use the path\'s stroke colour (default: the colour lock, vector.setColorLocked; off unless set).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1 (default 1).' },
 					index: { type: 'integer', minimum: 0, description: 'Position in the stroke stack, 0 the bottom (default: on top).' },
 					seed: { ...BRUSH_SEED, description: 'Character seed 0–2147483647: turns on the brush\'s jitter and paper grain; the same seed always renders the same stroke (default: none, plain dabs).' },
@@ -1622,7 +1622,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 					size: { type: ['number', 'null'], description: 'Diameter in document units, or null for the brush\'s own.' },
 					pressure: { type: ['array', 'null'], items: { type: 'number', minimum: 0, maximum: 1 }, description: 'Pressure profile 0–1 from start to end, or null for full pressure.' },
 					color: { type: 'string', description: 'CSS colour (with another brushId and no color, the new brush\'s default colour, if it has one, unless keepColour).' },
-					keepColour: { type: 'boolean', description: 'With another brushId: keep the layer\'s colour instead of taking the new brush\'s default colour (default false).' },
+					keepColour: { type: 'boolean', description: 'With another brushId: keep the layer\'s colour instead of taking the new brush\'s default colour (default: the colour lock, vector.setColorLocked; off unless set).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1.' },
 					seed: { anyOf: [BRUSH_SEED, { type: 'null' }], description: 'Character seed 0–2147483647 (jitter and paper grain; a new seed gives a new take on the same stroke), or null for plain dabs.' },
 					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'The paper the grain comes from { pattern, seed, scale, depth } (applies with a seed), null for no grain, or {} for the default sanded paper.' }
@@ -1637,6 +1637,24 @@ export function createVectorCommands(controller: VectorEditorController, options
 				layerIndex(id, 'stroke', index);
 				check(controller.setBrushstroke(index, patch, { ids: [id] }));
 				return stackResult(id, 'stroke');
+			}
+		},
+		{
+			...base,
+			id: `${prefix}setColorLocked`,
+			label: 'Keep Brushstroke Colour',
+			keywords: ['colour lock', 'color lock', 'keep colour', 'keep my colour', 'brush default colour', 'brushstroke'],
+			description:
+				'Locks (true) or unlocks (false) brushstroke colours: while locked, vector.addBrushstroke and vector.setBrushstroke without `color` keep the path\'s (or layer\'s) stroke colour instead of taking the brush\'s default colour (the ballpoint\'s blue, chalk), unless a call passes `keepColour: false`. Editor state, not an undo step. Returns { colorLocked }.',
+			params: {
+				type: 'object',
+				properties: { locked: { type: 'boolean', description: 'true keeps paths\' colours, false lets brushes give their default colour again.' } },
+				required: ['locked'],
+				additionalProperties: false
+			},
+			run: (_ctx: unknown, params: { locked: boolean }) => {
+				controller.setColorLocked(params.locked);
+				return { colorLocked: controller.getState().colorLocked };
 			}
 		}
 	];

@@ -36,7 +36,10 @@ export interface DrawStrokeInput {
 	tiltY?: readonly number[];
 	/** Smooth the points before fitting (default false: agent points are taken as given). */
 	streamline?: boolean;
-	/** Ignore the brush's default colour and use the tool's colour (default: `colorLocked`). */
+	/**
+	 * Ignore the brush's default colour and paint in the current stroke colour (`style.color`; a
+	 * stroke with the other tool takes that tool's default). Default: `colorLocked`.
+	 */
 	keepColour?: boolean;
 }
 
@@ -238,7 +241,8 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		// A brush with a default colour paints it when no colour is given (the ballpoint's blue), unless keepColour / colorLocked.
 		if (input.style?.color === undefined) {
 			if (input.keepColour ?? colorLocked) {
-				style.color = currentStyle.color;
+				// The user's colour: the current stroke colour, unless the stroke is the other tool (a highlighter stroke while the pen is out keeps the highlighter's default).
+				if ((tool === 'highlighter') === (currentTool === 'highlighter')) style.color = currentStyle.color;
 			} else if (typeof style.brush === 'string') {
 				const preset = (await listCanvasBrushes(options.brushLibrary)).find((b) => b.id === style.brush);
 				const hex = preset?.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;

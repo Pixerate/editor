@@ -10993,7 +10993,7 @@
         },
         "keepColour": {
           "type": "boolean",
-          "description": "Ignore the brush's default colour and use the path's stroke colour (default false)."
+          "description": "Ignore the brush's default colour and use the path's stroke colour (default: the colour lock, vector.setColorLocked; off unless set)."
         },
         "opacity": {
           "type": "number",
@@ -11123,7 +11123,7 @@
         },
         "keepColour": {
           "type": "boolean",
-          "description": "With another brushId: keep the layer's colour instead of taking the new brush's default colour (default false)."
+          "description": "With another brushId: keep the layer's colour instead of taking the new brush's default colour (default: the colour lock, vector.setColorLocked; off unless set)."
         },
         "opacity": {
           "type": "number",
@@ -11197,6 +11197,35 @@
       "required": [
         "id",
         "index"
+      ],
+      "additionalProperties": false
+    },
+    "undoable": true,
+    "readOnly": false
+  },
+  {
+    "id": "vector.setColorLocked",
+    "label": "Keep Brushstroke Colour",
+    "group": "Vector",
+    "keywords": [
+      "colour lock",
+      "color lock",
+      "keep colour",
+      "keep my colour",
+      "brush default colour",
+      "brushstroke"
+    ],
+    "description": "Locks (true) or unlocks (false) brushstroke colours: while locked, vector.addBrushstroke and vector.setBrushstroke without `color` keep the path's (or layer's) stroke colour instead of taking the brush's default colour (the ballpoint's blue, chalk), unless a call passes `keepColour: false`. Editor state, not an undo step. Returns { colorLocked }.",
+    "params": {
+      "type": "object",
+      "properties": {
+        "locked": {
+          "type": "boolean",
+          "description": "true keeps paths' colours, false lets brushes give their default colour again."
+        }
+      },
+      "required": [
+        "locked"
       ],
       "additionalProperties": false
     },

@@ -268,4 +268,61 @@ describe('default colours in canvas and vector', () => {
 		expect(c.addBrushstroke({ brushId: 'chalk' }, { ids: ['a'], keepColour: false }).ok).toBe(true);
 		expect(top().paint).toBe('#f8fafc');
 	});
+
+	it('lets agents lock the colour with canvas.setColorLocked and vector.setColorLocked, and pass keepColour per stroke', async () => {
+		const { draw, nodes } = canvas();
+		const commands = new CommandRegistry();
+		commands.register(createDrawCommands(draw));
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const colourOf = async (params: Record<string, unknown>) => {
+			const r = await tools.callTool('run_command', { id: 'canvas.drawFreehand', params: { points: [[0, 0], [30, 5]], ...params } });
+			expect(r.isError).toBeFalsy();
+			return (nodes().at(-1)!.data.shape as unknown as { stroke: string }).stroke;
+		};
+		draw.setStyle({ color: '#ff0000' });
+		expect(await colourOf({ brush: 'ballpoint' })).toBe('#1e3a8a');
+		// keepColour per stroke: the current colour instead of the ballpoint's blue.
+		expect(await colourOf({ brush: 'ballpoint', keepColour: true })).toBe('#ff0000');
+		const locked = await tools.callTool('run_command', { id: 'canvas.setColorLocked', params: { locked: true } });
+		expect(locked.isError).toBeFalsy();
+		expect(JSON.stringify(locked.structuredContent)).toContain('"colorLocked":true');
+		expect(draw.colorLocked).toBe(true);
+		await draw.selectBrush('ballpoint');
+		expect(draw.style.color).toBe('#ff0000');
+		expect(await colourOf({ brush: 'ballpoint' })).toBe('#ff0000');
+		expect(await colourOf({ brush: 'ballpoint', keepColour: false })).toBe('#1e3a8a');
+		// A highlighter stroke while the pen is out keeps the highlighter's own default, not the pen's colour.
+		const hl = await draw.drawStroke({ points: [[0, 0], [30, 5]], tool: 'highlighter', style: { brush: 'ballpoint' } });
+		expect((hl.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#facc15');
+		const bad = await tools.callTool('run_command', { id: 'canvas.setColorLocked', params: {} });
+		expect(bad.isError).toBe(true);
+		expect((bad.content[0] as { text: string }).text).toMatch(/locked/);
+		await tools.callTool('run_command', { id: 'canvas.setColorLocked', params: { locked: false } });
+		expect(draw.colorLocked).toBe(false);
+		// Without setColorLocked on the target, the command is not offered.
+		expect(createDrawCommands({ drawStroke: draw.drawStroke, listBrushes: draw.listBrushes }).some((c) => c.id === 'canvas.setColorLocked')).toBe(false);
+
+		const path = { id: 'a', type: 'path', subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 190, y: 50 }] }], fill: null, stroke: '#1d4ed8', strokeWidth: 2 } as unknown as VectorPathNode;
+		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] } });
+		const vectorCommands = new CommandRegistry();
+		vectorCommands.register(createVectorCommands(c));
+		const vectorTools = new ToolRegistry();
+		vectorTools.register(createCommandToolProvider(vectorCommands));
+		const top = () => (c.getNode('a') as VectorPathNode).strokes!.at(-1)!;
+		const set = await vectorTools.callTool('run_command', { id: 'vector.setColorLocked', params: { locked: true } });
+		expect(set.isError).toBeFalsy();
+		expect(JSON.stringify(set.structuredContent)).toContain('"colorLocked":true');
+		expect(c.getState().colorLocked).toBe(true);
+		expect((await vectorTools.callTool('run_command', { id: 'vector.addBrushstroke', params: { ids: ['a'], brushId: 'ballpoint' } })).isError).toBeFalsy();
+		expect(top().paint).toBe('#1d4ed8');
+		expect((await vectorTools.callTool('run_command', { id: 'vector.addBrushstroke', params: { ids: ['a'], brushId: 'ballpoint', keepColour: false } })).isError).toBeFalsy();
+		expect(top().paint).toBe('#1e3a8a');
+		const wrong = await vectorTools.callTool('run_command', { id: 'vector.setColorLocked', params: { locked: 'yes' } });
+		expect(wrong.isError).toBe(true);
+		await vectorTools.callTool('run_command', { id: 'vector.setColorLocked', params: { locked: false } });
+		expect(c.getState().colorLocked).toBe(false);
+		// The lock is editor state, not an undo step.
+		expect(c.getState().undoLabel).not.toMatch(/lock/i);
+	});
 });

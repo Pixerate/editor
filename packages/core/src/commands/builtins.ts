@@ -351,11 +351,14 @@ export interface DrawCommandTarget {
 		tiltX?: readonly number[];
 		tiltY?: readonly number[];
 		streamline?: boolean;
+		keepColour?: boolean;
 	}): Promise<{ id: string; bounds: { x: number; y: number; width: number; height: number }; brush?: unknown }>;
 	/** The presets and saved brushes a stroke can be brushed with (the canvas profile's; loads the paint engine). */
 	listBrushes(): Promise<CanvasBrushPreset[]>;
 	/** A node's box in canvas coordinates, so gestures can take `{ nodeId }` targets (without it they take boxes and points only). */
 	nodeBounds?(id: string): { x: number; y: number; width: number; height: number } | undefined;
+	/** Locks or unlocks the stroke colour against brushes' default colours (a draw controller's `setColorLocked`; adds `canvas.setColorLocked`). */
+	setColorLocked?(locked: boolean): void;
 }
 
 export interface DrawCommandOptions {
@@ -496,7 +499,8 @@ export function planFreehandPlayback(points: unknown, max = 32): PlaybackStep[] 
 /**
  * Agent / palette commands for freehand drawing: `canvas.drawFreehand` (a pen or highlighter
  * stroke through given points, optionally brushed with a dry paint preset and a pressure / tilt
- * profile; one undo step), the read-only `canvas.listBrushes` (the dry presets it accepts) and
+ * profile; one undo step), the read-only `canvas.listBrushes` (the dry presets it accepts),
+ * `canvas.setColorLocked` (when the target has `setColorLocked`) and
  * the annotation gestures `canvas.circle`, `canvas.underline`, `canvas.arrow`, `canvas.bracket`,
  * `canvas.strike`, `canvas.cross` and `canvas.check` (hand-drawn marks around boxes, points or,
  * when the target has `nodeBounds`, nodes).
@@ -528,7 +532,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					},
 					tool: { type: 'string', enum: ['pen', 'highlighter'], description: 'Pen (default: blue, width 3) or highlighter (yellow, width 24, opacity 0.35); sets the defaults below.' },
 					color: { type: 'string', description: 'Stroke colour, any CSS colour (default: the brush\'s default colour, such as the ballpoint\'s blue, unless keepColour; else the tool\'s).' },
-					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and use the tool\'s colour (default: the draw controller\'s colorLocked).' },
+					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and paint in the canvas\'s current stroke colour (a stroke with the other tool takes that tool\'s default). Default: the colour lock (canvas.setColorLocked), off unless set.' },
 					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool). For brushed strokes it is the brush diameter; leave it out to use the preset\'s own size (canvas.listBrushes gives it).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
 					brush: {
@@ -589,6 +593,28 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 			readOnly: true,
 			run: async () => ({ brushes: await target.listBrushes() })
 		},
+		...(target.setColorLocked
+			? [
+					{
+						...base,
+						id: `${prefix}setColorLocked`,
+						label: 'Keep Stroke Colour',
+						keywords: ['colour lock', 'color lock', 'keep colour', 'keep my colour', 'brush default colour'],
+						description:
+							'Locks (true) or unlocks (false) the stroke colour: while locked, choosing a brush keeps the current colour instead of taking the brush\'s default colour (the ballpoint\'s blue, chalk), and canvas.drawFreehand with a brush and no `color` paints in the current colour unless `keepColour: false`. Editor state, not an undo step. Returns { colorLocked }.',
+						params: {
+							type: 'object',
+							properties: { locked: { type: 'boolean', description: 'true locks the stroke colour, false lets brushes set it again.' } },
+							required: ['locked'],
+							additionalProperties: false
+						},
+						run: (_ctx: unknown, params: { locked: boolean }) => {
+							target.setColorLocked!(params.locked);
+							return { colorLocked: params.locked };
+						}
+					} satisfies CommandSpec
+				]
+			: []),
 		...createGestureCommands(target, base, prefix, options)
 	];
 }

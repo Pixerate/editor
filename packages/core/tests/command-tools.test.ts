@@ -278,7 +278,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		{
 			// Commands listed as tools of their own (the canvas gestures and listBrushes).
 			const drawCommands = new CommandRegistry();
-			drawCommands.register(createDrawCommands({ drawStroke: async () => ({ id: 'n', bounds: { x: 0, y: 0, width: 1, height: 1 } }), listBrushes: async () => [] }));
+			drawCommands.register(createDrawCommands({ drawStroke: async () => ({ id: 'n', bounds: { x: 0, y: 0, width: 1, height: 1 } }), listBrushes: async () => [], setColorLocked: () => {} }));
 			registry.register(createCommandToolProvider(drawCommands, { id: 'draw', namespace: 'draw', tools: (id) => id !== 'canvas.drawFreehand' }));
 		}
 		registry.register(createGradientToolProvider(new GradientController(), { id: 'gradient', namespace: 'gradient' }));

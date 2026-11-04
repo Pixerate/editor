@@ -1435,5 +1435,14 @@ describe("Brushstrokes (react)", () => {
     await act(async () => grain().click());
     expect(brush().paper).toBeUndefined();
     expect(grain().checked).toBe(true);
+    // "Keep colour" is the controller's colour lock: brushes then keep the path's colour.
+    const lock = () => container.querySelector("[data-vector-brushstroke-color-lock]") as HTMLInputElement;
+    expect(lock().checked).toBe(false);
+    await act(async () => lock().click());
+    expect(c.getState().colorLocked).toBe(true);
+    expect(lock().checked).toBe(true);
+    await act(async () => lock().click());
+    expect(c.getState().colorLocked).toBe(false);
+    expect(lock().checked).toBe(false);
   });
 });
