@@ -3636,11 +3636,19 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `createPaintEffectsToolProvider` lists its tools only once the controller has an effect provider.
 - **Solution / Workaround**: `paintContracts({ effects })` takes the provider. `scripts/export-contracts.mjs` and `tests/paint-contracts.test.ts` pass `createFakeEffectProvider()` from `effects/index.js`, so the committed `tools.json` doesn't depend on a real catalogue. Keyboard shortcuts live in `PAINT_SHORTCUTS`, which `handlePaintShortcut` dispatches from; add a key there, not in the handler, so `commands.json` stays true.
 
+### [swift] SwiftPM Ignores Prefixed Version Tags
+- **Issue / Symptom**: A tag like `swift-v0.1.0` (or changesets' `@pixerate/swift@0.1.0`) cannot be used with `.package(url:from:)`; SwiftPM finds no versions.
+- **Root Cause**: SwiftPM only reads tags of the form `1.2.3` or `v1.2.3` as versions and ignores every other prefix. Pixerate/schemas#70 hit the same thing.
+- **Solution / Workaround**: The release workflow tags the release commit `v<version>` when `@pixerate/swift` changes ("Tag the Swift package"). Changesets tags npm packages as `@pixerate/<name>@<version>`, so plain `v…` tags only ever mean the Swift package. Never add `swift-v…` tags.
 ### [conformance] Recorded Scenarios Need Seeds, the TypeScript Wet Kernel and No Clock Values
 - **Issue / Symptom**: `scripts/record-conformance.mjs` refused steps as "not deterministic": a `paint_stroke` without a `seed` picks a random one, `get_wet_paint` reported a `typescript` backend on one run and `wasm` on the next, and `list_paint_proposals` returned a `createdAt` time. Layer ids (`pl<time><n>`) differ on every run too.
 - **Root Cause**: The editor seeds strokes randomly, loads the WebAssembly wet kernel in the background (whichever is ready first runs), and stamps proposals and ids with the clock.
 - **Solution / Workaround**: Scenarios pass a `seed` to every stroke. `createPaintConformanceHost` forces the TypeScript wet kernel on one thread with the GPU off, and wet steps `ignore` the backend fields. Normalization numbers clock-made ids (`isGeneratedId`) as `@1`, `@2`, … and turns ISO times into `"<time>"`; counter ids (`s1`, `stencil1`, `pad1`) stay, because another implementation can match them. A comment containing a JSON pointer like `/layers/*` + `/engine` ends a `/** */` block early: describe the `*` segment in words.
 
+### [swift] Generated Swift Names: `Type` Members and Required Arguments That May Be Null
+- **Issue / Symptom**: The first generated `PaintToolArguments.swift` did not compile ("type member must not be named 'Type'"), and reading `set_paper_effect` arguments threw "effect is required." for `{ "effect": null }`, a call the schema allows.
+- **Root Cause**: An argument called `type` with an `enum` became a nested `enum Type`, which Swift reserves for metatypes (`Protocol`, `Self` and `Any` too). `effect` is required but its schema is `anyOf: [string, null]`, so a present `null` is valid and reads as `nil`.
+- **Solution / Workaround**: `scripts/gen-swift.mjs` names such nested enums `TypeOption` (and so on), and makes a required argument optional in Swift when its schema allows `null` (the registry has already checked it is there). The Swift test reads every argument the recorded scenarios pass into its typed struct, which is how this was found.
 ### [swift] The Swift Tool Bridge Client Lives on the Main Actor
 - **Issue / Symptom**: `ToolRegistry` is not `Sendable`, while `URLSessionWebSocketTask` calls back on its session's queue, so a bridge client that touched the registry from those callbacks would not compile under Swift 6 (or would race).
 - **Root Cause**: Editors and their registries are main-thread objects, as in the browser; socket callbacks are not.
