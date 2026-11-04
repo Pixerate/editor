@@ -1,0 +1,558 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "swatches-and-mixing-pad",
+  "description": "Swatches, and mixing paint on the pad: strokes, piles, picks and saved pads.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_swatches",
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f7f5ee",
+              "index": 0,
+              "name": "Warm white"
+            },
+            {
+              "color": "#f3d23a",
+              "index": 1,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 2,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 3,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 4,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 5,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 6,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 7,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 8,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 9,
+              "name": "Warm black"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_swatch",
+      "arguments": {
+        "color": "#aa5500",
+        "name": "Burnt"
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f7f5ee",
+              "index": 0,
+              "name": "Warm white"
+            },
+            {
+              "color": "#f3d23a",
+              "index": 1,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 2,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 3,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 4,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 5,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 6,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 7,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 8,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 9,
+              "name": "Warm black"
+            },
+            {
+              "color": "#aa5500",
+              "index": 10,
+              "name": "Burnt"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_swatch",
+      "arguments": {
+        "color": "#0055aa"
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f7f5ee",
+              "index": 0,
+              "name": "Warm white"
+            },
+            {
+              "color": "#f3d23a",
+              "index": 1,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 2,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 3,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 4,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 5,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 6,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 7,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 8,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 9,
+              "name": "Warm black"
+            },
+            {
+              "color": "#aa5500",
+              "index": 10,
+              "name": "Burnt"
+            },
+            {
+              "color": "#0055aa",
+              "index": 11
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "remove_swatch",
+      "arguments": {
+        "index": 0
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f3d23a",
+              "index": 0,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 1,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 2,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 3,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 4,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 5,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 6,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 7,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 8,
+              "name": "Warm black"
+            },
+            {
+              "color": "#aa5500",
+              "index": 9,
+              "name": "Burnt"
+            },
+            {
+              "color": "#0055aa",
+              "index": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_swatches",
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f3d23a",
+              "index": 0,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 1,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 2,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 3,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 4,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 5,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 6,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 7,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 8,
+              "name": "Warm black"
+            },
+            {
+              "color": "#aa5500",
+              "index": 9,
+              "name": "Burnt"
+            },
+            {
+              "color": "#0055aa",
+              "index": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "remove_swatch",
+      "arguments": {
+        "index": 9
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f3d23a",
+              "index": 0,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 1,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 2,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 3,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 4,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 5,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 6,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 7,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 8,
+              "name": "Warm black"
+            },
+            {
+              "color": "#0055aa",
+              "index": 9
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "mixing_pad_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 40,
+            "y": 40
+          },
+          {
+            "x": 120,
+            "y": 60
+          }
+        ],
+        "color": "#cc2222",
+        "size": 20
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 49,
+            "width": 109,
+            "x": 25,
+            "y": 25
+          }
+        }
+      }
+    },
+    {
+      "tool": "mix_on_pad",
+      "arguments": {
+        "paints": [
+          {
+            "color": "#1d4ed8",
+            "parts": 1
+          },
+          {
+            "color": "#facc15",
+            "parts": 2
+          }
+        ],
+        "x": 200,
+        "y": 110,
+        "passes": 4
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 80,
+            "width": 80,
+            "x": 160,
+            "y": 70
+          },
+          "color": "#7da740"
+        }
+      }
+    },
+    {
+      "tool": "pick_mixing_pad_color",
+      "arguments": {
+        "x": 200,
+        "y": 110,
+        "radius": 4
+      },
+      "expect": {
+        "result": {
+          "color": "#7da740"
+        }
+      }
+    },
+    {
+      "tool": "render_mixing_pad",
+      "expect": {
+        "result": "Mixing pad 360×220"
+      }
+    },
+    {
+      "tool": "save_mixing_pad",
+      "arguments": {
+        "name": "Greens"
+      },
+      "expect": {
+        "result": {
+          "id": "pad1",
+          "name": "Greens"
+        }
+      }
+    },
+    {
+      "tool": "list_mixing_pads",
+      "expect": {
+        "result": {
+          "pads": [
+            {
+              "id": "pad1",
+              "name": "Greens"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "clear_mixing_pad",
+      "expect": {
+        "result": {
+          "cleared": true
+        }
+      }
+    },
+    {
+      "tool": "load_mixing_pad",
+      "arguments": {
+        "id": "pad1"
+      },
+      "expect": {
+        "result": {
+          "id": "pad1",
+          "name": "Greens"
+        }
+      }
+    },
+    {
+      "tool": "pick_mixing_pad_color",
+      "arguments": {
+        "x": 200,
+        "y": 110
+      },
+      "expect": {
+        "result": {
+          "color": "#7da740"
+        }
+      }
+    },
+    {
+      "tool": "remove_mixing_pad",
+      "arguments": {
+        "id": "pad1"
+      },
+      "expect": {
+        "result": {
+          "id": "pad1",
+          "name": "Greens"
+        }
+      }
+    },
+    {
+      "tool": "load_mixing_pad",
+      "arguments": {
+        "id": "pad1"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown mixing pad \"pad1\". Call list_mixing_pads for the ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

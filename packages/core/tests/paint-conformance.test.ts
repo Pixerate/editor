@@ -1,0 +1,79 @@
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { createFakeEffectProvider } from '../src/effects';
+import { createPaintConformanceHost } from '../src/paint-editor';
+import { decodePng } from '../src/raster';
+import { ConformanceIds, normalizeConformanceValue, omitConformancePaths, runConformanceScenario, type ConformanceScenario } from '../src/tools/conformance';
+import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
+
+/**
+ * Replays the paint scenarios of `@pixerate/conformance` (`domains/paint/fixtures`), the ones the
+ * Swift port replays too, and checks this core still produces what they record. After an intended
+ * change, run `pnpm --filter @pixerate/editor build && pnpm conformance:record` and commit.
+ */
+const dir = new URL('../../conformance/domains/paint/fixtures/', import.meta.url);
+const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+const scenarios = files.map((f) => JSON.parse(readFileSync(new URL(f, dir), 'utf8')) as ConformanceScenario);
+const schema = JSON.parse(readFileSync(new URL('../../conformance/schema/fixture.schema.json', import.meta.url), 'utf8')) as JsonSchema;
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+describe('the paint conformance scenarios', () => {
+  it('are valid scenarios, each named after its file', () => {
+    expect(scenarios.length).toBeGreaterThan(0);
+    for (const [i, s] of scenarios.entries()) {
+      expect(validateJsonSchema(s, schema), files[i]).toEqual([]);
+      expect(`${s.id}.json`).toBe(files[i]);
+      for (const step of s.steps) expect(step.expect, `${s.id} ${step.tool} is recorded`).toBeDefined();
+    }
+  });
+
+  it('use every paint tool at least once (a new tool needs a scenario)', () => {
+    const tools = (JSON.parse(readFileSync(new URL('../tools.json', dir), 'utf8')) as { providers: Array<{ tools: Array<{ name: string }> }> }).providers.flatMap((p) => p.tools.map((t) => t.name));
+    const used = new Set(scenarios.flatMap((s) => s.steps.map((step) => step.tool)));
+    expect(tools.filter((t) => !used.has(t))).toEqual([]);
+    expect([...used].filter((t) => !tools.includes(t))).toEqual([]);
+  });
+
+  it.each(scenarios.map((s) => [s.id, s] as const))('%s replays as recorded', async (_id, scenario) => {
+    const outputs = await runConformanceScenario(scenario, createPaintConformanceHost(scenario.setup ?? {}, { effects: createFakeEffectProvider() }));
+    scenario.steps.forEach((step, i) => {
+      const label = `step ${i + 1} (${step.tool})`;
+      const out = outputs[i]!;
+      expect(out.result, label).toEqual(step.expect!.result);
+      expect(out.isError, label).toBe(step.expect!.isError === true);
+      if (step.document) expect(out.document, `${label} document`).toEqual(step.expect!.document);
+      if (step.pixels) {
+        const recorded = step.expect!.pixels!;
+        expect(sha256(out.pixels!.data), `${label} pixels`).toBe(recorded.sha256);
+        const png = decodePng(new Uint8Array(readFileSync(new URL(recorded.file, dir))));
+        expect([png.width, png.height], `${label} ${recorded.file}`).toEqual([recorded.width, recorded.height]);
+        expect(sha256(new Uint8Array(png.data.buffer, png.data.byteOffset, png.data.byteLength)), `${recorded.file} holds the recorded pixels`).toBe(recorded.sha256);
+      }
+    });
+  }, 60_000);
+});
+
+describe('conformance normalization', () => {
+  const isId = (v: string) => /^pl[0-9a-z]{9,}$/.test(v);
+
+  it('numbers generated ids in a fixed order and replaces them everywhere, keeping other ids', () => {
+    const ids = new ConformanceIds();
+    const value = { layers: [{ name: 'B', id: 'plb000000002' }, { id: 'pla000000001', name: 'A' }], active: 'pla000000001', strokeId: 's1', brush: 'ink-pen' };
+    // Keys are walked sorted, so `active` numbers its id before `layers` does
+    expect(normalizeConformanceValue(value, ids, isId)).toEqual({ active: '@1', brush: 'ink-pen', layers: [{ id: '@2', name: 'B' }, { id: '@1', name: 'A' }], strokeId: 's1' });
+    // The numbering carries over, ids inside messages and object keys are replaced too
+    expect(normalizeConformanceValue({ message: 'Unknown layer "plb000000002".', byLayer: { pla000000001: 1 }, id: 'plc000000003' }, ids, isId)).toEqual({ byLayer: { '@1': 1 }, id: '@3', message: 'Unknown layer "@2".' });
+    expect(ids.resolve('@3')).toBe('plc000000003');
+  });
+
+  it('hides binary payloads and clock times', () => {
+    const ids = new ConformanceIds();
+    expect(normalizeConformanceValue({ png: 'A'.repeat(200), short: 'AAAA', url: 'data:image/png;base64,AA', at: '2026-11-04T01:06:52.993Z', day: '2026-11-04' }, ids)).toEqual({ at: '<time>', day: '2026-11-04', png: '<binary>', short: 'AAAA', url: '<binary>' });
+  });
+
+  it('leaves out ignored paths, with * for every element or member', () => {
+    expect(omitConformancePaths({ a: 1, backend: { x: 1 }, layers: [{ engine: 1, id: 'x' }, { engine: 2, id: 'y' }] }, ['/backend', '/layers/*/engine'])).toEqual({ a: 1, layers: [{ id: 'x' }, { id: 'y' }] });
+    expect(omitConformancePaths({ m: { a: { k: 1, j: 2 }, b: { k: 3 } } }, ['/m/*/k'])).toEqual({ m: { a: { j: 2 }, b: {} } });
+  });
+});

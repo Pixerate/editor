@@ -1,0 +1,143 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "paths-and-replay",
+  "description": "Strokes along SVG paths, and recorded strokes painted again moved, scaled and repeated.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "stroke_path",
+      "arguments": {
+        "path": "M4 28 C 12 2, 36 2, 44 28",
+        "seed": 31,
+        "color": "#553311",
+        "pressure": [
+          0.2,
+          1,
+          0.2
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 50,
+            "x": -1,
+            "y": 2
+          },
+          "dabs": 120,
+          "layerId": "@1",
+          "strokeIds": [
+            "s1"
+          ]
+        },
+        "pixels": {
+          "file": "png/paths-and-replay.1.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "8ba2c2ebdde9bd75a03f4b655d42ce1e6bc44e5b93bbd01e09e2a365dd7be08c",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "stroke_path",
+      "arguments": {
+        "path": "M4 16 L44 16",
+        "spacing": 0.5,
+        "brushId": "marker",
+        "seed": 32
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 38,
+            "width": 78,
+            "x": -15,
+            "y": -3
+          },
+          "dabs": 42,
+          "layerId": "@1",
+          "strokeIds": [
+            "s2"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "replay_strokes",
+      "arguments": {
+        "strokeIds": [
+          "s1"
+        ],
+        "dx": 0,
+        "dy": -6,
+        "scale": 0.8,
+        "color": "#113355",
+        "repeat": 2
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 28,
+            "width": 40,
+            "x": 4,
+            "y": -4
+          },
+          "layerIds": [
+            "@1"
+          ],
+          "strokeIds": [
+            "s3",
+            "s4"
+          ]
+        },
+        "pixels": {
+          "file": "png/paths-and-replay.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "122cab461386da885995cf47c8a07000a953b6f32ed244fdf74d68d4e487ff29",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "stroke_path",
+      "arguments": {
+        "path": "not a path"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "path has no segments to brush; give SVG path data such as \"M 10 10 L 200 80\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "replay_strokes",
+      "arguments": {
+        "strokeIds": [
+          "s9"
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Unknown stroke \"s9\". Call list_strokes for the ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

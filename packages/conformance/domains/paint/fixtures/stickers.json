@@ -1,0 +1,433 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "stickers",
+  "description": "A sticker layer: placing, finding, changing, arranging and removing stickers.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "find_stickers",
+      "arguments": {
+        "limit": 5
+      },
+      "expect": {
+        "result": {
+          "categories": [
+            {
+              "count": 4,
+              "id": "shapes",
+              "name": "Shapes"
+            },
+            {
+              "count": 2,
+              "id": "nature",
+              "name": "Nature"
+            },
+            {
+              "count": 3,
+              "id": "party",
+              "name": "Party"
+            }
+          ],
+          "items": [
+            {
+              "category": "shapes",
+              "description": "A round dot.",
+              "formats": [
+                "svg",
+                "png"
+              ],
+              "height": 100,
+              "licence": {
+                "commercial": true,
+                "name": "MIT",
+                "spdx": "MIT"
+              },
+              "name": "Dot",
+              "ref": "editor:dot",
+              "tags": [
+                "circle",
+                "round",
+                "spot"
+              ],
+              "tintable": true,
+              "width": 100
+            },
+            {
+              "category": "shapes",
+              "description": "A five-pointed star, one point up.",
+              "formats": [
+                "svg",
+                "png"
+              ],
+              "height": 100,
+              "licence": {
+                "commercial": true,
+                "name": "MIT",
+                "spdx": "MIT"
+              },
+              "name": "Star",
+              "ref": "editor:star",
+              "tags": [
+                "five-pointed",
+                "favourite",
+                "rating"
+              ],
+              "tintable": true,
+              "width": 100
+            },
+            {
+              "category": "shapes",
+              "description": "A heart.",
+              "formats": [
+                "svg",
+                "png"
+              ],
+              "height": 100,
+              "licence": {
+                "commercial": true,
+                "name": "MIT",
+                "spdx": "MIT"
+              },
+              "name": "Heart",
+              "ref": "editor:heart",
+              "tags": [
+                "love",
+                "like"
+              ],
+              "tintable": true,
+              "width": 100
+            },
+            {
+              "category": "nature",
+              "description": "A pointed leaf with a midrib.",
+              "formats": [
+                "svg",
+                "png"
+              ],
+              "height": 100,
+              "licence": {
+                "commercial": true,
+                "name": "MIT",
+                "spdx": "MIT"
+              },
+              "name": "Leaf",
+              "ref": "editor:leaf",
+              "tags": [
+                "plant",
+                "green"
+              ],
+              "tintable": true,
+              "width": 100
+            },
+            {
+              "category": "nature",
+              "description": "A five-petal flower.",
+              "formats": [
+                "svg",
+                "png"
+              ],
+              "height": 100,
+              "licence": {
+                "commercial": true,
+                "name": "MIT",
+                "spdx": "MIT"
+              },
+              "name": "Flower",
+              "ref": "editor:flower",
+              "tags": [
+                "petals",
+                "blossom"
+              ],
+              "tintable": true,
+              "width": 100
+            }
+          ],
+          "next": "5",
+          "provider": "editor",
+          "total": 9
+        }
+      }
+    },
+    {
+      "tool": "describe_sticker",
+      "arguments": {
+        "ref": "editor:star"
+      },
+      "expect": {
+        "result": {
+          "category": "shapes",
+          "colours": [
+            "#f59e0b"
+          ],
+          "description": "A five-pointed star, one point up.",
+          "formats": [
+            "svg",
+            "png"
+          ],
+          "height": 100,
+          "licence": {
+            "commercial": true,
+            "name": "MIT",
+            "spdx": "MIT"
+          },
+          "name": "Star",
+          "ref": "editor:star",
+          "silhouette": "M49.34 3.13L50 2.5L54.25 7.03L57.04 10.94L59.52 15.63L60.97 19.53L61.89 23.44L62.28 28.13L61.97 32.81L62.5 33.39L66.41 31.74L70.31 30.71L74.22 30.22L78.91 30.25L83.59 30.91L88.28 32.21L91.41 33.44L94.88 35.16L94.89 35.94L92.77 39.84L90.04 43.75L87.28 46.88L83.75 50L80.47 52.23L77.24 53.91L72.66 55.52L69.25 56.25L71.99 59.38L74.58 63.28L76.41 67.19L77.65 71.09L78.5 75.78L78.75 80.47L78.35 85.94L78.1 87.5L77.58 88.28L73.44 87.67L68.75 86.31L64.84 84.66L60.94 82.44L57.81 80.11L54.69 77.1L52.34 74.13L50.18 70.31L50 70L48.11 73.44L45.31 77.1L42.19 80.11L39.06 82.44L35.16 84.66L31.25 86.31L26.56 87.67L22.42 88.28L21.9 87.5L21.65 85.94L21.25 80.47L21.5 75.78L22.35 71.09L23.59 67.19L25.42 63.28L28.01 59.38L30.75 56.25L27.34 55.52L22.76 53.91L19.53 52.23L16.25 50L12.72 46.88L9.96 43.75L7.23 39.84L5.11 35.94L5.12 35.16L8.59 33.44L11.72 32.21L16.41 30.91L21.09 30.25L25.78 30.22L29.69 30.71L33.59 31.74L37.5 33.39L38.03 32.81L37.72 28.13L38 24.22L38.81 20.31L39.83 17.19L41.61 13.28L43.75 9.72L46.39 6.25L49.22 3.24Z",
+          "tags": [
+            "five-pointed",
+            "favourite",
+            "rating"
+          ],
+          "tintable": true,
+          "width": 100
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Stickers"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Stickers",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_stickers",
+      "arguments": {
+        "stickers": [
+          {
+            "ref": "editor:star",
+            "x": 12,
+            "y": 12,
+            "size": 16,
+            "color": "#ffaa00"
+          },
+          {
+            "stamp": "heart",
+            "x": 30,
+            "y": 18,
+            "size": 14,
+            "rotation": 20,
+            "color": "#cc2244"
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "stickers": [
+            {
+              "color": "#ffaa00",
+              "id": "st1",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 301794027,
+              "size": 16,
+              "stamp": "star",
+              "x": 12,
+              "y": 12
+            },
+            {
+              "color": "#cc2244",
+              "id": "st2",
+              "opacity": 1,
+              "ref": "editor:heart",
+              "rotation": 20,
+              "seed": 992653278,
+              "size": 14,
+              "stamp": "heart",
+              "x": 30,
+              "y": 18
+            }
+          ]
+        },
+        "pixels": {
+          "file": "png/stickers.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "cd49e8ad2920790891a93d00e50335ffb3c49fa19fd58d911f40bc5bc008500b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_stickers",
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "stickers": [
+            {
+              "color": "#ffaa00",
+              "id": "st1",
+              "opacity": 1,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 301794027,
+              "size": 16,
+              "stamp": "star",
+              "x": 12,
+              "y": 12
+            },
+            {
+              "color": "#cc2244",
+              "id": "st2",
+              "opacity": 1,
+              "ref": "editor:heart",
+              "rotation": 20,
+              "seed": 992653278,
+              "size": 14,
+              "stamp": "heart",
+              "x": 30,
+              "y": 18
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "sticker_at",
+      "arguments": {
+        "x": 12,
+        "y": 12
+      },
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "sticker": {
+            "color": "#ffaa00",
+            "id": "st1",
+            "opacity": 1,
+            "ref": "editor:star",
+            "rotation": 0,
+            "seed": 301794027,
+            "size": 16,
+            "stamp": "star",
+            "x": 12,
+            "y": 12
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_sticker",
+      "arguments": {
+        "id": "st1",
+        "x": 20,
+        "size": 20,
+        "opacity": 0.6
+      },
+      "expect": {
+        "result": {
+          "color": "#ffaa00",
+          "id": "st1",
+          "opacity": 0.6,
+          "ref": "editor:star",
+          "rotation": 0,
+          "seed": 301794027,
+          "size": 20,
+          "stamp": "star",
+          "x": 20,
+          "y": 12
+        }
+      }
+    },
+    {
+      "tool": "arrange_stickers",
+      "arguments": {
+        "ids": [
+          "st1"
+        ],
+        "to": "front"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "order": [
+            "st2",
+            "st1"
+          ]
+        },
+        "pixels": {
+          "file": "png/stickers.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "52a4baa9032e279ae77b5695edf6c5261734fad3e6da3547d693e7cc5f97995a",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_stickers",
+      "arguments": {
+        "ids": [
+          "st2"
+        ]
+      },
+      "expect": {
+        "result": {
+          "removed": [
+            "st2"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_stickers",
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "stickers": [
+            {
+              "color": "#ffaa00",
+              "id": "st1",
+              "opacity": 0.6,
+              "ref": "editor:star",
+              "rotation": 0,
+              "seed": 301794027,
+              "size": 20,
+              "stamp": "star",
+              "x": 20,
+              "y": 12
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "describe_sticker",
+      "arguments": {
+        "ref": "editor:nothing"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No sticker \"editor:nothing\". Closest: editor:ring, editor:dot, editor:star; find_stickers lists them."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

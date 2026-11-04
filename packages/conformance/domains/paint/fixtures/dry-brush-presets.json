@@ -1,0 +1,1713 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "dry-brush-presets",
+  "description": "One seeded stroke with each of several built-in brushes, over a light fill.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_brush_presets",
+      "arguments": {
+        "limit": 200
+      },
+      "expect": {
+        "result": {
+          "brushes": [
+            {
+              "builtin": true,
+              "category": "pencil",
+              "engine": "dab",
+              "id": "pencil-hb",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "HB pencil",
+              "size": 4,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pencil"
+            },
+            {
+              "builtin": true,
+              "category": "pencil",
+              "engine": "dab",
+              "id": "pencil-6b",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "6B pencil",
+              "size": 7,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pencil"
+            },
+            {
+              "builtin": true,
+              "category": "pastel",
+              "engine": "dab",
+              "id": "soft-pastel",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Soft pastel",
+              "size": 32,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "soft-pastel"
+            },
+            {
+              "builtin": true,
+              "category": "pastel",
+              "engine": "dab",
+              "id": "oil-pastel",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Oil pastel",
+              "size": 26,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "oil-pastel"
+            },
+            {
+              "builtin": true,
+              "category": "charcoal",
+              "engine": "dab",
+              "id": "charcoal-stick",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Charcoal stick",
+              "size": 26,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "charcoal"
+            },
+            {
+              "builtin": true,
+              "category": "charcoal",
+              "engine": "dab",
+              "id": "vine-charcoal",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Vine charcoal",
+              "size": 10,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "charcoal"
+            },
+            {
+              "builtin": true,
+              "category": "airbrush",
+              "engine": "dab",
+              "id": "airbrush",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "spray",
+              "name": "Airbrush",
+              "size": 90,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "airbrush"
+            },
+            {
+              "builtin": true,
+              "category": "marker",
+              "engine": "dab",
+              "id": "marker",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Chisel marker",
+              "size": 24,
+              "surface": "dry",
+              "tip": "chisel",
+              "variety": "marker"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "ink-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Ink pen",
+              "size": 4,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pen"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "brush-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Brush pen",
+              "size": 14,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "brush-pen"
+            },
+            {
+              "builtin": true,
+              "category": "eraser",
+              "engine": "eraser",
+              "id": "eraser-soft",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Soft eraser",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "eraser"
+            },
+            {
+              "builtin": true,
+              "category": "eraser",
+              "engine": "eraser",
+              "id": "eraser-hard",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Hard eraser",
+              "size": 16,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "eraser"
+            },
+            {
+              "builtin": true,
+              "category": "blender",
+              "engine": "blender",
+              "id": "blender",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Blender",
+              "size": 34,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "blender"
+            },
+            {
+              "builtin": true,
+              "category": "smudge",
+              "engine": "smudge",
+              "id": "smudge",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Smudge",
+              "size": 26,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "smudge"
+            },
+            {
+              "builtin": true,
+              "category": "smudge",
+              "engine": "smudge",
+              "id": "wet-smudge",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Pigment smudge",
+              "size": 30,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "smudge"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "dirty-round",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Dirty round",
+              "size": 22,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "acrylic"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "multicolor-flat",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Multi-colour flat",
+              "size": 30,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "acrylic"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "palette-dabber",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Palette dabber",
+              "size": 18,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "acrylic"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "gradient-round",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Gradient round",
+              "size": 24,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "gradient"
+            },
+            {
+              "builtin": true,
+              "category": "paint",
+              "engine": "dab",
+              "id": "pressure-ombre",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Pressure ombré",
+              "size": 26,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "gradient"
+            },
+            {
+              "builtin": true,
+              "category": "marker",
+              "engine": "dab",
+              "id": "rainbow-marker",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Rainbow marker",
+              "size": 18,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "marker"
+            },
+            {
+              "builtin": true,
+              "category": "mixer",
+              "engine": "mixer",
+              "id": "mixer-brush",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Mixer Brush",
+              "size": 30,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "mixer"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "watercolor-round",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Watercolour round",
+              "size": 28,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "watercolor-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Wash brush",
+              "size": 90,
+              "surface": "wet",
+              "tip": "flat",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "gradient-wash",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Gradient wash",
+              "size": 80,
+              "surface": "wet",
+              "tip": "flat",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "watercolor-detail",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Watercolour rigger",
+              "size": 7,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "watercolor",
+              "engine": "wet",
+              "id": "gouache",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Gouache",
+              "size": 26,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "gouache"
+            },
+            {
+              "builtin": true,
+              "category": "oil",
+              "engine": "wet",
+              "id": "oil-round",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Wet oil round",
+              "size": 24,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "oil",
+              "engine": "wet",
+              "id": "oil-flat",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Wet oil flat",
+              "size": 40,
+              "surface": "wet",
+              "tip": "flat",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "impasto-brush",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Impasto brush",
+              "size": 36,
+              "surface": "thick",
+              "tip": "flat",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "paint-tube",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Paint tube",
+              "size": 22,
+              "surface": "thick",
+              "tip": "round",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "palette-knife",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Palette knife",
+              "size": 48,
+              "surface": "thick",
+              "tip": "flat",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "paint-roller",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Roller",
+              "size": 70,
+              "surface": "thick",
+              "tip": "flat",
+              "variety": "acrylic"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "gloop-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Gloop pen",
+              "size": 14,
+              "surface": "thick",
+              "tip": "round",
+              "variety": "gloop"
+            },
+            {
+              "builtin": true,
+              "category": "impasto",
+              "engine": "impasto",
+              "id": "metallic-paint",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Metallic paint",
+              "size": 30,
+              "surface": "thick",
+              "tip": "flat",
+              "variety": "metallic"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "hair-strands",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Hair strands",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "hair"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "spring-ink",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Spring ink",
+              "size": 30,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "spring"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "orbit-curls",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Orbit curls",
+              "size": 36,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "curls"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "flow-fur",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Flow fur",
+              "size": 50,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "fur"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "bead-trail",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Bead trail",
+              "size": 34,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "beads"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "sparkle-dust",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Sparkle dust",
+              "size": 60,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "glitter"
+            },
+            {
+              "builtin": true,
+              "category": "bristle",
+              "engine": "bristle",
+              "id": "bristle-round",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Bristle round",
+              "size": 30,
+              "surface": "dry",
+              "tip": "bristle",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "bristle",
+              "engine": "bristle",
+              "id": "bristle-flat",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Bristle flat",
+              "size": 46,
+              "surface": "dry",
+              "tip": "bristle",
+              "variety": "oil"
+            },
+            {
+              "builtin": true,
+              "category": "bristle",
+              "engine": "bristle",
+              "id": "dry-brush",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Dry brush",
+              "size": 44,
+              "surface": "dry",
+              "tip": "bristle",
+              "variety": "dry-brush"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "impasto",
+              "id": "glow-gel",
+              "kind": "mark",
+              "light": 0.85,
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Glow gel",
+              "size": 16,
+              "surface": "thick",
+              "tip": "round",
+              "variety": "gel"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "dab",
+              "id": "neon-marker",
+              "kind": "mark",
+              "light": 1,
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Neon marker",
+              "size": 10,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "neon"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "dab",
+              "id": "light-airbrush",
+              "kind": "mark",
+              "light": 0.7,
+              "marks": "continuous",
+              "medium": "spray",
+              "name": "Light airbrush",
+              "size": 90,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "airbrush"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "spark-trail",
+              "kind": "mark",
+              "light": 1,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Spark trail",
+              "size": 50,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "sparks"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "light-ribbon",
+              "kind": "mark",
+              "light": 0.8,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Light ribbon",
+              "size": 80,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "ribbon"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "flame-ribbon",
+              "kind": "mark",
+              "light": 1,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Flame ribbon",
+              "size": 50,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "flame"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "neon-strand",
+              "kind": "mark",
+              "light": 1,
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Neon strand",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "neon"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "smoke-ribbon",
+              "kind": "mark",
+              "light": 0.3,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Smoke ribbon",
+              "size": 70,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "smoke"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "bokeh-dots",
+              "kind": "mark",
+              "light": 0.9,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Bokeh dots",
+              "size": 80,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "bokeh"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "particle",
+              "id": "twinkle-sparks",
+              "kind": "mark",
+              "light": 1,
+              "marks": "particles",
+              "medium": "paint",
+              "name": "Twinkle sparks",
+              "size": 50,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "sparks"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "wet",
+              "id": "glow-wash",
+              "kind": "mark",
+              "light": 0.7,
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Glow wash",
+              "size": 40,
+              "surface": "wet",
+              "tip": "round",
+              "variety": "watercolor"
+            },
+            {
+              "builtin": true,
+              "category": "light",
+              "engine": "dab",
+              "id": "highlighter",
+              "kind": "mark",
+              "light": 0.5,
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Highlighter",
+              "size": 30,
+              "surface": "dry",
+              "tip": "chisel",
+              "variety": "highlighter"
+            },
+            {
+              "builtin": true,
+              "category": "sticker",
+              "engine": "sticker",
+              "id": "sticker-stars",
+              "kind": "mark",
+              "marks": "objects",
+              "name": "Star stickers",
+              "size": 36,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "stars"
+            },
+            {
+              "builtin": true,
+              "category": "sticker",
+              "engine": "sticker",
+              "id": "sticker-leaves",
+              "kind": "mark",
+              "marks": "objects",
+              "name": "Leaf stickers",
+              "size": 40,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "leaves"
+            },
+            {
+              "builtin": true,
+              "category": "sticker",
+              "engine": "sticker",
+              "id": "sticker-confetti",
+              "kind": "mark",
+              "marks": "objects",
+              "name": "Confetti",
+              "size": 22,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "confetti"
+            },
+            {
+              "builtin": true,
+              "category": "sticker",
+              "engine": "sticker",
+              "id": "sticker-flowers",
+              "kind": "mark",
+              "marks": "objects",
+              "name": "Flower stickers",
+              "size": 44,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "flowers"
+            },
+            {
+              "builtin": true,
+              "category": "sticker",
+              "engine": "sticker",
+              "id": "sticker-splats",
+              "kind": "mark",
+              "marks": "objects",
+              "name": "Paint splats",
+              "size": 50,
+              "surface": "dry",
+              "tip": "stamp",
+              "variety": "splats"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "add-water",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Add water",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "water"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "hair-dryer",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Dry",
+              "size": 80,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "dryer"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "blow",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Blow",
+              "size": 50,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "blow"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "wet-blend",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Wet blend",
+              "size": 36,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "wet-blend"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "wet-drag",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Wet smudge",
+              "size": 30,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "wet-drag"
+            },
+            {
+              "builtin": true,
+              "category": "wet-tool",
+              "engine": "wet",
+              "id": "blot",
+              "kind": "tool",
+              "marks": "continuous",
+              "name": "Blot (erase wet)",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "tool": "blot"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "ballpoint",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Ballpoint",
+              "size": 3,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "ballpoint"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "gel-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Gel pen",
+              "size": 4,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "gel"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "fineliner",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Fineliner",
+              "size": 2,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "fineliner"
+            },
+            {
+              "builtin": true,
+              "category": "pastel",
+              "engine": "dab",
+              "id": "crayon",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Crayon",
+              "size": 14,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "crayon"
+            },
+            {
+              "builtin": true,
+              "category": "pastel",
+              "engine": "dab",
+              "id": "chalk",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "dry",
+              "name": "Chalk",
+              "size": 18,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "chalk"
+            },
+            {
+              "builtin": true,
+              "category": "airbrush",
+              "engine": "dab",
+              "id": "spray-can",
+              "kind": "mark",
+              "marks": "scatter",
+              "medium": "spray",
+              "name": "Spray can",
+              "size": 60,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "spraycan"
+            }
+          ],
+          "host": "paint",
+          "total": 73
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 2,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 5,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "pencil-hb",
+        "color": "#203060",
+        "seed": 100
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 12,
+            "x": -2,
+            "y": 0
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "97a3f4d666197472939188a4765216a6d31ce164999c24ee88726a1a9b5f48a9",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 5,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 8,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "pencil-6b",
+        "color": "#203060",
+        "seed": 101
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 36,
+            "width": 15,
+            "x": -1,
+            "y": -2
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "46a5a18ac10218596deb9c3a97c9dcaa56e2d81bc544ba67a7e1e6ddd94bdfb5",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 8,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 11,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "soft-pastel",
+        "color": "#203060",
+        "seed": 102
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 72,
+            "width": 52,
+            "x": -16,
+            "y": -19
+          },
+          "dabs": 16,
+          "layerId": "@1",
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "d692727c5042f3e4487e2badbc95126278a26a54c6f9a439577f383cb60617a1",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 11,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 14,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "charcoal-stick",
+        "color": "#203060",
+        "seed": 103
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 66,
+            "width": 47,
+            "x": -11,
+            "y": -18
+          },
+          "dabs": 19,
+          "layerId": "@1",
+          "strokeId": "s4"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "02371ba7ca9e70072669f98a470cbeaa4826b0c0d9ad034040408852dcc1a7c1",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 14,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 17,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "airbrush",
+        "color": "#203060",
+        "seed": 104
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 181,
+            "width": 162,
+            "x": -66,
+            "y": -76
+          },
+          "dabs": 7,
+          "layerId": "@1",
+          "strokeId": "s5"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.6.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0c30acc2d204cc585616494f78cae3c4be620424499f091dbd81dbf0ce37f975",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 17,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 20,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "marker",
+        "color": "#203060",
+        "seed": 105
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 62,
+            "width": 41,
+            "x": -2,
+            "y": -15
+          },
+          "dabs": 26,
+          "layerId": "@1",
+          "strokeId": "s6"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "a6b94d1c42a9fd770333afb9a647531b6337032fec27bab108c0e0162214a27e",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 20,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 23,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "ink-pen",
+        "color": "#203060",
+        "seed": 106
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 11,
+            "x": 16,
+            "y": 0
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s7"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "df16263e80b841d6c1b5b84aaa57e6f8905685fcc507ab900dcaa7bf1abf46ea",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 23,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 26,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "brush-pen",
+        "color": "#203060",
+        "seed": 107
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 40,
+            "width": 21,
+            "x": 15,
+            "y": -3
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s8"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "d3c6e92b2531f0261baaa105c9bb6a1447233d7455f63060e4cdc1a2bdcb31cb",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 26,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 29,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "dirty-round",
+        "color": "#203060",
+        "seed": 108
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 52,
+            "width": 32,
+            "x": 13,
+            "y": -9
+          },
+          "dabs": 22,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": "#202f5f",
+            "reservoir": "#203060"
+          },
+          "strokeId": "s9"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.10.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "27367a0ef353c99e0680e2a79bfb854ffa7aa1e2114d8c7a91d5cb58eb72a1f7",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 29,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 32,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "gradient-round",
+        "color": "#203060",
+        "seed": 109
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 53,
+            "width": 33,
+            "x": 15,
+            "y": -9
+          },
+          "dabs": 24,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#3c5890"
+          },
+          "strokeId": "s10"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.11.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "c32927199eacded26bc385f96411a8d6a39516c200dd7ad66b2f910f13aefe79",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 32,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 35,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "ballpoint",
+        "color": "#203060",
+        "seed": 110
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 32,
+            "width": 11,
+            "x": 28,
+            "y": 0
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s11"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.12.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0edbb93df7bfb6be4aa4701b1bf7502aea64a755a017c6a911b74e99edbaa80a",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 35,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 38,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "crayon",
+        "color": "#203060",
+        "seed": 111
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 45,
+            "width": 24,
+            "x": 25,
+            "y": -6
+          },
+          "dabs": 33,
+          "layerId": "@1",
+          "strokeId": "s12"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.13.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "75cd2386ad85a194ff39cfe2580a53b270d99efde880e787741ab3f374cc0ccd",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 38,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 41,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "chalk",
+        "color": "#203060",
+        "seed": 112
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 47,
+            "width": 30,
+            "x": 25,
+            "y": -7
+          },
+          "dabs": 32,
+          "layerId": "@1",
+          "strokeId": "s13"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.14.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f92e58a229db198ec10ef6c961d0914231d48de3266c903654a4d8bab9ecf26f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 41,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 44,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "spray-can",
+        "color": "#203060",
+        "seed": 113
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 84,
+            "width": 69,
+            "x": 9,
+            "y": -27
+          },
+          "dabs": 138,
+          "layerId": "@1",
+          "strokeId": "s14"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.15.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "13b0ed8ebc98cd40290df5e55fe9f1bb4614dcad683bb66a4a276ec585a95e95",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 44,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 47,
+            "y": 28,
+            "pressure": 0.9
+          }
+        ],
+        "brushId": "highlighter",
+        "color": "#203060",
+        "seed": 114
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 68,
+            "width": 47,
+            "x": 22,
+            "y": -18
+          },
+          "dabs": 21,
+          "layerId": "@1",
+          "strokeId": "s15"
+        },
+        "pixels": {
+          "file": "png/dry-brush-presets.16.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3e547090b477f9e624867eb1b9ae139862eaa6991dd06f32ce24e2004fb6ba12",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

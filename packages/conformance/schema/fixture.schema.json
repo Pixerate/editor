@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fixture.schema.json",
+  "title": "Conformance scenario",
+  "description": "A sequence of tool calls with what each returned in @pixerate/editor, for another implementation to replay (domains/<domain>/fixtures/<id>.json).",
+  "type": "object",
+  "required": ["id", "description", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "Unique within the domain; also the file name." },
+    "description": { "type": "string", "minLength": 1 },
+    "setup": { "type": "object", "description": "Options for the fresh editor the scenario starts from, such as { width, height }." },
+    "skip": {
+      "type": "object",
+      "description": "Why an implementation skips the whole scenario, by implementation (swift).",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["tool"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Tool name, unprefixed." },
+          "arguments": { "type": "object", "description": "Tool arguments; a string @n stands for the id numbered n." },
+          "document": { "type": "boolean", "description": "Also compare the saved document after this call." },
+          "pixels": {
+            "description": "Also compare the rendered pixels after this call.",
+            "oneOf": [
+              { "type": "boolean" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "paper": { "type": "boolean", "description": "false leaves the paper out (transparent where unpainted)." },
+                  "tolerance": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": { "maxDelta": { "type": "number", "minimum": 0 }, "meanDelta": { "type": "number", "minimum": 0 } }
+                  }
+                }
+              }
+            ]
+          },
+          "ignore": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^(/[^/]+)+$" },
+            "description": "JSON pointers left out of the result before comparing; a * segment is every element or member."
+          },
+          "expect": {
+            "type": "object",
+            "required": ["result"],
+            "additionalProperties": false,
+            "description": "Written by scripts/record-conformance.mjs.",
+            "properties": {
+              "result": { "description": "The normalized structuredContent, or { error: { code, message, details? } }." },
+              "isError": { "const": true },
+              "document": { "description": "The normalized saved document." },
+              "pixels": {
+                "type": "object",
+                "required": ["file", "width", "height", "sha256", "maxDelta", "meanDelta"],
+                "additionalProperties": false,
+                "properties": {
+                  "file": { "type": "string", "pattern": "^png/[a-z0-9-]+\\.[0-9]+\\.png$" },
+                  "width": { "type": "integer", "minimum": 1 },
+                  "height": { "type": "integer", "minimum": 1 },
+                  "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "maxDelta": { "type": "number", "minimum": 0 },
+                  "meanDelta": { "type": "number", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

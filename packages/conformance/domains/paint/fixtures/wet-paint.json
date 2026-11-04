@@ -1,0 +1,721 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "wet-paint",
+  "description": "Watercolour that keeps moving until it dries, with the simulation stepped explicitly.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "set_wet_engine",
+      "arguments": {
+        "gpu": "off"
+      },
+      "ignore": [
+        "/engine"
+      ],
+      "expect": {
+        "result": {}
+      }
+    },
+    {
+      "tool": "wet_paper",
+      "arguments": {
+        "amount": 0.6,
+        "rect": {
+          "x": 4,
+          "y": 4,
+          "width": 40,
+          "height": 24
+        }
+      },
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "rect": {
+            "height": 24,
+            "width": 40,
+            "x": 4,
+            "y": 4
+          },
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "set_wet_settings",
+      "arguments": {
+        "viscosity": 0.4,
+        "evaporation": 0.3,
+        "edgeDarkening": 0.6,
+        "granulation": 0.5
+      },
+      "expect": {
+        "result": {
+          "layerId": "@1",
+          "params": {
+            "bleed": 0.3,
+            "bloom": 0.4,
+            "edgeDarkening": 0.6,
+            "evaporation": 0.3,
+            "fixture": 0.2,
+            "granulation": 0.5,
+            "pickup": 0.2,
+            "pigmentWeight": 0.3,
+            "viscosity": 0.4
+          },
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "set_flow_map",
+      "arguments": {
+        "kind": "linear",
+        "angle": 90,
+        "strength": 0.4
+      },
+      "expect": {
+        "result": {
+          "flow": {
+            "angle": 90,
+            "clockwise": true,
+            "kind": "linear",
+            "scale": 120,
+            "seed": 1,
+            "strength": 0.4
+          },
+          "layerId": "@1",
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "set_canvas_tilt",
+      "arguments": {
+        "angle": 10,
+        "direction": 90
+      },
+      "expect": {
+        "result": {
+          "stillWet": true,
+          "tilt": {
+            "angle": 10,
+            "direction": 90
+          }
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "watercolor-round",
+        "color": "#2255aa",
+        "seed": 71
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 47,
+            "width": 63,
+            "x": -8,
+            "y": -7
+          },
+          "dabs": 18,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#2255aa"
+          },
+          "strokeId": "s1",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "get_wet_paint",
+      "ignore": [
+        "/backend",
+        "/engine",
+        "/layers/*/engine"
+      ],
+      "expect": {
+        "result": {
+          "clock": 0,
+          "gpu": "off",
+          "gpuActive": false,
+          "instantDry": false,
+          "layerIds": [
+            "@1"
+          ],
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 90,
+                "clockwise": true,
+                "kind": "linear",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.4
+              },
+              "layerId": "@1",
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.6,
+                "evaporation": 0.3,
+                "fixture": 0.2,
+                "granulation": 0.5,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.4
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "wetCells": 1274
+            }
+          ],
+          "message": "Wet paint runs in plain JavaScript until the WebAssembly kernel has loaded.",
+          "overlay": false,
+          "paused": false,
+          "speed": 120,
+          "tilt": {
+            "angle": 10,
+            "direction": 90
+          },
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "steps": 20
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "clock": 20,
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 90,
+                "clockwise": true,
+                "kind": "linear",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.4
+              },
+              "layerId": "@1",
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.6,
+                "evaporation": 0.3,
+                "fixture": 0.2,
+                "granulation": 0.5,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.4
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "wetCells": 1291
+            }
+          ],
+          "steps": 20,
+          "stillWet": true
+        },
+        "pixels": {
+          "file": "png/wet-paint.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "92bc9c5ec338a843c2ca28b68d30db29c2dd365390d36c4741e05fd53b535597",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "pause_wet_paint",
+      "arguments": {
+        "paused": true
+      },
+      "expect": {
+        "result": {
+          "paused": true,
+          "speed": 120,
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "pause_wet_paint",
+      "arguments": {
+        "paused": false,
+        "speed": 2
+      },
+      "expect": {
+        "result": {
+          "paused": false,
+          "speed": 2,
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "set_water_overlay",
+      "arguments": {
+        "visible": true
+      },
+      "expect": {
+        "result": {
+          "stillWet": true,
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "set_water_overlay",
+      "arguments": {
+        "visible": false
+      },
+      "expect": {
+        "result": {
+          "stillWet": true,
+          "visible": false
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:2n6-emf9lpblt0"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#2255aa",
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.13333333333333333,
+                    0.3333333333333333,
+                    0.6666666666666666
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.3,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 42,
+                    "y": 26
+                  }
+                ],
+                "seed": 71,
+                "steps": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wet": {
+              "layers": {
+                "@1": {
+                  "flow": {
+                    "angle": 90,
+                    "clockwise": true,
+                    "kind": "linear",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.4
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.6,
+                    "evaporation": 0.3,
+                    "fixture": 0.2,
+                    "granulation": 0.5,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.4
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 10,
+                "direction": 90
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 0,
+                "clock": 0,
+                "data": {
+                  "amount": 0.6,
+                  "rect": {
+                    "height": 24,
+                    "width": 40,
+                    "x": 4,
+                    "y": 4
+                  }
+                },
+                "kind": "wet-paper",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "clock": 0,
+                "data": {
+                  "bleed": 0.3,
+                  "bloom": 0.4,
+                  "edgeDarkening": 0.6,
+                  "evaporation": 0.3,
+                  "fixture": 0.2,
+                  "granulation": 0.5,
+                  "pickup": 0.2,
+                  "pigmentWeight": 0.3,
+                  "viscosity": 0.4
+                },
+                "kind": "params",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "clock": 0,
+                "data": {
+                  "angle": 90,
+                  "clockwise": true,
+                  "kind": "linear",
+                  "scale": 120,
+                  "seed": 1,
+                  "strength": 0.4
+                },
+                "kind": "flow",
+                "layerId": "@1"
+              },
+              {
+                "at": 0,
+                "clock": 0,
+                "data": {
+                  "angle": 10,
+                  "direction": 90
+                },
+                "kind": "tilt"
+              },
+              {
+                "at": 1,
+                "clock": 20,
+                "kind": "dry"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/wet-paint.13.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "92bc9c5ec338a843c2ca28b68d30db29c2dd365390d36c4741e05fd53b535597",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_instant_dry",
+      "arguments": {
+        "on": true
+      },
+      "expect": {
+        "result": {
+          "instantDry": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 6,
+            "y": 26
+          },
+          {
+            "x": 16,
+            "y": 8,
+            "pressure": 0.9
+          },
+          {
+            "x": 30,
+            "y": 20
+          },
+          {
+            "x": 44,
+            "y": 6,
+            "pressure": 0.4
+          }
+        ],
+        "brushId": "watercolor-round",
+        "color": "#aa2255",
+        "seed": 72
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 54,
+            "width": 71,
+            "x": -15,
+            "y": -7
+          },
+          "dabs": 18,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#aa2255"
+          },
+          "strokeId": "s2",
+          "wet": false
+        },
+        "pixels": {
+          "file": "png/wet-paint.15.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3b71780528c02df238b7038b9f22d09dbb7902703ccca065a53d2f26d3105440",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_wet_paint",
+      "ignore": [
+        "/backend",
+        "/engine",
+        "/layers/*/engine"
+      ],
+      "expect": {
+        "result": {
+          "clock": 20,
+          "gpu": "off",
+          "gpuActive": false,
+          "instantDry": true,
+          "layerIds": [],
+          "layers": [],
+          "message": "Wet paint runs in plain JavaScript until the WebAssembly kernel has loaded.",
+          "overlay": false,
+          "paused": false,
+          "speed": 2,
+          "tilt": {
+            "angle": 10,
+            "direction": 90
+          },
+          "wet": false
+        }
+      }
+    }
+  ]
+}
