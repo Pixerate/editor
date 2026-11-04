@@ -3780,7 +3780,7 @@ All contributors and AI assistants should check this file before starting work a
 ### [swift] Long Wet Runs Are Slow in Debug Builds
 - **Issue / Symptom**: An extra scenario with a few hundred wet steps over two tiles took minutes under `swift test`, where the TS core takes seconds.
 - **Root Cause**: `swift test` builds without optimisation, and each wet step visits all 65 536 cells of every live 256 px tile with a few hundred float operations each.
-- **Solution / Workaround**: Keep committed scenarios short (the recorded ones run in seconds). Probe long runs with `swift test -c release -Xswiftc -enable-testing --filter PaintScenarioProbeTests` (`-enable-testing` keeps `@testable import` working).
+- **Solution / Workaround**: Keep committed scenarios short (the recorded ones run in seconds). Test optimised, as CI does: `swift test -Xswiftc -O -Xswiftc -enable-testing` (`-enable-testing` keeps `@testable import` working). A clean build and test went from 115 s to 45 s locally (build 21 → 31 s, tests 94 → 14 s); on CI the macOS tests took ~3 min and the iOS simulator ~4.5 min unoptimised. Timing checks (parse time growth and the like) should still allow for debug builds, where they are noisier.
 
 ### [swift] Metal Only Shades Wet Paint: Stepping on the GPU Would Not Make It Faster
 - **Issue / Symptom**: A Metal copy of the TS core's Engine B (a GPU mirror that also steps each batch) would have doubled the work without letting wet paint run more steps per second.
