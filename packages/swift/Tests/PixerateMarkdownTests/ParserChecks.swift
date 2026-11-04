@@ -137,7 +137,7 @@ enum ParserChecks {
         ("> /", .codeBlock, "> ```\n> |\n> ```"),
     ]
     
-    private static func runEditing() -> Int {
+    static func runEditing() -> Int {
         var failures = 0
         // "/" trigger detection
         let triggers: [(String, Int, Bool)] = [("", 0, true), ("- ", 2, true), ("> ", 2, true), ("text", 4, false), ("a\n", 2, true),
@@ -231,7 +231,7 @@ enum ParserChecks {
         ("x^{qz}", "x^(qz)"),
     ]
     
-    private static func runHTML() -> Int {
+    static func runHTML() -> Int {
         var failures = 0
         for (tex, expected) in mathCases {
             let actual = MarkdownMath.unicode(tex)
@@ -251,7 +251,7 @@ enum ParserChecks {
         return failures
     }
     
-    private static func runFormatting() -> Int {
+    static func runFormatting() -> Int {
         var failures = 0
         for (markdown, select, operation, expected) in formattingCases {
             if ProcessInfo.processInfo.environment["SWASH_TRACE"] != nil { print("case \(operation) \(markdown.debugDescription)"); fflush(stdout) }
@@ -294,7 +294,7 @@ enum ParserChecks {
         return failures
     }
     
-    private static func runOutline() -> Int {
+    static func runOutline() -> Int {
         var failures = 0
         func expect(_ ok: Bool, _ message: @autoclosure () -> String) {
             if !ok { failures += 1; print("❌ outline: \(message())") }
@@ -324,7 +324,7 @@ enum ParserChecks {
         return failures
     }
 
-    private static func runMathEditing() -> Int {
+    static func runMathEditing() -> Int {
         var failures = 0
         // "|" marks the caret (or "[…]" a selection); expected nil means default typing
         let cases: [(String, String, String?)] = [
@@ -373,7 +373,12 @@ enum ParserChecks {
     }
 
     static func run() -> Int {
-        var failures = runFormatting() + runEditing() + runHTML() + runOutline() + runMathEditing()
+        runFormatting() + runEditing() + runHTML() + runOutline() + runMathEditing()
+            + runMarkers() + runFuzz() + runPathological() + runGrowth()
+    }
+
+    static func runMarkers() -> Int {
+        var failures = 0
         // 1. Marker ranges
         for (markdown, nodeName, expected) in markerCases {
             let document = MarkdownDocument.parse(markdown)
@@ -411,7 +416,10 @@ enum ParserChecks {
             }
         }
         print("Marker and extension checks: \(failures == 0 ? "all passed" : "\(failures) failed") (\(markerCases.count + extensionCases.count) cases)")
+        return failures
+    }
 
+    static func runFuzz() -> Int {
         // 2. Fuzzing: random markdown-ish input must parse with valid, nested ranges
         var generator = SplitMix64(seed: 0x5157A5)
         let alphabet = Array("ab *_~`#>-+=|:[]()!<>&;\\\n\n  \t1.)x^\"'/@w.$$")
@@ -427,8 +435,11 @@ enum ParserChecks {
             }
         }
         print("Fuzz (3000 random inputs): \(fuzzFailures == 0 ? "no problems" : "\(fuzzFailures) problems")")
-        failures += fuzzFailures
+        return fuzzFailures
+    }
 
+    static func runPathological() -> Int {
+        var failures = 0
         // 3. Pathological inputs must stay fast (CommonMark pathological test patterns)
         let pathological: [(String, String)] = [
             ("nested brackets", String(repeating: "[", count: 5000) + "a" + String(repeating: "]", count: 5000)),
@@ -450,13 +461,12 @@ enum ParserChecks {
             if !ok { failures += 1 }
             print(String(format: "  %@ %-20@ %7.1f ms", ok ? "✓" : "❌", name as NSString, ms))
         }
-        failures += runGrowth()
         return failures
     }
 
     /// Parse time must grow roughly linearly: quadrupling the input may cost at most ~6× (a
     /// quadratic path costs ~16×). Patterns from the performance audit (§5).
-    private static func runGrowth() -> Int {
+    static func runGrowth() -> Int {
         let patterns: [(String, (Int) -> String)] = [
             ("emphasis text runs", { String(repeating: "*a ", count: $0) }),
             ("open brackets", { String(repeating: "[", count: $0) }),

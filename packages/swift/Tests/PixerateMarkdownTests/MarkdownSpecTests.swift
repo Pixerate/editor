@@ -42,17 +42,25 @@ final class MarkdownSpecTests: XCTestCase {
 
     /// Marker ranges, extensions, formatting and editing commands, HTML paste conversion,
     /// robustness on random input and linear-time parsing (failures are printed above the count).
-    func testParserChecks() {
+    // ParserChecks, one test per section, so a failing test's name says which part broke (CI's
+    // `xcodebuild -quiet` shows failing test names but not their messages).
+    private func check(_ section: () -> Int) {
         var failures = 0
-        let output = Self.capturingOutput { failures = ParserChecks.run() }
+        let output = Self.capturingOutput { failures = section() }
         XCTAssertEqual(failures, 0, Self.failureLines(output))
     }
 
-    func testCodeHighlighterChecks() {
-        var failures = 0
-        let output = Self.capturingOutput { failures = CodeHighlighterChecks.run() }
-        XCTAssertEqual(failures, 0, Self.failureLines(output))
-    }
+    func testFormattingChecks() { check(ParserChecks.runFormatting) }
+    func testEditingCommandChecks() { check(ParserChecks.runEditing) }
+    func testHTMLPasteChecks() { check(ParserChecks.runHTML) }
+    func testOutlineChecks() { check(ParserChecks.runOutline) }
+    func testMathEditingChecks() { check(ParserChecks.runMathEditing) }
+    func testMarkerAndExtensionChecks() { check(ParserChecks.runMarkers) }
+    func testFuzzChecks() { check(ParserChecks.runFuzz) }
+    func testPathologicalInputTimes() { check(ParserChecks.runPathological) }
+    func testParseTimeGrowth() { check(ParserChecks.runGrowth) }
+
+    func testCodeHighlighterChecks() { check(CodeHighlighterChecks.run) }
 
     /// The checks print their results (they also run as Swash's command-line runner), and CI's
     /// `xcodebuild -quiet` hides test output, so failing lines go into the assertion message.
