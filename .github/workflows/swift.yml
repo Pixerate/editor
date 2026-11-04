@@ -1,0 +1,70 @@
+name: Swift
+
+# The Swift editors (#533): build and test the package on macOS and in the iOS simulator, and check
+# the Swift generated from @pixerate/conformance is current. Runs when the Swift code, the
+# contracts or the scripts that write them change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Package.swift"
+      - "packages/swift/**"
+      - "packages/conformance/**"
+      - "scripts/gen-swift.mjs"
+      - "scripts/export-contracts.mjs"
+      - "scripts/record-conformance.mjs"
+      - ".github/workflows/swift.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Package.swift"
+      - "packages/swift/**"
+      - "packages/conformance/**"
+      - "scripts/gen-swift.mjs"
+      - "scripts/export-contracts.mjs"
+      - "scripts/record-conformance.mjs"
+      - ".github/workflows/swift.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift (macOS and iOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Check the generated Swift is current
+        run: node scripts/gen-swift.mjs --check
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build (macOS)
+        run: swift build
+
+      - name: Test (macOS)
+        # Writes the conformance summary (passed / failed / skipped scenarios) to the job summary.
+        run: swift test
+
+      - name: Test (iOS simulator)
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
+          ')
+          echo "Simulator: $udid"
+          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet
