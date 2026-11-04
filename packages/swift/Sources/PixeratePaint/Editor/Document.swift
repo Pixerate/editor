@@ -61,6 +61,10 @@ public final class PaintDocumentState {
     public var light: OrderedMap<String, TiledSurface>?
     /// Where this document's (0, 0) is in the coordinates of the canvas it grew from (missing = 0, 0).
     public var origin: LayerOffset?
+    /// Effect layers: the provider effect each is drawn from (layer id → effect).
+    public var effectLayers: OrderedMap<String, PaintEffectSource>?
+    /// Effect paper: a provider generator drawn over the paper, under the paint.
+    public var paperEffect: PaintPaperEffect?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -77,6 +81,8 @@ public final class PaintDocumentState {
         d.liveStrokes = liveStrokes
         d.light = light
         d.origin = origin
+        d.effectLayers = effectLayers
+        d.paperEffect = paperEffect
         change(d)
         return d
     }

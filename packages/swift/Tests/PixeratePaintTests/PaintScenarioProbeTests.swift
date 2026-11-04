@@ -42,6 +42,7 @@ final class PaintScenarioProbeTests: XCTestCase {
             }
             if let dir = ProcessInfo.processInfo.environment["PIXERATE_PAINT_DUMP"] {
                 try JSONValue.array(host.raw).stringified().write(toFile: "\(dir)/\(scenario.id).swift.json", atomically: true, encoding: .utf8)
+                try JSONValue.array(outputs.map { $0.document ?? .null }).stringified().write(toFile: "\(dir)/\(scenario.id).swift.doc", atomically: true, encoding: .utf8)
                 try outputs.map { $0.pixels.map { Data($0.data).base64EncodedString() } ?? "" }.joined(separator: "\n").write(toFile: "\(dir)/\(scenario.id).swift.px", atomically: true, encoding: .utf8)
             }
             let mismatches = compareConformance(scenario, outputs) { try decodeConformancePNG(Data(contentsOf: $0)) }
@@ -62,7 +63,7 @@ final class PaintUnportedToolsProbeTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["PIXERATE_PAINT_PROBE"] != nil else { return }
         let host = try PaintConformanceHost(setup: [:])
         let c = host.controller
-        let have = Set(try (createPaintEditorToolProvider(c).tools + createPaintBrushLibraryToolProvider(c).tools + createPaintProposalToolProvider(PaintProposals(controller: c)).tools).map(\.name))
+        let have = Set(try (createPaintEditorToolProvider(c).tools + createPaintEffectsToolProvider(c).tools + createPaintBrushLibraryToolProvider(c).tools + createPaintProposalToolProvider(PaintProposals(controller: c)).tools).map(\.name))
         for p in try PaintContracts.toolProviders() {
             let missing = p.tools.map(\.name).filter { !have.contains($0) }
             print("UNPORTED \(p.id): \(missing.joined(separator: ", "))")

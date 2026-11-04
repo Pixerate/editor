@@ -170,6 +170,10 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         return .object(try c.strokePath(x.path, spacing: x.spacing, pressure: x.pressure, i))
     }
     h["replay_strokes"] = { a in
+        if a["color"] == nil {
+            let ids = Set(a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [])
+            try await c.prepareEffectPaints(c.doc.strokes.filter { ids.contains($0.id) }.compactMap(\.effect))
+        }
         let o = a["origin"]?.objectValue
         let opts = ReplayOptions(
             strokeIds: a["strokeIds"]?.arrayValue?.compactMap(\.stringValue) ?? [], dx: a["dx"]?.numberValue, dy: a["dy"]?.numberValue,

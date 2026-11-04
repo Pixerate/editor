@@ -367,9 +367,13 @@ final class DryStroke {
     private var buf: [Float] = []
     private var lastRaw: PenPoint?
     private var lastFed: PenPoint?
+    /// Effect paint: each pixel's colour (and alpha) from these pixels.
+    private let effect: EffectPaintPixels?
+    private var field: [Float] = []
 
-    init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy]) {
+    init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], effect: EffectPaintPixels? = nil) {
         self.brush = brush
+        self.effect = effect
         self.grain = grain
         self.seed = seed
         smoother = PenSmoother(brush.tip.smoothing, brush.pressureSmoothing)
@@ -432,7 +436,13 @@ final class DryStroke {
                 }
             }
         }
-        coverage.accumulate(rect, buf, m.opacity)
+        var fieldArg: [Float]? = nil
+        if let effect {
+            if field.count < n * 3 { field = [Float](repeating: 0, count: n * 3) }
+            sampleEffectField(effect, rect, &buf, &field, EffectDabPlace(d))
+            fieldArg = field
+        }
+        coverage.accumulate(rect, buf, m.opacity, field: fieldArg)
         rects.append(rect)
         dabCount += 1
     }

@@ -109,6 +109,8 @@ public final class PaintEditorModel {
         tables = try PaintContracts.uiTables()
         commands = try PaintContracts.commands()
         subscriptions.append(try r.register(createPaintEditorToolProvider(c)))
+        // Provider effects: their read tools say when no provider is set (`controller.setEffectsProvider`).
+        subscriptions.append(try r.register(createPaintEffectsToolProvider(c)))
         subscriptions.append(try r.register(createPaintBrushLibraryToolProvider(c)))
         gesture = PaintGesture(controller: c) { [unowned self] in self.viewport }
         gesture.onSelectStroke = { [unowned self] id in self.selectedStroke = id }
@@ -217,12 +219,19 @@ public final class PaintEditorModel {
 
     /// The painting as a file (`export_image` / `export_psd`): PNG with the paper, or an 8-bit RGB PSD with its layers.
     /// `scale` above 1 repaints the recorded strokes larger (`export_high_res`) instead of upscaling.
-    public func exportFile(_ format: PaintExportFormat, scale: Double = 1) -> PaintExportFile? {
-        attempt {
-            switch format {
-            case .png where scale > 1:
-                let img = try controller.renderHighRes(scale: scale)
+    public func exportFile(_ format: PaintExportFormat, scale: Double = 1) async -> PaintExportFile? {
+        if format == .png && scale > 1 {
+            do {
+                let img = try await controller.renderHighRes(scale: scale)
+                error = nil
                 return PaintExportFile(format: .png, bytes: Data(encodePng(img.width, img.height, img.data)))
+            } catch {
+                self.error = error.localizedDescription
+                return nil
+            }
+        }
+        return attempt {
+            switch format {
             case .png: return PaintExportFile(format: .png, bytes: Data(try controller.exportPng()))
             case .psd: return PaintExportFile(format: .psd, bytes: Data(try controller.exportPsd().bytes))
             }

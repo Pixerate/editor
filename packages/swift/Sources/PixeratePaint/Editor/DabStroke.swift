@@ -47,9 +47,12 @@ final class PaintDabStroke {
     private var paintColor = [0.0, 0.0, 0.0]
     private var lastRaw: PenPoint?
     private var lastFed: PenPoint?
+    /// Effect paint: each dab's colour (and flow, by alpha) is the effect's at the dab's centre.
+    private let effect: EffectPaintPixels?
 
-    init(_ brush: PaintBrush, target: PaintTileTarget, load: MixerLoad, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?) {
+    init(_ brush: PaintBrush, target: PaintTileTarget, load: MixerLoad, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?, effect: EffectPaintPixels? = nil) {
         self.brush = brush
+        self.effect = effect
         self.target = target
         self.grain = grain
         self.seed = seed
@@ -158,7 +161,11 @@ final class PaintDabStroke {
         ex.pickUp(medium.sample(rect, tip))
         // 2. The dab's paint: one colour, gradient paint's colour for this dab, or a colour per pixel across the tip.
         var flow = 1.0
-        if let sampler, gradient == nil {
+        if let effect {
+            let e = sampleEffectAt(effect, d.dab.x, d.dab.y, EffectDabPlace(d))
+            flow = e.alpha
+            ex.setReservoirColor(e.rgb[0], e.rgb[1], e.rgb[2])
+        } else if let sampler, gradient == nil {
             let g = sampler.dab(d.params)
             ex.setReservoirColor(g.rgb[0], g.rgb[1], g.rgb[2])
             flow = g.alpha

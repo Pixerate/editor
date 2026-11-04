@@ -105,9 +105,18 @@ extension PaintEditorController {
         if let color {
             next.color = try parseColor(.string(color))
             next.paint = nil
+            next.effect = nil
         }
         if let paint {
-            if paint == .null { next.paint = nil } else {
+            if paint == .null {
+                next.paint = nil
+                next.effect = nil
+            } else if isPaintEffectPaint(paint) {
+                guard let e = readPaintEffectPaint(paint), effectPaintImage(e) != nil else { throw PaintEditorError("The effect \"\(paint.objectValue?["effect"]?.stringValue ?? "")\" is not rendered yet; render it first (prepareEffectPaints; the update_stroke tool does this).") }
+                next.paint = nil
+                next.effect = e
+            } else {
+                next.effect = nil
                 switch try readStrokePaintPublic(paint) {
                 case .color(let c):
                     next.color = c
@@ -241,7 +250,7 @@ extension PaintEditorController {
     private func drawLiveStroke(_ d: PaintDocumentState, _ plain: PaintLayer, _ surface: TiledSurface, _ st: RecordedStroke) throws -> (surface: TiledSurface, bounds: RasterRect?) {
         var i = PaintStrokeInit(layerId: plain.id, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
         i.fixedBrush = st.brush
-        i.paint = st.paint?.json
+        i.paint = st.effect?.json ?? st.paint?.json
         i.snapToPerspective = false
         i.stencils = false
         i.maskStencils = st.stencils ?? []

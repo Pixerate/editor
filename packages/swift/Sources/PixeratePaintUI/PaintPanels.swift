@@ -185,9 +185,9 @@ public struct PaintToolbarView: View {
                 Button(model.hand == "right" ? "Right-handed" : "Left-handed") { model.toggleHand() }.help("Which hand holds the pen (palm rejection)")
                 Divider().frame(height: 16)
                 Menu("Export") {
-                    Button("PNG image…") { exportFile = model.exportFile(.png) }
-                    Button("PNG at 2× (repainted)…") { exportFile = model.exportFile(.png, scale: 2) }
-                    Button("Photoshop (PSD)…") { exportFile = model.exportFile(.psd) }
+                    Button("PNG image…") { Task { exportFile = await model.exportFile(.png) } }
+                    Button("PNG at 2× (repainted)…") { Task { exportFile = await model.exportFile(.png, scale: 2) } }
+                    Button("Photoshop (PSD)…") { Task { exportFile = await model.exportFile(.psd) } }
                 }
                 .fixedSize()
             }

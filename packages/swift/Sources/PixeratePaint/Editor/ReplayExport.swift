@@ -139,12 +139,17 @@ extension PaintEditorController {
         paper.scale = Swift.min(8, paper.scale * scale)
         target.doc = PaintDocumentState(canvas: target.doc.canvas, paper: paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [])
         target.lighting = lighting
+        // Effect paint: the target renders what it is missing with the same provider; at scale 1 it starts from these pixels.
+        target.effectsProvider = effectsProvider
+        if Int(w) == width && Int(h) == height { target.effectPaintPixels = effectPaintPixels }
         return target
     }
 
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
-    func replayPainting(into target: PaintEditorController, scale s: Double = 1, onStroke: ((Int) throws -> Void)? = nil) throws {
+    func replayPainting(into target: PaintEditorController, scale s: Double = 1, onStroke: ((Int) throws -> Void)? = nil) async throws {
         let source = doc
+        // Strokes are synchronous: render their effect paint first (throws naming an effect that cannot be).
+        try await target.prepareEffectPaints(source.strokes.compactMap(\.effect))
         let m: Affine = [s, 0, 0, s, 0, 0]
         enum Item { case stroke(RecordedStroke), paint(PaintEvent) }
         var items: [(item: Item, at: Double, order: Int)] = []
@@ -171,6 +176,7 @@ extension PaintEditorController {
                             if let sts = st.stencils { v.stencils = sts.map { scaleStencil($0, s) } }
                             return v
                         }
+                        try await target.prepareEffectPaints(list.compactMap(\.effect))
                         try target.replaceLiveStrokes(e.layerId, list)
                     }
                 default:
@@ -182,7 +188,7 @@ extension PaintEditorController {
                 if target.getLayer(st.layerId) == nil { continue }
                 var i = PaintStrokeInit(layerId: st.layerId, color: st.color, seed: st.seed, copies: st.copies ?? [], load: st.load)
                 i.fixedBrush = st.brush
-                i.paint = st.paint?.json
+                i.paint = st.effect?.json ?? st.paint?.json
                 i.snapToPerspective = false
                 i.stencils = false
                 i.maskStencils = (st.stencils ?? []).map { s == 1 ? $0 : scaleStencil($0, s) }
@@ -197,7 +203,7 @@ extension PaintEditorController {
      * strokes, a video project of the frames as stills and the ffmpeg command that renders it.
      * Changes nothing here.
      */
-    public func timeLapse(frames framesWanted: Int? = nil, strokesPerFrame: Int? = nil, maxSide maxSideIn: Double? = nil, fps fpsIn: Double? = nil, holdMs: Double? = nil) throws -> PaintTimeLapse {
+    public func timeLapse(frames framesWanted: Int? = nil, strokesPerFrame: Int? = nil, maxSide maxSideIn: Double? = nil, fps fpsIn: Double? = nil, holdMs: Double? = nil) async throws -> PaintTimeLapse {
         let target = try createReplayTarget(scale: 1)
         let maxSide = Swift.max(32, Swift.min(4096, JS.round(maxSideIn ?? 720)))
         let total = doc.strokes.count
@@ -212,7 +218,7 @@ extension PaintEditorController {
             frames.append(encodePng(f.width, f.height, f.data))
         }
         shoot()
-        try replayPainting(into: target) { i in if i % perFrame == 0 || i == total { shoot() } }
+        try await replayPainting(into: target) { i in if i % perFrame == 0 || i == total { shoot() } }
         let (video, ffmpeg, durationMs) = try timeLapseVideo(frames.count, width, height, fps, holdMs ?? 1500)
         return PaintTimeLapse(fps: fps, width: width, height: height, frames: frames, video: video, ffmpeg: ffmpeg, durationMs: durationMs)
     }
@@ -222,9 +228,9 @@ extension PaintEditorController {
      * grain and fills scaled): more detail instead of upscaled pixels. Layers painted without
      * recorded strokes come out empty. Changes nothing here.
      */
-    public func renderHighRes(scale: Double, paper: Bool? = nil) throws -> (width: Int, height: Int, data: [UInt8]) {
+    public func renderHighRes(scale: Double, paper: Bool? = nil) async throws -> (width: Int, height: Int, data: [UInt8]) {
         let target = try createReplayTarget(scale: scale)
-        try replayPainting(into: target, scale: scale)
+        try await replayPainting(into: target, scale: scale)
         return target.compositePixels(paper: paper)
     }
 }
@@ -233,7 +239,7 @@ extension PaintEditorController {
 func paintReplayExportContentHandlers(_ c: PaintEditorController) -> [String: (JSONObject) async throws -> ToolOutput] {
     var h: [String: (JSONObject) async throws -> ToolOutput] = [:]
     h["export_time_lapse"] = { a in
-        let tl = try c.timeLapse(frames: a["frames"]?.numberValue.map { Int($0) }, maxSide: a["maxSide"]?.numberValue, fps: a["fps"]?.numberValue, holdMs: a["holdMs"]?.numberValue)
+        let tl = try await c.timeLapse(frames: a["frames"]?.numberValue.map { Int($0) }, maxSide: a["maxSide"]?.numberValue, fps: a["fps"]?.numberValue, holdMs: a["holdMs"]?.numberValue)
         let n = tl.frames.count
         var pick: [Int] = []
         for v in [0, n / 3, (2 * n) / 3, n - 1] where !pick.contains(v) { pick.append(v) }
@@ -254,7 +260,7 @@ func paintReplayExportContentHandlers(_ c: PaintEditorController) -> [String: (J
 func paintReplayExportHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] {
     var h: [String: PaintToolHandler] = [:]
     h["export_high_res"] = { a in
-        let img = try c.renderHighRes(scale: a["scale"]?.numberValue ?? 1, paper: a["paper"]?.boolValue)
+        let img = try await c.renderHighRes(scale: a["scale"]?.numberValue ?? 1, paper: a["paper"]?.boolValue)
         let bytes = encodePng(img.width, img.height, img.data)
         return ["mimeType": "image/png", "width": .number(Double(img.width)), "height": .number(Double(img.height)), "bytes": .number(Double(bytes.count)), "data": .string(bytesToBase64(bytes))]
     }

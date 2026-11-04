@@ -6,9 +6,6 @@
     "width": 48,
     "height": 32
   },
-  "skip": {
-    "swift": "Provider effects (effect layers, effect paper and effect paint) are not ported yet (#540)."
-  },
   "steps": [
     {
       "tool": "search_effects",

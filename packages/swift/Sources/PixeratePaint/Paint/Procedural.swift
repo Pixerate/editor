@@ -107,6 +107,9 @@ class MarkStroke: CoverageStroke {
     private let tipTable: [PaintGradientSample]?
     private var pen: PenDab?
     private var penColor = PaintGradientSample()
+    /// Effect paint: each pixel of a mark takes its colour (and alpha) from these pixels.
+    var effect: EffectPaintPixels?
+    private var field: [Float] = []
 
     init(_ brush: PaintBrush, grain: PaperGrain?, paperDepth: Double, seed: Int, copies: [StrokeCopy], paint: PaintGradientSource?) {
         self.brush = brush
@@ -239,9 +242,15 @@ class MarkStroke: CoverageStroke {
                 }
             }
         }
-        let color = markColor(x, y)
-        if let color, color.alpha < 1 { for k in 0..<n { vals[k] = Float(Double(vals[k]) * color.alpha) } }
-        coverage.accumulate(rect, vals, opacity, color: color?.rgb)
+        if let effect {
+            if field.count < n * 3 { field = [Float](repeating: 0, count: n * 3) }
+            sampleEffectField(effect, rect, &vals, &field, pen.map(EffectDabPlace.init))
+            coverage.accumulate(rect, vals, opacity, field: field)
+        } else {
+            let color = markColor(x, y)
+            if let color, color.alpha < 1 { for k in 0..<n { vals[k] = Float(Double(vals[k]) * color.alpha) } }
+            coverage.accumulate(rect, vals, opacity, color: color?.rgb)
+        }
         rects.append(rect)
         dabCount += 1
     }

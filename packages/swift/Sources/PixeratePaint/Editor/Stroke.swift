@@ -40,6 +40,8 @@ struct StrokeSessionInit {
     var paint: PaintGradientSource?
     /// Light paint: the layer's light channel before the stroke; a grey twin of the stroke paints it.
     var light: TiledSurface? = nil
+    /// Effect paint: the effect (recorded with the stroke) and its rendered pixels.
+    var effect: (source: PaintEffectPaint, pixels: EffectPaintPixels)? = nil
 }
 
 public struct PaintStrokeResult {
@@ -120,6 +122,7 @@ final class PaintStrokeSession: PaintTileTarget {
             t.inputFilter = nil
             t.mixerLoad = MixerLoad(reservoir: i.mixerLoad.reservoir != nil ? [g, g, g] : nil, amount: i.mixerLoad.amount, pickup: nil)
             t.paint = i.paint.map { p in var q = p; q.stops = p.stops.map { var st = $0; st.color = hex; return st }; return q }
+            t.effect = i.effect.map { ($0.source, greyPixels($0.pixels, grey)) }
             t.light = nil
             lightTwin = try PaintStrokeSession(t)
         }
@@ -130,16 +133,18 @@ final class PaintStrokeSession: PaintTileTarget {
         if dabByDab {
             dry = nil
         } else if brush.engine == "dab" || brush.engine == "eraser" {
-            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies)
-        } else if brush.engine == "particle" {
-            dry = ParticleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
-        } else if brush.engine == "bristle" {
-            dry = BristleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
+            dry = DryStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, effect: i.effect?.pixels)
+        } else if brush.engine == "particle" || brush.engine == "bristle" {
+            let m: MarkStroke = brush.engine == "particle"
+                ? ParticleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
+                : BristleStroke(brush, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
+            m.effect = i.effect?.pixels
+            dry = m
         } else {
             throw UnportedBrushError(message: "The \(brush.name) brush paints with the \(brush.engine) engine, which the Swift paint editor does not paint with yet.")
         }
         if dabByDab {
-            wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint)
+            wet = PaintDabStroke(brush, target: self, load: i.mixerLoad, grain: i.grain, paperDepth: i.paperDepth, seed: i.seed, copies: copies, paint: i.paint, effect: i.effect?.pixels)
         }
     }
 
