@@ -1929,14 +1929,14 @@
           "core": "`PaintEditorController`, `extendCanvas`, `beginStroke`, `paintStroke`, `compositeTiles`",
           "react": "`<PaintEditor>`, `<PaintCanvas>` & `usePaintEditor`",
           "svelte": "`<PaintEditor>`, `<PaintCanvas>` & `createReactivePaintEditor`",
-          "swift": "`PaintEditorController` (live strokes: `beginStroke`, `PaintLiveStroke`), `PaintEditorView`, `PaintCanvasView` & `PaintEditorModel` (wet paint drying on `extendCanvas`: Planned (#545))"
+          "swift": "`PaintEditorController` (live strokes: `beginStroke`, `PaintLiveStroke`), `PaintEditorView`, `PaintCanvasView` & `PaintEditorModel`"
         },
         {
           "feature": "Paper (generated grain height maps in eleven patterns, seed, scale, repeat or mirror tiling, colour and shading, grain depth, dry and wet tuning, absorption / permeability / roughness for later wet media; a library of twelve papers in six families; `list_papers`, `get_paper`, `set_paper` agent tools)",
           "core": "`PAPER_LIBRARY`, `PaperGrain`, `grainCatch`, `setPaper`",
           "react": "`<PaperPanel>`",
           "svelte": "`<PaperPanel>`",
-          "swift": "`PaperSettings`, `renderPaper`, `PaintPaperPanel` (the wet-media, metallic and backlight sliders: with those features)"
+          "swift": "`PaperSettings`, `renderPaper`, `PaintPaperPanel` (with the wet-media, metallic and backlight sliders)"
         },
         {
           "feature": "Dry Media Brushes (pencil, pastel, charcoal, crayon, chalk, airbrush, marker, ink pen, brush pen, ballpoint, gel pen, fineliner, erasers, blender, smudge, Mixer Brush on the shared engine; paper grain response that catches the peaks at light pressure; pressure, tilt, barrel rotation and velocity dynamics; separate position and pressure smoothing; fixed / follow-stroke / barrel rotation; seeded jitter that replays exactly; `paint_stroke` agent tool)",
@@ -2027,28 +2027,28 @@
           "core": "`WetWorld`, `WetMedium`, `pigmentOf`, `filmPixel` (`/paint`) & `PaintWetLayers`, `WetStrokeDriver`, `tickWet`, `dryPaint`, `wetPaper`, `startWetClock`",
           "react": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
           "svelte": "`<WetPanel>`, the wet tools and wet settings in `<BrushPanel>`'s `<BrushEditor>`, clock and water overlay in `<PaintCanvas>`",
-          "swift": "Planned (#545)"
+          "swift": "✅ `PaintWetLayers` on `WetWorld` (the TypeScript kernel's maths, bit-exact, on one thread), `WetParams`, `WetFlowSpec`, `WetTilt`, `PaintWetOptions`; `PaintEditorController` `tickWet`, `advanceWet`, `dryPaint`, `wetPaper`; `PaintWetPanel` and the water overlay in `PaintCanvasView`, ticked by `PaintEditorModel` `runWetClock`; no WebAssembly or worker threads"
         },
         {
           "feature": "Wet Media GPU Accelerator (Engine B: the wet step and display shading in WebGPU compute shaders on the CPU engine's tile layout, used when `navigator.gpu` is there and at least 16 tiles of 256 px are wet; edits upload only the rows they change, each batch also runs on the GPU, and every stale tile is shaded and read back at once; between strokes the GPU shows up to 16 steps ahead while the CPU works through them; the CPU engine stays the authority, so the display is within 1/255 of it and drying, saving, export and replay are byte-identical with the GPU on or off; capability check with the reason it is unavailable; force CPU; `set_wet_engine` agent tool, `engine` in `get_wet_paint`)",
           "core": "`createWetGpuEngine`, `wetGpuSupport`, `WetWorld.attachGpu` / `displayGpu` (`/paint`) & `setWetEngine`, `wetEngine`, `wetEngineSummary`",
           "react": "Engine select and status in `<WetPanel>`",
           "svelte": "Engine select and status in `<WetPanel>`",
-          "swift": "Planned (#545)"
+          "swift": "CPU only (TypeScript kernel); no GPU: `set_wet_engine` takes `auto` or `off` and reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
         },
         {
           "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
           "core": "`ThickStrokeDriver`, `LitCache`, `lightTile`, `setLighting`, `flattenRelief`, `WET_MEDIUM_PARAMS`",
           "react": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
           "svelte": "`<BrushPanel>` impasto and medium menus, light section in `<PaperPanel>`, Instant dry in `<WetPanel>`",
-          "swift": "Planned (#545)"
+          "swift": "✅ `ThickChannels`, `PaintLighting`, `PaintEditorController` `setLighting`, `reliefOf`, `flattenRelief`, `setInstantDry`; wet oils on `PaintWetLayers`; metallic paper; `PaintLightPanel` (light sliders, Flatten relief)"
         },
         {
           "feature": "Time-lapse & High-Res Replay (the painting repainted from its recorded strokes and events in a headless editor: fills, clears, flattened relief and wet events at their simulation clock, wet strokes point by point at the clock each point was painted, so wet paint flows as it did; time-lapse frames after strokes and while paint flows, as PNGs, a video project of stills and the ffmpeg command from the video editor's export path, zipped; a high-resolution export repainted at 2–8× with brush sizes, grain and wet events scaled; `export_time_lapse`, `export_high_res` agent tools)",
           "core": "`timeLapse`, `renderHighRes`, `replayPainting`, `timeLapseZip`, `timeLapseVideo`",
           "react": "`<PaintToolbar>` Time-lapse and PNG 2×",
           "svelte": "`<PaintToolbar>` Time-lapse and PNG 2×",
-          "swift": "✅ `PaintEditorController` `timeLapse` (`PaintTimeLapse`) and `renderHighRes`, PNG 2× in the Export menu (wet events and flattened relief: Planned (#545))"
+          "swift": "✅ `PaintEditorController` `timeLapse` (`PaintTimeLapse`) and `renderHighRes`, with wet events, wet strokes at their clock and flattened relief; PNG 2× in the Export menu"
         },
         {
           "feature": "Procedural, Bristle & Sticker Brushes (particle brushes: spring-and-mass strings, springs, orbits, flow particles, elastic strands that stretch and snap back and fuzzy winding strands, drawn as dots, lines, bead sequences or filled ribbons between neighbouring paths (seamless, telescoped coverage); sine waves on any kind (amplitude, wavelength, speed by stroke time, phase jitter); dots and beads textured with up to four sticker stamps in turn or at random, turned by motion, at random or to the tip; `set_brush` `marks` and `tip.stamps` agent settings; bristle brushes whose bristles splay with pressure, flatten with tilt, bend at turns and run dry one by one; sticker spray of any sticker from the sticker library (the editor's procedural textured stamps by default, or a host's: `setStickersProvider`, refs `provider:id`; art loaded once and cached, tintable art in the paint colour; bare stamps in old brushes and documents read as `editor:` refs and paint the same pixels) that stay editable objects on a sticker layer: move, turn, resize, recolour, restamp, reorder, delete; placed exactly, picked by shape and dragged with the Stickers tool, each drag one undo step; all seeded and replayable; `add_stickers`, `sticker_at`, `list_stickers`, `update_sticker`, `arrange_stickers`, `remove_stickers` agent tools)",
@@ -2062,7 +2062,7 @@
           "core": "`doc.light`, `LightCache`, `computeSpill`, `lightTwinBrush`, `setLightSpill`, `clearLight`, `lightOf`",
           "react": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
           "svelte": "Light, Rim and Clarity sliders in `<BrushPanel>`, a Light section (spill, Clear light) in `<PaintLayersPanel>`",
-          "swift": "Planned (#545)"
+          "swift": "✅ `PaintEditorController` `lightOf`, `setLightSpill`, `clearLight`; glow with rim and clarity, spill, wet light, backlit paper; `PaintLightSpillPanel`; no Light, Rim or Clarity sliders in `PaintBrushPanel` yet"
         },
         {
           "feature": "Live stroke layers (a layer drawn from its strokes, so each stroke's brush, settings, colour, paint, seed and points stay editable; redraws exactly and only where an edit changes; reorder, delete, rasterize; select and drag on the canvas; saved, undone and replayed; `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes`, `convert_to_stroke_layer`, `rasterize_stroke_layer`, `list_strokes {live}`, `add_layer {type: strokes}` agent tools)",
@@ -2090,7 +2090,7 @@
           "core": "`setPaperEffect`, `addEffectLayer`, `applyLightEffect`, `setEffectPaint`, `createPaintEffectsToolProvider` (`/paint-editor`)",
           "react": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
           "svelte": "`<PaintEffectsPanel>`, `usePaintEffectsTools` (`/paint-editor`)",
-          "swift": "✅ `EffectProvider`, `FakeEffectProvider`, `createPaintEffectsToolProvider`, `PaintEffectPaint`: effect paper, effect layers, fills, light baked onto dried paint, effect paint for dab, particle, bristle and Mixer Brush strokes, saved and replayed; no effects panel in `PaintEditorView`, live playback in the view or export at a moment yet; wet, impasto and sticker effect paint: Planned (#545)"
+          "swift": "✅ `EffectProvider`, `FakeEffectProvider`, `createPaintEffectsToolProvider`, `PaintEffectPaint`: effect paper, effect layers, fills, light baked onto dried paint, effect paint for dab, particle, bristle, Mixer Brush, wet and impasto strokes, saved and replayed; no effects panel in `PaintEditorView`, live playback in the view or export at a moment yet; sticker effect paint: Planned (#545)"
         }
       ]
     },
