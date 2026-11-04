@@ -6,6 +6,9 @@
     "width": 48,
     "height": 32
   },
+  "skip": {
+    "swift": "The Swift paint editor is not ported yet (#540)."
+  },
   "steps": [
     {
       "tool": "add_layer",
