@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { BRUSH_PRESETS, brushEditorSections, brushLibraryGroups, CANVAS_PROFILE, IMAGE_PROFILE, PAINT_PROFILE, resolveBrush, setBrushEditorValue, type Brush, type BrushEditorControl } from '../src/brushes';
+import {
+  BRUSH_PRESETS,
+  brushEditorScope,
+  brushEditorSections,
+  brushLibraryGroups,
+  CANVAS_PROFILE,
+  checkBrush,
+  checkBrushEdit,
+  createBrushLibrary,
+  createBrushLibraryToolProvider,
+  IMAGE_PROFILE,
+  newBrushFor,
+  PAINT_PROFILE,
+  resolveBrush,
+  saveBrushEdit,
+  setBrushEditorValue,
+  VECTOR_PROFILE,
+  type Brush,
+  type BrushEditorControl,
+} from '../src/brushes';
+import { ToolRegistry } from '../src/tools';
 
 const preset = (id: string) => BRUSH_PRESETS.find((b) => b.id === id)!;
 const control = (brush: Brush, path: string, profile = PAINT_PROFILE): BrushEditorControl | undefined => brushEditorSections(brush, profile).flatMap((s) => s.controls).find((c) => c.path === path);
@@ -27,14 +47,115 @@ describe('brushEditorSections', () => {
     expect(brushEditorSections(preset('blender')).find((s) => s.id === 'behaviour')!.title).toBe('Blender');
   });
 
-  it("leaves out what the host refuses and notes what it paints without", () => {
+  it('lists only what the host uses: sections, controls and options', () => {
     const canvas = brushEditorSections(preset('pencil-6b'), CANVAS_PROFILE);
     expect(canvas.map((s) => s.id)).not.toContain('marks');
     expect(canvas.map((s) => s.id)).not.toContain('light');
     expect(control(preset('pencil-6b'), 'behaviour.surface', CANVAS_PROFILE)).toBeUndefined();
     expect(control(preset('pencil-6b'), 'kind', CANVAS_PROFILE)).toBeUndefined();
-    const image = brushEditorSections(preset('pencil-6b'), IMAGE_PROFILE);
-    expect(image.find((s) => s.id === 'behaviour')!.controls.find((c) => c.path === 'behaviour.grain')!.note).toBeTruthy();
+    // Canvas strokes carry no timing: no velocity control. The image editor paints without grain.
+    expect(control(preset('pencil-6b'), 'dynamics.velocitySize', CANVAS_PROFILE)).toBeUndefined();
+    expect(control(preset('pencil-6b'), 'dynamics.velocitySize')).toBeDefined();
+    expect(control(preset('pencil-6b'), 'dynamics.tiltSize', CANVAS_PROFILE)).toBeDefined();
+    expect(control(preset('pencil-6b'), 'behaviour.grain', IMAGE_PROFILE)).toBeUndefined();
+    expect(control(preset('pencil-6b'), 'behaviour.grain', CANVAS_PROFILE)).toBeDefined();
+    // Enum options: tip shapes and tools the host has.
+    expect((control(preset('pencil-6b'), 'tip.shape', CANVAS_PROFILE) as { options: Array<{ value: string }> }).options.map((o) => o.value)).toEqual(['round', 'flat', 'chisel']);
+    expect((control(preset('eraser-soft'), 'tool', IMAGE_PROFILE) as { options: Array<{ value: string }> }).options.map((o) => o.value)).toEqual(['eraser']);
+    // Light brushes paint as plain colour in vector strokes: no light controls there.
+    expect(brushEditorSections(preset('highlighter'), VECTOR_PROFILE).map((s) => s.id)).not.toContain('light');
+  });
+
+  it("gives what the host can't use no control, so an edit keeps it", () => {
+    const wash = preset('watercolor-wash');
+    const paths = brushEditorSections(wash, CANVAS_PROFILE).flatMap((s) => s.controls.map((c) => c.path));
+    expect(paths).not.toContain('behaviour.wet.water');
+    expect(paths).not.toContain('behaviour.wet.medium');
+    expect(paths).toContain('tip.size');
+    const bristle = brushEditorSections(preset('bristle-round'), CANVAS_PROFILE).flatMap((s) => s.controls.map((c) => c.path));
+    expect(bristle).not.toContain('tip.shape');
+    expect(bristle).not.toContain('tip.bristle.count');
+    // Changing what is shown leaves the rest as it was.
+    const edited = setBrushEditorValue(wash, 'tip.size', 33).brush;
+    expect(edited.behaviour).toEqual(wash.behaviour);
+  });
+});
+
+describe('brushEditorScope', () => {
+  it("names the facets the host can't use", () => {
+    const lit: Brush = { ...preset('ink-pen'), id: 'lit-ink', name: 'Lit ink', light: { amount: 0.6 }, behaviour: { surface: 'wet' }, dynamics: { velocitySize: 0 } };
+    expect(brushEditorScope(lit, CANVAS_PROFILE)).toEqual({
+      hidden: [
+        { facet: 'behaviour.surface', label: 'wet behaviour' },
+        { facet: 'light', label: 'light' },
+      ],
+      note: "Also has wet behaviour and light, which Canvas can't use.",
+    });
+    expect(brushEditorScope(preset('ink-pen'), CANVAS_PROFILE).note).toBe("Also has velocity dynamics, which Canvas can't use.");
+    expect(brushEditorScope(lit, PAINT_PROFILE)).toEqual({ hidden: [], note: null });
+    expect(brushEditorScope(preset('bristle-round'), IMAGE_PROFILE).note).toMatch(/a bristle tip/);
+  });
+});
+
+describe('editing a brush in a limited host', () => {
+  const lit: Brush = { ...preset('ink-pen'), id: 'lit-ink', name: 'Lit ink', light: { amount: 0.6, glow: true } };
+
+  it('keeps facets the original had, and refuses ones the edit adds', () => {
+    const smaller = setBrushEditorValue(lit, 'tip.size', 4).brush;
+    expect(checkBrushEdit(lit, smaller, CANVAS_PROFILE)).toMatchObject({ ok: true, kept: [{ facet: 'light' }] });
+    expect(checkBrushEdit(null, smaller, CANVAS_PROFILE).ok).toBe(false);
+    const wet = { ...smaller, behaviour: { surface: 'wet' as const } };
+    expect(checkBrushEdit(lit, wet, CANVAS_PROFILE)).toMatchObject({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ facet: 'behaviour.surface', severity: 'error' })]) });
+  });
+
+  it('saves to the shared library: a saved brush in place, keeping its light', async () => {
+    const library = createBrushLibrary();
+    await library.save(lit);
+    const r = await saveBrushEdit(library, { original: lit, brush: setBrushEditorValue(lit, 'tip.size', 4).brush, profile: CANVAS_PROFILE });
+    expect(r.kept.map((i) => i.facet)).toEqual(['light']);
+    expect((await library.get('lit-ink'))!.brush).toMatchObject({ tip: { size: 4 }, light: { amount: 0.6, glow: true } });
+  });
+
+  it('saves a copy of a built-in, and "save as" under a new name', async () => {
+    const library = createBrushLibrary();
+    const pencil = preset('pencil-hb');
+    const copy = await saveBrushEdit(library, { original: pencil, brush: setBrushEditorValue(pencil, 'tip.size', 7).brush, profile: IMAGE_PROFILE });
+    expect(copy.brush).toMatchObject({ id: 'hb-pencil-copy', name: 'HB pencil copy', tip: { size: 7 } });
+    expect(library.isBuiltin('pencil-hb')).toBe(true);
+    const again = await saveBrushEdit(library, { original: pencil, brush: pencil, profile: IMAGE_PROFILE });
+    expect(again.brush.id).toBe('hb-pencil-copy-2');
+    const named = await saveBrushEdit(library, { original: copy.brush, brush: copy.brush, profile: IMAGE_PROFILE, name: 'Sketch pencil' });
+    expect(named.brush).toMatchObject({ id: 'sketch-pencil', name: 'Sketch pencil' });
+  });
+
+  it('makes a new brush of only what the host uses, which passes its check', async () => {
+    const fresh = newBrushFor(CANVAS_PROFILE, { ...preset('watercolor-wash'), dynamics: { velocitySize: 0.4 } });
+    expect(fresh).toMatchObject({ id: 'new-brush', name: 'New brush', kind: 'mark' });
+    expect(checkBrush(fresh, CANVAS_PROFILE)).toEqual({ ok: true, issues: [] });
+    expect(fresh.behaviour?.surface).toBeUndefined();
+    expect(checkBrush(newBrushFor(VECTOR_PROFILE, preset('highlighter')), VECTOR_PROFILE).issues).toEqual([]);
+    expect(newBrushFor(CANVAS_PROFILE, preset('smudge'))).toMatchObject({ kind: 'mark', tip: { shape: 'round' } });
+    const library = createBrushLibrary();
+    await expect(saveBrushEdit(library, { original: null, brush: { ...fresh, light: { amount: 1 } }, profile: CANVAS_PROFILE })).rejects.toThrow(/Canvas can't use this brush: light/);
+    expect((await saveBrushEdit(library, { original: null, brush: fresh, profile: CANVAS_PROFILE })).brush.id).toBe('new-brush');
+  });
+
+  it('agents follow the same rule through update_brush and create_brush', async () => {
+    const library = createBrushLibrary();
+    await library.save(lit);
+    const tools = new ToolRegistry();
+    tools.register(createBrushLibraryToolProvider(library, { profile: CANVAS_PROFILE, id: 'canvasbrushes' }));
+    const ok = await tools.callTool('canvasbrushes__update_brush', { id: 'lit-ink', tip: { size: 5 } });
+    expect(ok.isError).toBeFalsy();
+    expect(ok.structuredContent).toMatchObject({ changed: ['tip.size'], kept: [{ facet: 'light', severity: 'error' }] });
+    expect((await library.get('lit-ink'))!.brush.light).toEqual({ amount: 0.6, glow: true });
+    const adds = await tools.callTool('canvasbrushes__update_brush', { id: 'lit-ink', behaviour: { surface: 'wet' } });
+    expect(adds.isError).toBe(true);
+    expect((adds.content[0] as { text: string }).text).toMatch(/Canvas can't use this brush: behaviour\.surface: Canvas has no wet surface/);
+    expect((await library.get('lit-ink'))!.brush.behaviour?.surface).toBeUndefined();
+    const created = await tools.callTool('canvasbrushes__create_brush', { id: 'new-lit', name: 'New lit', basedOn: 'lit-ink' });
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as { text: string }).text).toMatch(/light: Canvas can't paint light paint/);
   });
 });
 

@@ -38,8 +38,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  swift:
-    name: Swift (macOS and iOS)
+  # Three jobs in parallel: the wall time is the slowest one, not the sum. Tests build with -O
+  # (and testability): the debug-built wet and conformance code ran ~7x slower than the extra
+  # compile time it saves (#533).
+  macos:
+    name: Swift (macOS)
     runs-on: macos-latest
     timeout-minutes: 30
 
@@ -62,24 +65,43 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Build (macOS)
-        run: swift build
-
-      - name: Build the demo app (macOS)
-        # apps/swift-demo: its own package, on the root package by relative path.
-        run: swift build --package-path apps/swift-demo
-
       - name: Test (macOS)
-        # Writes the conformance summary (passed / failed / skipped scenarios) to the job summary.
-        run: swift test
+        # Builds every target and test optimised, then runs the tests. Writes the conformance summary
+        # (passed / failed / skipped scenarios) to the job summary.
+        run: swift test -Xswiftc -O -Xswiftc -enable-testing
+
+  ios:
+    name: Swift (iOS simulator)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Test (iOS simulator)
         # The Pixerate-Package scheme builds and tests every target, PixeratePaintUI and its tests included.
         run: |
+          xcodebuild -version
           udid=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           devices = json.load(sys.stdin)["devices"]
           print(next(d["udid"] for runtime, ds in sorted(devices.items(), reverse=True) if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))
           ')
           echo "Simulator: $udid"
-          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet
+          xcodebuild test -scheme Pixerate-Package -destination "id=$udid" -quiet SWIFT_OPTIMIZATION_LEVEL=-O ENABLE_TESTABILITY=YES
+
+  demo:
+    name: Swift (demo app)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build the demo app (macOS)
+        # apps/swift-demo: its own package, on the root package by relative path.
+        run: |
+          swift --version
+          swift build --package-path apps/swift-demo

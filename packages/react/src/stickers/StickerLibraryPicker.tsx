@@ -15,9 +15,12 @@ export interface StickerLibraryPickerProps {
   className?: string;
 }
 
+/** A sticker's tooltip: name, ref, licence and credit, AI-generated, dark variant. */
+const tooltip = (it: StickerBrowserItem) => `${it.name} (${it.ref}) · ${it.licence.name}${it.licence.attribution ? ` · ${it.licence.attribution}` : ''}${it.aiGenerated ? ' · AI-generated' : ''}${it.variants?.includes('dark') ? ' · light and dark' : ''}`;
+
 /**
- * Stickers from a sticker library: searchable, by category and a page at a time, with each
- * sticker's licence in its tooltip. Clicking one calls `onPick`. The same picker serves the paint
+ * Stickers from a sticker library: searchable, by category or collection and a page at a time,
+ * with each sticker's licence in its tooltip and an AI label on AI-generated art. Clicking one calls `onPick`. The same picker serves the paint
  * editor's sticker brush and inserting stickers into the vector, image and canvas editors.
  */
 export const StickerLibraryPicker: React.FC<StickerLibraryPickerProps> = ({ provider, selected = [], onPick, label = 'Stickers', footer, className }) => {
@@ -43,6 +46,16 @@ export const StickerLibraryPicker: React.FC<StickerLibraryPickerProps> = ({ prov
             ))}
           </select>
         )}
+        {s.collections.length > 0 && (
+          <select aria-label="Sticker collection" value={s.collection} onChange={(e) => void browser.setCollection(e.target.value)} className="rounded bg-slate-800 px-1 py-0.5">
+            <option value="">All collections</option>
+            {s.collections.map((c) => (
+              <option key={c.id} value={c.id} title={c.description}>
+                {c.name} ({c.count})
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto" role="group" aria-label={label}>
         {s.items.map((it) => {
@@ -52,12 +65,17 @@ export const StickerLibraryPicker: React.FC<StickerLibraryPickerProps> = ({ prov
               key={it.ref}
               type="button"
               aria-pressed={on}
-              title={`${it.name} (${it.ref}) · ${it.licence.name}${it.licence.attribution ? ` · ${it.licence.attribution}` : ''}`}
+              title={tooltip(it)}
               className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${on ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}
               onClick={() => onPick(it)}
             >
               {it.thumbnail && <img src={it.thumbnail} alt="" className="h-4 w-4" />}
               {it.name}
+              {it.aiGenerated && (
+                <span className="rounded bg-slate-700 px-0.5 text-[8px] text-slate-200" aria-label="AI-generated">
+                  AI
+                </span>
+              )}
             </button>
           );
         })}

@@ -10236,7 +10236,7 @@
         {
           "name": "find_stickers",
           "title": "Find stickers",
-          "description": "Searches the sticker library (the editor's own stamps unless the host plugged in its own): words in the name, tags, category or description, filtered by category, tags and commercial licence, a small page at a time. Returns each sticker's ref (provider:id, for the tools that spray or place stickers), name, category, tags, natural width and height, formats, whether it is tintable (recoloured to the paint colour) and its licence, plus total and next (pass as after for the next page) and the categories. Changes nothing.",
+          "description": "Searches the sticker library (the editor's own stamps unless the host plugged in its own): words in the name, tags, category or description, filtered by category, collection, tags and commercial licence, a small page at a time. Returns each sticker's ref (provider:id, for the tools that spray or place stickers), name, category, tags, natural width and height, formats, whether it is tintable (recoloured to the paint colour), its licence, aiGenerated when the provider says whether AI made the art, variants (light, and dark when it has art for dark backgrounds) and its collection, plus total and next (pass as after for the next page), the categories and the collections. Changes nothing.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -10248,6 +10248,11 @@
               "category": {
                 "type": "string",
                 "description": "Only this category (the result lists them)."
+              },
+              "collection": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Only this collection id (the result lists them; default every collection)."
               },
               "tags": {
                 "type": "array",
@@ -10286,7 +10291,7 @@
         {
           "name": "describe_sticker",
           "title": "Describe a sticker",
-          "description": "Everything about one sticker by ref (from find_stickers): name, category, tags, natural size, formats, tintable, licence (with any attribution it asks for), dominant colours, variants and its outline as SVG path data (silhouette). An unknown ref is refused with the closest refs. Changes nothing.",
+          "description": "Everything about one sticker by ref (from find_stickers): name, category, collection, tags, natural size, formats, tintable, licence (with any attribution it asks for), aiGenerated, variants (light / dark), dominant colours and its outline as SVG path data (silhouette). An unknown ref is refused with the closest refs. Changes nothing.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -13970,7 +13975,7 @@
         {
           "name": "update_brush",
           "title": "Update a brush",
-          "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush; a refused change saves nothing. One change. Returns the brush, the leaf paths changed, problems and warnings.",
+          "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.",
           "inputSchema": {
             "type": "object",
             "properties": {

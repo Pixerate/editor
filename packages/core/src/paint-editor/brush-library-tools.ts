@@ -5,13 +5,26 @@
 
 import { PAINT_PROFILE } from '../brushes/profiles';
 import { resolveBrush } from '../brushes/resolve';
-import { createBrushLibraryToolProvider, type BrushLibraryToolProviderOptions } from '../brushes/tools';
+import { createBrushLibraryToolProvider, type BrushLibraryToolProviderOptions, type BrushPreviewRenderer } from '../brushes/tools';
 import type { AgentToolProvider } from '../tools/registry.js';
 import { bytesToBase64, encodePng } from '../raster/png';
 import type { PaintEditorController } from './controller';
+import { DEFAULT_PAPER, type PaperSettings } from './paper';
 import { renderBrushThumbnail } from './thumbnails';
 
 export type PaintBrushLibraryToolProviderOptions = Omit<BrushLibraryToolProviderOptions, 'renderPreview'>;
+
+/**
+ * A brush preview renderer (`BrushPreviewRenderer`, as `preview_brush` and `BrushLibraryEditor`
+ * take) that paints the test stroke with the paint engine on `paper` (read on every call; default
+ * the default paper). Any brush the paint editor renders, so also the image editor's.
+ */
+export function paintBrushPreviewRenderer(paper: () => PaperSettings = () => DEFAULT_PAPER): BrushPreviewRenderer {
+  return (brush, { width, height, color }) => {
+    const t = renderBrushThumbnail(resolveBrush(brush), { paper: paper(), width, height, color: color.toLowerCase() });
+    return { data: bytesToBase64(encodePng(t.width, t.height, t.data)), mimeType: 'image/png' };
+  };
+}
 
 /**
  * The brush library tools for a paint editor (`@pixerate/editor/brushes`' provider on the
@@ -24,9 +37,6 @@ export function createPaintBrushLibraryToolProvider(controller: PaintEditorContr
     profile: PAINT_PROFILE,
     stickers: () => controller.stickers.provider,
     ...options,
-    renderPreview: (brush, { width, height, color }) => {
-      const t = renderBrushThumbnail(resolveBrush(brush), { paper: controller.getState().document.paper, width, height, color: color.toLowerCase() });
-      return { data: bytesToBase64(encodePng(t.width, t.height, t.data)), mimeType: 'image/png' };
-    },
+    renderPreview: paintBrushPreviewRenderer(() => controller.getState().document.paper),
   });
 }

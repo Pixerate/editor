@@ -8,7 +8,7 @@
 
 import type { Command } from '../history/types.js';
 import { StickerError } from '../stickers/errors.js';
-import type { StickerLicence, StickerRef } from '../stickers/types.js';
+import type { StickerLicence, StickerRef, StickerVariant } from '../stickers/types.js';
 import type { StickerInsertHost, StickerPlacement } from '../stickers/tools.js';
 import { SHAPE_DATA_KEY, SHAPE_NODE_TYPE } from './shapeNodes.js';
 import type { PathShape } from './shapeGeometry.js';
@@ -18,6 +18,8 @@ import type { CanvasNode } from './types.js';
 export interface CanvasStickerData {
   ref: StickerRef;
   licence: StickerLicence;
+  /** `dark` when it was placed in its dark variant. */
+  variant?: StickerVariant;
 }
 
 export interface CanvasStickerHostOptions<TNode extends CanvasNode = CanvasNode> {
@@ -29,6 +31,8 @@ export interface CanvasStickerHostOptions<TNode extends CanvasNode = CanvasNode>
   createId?: () => string;
   /** The default centre (default the middle of the nodes' bounds, or 0, 0). */
   defaultCentre?: () => { x: number; y: number };
+  /** The canvas or theme is dark: stickers that have a dark variant use it. */
+  dark?: () => boolean;
 }
 
 /** The shape node for a placed sticker (top-left at its box), or a refusal naming what is missing. */
@@ -38,7 +42,7 @@ export function stickerCanvasNode(placement: StickerPlacement, id: string): Canv
   if (!silhouette) throw new StickerError('unsupported_format', `"${placement.ref}" has no outline (silhouette); the canvas places stickers by their outline. Pick one whose describe_sticker lists a silhouette.`);
   const fill = placement.colour ?? description.colours?.[0] ?? '#1f2937';
   const shape: PathShape = { kind: 'path', d: silhouette, viewBox: [0, 0, description.width, description.height], fillRule: 'evenodd', fill };
-  const sticker: CanvasStickerData = { ref: placement.ref, licence: description.licence };
+  const sticker: CanvasStickerData = { ref: placement.ref, licence: description.licence, ...(placement.variant === 'dark' ? { variant: 'dark' } : {}) };
   return {
     id,
     type: SHAPE_NODE_TYPE,
@@ -63,6 +67,7 @@ export function createCanvasStickerHost<TNode extends CanvasNode = CanvasNode>(o
   return {
     noun: 'shape node',
     format: 'svg',
+    ...(options.dark ? { dark: options.dark } : {}),
     defaultCentre: () => {
       if (options.defaultCentre) return options.defaultCentre();
       const nodes = options.getNodes();

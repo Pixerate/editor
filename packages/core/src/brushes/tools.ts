@@ -13,7 +13,7 @@ import type { JsonSchema } from '../tools/schema';
 import { BrushLibraryError, closest, type BrushLibrary, type BrushLibraryEntry } from './library';
 import { normalizeBrushSpec } from './normalize';
 import { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch } from './patch';
-import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, type BrushCheck, type BrushHostProfile } from './profiles';
+import { BRUSH_HOST_PROFILES, checkBrush, degrade, PAINT_PROFILE, withKeptIssues, type BrushCheck, type BrushHostProfile } from './profiles';
 import { resolveCategory, resolveEngine } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
@@ -120,8 +120,11 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     }
     return { ok: !issues.some((i) => i.severity === 'error'), issues };
   };
-  /** Normalises and checks a brush for this host, then stores it. */
-  const store = async (raw: Record<string, unknown>, overwrite: boolean) => {
+  /**
+   * Normalises and checks a brush for this host, then stores it. With `original` (an update), what
+   * it already had that this host can't use is kept, not refused: only new refusals refuse it.
+   */
+  const store = async (raw: Record<string, unknown>, overwrite: boolean, original?: Brush) => {
     const problems: string[] = [];
     let brush: Brush;
     try {
@@ -129,7 +132,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     } catch (e) {
       throw new BrushLibraryError('invalid', (e as Error).message);
     }
-    const check = await checkFor(brush, profile);
+    const check = withKeptIssues(await checkFor(brush, profile), original ? await checkFor(original, profile) : null);
     if (!check.ok) throw new BrushLibraryError('invalid', refusal(check, profile));
     const saved = await library.save(brush, { overwrite });
     return { ...saved, problems, check };
@@ -281,7 +284,7 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     {
       name: 'update_brush',
       title: 'Update a brush',
-      description: `Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush; a refused change saves nothing. One change. Returns the brush, the leaf paths changed, problems and warnings.`,
+      description: `Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -299,8 +302,8 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
         if (e.builtin) throw new BrushLibraryError('builtin', `"${id}" is a built-in brush and can't be changed; duplicate_brush makes a copy you can change.`);
         const base = copy(e.brush) as unknown as Record<string, unknown>;
         for (const k of (unset as string[] | undefined) ?? []) delete base[k];
-        const saved = await store(merge(base, { ...patch, id }), true);
-        return { id, brush: saved.brush, changed: changedPaths(e.brush, saved.brush), problems: saved.problems, warnings: warnings(saved.check) };
+        const saved = await store(merge(base, { ...patch, id }), true, e.brush);
+        return { id, brush: saved.brush, changed: changedPaths(e.brush, saved.brush), problems: saved.problems, warnings: warnings(saved.check), ...(saved.check.kept.length ? { kept: saved.check.kept } : {}) };
       },
     },
     {

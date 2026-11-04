@@ -18,7 +18,7 @@ import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, t
 import { hash2, rand01 } from './noise';
 import { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
 import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
-import type { StickerRef } from '../stickers/types';
+import type { StickerRef, StickerVariant } from '../stickers/types';
 import { sampleArt, type StickerArt, type StickerArtLookup } from './sticker-art';
 
 export { STAMP_KINDS, stampCoverage, type StampKind } from '../stickers/stamps';
@@ -46,6 +46,11 @@ export interface Sticker {
   opacity: number;
   /** Texture seed. */
   seed: number;
+  /**
+   * `dark` when it is drawn in its sticker's dark variant (sprayed or placed while the editor's
+   * colour scheme was dark and the sticker has one); absent for the light art.
+   */
+  variant?: StickerVariant;
 }
 
 function hexRgb(hex: string): [number, number, number] {
@@ -82,7 +87,7 @@ export function stickerStamp(s: Pick<Sticker, 'ref' | 'stamp'>): StampKind | nul
 export function drawSticker(medium: TileMedium, s: Sticker, art?: StickerArtLookup): RasterRect {
   const kind = stickerStamp(s);
   if (!kind) {
-    const a = art?.(s.ref);
+    const a = art?.(s.ref, s.variant);
     return a ? drawArtSticker(medium, s, a) : stickerRect(s);
   }
   const rect = stickerRect(s);
@@ -193,6 +198,8 @@ export interface StickerSprayInit {
   effect?: EffectPaintPixels | null;
   /** Loaded art for provider stickers; stickers without art yet are skipped (see `skipped`). */
   art?: StickerArtLookup;
+  /** The variant to spray a provider sticker in (default `light`); recorded on each sticker. */
+  variant?: (ref: StickerRef) => StickerVariant;
 }
 
 /** A sticker-spray stroke: drops stickers along the path and draws them as it goes. */
@@ -264,7 +271,8 @@ export class StickerSpray {
     }
     const ref = st.stamps[Math.floor(rand01(seed, i, 57) * st.stamps.length)] ?? 'editor:dot';
     const stamp = stickerStamp({ ref });
-    if (!stamp && !this.init.art?.(ref)) {
+    const variant = stamp ? 'light' : (this.init.variant?.(ref) ?? 'light');
+    if (!stamp && !this.init.art?.(ref, variant)) {
       this.skipped.add(ref);
       this.next++;
       return;
@@ -280,6 +288,7 @@ export class StickerSpray {
       color: st.colorJitter > 0 ? jitterColor(base.color, st.colorJitter, seed, i) : base.color,
       opacity: Math.round(Math.min(1, d.opacity * this.init.brush.tip.opacity * base.alpha) * 1000) / 1000,
       seed: Math.floor(rand01(seed, i, 65) * 1e9),
+      ...(variant === 'dark' ? { variant } : {}),
     };
     this.stickers.push(sticker);
     rects.push(drawSticker(this.medium, sticker, this.init.art));
@@ -404,7 +413,7 @@ export function stickerAt(stickers: readonly Sticker[], x: number, y: number, ar
       if (stampCoverage(kind, u, v, s.seed) > 0.25) return s;
       continue;
     }
-    const pic = art?.(s.ref);
+    const pic = art?.(s.ref, s.variant);
     if (!pic) return s;
     const scale = Math.max(pic.width, pic.height) / 2;
     if (sampleArt(pic, u * scale + pic.width / 2, v * scale + pic.height / 2, [0, 0, 0, 0])[3] > 0.25) return s;

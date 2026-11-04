@@ -137,8 +137,14 @@ swift test
 ```
 
 `swift test` builds without optimisation, where the wet kernel takes a fraction of a second per
-256 px tile per step. For long wet runs (extra scenarios through `PIXERATE_PAINT_PROBE_FILES`),
-test an optimised build: `swift test -c release -Xswiftc -enable-testing --filter PaintScenarioProbeTests`.
+256 px tile per step. CI tests an optimised build, which compiles a little slower and runs the
+suite about 7× faster; do the same locally with `swift test -Xswiftc -O -Xswiftc -enable-testing`
+(`-enable-testing` keeps `@testable import` working; `assert` checks are off, preconditions stay).
+For long wet runs (extra scenarios through `PIXERATE_PAINT_PROBE_FILES`), use it with
+`--filter PaintScenarioProbeTests`.
+
+The Swift workflow runs three jobs in parallel: macOS (the generated-code check and the tests),
+the iOS simulator (`xcodebuild test`, also optimised) and the demo app's build.
 
 `Tests/PixerateCoreTests/Fixtures/core-vectors.json` is written by the TS core
 (`packages/core/tests/swift-vectors.test.ts`): RNG outputs, number formatting, `JSON.stringify`

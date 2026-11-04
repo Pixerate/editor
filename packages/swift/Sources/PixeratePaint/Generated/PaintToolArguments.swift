@@ -1956,6 +1956,8 @@ public struct FindStickersArguments: Sendable {
     public var query: String?
     /// Only this category (the result lists them).
     public var category: String?
+    /// Only this collection id (the result lists them; default every collection).
+    public var collection: String?
     /// Only stickers with every one of these tags.
     public var tags: [String]?
     /// true: only stickers whose licence allows commercial use.
@@ -1969,6 +1971,7 @@ public struct FindStickersArguments: Sendable {
     public init(_ args: JSONObject) throws {
         query = try args.string("query")
         category = try args.string("category")
+        collection = try args.string("collection")
         tags = try args.strings("tags")
         commercial = try args.bool("commercial")
         limit = try args.integer("limit")

@@ -6,13 +6,16 @@
  * PNG art (`data:` URLs) is decoded here, in any environment. SVG and `https:` images need a
  * rasteriser: the browser's (`createImageBitmap` and `OffscreenCanvas`) by default, or the
  * host's (`PaintEditorOptions.rasterizeSticker`).
+ *
+ * A sticker with a dark variant is kept in each variant asked for: `ensure(…, dark)` loads the dark
+ * art when the sticker has it, and sprayed stickers record the variant they were drawn in.
  */
 
 import { decodePng, parseDataUrl } from '../raster/png';
 import { describeStickerRef } from '../stickers/tools';
-import { editorStampOf, stickerIdFor } from '../stickers/helpers';
+import { editorStampOf, stickerIdFor, stickerVariantFor } from '../stickers/helpers';
 import { StickerError } from '../stickers/errors';
-import type { StickerAsset, StickerProvider, StickerRef } from '../stickers/types';
+import type { StickerAsset, StickerDescription, StickerProvider, StickerRef, StickerVariant } from '../stickers/types';
 
 /** Rasterised sticker art (straight RGBA) and whether to recolour it. */
 export interface StickerArt {
@@ -23,8 +26,8 @@ export interface StickerArt {
   tintable: boolean;
 }
 
-/** The art for a ref, when it has loaded. */
-export type StickerArtLookup = (ref: StickerRef) => StickerArt | undefined;
+/** The art for a ref in a variant (default `light`), when it has loaded. */
+export type StickerArtLookup = (ref: StickerRef, variant?: StickerVariant) => StickerArt | undefined;
 
 /** Turns a sticker asset into RGBA at about `size` px on its longest side. */
 export type StickerRasterizer = (asset: StickerAsset, size: number) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
@@ -63,53 +66,84 @@ export const defaultStickerRasterizer: StickerRasterizer = async (asset, size) =
   return { width: w, height: h, data: img.data };
 };
 
-/** Loaded sticker art by ref, with the state of each load. */
+/** Loaded sticker art by ref and variant, with the state of each load. */
 export class StickerArtCache {
-  private readonly entries = new Map<StickerRef, Entry>();
+  private readonly entries = new Map<string, Entry>();
+  /** Descriptions by ref (their variants pick the art), shared by the loads that need them. */
+  private readonly descriptions = new Map<StickerRef, Promise<StickerDescription>>();
+  private readonly variants = new Map<StickerRef, readonly StickerVariant[]>();
 
-  /** The art for `ref` when it has loaded (editor stamps never need any). */
-  get: StickerArtLookup = (ref) => {
-    const e = this.entries.get(ref);
+  private static key(ref: StickerRef, variant: StickerVariant = 'light'): string {
+    return variant === 'dark' ? `${ref}#dark` : ref;
+  }
+
+  /** The art for `ref` in `variant` (default `light`) when it has loaded (editor stamps never need any). */
+  get: StickerArtLookup = (ref, variant) => {
+    const e = this.entries.get(StickerArtCache.key(ref, variant));
     return e?.status === 'ready' ? e.art : undefined;
   };
 
+  /** The variant to draw `ref` in on a dark or light background: `dark` once the sticker is known to have it. */
+  variantFor(ref: StickerRef, dark: boolean): StickerVariant {
+    return dark && this.variants.get(ref)?.includes('dark') ? 'dark' : 'light';
+  }
+
   /** `ready`, `loading`, `failed` (with the reason) or `none` (never asked for). Editor stamps are always `ready`. */
-  status(ref: StickerRef): { status: 'ready' | 'loading' | 'failed' | 'none'; error?: string } {
+  status(ref: StickerRef, variant?: StickerVariant): { status: 'ready' | 'loading' | 'failed' | 'none'; error?: string } {
     if (editorStampOf(ref)) return { status: 'ready' };
-    const e = this.entries.get(ref);
-    if (!e) return { status: 'none' };
+    const e = this.entries.get(StickerArtCache.key(ref, variant));
+    if (!e) return this.descriptions.has(ref) && !this.variants.has(ref) ? { status: 'loading' } : { status: 'none' };
     return e.status === 'failed' ? { status: 'failed', error: e.error } : { status: e.status };
   }
 
   /**
-   * Loads and rasterises `ref` from `provider` once (later calls share the load). Unknown refs
-   * reject with the closest known ones; failures are kept so they are reported, and retried on
-   * the next call.
+   * Loads and rasterises `ref` from `provider` once per variant (later calls share the load): the
+   * dark variant when `dark` and the sticker has one, else the light. Unknown refs reject with the
+   * closest known ones; failures are kept so they are reported, and retried on the next call.
    */
-  ensure(provider: StickerProvider, ref: StickerRef, rasterize: StickerRasterizer): Promise<StickerArt | null> {
-    if (editorStampOf(ref)) return Promise.resolve(null);
-    const e = this.entries.get(ref);
+  async ensure(provider: StickerProvider, ref: StickerRef, rasterize: StickerRasterizer, dark = false): Promise<StickerArt | null> {
+    if (editorStampOf(ref)) return null;
+    let described = this.descriptions.get(ref);
+    if (!described) {
+      described = describeStickerRef(provider, ref);
+      this.descriptions.set(ref, described);
+    }
+    let d: StickerDescription;
+    try {
+      d = await described;
+    } catch (err) {
+      this.descriptions.delete(ref);
+      this.entries.set(StickerArtCache.key(ref), { status: 'failed', error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
+    this.variants.set(ref, d.variants ?? ['light']);
+    return this.load(provider, ref, d, stickerVariantFor(d, dark), rasterize);
+  }
+
+  private load(provider: StickerProvider, ref: StickerRef, d: StickerDescription, variant: StickerVariant, rasterize: StickerRasterizer): Promise<StickerArt> {
+    const key = StickerArtCache.key(ref, variant);
+    const e = this.entries.get(key);
     if (e?.status === 'ready') return Promise.resolve(e.art);
     if (e?.status === 'loading') return e.promise;
     const promise = (async () => {
-      const d = await describeStickerRef(provider, ref);
       const id = stickerIdFor(provider, ref)!;
       const max = provider.capabilities.maxSize ?? STICKER_ART_SIZE;
       const size = Math.min(STICKER_ART_SIZE, max);
-      const asset = await provider.load(id, d.formats.includes('png') ? { format: 'png', size } : { format: d.formats[0] ?? 'svg', size });
+      const v = variant === 'dark' ? { variant } : {};
+      const asset = await provider.load(id, d.formats.includes('png') ? { format: 'png', size, ...v } : { format: d.formats[0] ?? 'svg', size, ...v });
       const px = await rasterize(asset, size);
       if (!(px.width > 0 && px.height > 0) || px.data.length !== px.width * px.height * 4) throw new StickerError('load_failed', `The art for "${ref}" came back empty or the wrong size.`);
       return { ...px, tintable: d.tintable };
     })();
-    this.entries.set(ref, { status: 'loading', promise });
+    this.entries.set(key, { status: 'loading', promise });
     return promise.then(
       (art) => {
-        this.entries.set(ref, { status: 'ready', art });
+        this.entries.set(key, { status: 'ready', art });
         return art;
       },
       (err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
-        this.entries.set(ref, { status: 'failed', error: message });
+        this.entries.set(key, { status: 'failed', error: message });
         throw err;
       }
     );
@@ -118,6 +152,8 @@ export class StickerArtCache {
   /** Forgets every load (a new provider). */
   clear(): void {
     this.entries.clear();
+    this.descriptions.clear();
+    this.variants.clear();
   }
 }
 

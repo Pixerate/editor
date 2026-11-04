@@ -24,18 +24,21 @@
   import { DEFAULT_PAINT_GRADIENT } from '@pixerate/editor/image-editor';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import ControlSlider from './ControlSlider.svelte';
-  import { IMAGE_PROFILE } from '@pixerate/editor/brushes';
+  import { IMAGE_PROFILE, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
+  import BrushLibraryEditor from '../brushes/BrushLibraryEditor.svelte';
   import { brushLibraryState } from '../brushes/brushLibrary.svelte.js';
 
   interface Props {
     controller: ImageEditorController;
     /** The row of paint tool buttons (default true); hide it when the host has its own toolbar. */
     showTools?: boolean;
+    /** Draws the brush editor's preview stroke (default: the controller's `brushPreview` option). */
+    renderBrushPreview?: BrushPreviewRenderer;
     class?: string;
   }
 
-  let { controller, showTools = true, class: className = '' }: Props = $props();
+  let { controller, showTools = true, renderBrushPreview, class: className = '' }: Props = $props();
 
   let tick = $state(0);
   $effect(() => {
@@ -50,6 +53,7 @@
   });
   let error = $state<string | null>(null);
   let presetsOpen = $state(false);
+  let editing = $state(false);
   // Read only while open: the list follows the library, so a brush saved in another editor shows up.
   const presets = brushLibraryState(() => (presetsOpen ? controller.brushLibrary : null), () => ({ profile: IMAGE_PROFILE }));
   const presetName = $derived(presets.entries.find((e) => e.brush.id === view.brushPreset)?.brush.name ?? view.brushPreset);
@@ -82,7 +86,24 @@
 
   {#if view.tool === 'brush' || view.tool === 'mixer' || view.tool === 'eraser'}
     <div class="flex flex-col gap-1" data-testid="brush-presets">
-      <button type="button" aria-expanded={presetsOpen} class={imageChipClass(presetsOpen)} onclick={() => (presetsOpen = !presetsOpen)} title="Paint with a brush from the brush library">Brush presets{presetName ? `: ${presetName}` : ''}</button>
+      <div class="flex flex-wrap gap-1">
+        <button type="button" aria-expanded={presetsOpen} class={imageChipClass(presetsOpen)} onclick={() => (presetsOpen = !presetsOpen)} title="Paint with a brush from the brush library">Brush presets{presetName ? `: ${presetName}` : ''}</button>
+        <button type="button" aria-expanded={editing} class={imageChipClass(editing)} onclick={() => (editing = !editing)} title="Edit this brush, or make a new one, in the shared brush library">Edit brush…</button>
+      </div>
+      {#if editing}
+        <BrushLibraryEditor
+          library={controller.brushLibrary}
+          brushId={view.brushPreset}
+          profile={IMAGE_PROFILE}
+          renderPreview={renderBrushPreview ?? controller.brushPreview ?? undefined}
+          class="rounded border border-border bg-slate-950 p-2"
+          onsaved={(b) => {
+            error = null;
+            controller.setBrushPreset(b.id).catch((err) => (error = userErrorMessage(err)));
+          }}
+          onclose={() => (editing = false)}
+        />
+      {/if}
       {#if presetsOpen}
         <BrushLibraryBrowser
           entries={presets.entries}

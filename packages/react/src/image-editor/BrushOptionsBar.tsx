@@ -21,22 +21,25 @@ import { PaintGradientEditor } from './PaintGradientEditor';
 import { ControlSlider } from './ControlSlider';
 import { imageChipClass } from './styles';
 import { ImageCheckbox, ImageColor, ImageRange, ImageSelect } from './controls/controls.js';
-import { IMAGE_PROFILE } from '@pixerate/editor/brushes';
+import { IMAGE_PROFILE, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
 import { BrushLibraryBrowser } from '../brushes/BrushLibraryBrowser';
+import { BrushLibraryEditor } from '../brushes/BrushLibraryEditor';
 import { useBrushLibrary } from '../brushes/useBrushLibrary';
 
 export interface BrushOptionsBarProps {
   controller: ImageEditorController;
   /** The row of paint tool buttons (default true); hide it when the host has its own toolbar. */
   showTools?: boolean;
+  /** Draws the brush editor's preview stroke (default: the controller's `brushPreview` option). */
+  renderBrushPreview?: BrushPreviewRenderer;
   className?: string;
 }
 
-
-
 /**
  * The paint tools: Move / Brush / Mixer / Eraser, brush presets from the editor's brush library
- * (`BrushLibraryBrowser` with `IMAGE_PROFILE`: choosing one sets the tool and brush), the brush's size, hardness, opacity, flow and
+ * (`BrushLibraryBrowser` with `IMAGE_PROFILE`: choosing one sets the tool and brush) and "Edit brush…"
+ * (`BrushLibraryEditor` with `IMAGE_PROFILE`: saves go to the library and the saved brush is
+ * picked), the brush's size, hardness, opacity, flow and
  * smoothing, pressure toggles, the foreground and background colours (D resets, X swaps) and
  * Edit › Fill / Clear on the active layer, and gradient paint for the brush (the colour changes as
  * the stroke goes; `PaintGradientEditor`). With the Mixer Brush: its load (Load brush / Clean
@@ -46,7 +49,7 @@ export interface BrushOptionsBarProps {
  * toggles that tool uses.
  * Shortcuts are handled by `handlePaintShortcut` in the editor.
  */
-export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, showTools = true, className }) => {
+export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, showTools = true, renderBrushPreview, className }) => {
   const [, setTick] = useState(0);
   useEffect(() => controller.subscribe(() => setTick((n) => n + 1)), [controller]);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, sh
   const { brush, foreground, background, mixer, mixerLoad, retouch, cloneSource, paint } = state.paint;
   const tool = state.activeTool as (typeof PAINT_TOOLS)[number]['id'];
   const [presetsOpen, setPresetsOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   // Read only while open: the list follows the library, so a brush saved in another editor shows up.
   const presets = useBrushLibrary(presetsOpen ? controller.brushLibrary : null, { profile: IMAGE_PROFILE });
   const presetName = presets.find((e) => e.brush.id === state.paint.brushPreset)?.brush.name ?? state.paint.brushPreset;
@@ -87,9 +91,28 @@ export const BrushOptionsBar: React.FC<BrushOptionsBarProps> = ({ controller, sh
 
       {(tool === 'brush' || tool === 'mixer' || tool === 'eraser') && (
         <div className="flex flex-col gap-1" data-testid="brush-presets">
-          <button type="button" aria-expanded={presetsOpen} className={imageChipClass(presetsOpen)} onClick={() => setPresetsOpen((o) => !o)} title="Paint with a brush from the brush library">
-            Brush presets{presetName ? `: ${presetName}` : ''}
-          </button>
+          <div className="flex flex-wrap gap-1">
+            <button type="button" aria-expanded={presetsOpen} className={imageChipClass(presetsOpen)} onClick={() => setPresetsOpen((o) => !o)} title="Paint with a brush from the brush library">
+              Brush presets{presetName ? `: ${presetName}` : ''}
+            </button>
+            <button type="button" aria-expanded={editing} className={imageChipClass(editing)} onClick={() => setEditing((o) => !o)} title="Edit this brush, or make a new one, in the shared brush library">
+              Edit brush…
+            </button>
+          </div>
+          {editing && (
+            <BrushLibraryEditor
+              library={controller.brushLibrary}
+              brushId={state.paint.brushPreset}
+              profile={IMAGE_PROFILE}
+              renderPreview={renderBrushPreview ?? controller.brushPreview ?? undefined}
+              className="rounded border border-border bg-slate-950 p-2"
+              onSaved={(b) => {
+                setError(null);
+                controller.setBrushPreset(b.id).catch((err) => setError(userErrorMessage(err)));
+              }}
+              onClose={() => setEditing(false)}
+            />
+          )}
           {presetsOpen && (
             <BrushLibraryBrowser
               entries={presets}

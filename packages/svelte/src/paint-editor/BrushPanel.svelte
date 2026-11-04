@@ -3,7 +3,7 @@
   import { brushLoadColor, brushTakesPaint, downloadBytes, toggleStickerRef, DEFAULT_PAINT_GRADIENT, type PaintEditorController } from '@pixerate/editor/paint-editor';
   import { brushColourHex, PAINT_PROFILE, type Brush, type BrushLibraryEntry } from '@pixerate/editor/brushes';
   import { untrack } from 'svelte';
-  import BrushEditor from './BrushEditor.svelte';
+  import BrushEditor from '../brushes/BrushEditor.svelte';
   import BrushLibraryBrowser from '../brushes/BrushLibraryBrowser.svelte';
   import PaintGradientEditor from './PaintGradientEditor.svelte';
   import { attempt, button, chip, paintEditorState, panel } from './paintEditorRune.svelte.js';

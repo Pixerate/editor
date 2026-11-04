@@ -10,6 +10,7 @@ import type { SerializedLayeredImageEditorState } from './layers/serialize';
 import type { PaintOptions } from './controller';
 import type { TextShaper } from './layers/text';
 import type { BrushLibrary } from '../brushes/library';
+import type { BrushPreviewRenderer } from '../brushes/tools';
 
 export interface ImageDimensions {
   width: number;
@@ -542,6 +543,12 @@ export interface ImageEditorOptions {
    * paints here (default: a library in memory).
    */
   brushLibrary?: BrushLibrary;
+  /**
+   * Draws a brush's preview stroke for the brush editor ("Edit brush…"), e.g. the paint engine's
+   * `paintBrushPreviewRenderer()` from `@pixerate/editor/paint-editor` (not bundled here, so the
+   * image editor stays free of the paint editor). Without it the brush editor has no preview.
+   */
+  brushPreview?: BrushPreviewRenderer;
   /**
    * What lays out and draws type layers. Default: the browser's fonts through Canvas 2D
    * (`createCanvasTextShaper`) where there is a 2D canvas; `null` (or no canvas) keeps type layers'

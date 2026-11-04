@@ -47,6 +47,9 @@ paints without (warnings), each with a fix; lists and writes use the current hos
 
 Every host lists the presets its profile admits and the library's saved brushes it admits, and
 each registers these tools with its own profile, so `list_brush_presets` shows that host's brushes.
+People edit brushes in every host with the same brush editor, scoped the same way: it shows only
+the controls the host uses (no velocity on canvas, no grain in the image editor), and what the
+brush has for other hosts is kept on save. The tools follow the same rule (see Pitfalls).
 A saved brush used in canvas or vector strokes is copied into the stroke, so the document renders
 where the library is not; changing the brush in the library later doesn't change strokes already
 drawn.
@@ -87,8 +90,13 @@ drawn.
 
 ## Pitfalls
 
-- **A facet the host refuses.** `create_brush` and `update_brush` refuse it with the facet and
-  fix; `check_brush` returns `degraded`, the brush with those facets stripped, to start from.
+- **A facet the host refuses.** `create_brush` refuses it, and `update_brush` refuses a change
+  that adds it, with the facet and fix; `check_brush` returns `degraded`, the brush with those
+  facets stripped, to start from.
+- **Tuning a brush in a host that can't paint all of it.** `update_brush` keeps what the brush
+  already has for other hosts (a paint brush's light, changed from canvas) and lists it in
+  `kept`; it is not stripped. To make a copy for this host only, `create_brush` from
+  `check_brush`'s `degraded` brush instead.
 - **Ids.** Built-in ids can't be reused or changed; a taken id is refused (update it instead).
 - **Stamps.** Any marks take any sticker ref from `find_stickers`, or an editor stamp
   (`editor:star`…). A ref the host's sticker library can't load is refused with the closest
@@ -113,7 +121,7 @@ drawn.
 | `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, engine, tip, size, marks, surface, light) and `total`. Call first. |
 | `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category` and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
 | `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
-| `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes the host can't render. Returns `brush`, `changed` paths, `problems`, `warnings`. |
+| `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes that add what the host can't render; keeps what the brush already had for other hosts. Returns `brush`, `changed` paths, `problems`, `warnings` and, when there are any, `kept` (facets this host can't use, left as they were). |
 | `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |
 | `remove_brush` | Delete a saved brush for good (export it first to keep a copy). Built-ins are refused. Returns `removed`. |
 | `check_brush` | Check a brush (`id`, or an unsaved `brush` spec) for a `host` (paint, image, canvas, vector). Returns `ok`, `issues` (facet, severity, reason, fix) and, when refused, `degraded`. |

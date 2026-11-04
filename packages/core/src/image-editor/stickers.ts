@@ -7,11 +7,15 @@
 import type { StickerInsertHost } from '../stickers/tools.js';
 import type { ImageEditorController } from './controller.js';
 
-/** `insert_sticker` for an image editor: a new pixel layer named after the sticker, one undo step. */
-export function createImageStickerHost(controller: ImageEditorController): StickerInsertHost {
+/**
+ * `insert_sticker` for an image editor: a new pixel layer named after the sticker, one undo step.
+ * With `dark` (the host's dark theme or picture), stickers that have a dark variant use it.
+ */
+export function createImageStickerHost(controller: ImageEditorController, options: { dark?: () => boolean } = {}): StickerInsertHost {
   return {
     noun: 'pixel layer',
     format: 'png',
+    ...(options.dark ? { dark: options.dark } : {}),
     defaultCentre: () => {
       const { width, height } = controller.getCanvasSize();
       return { x: width / 2, y: height / 2 };

@@ -46,6 +46,26 @@ describe('sticker pickers', () => {
     expect(picked).toEqual(['fake:badge-hot']);
   });
 
+  it('StickerLibraryPicker filters by collection and labels AI-generated art', async () => {
+    render(<StickerLibraryPicker provider={library()} onPick={() => {}} />);
+    await settle();
+    const select = container.querySelector('select[aria-label="Sticker collection"]') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['All collections', 'Outdoors (6)', 'Kitchen (5)', 'Shop (4)']);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(win.HTMLSelectElement.prototype, 'value')!.set!.call(select, 'fake:outdoors');
+      select.dispatchEvent(new win.Event('change', { bubbles: true }));
+    });
+    await settle();
+    const items = [...container.querySelectorAll('[aria-label="Stickers"] button')];
+    expect(items).toHaveLength(6);
+    expect(items.every((b) => b.querySelector('[aria-label="AI-generated"]'))).toBe(true);
+    expect(items[0].getAttribute('title')).toMatch(/· AI-generated$/);
+    // Editor stickers have no collections: no collection filter.
+    render(<StickerLibraryPicker provider={editorStickers()} onPick={() => {}} />);
+    await settle();
+    expect(container.querySelector('select[aria-label="Sticker collection"]')).toBeNull();
+  });
+
   it('StickerInsertPanel inserts a picked sticker through a host, tinted when asked', async () => {
     let nodes: CanvasNode[] = [{ id: 'frame', position: { x: 0, y: 0 }, width: 300, height: 200, data: {} }];
     const host = createCanvasStickerHost({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });
