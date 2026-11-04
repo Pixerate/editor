@@ -2365,7 +2365,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createToolBridge` (`/bridge`, Node) & `connectToolBridge` (`/tools`)",
         "react": "`useToolBridge`",
         "svelte": "`useToolBridge`",
-        "swift": "Planned (#533)"
+        "swift": "`ToolBridgeClient`"
       },
       {
         "feature": "Agent Tool Discovery & Scoped Views (`registry.view()` shows an agent only some toolsets or only read tools, refusing the rest with the reason; with `discovery` it lists `list_toolsets`, `search_tools`, `enable_tools`, `disable_tools` and `get_skill` until the agent enables what it needs; agent skills served as MCP resources and prompts; `toolsetInstructions` for the MCP `initialize` result)",
