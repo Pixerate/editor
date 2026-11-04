@@ -3636,6 +3636,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `createPaintEffectsToolProvider` lists its tools only once the controller has an effect provider.
 - **Solution / Workaround**: `paintContracts({ effects })` takes the provider. `scripts/export-contracts.mjs` and `tests/paint-contracts.test.ts` pass `createFakeEffectProvider()` from `effects/index.js`, so the committed `tools.json` doesn't depend on a real catalogue. Keyboard shortcuts live in `PAINT_SHORTCUTS`, which `handlePaintShortcut` dispatches from; add a key there, not in the handler, so `commands.json` stays true.
 
+### [swift] SwiftPM Ignores Prefixed Version Tags
+- **Issue / Symptom**: A tag like `swift-v0.1.0` (or changesets' `@pixerate/swift@0.1.0`) cannot be used with `.package(url:from:)`; SwiftPM finds no versions.
+- **Root Cause**: SwiftPM only reads tags of the form `1.2.3` or `v1.2.3` as versions and ignores every other prefix. Pixerate/schemas#70 hit the same thing.
+- **Solution / Workaround**: The release workflow tags the release commit `v<version>` when `@pixerate/swift` changes ("Tag the Swift package"). Changesets tags npm packages as `@pixerate/<name>@<version>`, so plain `v…` tags only ever mean the Swift package. Never add `swift-v…` tags.
 ### [conformance] Recorded Scenarios Need Seeds, the TypeScript Wet Kernel and No Clock Values
 - **Issue / Symptom**: `scripts/record-conformance.mjs` refused steps as "not deterministic": a `paint_stroke` without a `seed` picks a random one, `get_wet_paint` reported a `typescript` backend on one run and `wasm` on the next, and `list_paint_proposals` returned a `createdAt` time. Layer ids (`pl<time><n>`) differ on every run too.
 - **Root Cause**: The editor seeds strokes randomly, loads the WebAssembly wet kernel in the background (whichever is ready first runs), and stamps proposals and ids with the clock.
