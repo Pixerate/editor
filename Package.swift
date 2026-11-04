@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PixerateCore", targets: ["PixerateCore"]),
         .library(name: "PixerateContracts", targets: ["PixerateContracts"]),
         .library(name: "PixeratePaint", targets: ["PixeratePaint"]),
+        .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -29,6 +30,8 @@ let package = Package(
         ),
         // The paint editor. `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
         .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        // Replays the recorded scenarios against a Swift editor and compares the results.
+        .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
             name: "PixerateCoreTests",
             dependencies: ["PixerateCore"],
@@ -38,7 +41,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixeratePaintTests",
-            dependencies: ["PixeratePaint", "PixerateContracts", "PixerateCore"],
+            dependencies: ["PixeratePaint", "PixerateContracts", "PixerateCore", "PixerateConformance"],
             path: "packages/swift/Tests/PixeratePaintTests",
             swiftSettings: settings
         ),

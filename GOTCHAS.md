@@ -3645,3 +3645,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The first generated `PaintToolArguments.swift` did not compile ("type member must not be named 'Type'"), and reading `set_paper_effect` arguments threw "effect is required." for `{ "effect": null }`, a call the schema allows.
 - **Root Cause**: An argument called `type` with an `enum` became a nested `enum Type`, which Swift reserves for metatypes (`Protocol`, `Self` and `Any` too). `effect` is required but its schema is `anyOf: [string, null]`, so a present `null` is valid and reads as `nil`.
 - **Solution / Workaround**: `scripts/gen-swift.mjs` names such nested enums `TypeOption` (and so on), and makes a required argument optional in Swift when its schema allows `null` (the registry has already checked it is there). The Swift test reads every argument the recorded scenarios pass into its typed struct, which is how this was found.
+
+### [swift] Assigning `nil` to a `JSONObject` Member Writes JSON `null`
+- **Issue / Symptom**: `omitConformancePaths` in Swift left `"backend": null` where the TypeScript version removed `backend`.
+- **Root Cause**: `JSONValue` is `ExpressibleByNilLiteral` (so `nil` can be written for JSON `null` in literals). In `o[key] = cond ? nil : value`, the `nil` is typed as `JSONValue` (`.null`), not as `Optional.none`, so the subscript stores a null member instead of removing it.
+- **Solution / Workaround**: Remove members with `o[key] = Optional<JSONValue>.none` (or a plain `o[key] = nil` statement where the right side is not inferred as `JSONValue`). The runner test compares the result with the TypeScript cases, which caught it.
