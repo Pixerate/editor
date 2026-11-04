@@ -136,7 +136,7 @@ extension PaintEditorController {
         wet.tick(now)
     }
 
-    /// Lets the CPU engine run alone (`off`) or allows a GPU engine (`auto`; this port has none). Not an undo step.
+    /// Lets the CPU engine run alone (`off`) or lets Metal shade large wet areas (`auto`). Not an undo step.
     public func setWetEngine(gpu: String?, minTiles: Int?) throws -> WetEngineInfo {
         let g = gpu ?? wet.gpuMode
         if !WET_GPU_MODES.contains(g) { throw PaintEditorError("gpu must be auto or off, not \(JSONValue.string(g).stringified()).") }

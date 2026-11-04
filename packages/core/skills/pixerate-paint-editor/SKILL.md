@@ -348,7 +348,7 @@ Listing, saving, sharing and previewing brushes are the brush library's tools (`
 | `set_canvas_tilt` | Tilt the canvas (`angle` 0..90°, `direction` downhill clockwise from the bottom): wet paint runs downhill, very wet paint drips. Returns `tilt`, `stillWet`. |
 | `pause_wet_paint` | Stop or resume time (`paused`) and set `speed` (steps per second). Editor state. |
 | `set_water_overlay` | Show where the water is (`visible`), view only. |
-| `set_wet_engine` | Let Engine B (WebGPU) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
+| `set_wet_engine` | Let Engine B (WebGPU in browsers, Metal in the Swift editors) shade large washes (`gpu` "auto", the default) or force the CPU (`gpu` "off"); `minTiles` sets the wet area at which the GPU takes over. Never changes the result, only how it is drawn; editor setting, not saved, not an undo step. Returns `engine` (`state`: off, not-started, starting, unavailable, standby, active, failed; `reason`, `adapter`). |
 | `set_instant_dry` | `on`: every wet stroke dries as it ends (same undo step); off (default) wet paint keeps moving. Returns `instantDry`. |
 
 ### Thick paint and light
