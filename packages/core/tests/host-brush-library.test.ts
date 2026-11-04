@@ -192,3 +192,48 @@ describe('image editor brush presets', () => {
 		expect((await c.listBrushPresets()).map((e) => e.brush.id)).toEqual(listed);
 	});
 });
+
+describe('default colours in canvas and vector', () => {
+	it('lists default colours, takes them when a brush is picked or drawn with, and keeps a colour when asked', async () => {
+		const { draw } = canvas();
+		const list = await listCanvasBrushes();
+		expect(list.find((b) => b.id === 'ballpoint')!.defaultColor).toBe('#1e3a8a');
+		expect(list.find((b) => b.id === 'chalk')!.defaultColor).toEqual({ light: '#475569', dark: '#f8fafc' });
+		expect(list.find((b) => b.id === 'pencil-hb')!.defaultColor).toBeUndefined();
+		expect(await draw.selectBrush('ballpoint')).toMatchObject({ id: 'ballpoint' });
+		expect(draw.style).toMatchObject({ brush: 'ballpoint', brushSize: 3, color: '#1e3a8a' });
+		draw.setColorScheme('dark');
+		await draw.selectBrush('chalk');
+		expect(draw.style.color).toBe('#f8fafc');
+		draw.setStyle({ color: '#ff0000' });
+		await draw.selectBrush('crayon', { keepColour: true });
+		expect(draw.style).toMatchObject({ brush: 'crayon', color: '#ff0000' });
+		await draw.selectBrush('pencil-hb');
+		expect(draw.style.color).toBe('#ff0000');
+		await draw.selectBrush(null);
+		expect(draw.style.brush).toBeUndefined();
+		await expect(draw.selectBrush('watercolor-wash')).rejects.toThrow(/can't brush a canvas stroke/);
+		// Agents: a brush's default colour when no colour is given; theirs when it is.
+		const r = await draw.drawStroke({ points: [[0, 0], [30, 5]], style: { brush: 'gel-pen' } });
+		expect((r.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#111827');
+		const own = await draw.drawStroke({ points: [[0, 0], [30, 5]], style: { brush: 'gel-pen', color: '#16a34a' } });
+		expect((own.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#16a34a');
+	});
+
+	it('gives a vector brushstroke its brush\'s default colour, unless one is given or kept', () => {
+		const path = { id: 'a', type: 'path', subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 190, y: 50 }] }], fill: null, stroke: '#1d4ed8', strokeWidth: 2 } as unknown as VectorPathNode;
+		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] }, colorScheme: 'dark' });
+		const top = () => (c.getNode('a') as VectorPathNode).strokes!.at(-1)!;
+		expect(c.addBrushstroke({ brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#1e3a8a');
+		const index = (c.getNode('a') as VectorPathNode).strokes!.length - 1;
+		expect(c.setBrushstroke(index, { brushId: 'chalk' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#f8fafc');
+		expect(c.setBrushstroke(index, { brushId: 'crayon', keepColour: true }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#f8fafc');
+		expect(c.setBrushstroke(index, { brushId: 'pencil-hb' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#f8fafc');
+		expect(c.addBrushstroke({ brushId: 'fineliner' }, { ids: ['a'], keepColour: true }).ok).toBe(true);
+		expect(top().paint).toBe('#1d4ed8');
+	});
+});

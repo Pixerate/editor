@@ -1,0 +1,2892 @@
+{
+  "tools": [
+    {
+      "id": "brush",
+      "label": "Brush",
+      "key": "b"
+    },
+    {
+      "id": "eyedropper",
+      "label": "Eyedropper",
+      "key": "i"
+    },
+    {
+      "id": "sticker",
+      "label": "Stickers",
+      "key": "s"
+    },
+    {
+      "id": "stroke",
+      "label": "Select stroke",
+      "key": "v"
+    },
+    {
+      "id": "pan",
+      "label": "Pan",
+      "key": "h"
+    },
+    {
+      "id": "rotate",
+      "label": "Rotate view",
+      "key": "r"
+    }
+  ],
+  "brushOptions": [
+    {
+      "id": "size",
+      "label": "Size",
+      "section": "layer",
+      "min": 1,
+      "max": 500,
+      "step": 1,
+      "default": 20,
+      "decimals": 0,
+      "track": {
+        "kind": "plain"
+      },
+      "unit": "px"
+    },
+    {
+      "id": "hardness",
+      "label": "Hardness",
+      "section": "layer",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 1,
+      "decimals": 0,
+      "track": {
+        "kind": "plain"
+      },
+      "displayScale": 100,
+      "unit": "%"
+    },
+    {
+      "id": "opacity",
+      "label": "Opacity",
+      "section": "layer",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 1,
+      "decimals": 0,
+      "track": {
+        "kind": "plain"
+      },
+      "displayScale": 100,
+      "unit": "%"
+    },
+    {
+      "id": "flow",
+      "label": "Flow",
+      "section": "layer",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 1,
+      "decimals": 0,
+      "track": {
+        "kind": "plain"
+      },
+      "displayScale": 100,
+      "unit": "%"
+    },
+    {
+      "id": "smoothing",
+      "label": "Smoothing",
+      "section": "layer",
+      "min": 0,
+      "max": 0.95,
+      "step": 0.01,
+      "default": 0,
+      "decimals": 0,
+      "track": {
+        "kind": "plain"
+      },
+      "displayScale": 100,
+      "unit": "%"
+    }
+  ],
+  "blendMenu": [
+    {
+      "label": "Standard",
+      "modes": [
+        {
+          "id": "normal",
+          "label": "Normal",
+          "canvas": "source-over"
+        },
+        {
+          "id": "darken",
+          "label": "Darken",
+          "canvas": "darken"
+        },
+        {
+          "id": "multiply",
+          "label": "Multiply",
+          "canvas": "multiply"
+        },
+        {
+          "id": "color-burn",
+          "label": "Color Burn",
+          "canvas": "color-burn"
+        },
+        {
+          "id": "linear-burn",
+          "label": "Linear Burn",
+          "canvas": null
+        },
+        {
+          "id": "darker-color",
+          "label": "Darker Color",
+          "canvas": null
+        },
+        {
+          "id": "lighten",
+          "label": "Lighten",
+          "canvas": "lighten"
+        },
+        {
+          "id": "screen",
+          "label": "Screen",
+          "canvas": "screen"
+        },
+        {
+          "id": "color-dodge",
+          "label": "Color Dodge",
+          "canvas": "color-dodge"
+        },
+        {
+          "id": "linear-dodge",
+          "label": "Linear Dodge (Add)",
+          "canvas": null
+        },
+        {
+          "id": "lighter-color",
+          "label": "Lighter Color",
+          "canvas": null
+        },
+        {
+          "id": "overlay",
+          "label": "Overlay",
+          "canvas": "overlay"
+        },
+        {
+          "id": "soft-light",
+          "label": "Soft Light",
+          "canvas": null
+        },
+        {
+          "id": "hard-light",
+          "label": "Hard Light",
+          "canvas": "hard-light"
+        },
+        {
+          "id": "vivid-light",
+          "label": "Vivid Light",
+          "canvas": null
+        },
+        {
+          "id": "linear-light",
+          "label": "Linear Light",
+          "canvas": null
+        },
+        {
+          "id": "pin-light",
+          "label": "Pin Light",
+          "canvas": null
+        },
+        {
+          "id": "hard-mix",
+          "label": "Hard Mix",
+          "canvas": null
+        },
+        {
+          "id": "difference",
+          "label": "Difference",
+          "canvas": "difference"
+        },
+        {
+          "id": "exclusion",
+          "label": "Exclusion",
+          "canvas": "exclusion"
+        },
+        {
+          "id": "subtract",
+          "label": "Subtract",
+          "canvas": null
+        },
+        {
+          "id": "divide",
+          "label": "Divide",
+          "canvas": null
+        },
+        {
+          "id": "hue",
+          "label": "Hue",
+          "canvas": "hue"
+        },
+        {
+          "id": "saturation",
+          "label": "Saturation",
+          "canvas": "saturation"
+        },
+        {
+          "id": "color",
+          "label": "Color",
+          "canvas": "color"
+        },
+        {
+          "id": "luminosity",
+          "label": "Luminosity",
+          "canvas": "luminosity"
+        }
+      ]
+    },
+    {
+      "label": "Paint",
+      "modes": [
+        {
+          "id": "pigment",
+          "label": "Pigment",
+          "canvas": null,
+          "standard": "normal",
+          "description": "Mixes the layer into what is below like paint, by its opacity: blue and yellow make green."
+        },
+        {
+          "id": "watercolor",
+          "label": "Watercolor",
+          "canvas": null,
+          "painterly": true,
+          "standard": "multiply",
+          "description": "A transparent wash: the colours filter each other wavelength by wavelength, so layers darken like glazes and blue over yellow gives green. White is clear."
+        },
+        {
+          "id": "tint",
+          "label": "Tint",
+          "canvas": null,
+          "painterly": true,
+          "standard": "color",
+          "description": "Tints what is below with the layer's colour and keeps its lightness; mid-tones take the full tint, highlights and darks stay clean."
+        },
+        {
+          "id": "highlight",
+          "label": "Highlight",
+          "canvas": null,
+          "painterly": true,
+          "standard": "screen",
+          "description": "Adds the layer as coloured light that rolls off softly towards white instead of clipping. Black adds nothing."
+        },
+        {
+          "id": "shadow",
+          "label": "Shadow",
+          "canvas": null,
+          "painterly": true,
+          "standard": "multiply",
+          "description": "Shades what is below as if the layer blocked the light, coloured by the layer, with ambient light so it never crushes to black. White does nothing."
+        }
+      ]
+    }
+  ],
+  "layerEffects": [
+    {
+      "kind": "bevel-emboss",
+      "label": "Bevel & Emboss",
+      "controls": [
+        {
+          "key": "style",
+          "label": "Style",
+          "type": "select",
+          "value": "inner-bevel",
+          "options": [
+            {
+              "value": "inner-bevel",
+              "label": "Inner Bevel"
+            },
+            {
+              "value": "outer-bevel",
+              "label": "Outer Bevel"
+            },
+            {
+              "value": "emboss",
+              "label": "Emboss"
+            },
+            {
+              "value": "pillow-emboss",
+              "label": "Pillow Emboss"
+            },
+            {
+              "value": "stroke-emboss",
+              "label": "Stroke Emboss"
+            }
+          ]
+        },
+        {
+          "key": "technique",
+          "label": "Technique",
+          "type": "select",
+          "value": "smooth",
+          "options": [
+            {
+              "value": "smooth",
+              "label": "Smooth"
+            },
+            {
+              "value": "chisel-hard",
+              "label": "Chisel Hard"
+            },
+            {
+              "value": "chisel-soft",
+              "label": "Chisel Soft"
+            }
+          ]
+        },
+        {
+          "key": "depth",
+          "label": "Depth",
+          "type": "range",
+          "min": 0,
+          "max": 10,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "direction",
+          "label": "Direction",
+          "type": "select",
+          "value": "up",
+          "options": [
+            {
+              "value": "up",
+              "label": "Up"
+            },
+            {
+              "value": "down",
+              "label": "Down"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "soften",
+          "label": "Soften",
+          "type": "range",
+          "min": 0,
+          "max": 16,
+          "step": 1,
+          "value": 0,
+          "unit": "px"
+        },
+        {
+          "key": "useGlobalLight",
+          "label": "Use global light",
+          "type": "checkbox",
+          "value": true
+        },
+        {
+          "key": "angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 120,
+          "unit": "°"
+        },
+        {
+          "key": "altitude",
+          "label": "Altitude",
+          "type": "range",
+          "min": 0,
+          "max": 90,
+          "step": 1,
+          "value": 30,
+          "unit": "°"
+        },
+        {
+          "key": "highlightColor",
+          "label": "Highlight",
+          "type": "color",
+          "value": "#ffffff"
+        },
+        {
+          "key": "highlightBlend",
+          "label": "Highlight mode",
+          "type": "select",
+          "value": "screen",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "highlightOpacity",
+          "label": "Highlight opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "shadowColor",
+          "label": "Shadow",
+          "type": "color",
+          "value": "#000000"
+        },
+        {
+          "key": "shadowBlend",
+          "label": "Shadow mode",
+          "type": "select",
+          "value": "multiply",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "shadowOpacity",
+          "label": "Shadow opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "kind": "stroke",
+      "label": "Stroke",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 3,
+          "unit": "px"
+        },
+        {
+          "key": "position",
+          "label": "Position",
+          "type": "select",
+          "value": "outside",
+          "options": [
+            {
+              "value": "outside",
+              "label": "Outside"
+            },
+            {
+              "value": "inside",
+              "label": "Inside"
+            },
+            {
+              "value": "center",
+              "label": "Center"
+            }
+          ]
+        },
+        {
+          "key": "fill.type",
+          "label": "Fill",
+          "type": "select",
+          "value": "color",
+          "options": [
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "gradient",
+              "label": "Gradient"
+            },
+            {
+              "value": "pattern",
+              "label": "Pattern"
+            }
+          ]
+        },
+        {
+          "key": "fill.color",
+          "label": "Color",
+          "type": "color",
+          "value": "#000000"
+        }
+      ]
+    },
+    {
+      "kind": "inner-shadow",
+      "label": "Inner Shadow",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "multiply",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "color",
+          "label": "Color",
+          "type": "color",
+          "value": "#000000"
+        },
+        {
+          "key": "useGlobalLight",
+          "label": "Use global light",
+          "type": "checkbox",
+          "value": true
+        },
+        {
+          "key": "angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 120,
+          "unit": "°"
+        },
+        {
+          "key": "distance",
+          "label": "Distance",
+          "type": "range",
+          "min": 0,
+          "max": 500,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "choke",
+          "label": "Choke",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "noise",
+          "label": "Noise",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "kind": "inner-glow",
+      "label": "Inner Glow",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "screen",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "fill.type",
+          "label": "Fill",
+          "type": "select",
+          "value": "color",
+          "options": [
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "gradient",
+              "label": "Gradient"
+            }
+          ]
+        },
+        {
+          "key": "fill.color",
+          "label": "Color",
+          "type": "color",
+          "value": "#ffffbe"
+        },
+        {
+          "key": "technique",
+          "label": "Technique",
+          "type": "select",
+          "value": "softer",
+          "options": [
+            {
+              "value": "softer",
+              "label": "Softer"
+            },
+            {
+              "value": "precise",
+              "label": "Precise"
+            }
+          ]
+        },
+        {
+          "key": "source",
+          "label": "Source",
+          "type": "select",
+          "value": "edge",
+          "options": [
+            {
+              "value": "edge",
+              "label": "Edge"
+            },
+            {
+              "value": "center",
+              "label": "Center"
+            }
+          ]
+        },
+        {
+          "key": "choke",
+          "label": "Choke",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "range",
+          "label": "Range",
+          "type": "range",
+          "min": 0.01,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.5,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "noise",
+          "label": "Noise",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "kind": "satin",
+      "label": "Satin",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "multiply",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.5,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "color",
+          "label": "Color",
+          "type": "color",
+          "value": "#000000"
+        },
+        {
+          "key": "angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 19,
+          "unit": "°"
+        },
+        {
+          "key": "distance",
+          "label": "Distance",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 11,
+          "unit": "px"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 14,
+          "unit": "px"
+        },
+        {
+          "key": "invert",
+          "label": "Invert",
+          "type": "checkbox",
+          "value": true
+        }
+      ]
+    },
+    {
+      "kind": "color-overlay",
+      "label": "Color Overlay",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "color",
+          "label": "Color",
+          "type": "color",
+          "value": "#ff0000"
+        }
+      ]
+    },
+    {
+      "kind": "gradient-overlay",
+      "label": "Gradient Overlay",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "gradient.stops.0.color",
+          "label": "Start colour",
+          "type": "color",
+          "value": "#000000"
+        },
+        {
+          "key": "gradient.stops.last.color",
+          "label": "End colour",
+          "type": "color",
+          "value": "#ffffff"
+        },
+        {
+          "key": "gradient.style",
+          "label": "Style",
+          "type": "select",
+          "value": "linear",
+          "options": [
+            {
+              "value": "linear",
+              "label": "Linear"
+            },
+            {
+              "value": "radial",
+              "label": "Radial"
+            },
+            {
+              "value": "angle",
+              "label": "Angle"
+            },
+            {
+              "value": "reflected",
+              "label": "Reflected"
+            },
+            {
+              "value": "diamond",
+              "label": "Diamond"
+            }
+          ]
+        },
+        {
+          "key": "gradient.angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 90,
+          "unit": "°"
+        },
+        {
+          "key": "gradient.scale",
+          "label": "Scale",
+          "type": "range",
+          "min": 0.1,
+          "max": 1.5,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "gradient.reverse",
+          "label": "Reverse",
+          "type": "checkbox",
+          "value": false
+        },
+        {
+          "key": "gradient.align",
+          "label": "Align with layer",
+          "type": "checkbox",
+          "value": true
+        }
+      ]
+    },
+    {
+      "kind": "pattern-overlay",
+      "label": "Pattern Overlay",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "normal",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "patternId",
+          "label": "Pattern",
+          "type": "select",
+          "value": "checker",
+          "options": [
+            {
+              "value": "checker",
+              "label": "Checker"
+            },
+            {
+              "value": "stripes",
+              "label": "Diagonal Stripes"
+            },
+            {
+              "value": "dots",
+              "label": "Dots"
+            },
+            {
+              "value": "grid",
+              "label": "Grid"
+            },
+            {
+              "value": "noise",
+              "label": "Noise"
+            }
+          ]
+        },
+        {
+          "key": "scale",
+          "label": "Scale",
+          "type": "range",
+          "min": 0.01,
+          "max": 10,
+          "step": 0.01,
+          "value": 1,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 0,
+          "unit": "°"
+        },
+        {
+          "key": "link",
+          "label": "Link with layer",
+          "type": "checkbox",
+          "value": true
+        }
+      ]
+    },
+    {
+      "kind": "outer-glow",
+      "label": "Outer Glow",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "screen",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "fill.type",
+          "label": "Fill",
+          "type": "select",
+          "value": "color",
+          "options": [
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "gradient",
+              "label": "Gradient"
+            }
+          ]
+        },
+        {
+          "key": "fill.color",
+          "label": "Color",
+          "type": "color",
+          "value": "#ffffbe"
+        },
+        {
+          "key": "technique",
+          "label": "Technique",
+          "type": "select",
+          "value": "softer",
+          "options": [
+            {
+              "value": "softer",
+              "label": "Softer"
+            },
+            {
+              "value": "precise",
+              "label": "Precise"
+            }
+          ]
+        },
+        {
+          "key": "spread",
+          "label": "Spread",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "range",
+          "label": "Range",
+          "type": "range",
+          "min": 0.01,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.5,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "noise",
+          "label": "Noise",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "kind": "drop-shadow",
+      "label": "Drop Shadow",
+      "controls": [
+        {
+          "key": "blend",
+          "label": "Blend mode",
+          "type": "select",
+          "value": "multiply",
+          "options": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "darken",
+              "label": "Darken"
+            },
+            {
+              "value": "multiply",
+              "label": "Multiply"
+            },
+            {
+              "value": "color-burn",
+              "label": "Color Burn"
+            },
+            {
+              "value": "linear-burn",
+              "label": "Linear Burn"
+            },
+            {
+              "value": "darker-color",
+              "label": "Darker Color"
+            },
+            {
+              "value": "lighten",
+              "label": "Lighten"
+            },
+            {
+              "value": "screen",
+              "label": "Screen"
+            },
+            {
+              "value": "color-dodge",
+              "label": "Color Dodge"
+            },
+            {
+              "value": "linear-dodge",
+              "label": "Linear Dodge (Add)"
+            },
+            {
+              "value": "lighter-color",
+              "label": "Lighter Color"
+            },
+            {
+              "value": "overlay",
+              "label": "Overlay"
+            },
+            {
+              "value": "soft-light",
+              "label": "Soft Light"
+            },
+            {
+              "value": "hard-light",
+              "label": "Hard Light"
+            },
+            {
+              "value": "vivid-light",
+              "label": "Vivid Light"
+            },
+            {
+              "value": "linear-light",
+              "label": "Linear Light"
+            },
+            {
+              "value": "pin-light",
+              "label": "Pin Light"
+            },
+            {
+              "value": "hard-mix",
+              "label": "Hard Mix"
+            },
+            {
+              "value": "difference",
+              "label": "Difference"
+            },
+            {
+              "value": "exclusion",
+              "label": "Exclusion"
+            },
+            {
+              "value": "subtract",
+              "label": "Subtract"
+            },
+            {
+              "value": "divide",
+              "label": "Divide"
+            },
+            {
+              "value": "hue",
+              "label": "Hue"
+            },
+            {
+              "value": "saturation",
+              "label": "Saturation"
+            },
+            {
+              "value": "color",
+              "label": "Color"
+            },
+            {
+              "value": "luminosity",
+              "label": "Luminosity"
+            },
+            {
+              "value": "watercolor",
+              "label": "Watercolor"
+            },
+            {
+              "value": "tint",
+              "label": "Tint"
+            },
+            {
+              "value": "highlight",
+              "label": "Highlight"
+            },
+            {
+              "value": "shadow",
+              "label": "Shadow"
+            }
+          ]
+        },
+        {
+          "key": "opacity",
+          "label": "Opacity",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0.75,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "color",
+          "label": "Color",
+          "type": "color",
+          "value": "#000000"
+        },
+        {
+          "key": "useGlobalLight",
+          "label": "Use global light",
+          "type": "checkbox",
+          "value": true
+        },
+        {
+          "key": "angle",
+          "label": "Angle",
+          "type": "range",
+          "min": -180,
+          "max": 180,
+          "step": 1,
+          "value": 120,
+          "unit": "°"
+        },
+        {
+          "key": "distance",
+          "label": "Distance",
+          "type": "range",
+          "min": 0,
+          "max": 500,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "spread",
+          "label": "Spread",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "range",
+          "min": 0,
+          "max": 250,
+          "step": 1,
+          "value": 5,
+          "unit": "px"
+        },
+        {
+          "key": "noise",
+          "label": "Noise",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "value": 0,
+          "percent": true,
+          "unit": "%"
+        },
+        {
+          "key": "knocksOut",
+          "label": "Layer knocks out shadow",
+          "type": "checkbox",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "sliders": {
+    "paper": [
+      {
+        "path": "depth",
+        "label": "Grain depth",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "scale",
+        "label": "Grain scale",
+        "min": 0.25,
+        "max": 8,
+        "step": 0.05
+      },
+      {
+        "path": "shading",
+        "label": "Shading",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "dry.contrast",
+        "label": "Contrast",
+        "min": 0,
+        "max": 3,
+        "step": 0.05
+      },
+      {
+        "path": "absorption",
+        "label": "Absorption",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "permeability",
+        "label": "Permeability",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "roughness",
+        "label": "Roughness",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "metallic",
+        "label": "Metallic",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "backlight",
+        "label": "Backlight",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "wet": [
+      {
+        "path": "viscosity",
+        "label": "Viscosity",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "evaporation",
+        "label": "Evaporation",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "edgeDarkening",
+        "label": "Edge darkening",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "granulation",
+        "label": "Granulation",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "bloom",
+        "label": "Blooms",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "bleed",
+        "label": "Colour bleed",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "pigmentWeight",
+        "label": "Pigment weight",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "pickup",
+        "label": "Lifting",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "fixture",
+        "label": "Staining",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "wetTilt": [
+      {
+        "path": "angle",
+        "label": "Tilt",
+        "min": 0,
+        "max": 90,
+        "step": 1
+      },
+      {
+        "path": "direction",
+        "label": "Downhill",
+        "min": 0,
+        "max": 359,
+        "step": 1
+      }
+    ],
+    "wetSpeed": {
+      "path": "speed",
+      "label": "Speed",
+      "min": 15,
+      "max": 480,
+      "step": 15
+    },
+    "light": [
+      {
+        "path": "azimuth",
+        "label": "Light direction",
+        "min": 0,
+        "max": 359,
+        "step": 1
+      },
+      {
+        "path": "elevation",
+        "label": "Light height",
+        "min": 5,
+        "max": 90,
+        "step": 1
+      },
+      {
+        "path": "relief",
+        "label": "Relief",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "stroke": [
+      {
+        "path": "tip.size",
+        "label": "Size",
+        "min": 1,
+        "max": 400,
+        "step": 1
+      },
+      {
+        "path": "tip.opacity",
+        "label": "Opacity",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      },
+      {
+        "path": "tip.flow",
+        "label": "Flow",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ],
+    "sticker": [
+      {
+        "path": "size",
+        "label": "Size",
+        "min": 2,
+        "max": 400,
+        "step": 1
+      },
+      {
+        "path": "rotation",
+        "label": "Rotation",
+        "min": -180,
+        "max": 180,
+        "step": 1
+      },
+      {
+        "path": "opacity",
+        "label": "Opacity",
+        "min": 0,
+        "max": 1,
+        "step": 0.01
+      }
+    ]
+  },
+  "pathStrokeTapers": [
+    {
+      "id": "even",
+      "label": "Even"
+    },
+    {
+      "id": "both",
+      "label": "Taper both ends",
+      "pressure": [
+        0.2,
+        1,
+        0.2
+      ]
+    },
+    {
+      "id": "in",
+      "label": "Fade in",
+      "pressure": [
+        0.2,
+        1
+      ]
+    },
+    {
+      "id": "out",
+      "label": "Fade out",
+      "pressure": [
+        1,
+        0.2
+      ]
+    }
+  ],
+  "padSampleSizes": [
+    1,
+    3,
+    5,
+    9,
+    15
+  ],
+  "wetGpu": [
+    {
+      "value": "auto",
+      "label": "GPU for large washes"
+    },
+    {
+      "value": "off",
+      "label": "CPU only"
+    }
+  ],
+  "labels": {
+    "wetTools": {
+      "paint": "Paint",
+      "water": "Add water",
+      "dry": "Dry",
+      "blow": "Blow",
+      "blend": "Blend",
+      "smudge": "Smudge",
+      "blot": "Blot (erase wet)"
+    },
+    "wetMedia": {
+      "watercolor": "Watercolour",
+      "gouache": "Gouache",
+      "oil": "Oil"
+    },
+    "impastoTools": {
+      "brush": "Brush",
+      "tube": "Paint tube",
+      "knife": "Palette knife",
+      "roller": "Roller",
+      "gloop": "Gloop pen"
+    },
+    "particleKinds": {
+      "string": "Strings",
+      "spring": "Springs",
+      "orbit": "Orbits",
+      "flow": "Flow",
+      "elastic": "Elastic",
+      "fuzzy": "Fuzzy"
+    },
+    "particleRenders": {
+      "dot": "Dots",
+      "line": "Lines",
+      "sequence": "Beads",
+      "ribbon": "Ribbon"
+    },
+    "ribbonPairs": {
+      "adjacent": "Neighbours",
+      "first-last": "Outermost"
+    },
+    "dotTextureOrders": {
+      "sequence": "In turn",
+      "random": "Random"
+    },
+    "dotRotations": {
+      "follow": "Follow motion",
+      "random": "Random",
+      "fixed": "Tip angle"
+    },
+    "stamps": {
+      "dot": "Dot",
+      "star": "Star",
+      "heart": "Heart",
+      "leaf": "Leaf",
+      "flower": "Flower",
+      "confetti": "Confetti",
+      "splat": "Splat",
+      "sparkle": "Sparkle",
+      "ring": "Ring"
+    }
+  }
+}

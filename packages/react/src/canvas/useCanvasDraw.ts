@@ -24,6 +24,8 @@ export interface UseCanvasDrawOptions<TNode extends CanvasNode = CanvasNode> {
 	generateNodeId?: () => string;
 	/** The brush library whose saved brushes strokes may use besides the presets (the canvas profile decides which); read once, on mount. */
 	brushLibrary?: CanvasDrawControllerOptions<TNode>['brushLibrary'];
+	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */
+	colorScheme?: 'light' | 'dark';
 	onStrokeComplete?: (node: TNode) => void;
 	onNodesErase?: (erasedNodes: TNode[]) => void;
 }
@@ -50,6 +52,11 @@ export interface CanvasDrawActions<TNode extends CanvasNode = CanvasNode> {
 	nodeBounds: (id: string) => { x: number; y: number; width: number; height: number } | undefined;
 	/** The presets and saved brushes `style.brush` accepts (loads the paint engine). */
 	listBrushes: () => Promise<CanvasBrushPreset[]>;
+	/**
+	 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour`.
+	 * Resolves to the preset; rejects for a brush the canvas can't paint.
+	 */
+	selectBrush: (id: string | null, choice?: { keepColour?: boolean }) => Promise<CanvasBrushPreset | null>;
 }
 
 export type CanvasDraw<TNode extends CanvasNode = CanvasNode> = CanvasDrawState &
@@ -85,6 +92,7 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 				drawOptions: options.drawOptions,
 				generateNodeId: options.generateNodeId,
 				brushLibrary: options.brushLibrary,
+				colorScheme: options.colorScheme,
 				onToolChange: setToolState,
 				onStyleChange: (s) => setStyleState(s),
 				onActiveStrokeChange: setActiveStroke,
@@ -103,6 +111,10 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		}
 	}, [options.initialTool, controller]);
 
+	useEffect(() => {
+		controller.setColorScheme(options.colorScheme ?? 'light');
+	}, [options.colorScheme, controller]);
+
 	return useMemo(
 		() => ({
 			tool,
@@ -118,7 +130,8 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 			eraseAt: controller.eraseAt,
 			drawStroke: controller.drawStroke,
 			nodeBounds: controller.nodeBounds,
-			listBrushes: controller.listBrushes
+			listBrushes: controller.listBrushes,
+			selectBrush: controller.selectBrush
 		}),
 		[tool, style, activeStroke, controller]
 	);

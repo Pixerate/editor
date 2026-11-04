@@ -16,6 +16,7 @@
 import { BrushstrokeCache, brushstrokeDataUrl, isBrushstrokeBrush, type BrushstrokeImage } from '../paint/brushstroke.js';
 import { GRAIN_PATTERNS, type GrainPattern } from '../paint/grain.js';
 import { BUILTIN_BRUSHES, type PaintBrush } from '../paint-editor/brushes.js';
+import { brushColourHex } from '../brushes/colour.js';
 import { closest } from '../brushes/library.js';
 import { normalizeBrushSpec } from '../brushes/normalize.js';
 import { BRUSH_PRESETS } from '../brushes/presets.js';
@@ -88,6 +89,16 @@ export function vectorBrushstrokeBrushError(id: string, user: readonly Brush[] =
 	const preset = BRUSH_PRESETS.find((b) => b.id === id);
 	if (preset) return `Brush "${id}" (${preset.name}) can't paint a brushstroke: ${reasons(preset)} Use one of: ${ids.join(', ')}.`;
 	return `Unknown brush "${id}". ${closest(id, ids)}Use one of: ${ids.join(', ')} (vector.listBrushes lists them).`;
+}
+
+/**
+ * The default colour of brush `id` (a preset, else a saved brush of `user`) as a hex colour for
+ * `scheme`: a solid default, or the side of a light / dark pair; null when it has none (it paints
+ * in the colour it is given).
+ */
+export function vectorBrushstrokeDefaultColour(id: string, user: readonly Brush[] = [], scheme: 'light' | 'dark' = 'light'): string | null {
+	const brush = BRUSH_PRESETS.find((b) => b.id === id) ?? user.find((b) => b.id === id);
+	return brush ? brushColourHex(brush.colour?.default, scheme) : null;
 }
 
 /**

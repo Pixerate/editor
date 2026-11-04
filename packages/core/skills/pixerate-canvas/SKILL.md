@@ -99,6 +99,8 @@ you to. Withdraw stale ones with `reject_proposal`: when the user changes what a
   one width), the airbrush is a soft spray. The grain and jitter are seeded per stroke, so a
   stroke always looks the same, and neighbouring strokes share one sheet of paper. Pick the brush
   for the look, then the colour; for a sketch, use one or two brushes rather than all of them.
+  A brush with a default colour (ballpoint blue, highlighter yellow, chalk) paints in it when
+  you pass no `color`; pass `color` to use another.
 - **Annotate with gestures, not points.** To mark up work the way a designer marks up a print,
   use the gesture commands (`canvas.circle`, `canvas.underline`, `canvas.arrow`,
   `canvas.bracket`, `canvas.strike`, `canvas.cross`, `canvas.check`) with node ids
@@ -251,7 +253,7 @@ character: seeded jitter and the paper grain they catch) and, when a width was c
 
 | Command | Use it to |
 | --- | --- |
-| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset or saved brush id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
+| `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush` and no `color`, the brush's default colour if it has one; with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset or saved brush id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
 | `canvas.listBrushes` | Read-only: the brushes `canvas.drawFreehand` and the gestures accept as `brush`: the dry presets, then saved brushes from the brush library the canvas can paint (`id`, `name`, `category`, the brush's own `size`, which a stroke uses unless you pass `width`, and `builtin`). Call it before the first brushed stroke instead of guessing ids. |
 
 Gestures draw one hand-drawn stroke node each (one undo step) through the same path as

@@ -19,8 +19,8 @@ import { CoverageMap, dabRect, rasterizeDab, type BrushSettings, type Dab, type 
 import type { RasterRect } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
-import { rand01, randSigned } from './noise';
-import { rasterizeStampDab, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
+import { randSigned } from './noise';
+import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
 import type { StickerArtLookup } from './sticker-art';
 import { grainCatch, type PaperGrain } from './paper';
 
@@ -406,14 +406,7 @@ export class DryStroke {
         continue;
       }
       // Spray: droplets spread evenly over the tip's disc (seeded per dab, so replays match).
-      const count = 1 + Math.round(spray.density * 31);
-      const key = d.index * 131 + Math.round(d.travel * 8);
-      for (let i = 0; i < count; i++) {
-        const a = rand01(seed, key * 64 + i, 61) * Math.PI * 2;
-        const rr = Math.sqrt(rand01(seed, key * 64 + i, 67)) * d.radius;
-        const drop: Dab = { ...d, x: d.x + Math.cos(a) * rr, y: d.y + Math.sin(a) * rr, radius: Math.max(0.5, d.radius * spray.size * (0.6 + 0.8 * rand01(seed, key * 64 + i, 71))), roundness: 1, angle: rand01(seed, key * 64 + i, 73) * Math.PI * 2 };
-        this.mark(drop, d, rects);
-      }
+      for (const drop of sprayDroplets(d, spray, seed)) this.mark(drop, d, rects);
     }
     return rects;
   }

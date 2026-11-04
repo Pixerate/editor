@@ -5,6 +5,7 @@
 //
 // Domains:
 //   brushes  `brushContracts()` from `@pixerate/editor/brushes` → packages/conformance/domains/brushes/
+//   paint    `paintContracts()` from `@pixerate/editor/paint-editor` (effect tools listed with the fake effect provider) → packages/conformance/domains/paint/
 //
 // Usage: node scripts/export-contracts.mjs [--check]   (--check writes nothing and exits 1 when a file is out of date)
 
@@ -18,14 +19,20 @@ const check = process.argv.includes("--check");
 /** Every contract file is JSON with two-space indents and a final newline, so diffs stay small. */
 const format = (value) => JSON.stringify(value, null, 2) + "\n";
 
-const entry = path.join(root, "packages/core/dist/brushes/index.js");
-if (!fs.existsSync(entry)) {
-  console.error(`No ${path.relative(root, entry)}: build the core first (pnpm --filter @pixerate/editor build).`);
-  process.exit(1);
+/** Imports a built core entry, e.g. `brushes/index.js`. */
+async function core(entry) {
+  const file = path.join(root, "packages/core/dist", entry);
+  if (!fs.existsSync(file)) {
+    console.error(`No ${path.relative(root, file)}: build the core first (pnpm --filter @pixerate/editor build).`);
+    process.exit(1);
+  }
+  return import(pathToFileURL(file).href);
 }
-const { brushContracts } = await import(pathToFileURL(entry).href);
+const { brushContracts } = await core("brushes/index.js");
+const { paintContracts } = await core("paint-editor/index.js");
+const { createFakeEffectProvider } = await core("effects/index.js");
 
-const domains = { brushes: brushContracts() };
+const domains = { brushes: brushContracts(), paint: paintContracts({ effects: createFakeEffectProvider() }) };
 let stale = 0;
 for (const [domain, files] of Object.entries(domains)) {
   const dir = path.join(root, "packages/conformance/domains", domain);

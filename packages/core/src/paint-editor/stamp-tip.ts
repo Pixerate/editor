@@ -10,6 +10,7 @@ import type { RasterRect as CropBox } from '../raster/surface';
 import { stampCoverage, type StampKind } from '../stickers/stamps';
 import { editorStampOf } from '../stickers/helpers';
 import type { StickerArtLookup } from './sticker-art';
+import { rand01 } from './noise';
 
 /** Coverage 0..1 of a stamp at (u, v) of its unit square (−1..1, y down); `seed` varies shapes with random parts. */
 export type StampSampler = (u: number, v: number, seed: number) => number;
@@ -108,4 +109,22 @@ export function rasterizeStampDab(d: StampDab, sample: StampSampler, seed: numbe
 export function brushStickerRefs(brush: { engine: string; stamp: string | null; sticker: { stamps: readonly string[] }; particle: { dotTextures: readonly string[] } }): string[] {
   const refs = brush.engine === 'sticker' ? [...brush.sticker.stamps] : brush.engine === 'particle' ? [...brush.particle.dotTextures] : brush.engine === 'dab' && brush.stamp ? [brush.stamp] : [];
   return [...new Set(refs.filter((r) => r.includes(':') && !r.startsWith('editor:')))];
+}
+
+/**
+ * Spray marks: the droplets of dab `d`, spread evenly over its disc, each a fraction `size` of
+ * the tip (with ±40% variation) and turned at random. Seeded by the stroke `seed`, the dab's
+ * index and its travel, so replays lay the same droplets.
+ */
+export function sprayDroplets<D extends { x: number; y: number; radius: number; roundness: number; angle: number; index: number; travel: number }>(d: D, spray: { density: number; size: number }, seed: number): D[] {
+  const count = 1 + Math.round(spray.density * 31);
+  const key = d.index * 131 + Math.round(d.travel * 8);
+  const out: D[] = [];
+  for (let i = 0; i < count; i++) {
+    const n = key * 64 + i;
+    const a = rand01(seed, n, 61) * Math.PI * 2;
+    const rr = Math.sqrt(rand01(seed, n, 67)) * d.radius;
+    out.push({ ...d, x: d.x + Math.cos(a) * rr, y: d.y + Math.sin(a) * rr, radius: Math.max(0.5, d.radius * spray.size * (0.6 + 0.8 * rand01(seed, n, 71))), roundness: 1, angle: rand01(seed, n, 73) * Math.PI * 2 });
+  }
+  return out;
 }

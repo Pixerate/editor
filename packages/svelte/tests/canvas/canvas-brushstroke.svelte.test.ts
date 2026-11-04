@@ -30,6 +30,19 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect((await draw.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 
+	it('selectBrush takes the brush\'s default colour for the colour scheme, unless keepColour', async () => {
+		let nodes: CanvasNode[] = [];
+		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen' });
+		await draw.selectBrush('chalk');
+		expect(draw.style).toMatchObject({ brush: 'chalk', color: '#475569' });
+		draw.setColorScheme('dark');
+		await draw.selectBrush('chalk');
+		expect(draw.style.color).toBe('#f8fafc');
+		await draw.selectBrush('ballpoint', { keepColour: true });
+		expect(draw.style).toMatchObject({ brush: 'ballpoint', color: '#f8fafc' });
+		await expect(draw.selectBrush('watercolor-round')).rejects.toThrow(/can't brush a canvas stroke/);
+	});
+
 	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {
 		let nodes: CanvasNode[] = [{ id: 'card', position: { x: 100, y: 80 }, width: 160, height: 40, data: {} }];
 		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n) });

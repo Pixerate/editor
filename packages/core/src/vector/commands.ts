@@ -1572,7 +1572,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					brushId: { type: 'string', description: 'Brush id from vector.listBrushes, e.g. "pencil-hb".' },
 					size: { type: 'number', exclusiveMinimum: 0, maximum: 500, description: 'Brush diameter in document units (default: the brush\'s own).' },
 					pressure: { type: 'array', items: { type: 'number', minimum: 0, maximum: 1 }, minItems: 1, maxItems: 64, description: 'Pressure 0–1 along the length, spread evenly from start to end (default: full pressure).' },
-					color: { type: 'string', description: 'CSS colour (default: the path\'s stroke colour, else black).' },
+					color: { type: 'string', description: 'CSS colour (default: the brush\'s own default colour, such as the ballpoint\'s blue, unless keepColour; else the path\'s stroke colour, else black).' },
+					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and use the path\'s stroke colour (default false).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1 (default 1).' },
 					index: { type: 'integer', minimum: 0, description: 'Position in the stroke stack, 0 the bottom (default: on top).' },
 					seed: { ...BRUSH_SEED, description: 'Character seed 0–2147483647: turns on the brush\'s jitter and paper grain; the same seed always renders the same stroke (default: none, plain dabs).' },
@@ -1583,7 +1584,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			},
 			undoable: true,
 			enabled: enabledFor,
-			run: (_ctx: unknown, params: { ids?: string[]; brushId: string; size?: number; pressure?: number[]; color?: string; opacity?: number; index?: number; seed?: number; paper?: VectorBrushstrokePaper | null }) => {
+			run: (_ctx: unknown, params: { ids?: string[]; brushId: string; size?: number; pressure?: number[]; color?: string; keepColour?: boolean; opacity?: number; index?: number; seed?: number; paper?: VectorBrushstrokePaper | null }) => {
 				const targets = params.ids ?? controller.getState().selection;
 				check(
 					controller.addBrushstroke(
@@ -1594,7 +1595,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 							...(params.seed !== undefined ? { seed: params.seed } : {}),
 							...(params.paper !== undefined ? { paper: params.paper } : {})
 						},
-						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
+						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.keepColour ? { keepColour: true } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
 					)
 				);
 				const paths: unknown[] = [];
@@ -1620,7 +1621,8 @@ export function createVectorCommands(controller: VectorEditorController, options
 					brushId: { type: 'string', description: 'Another brush from vector.listBrushes.' },
 					size: { type: ['number', 'null'], description: 'Diameter in document units, or null for the brush\'s own.' },
 					pressure: { type: ['array', 'null'], items: { type: 'number', minimum: 0, maximum: 1 }, description: 'Pressure profile 0–1 from start to end, or null for full pressure.' },
-					color: { type: 'string', description: 'CSS colour.' },
+					color: { type: 'string', description: 'CSS colour (with another brushId and no color, the new brush\'s default colour, if it has one, unless keepColour).' },
+					keepColour: { type: 'boolean', description: 'With another brushId: keep the layer\'s colour instead of taking the new brush\'s default colour (default false).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity 0–1.' },
 					seed: { anyOf: [BRUSH_SEED, { type: 'null' }], description: 'Character seed 0–2147483647 (jitter and paper grain; a new seed gives a new take on the same stroke), or null for plain dabs.' },
 					paper: { anyOf: [BRUSH_PAPER, { type: 'null' }], description: 'The paper the grain comes from { pattern, seed, scale, depth } (applies with a seed), null for no grain, or {} for the default sanded paper.' }
@@ -1629,7 +1631,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 				additionalProperties: false
 			},
 			undoable: true,
-			run: (_ctx: unknown, params: { id: string; index: number; brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null }) => {
+			run: (_ctx: unknown, params: { id: string; index: number; brushId?: string; size?: number | null; pressure?: number[] | null; color?: string; keepColour?: boolean; opacity?: number; seed?: number | null; paper?: VectorBrushstrokePaper | null }) => {
 				const { id, index, ...patch } = params;
 				if (!Object.keys(patch).length) fail('Pass at least one of brushId, size, pressure, color, opacity, seed, paper.');
 				layerIndex(id, 'stroke', index);

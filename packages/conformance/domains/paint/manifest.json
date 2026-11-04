@@ -1,0 +1,22 @@
+{
+  "domain": "paint",
+  "formatVersion": 1,
+  "document": {
+    "kind": "paint",
+    "formatVersion": 1,
+    "format": "pixerate-paint",
+    "version": 2
+  },
+  "counts": {
+    "providers": 4,
+    "tools": 130,
+    "commands": 13,
+    "layerEffects": 10
+  },
+  "files": [
+    "commands.json",
+    "document.schema.json",
+    "tools.json",
+    "ui.json"
+  ]
+}
