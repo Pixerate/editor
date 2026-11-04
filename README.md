@@ -176,7 +176,7 @@ Open http://localhost:3000. The demo has a tab per area: **Prompt Studio**, **Do
 Every feature is available from core and from both framework packages, except where a footnote says otherwise. "Via core" means the framework package uses the core API directly, with no extra wrapper. The Swift column tracks the native editors (#533): what is ported, and the issue for what is planned. This section is generated from [`parity/features.json`](./parity/features.json) by `node scripts/parity.mjs`; edit that file, not this section. Expand an area for the details.
 
 <details>
-<summary><strong>Prompt engine</strong> (18)</summary>
+<summary><strong>Prompt engine</strong> (19)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -192,6 +192,7 @@ Every feature is available from core and from both framework packages, except wh
 | Comparison Conditions (`{?amount>100}…{/amount}`, `= <> < > <= >=`) | ✅ | ✅ | ✅ | Planned (#546) |
 | Mail-Merge Data Sources (`parseDataSource`, `matchFields`: CSV/TSV/JSON, fuzzy field matching) | ✅ | Via core | Via core | Planned (#546) |
 | Multi-Record Merge & Preview (`mergeRecords` / `<MergePreview />`) | Headless | `<MergePreview />` & `useMergePreview` | `<MergePreview />` & `createMergePreview` | Planned (#546) |
+| Prompt Editor (plain-text editor: echo-safe controlled `content`, milestones, live `isEditing` / `placeholder` / `className`) | `createPromptEditorOptions` & `syncPromptEditor` | `usePromptEditor` | `usePromptEditor` | Planned (#546) |
 | Plain Text Clipboard & Linebreak Parser | ✅ | ✅ | ✅ | Planned (#546) |
 | Live Animated Gradient Text | ✅ | ✅ | ✅ | Planned (#546) |
 | Slash Command Trigger (`/command`) | ✅ | ✅ | ✅ | Planned (#546) |

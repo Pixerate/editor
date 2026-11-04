@@ -102,6 +102,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#546)"
       },
       {
+        "feature": "Prompt Editor (plain-text editor: echo-safe controlled `content`, milestones, live `isEditing` / `placeholder` / `className`)",
+        "core": "`createPromptEditorOptions` & `syncPromptEditor`",
+        "react": "`usePromptEditor`",
+        "svelte": "`usePromptEditor`",
+        "swift": "Planned (#546)"
+      },
+      {
         "feature": "Plain Text Clipboard & Linebreak Parser",
         "core": "✅",
         "react": "✅",

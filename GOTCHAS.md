@@ -3840,3 +3840,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Writing `const { $from, from, to } = selection;` inside a `.svelte.ts` rune module fails with `CompileError: The $ prefix is reserved, and cannot be used for variables and imports`.
 - **Root Cause**: The Svelte 5 compiler reserves all local identifier names prefixed with `$` inside `.svelte` and `.svelte.ts` files for runes and store auto-subscriptions.
 - **Solution / Workaround**: Rename `$`-prefixed ProseMirror properties when destructuring in `.svelte.ts` files (e.g. `const { $from: resolvedFrom, from, to } = selection;`) or access them as property lookups (`selection.$from`).
+
+### [svelte/runes] A Getter-Based Wrapper Must Not Re-Apply Unchanged Controlled Content
+- **Issue / Symptom**: In Svelte's `usePromptEditor`, changing an unrelated prop (e.g. `placeholder`) reset the editor to the parent's `content`, throwing away text the parent had not taken up from `onContentChange`. React's hook did not do this.
+- **Root Cause**: A Svelte `$effect` re-reads the whole props getter whenever any prop changes, whereas React's content `useEffect` only runs when `content` changes. Comparing `content` against the editor's text on every run therefore overwrote un-echoed edits.
+- **Solution / Workaround**: `syncPromptEditor(editor, config, previous)` in core applies content only when `config.content !== previous.content` and it differs from the editor's text. Pass the previous config from both bindings.

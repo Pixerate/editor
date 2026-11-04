@@ -136,6 +136,34 @@ describe("usePromptEditor (Svelte)", () => {
     expect(setContent).not.toHaveBeenCalled();
   });
 
+  it("does not overwrite typed text when an unrelated prop changes and content did not", () => {
+    // The parent ignores onContentChange (content stays "start"), like React's hook,
+    // where only a change of the content prop is applied.
+    let placeholder = $state("one");
+    const prompt = setupPromptEditor(() => ({ content: "start", placeholder }));
+    const editor = prompt.editor!;
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.commands.insertContent(" typed");
+
+    placeholder = "two";
+    flushSync();
+    expect(prompt.editor).toBe(editor);
+    expect(editor.getText()).toBe("start typed");
+  });
+
+  it("captures slash-menu keys and clears the menu on Escape", () => {
+    const clearSlashCommand = vi.fn();
+    const onEscape = vi.fn();
+    const prompt = setupPromptEditor(() => ({ slashCommandActive: true, clearSlashCommand, onEscape }));
+    const editor = prompt.editor!;
+    const handleKeyDown = editor.options.editorProps.handleKeyDown!;
+    const key = (k: string) => new KeyboardEvent("keydown", { key: k, cancelable: true });
+    expect(handleKeyDown(editor.view, key("ArrowUp"))).toBe(true);
+    expect(handleKeyDown(editor.view, key("Escape"))).toBe(true);
+    expect(clearSlashCommand).toHaveBeenCalledTimes(1);
+    expect(onEscape).not.toHaveBeenCalled();
+  });
+
   it("fires each milestone once, using the core tokenizer", () => {
     const onMilestone = vi.fn();
     const prompt = setupPromptEditor(() => ({ onMilestone, content: "" }));
