@@ -47,7 +47,7 @@ import {
   type CanvasNode,
   type FreehandTool,
 } from "@pixerate/editor-react/canvas";
-import { createCanvasGestureRecorder, createCanvasStickerHost, renderCanvasBrushPreview, type CanvasEdge } from "@pixerate/editor/canvas";
+import { createCanvasGestureRecorder, createCanvasStickerHost, renderCanvasBrushPreview, type CanvasEdge, type FreehandStrokeStyle } from "@pixerate/editor/canvas";
 import { CANVAS_PROFILE, createBrushLibraryToolProvider } from "@pixerate/editor/brushes";
 import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { demoBrushLibrary } from "../demoBrushes";
@@ -264,19 +264,22 @@ const CanvasDemo: React.FC = () => {
   });
   const [activeGradientKey, setActiveGradientKey] = useState<string | null>(null);
 
+  const [scheme, setScheme] = useState<"light" | "dark">(() => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
   const draw = useCanvasDraw<BoxNode>({
     nodes,
     setNodes,
     history: history.manager,
     initialTool: "select",
     brushLibrary: demoBrushLibrary,
-    // The demo is always dark, so chalk is white.
-    colorScheme: "dark",
+    // Light / dark brush colours (the chalk) resolve for this scheme, and a colour taken from one
+    // follows when it changes: it starts from the system setting, and the toggle above switches it.
+    colorScheme: scheme,
   });
   // Dry paint brushes for freehand strokes; the paint engine loads when this list is first read.
   // Picking a brush sets the size to the preset's own; the slider then changes the brush size.
-  const [brushId, setBrushId] = useState("");
-  const [brushSize, setBrushSize] = useState<number | undefined>(undefined);
+  // The brush lives in the draw style, so a brush an agent picks (canvas.selectBrush) shows here.
+  const brushId = typeof draw.style.brush === "string" ? draw.style.brush : "";
+  const brushSize = draw.style.brushSize;
   const [brushMenuOpen, setBrushMenuOpen] = useState(false);
   const [brushEditorOpen, setBrushEditorOpen] = useState(false);
   // The presets and the demo library's saved brushes the canvas can paint (a brush saved in the
@@ -284,18 +287,21 @@ const CanvasDemo: React.FC = () => {
   const brushes = useCanvasBrushes({ swatches: { width: 96, height: 22, background: "#0f172a" }, library: demoBrushLibrary });
   const brushEntries = useBrushLibrary(demoBrushLibrary, { profile: CANVAS_PROFILE });
   const pickBrush = useCallback((id: string) => {
-    setBrushId(id);
-    setBrushSize(brushes.brushes.find((b) => b.id === id)?.size);
     setBrushMenuOpen(false);
-    // Picking a brush with a default colour (the ballpoint's blue, chalk's white) paints in it.
-    if (id) draw.selectBrush(id).catch(() => {});
-  }, [brushes.brushes, draw]);
+    // Picking a brush with a default colour (the ballpoint's blue, chalk's light / dark pair)
+    // paints in it, unless "Keep my colour" is on.
+    draw.selectBrush(id || null).catch(() => {});
+  }, [draw]);
+  // Switching between pen and highlighter resets the style: give the new tool the brush back.
+  const chosenBrush = useRef<Partial<FreehandStrokeStyle>>({});
+  const lastTool = useRef(draw.tool);
   useEffect(() => {
-    const brushSpec = brushes.brushes.find((b) => b.id === brushId)?.spec;
-    if ((draw.tool === "pen" || draw.tool === "highlighter") && ((draw.style.brush ?? "") !== brushId || draw.style.brushSize !== brushSize || draw.style.brushSpec !== brushSpec)) {
-      draw.setStyle({ brush: brushId || undefined, brushSize: brushId ? brushSize : undefined, brushSpec });
-    }
-  }, [draw, brushId, brushSize, brushes.brushes]);
+    const toolChanged = lastTool.current !== draw.tool;
+    lastTool.current = draw.tool;
+    if (draw.tool !== "pen" && draw.tool !== "highlighter") return;
+    if (toolChanged && draw.style.brush === undefined && chosenBrush.current.brush !== undefined) draw.setStyle(chosenBrush.current);
+    else chosenBrush.current = { brush: draw.style.brush, brushSize: draw.style.brushSize, brushSpec: draw.style.brushSpec };
+  }, [draw]);
   const currentBrush = brushes.brushes.find((b) => b.id === brushId);
   // Gradient paint for brushed strokes, sampled dab by dab (the stroke colour fills "paint" stops).
   const [brushPaintId, setBrushPaintId] = useState("");
@@ -647,6 +653,14 @@ const CanvasDemo: React.FC = () => {
   return (
     <div className="space-y-3">
       <EditorDocumentAutosave doc={canvasDocument} name="Canvas" />
+      <div className="flex items-center gap-2 text-xs text-slate-400" role="group" aria-label="Colour scheme">
+        <span>Brush colours for</span>
+        {(["light", "dark"] as const).map((s) => (
+          <button key={s} type="button" aria-pressed={scheme === s} onClick={() => setScheme(s)} className={`rounded px-2 py-0.5 ${scheme === s ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300 hover:text-white"}`}>
+            {s === "light" ? "Light mode" : "Dark mode"}
+          </button>
+        ))}
+      </div>
       <div
         className="bg-slate-900/80 border border-slate-800 rounded-xl p-2 flex flex-wrap items-center gap-1 shadow-md"
         role="toolbar"
@@ -773,7 +787,7 @@ const CanvasDemo: React.FC = () => {
                 min={1}
                 max={120}
                 value={brushSize ?? currentBrush?.size ?? 10}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
+                onChange={(e) => draw.setStyle({ brushSize: Number(e.target.value) })}
                 className="w-16 accent-sky-500 cursor-pointer"
                 title={`Brush size: ${brushSize ?? currentBrush?.size}px`}
                 aria-label="Brush size"
@@ -809,6 +823,9 @@ const CanvasDemo: React.FC = () => {
                   <button type="button" aria-pressed={!brushId} className="w-full text-left text-xs text-slate-200 px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700" onClick={() => pickBrush("")}>
                     Vector stroke
                   </button>
+                  <label className="flex items-center gap-1.5 px-2 py-1 text-slate-300" title="Choosing a brush keeps the stroke colour instead of taking the brush's default colour">
+                    <input type="checkbox" aria-label="Keep my colour" checked={draw.colorLocked} onChange={(e) => draw.setColorLocked(e.target.checked)} /> Keep my colour when choosing a brush
+                  </label>
                   {/* The shared brush library, filtered by the canvas profile; thumbnails are canvas swatches. */}
                   <BrushLibraryBrowser entries={brushEntries} activeId={brushId || undefined} profile={CANVAS_PROFILE} onSelect={pickBrush} thumbnail={(id) => brushes.brushes.find((b) => b.id === id)?.swatch} thumbnailWidth={96} thumbnailHeight={22} />
                 </div>
