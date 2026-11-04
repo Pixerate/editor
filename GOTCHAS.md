@@ -3623,3 +3623,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Under StrictMode, the change feed stopped reporting anything after mount.
 - **Root Cause**: A feed made in `useMemo` subscribes to the controller once. StrictMode runs the unmount cleanup (`dispose`) and remounts, which reuses the disposed feed.
 - **Solution / Workaround**: Create the feed inside the effect, dispose it in that effect's cleanup, and keep it in state, so each mount has a live one. `feed` is `null` until mounted.
+
+### [core/paint-editor] The Paint Contracts Take an Effect Provider
+
+- **Issue / Symptom**: `paintContracts()` listed no effect tools, and bundling the fake effect provider into `@pixerate/editor/paint-editor` to fix that would ship test code to every paint host.
+- **Root Cause**: `createPaintEffectsToolProvider` lists its tools only once the controller has an effect provider.
+- **Solution / Workaround**: `paintContracts({ effects })` takes the provider. `scripts/export-contracts.mjs` and `tests/paint-contracts.test.ts` pass `createFakeEffectProvider()` from `effects/index.js`, so the committed `tools.json` doesn't depend on a real catalogue. Keyboard shortcuts live in `PAINT_SHORTCUTS`, which `handlePaintShortcut` dispatches from; add a key there, not in the handler, so `commands.json` stays true.

@@ -290,49 +290,68 @@ export class PaintGesture {
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
-/** Keyboard shortcuts shared by both editors; returns true when it handled the key. */
+/** A keyboard command of the paint editor (`PAINT_SHORTCUTS`). */
+export interface PaintShortcut {
+  /** Stable id, e.g. `undo` or `tool.brush`. */
+  id: string;
+  label: string;
+  group: 'edit' | 'tools' | 'brush' | 'colour' | 'view';
+  /** Keys that run it: `Mod` is Ctrl or Cmd; letters are matched case-insensitively. */
+  keys: readonly string[];
+  /** The agent tool that does the same, when there is one. */
+  tool?: string;
+}
+
+/** The keyboard commands both editors handle (`handlePaintShortcut`), in the order it checks them. */
+export const PAINT_SHORTCUTS: readonly PaintShortcut[] = [
+  { id: 'undo', label: 'Undo', group: 'edit', keys: ['Mod+Z'], tool: 'undo_paint' },
+  { id: 'redo', label: 'Redo', group: 'edit', keys: ['Mod+Shift+Z', 'Mod+Y'], tool: 'redo_paint' },
+  ...PAINT_TOOLS.map((t) => ({ id: `tool.${t.id}`, label: t.label, group: 'tools' as const, keys: [t.key.toUpperCase()] })),
+  { id: 'brush.smaller', label: 'Smaller brush', group: 'brush', keys: ['['], tool: 'set_brush' },
+  { id: 'brush.larger', label: 'Larger brush', group: 'brush', keys: [']'], tool: 'set_brush' },
+  { id: 'colour.swap', label: 'Swap colours', group: 'colour', keys: ['X'] },
+  { id: 'view.mirror', label: 'Mirror the view', group: 'view', keys: ['M'], tool: 'set_view' },
+  { id: 'view.reset', label: 'Reset the view', group: 'view', keys: ['Escape'], tool: 'set_view' },
+];
+
+/** The shortcut `e` presses, if any. */
+export function paintShortcutFor(e: { key: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }): PaintShortcut | null {
+  if (!e.key) return null;
+  const parts = [...(e.ctrlKey || e.metaKey ? ['Mod'] : []), ...(e.shiftKey && (e.ctrlKey || e.metaKey) ? ['Shift'] : [])];
+  const key = e.key.length === 1 ? e.key.toUpperCase() : e.key[0].toUpperCase() + e.key.slice(1).toLowerCase();
+  const combo = [...parts, key].join('+');
+  return PAINT_SHORTCUTS.find((s) => s.keys.includes(combo)) ?? null;
+}
+
+/** Keyboard shortcuts shared by both editors (`PAINT_SHORTCUTS`); returns true when it handled the key. */
 export function handlePaintShortcut(
   controller: PaintEditorController,
   gesture: PaintGesture,
   e: { key: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; target?: unknown }
 ): boolean {
-  const mod = e.ctrlKey || e.metaKey;
-  const key = e.key.toLowerCase();
-  if (mod && key === 'z') {
-    if (controller.getState().stroking) return true;
-    if (e.shiftKey) controller.redo();
-    else controller.undo();
+  const shortcut = paintShortcutFor(e);
+  if (!shortcut) return false;
+  const id = shortcut.id;
+  if (id === 'undo' || id === 'redo') {
+    if (controller.getState().stroking && !(id === 'redo' && e.key.toLowerCase() === 'y')) return true;
+    if (id === 'undo') controller.undo();
+    else controller.redo();
     return true;
   }
-  if (mod && key === 'y') {
-    controller.redo();
+  if (id.startsWith('tool.')) {
+    gesture.tool = id.slice(5) as PaintTool;
     return true;
   }
-  if (mod) return false;
-  const tool = PAINT_TOOLS.find((t) => t.key === key);
-  if (tool) {
-    gesture.tool = tool.id;
-    return true;
-  }
-  const brush = controller.getState().brush;
-  if (key === '[' || key === ']') {
+  if (id === 'brush.smaller' || id === 'brush.larger') {
+    const brush = controller.getState().brush;
     const step = Math.max(1, Math.round(brush.tip.size * 0.15));
-    controller.setBrush({ tip: { size: Math.max(1, brush.tip.size + (key === ']' ? step : -step)) } });
+    controller.setBrush({ tip: { size: Math.max(1, brush.tip.size + (id === 'brush.larger' ? step : -step)) } });
     return true;
   }
-  if (key === 'x') {
-    controller.swapColors();
-    return true;
-  }
-  if (key === 'm') {
-    controller.setView({ mirror: !controller.getState().view.mirror });
-    return true;
-  }
-  if (key === 'escape') {
-    controller.resetView();
-    return true;
-  }
-  return false;
+  if (id === 'colour.swap') controller.swapColors();
+  else if (id === 'view.mirror') controller.setView({ mirror: !controller.getState().view.mirror });
+  else if (id === 'view.reset') controller.resetView();
+  return true;
 }
 
 /** The 2D context methods the presenter uses (a `CanvasRenderingContext2D`). */

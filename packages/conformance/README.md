@@ -4,9 +4,9 @@ Language-neutral contracts generated from `@pixerate/editor`, so another impleme
 port in `packages/swift`, #533) can ship the same behaviour and check itself against it.
 
 This data-only package is generated: never edit its files by hand. `scripts/export-contracts.mjs`
-writes them from the built core, and the files are committed. A core test
-(`packages/core/tests/brush-contracts.test.ts`) fails when the committed files differ from what the
-code exports. After changing a contract's source, run:
+writes them from the built core, and the files are committed. Core tests
+(`packages/core/tests/brush-contracts.test.ts`, `paint-contracts.test.ts`) fail when the committed
+files differ from what the code exports. After changing a contract's source, run:
 
 ```bash
 pnpm --filter @pixerate/editor build
@@ -50,6 +50,31 @@ The brush model of `@pixerate/editor/brushes` (`brushContracts()`).
 - `editor-sections.json`: what the brush editor shows (`brushEditorSections`) for a few presets
   on every host: the ordered sections and their controls, values and ranges, as React and Svelte
   render them.
+
+### `domains/paint`
+
+The paint editor of `@pixerate/editor/paint-editor` (`paintContracts()`).
+
+- `manifest.json`: the domain, `formatVersion`, the saved document's kind and versions (the
+  envelope's `formatVersion`, the painting's `format` and `version`), counts and the other files.
+- `tools.json`: the agent tools of every paint provider as MCP tool lists (name, title,
+  description, `inputSchema`, all four annotations), under `providers` with each provider's id,
+  title and skill: the editor (`createPaintEditorToolProvider`, with its guide, wet, thick, replay,
+  sticker, pigment, sticker library and layer style tools), effects
+  (`createPaintEffectsToolProvider`, listed with the fake effect provider so the file does not
+  depend on a catalogue), the brush library and proposals. Positions are document pixels; a host
+  that sets an `origin` takes canvas coordinates instead.
+- `commands.json`: the keyboard commands both editors handle (`PAINT_SHORTCUTS`): `id`, `label`,
+  `group`, `keys` (`Mod` is Ctrl or Cmd), the agent `tool` that does the same where there is one,
+  and `params` (none take any).
+- `ui.json`: the tables React and Svelte render: the tool bar (`tools`), brush options, the blend
+  menu, every layer style with its controls at their defaults, the slider tables (paper, wet
+  paint, light, stroke, sticker), the mixing pad sample sizes, wet engine options and the label
+  tables.
+- `document.schema.json`: a saved painting, the `pixerate.editor-document` envelope of kind `paint`
+  around a `pixerate-paint` document. Objects are open, because readers keep fields they don't know
+  and write them back. Layers are the image editor's serialized layers. Each stroke's `brush`
+  refers to the brushes domain's `brush.schema.json`.
 
 ## Format
 

@@ -59,3 +59,4 @@ export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/ty
 export * from './sticker-art';
 export * from './collaboration';
 export * from './collaboration-tools';
+export { paintContracts, PAINT_CONTRACT_FORMAT_VERSION, PAINT_DOCUMENT_JSON_SCHEMA } from './contract';

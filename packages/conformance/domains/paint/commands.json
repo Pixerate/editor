@@ -1,0 +1,178 @@
+[
+  {
+    "id": "undo",
+    "label": "Undo",
+    "group": "edit",
+    "keys": [
+      "Mod+Z"
+    ],
+    "tool": "undo_paint",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "redo",
+    "label": "Redo",
+    "group": "edit",
+    "keys": [
+      "Mod+Shift+Z",
+      "Mod+Y"
+    ],
+    "tool": "redo_paint",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.brush",
+    "label": "Brush",
+    "group": "tools",
+    "keys": [
+      "B"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.eyedropper",
+    "label": "Eyedropper",
+    "group": "tools",
+    "keys": [
+      "I"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.sticker",
+    "label": "Stickers",
+    "group": "tools",
+    "keys": [
+      "S"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.stroke",
+    "label": "Select stroke",
+    "group": "tools",
+    "keys": [
+      "V"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.pan",
+    "label": "Pan",
+    "group": "tools",
+    "keys": [
+      "H"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "tool.rotate",
+    "label": "Rotate view",
+    "group": "tools",
+    "keys": [
+      "R"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "brush.smaller",
+    "label": "Smaller brush",
+    "group": "brush",
+    "keys": [
+      "["
+    ],
+    "tool": "set_brush",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "brush.larger",
+    "label": "Larger brush",
+    "group": "brush",
+    "keys": [
+      "]"
+    ],
+    "tool": "set_brush",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "colour.swap",
+    "label": "Swap colours",
+    "group": "colour",
+    "keys": [
+      "X"
+    ],
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "view.mirror",
+    "label": "Mirror the view",
+    "group": "view",
+    "keys": [
+      "M"
+    ],
+    "tool": "set_view",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "view.reset",
+    "label": "Reset the view",
+    "group": "view",
+    "keys": [
+      "Escape"
+    ],
+    "tool": "set_view",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  }
+]
