@@ -22,9 +22,13 @@ on:
           - wet-gpu
           - benchmarks
 
+permissions:
+  contents: read
+
+# A manual run queues behind the weekly one instead of cancelling it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   psd-corpus:
@@ -54,21 +58,36 @@ jobs:
       - name: Fetch and run PSD corpus suite
         env:
           PSD_CORPUS_REPORT: ${{ runner.temp }}/psd-corpus-report.json
+        run: pnpm test:corpus
+
+      # The report is an array with one entry per file: `error` is set when the file was rejected
+      # with a PsdError, `mergedError` is the mean difference from Photoshop's merged image.
+      - name: Summarise PSD corpus report
+        if: always()
+        env:
+          PSD_CORPUS_REPORT: ${{ runner.temp }}/psd-corpus-report.json
         run: |
-          pnpm test:corpus
-          if [ -f "$PSD_CORPUS_REPORT" ]; then
-            node -e '
-              const fs = require("node:fs");
-              const r = JSON.parse(fs.readFileSync(process.env.PSD_CORPUS_REPORT, "utf8"));
-              const summary = [
-                "### PSD Corpus Summary",
-                `- **Total files**: ${r.total ?? r.files?.length ?? "?"}`,
-                `- **Opened cleanly**: ${r.opened ?? "?"}`,
-                `- **Expected PsdError**: ${r.rejected ?? "?"}`,
-              ].join("\n");
-              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
-            '
+          if [ ! -f "$PSD_CORPUS_REPORT" ]; then
+            echo "No PSD corpus report was written (the suite failed before its last test)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+          # shellcheck disable=SC2016 # the backticks are JavaScript template literals
+          node -e '
+            const fs = require("node:fs");
+            const r = JSON.parse(fs.readFileSync(process.env.PSD_CORPUS_REPORT, "utf8"));
+            const rejected = r.filter((e) => e.error);
+            const errors = r.map((e) => e.mergedError).filter((e) => typeof e === "number").sort((a, b) => a - b);
+            const median = errors.length ? errors[Math.floor(errors.length / 2)].toFixed(3) : "n/a";
+            const lines = [
+              "### PSD corpus",
+              `- **Files**: ${r.length}`,
+              `- **Opened**: ${r.length - rejected.length}`,
+              `- **Rejected with PsdError**: ${rejected.length}`,
+              `- **Median merged-image error**: ${median}`,
+              ...rejected.map((e) => `  - ${e.file}: ${e.error}`),
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
 
       - name: Upload PSD corpus report
         if: always()
@@ -103,9 +122,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Pinned so a new Dawn build cannot change results between runs; bump it deliberately.
       - name: Install Dawn WebGPU binding outside workspace
-        run: npm install --prefix "$RUNNER_TEMP/webgpu" --no-save webgpu
+        run: npm install --prefix "$RUNNER_TEMP/webgpu" --no-save webgpu@0.6.2
 
+      # Fails (rather than skips) when the runner has no WebGPU adapter: the GPU tests assert that
+      # Engine B started.
       - name: Run WebGPU wet media tests (Engine B vs CPU parity)
         env:
           WET_GPU: ${{ runner.temp }}/webgpu/node_modules/webgpu
@@ -135,7 +157,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Vitest hides the console output of passing tests, which is where the deep, wet and
+      # selection benchmarks print their tables, so pass `--silent=false` and keep the whole log.
+      # `shell: bash` adds pipefail, so a failing test still fails the step through `tee`.
       - name: Run opt-in benchmark suites
+        shell: bash
         env:
           IMAGE_LAYERS_BENCH: "1"
           IMAGE_LAYERS_BENCH_OUT: ${{ runner.temp }}/image-layers-bench.txt
@@ -147,18 +173,22 @@ jobs:
           RASTER_TRANSFORM_BENCH_OUT: ${{ runner.temp }}/raster-transform-bench.txt
           SELECTION_BENCH: "1"
         run: |
-          mkdir -p "$RUNNER_TEMP"
-          pnpm --filter @pixerate/editor exec vitest run \
+          pnpm --filter @pixerate/editor exec vitest run --silent=false \
             tests/image-layers.bench.test.ts \
             tests/raster-deep.bench.test.ts \
             tests/paint-wet-kernel.test.ts \
             tests/paint-wet.bench.test.ts \
             tests/spreadsheet-recalc.bench.test.ts \
             tests/raster-transform.bench.test.ts \
-            tests/image-editor-selection.bench.test.ts
+            tests/image-editor-selection.bench.test.ts \
+            2>&1 | tee "$RUNNER_TEMP/benchmarks.log"
+
+      - name: Summarise benchmark outputs
+        if: always()
+        run: |
           {
-            echo "### Benchmark Outputs"
-            for f in "$RUNNER_TEMP"/*-bench.txt; do
+            echo "### Benchmarks"
+            for f in "$RUNNER_TEMP"/*-bench.txt "$RUNNER_TEMP/benchmarks.log"; do
               if [ -f "$f" ]; then
                 echo "#### $(basename "$f")"
                 echo '```'
@@ -173,6 +203,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-reports
-          path: ${{ runner.temp }}/*-bench.txt
+          path: |
+            ${{ runner.temp }}/*-bench.txt
+            ${{ runner.temp }}/benchmarks.log
           retention-days: 14
           if-no-files-found: ignore

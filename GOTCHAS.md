@@ -3835,3 +3835,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
+
+### [ci] Vitest Hides the Benchmarks' Tables Unless `--silent=false`
+- **Issue / Symptom**: `DEEP_BENCH=1 vitest run tests/raster-deep.bench.test.ts` passed but printed no timing table; the same happened for `WET_BENCH` and `SELECTION_BENCH`, so the scheduled benchmark job would have recorded nothing for them.
+- **Root Cause**: Vitest 5 drops the console output of passing tests by default, and those benchmarks only `console.log` their results (the image-layers, spreadsheet and transform benchmarks also write `*_BENCH_OUT` files).
+- **Solution / Workaround**: Run them with `vitest run --silent=false` (as `.github/workflows/scheduled-suites.yml` does, teeing the log into the step summary and artifact), or add a `*_BENCH_OUT` file to the benchmark.
