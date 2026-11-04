@@ -39,7 +39,8 @@ function Controls({
   if (!provider) return <p className="text-[11px] text-muted-foreground">No effects provider: its commands are kept as they are.</p>;
   if (error) return <p className="text-[11px] text-amber-500">{error}</p>;
   if (!description) return <p className="text-[11px] text-muted-foreground">Loading…</p>;
-  const pathControls = pathControlsOf(description);
+  // Only vector effects take a path here; motion effects animate existing nodes.
+  const pathControls = description.kind === 'vector' ? pathControlsOf(description) : [];
   const chosenPathNode = pathNode && pathNodes.includes(pathNode) ? pathNode : defaultPathNode && pathNodes.includes(defaultPathNode) ? defaultPathNode : pathNodes[0] ?? '';
   return (
     <>

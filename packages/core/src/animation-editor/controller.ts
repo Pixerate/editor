@@ -485,7 +485,7 @@ export class AnimationEditorController {
 
 	/**
 	 * Sets an applied vector effect's path from a path node in the artwork (landing on the node at
-	 * scale 1) or words written by the provider. One undo step.
+	 * scale 1) or words written by the provider (keeping where the picture was placed). One undo step.
 	 */
 	setVectorEffectPath(instance: string, path: MotionEffectPathInput, options: { control?: string } = {}): Promise<MotionEffectResult> {
 		return this.effectEdit(async () => {
@@ -500,9 +500,11 @@ export class AnimationEditorController {
 			const source: MotionEffectSource = { instance, effect: d.id, provider: provider.id, name: d.name, values: merged };
 			const motion = await provider.applyVectorEffect!(d.id, motionArtworkSvg(bare.artwork), merged);
 			const { group, shots, notes } = motionPartsFromVectorEffect(bare.artwork, motion, source, place);
+			const old = this.scene.artwork.nodes.find((n) => n.id === instance);
 			const index = this.scene.artwork.nodes.findIndex((n) => n.id === instance);
 			const nodes = [...bare.artwork.nodes];
-			nodes.splice(Math.max(0, index), 0, group);
+			// A node path places the picture on the node; words keep the group where it was (as update_effect does).
+			nodes.splice(Math.max(0, index), 0, !place && old?.transform ? { ...group, transform: old.transform } : group);
 			const at = this.scene.shots.findIndex((s) => was.shots.includes(s.id));
 			const kept = bare.shots;
 			const nextShots = [...kept.slice(0, Math.max(0, at)), ...shots, ...kept.slice(Math.max(0, at))];

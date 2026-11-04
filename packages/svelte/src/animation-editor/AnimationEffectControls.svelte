@@ -35,7 +35,7 @@
   <p class="text-[11px] text-muted-foreground">Loading…</p>
 {:else}
   {@const description = loaded.description}
-  {@const pathControls = pathControlsOf(description)}
+  {@const pathControls = description.kind === 'vector' ? pathControlsOf(description) : []}
   {#if pathControls.length > 0}
     <div class="mb-1 flex flex-wrap items-center gap-1" data-effect-part="path">
       <span class="text-muted-foreground">Path</span>

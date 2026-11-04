@@ -103,7 +103,7 @@ describe('animation editor: provider effect tools', () => {
 	const text = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
 
 	it('lists its tools; read-only hides the writes', () => {
-		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'list_camera_moves', 'set_shot_camera_move', 'clear_shot_camera_move', 'list_shot_layers', 'add_shot_layer', 'update_shot_layer', 'move_shot_layer', 'remove_shot_layer', 'set_shot_transition', 'clear_shot_transition', 'list_templates', 'describe_template', 'fill_template', 'add_vector_effect']);
+		expect(tools().registry.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'apply_effect', 'update_effect', 'remove_effect', 'list_camera_moves', 'set_shot_camera_move', 'clear_shot_camera_move', 'list_shot_layers', 'add_shot_layer', 'update_shot_layer', 'move_shot_layer', 'remove_shot_layer', 'set_shot_transition', 'clear_shot_transition', 'list_templates', 'describe_template', 'fill_template', 'add_vector_effect', 'set_vector_effect_path']);
 		const r = new ToolRegistry();
 		r.register(createAnimationEffectsToolProvider(editor(), { readOnly: true }));
 		expect(r.listTools().tools.map((t) => baseToolName(t.name))).toEqual(['search_effects', 'describe_effect', 'list_applied_effects', 'list_camera_moves', 'list_shot_layers', 'list_templates', 'describe_template']);
@@ -195,8 +195,35 @@ describe('animation editor: provider effect tools', () => {
 			registry.register(createAnimationEffectsToolProvider(c, { namespace: '' }));
 			let r = await registry.callTool('add_vector_effect', { effect: 'fake.route', path: { node: 'line' } });
 			expect(r.isError).toBeFalsy();
+			const instance = (r.structuredContent as { instance: string }).instance;
 			r = await registry.callTool('add_vector_effect', { effect: 'fake.route', path: { node: 'line', text: 'x' } });
 			expect(r.isError).toBe(true);
+			// set_vector_effect_path: words keep the picture where it was; a node lands it on the node again.
+			const before = c.getScene().artwork.nodes.find((n) => n.id === instance)!.transform;
+			r = await registry.callTool('set_vector_effect_path', { instance, path: { text: 'ab' } });
+			expect(r.isError).toBeFalsy();
+			expect(r.structuredContent).toMatchObject({ instance, group: instance, control: 'path', value: expect.stringMatching(/^M0 10 L3 0/) });
+			expect(c.getScene().artwork.nodes.find((n) => n.id === instance)!.transform).toEqual(before);
+			r = await registry.callTool('set_vector_effect_path', { instance, path: { node: 'line' } });
+			expect(r.structuredContent).toMatchObject({ control: 'path', value: expect.stringMatching(/^M60 50\s*L160 90\s*L210 50/) });
+			const b = vectorNodeBounds(c.getScene().artwork.nodes.find((n) => n.id === instance)!)!;
+			expect(b.x).toBeCloseTo(60, 3);
+			expect(b.y).toBeCloseTo(50, 3);
+			// One undo step brings the words back.
+			c.undo();
+			expect(String(c.appliedEffects().find((e) => e.instance === instance)!.values.path)).toMatch(/^M0 10 L3 0/);
+			// Refusals say what to pass and change nothing.
+			const scene = c.getScene();
+			expect(text(await registry.callTool('set_vector_effect_path', { instance: 'nope', path: { node: 'line' } }))).toMatch(/no applied effect "nope"; list_applied_effects/);
+			expect(text(await registry.callTool('set_vector_effect_path', { instance, path: { node: 'g' } }))).toMatch(/is a group, not a path/);
+			expect(text(await registry.callTool('set_vector_effect_path', { instance, path: { node: 'missing' } }))).toMatch(/no node "missing"/);
+			expect(text(await registry.callTool('set_vector_effect_path', { instance, path: { text: 'ab', font: 'serif' } }))).toMatch(/no font "serif"/);
+			expect(text(await registry.callTool('set_vector_effect_path', { instance, path: { node: 'line' }, control: 'color' }))).toMatch(/is not a path control/);
+			expect((await registry.callTool('set_vector_effect_path', { instance, path: { node: 'line', text: 'x' } })).isError).toBe(true);
+			expect((await registry.callTool('set_vector_effect_path', { instance })).isError).toBe(true);
+			expect(c.getScene()).toBe(scene);
+			const badge = (await registry.callTool('add_vector_effect', { effect: 'fake.badge' })).structuredContent as { instance: string };
+			expect(text(await registry.callTool('set_vector_effect_path', { instance: badge.instance, path: { node: 'line' } }))).toMatch(/does not draw along a path. Find one that does with search_effects accepts \["path"\]/);
 			r = await registry.callTool('search_effects', { accepts: ['path'], kind: 'vector' });
 			expect((r.structuredContent as { effects: Array<{ id: string }> }).effects.map((e) => e.id)).toEqual(['fake.route']);
 		});
