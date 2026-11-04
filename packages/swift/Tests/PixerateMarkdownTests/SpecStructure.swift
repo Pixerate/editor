@@ -31,13 +31,41 @@ enum SpecStructure {
     }
 }
 
-/// Absolute time budgets in the checks are for optimised builds (Swash's `swiftc -O` runners).
-/// `swift test` builds without optimisation and runs suites in parallel, so they get more room
-/// there; the growth ratios, which catch quadratic paths, are the same in both.
+/// Absolute time budgets in the checks hold for optimised builds (Swash's `swiftc -O` runners).
+/// `swift test` and the iOS simulator build without optimisation, where a single timing on a
+/// shared runner says little, so there the budgets are not enforced (the times are still
+/// printed). The growth ratios, which catch quadratic paths, are checked in both.
 enum TimingBudget {
     #if DEBUG
-    static let scale = 5.0
+    static let scale = Double.infinity
     #else
     static let scale = 1.0
     #endif
+
+    /// The largest time ratio for 4× the input. A quadratic path costs ~16×; debug builds on a
+    /// busy simulator have measured up to ~12× for linear code, so they get 10 rather than
+    /// the optimised build's limit.
+    static func growthLimit(_ optimised: Double) -> Double {
+        #if DEBUG
+        return max(optimised, 10)
+        #else
+        return optimised
+        #endif
+    }
+
+    /// The best times (ms) of `run` on a small and a 4× input, alternating the two five times so
+    /// that a busy stretch on the machine slows both rather than only one of them.
+    static func growth(small: String, large: String, _ run: (String) -> Void) -> (small: Double, large: Double) {
+        func time(_ input: String) -> Double {
+            let start = Date()
+            run(input)
+            return Date().timeIntervalSince(start) * 1000
+        }
+        var best = (small: Double.infinity, large: Double.infinity)
+        for _ in 0..<5 {
+            best.small = min(best.small, time(small))
+            best.large = min(best.large, time(large))
+        }
+        return best
+    }
 }

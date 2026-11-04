@@ -457,15 +457,6 @@ enum ParserChecks {
     /// Parse time must grow roughly linearly: quadrupling the input may cost at most ~6× (a
     /// quadratic path costs ~16×). Patterns from the performance audit (§5).
     private static func runGrowth() -> Int {
-        func best(_ input: String) -> Double {
-            var best = Double.infinity
-            for _ in 0..<3 {
-                let start = Date()
-                _ = MarkdownDocument.parse(input)
-                best = min(best, Date().timeIntervalSince(start) * 1000)
-            }
-            return best
-        }
         let patterns: [(String, (Int) -> String)] = [
             ("emphasis text runs", { String(repeating: "*a ", count: $0) }),
             ("open brackets", { String(repeating: "[", count: $0) }),
@@ -478,11 +469,10 @@ enum ParserChecks {
         ]
         var failures = 0
         for (name, make) in patterns {
-            let small = best(make(5000))
-            let large = best(make(20000))
+            let (small, large) = TimingBudget.growth(small: make(5000), large: make(20000)) { _ = MarkdownDocument.parse($0) }
             let ratio = large / max(small, 0.01)
             // Below a few milliseconds timing noise dominates, so only the ratio of slow cases counts
-            let ok = large < 5 || ratio < 6
+            let ok = large < 5 || ratio < TimingBudget.growthLimit(6)
             if !ok { failures += 1 }
             print(String(format: "  %@ growth %-22@ 5k %6.1f ms  20k %6.1f ms  ×%.1f", ok ? "✓" : "❌", name as NSString, small, large, ratio))
         }

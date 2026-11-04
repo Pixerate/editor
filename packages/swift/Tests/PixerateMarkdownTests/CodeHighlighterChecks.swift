@@ -180,10 +180,9 @@ enum CodeHighlighterChecks {
             ("toml keys", .toml, { String(repeating: "a = \"b\"\n", count: $0) }),
         ]
         for (name, language, make) in pathological {
-            let small = ms(language, make(5_000))
-            let big = ms(language, make(20_000))
+            let (small, big) = TimingBudget.growth(small: make(5_000), large: make(20_000)) { _ = CodeHighlighter.tokens(for: $0, language: language) }
             let ratio = big / max(small, 0.01)
-            let ok = big < 5 || ratio < 8
+            let ok = big < 5 || ratio < TimingBudget.growthLimit(8)
             if !ok { failures += 1 }
             print(String(format: "  %@ growth %-24@ 5k %6.1f ms  20k %6.1f ms  ×%.1f", ok ? "✓" : "❌", name as NSString, small, big, ratio))
         }

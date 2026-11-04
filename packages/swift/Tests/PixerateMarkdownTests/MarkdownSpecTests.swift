@@ -43,10 +43,39 @@ final class MarkdownSpecTests: XCTestCase {
     /// Marker ranges, extensions, formatting and editing commands, HTML paste conversion,
     /// robustness on random input and linear-time parsing (failures are printed above the count).
     func testParserChecks() {
-        XCTAssertEqual(ParserChecks.run(), 0)
+        var failures = 0
+        let output = Self.capturingOutput { failures = ParserChecks.run() }
+        XCTAssertEqual(failures, 0, Self.failureLines(output))
     }
 
     func testCodeHighlighterChecks() {
-        XCTAssertEqual(CodeHighlighterChecks.run(), 0)
+        var failures = 0
+        let output = Self.capturingOutput { failures = CodeHighlighterChecks.run() }
+        XCTAssertEqual(failures, 0, Self.failureLines(output))
+    }
+
+    /// The checks print their results (they also run as Swash's command-line runner), and CI's
+    /// `xcodebuild -quiet` hides test output, so failing lines go into the assertion message.
+    private static func failureLines(_ output: String) -> String {
+        output.split(separator: "\n").filter { $0.contains("❌") }.joined(separator: "\n")
+    }
+
+    /// Runs `body` with standard output going to a temporary file, then echoes and returns it.
+    private static func capturingOutput(_ body: () -> Void) -> String {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("pixerate-markdown-\(UUID().uuidString).txt")
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        guard let file = try? FileHandle(forWritingTo: url) else { body(); return "" }
+        fflush(stdout)
+        let saved = dup(STDOUT_FILENO)
+        dup2(file.fileDescriptor, STDOUT_FILENO)
+        body()
+        fflush(stdout)
+        dup2(saved, STDOUT_FILENO)
+        close(saved)
+        try? file.close()
+        let output = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        try? FileManager.default.removeItem(at: url)
+        print(output, terminator: "")
+        return output
     }
 }
