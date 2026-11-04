@@ -3782,6 +3782,16 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `swift test` builds without optimisation, and each wet step visits all 65 536 cells of every live 256 px tile with a few hundred float operations each.
 - **Solution / Workaround**: Keep committed scenarios short (the recorded ones run in seconds). Probe long runs with `swift test -c release -Xswiftc -enable-testing --filter PaintScenarioProbeTests` (`-enable-testing` keeps `@testable import` working).
 
+### [swift] Metal Only Shades Wet Paint: Stepping on the GPU Would Not Make It Faster
+- **Issue / Symptom**: A Metal copy of the TS core's Engine B (a GPU mirror that also steps each batch) would have doubled the work without letting wet paint run more steps per second.
+- **Root Cause**: The CPU engine is the authority (saving, export, replay and pick-up read its exact bits), so it runs every step whatever the GPU does. In Swift it steps on the main thread at 3.5 ms per 256 px tile-step (a fully wet 2048² canvas: 223 ms a step, M4 Pro, release); the web hides its step in a worker, which Swift does not have. Shading (1.9 ms per tile on the CPU) is the only part a GPU can take over without changing results.
+- **Solution / Workaround**: `WetMetalEngine` only shades the display (10 ms for those 64 tiles). Slots are page-aligned (`WET_SLOT_ALLOCATION`) and wrapped with `makeBuffer(bytesNoCopy:)`, so Metal reads the CPU's state in place: no upload and no mirror to keep in step. Shading waits for its command buffer, so the CPU never writes a slot the GPU is reading. Making wet paint itself faster in Swift means a faster CPU step (SIMD, and threads across tiles, which stay bit-exact), not GPU steps.
+
+### [swift] naga's CLI Leaves Metal Buffer Indices as Placeholders
+- **Issue / Symptom**: The MSL that `naga shade.wgsl shade.metal` writes compiles to nothing usable: every kernel argument is `[[user(fake0)]]`.
+- **Root Cause**: naga's Metal backend takes binding slots from a per-pipeline map, which its CLI has no option for, so it writes placeholders.
+- **Solution / Workaround**: `scripts/gen-msl.mjs` replaces each placeholder with `[[buffer(n)]]`, using the argument's WGSL `@binding(n)`, and puts naga's hidden `_buffer_sizes` argument after the last binding (`WET_SHADE_SIZES_INDEX`). It fails if an argument has no WGSL binding; `tests/swift-shaders.test.ts` checks each binding. Metal compiles the MSL with `mathMode = .safe` (`fastMathEnabled = false` before macOS 15 / iOS 18), or `exp` / `pow` drift further from the CPU's.
+
 ### [swift] PixerateMarkdown Is Swash's Engine: Its API Is Public on Purpose
 - **Issue / Symptom**: Narrowing a `public` declaration in `PixerateMarkdown` (or renaming one) builds and tests fine here, then breaks the Swash app, its Quick Look extension or its `swiftc` test runners at the next version bump.
 - **Root Cause**: The engine moved out of Swash (`Swash/Markdown/`, where everything was internal) in #546, so the app reaches into it across a module boundary: node links (`parent`, `firstChild`, `next`), parser state, formatting helpers, `MarkdownEdit(text:selection:)`. Swash's runners also compile `SpecStructure.swift`, `ParserChecks.swift` and `CodeHighlighterChecks.swift` from `Tests/PixerateMarkdownTests` with `@testable import`.

@@ -21,6 +21,7 @@
     "contracts": "node scripts/export-contracts.mjs",
     "conformance:record": "node scripts/record-conformance.mjs",
     "gen:swift": "node scripts/gen-swift.mjs && node scripts/gen-swift-markdown.mjs",
+    "gen:msl": "node scripts/gen-msl.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev": "pnpm --filter demo dev",

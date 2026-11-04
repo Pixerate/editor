@@ -2041,7 +2041,7 @@
           "core": "`createWetGpuEngine`, `wetGpuSupport`, `WetWorld.attachGpu` / `displayGpu` (`/paint`) & `setWetEngine`, `wetEngine`, `wetEngineSummary`",
           "react": "Engine select and status in `<WetPanel>`",
           "svelte": "Engine select and status in `<WetPanel>`",
-          "swift": "CPU only (TypeScript kernel); no GPU: `set_wet_engine` takes `auto` or `off` and reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
+          "swift": "✅ Metal shading of the display: `WetMetalEngine` shades every stale tile at once from the core's WGSL shading kernel (translated by naga, `pnpm gen:msl`), reading the CPU engine's tiles in place on shared memory (`WetWorld` `attachGpu` / `displayGpu`), at 16 wet tiles; the GPU never steps (the CPU is the authority and runs every step), so there are no lead frames; `set_wet_engine` reports the engine (`WetEngineInfo`), and the engine picker in `PaintWetPanel` lists both"
         },
         {
           "feature": "Oils & Thick Paint (wet oil on the wet simulation: thick, slow-drying, blending into the wet paint it meets; a thick-paint layer channel set of height and material (gloss, metallic) lit at render time by a movable light, relit tile by tile; impasto brush with bristle ridges, paint tube, palette knife that scrapes and smears, roller, gloop pen, metallic paint; paint loading that runs out along a stroke, thinners, instant dry; metallic paper; relief and lighting saved with the document; `set_lighting`, `get_relief`, `flatten_relief`, `set_instant_dry` agent tools)",
