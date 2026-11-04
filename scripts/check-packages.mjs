@@ -104,11 +104,21 @@ for (const { pkg, target } of packages) {
     ...targets(pkg.exports),
     ...targets(pkg.bin ?? {}),
     ...targets(pkg.types ?? []),
+    ...targets(pkg.typesVersions ?? {}),
   ];
   for (const file of new Set(files)) {
     if (!fs.existsSync(path.join(target, file)))
       fail(
         `${pkg.name}: ${file} is referenced by package.json but not in the tarball`,
+      );
+  }
+  const tv = pkg.typesVersions?.["*"] ?? {};
+  for (const key of Object.keys(pkg.exports)) {
+    if (key === "." || key === "./package.json") continue;
+    const subpath = key.slice(2);
+    if (!Array.isArray(tv[subpath]) || !tv[subpath].length)
+      fail(
+        `${pkg.name}: exports["${key}"] is missing from typesVersions["*"]["${subpath}"]`,
       );
   }
 }
@@ -154,6 +164,16 @@ const consumers = [
       targets(pkg.exports).some((file) => file.endsWith(".cjs")),
     ),
   },
+  {
+    name: "node10",
+    file: "consumer-node10.ts",
+    node10: true,
+    options: {
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    },
+    packages: packages,
+  },
 ];
 const ours = (fileName) =>
   fileName.includes("/node_modules/@pixerate/") ||
@@ -165,6 +185,20 @@ const ours = (fileName) =>
 // must be in one of our declaration files and name a third-party package.
 const THIRD_PARTY_ESM_ONLY = new Set([1479, 1541, 1542]);
 function tolerated(consumer, d) {
+  if (
+    consumer.node10 &&
+    d.code === 2307 &&
+    d.file?.fileName.includes("/node_modules/@pixerate/")
+  ) {
+    const specifier = /["']([^"']+)["']/.exec(
+      d.file.text.slice(d.start, d.start + d.length),
+    )?.[1];
+    return (
+      !!specifier &&
+      !specifier.startsWith(".") &&
+      !specifier.startsWith("@pixerate/")
+    );
+  }
   if (
     !consumer.cjs ||
     !THIRD_PARTY_ESM_ONLY.has(d.code) ||
