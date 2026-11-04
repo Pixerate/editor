@@ -3706,3 +3706,28 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Glowing dry brushes changed the layer's pixels, or their light was lost on undo.
 - **Root Cause**: The TS keeps light in a separate per-layer channel (`document.light`). Each stroke runs a light twin of the paint session that lays `light.amount` into that channel, and the compositor adds glow and spill as extra view layers.
 - **Solution / Workaround**: `PaintStrokeSession` owns an optional light twin committed with the stroke into `PaintDocumentState.light` (an `OrderedMap`, in layer order). `lightLayers` draws it when rendering. Wet, thick and particle light (#545) are not ported.
+
+### [swift] `ImageRenderer` Draws AppKit and UIKit Views as a Yellow "No" Placeholder
+- **Issue / Symptom**: An `ImageRenderer` snapshot of `PaintEditorView` or `PaintCanvasView` came out as a yellow square with a red no-entry sign, and the side panels came out empty.
+- **Root Cause**: `ImageRenderer` only draws SwiftUI's own rendering. `NSViewRepresentable` / `UIViewRepresentable` views (the canvas's input view) are drawn as placeholders, and the placeholder covers the whole `ZStack`. On macOS most standard controls (segmented pickers, buttons, sliders, `ScrollView`) are AppKit views too, so they come out the same way or empty.
+- **Solution / Workaround**: Snapshot the canvas with `PaintCanvasView(model:interactive: false)`, which leaves out the input view; its drawing is a SwiftUI `Canvas`, which renders. Check the whole editor in a running app instead: the demo writes its window with `PIXERATE_DEMO_SNAPSHOT=<png>` (`NSView.cacheDisplay`). That capture draws controls without their text, so read it for layout only. Set `model.viewport` and call `fitView()` before rendering, because `onAppear` doesn't run under `ImageRenderer`.
+
+### [swift] A `swift run` SwiftUI App Stays in the Background, and `screencapture` Returns Black
+- **Issue / Symptom**: `swift run --package-path apps/swift-demo` opened a window behind other apps that didn't take key presses, and `screencapture -x` from a terminal or agent produced an all-black image.
+- **Root Cause**: A SwiftPM executable is not an app bundle, so it starts with no regular activation policy. `screencapture` needs the Screen Recording permission for the calling process; without it, macOS returns black frames rather than an error.
+- **Solution / Workaround**: The demo's app delegate calls `NSApp.setActivationPolicy(.regular)` and `NSApp.activate(ignoringOtherApps:)` at launch. To check rendering without the permission, use `PIXERATE_DEMO_SNAPSHOT` (see above). Grant Screen Recording to the terminal when a real screenshot is needed.
+
+### [swift] Live Strokes Show Less Than the Committed Stroke Until They End
+- **Issue / Symptom**: The composite drawn while a `beginStroke` session was open didn't equal the pixels after `end()`, although the ended stroke matched `paint_stroke` exactly.
+- **Root Cause**: Smoothing and spacing hold back the tail of the stroke until `finish()` (the TS session works the same way), so the last dabs are only laid when the pen lifts.
+- **Solution / Workaround**: Compare live and `paint_stroke` pixels after `end()`. Tests check that the open stroke shows some paint, not all of it. Pushing samples one at a time or in coalesced batches gives the same committed pixels as one `paint_stroke` call with the recorded points and seed (`PaintLiveStrokeTests`, `PaintEditorModelTests`).
+
+### [swift] Apple Pencil and Tablet Angles Are Mapped Without a Device Check
+- **Issue / Symptom**: Pen tilt maths takes Pointer Events' conventions (`tiltX` / `tiltY` in degrees, `altitudeAngle` / `azimuthAngle` in radians, azimuth clockwise from +x with y down). AppKit and UIKit report their own.
+- **Root Cause**: UIKit's `altitudeAngle` (π/2 upright) and `azimuthAngle(in:)` (in the view's y-down space) are used as they are. AppKit's `NSEvent.tilt` is -1…1 per axis (right and towards the user positive) and is scaled by 90°. `rollAngle` (Pencil Pro, iOS 17.5) and `NSEvent.rotation` become `twist` in degrees. Force is `force / maximumPossibleForce`.
+- **Solution / Workaround**: These follow the platform documentation and the unit tests, but nobody has checked them on a Pencil or a Wacom tablet yet. If shading leans the wrong way on a device, fix it in `PaintInputNSView.pointer` / `PaintInputUIView.pointer` (`PixeratePaintUI/PaintCanvasView.swift`), not in the engine.
+
+### [swift] A Path Dependency's Package Identity Is Its Directory Name
+- **Issue / Symptom**: `.product(name: "PixeratePaintUI", package: "editor")` in `apps/swift-demo` fails to resolve in a git worktree or in a checkout whose directory has another name.
+- **Root Cause**: SwiftPM names a local package after the last component of its path, not after the `name:` in its manifest.
+- **Solution / Workaround**: The demo declares `.package(name: "Pixerate", path: "../..")` and refers to `package: "Pixerate"`, which resolves whatever the checkout directory is called.

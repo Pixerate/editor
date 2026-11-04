@@ -20,10 +20,41 @@ package works as a git dependency); its sources are here.
 | `PixerateCore` | The `pixerate.editor-document` envelope with step-by-step migrations and load reports (`persistence/migrate.ts`, `editorDocument.ts`); undo / redo with gestures, marks, batches, origins (`user` / `agent:<id>`) and commit events (`history/`); the seeded RNG, bit-exact with `paint/rand.ts`; JSON Schema validation with the same messages (`tools/schema.ts`); `ToolRegistry` with MCP-shaped results, middleware and the origin middleware (`tools/registry.ts`, `tools/origin.ts`); `ToolBridgeClient`, which connects a registry to `pixerate-mcp-bridge` so MCP clients drive the editor (`tools/bridge-client.ts`, see `docs/mcp-bridge.md`); an order-preserving `JSONValue` whose `stringified()` matches `JSON.stringify` | Foundation only |
 | `PixerateContracts` | The files of `@pixerate/conformance` (`packages/conformance`), bundled as resources: each domain's contracts and recorded scenarios (`ConformanceContracts.url("domains/paint/tools.json")`) | Foundation only |
 | `PixerateRaster` | The raster module (`raster/`): tiled copy-on-write surfaces (`TiledSurface`, 256 px tiles, straight 8-bit RGBA or mask bytes) with 16- and 32-bit deep samples; every blend mode, pigment mixing and the painterly modes; Gaussian blur and curves; transforms and mesh warps; the cached per-tile `RasterCompositor` and the float `DeepCompositor`, with editor profiles; layer effects (model, validation, renderer, panel view model) and patterns; the PNG / zlib codec; viewport maths. Same pixels and bytes as the TS core; `JS` holds JavaScript's number semantics (`Math.round`, `Uint8ClampedArray` stores, V8's `exp`, `sin`, `cbrt`, …) | `PixerateCore` |
-| `PixeratePaint` | The paint editor's dry engine (`paint-editor/`, `paint/`, the brush parts of `brushes/`): `PaintEditorController` with canvas, paper (`PaperSettings`, `renderPaper`), the shared layer stack, fills, undo / redo and groups; the dry brushes on the shared dab engine with paper grain, pen dynamics, smoothing, spray and seeded jitter; blenders, smudge and the Mixer Brush on `PaintExchange`; recorded strokes (`RecordedStroke`), replays, brushed SVG paths and live stroke layers; symmetry, perspective and stencils; tracing and reference images, harmonies, swatches and `MixingPad`; light paint from dry brushes; layer styles; saved documents and PNG export; proposals (`PaintProposals`); the brush library (`BrushLibrary`: presets, normalization, v1 migration, host profiles, thumbnails). Agent tools come from the contracts (`createPaintEditorToolProvider`, `createPaintBrushLibraryToolProvider`, `createPaintProposalToolProvider`); only implemented tools are registered. `PaintConformanceHost` runs the paint scenarios. Wet, thick and sticker media, particle and bristle engines, provider effects, PSD, time-lapse and high-res export are not ported yet. `Generated/` holds what `scripts/gen-swift.mjs` writes from the contracts: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts`, `PixerateRaster`, `PixerateConformance` |
+| `PixeratePaint` | The paint editor's dry engine (`paint-editor/`, `paint/`, the brush parts of `brushes/`): `PaintEditorController` with canvas, paper (`PaperSettings`, `renderPaper`), the shared layer stack, fills, undo / redo and groups; change notifications (`subscribe`), live strokes from pointer input (`beginStroke`, `PaintLiveStroke`) and tile-by-tile compositing for views (`compositeTiles`), with the view maths and pen input helpers (`screenToDocument`, `pointerToPenPoint`, `isPalmTouch`); the dry brushes on the shared dab engine with paper grain, pen dynamics, smoothing, spray and seeded jitter; blenders, smudge and the Mixer Brush on `PaintExchange`; recorded strokes (`RecordedStroke`), replays, brushed SVG paths and live stroke layers; symmetry, perspective and stencils; tracing and reference images, harmonies, swatches and `MixingPad`; light paint from dry brushes; layer styles; saved documents and PNG export; proposals (`PaintProposals`); the brush library (`BrushLibrary`: presets, normalization, v1 migration, host profiles, thumbnails). Agent tools come from the contracts (`createPaintEditorToolProvider`, `createPaintBrushLibraryToolProvider`, `createPaintProposalToolProvider`); only implemented tools are registered. `PaintConformanceHost` runs the paint scenarios. Wet, thick and sticker media, particle and bristle engines, provider effects, PSD, time-lapse and high-res export are not ported yet. `Generated/` holds what `scripts/gen-swift.mjs` writes from the contracts: `PaintToolName`, an `…Arguments` struct per tool (`paintToolArguments(_:_:)` reads any of them by name), `PaintCommandID`, `PaintUITables` and `PaintContractVersions` | `PixerateCore`, `PixerateContracts`, `PixerateRaster`, `PixerateConformance` |
 | `PixerateConformance` | The scenario runner: replays a domain's recorded scenarios (`ConformanceScenario.load(domain:)`) against a `ConformanceHost` with the same normalization rules as the TypeScript runner, and compares results, documents and pixels (`compareConformance`, `decodeConformancePNG`) | `PixerateCore`, `PixerateContracts` |
+| `PixeratePaintUI` | The paint editor's SwiftUI views (`react/src/paint-editor`, `paint-editor/ui.ts`), macOS 14 and iOS 17: `PaintEditorView` (toolbar, brush column, canvas, colour / paper / layers / styles tabs); `PaintCanvasView`, which draws the composite through CoreGraphics with the view's zoom, pan, rotation and mirroring, copying only changed tiles (`PaintCanvasPresenter`), with the guide overlay; `PaintGesture` (strokes as live `beginStroke` sessions, eyedropper, Select stroke, pan, rotate, wheel / pinch zoom, palm rejection) fed by mouse, trackpad and tablet events on macOS and touches and Apple Pencil (force, altitude, azimuth, roll, coalesced and predicted touches) on iOS; panels rendered from `PaintUITables` (tools, brush options, blend menu, paper and stroke sliders, layer styles) and shortcuts from `PaintContracts.commands()` (`Mod` is ⌘); `PaintEditorModel`, the observable view model that owns the editor's `ToolRegistry`, so agents and the user change the same editor. Only features the engine paints are offered (no wet, thick, sticker, procedural or provider-effect panels) | `PixeratePaint`, `PixerateCore`, `PixerateRaster`, SwiftUI (AppKit / UIKit for input) |
 
-UI targets (`PixeratePaintUI`, …) are the only ones that will import SwiftUI, AppKit or UIKit.
+UI targets (`PixeratePaintUI`, …) are the only ones that import SwiftUI, AppKit or UIKit.
+
+```swift
+import PixeratePaintUI
+
+struct Painting: View {
+    @State private var model = try! PaintEditorModel()   // a 1024 × 768 painting with its agent tools
+    var body: some View { PaintEditorView(model: model) }
+}
+```
+
+On iOS, embed `PaintEditorView` (or `PaintCanvasView` with your own panels) the same way in any
+SwiftUI app: add the package, depend on the `PixeratePaintUI` product and put the view in a scene.
+The canvas takes touches and the Pencil directly; give the view the whole screen width on iPad,
+since the two side columns are 250 points each (`PaintEditorView(model:sideWidth:)`).
+
+## Demo
+
+`apps/swift-demo` is a macOS SwiftUI app (its own SwiftPM package, on this one by relative path):
+a Paint tab with `PaintEditorView` and an agent panel listing the editor's tools, with a switch
+that connects them to `pixerate-mcp-bridge` through `ToolBridgeClient` (status, editor id, token).
+
+```bash
+swift run --package-path apps/swift-demo PixerateSwiftDemo
+# connect an MCP client: start the bridge (docs/mcp-bridge.md), turn on "Connect" in the agent panel
+```
+
+`PIXERATE_DEMO_SNAPSHOT=/tmp/demo.png` makes the app write its window to that PNG after four
+seconds (drawn by AppKit, so it needs no Screen Recording permission). There is no iOS app target
+yet (SwiftPM can't make one without an Xcode project); the iOS simulator build of
+`PixeratePaintUI` runs in CI.
 
 ## Conformance
 
@@ -35,7 +66,7 @@ itself: a host that plays back the TypeScript recordings, with ids of its own, m
 scenario, and every recorded PNG must decode to its recorded hash.
 
 The Swift CI workflow (`.github/workflows/swift.yml`) runs `gen-swift --check`, then builds and
-tests on macOS and in an iOS simulator, whenever the Swift code, the contracts or their scripts
+tests on macOS (and builds the demo app) and in an iOS simulator, whenever the Swift code, the contracts or their scripts
 change.
 
 ## Releases
