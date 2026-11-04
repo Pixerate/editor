@@ -2780,6 +2780,37 @@
       }
     ]
   },
+  "pathStrokeTapers": [
+    {
+      "id": "even",
+      "label": "Even"
+    },
+    {
+      "id": "both",
+      "label": "Taper both ends",
+      "pressure": [
+        0.2,
+        1,
+        0.2
+      ]
+    },
+    {
+      "id": "in",
+      "label": "Fade in",
+      "pressure": [
+        0.2,
+        1
+      ]
+    },
+    {
+      "id": "out",
+      "label": "Fade out",
+      "pressure": [
+        1,
+        0.2
+      ]
+    }
+  ],
   "padSampleSizes": [
     1,
     3,

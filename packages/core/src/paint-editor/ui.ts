@@ -702,6 +702,14 @@ export function toggleDotTexture(textures: readonly StampKind[], stamp: StampKin
   return textures.length < MAX_DOT_TEXTURES ? [...textures, stamp] : [...textures];
 }
 
+/** Pressure profiles the "Brush a path" panel offers for `strokePath` (`pressure` undefined: even). */
+export const PATH_STROKE_TAPERS: ReadonlyArray<{ id: string; label: string; pressure?: readonly number[] }> = [
+  { id: 'even', label: 'Even' },
+  { id: 'both', label: 'Taper both ends', pressure: [0.2, 1, 0.2] },
+  { id: 'in', label: 'Fade in', pressure: [0.2, 1] },
+  { id: 'out', label: 'Fade out', pressure: [1, 0.2] },
+];
+
 /** The sticker panel's sliders for the selected sticker. */
 /** The brush sliders of a picked stroke on a stroke layer (paths into its brush; see `updateStroke`). */
 export const STROKE_SLIDERS: readonly SliderControl[] = [

@@ -69,8 +69,8 @@ The paint editor of `@pixerate/editor/paint-editor` (`paintContracts()`).
   and `params` (none take any).
 - `ui.json`: the tables React and Svelte render: the tool bar (`tools`), brush options, the blend
   menu, every layer style with its controls at their defaults, the slider tables (paper, wet
-  paint, light, stroke, sticker), the mixing pad sample sizes, wet engine options and the label
-  tables.
+  paint, light, stroke, sticker), the "Brush a path" tapers, the mixing pad sample sizes, wet
+  engine options and the label tables.
 - `document.schema.json`: a saved painting, the `pixerate.editor-document` envelope of kind `paint`
   around a `pixerate-paint` document. Objects are open, because readers keep fields they don't know
   and write them back. Layers are the image editor's serialized layers. Each stroke's `brush`

@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { createBrushLibrary } from '@pixerate/editor/brushes';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, PathStrokePanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
@@ -679,5 +679,28 @@ describe('wet light paint and backlit paper', () => {
     expect(c.document.paper.backlight).toBe(0.4);
     setValue(target.querySelector('input[aria-label="Backlight colour"]') as HTMLInputElement, '#ffccaa', true);
     expect(c.document.paper.backlightColor).toBe('#ffccaa');
+  });
+});
+
+describe('Svelte PathStrokePanel', () => {
+  it('brushes pasted SVG path data with a taper, one undo step, and shows errors', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    show(PathStrokePanel, { controller: c });
+    const area = target.querySelector('textarea[aria-label="SVG path data"]') as HTMLTextAreaElement;
+    expect(byText('Brush path').disabled).toBe(true);
+    area.value = 'M 10 40 L 110 40';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    setValue(target.querySelector('select[aria-label="Pressure along the path"]') as HTMLSelectElement, 'both');
+    click(byText('Brush path'));
+    expect(c.getStrokes().length).toBe(1);
+    expect(c.getStrokes()[0].points[0].pressure).toBeCloseTo(0.2, 2);
+    expect(c.getState().undoLabel).toMatch(/path stroke/);
+    area.value = 'M 5 5';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    click(byText('Brush path'));
+    expect(target.querySelector('[role="alert"]')?.textContent).toContain('no segments to brush');
+    expect(c.getStrokes().length).toBe(1);
   });
 });

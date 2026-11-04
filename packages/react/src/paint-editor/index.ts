@@ -12,6 +12,7 @@ export * from './WetPanel';
 export * from './StickerPanel';
 export * from './StickerPicker';
 export * from './StrokePanel';
+export * from './PathStrokePanel';
 export * from './PaintEditor';
 export { PaintSlider } from './shared';
 export * from './PaintGradientEditor';

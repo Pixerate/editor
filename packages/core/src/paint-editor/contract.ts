@@ -34,6 +34,7 @@ import {
   PAINT_SHORTCUTS,
   PAINT_TOOLS,
   PAPER_SLIDERS,
+  PATH_STROKE_TAPERS,
   PARTICLE_KIND_LABELS,
   PARTICLE_RENDER_LABELS,
   RIBBON_PAIR_LABELS,
@@ -139,6 +140,7 @@ function uiTables() {
     blendMenu: BLEND_MENU_GROUPS,
     layerEffects: LAYER_EFFECT_MENU.map(({ kind, label }) => ({ kind, label, controls: layerEffectControls(defaultLayerEffect(kind, kind)) })),
     sliders: { paper: PAPER_SLIDERS, wet: WET_PARAM_SLIDERS, wetTilt: WET_TILT_SLIDERS, wetSpeed: WET_SPEED_SLIDER, light: LIGHT_SLIDERS, stroke: STROKE_SLIDERS, sticker: STICKER_SLIDERS },
+    pathStrokeTapers: PATH_STROKE_TAPERS,
     padSampleSizes: PAD_SAMPLE_SIZES,
     wetGpu: WET_GPU_OPTIONS,
     labels: {
