@@ -8,7 +8,7 @@ The SwiftPM manifest is [`Package.swift`](../../Package.swift) at the repository
 package works as a git dependency); its sources are here.
 
 ```swift
-.package(url: "https://github.com/Pixerate/editor.git", from: "…")
+.package(url: "https://github.com/Pixerate/editor.git", .upToNextMinor(from: "0.1.0"))
 // target dependency:
 .product(name: "PixerateCore", package: "editor")
 ```
@@ -49,3 +49,24 @@ and run `swift test` again.
 
 Async code runs on its caller's executor (`NonisolatedNonsendingByDefault`), as JavaScript's does,
 so histories and registries (not `Sendable`) can be used from async tool handlers.
+
+## Releases
+
+The Swift package has its own version, `@pixerate/swift` in `packages/swift/package.json`, bumped
+by changesets like the npm packages. When a release changes it, the release workflow tags that
+release commit `v<version>`. SwiftPM only treats `1.2.3` and `v1.2.3` tags as versions (any other
+prefix is ignored, so there are no `swift-v…` tags), and changesets' own tags are
+`@pixerate/editor@…`, so the plain `v…` tags only ever mean the Swift package. While it is 0.x, a
+minor bump can break, so depend on it with `.upToNextMinor(from:)`.
+
+## Keeping parity
+
+The TypeScript core is the specification (`Agents.md` §3.5). For each domain, `@pixerate/conformance`
+holds what the editor offers (tools, commands, UI tables, the document schema) and recorded
+scenarios of what its tools do, including pixels. The Swift code replays the scenarios and must get
+the same results; a scenario it can't pass yet is marked `"skip": { "swift": "… (#issue)" }`.
+
+| Domain | Contracts | Scenarios | Swift |
+| :--- | :--- | :--- | :--- |
+| Brushes | `domains/brushes` | — | Not started |
+| Paint | `domains/paint` | `domains/paint/fixtures` | In progress (#539, #540) |

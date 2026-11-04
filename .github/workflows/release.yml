@@ -68,6 +68,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Note the Swift package version
+        id: swift_version
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: echo "before=$(node -p "require('./packages/swift/package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Version packages & update CHANGELOG.md files
         # A manual run with no pending changesets only publishes what npm is missing (e.g. after
         # the publish step failed: the version commit is already on main). `changeset version`
@@ -124,6 +129,29 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+
+      # SwiftPM resolves plain semantic version tags (v1.2.3) only, not changesets' `name@version`
+      # tags, so a new @pixerate/swift version gets a `v<version>` tag on the release commit.
+      - name: Tag the Swift package
+        if: steps.changeset_check.outputs.should_release == 'true'
+        run: |
+          before="${{ steps.swift_version.outputs.before }}"
+          after=$(node -p "require('./packages/swift/package.json').version")
+          if [ "$after" = "$before" ]; then
+            echo "@pixerate/swift stays at $after; no Swift tag."
+            exit 0
+          fi
+          tag="v$after"
+          if existing=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+            if [ "$existing" = "$(git rev-parse HEAD)" ]; then
+              echo "$tag already tags this commit."
+              exit 0
+            fi
+            echo "::error::$tag already exists on $existing, not on the release commit. Bump @pixerate/swift past it."
+            exit 1
+          fi
+          git tag -a "$tag" -m "Swift package $after"
+          echo "Tagged $tag for SwiftPM."
 
       - name: Push release tags
         if: steps.changeset_check.outputs.should_release == 'true'

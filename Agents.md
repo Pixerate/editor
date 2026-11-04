@@ -33,6 +33,7 @@ All commit messages must follow the [Conventional Commits](https://www.conventio
 - `react`: Changes to `packages/react` (`@pixerate/editor-react`)
 - `svelte`: Changes to `packages/svelte` (`@pixerate/editor-svelte`)
 - `demo`: Changes to `apps/demo`
+- `swift`: Changes to `packages/swift` and the root `Package.swift` (the Swift editors, #533)
 - `monorepo`: Root configuration, pnpm workspace, changesets
 
 #### Examples:
@@ -50,6 +51,8 @@ pnpm changeset
 ```
 
 Select the affected packages, choose the appropriate bump level (`patch`, `minor`, `major`), and provide a clear summary of the changes. Never push library code changes without a changeset file in `.changeset/`.
+
+Swift changes bump `@pixerate/swift` (the private `packages/swift/package.json`). When its version changes, the release workflow tags the release commit `v<version>`, which is what SwiftPM resolves (`from: "0.2.0"`). SwiftPM ignores any other tag prefix, so never add `swift-v…` tags.
 
 ---
 
@@ -80,6 +83,11 @@ Our core value proposition is **parity across JavaScript, React, and Svelte**:
    - Ensure the React package (`@pixerate/editor-react`) maintains full backwards compatibility with `usePromptEditor` options, milestone tracking, and clipboard handling.
    - Ensure the Svelte package (`@pixerate/editor-svelte`) maintains full backwards compatibility with `EditableTextNodeEditor` props, bubble menus, and reactive store behaviors.
 4. **The Parity Test**: Before opening a PR or completing a refactor, review the feature matrix in `README.md` and ensure no cell in the React or Svelte column is left behind, and that the feature has an agent path (see section 4).
+5. **Swift parity (#533)**: The native Swift editors in `packages/swift` are a second implementation of the core, checked against what the TypeScript core does, not a binding to it. The TypeScript core stays the executable specification:
+   - **Contracts are generated, never edited.** `@pixerate/conformance` holds each domain's contracts (`pnpm contracts`) and recorded scenarios (`pnpm conformance:record`); Swift sources generated from them live in `packages/swift/Sources/*/Generated/`. After changing a tool, command, UI table or document format, rebuild the core, rerun the generators and commit the diff. Core tests and the Swift CI job fail when any of them is stale.
+   - **Every tool has a scenario.** A domain's scenario test fails when one of its tools is not called by any scenario, so a new tool needs a scenario in the same change.
+   - **A change to a ported domain ships its Swift in the same PR**, or marks each scenario it breaks with `"skip": { "swift": "<what is missing> (#<issue>)" }` and opens that issue. Skips are visible debt: the Swift test run reports them, and they are removed as the Swift catches up. `packages/swift/README.md` lists which domains are ported.
+   - **Swift matches results, documents and pixels.** Tool results and error messages compare exactly after normalization; pixels within each snapshot's `maxDelta` / `meanDelta`. Port numeric code with `Double` first; add SIMD or `Float` fast paths only behind those tolerances.
 
 ---
 
@@ -136,5 +144,13 @@ pnpm --filter demo build
 # 4. Check that new capabilities have agent tools (section 4), with tests,
 #    and that the domain's packages/core/skills/<skill>/SKILL.md describes them
 
-# 5. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
+# 5. Contracts, scenarios and generated Swift are current (section 3.5), after the build
+node scripts/export-contracts.mjs --check
+node scripts/record-conformance.mjs --check
+
+# 6. Swift builds and passes (macOS; CI also builds for the iOS simulator)
+swift build
+swift test
+
+# 7. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
 ```
