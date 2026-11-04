@@ -33,6 +33,8 @@ extension PaintEditorController {
             if undoStack.count > historyLimit { undoStack.removeFirst() }
             redoStack = []
         }
+        // Listeners hear the group once, at its end.
+        emit()
         return result
     }
 

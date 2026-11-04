@@ -182,27 +182,27 @@ func rgbToHex(_ r: Double, _ g: Double, _ b: Double) -> String {
 private func movePoint(_ p: LayerOffset, _ dx: Int, _ dy: Int) -> LayerOffset { LayerOffset(x: p.x + dx, y: p.y + dy) }
 
 public final class PaintEditorController {
-    public internal(set) var doc: PaintDocumentState
+    public internal(set) var doc: PaintDocumentState { didSet { emit() } }
     var undoStack: [HistoryEntry] = []
     var redoStack: [HistoryEntry] = []
     let historyLimit: Int
     public let brushLibrary: BrushLibrary
-    public internal(set) var brush: PaintBrush
+    public internal(set) var brush: PaintBrush { didSet { emit() } }
     /// The active brush as facets (what `get_brush` and the brush editor show).
     var brushSpec: Brush
-    var brushEntries: [LibraryBrush]
-    public internal(set) var color: String
-    public internal(set) var secondaryColor = "#ffffff"
+    var brushEntries: [LibraryBrush] { didSet { emit() } }
+    public internal(set) var color: String { didSet { emit() } }
+    public internal(set) var secondaryColor = "#ffffff" { didSet { emit() } }
     /// Gradient paint the editor paints with instead of the one colour, or nil.
-    var gradient: PaintGradientSource?
-    public internal(set) var mixerLoad = EMPTY_MIXER_LOAD
-    public internal(set) var view = PaintView()
-    public internal(set) var hand: String
-    public internal(set) var colorLocked = false
+    var gradient: PaintGradientSource? { didSet { emit() } }
+    public internal(set) var mixerLoad = EMPTY_MIXER_LOAD { didSet { emit() } }
+    public internal(set) var view = PaintView() { didSet { emit() } }
+    public internal(set) var hand: String { didSet { emit() } }
+    public internal(set) var colorLocked = false { didSet { emit() } }
     var colorScheme = "light"
     var brushColour: JSONValue?
     /// Painting guides (symmetry, perspective, tracing, references, stencils).
-    public internal(set) var guides: PaintGuides
+    public internal(set) var guides: PaintGuides { didSet { emit() } }
     var nextStencilId = 1
     var nextReferenceId = 1
     var stencilCache: (key: [Stencil], size: String, mask: PaintSelection?)?
@@ -217,11 +217,18 @@ public final class PaintEditorController {
     let pad = MixingPad()
     var savedPads: [SavedMixingPad] = []
     var nextPadId = 1
-    public internal(set) var swatches: [Swatch] = DEFAULT_SWATCHES
+    public internal(set) var swatches: [Swatch] = DEFAULT_SWATCHES { didSet { emit() } }
     var seedCounter = 1
     var strokeCounter = 1
-    public internal(set) var lighting = PaintLighting()
+    public internal(set) var lighting = PaintLighting() { didSet { emit() } }
     private var library: LibraryCancellable?
+    /// Change listeners (`subscribe`) and how many changes there have been.
+    var listeners: [UUID: () -> Void] = [:]
+    public internal(set) var version = 0
+    /// The live stroke being painted from pointer input (`beginStroke`), if any.
+    var liveStroke: PaintLiveStroke?
+    /// The compositor the canvas view draws with: its per-tile cache makes redraws touch only changed tiles.
+    lazy var viewCompositor = createPaintCompositor()
 
     private final class LibraryCancellable {
         let c: Cancellable
@@ -270,6 +277,7 @@ public final class PaintEditorController {
     }
 
     public func undo() -> String? {
+        if liveStroke != nil { return nil }
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
         doc = e.before
@@ -278,6 +286,7 @@ public final class PaintEditorController {
     }
 
     public func redo() -> String? {
+        if liveStroke != nil { return nil }
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
         doc = e.after
@@ -965,6 +974,11 @@ public final class PaintEditorController {
     func runStroke(_ d: PaintDocumentState, _ i: PaintStrokeInit, _ points: [PenPoint]) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
         let session = try sessionFor(d, i)
         session.push(points)
+        return try endStroke(d, session)
+    }
+
+    /// Ends a stroke session and returns `d` with its pixels and its recorded stroke.
+    func endStroke(_ d: PaintDocumentState, _ session: PaintStrokeSession) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
         var result = try session.end()
         var out = d
         if let surface = session.surfaceAfter {
@@ -986,6 +1000,7 @@ public final class PaintEditorController {
 
     /// Paints one stroke from data (one undo step).
     public func paintStroke(_ i: PaintStrokeInit, points rawPoints: [PenPoint]) throws -> PaintStrokeResult {
+        if liveStroke != nil { throw PaintEditorError("A stroke is in progress; end or cancel it before painting another.") }
         let points = try checkPoints(rawPoints)
         let before = doc
         var i = i
@@ -1027,6 +1042,7 @@ public final class PaintEditorController {
         if let layerIds {
             layers = layerIds.compactMap { getLayer($0) }.map { $0.copy(visible: true) }
         }
+        if layerIds == nil, let live = liveStroke, live.open { layers = mapLayer(layers, live.layerId) { $0.withSurface(live.session.currentSurface()) } }
         if layerIds == nil { layers = lightLayers(layers) }
         let under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper)]
         return under + layers.map(ViewLayer.init)

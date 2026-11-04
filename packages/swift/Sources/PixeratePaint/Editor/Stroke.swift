@@ -93,6 +93,9 @@ final class PaintStrokeSession: PaintTileTarget {
 
     /// Light paint: the stroke's twin over the light channel.
     private var lightTwin: PaintStrokeSession?
+    /// The tiles shown while the stroke is painted (`currentSurface`), and the keys changed since.
+    private var shown: OrderedMap<TileKey, Tile>?
+    private var stale: [TileKey] = []
 
     /// Light paint: the layer's light channel after the stroke, or nil when the stroke has no twin.
     var lightChannel: TiledSurface? { lightTwin?.surfaceAfter.map(shadowToLight) }
@@ -172,7 +175,33 @@ final class PaintStrokeSession: PaintTileTarget {
         let filtered = initValues.inputFilter.map { pts.map($0) } ?? pts
         points += filtered
         lightTwin?.push(filtered)
-        update(dry != nil ? dry!.push(filtered) : wet!.push(filtered))
+        let rects = dry != nil ? dry!.push(filtered) : wet!.push(filtered)
+        update(rects)
+        markStale(rects)
+    }
+
+    /// Notes the tiles `rects` (document pixels) touched, for `currentSurface`.
+    private func markStale(_ rects: [RasterRect]) {
+        let off = initValues.offset
+        for r in rects {
+            for t in tilesInRect(RasterRect(x: r.x - off.x, y: r.y - off.y, width: r.width, height: r.height)) { stale.append(tileKey(t.tx, t.ty)) }
+        }
+    }
+
+    /**
+     * The layer's pixels as painted so far, for drawing the stroke while it is painted. Tiles the
+     * stroke has not changed since the last call stay the same objects, so a tile-caching
+     * compositor redraws only the changed ones.
+     */
+    func currentSurface() -> TiledSurface {
+        var tiles = shown ?? base.tiles
+        for key in stale {
+            guard let t = live[key], touchedSet.contains(key) else { continue }
+            if let tile = finishTile(t.data, base.channels, base.defaultValue) { tiles.set(key, tile) } else { _ = tiles.delete(key) }
+        }
+        stale = []
+        shown = tiles
+        return TiledSurface(channels: base.channels, tiles: tiles, defaultValue: base.defaultValue)
     }
 
     private func update(_ rects: [RasterRect]) {
