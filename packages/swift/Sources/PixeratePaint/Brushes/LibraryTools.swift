@@ -99,9 +99,9 @@ func renderBrushThumbnail(_ brush: PaintBrush, paper: PaperSettings, width w: In
         surface = light != nil || thick != nil ? glowSurface(lit, light, thick) : lit
     }
     let layer = RasterLayer(id: "thumbnail", name: "thumbnail", content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
-    // Light paint reads on dark paper, with its spill.
+    // Light paint reads on dark paper, with its spill; a multiply light brush (a highlighter) is a tint on paper.
     var shown = paper
-    if light != nil { shown.color = "#141414" }
+    if light != nil && b.tip.blend != .multiply { shown.color = "#141414" }
     var layers = [ViewLayer.paper(shown), ViewLayer(layer)]
     if let light, let spill = computeSpill(surface, light, LightSpill(radius: Swift.max(4, Double(height) / 6), strength: 1)) {
         layers.append(ViewLayer(RasterLayer(id: "thumbnail-light", name: "light", visible: true, opacity: 1, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))))
