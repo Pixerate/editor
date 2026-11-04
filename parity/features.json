@@ -2083,7 +2083,7 @@
           "core": "`PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })`",
           "react": "`usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
           "svelte": "`createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
-          "swift": "Planned (#540)"
+          "swift": "Planned (#533)"
         },
         {
           "feature": "Paint Provider Effects (optional: with an `EffectProvider`, effect paper drawn over the sheet and under the paint, multiplied so the grain shows; effect layers drawn by generators, overlays and titles and redrawn with new values; effect fills; filter light baked onto dried paint, thick paint keeping its relief; each one undo step, a slider drag one; saved with the document; effect paint, where dry, particle, bristle, mixer, watercolour, gouache, oil and impasto brushes take each pixel's colour from an effect rendered once at the canvas size (in wet paint it flows with the water) or laid along each stroke, and sprayed stickers take it at their centre, recorded with the stroke and rendered again for replays, and live effect paint that keeps playing in strokes on stroke layers (play, pause, frame rate cap, export at a moment); agent tools `set_paper_effect`, `add_effect_layer`, `fill_layer_with_effect`, `set_effect_paint` and the shared effect tools)",
