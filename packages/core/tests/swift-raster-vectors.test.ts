@@ -1090,7 +1090,8 @@ function codecVectors() {
     { name: 'random 66k (two blocks)', data: Uint8Array.from({ length: 66000 }, () => Math.floor(r() * 256)) },
     { name: 'text', data: new TextEncoder().encode('The raster module: tiled copy-on-write surfaces, blend modes and a per-tile compositor. '.repeat(12)) },
   ];
-  const zlib = inputs.map(({ name, data }) => ({ name, input: b64(data), adler: adler32(data), deflate: b64(deflate(data)), stored: b64(deflate(data, 0)), raw: b64(deflateRaw(data)) }));
+  // The stored and raw streams of the large input are left out (they would double the file).
+  const zlib = inputs.map(({ name, data }) => ({ name, input: b64(data), adler: adler32(data), deflate: b64(deflate(data)), stored: data.length > 10000 ? null : b64(deflate(data, 0)), raw: data.length > 10000 ? null : b64(deflateRaw(data)) }));
   // Streams written by Node's zlib (fixed Huffman, stored, dynamic at level 9) that `inflate` must read.
   const foreign = inputs.slice(1, 4).flatMap(({ name, data }) =>
     [

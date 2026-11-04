@@ -717,8 +717,8 @@ final class RasterVectorTests: XCTestCase {
             XCTAssertEqual(adler32(input), UInt32(z.get("adler").n), name)
             let out = deflate(input)
             assertBytes(out, bytes(z.get("deflate")), "deflate \(name)")
-            assertBytes(deflate(input, level: 0), bytes(z.get("stored")), "deflate stored \(name)")
-            assertBytes(deflateRaw(input), bytes(z.get("raw")), "deflateRaw \(name)")
+            if z.get("stored") != .null { assertBytes(deflate(input, level: 0), bytes(z.get("stored")), "deflate stored \(name)") }
+            if z.get("raw") != .null { assertBytes(deflateRaw(input), bytes(z.get("raw")), "deflateRaw \(name)") }
             assertBytes(try inflate(out), input, "inflate \(name)")
         }
         for f in c.get("foreign").a { assertBytes(try inflate(bytes(f.get("stream"))), bytes(f.get("out")), "inflate \(f.get("name").s)") }
