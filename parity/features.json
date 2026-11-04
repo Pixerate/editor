@@ -1988,7 +1988,7 @@
           "swift": "`RecordedStroke`"
         },
         {
-          "feature": "Brush a Path (SVG path data brushed with the active brush as if drawn by hand along it: each subpath one recorded stroke, sampled evenly, with an even pressure or a taper; grain, pick-up, wet and thick paint as in a hand stroke; one undo step; `stroke_path` agent tool, canvas coordinates on a hosted layer)",
+          "feature": "Brush a Path (SVG path data brushed with the active brush as if drawn by hand along it: each subpath one recorded stroke, sampled evenly, with an even pressure or a taper and an optional drawing speed that times the samples; grain, pick-up, wet and thick paint as in a hand stroke; one undo step; `stroke_path` agent tool, canvas coordinates on a hosted layer)",
           "core": "`strokePath`, `samplePath`, `PATH_STROKE_TAPERS`",
           "react": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
           "svelte": "`<PathStrokePanel>` (in `<PaintEditor>`'s Layers tab)",
@@ -2093,7 +2093,7 @@
           "swift": "`Stencil`, `PaintToolbarView` Ruler, Circle, Mask & outlines in `PaintCanvasView`"
         },
         {
-          "feature": "Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `fill_layer` and `replay_strokes` act out through a `director`)",
+          "feature": "Paint Agent Cursors (an agent's strokes painted live by its cursor on the canvas, paced by the points' times, as one undo step; fills rubbed across the sheet, replays starting from the strokes they copy; cursors placed through the view's zoom, rotation and mirroring; `paint_stroke`, `stroke_path` (each subpath in turn, the whole path one undo step), `fill_layer` and `replay_strokes` act out through a `director`)",
           "core": "`PaintDirector`, `PaintPresence` & `createPaintEditorToolProvider({ director })`",
           "react": "`usePaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",
           "svelte": "`createPaintDirector` & `<PaintEditor presence>` / `<PaintCanvas presence>`",

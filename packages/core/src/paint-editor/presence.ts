@@ -209,12 +209,12 @@ export class PaintDirector {
   }
 
   /** Paints a stroke live: begins it, pushes its points frame by frame as the cursor reaches them, then ends it (one undo step). */
-  private async stroke(id: string, init: PaintStrokeInit & { points: readonly PenPoint[] }): Promise<PaintStrokeResult> {
+  private async stroke(id: string, init: PaintStrokeInit & { points: readonly PenPoint[] }, within: <U>(step: () => U) => U = (step) => step()): Promise<PaintStrokeResult> {
     const c = this.controller;
     const points = c.checkPoints(init.points);
     const { points: _points, ...rest } = init;
     // Validate the layer and brush (and that nothing else is painting) before moving at all.
-    const session = c.beginStroke({ snapToPerspective: false, start: points[0], ...rest });
+    const session = within(() => c.beginStroke({ snapToPerspective: false, start: points[0], ...rest }));
     try {
       await this.glide(id, points[0]!);
       this.presence.set({ id, pressed: true });
@@ -255,14 +255,15 @@ export class PaintDirector {
     const first = checked[0]!;
     const base = first.brushId ? c.getBrush(first.brushId) : c.getState().brush;
     const stepLabel = label ?? `${base?.name ?? 'Brush'} path stroke`;
-    return c.group(stepLabel, async () => {
+    // The user can't paint or undo between subpaths: the group refuses them until the path is done.
+    return c.group(stepLabel, async (within) => {
       let layerId = first.layerId ?? c.document.activeLayerId ?? '';
       let bounds: RasterRect | null = null;
       let dabs = 0;
       const strokeIds: string[] = [];
       let last: PaintStrokeResult | null = null;
       for (const s of checked) {
-        const r = await this.stroke(id, s);
+        const r = await this.stroke(id, s, within);
         layerId = r.layerId;
         bounds = unionRect(bounds, r.bounds);
         dabs += r.dabs;

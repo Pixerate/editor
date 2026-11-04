@@ -462,7 +462,8 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A paint
   keep taking its colours.
 - **Strokes take real time when the host shows your cursor.** With a director (the demo and
   editors that set `createPaintEditorToolProvider({ director })`), `paint_stroke` paints live at
-  the pace of the points' `t` (else about 1.5 px per ms, at most ~1.8 s), and `fill_layer` /
+  the pace of the points' `t` (else about 1.5 px per ms, at most ~1.8 s), `stroke_path` paints
+  each subpath in turn (paced by its `speed` when given) as one undo step, and `fill_layer` /
   `replay_strokes` move the cursor first. Results and undo are the same; it is one more reason to
   paint a few long strokes and replay them rather than many short ones. A stroke fails with "A
   stroke is in progress" while the user is painting; try it again afterwards.

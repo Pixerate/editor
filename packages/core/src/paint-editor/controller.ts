@@ -544,7 +544,7 @@ export class PaintEditorController {
   /** Origins set by `withOrigin`, innermost last. */
   private origins: string[] = [];
   /** `group` in progress: commits fold into one step, recorded when it ends. */
-  private grouping: { label: string; before: PaintDocumentState; changed: boolean } | null = null;
+  private grouping: { label: string; before: PaintDocumentState; changed: boolean; pending: boolean; inside: number } | null = null;
   /** `previewPaint` in progress: nothing is emitted or recorded. */
   private previewing = false;
   private version = 0;
@@ -729,17 +729,29 @@ export class PaintEditorController {
 
   /**
    * Runs `fn` as one undo step named `label`: every change it makes (strokes, fills, new layers) is
-   * undone together. When `fn` returns a promise, the group holds until it settles. Nested groups
-   * join the outer one. If `fn` throws or rejects, its changes are put back and nothing is recorded.
+   * undone together. When `fn` returns a promise, the group holds until it settles; until then other
+   * changes (the user's strokes, undo) are refused, except those `fn` makes through `within`, so
+   * nothing else lands in (or is lost with) the group's step. Nested groups join the outer one. If
+   * `fn` throws or rejects, its changes are put back and nothing is recorded.
    */
-  group<T>(label: string, fn: () => T): T {
-    if (this.grouping) return fn();
+  group<T>(label: string, fn: (within: <U>(step: () => U) => U) => T): T {
+    if (this.grouping && (!this.grouping.pending || this.grouping.inside)) return fn((step) => step());
     this.requireIdle('grouping changes');
     const before = this.doc;
     const revision = this.docRevision;
     const strokesBefore = this.strokeCounter;
-    const g = { label, before, changed: false };
+    const origin = this.getOrigin();
+    const g = { label, before, changed: false, pending: false, inside: 0 };
     this.grouping = g;
+    const within = <U>(step: () => U): U => {
+      if (this.grouping !== g) return step();
+      g.inside++;
+      try {
+        return step();
+      } finally {
+        g.inside--;
+      }
+    };
     const rollback = () => {
       this.grouping = null;
       this.strokeCounter = strokesBefore;
@@ -759,7 +771,7 @@ export class PaintEditorController {
     const finish = () => {
       this.grouping = null;
       if ((g.changed && this.doc !== before) || this.wetOp) {
-        const entry: HistoryEntry = { label: g.label, origin: this.getOrigin(), before, after: this.doc };
+        const entry: HistoryEntry = { label: g.label, origin, before, after: this.doc };
         if (this.wetOp) {
           entry.wet = { before: this.wetOp.before, after: this.wet.snapshot(), lost: false };
           this.wetOp = null;
@@ -774,12 +786,13 @@ export class PaintEditorController {
     };
     let result: T;
     try {
-      result = fn();
+      result = fn(within);
     } catch (e) {
       rollback();
       throw e;
     }
     if (result && typeof (result as { then?: unknown }).then === 'function') {
+      g.pending = true;
       return Promise.resolve(result).then(
         (val) => {
           finish();
@@ -927,12 +940,14 @@ export class PaintEditorController {
   /** Why the document cannot be replaced or stepped through right now, or `null`. */
   busyReason(): string | null {
     if (this.session) return 'A stroke is in progress; end or cancel it first.';
+    if (this.grouping?.pending && !this.grouping.inside) return `"${this.grouping.label}" is still being painted; wait for it to finish first.`;
     if (this.wet.busy) return 'Wet paint is mid-step; wait a moment (wetIdle()) first.';
     return null;
   }
 
   private requireIdle(what: string): void {
     if (this.session) throw new PaintEditorError(`A stroke is in progress; end or cancel it before ${what}.`);
+    if (this.grouping?.pending && !this.grouping.inside) throw new PaintEditorError(`"${this.grouping.label}" is still being painted (one undo step); wait for it to finish before ${what}.`);
   }
 
   private commit(label: string, next: PaintDocumentState, before = this.doc): void {
