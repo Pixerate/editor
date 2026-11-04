@@ -57,11 +57,12 @@ describe('sticker contract: AI-generated art, light / dark variants and collecti
     expect(await p.describe('fruit-apple')).toMatchObject({ variants: ['light', 'dark'], collection: 'kitchen' });
     expect((await p.describe('fruit-apple'))!.aiGenerated).toBeUndefined();
     expect((await p.describe('art-sketch'))!.collection).toBeUndefined();
-    expect(await p.listCollections!()).toEqual([
+    expect(await p.collections!()).toEqual([
       { id: 'outdoors', name: 'Outdoors', description: 'Weather, AI-generated.', count: 6 },
       { id: 'kitchen', name: 'Kitchen', description: 'Fruit tiles with dark variants.', count: 5 },
       { id: 'shop', name: 'Shop', description: 'Tintable sale badges.', count: 4 },
     ]);
+    expect(await p.listCollections!()).toEqual(await p.collections!());
     const kitchen = await p.list({ collection: 'kitchen' });
     expect(kitchen.total).toBe(5);
     expect(kitchen.items.every((s) => s.collection === 'kitchen')).toBe(true);
@@ -91,6 +92,7 @@ describe('sticker contract: AI-generated art, light / dark variants and collecti
     expect(await issues(oneSticker({ variants: ['light', 'sepia' as 'dark'] }))).toContain('variants must list light and / or dark, each once');
     expect(await issues(oneSticker({ collection: 'brand' }))).toContain('is in collection "brand" but the provider has no listCollections()');
     expect(await issues(oneSticker({ collection: 'brand' }, { listCollections: () => [{ id: 'brand', name: 'Brand', count: 2 }] }))).toContain('collection "brand" says count 2 but list({ collection }) has 1');
+    expect(await issues(oneSticker({ collection: 'brand' }, { collections: () => [{ id: 'brand', name: 'Brand', count: 1 }] }))).toEqual([]);
     // A provider that ignores the variant: dark art for a sticker that has none is not refused.
     expect(await issues(oneSticker({}, { load: () => ({ kind: 'svg', svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' }) }))).toContain('load({ variant: "dark" }) did not reject for a sticker without a dark variant (checkStickerVariant does it)');
   });

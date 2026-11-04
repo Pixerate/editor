@@ -144,6 +144,8 @@ export interface StickerProvider {
   /** Categories with counts, when the provider knows them. */
   categories?(): MaybePromise<Array<{ id: string; name: string; count: number }>>;
   /** Its collections with counts, when it groups its stickers. Ids stay unique across collections, so `load(id)` needs none. */
+  collections?(): MaybePromise<StickerCollection[]>;
+  /** Alias for `collections()`. */
   listCollections?(): MaybePromise<StickerCollection[]>;
 }
 

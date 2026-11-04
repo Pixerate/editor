@@ -1,3 +1,4 @@
+import { providerCollections } from './helpers';
 import type { StickerProvider, StickerSummary } from './types';
 
 export interface StickerConformanceIssue {
@@ -36,7 +37,7 @@ function checkSummary(s: StickerSummary, provider: StickerProvider, issues: Stic
     else if (!v.includes('light')) at('variants must include light (every sticker has its light art)');
   }
   if (s.collection !== undefined && (typeof s.collection !== 'string' || !s.collection)) at('collection must be a non-empty string when present');
-  if (s.collection !== undefined && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no listCollections()`);
+  if (s.collection !== undefined && !provider.collections && !provider.listCollections) at(`is in collection "${s.collection}" but the provider has no listCollections()`);
 }
 
 /**
@@ -102,9 +103,9 @@ export async function checkStickerProvider(provider: StickerProvider, options: S
     if (d?.colours?.some((c) => !HEX.test(c))) top(`describe("${first.id}").colours must be #rrggbb`);
   }
   if ((await provider.describe('__no_such_sticker__')) !== undefined) top('describe of an unknown id returned a sticker');
-  if (provider.listCollections) {
+  if (provider.collections || provider.listCollections) {
     try {
-      const collections = await provider.listCollections();
+      const collections = (await providerCollections(provider)) ?? [];
       const known = new Set<string>();
       for (const c of collections) {
         if (typeof c?.id !== 'string' || !c.id || typeof c.name !== 'string' || !c.name || !(Number.isInteger(c.count) && c.count >= 0)) {

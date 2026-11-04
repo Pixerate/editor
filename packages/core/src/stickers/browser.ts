@@ -5,7 +5,7 @@
  * UI-agnostic.
  */
 
-import { stickerRefOf } from './helpers';
+import { providerCollections, stickerRefOf } from './helpers';
 import type { StickerCollection, StickerProvider, StickerRef, StickerSummary } from './types';
 
 export interface StickerBrowserItem extends StickerSummary {
@@ -66,7 +66,7 @@ export class StickerBrowser {
     this.set({ loading: true, error: null, items: [], total: 0, hasMore: false, provider: p.name });
     try {
       const categories = (await p.categories?.()) ?? [];
-      const collections = (await p.listCollections?.()) ?? [];
+      const collections = (await providerCollections(p)) ?? [];
       if (run !== this.run) return;
       // A collection the new provider doesn't have shows everything.
       this.set({ categories, collections, ...(this.s.collection && !collections.some((c) => c.id === this.s.collection) ? { collection: '' } : {}) });

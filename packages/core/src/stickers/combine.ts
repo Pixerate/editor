@@ -1,5 +1,5 @@
 import { StickerError } from './errors';
-import { checkStickerSearchOptions, DEFAULT_STICKER_PAGE, parseStickerRef, stickerRefOf } from './helpers';
+import { checkStickerSearchOptions, DEFAULT_STICKER_PAGE, parseStickerRef, providerCollections, stickerRefOf } from './helpers';
 import type { StickerCollection, StickerPage, StickerProvider, StickerSearchOptions, StickerSummary } from './types';
 
 /**
@@ -102,9 +102,14 @@ export function combineStickerProviders(providers: readonly StickerProvider[], o
       }
       return [...counts.values()];
     },
+    async collections() {
+      const out: StickerCollection[] = [];
+      for (const p of providers) for (const c of (await providerCollections(p)) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
+      return out;
+    },
     async listCollections() {
       const out: StickerCollection[] = [];
-      for (const p of providers) for (const c of (await p.listCollections?.()) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
+      for (const p of providers) for (const c of (await providerCollections(p)) ?? []) out.push({ ...c, id: collectionOf(p, c.id) });
       return out;
     },
   };
