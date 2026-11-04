@@ -16,6 +16,8 @@ export interface BrushEditorProps {
   onChange: (brush: Brush) => void;
   /** A live preview stroke of `brush`: pixels (e.g. `controller.brushThumbnail`) or an image URL. */
   preview?: Pixels | string | null;
+  /** The colour behind an image-URL preview, for transparent previews (see `brushPreviewColours`). */
+  previewBackground?: string;
   /** With it, a "Save" button (labelled `saveLabel`) saves the brush in place. */
   onSave?: () => unknown;
   /** The Save button's label (default "Save"; e.g. "Save a copy" for a built-in). */
@@ -34,7 +36,7 @@ export interface BrushEditorProps {
  * profile uses is shown; what the brush has for other hosts is kept and named
  * (`brushEditorScope`). `BrushLibraryEditor` wires it to a brush library.
  */
-export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, onSave, saveLabel = 'Save', onSaveAs, renderExtra, className }) => {
+export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT_PROFILE, onChange, preview, previewBackground, onSave, saveLabel = 'Save', onSaveAs, renderExtra, className }) => {
   const sections = useMemo(() => brushEditorSections(brush, profile), [brush, profile]);
   const scope = useMemo(() => brushEditorScope(brush, profile), [brush, profile]);
   const [problems, setProblems] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export const BrushEditor: React.FC<BrushEditorProps> = ({ brush, profile = PAINT
   return (
     <div className={`flex flex-col gap-2 ${className ?? ''}`} data-testid="brush-editor">
       {typeof preview === 'string' ? (
-        <img src={preview} alt="Brush preview" className="rounded object-contain" style={{ width: '100%', aspectRatio: '4 / 1' }} />
+        <img src={preview} alt="Brush preview" className="rounded object-contain" style={{ width: '100%', aspectRatio: '4 / 1', ...(previewBackground ? { background: previewBackground } : {}) }} />
       ) : (
         preview !== undefined && <PixelCanvas pixels={preview} label="Brush preview" className="rounded" style={{ width: '100%', aspectRatio: preview ? `${preview.width} / ${preview.height}` : '4 / 1' }} />
       )}

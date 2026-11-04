@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { brushColourHex, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
+import { brushPreviewColours, checkBrushEdit, newBrushFor, saveBrushEdit, type Brush, type BrushHostProfile, type BrushLibrary, type BrushPreviewRenderer } from '@pixerate/editor/brushes';
 import { button } from '../paint-editor/shared';
 import { BrushEditor } from './BrushEditor';
 
@@ -12,7 +12,12 @@ export interface BrushLibraryEditorProps {
   profile: BrushHostProfile;
   /** Draws the preview stroke (the host's renderer, as for `preview_brush`). Without it there is no preview. */
   renderPreview?: BrushPreviewRenderer;
-  /** The preview colour for brushes with no solid default colour (default slate). */
+  /**
+   * What a transparent preview is shown on (#rrggbb, default white); the renderer's own `paper`
+   * wins. The preview colour is chosen to read on it (`brushPreviewColours`).
+   */
+  previewPaper?: string;
+  /** A fixed preview colour instead (overrides the brush's own and the contrast check). */
   previewColor?: string;
   /** Called with the brush as saved (a copy has a new id): e.g. pick it in the host. */
   onSaved?: (brush: Brush) => void;
@@ -27,7 +32,7 @@ export interface BrushLibraryEditorProps {
  * saves under a new name, and "New brush" starts from the current one with only what the host
  * uses. Facets the host can't use are kept on save; a new brush must pass the host's check.
  */
-export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library, brushId, profile, renderPreview, previewColor = '#64748b', onSaved, onClose, className }) => {
+export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library, brushId, profile, renderPreview, previewPaper = '#ffffff', previewColor, onSaved, onClose, className }) => {
   const [original, setOriginal] = useState<Brush | null>(null);
   const [builtin, setBuiltin] = useState(false);
   const [draft, setDraft] = useState<Brush | null>(null);
@@ -49,7 +54,10 @@ export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library,
     };
   }, [library, brushId, profile]);
 
-  const colour = (draft && brushColourHex(draft.colour?.default ?? '', 'light')) || previewColor;
+  // The preview colour reads on what the preview is drawn on: the renderer's paper, or the box behind it.
+  const paper = renderPreview?.paper ?? previewPaper;
+  const colours = useMemo(() => (draft ? brushPreviewColours(draft, { paper, profile }) : null), [draft, paper, profile]);
+  const colour = previewColor ?? colours?.color ?? '#475569';
   useEffect(() => {
     if (!draft || !renderPreview) return;
     let live = true;
@@ -105,6 +113,7 @@ export const BrushLibraryEditor: React.FC<BrushLibraryEditorProps> = ({ library,
         brush={draft}
         profile={profile}
         preview={renderPreview ? preview : undefined}
+        previewBackground={colours?.background}
         onChange={(next) => {
           setDraft(next);
           setStatus(null);
