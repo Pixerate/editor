@@ -11,8 +11,8 @@
 // Type-only: the library works with any adapter from `@pixerate/editor/persistence` without
 // bundling the persistence module into this entry.
 import type { StorageAdapter } from '../persistence/storage.js';
-import type { PaintBrushInput } from '../paint-editor/brushes';
-import { BRUSH_ID } from '../paint-editor/brushes';
+import type { PaintBrushInput } from '../paint-editor/brush-model';
+import { BRUSH_ID } from '../paint-editor/brush-model';
 import { migrateBrushV1 } from './migrate';
 import { normalizeBrushSpec } from './normalize';
 import { checkBrush, type BrushHostProfile } from './profiles';

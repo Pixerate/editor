@@ -15,7 +15,7 @@ import type { ColorValue } from '../color/dual';
 import type { PaintGradientSource } from '../paint/gradient-paint';
 import type { MixingModel } from '../paint/exchange';
 import type { BlendMode } from '../raster/blend';
-import type { BrushRotation, ImpastoTool, PaintBrush, WetMediumKind } from '../paint-editor/brushes';
+import type { BrushRotation, ImpastoTool, PaintBrush, WetMediumKind } from '../paint-editor/brush-model';
 import type { PaintEffectPaint } from '../paint-editor/effect-paint';
 import type { DotRotation, DotTextureOrder, ParticleKind, ParticleRender, RibbonPairs } from '../paint-editor/mark-settings';
 import type { StickerRef } from '../stickers/types';

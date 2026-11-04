@@ -7,7 +7,7 @@
  * `migrateBrushV1` reads the same map the other way, so the two directions cannot drift apart.
  */
 
-import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brushes';
+import { normalizePaintBrush, WET_MEDIA, type PaintBrushCategory, type PaintBrushEngine, type PaintBrushInput, type WetMediumKind, type WetTool } from '../paint-editor/brush-model';
 import { editorStampOf } from '../stickers/helpers';
 import type { Brush, BrushTool, ResolvedBrush } from './types';
 

@@ -9,7 +9,7 @@
 import { readPaintSource } from '../paint/gradient-paint';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema';
 import { editorStampOf, normalizeStickerRef } from '../stickers/helpers';
-import { BRUSH_ID } from '../paint-editor/brushes';
+import { BRUSH_ID } from '../paint-editor/brush-model';
 import { BRUSH_FACET_SCHEMAS, BRUSH_JSON_SCHEMA, MAX_BRUSH_PALETTE } from './schema';
 import { BRUSH_TOOLS, type Brush, type BrushKind, type BrushPaint, type BrushTool } from './types';
 

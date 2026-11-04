@@ -65,10 +65,8 @@ describe("subpath entry isolation", () => {
   });
 
   it("brushes/index.js reaches no renderer", () => {
-    // The brush model is read by every host (and later the library tools), so it must not bundle
-    // the paint engine's strokes: only settings, defaults and normalisers. (It still reaches the
-    // paint editor's v1 BUILTIN_BRUSHES, which share a module with normalizePaintBrush, until the
-    // paint editor reads its presets from the brush model.)
+    // The brush model is read by every host (and the library tools), so it must not bundle
+    // the paint engine's strokes: only settings, defaults and normalisers (`paint-editor/brush-model`).
     const reached = (entry: string) => {
       const seen = new Set<string>();
       const visit = (file: string) => {

@@ -8,7 +8,7 @@
  * (`resolveCategory`), so a v1 brush filed under a category its settings do not match moves.
  */
 
-import { normalizePaintBrush, type PaintBrushInput } from '../paint-editor/brushes';
+import { normalizePaintBrush, type PaintBrushInput } from '../paint-editor/brush-model';
 import { BRUSH_FIELDS, getPath, resolveBrush, setPath, WET_TOOL_OF } from './resolve';
 import type { Brush, BrushMedium, BrushTipShape, BrushTool, ResolvedBrush } from './types';
 
