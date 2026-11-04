@@ -1974,7 +1974,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`setColorScheme`, `setColorLocked`, `brushColourHex`, canvas `selectBrush`, `vectorBrushstrokeDefaultColour`, `PaintBrush.stamp` / `.spray`, `stampSampler`, `snapshotBrushLibrary`",
         "react": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `useCanvasDraw` `selectBrush` and `colorScheme`",
         "svelte": "`<BrushEditor>` default colour and palette with light / dark pairs, Keep my colour in `<BrushPanel>`, `createCanvasDraw` `selectBrush` and `setColorScheme`",
-        "swift": "Planned (#545) (stamp tips and textured particle dots need the sticker art)"
+        "swift": "Brush colours, palettes, `own` colours and the spray can ✅ (`PaintEditorController`); stamp tips and textured particle dots from library stickers: Planned (#545) (they need the sticker art)"
       },
       {
         "feature": "Strokes as Data (every stroke recorded with brush, colour, raw pen samples, seed and symmetry copies; replay exactly or moved, scaled, rotated, flipped, recoloured, with another brush or layer, repeated, as one undo step; `list_strokes`, `replay_strokes` agent tools)",
@@ -2065,7 +2065,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`ParticleStroke`, `BristleStroke`, `StickerSpray`, `addStickers`, `stickerAt`, `previewSticker`, `updateSticker`, `stickerSurface`",
         "react": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
         "svelte": "`<BrushPanel>` particle and bristle controls and a searchable, paged `<StickerPicker>`, the Stickers tool in `<PaintToolbar>` / `<PaintCanvas>` & `<StickerPanel>` with X/Y",
-        "swift": "Particle and bristle brushes ✅ (every kind and render, dots textured with editor stamps; in the brush picker of `PaintEditorView`); sticker spray, sticker layers and library sticker art: Planned (#545)"
+        "swift": "Particle, bristle and sticker brushes ✅ (every particle kind and render, dots textured with editor stamps; sticker spray and sticker layers of the editor's stickers: `Sticker`, `EditorStickers`, `PaintEditorController` `addStickers` / `updateSticker`; all in the brush picker of `PaintEditorView`); host sticker libraries and their art, the Stickers tool and sticker panel: Planned (#545)"
       },
       {
         "feature": "Light Paint (a per-layer light channel any dab, particle, bristle, Mixer Brush or impasto brush lays with `light.amount`: the paint glows in its own colour and spills, blurred, onto its surroundings; it moves with paint (smudges, blenders, the knife and pick-up brushes carry it; plain paint dims it; erasers remove it); glassy impasto with rim and clarity; Light presets glow gel, neon marker, light airbrush, spark trail, light ribbon, flame ribbon, neon strand, smoke ribbon, bokeh dots, twinkle sparks; per-layer spill radius and strength; saved, undone and replayed; PSD spill layers in Linear Dodge (Add); `get_light`, `set_light_spill`, `clear_light`, `set_brush` `light` / `behaviour.thick.rim` / `behaviour.thick.clarity` agent tools)",

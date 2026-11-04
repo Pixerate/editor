@@ -3751,3 +3751,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `export_psd` in Swift writes the same bytes as the TS core for pixel layers, groups, masks, locks and the merged image, but a layer with layer styles gets no `lfx2` block and an extra warning naming it.
 - **Root Cause**: Only the part of `image-editor/psd/export.ts` that paint layers need without styles was ported (`PixerateRaster/PSD.swift`); the descriptor writer, `writeLfx2` and pattern embedding were not.
 - **Solution / Workaround**: The merged image still shows the styles. Port `psd/descriptor.ts` and `writeLfx2` (and `Patt` for pattern effects) when a scenario exports styled layers to PSD, and drop the warning.
+
+### [swift] Replays Read Paint Events, so Moving the Document Must Move Them Too
+- **Issue / Symptom**: After `extend_canvas` with `left` or `top`, a Swift time-lapse or high-res export put a sticker layer's stickers (and a stroke layer's strokes) back where they were before the canvas grew, and the saved `paintEvents` differed from the TS core's.
+- **Root Cause**: Replays repaint sticker and stroke layers from their `paintEvents` (`stickers`, `live-strokes`), not from the document's current lists. The TS `extendCanvas` moves the stickers and strokes inside those events (rounding sticker centres to hundredths); the Swift `shiftDocument` only moved the document's own lists.
+- **Solution / Workaround**: `shiftDocument` moves `stickers` and `live-strokes` event data (and the in-memory strokes of `PaintEvent`) with the same rounding as the TS core. Anything new that moves paint must move the events too; a replay after the move is the test.
