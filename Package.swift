@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "PixeratePaint", targets: ["PixeratePaint"]),
         .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
         .library(name: "PixeratePaintUI", targets: ["PixeratePaintUI"]),
+        .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
     ],
     targets: [
         // Foundation only: no SwiftUI, AppKit or UIKit (the UI targets are the only ones that import them).
@@ -40,6 +41,10 @@ let package = Package(
         // model on `PaintEditorController`. The only paint target that imports SwiftUI (AppKit / UIKit
         // for pen and trackpad input, behind `#if canImport`).
         .target(name: "PixeratePaintUI", dependencies: ["PixeratePaint", "PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixeratePaintUI", swiftSettings: settings),
+        // The Markdown engine shared with Swash (#546): CommonMark + GFM parser, HTML renderer and
+        // HTML → Markdown converter, code highlighter, and the AST formatting and editing commands.
+        // Foundation only, with no dependency on the other targets, so apps can take it on its own.
+        .target(name: "PixerateMarkdown", path: "packages/swift/Sources/PixerateMarkdown", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
@@ -66,6 +71,13 @@ let package = Package(
             name: "PixeratePaintUITests",
             dependencies: ["PixeratePaintUI", "PixeratePaint", "PixerateCore", "PixerateRaster"],
             path: "packages/swift/Tests/PixeratePaintUITests",
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateMarkdownTests",
+            dependencies: ["PixerateMarkdown"],
+            path: "packages/swift/Tests/PixerateMarkdownTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: settings
         ),
     ]
