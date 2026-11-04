@@ -3835,3 +3835,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
 - **Solution / Workaround**: `vectorContracts()` writes each spec's own `shortcut` as written (`Mod` for Cmd or Ctrl), as paint's `PAINT_SHORTCUTS` do. Anything exported for another implementation must not go through platform-resolving APIs.
+
+### [monorepo] Node10 Consumers Need `typesVersions` for Every Subpath, and the Check Needs `esModuleInterop`
+- **Issue / Symptom**: With `moduleResolution: "node"` (node10), `import … from "@pixerate/editor/grammar"` had no types, and the first node10 consumer in `scripts/check-packages.mjs` reported 166 errors like "Module react can only be default-imported using the 'allowSyntheticDefaultImports' flag".
+- **Root Cause**: node10 ignores `exports`, so it only finds subpath declarations through `typesVersions["*"]`. Separately, our emitted React declarations use `import React from "react"`, which node10 only accepts with `allowSyntheticDefaultImports` (on by default for `bundler` and `node16`, off for node10).
+- **Solution / Workaround**: Every non-root `exports` key needs a matching `typesVersions["*"]` entry (`check-packages` fails otherwise). The node10 consumer sets `esModuleInterop: true`, which `tsc --init` writes and which implies `allowSyntheticDefaultImports`.

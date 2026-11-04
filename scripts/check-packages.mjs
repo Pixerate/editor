@@ -167,10 +167,12 @@ const consumers = [
   {
     name: "node10",
     file: "consumer-node10.ts",
-    node10: true,
+    // `esModuleInterop` is what `tsc --init` writes, and our declarations use React's default
+    // export (`import React from "react"`), which node10 only allows with it.
     options: {
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      esModuleInterop: true,
     },
     packages: packages,
   },
@@ -185,20 +187,6 @@ const ours = (fileName) =>
 // must be in one of our declaration files and name a third-party package.
 const THIRD_PARTY_ESM_ONLY = new Set([1479, 1541, 1542]);
 function tolerated(consumer, d) {
-  if (
-    consumer.node10 &&
-    d.code === 2307 &&
-    d.file?.fileName.includes("/node_modules/@pixerate/")
-  ) {
-    const specifier = /["']([^"']+)["']/.exec(
-      d.file.text.slice(d.start, d.start + d.length),
-    )?.[1];
-    return (
-      !!specifier &&
-      !specifier.startsWith(".") &&
-      !specifier.startsWith("@pixerate/")
-    );
-  }
   if (
     !consumer.cjs ||
     !THIRD_PARTY_ESM_ONLY.has(d.code) ||
