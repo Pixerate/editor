@@ -243,6 +243,12 @@ export function VectorAppearancePanel({ controller, renderBrushPreview, classNam
       </div>
       {/* Top layer first, as it draws. */}
       {[...layers].reverse().map((l) => layerRow(l, layers.length))}
+      {kind === 'stroke' && layers.some((l) => l.brushstroke) && (
+        // Editor state: brushstrokes added or rebrushed from now on keep their colour.
+        <label className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Choosing a brush keeps the stroke's colour instead of taking the brush's default colour">
+          <input type="checkbox" aria-label="Keep my colour" data-vector-keep-colour="" checked={state.colorLocked} onChange={(e) => controller.setColorLocked(e.target.checked)} /> Keep my colour when choosing a brush
+        </label>
+      )}
     </div>
   );
 

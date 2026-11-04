@@ -141,3 +141,16 @@ export interface CanvasBrushPreset {
 	/** The preset's own tip diameter in canvas units: a new brushed stroke's default size. */
 	size: number;
 }
+
+/** What the canvas brush picker is set to (`brushSettings()` of the draw controller). */
+export interface CanvasBrushChoice {
+	/** The preset or saved brush id the pen draws with by hand, or null for a plain vector stroke. */
+	brush: string | null;
+	/** The stroke colour, or null while strokes take a gradient. */
+	color: string | null;
+	colorScheme: 'light' | 'dark';
+	/** "Keep my colour": choosing a brush keeps the stroke colour. */
+	colorLocked: boolean;
+	/** The colour is a brush's light / dark default and changes with the scheme. */
+	colorFollowsScheme: boolean;
+}

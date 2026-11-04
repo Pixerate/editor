@@ -211,6 +211,12 @@
     </div>
     <!-- Top layer first, as it draws. -->
     {#each [...layers].reverse() as l (`${l.kind}-${l.index}`)}{@render layerRow(l, layers.length, ids)}{/each}
+    {#if kind === 'stroke' && layers.some((l) => l.brushstroke)}
+      <!-- Editor state: brushstrokes added or rebrushed from now on keep their colour. -->
+      <label class="flex items-center gap-1 text-[11px] text-muted-foreground" title="Choosing a brush keeps the stroke's colour instead of taking the brush's default colour">
+        <input type="checkbox" aria-label="Keep my colour" data-vector-keep-colour="" checked={view.colorLocked} onchange={(e) => controller.setColorLocked(e.currentTarget.checked)} /> Keep my colour when choosing a brush
+      </label>
+    {/if}
   </div>
 {/snippet}
 

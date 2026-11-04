@@ -100,7 +100,14 @@ you to. Withdraw stale ones with `reject_proposal`: when the user changes what a
   stroke always looks the same, and neighbouring strokes share one sheet of paper. Pick the brush
   for the look, then the colour; for a sketch, use one or two brushes rather than all of them.
   A brush with a default colour (ballpoint blue, highlighter yellow, chalk) paints in it when
-  you pass no `color`; pass `color` to use another.
+  you pass no `color`; pass `color` to use another. Light / dark defaults (chalk) resolve for
+  the canvas's colour scheme (`canvas.setColorScheme`; the host usually matches its theme).
+- **Setting up the pen for the person, not drawing.** `canvas.selectBrush` chooses the brush the
+  person draws with by hand, as the brush picker does: it takes the brush's default colour unless
+  they locked theirs (`canvas.setColorLocked`, "Keep my colour") or you pass `keepColour`. A
+  default taken this way follows the scheme until another colour is set. Respect a lock the
+  person set; don't unlock it to change their colour. These are editor state, not undo steps,
+  and don't affect `canvas.drawFreehand`, which takes its own `brush` and `color`.
 - **Annotate with gestures, not points.** To mark up work the way a designer marks up a print,
   use the gesture commands (`canvas.circle`, `canvas.underline`, `canvas.arrow`,
   `canvas.bracket`, `canvas.strike`, `canvas.cross`, `canvas.check`) with node ids
@@ -254,6 +261,9 @@ character: seeded jitter and the paper grain they catch) and, when a width was c
 | Command | Use it to |
 | --- | --- |
 | `canvas.drawFreehand` | Draw a pen or highlighter stroke through `points` (`[x, y]` pairs in canvas units, in drawing order; one undo step). `tool` picks the defaults (`pen`: blue, width 3; `highlighter`: yellow, width 24, opacity 0.35); `color`, `width`, `opacity` override them (with a `brush` and no `color`, the brush's default colour if it has one; with a `brush`, `width` is the brush diameter and defaults to the preset's own size). Pass `brush` (a preset or saved brush id from `canvas.listBrushes`, or tip settings) to paint it with a dry brush, plus `pressure` / `tiltX` / `tiltY` profiles spread along its length (`[0.2, 1, 0.3]` swells in the middle). Add `paint` (only with `brush`) for gradient paint that changes colour along the stroke: `{ "type": "gradient", "stops": [...], "map": { "by": "distance", "length": 200 } }` (length in canvas units), or `by` `pressure`, `tilt`, `direction`, `across-tip`, `random`. Returns the node `id`, its `bounds` and the stored `brush` (with `paint` normalised: defaults filled in, colours lowercased). |
+| `canvas.selectBrush` | Choose the brush the person draws with by hand (`brushId` from `canvas.listBrushes`, or `null` for a plain vector stroke), at its own size, taking its default colour unless the colour is locked or `keepColour`. Draws nothing. Returns `{ brush, color, colorScheme, colorLocked, colorFollowsScheme }`. |
+| `canvas.setColorLocked` | Lock (`locked: true`) or unlock the hand-drawing colour ("Keep my colour"): while locked, `canvas.selectBrush` keeps it. Returns the same settings as `canvas.selectBrush`; call it (or `canvas.selectBrush`) to read whether the person locked it. |
+| `canvas.setColorScheme` | Set `scheme` `light` or `dark`: picks the side of light / dark default colours for `canvas.selectBrush` and `canvas.drawFreehand`; a colour taken from such a default follows, strokes already drawn keep theirs. Usually the host's job. Returns the same settings as `canvas.selectBrush`. |
 | `canvas.listBrushes` | Read-only: the brushes `canvas.drawFreehand` and the gestures accept as `brush`: the dry presets, then saved brushes from the brush library the canvas can paint (`id`, `name`, `category`, the brush's own `size`, which a stroke uses unless you pass `width`, and `builtin`). Call it before the first brushed stroke instead of guessing ids. |
 
 Gestures draw one hand-drawn stroke node each (one undo step) through the same path as

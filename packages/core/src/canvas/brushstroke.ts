@@ -13,7 +13,7 @@ import type { CanvasBrush, CanvasBrushPaint, CanvasBrushPreset, CanvasBrushSpec,
 import type { BrushLibrary } from '../brushes/library.js';
 import type { BrushPreviewRenderer } from '../brushes/tools.js';
 
-export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPaper, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushSpec, CanvasBrushstroke } from './brushTypes.js';
+export type { CanvasBrush, CanvasBrushPaint, CanvasBrushPaintMapping, CanvasBrushPaintStop, CanvasBrushPaper, CanvasBrushChoice, CanvasBrushPreset, CanvasBrushSettings, CanvasBrushSpec, CanvasBrushstroke } from './brushTypes.js';
 
 export { brushstrokeScaleBucket };
 
