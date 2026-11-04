@@ -13,6 +13,7 @@ let package = Package(
     products: [
         .library(name: "PixerateCore", targets: ["PixerateCore"]),
         .library(name: "PixerateContracts", targets: ["PixerateContracts"]),
+        .library(name: "PixerateRaster", targets: ["PixerateRaster"]),
         .library(name: "PixeratePaint", targets: ["PixeratePaint"]),
         .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
     ],
@@ -28,6 +29,9 @@ let package = Package(
             resources: [.copy("domains"), .copy("schema")],
             swiftSettings: settings
         ),
+        // The raster module (`raster/` in the TS core): tiled surfaces, blend modes, the layer
+        // compositor, layer effects, transforms and the PNG / zlib codec. Foundation only.
+        .target(name: "PixerateRaster", dependencies: ["PixerateCore"], path: "packages/swift/Sources/PixerateRaster", swiftSettings: settings),
         // The paint editor. `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
         .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
         // Replays the recorded scenarios against a Swift editor and compares the results.
@@ -36,6 +40,13 @@ let package = Package(
             name: "PixerateCoreTests",
             dependencies: ["PixerateCore"],
             path: "packages/swift/Tests/PixerateCoreTests",
+            resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateRasterTests",
+            dependencies: ["PixerateRaster", "PixerateCore"],
+            path: "packages/swift/Tests/PixerateRasterTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings
         ),
