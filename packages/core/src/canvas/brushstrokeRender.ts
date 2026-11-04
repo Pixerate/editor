@@ -13,6 +13,7 @@ import { BRUSH_PRESETS } from '../brushes/presets.js';
 import { CANVAS_PROFILE, checkBrush, listPresets } from '../brushes/profiles.js';
 import { resolveBrush, resolveCategory } from '../brushes/resolve.js';
 import type { Brush } from '../brushes/types.js';
+import { isDualColor } from '../color/dual.js';
 import { parseCssColor } from '../image-editor/layers/css-color.js';
 import { resolveCanvasGradient } from './gradient.js';
 import { formatNumber, getShapeSvg, type ShapeSize } from './shapeGeometry.js';
@@ -43,12 +44,16 @@ export function readCanvasBrushSpec(spec: CanvasBrushSpec | unknown): Brush {
 
 /** The presets, then the saved brushes (`user`, facet brushes) the canvas can paint. */
 export function listCanvasBrushes(user: readonly unknown[] = []): CanvasBrushPreset[] {
-	const out: CanvasBrushPreset[] = PRESETS.map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: true }));
+	const colourOf = (spec: Brush): Pick<CanvasBrushPreset, 'defaultColor'> => {
+		const d = spec.colour?.default;
+		return typeof d === 'string' || isDualColor(d) ? { defaultColor: d as CanvasBrushPreset['defaultColor'] } : {};
+	};
+	const out: CanvasBrushPreset[] = PRESETS.map((b) => ({ id: b.id, name: b.name, category: b.category, size: b.tip.size, builtin: true, ...colourOf(BRUSH_PRESETS.find((p) => p.id === b.id)!) }));
 	for (const raw of user) {
 		try {
 			const brush = readCanvasBrushSpec(raw);
 			if (out.some((b) => b.id === brush.id)) continue;
-			out.push({ id: brush.id, name: brush.name, category: resolveCategory(brush), size: resolveBrush(brush).tip.size, builtin: false, spec: brush as unknown as CanvasBrushSpec });
+			out.push({ id: brush.id, name: brush.name, category: resolveCategory(brush), size: resolveBrush(brush).tip.size, builtin: false, spec: brush as unknown as CanvasBrushSpec, ...colourOf(brush) });
 		} catch {
 			// A saved brush the canvas can't paint is left out.
 		}

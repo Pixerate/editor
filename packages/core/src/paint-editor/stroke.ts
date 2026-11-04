@@ -190,6 +190,7 @@ export class PaintStrokeSession {
         copies: this.copies,
         paint: init.paint ?? null,
         effect,
+        stampArt: init.stampArt,
       });
     } else {
       const opts = { grain: init.grain, paperDepth: init.paperDepth, seed: init.seed, copies: this.copies, paint: init.paint ?? null, effect, stampArt: init.stampArt };

@@ -74,7 +74,14 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		/** A node's box in canvas coordinates (lets gesture commands such as `canvas.circle` take `{ nodeId }`). */
 		nodeBounds: controller.nodeBounds,
 		/** The dry paint presets `style.brush` accepts (loads the paint engine). */
-		listBrushes: controller.listBrushes
+		listBrushes: controller.listBrushes,
+		/**
+		 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour`.
+		 * Resolves to the preset; rejects for a brush the canvas can't paint.
+		 */
+		selectBrush: controller.selectBrush,
+		/** Sets the colour scheme that picks the side of a brush's light / dark default colour. */
+		setColorScheme: controller.setColorScheme
 	};
 }
 

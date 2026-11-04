@@ -270,6 +270,8 @@ const CanvasDemo: React.FC = () => {
     history: history.manager,
     initialTool: "select",
     brushLibrary: demoBrushLibrary,
+    // The demo is always dark, so chalk is white.
+    colorScheme: "dark",
   });
   // Dry paint brushes for freehand strokes; the paint engine loads when this list is first read.
   // Picking a brush sets the size to the preset's own; the slider then changes the brush size.
@@ -284,7 +286,9 @@ const CanvasDemo: React.FC = () => {
     setBrushId(id);
     setBrushSize(brushes.brushes.find((b) => b.id === id)?.size);
     setBrushMenuOpen(false);
-  }, [brushes.brushes]);
+    // Picking a brush with a default colour (the ballpoint's blue, chalk's white) paints in it.
+    if (id) draw.selectBrush(id).catch(() => {});
+  }, [brushes.brushes, draw]);
   useEffect(() => {
     const brushSpec = brushes.brushes.find((b) => b.id === brushId)?.spec;
     if ((draw.tool === "pen" || draw.tool === "highlighter") && ((draw.style.brush ?? "") !== brushId || draw.style.brushSize !== brushSize || draw.style.brushSpec !== brushSpec)) {

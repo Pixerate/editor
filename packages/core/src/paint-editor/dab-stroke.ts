@@ -28,6 +28,8 @@ import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
 import { rand01 } from './noise';
 import { grainCatch, type PaperGrain } from './paper';
+import { rasterizeStampDab, sprayDroplets, stampDabRect, stampSampler, type StampSampler } from './stamp-tip';
+import type { StickerArtLookup } from './sticker-art';
 
 export interface PaintDabStrokeOptions {
   /** Where the stroke reads and writes pixels. */
@@ -46,6 +48,8 @@ export interface PaintDabStrokeOptions {
   paint?: PaintGradientSource | null;
   /** Effect paint: each dab's colour (and flow, by alpha) is the effect's at the dab's centre. */
   effect?: EffectPaintPixels | null;
+  /** Loaded sticker art, for a stamp tip of a sticker from the sticker library (`brush.stamp`). */
+  stampArt?: StickerArtLookup;
 }
 
 /** Entries in a multi-colour gradient table. */
@@ -137,10 +141,14 @@ export class PaintDabStroke {
   private lastRaw: PenPoint | null = null;
   private lastFed: PenPoint | null = null;
 
+  /** The stamp tip's shape (dab brushes), or `null` for the round computed tip. */
+  private readonly stamp: StampSampler | null;
+
   constructor(
     readonly brush: PaintBrush,
     private readonly options: PaintDabStrokeOptions
   ) {
+    this.stamp = brush.engine === 'dab' && brush.stamp ? stampSampler(brush.stamp, options.stampArt) : null;
     this.smoother = new PenSmoother(brush.tip.smoothing, brush.pressureSmoothing);
     this.copies = options.copies?.length ? options.copies : [IDENTITY_COPY];
     const exchanging = brush.engine === 'mixer' || brush.engine === 'dab';
@@ -197,8 +205,10 @@ export class PaintDabStroke {
   }
 
   private paintDabs(copy: number, dabs: PenDab[], rects: RasterRect[]): void {
-    for (const d of dabs) {
-      const rect = dabRect(d, this.brush.tip.hardness);
+    // Spray marks (dab brushes): each dab is a scatter of droplets, each picking up and laying paint.
+    const spray = this.brush.engine === 'dab' ? this.brush.spray : null;
+    for (const d of spray ? dabs.flatMap((dab) => sprayDroplets(dab, spray, (this.options.seed ?? 0) + copy * 7919)) : dabs) {
+      const rect = this.stamp ? stampDabRect(d) : dabRect(d, this.brush.tip.hardness);
       if (rect.width <= 0 || rect.height <= 0) continue;
       this.dab(copy, d, rect);
       rects.push(rect);
@@ -215,7 +225,8 @@ export class PaintDabStroke {
     }
     const tip = this.tip.subarray(0, n);
     tip.fill(0);
-    rasterizeDab({ ...d, alpha: 1 }, this.brush.tip.hardness, rect, tip);
+    if (this.stamp) rasterizeStampDab({ ...d, alpha: 1 }, this.stamp, d.index, rect, tip);
+    else rasterizeDab({ ...d, alpha: 1 }, this.brush.tip.hardness, rect, tip);
     if (!(this.depth > 0 && this.options.grain)) return { tip, cov: tip };
     const cov = this.cov.subarray(0, n);
     const grain = this.options.grain;

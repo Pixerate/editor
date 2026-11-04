@@ -133,6 +133,13 @@ describe('brushstroke commands through the tool registry', () => {
 		expect((await run('vector.setBrushstroke', { id: 'a', index })).text).toContain('Pass at least one of');
 		expect((await run('vector.setBrushstroke', { id: 'a', index: 9, size: 2 })).text).toContain('out of range');
 		expect((await run('vector.addBrushstroke', { ids: ['a'], brushId: 'nope' })).text).toContain('Unknown brush');
+		// A brush's default colour, unless a colour is given or kept.
+		const ballpoint = await run('vector.addBrushstroke', { ids: ['a'], brushId: 'ballpoint' });
+		expect(ballpoint.result.paths[0].strokes.at(-1).paint).toBe('#1e3a8a');
+		const kept = await run('vector.addBrushstroke', { ids: ['a'], brushId: 'ballpoint', keepColour: true });
+		expect(kept.result.paths[0].strokes.at(-1).paint).not.toBe('#1e3a8a');
+		expect((await run('vector.setBrushstroke', { id: 'a', index, brushId: 'gel-pen' })).result.strokes[index].paint).toBe('#111827');
+		expect((await run('vector.setBrushstroke', { id: 'a', index, brushId: 'ballpoint', keepColour: true })).result.strokes[index].paint).toBe('#111827');
 	});
 });
 
