@@ -180,6 +180,31 @@ export function checkBrush(brush: Brush, profile: BrushHostProfile): BrushCheck 
   return { ok: !issues.some((i) => i.severity === 'error'), issues };
 }
 
+export interface BrushEditCheck extends BrushCheck {
+  /**
+   * Errors the brush had before the edit: facets this host can't use, kept unchanged for the
+   * hosts that can (a light paint brush edited in Canvas keeps its light). Not in `issues`.
+   */
+  kept: BrushIssue[];
+}
+
+/**
+ * A check of an edit: errors the original brush already had (`before`, its check for the same
+ * host) are kept rather than refused, so a host edits what it renders and leaves the rest alone.
+ * Without `before` (a new brush) every error refuses it.
+ */
+export function withKeptIssues(check: BrushCheck, before: BrushCheck | null): BrushEditCheck {
+  const had = new Set((before?.issues ?? []).filter((i) => i.severity === 'error').map((i) => i.facet));
+  const kept = check.issues.filter((i) => i.severity === 'error' && had.has(i.facet));
+  const issues = check.issues.filter((i) => !kept.includes(i));
+  return { ok: !issues.some((i) => i.severity === 'error'), issues, kept };
+}
+
+/** `checkBrush` for an edit of `original` (`null`: a new brush), keeping facets it already had that the host can't use. */
+export function checkBrushEdit(original: Brush | null, brush: Brush, profile: BrushHostProfile): BrushEditCheck {
+  return withKeptIssues(checkBrush(brush, profile), original ? checkBrush(original, profile) : null);
+}
+
 /** The presets (default: the built-in ones) a host can render, in library order. */
 export function listPresets(profile: BrushHostProfile, presets: readonly Brush[] = BRUSH_PRESETS): Brush[] {
   return presets.filter((b) => checkBrush(b, profile).ok);
@@ -198,10 +223,12 @@ export interface DegradedBrush {
  * The brush the host can render: facets it refuses are removed (light, motion, a reservoir, a
  * wet or thick surface, particle or object marks, bristle and stamp tips become round, an
  * unsupported default colour), each reported in `dropped`. A tool the host lacks can't be
- * stripped and stays in `issues`.
+ * stripped and stays in `issues`. `ignored: true` also removes what the host paints without
+ * (its warnings: velocity on canvas, grain in the image editor, palette colours it skips), for
+ * a brush made only of what the host uses.
  */
-export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush {
-  const before = checkBrush(brush, profile).issues.filter((i) => i.severity === 'error');
+export function degrade(brush: Brush, profile: BrushHostProfile, options: { ignored?: boolean } = {}): DegradedBrush {
+  const before = checkBrush(brush, profile).issues.filter((i) => i.severity === 'error' || options.ignored);
   const b = JSON.parse(JSON.stringify(brush)) as Brush;
   const dropped: BrushIssue[] = [];
   for (const issue of before) {
@@ -250,6 +277,10 @@ export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush 
       case 'colour.default':
         delete b.colour!.default;
         break;
+      case 'colour.palette':
+        b.colour!.palette = b.colour!.palette!.filter((c) => profile.colours.includes(brushColourKind(c)));
+        if (!b.colour!.palette.length) delete b.colour!.palette;
+        break;
       default:
         continue;
     }
@@ -257,6 +288,7 @@ export function degrade(brush: Brush, profile: BrushHostProfile): DegradedBrush 
   }
   // A Mixer Brush stripped of its reservoir with nothing else to exchange.
   if (b.behaviour?.exchange && !Object.keys(b.behaviour.exchange).length) delete b.behaviour.exchange;
+  if (b.colour && !Object.keys(b.colour).length) delete b.colour;
   // Removing a tip or mark facet can surface a new refusal (a stamp tip once its marks are gone).
   const after = checkBrush(b, profile).issues.filter((i) => i.severity === 'error');
   return { brush: b, dropped, issues: after };

@@ -107,6 +107,12 @@ export interface BrushLibrary {
   subscribe(listener: () => void): () => void;
 }
 
+/** Whether `library` is a whole `BrushLibrary` (it can save), not only a list to read: hosts offer brush editing on one. */
+export function isBrushLibrary(library: unknown): library is BrushLibrary {
+  const l = library as Partial<BrushLibrary> | null;
+  return !!l && typeof l.list === 'function' && typeof l.get === 'function' && typeof l.save === 'function' && typeof l.isBuiltin === 'function' && typeof l.subscribe === 'function';
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Whether a stored brush is version 1 (the flat `PaintBrush`). */

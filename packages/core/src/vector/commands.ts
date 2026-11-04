@@ -1612,7 +1612,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 			label: 'Edit Brushstroke…',
 			keywords: ['brushstroke', 'brush', 'size', 'pressure', 'taper'],
 			description:
-				'Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId`, `size` (null: the brush\'s own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush\'s character on; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default paper). Pass at least one. One undo step. Returns { id, strokes }.',
+				'Changes the brushstroke at stroke layer `index` of path `id` (vector.getAppearance lists strokes; 0 is the bottom): `brushId` (the same id again takes that saved brush as the library has it now), `size` (null: the brush\'s own), `pressure` (null: full pressure), `color`, `opacity`, `seed` (turns the brush\'s character on; null: plain dabs) and `paper` (replaced whole; null: no grain; {}: the default paper). Pass at least one. One undo step. Returns { id, strokes }.',
 			params: {
 				type: 'object',
 				properties: {

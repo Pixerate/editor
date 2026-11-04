@@ -1567,7 +1567,7 @@
     {
       "name": "update_brush",
       "title": "Update a brush",
-      "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush; a refused change saves nothing. One change. Returns the brush, the leaf paths changed, problems and warnings.",
+      "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.",
       "inputSchema": {
         "type": "object",
         "properties": {

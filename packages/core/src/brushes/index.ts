@@ -17,10 +17,11 @@ export { migrateBrushV1 } from './migrate';
 export { BRUSH_PRESETS } from './presets';
 export { brushColourHex } from './colour';
 export { BRUSH_CONTRACT_FORMAT_VERSION, BRUSH_LIBRARY_FILE_JSON_SCHEMA, BRUSH_PROFILE_JSON_SCHEMA, brushContracts } from './contract';
-export { BRUSH_HOST_PROFILES, brushColourKind, CANVAS_PROFILE, checkBrush, degrade, IMAGE_PROFILE, listPresets, PAINT_PROFILE, VECTOR_PROFILE, type BrushCheck, type BrushColourKind, type BrushHostProfile, type BrushIssue, type BrushSupport, type DegradedBrush } from './profiles';
+export { BRUSH_HOST_PROFILES, brushColourKind, CANVAS_PROFILE, checkBrush, checkBrushEdit, degrade, withKeptIssues, IMAGE_PROFILE, listPresets, PAINT_PROFILE, VECTOR_PROFILE, type BrushCheck, type BrushEditCheck, type BrushColourKind, type BrushHostProfile, type BrushIssue, type BrushSupport, type DegradedBrush } from './profiles';
 export {
   BrushLibraryError,
   createBrushLibrary,
+  isBrushLibrary,
   parseBrushLibrary,
   snapshotBrushLibrary,
   type BrushFilter,
@@ -34,5 +35,21 @@ export {
   type SaveBrushResult,
 } from './library';
 export { BRUSH_PATCH_PROPERTIES, BRUSH_UNSET_PROPERTY, changedBrushPaths, mergeBrushPatch, UNSETTABLE_BRUSH_FACETS, type BrushPatch, type UnsettableBrushFacet } from './patch';
-export { brushEditorSections, brushLibraryGroups, setBrushEditorValue, type BrushEditorControl, type BrushEditorSection, type BrushEditorSectionId, type BrushLibraryGroup } from './ui';
+export {
+  brushEditorScope,
+  brushEditorSections,
+  brushIdFromName,
+  brushLibraryGroups,
+  newBrushFor,
+  saveBrushEdit,
+  setBrushEditorValue,
+  type BrushEditorHiddenFacet,
+  type BrushEditorScope,
+  type SaveBrushEditOptions,
+  type SaveBrushEditResult,
+  type BrushEditorControl,
+  type BrushEditorSection,
+  type BrushEditorSectionId,
+  type BrushLibraryGroup,
+} from './ui';
 export { createBrushLibraryToolProvider, createBrushLibraryTools, type BrushLibraryToolProviderOptions, type BrushPreviewImage, type BrushPreviewRenderer } from './tools';

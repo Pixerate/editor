@@ -143,17 +143,22 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         guard let p = BRUSH_HOST_PROFILES.first(where: { $0.id == id }) else { throw BrushLibraryError(.invalid, "No host \"\(id)\"; use one of: \(BRUSH_HOST_PROFILES.map(\.id).joined(separator: ", ")).") }
         return p
     }
-    func store(_ raw: JSONObject, _ overwrite: Bool) throws -> (brush: Brush, problems: [String], check: BrushCheck) {
+    /// With `original` (an update), what it already had that this host can't use is kept, not refused.
+    func store(_ raw: JSONObject, _ overwrite: Bool, original: Brush? = nil) throws -> (brush: Brush, problems: [String], check: BrushCheck, kept: [BrushIssue]) {
         var problems: [String] = []
         let brush: Brush
         do { brush = try normalizeBrushSpec(.object(raw), &problems) } catch { throw BrushLibraryError(.invalid, error.localizedDescription) }
-        let check = checkBrush(brush, profile)
+        let had = Set((original.map { checkBrush($0, profile).issues } ?? []).filter { $0.severity == "error" }.map(\.facet))
+        let all = checkBrush(brush, profile)
+        let kept = all.issues.filter { $0.severity == "error" && had.contains($0.facet) }
+        let issues = all.issues.filter { i in !kept.contains { $0.facet == i.facet && $0.severity == i.severity } }
+        let check = BrushCheck(ok: !issues.contains { $0.severity == "error" }, issues: issues)
         if !check.ok {
             let errors = check.issues.filter { $0.severity == "error" }.map { "\($0.facet): \($0.reason) \($0.fix)" }.joined(separator: " ")
             throw BrushLibraryError(.invalid, "\(profile.name) can't use this brush: \(errors) (check_brush lists every issue; nothing was saved.)")
         }
         let saved = try library.save(.object(brush), overwrite: overwrite)
-        return (saved.brush, problems, check)
+        return (saved.brush, problems, check, kept)
     }
     func warnings(_ check: BrushCheck) -> JSONValue { .array(check.issues.filter { $0.severity == "warning" }.map(\.json)) }
 
@@ -204,8 +209,10 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         for k in a["unset"]?.arrayValue?.compactMap(\.stringValue) ?? [] { base[k] = nil }
         var patch = a.without("id", "unset")
         patch["id"] = .string(id)
-        let saved = try store(mergeBrushPatch(base, patch), true)
-        return ["id": .string(id), "brush": .object(saved.brush), "changed": .array(changedBrushPaths(.object(e.brush), .object(saved.brush)).map { .string($0) }), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
+        let saved = try store(mergeBrushPatch(base, patch), true, original: e.brush)
+        var result: JSONObject = ["id": .string(id), "brush": .object(saved.brush), "changed": .array(changedBrushPaths(.object(e.brush), .object(saved.brush)).map { .string($0) }), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
+        if !saved.kept.isEmpty { result["kept"] = .array(saved.kept.map(\.json)) }
+        return .object(result)
     }
     h["duplicate_brush"] = { a in
         let brush = try library.duplicate(a["id"]?.stringValue ?? "", newId: a["newId"]?.stringValue, name: a["name"]?.stringValue)
