@@ -36,6 +36,8 @@ export interface DrawStrokeInput {
 	tiltY?: readonly number[];
 	/** Smooth the points before fitting (default false: agent points are taken as given). */
 	streamline?: boolean;
+	/** Ignore the brush's default colour and use the tool's colour (default: `colorLocked`). */
+	keepColour?: boolean;
 }
 
 export interface DrawStrokeResult<TNode extends CanvasNode = CanvasNode> {
@@ -55,6 +57,8 @@ export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNo
 	brushLibrary?: Pick<BrushLibrary, 'list' | 'get' | 'isBuiltin'>;
 	/** The host's colour scheme (default light): a brush's light / dark default colour resolves to its side. */
 	colorScheme?: 'light' | 'dark';
+	/** Locks the stroke colour: choosing a brush with a default colour keeps it. */
+	colorLocked?: boolean;
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
 	history?: ArrangeHistoryTarget;
@@ -64,6 +68,7 @@ export interface CanvasDrawControllerOptions<TNode extends CanvasNode = CanvasNo
 	generateNodeId?: () => string;
 	onToolChange?: (tool: FreehandTool) => void;
 	onStyleChange?: (style: FreehandStrokeStyle) => void;
+	onColorLockedChange?: (locked: boolean) => void;
 	onActiveStrokeChange?: (stroke: FreehandStroke | null) => void;
 	onStrokeComplete?: (node: TNode) => void;
 	onNodesErase?: (erasedNodes: TNode[]) => void;
@@ -79,6 +84,8 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 	};
 	let activeStroke: FreehandStroke | null = null;
 	let colorScheme: 'light' | 'dark' = options.colorScheme === 'dark' ? 'dark' : 'light';
+	let colorLocked = !!options.colorLocked;
+	let brushColour: CanvasBrushPreset['defaultColor'] | null = null;
 	const erasedInDrag = new Map<string, { node: TNode; index: number }>();
 
 	let dragStartNodes: TNode[] | null = null;
@@ -89,6 +96,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		currentTool = tool;
 		// Update default styles when switching between pen and highlighter
 		if (tool === 'pen' || tool === 'highlighter') {
+			brushColour = null;
 			currentStyle = {
 				...createDefaultStrokeStyle(tool),
 				...options.style
@@ -99,6 +107,7 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 	}
 
 	function setStyle(style: Partial<FreehandStrokeStyle>) {
+		if (style.color !== undefined) brushColour = null;
 		currentStyle = { ...currentStyle, ...style };
 		options.onStyleChange?.(currentStyle);
 	}
@@ -226,11 +235,15 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		const tool = input.tool ?? 'pen';
 		if (tool !== 'pen' && tool !== 'highlighter') throw new Error(`Unknown tool '${String(tool)}': use 'pen' or 'highlighter'.`);
 		const style: FreehandStrokeStyle = { ...createDefaultStrokeStyle(tool), ...input.style };
-		// A brush with a default colour paints it when no colour is given (the ballpoint's blue).
-		if (input.style?.color === undefined && typeof style.brush === 'string') {
-			const preset = (await listCanvasBrushes(options.brushLibrary)).find((b) => b.id === style.brush);
-			const hex = preset?.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
-			if (hex) style.color = hex;
+		// A brush with a default colour paints it when no colour is given (the ballpoint's blue), unless keepColour / colorLocked.
+		if (input.style?.color === undefined) {
+			if (input.keepColour ?? colorLocked) {
+				style.color = currentStyle.color;
+			} else if (typeof style.brush === 'string') {
+				const preset = (await listCanvasBrushes(options.brushLibrary)).find((b) => b.id === style.brush);
+				const hex = preset?.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
+				if (hex) style.color = hex;
+			}
 		}
 		if (!(style.width > 0)) throw new Error('width must be a positive number of canvas units.');
 		const profiles = { pressure: input.pressure, tiltX: input.tiltX, tiltY: input.tiltY };
@@ -356,8 +369,8 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 		/**
 		 * A brush picker's choice: brushes the pen and highlighter with `id` (`null`: a plain vector
 		 * stroke) at the brush's own size, embedding a saved brush, and makes its default colour
-		 * (resolved for the colour scheme) the stroke colour unless `keepColour`. Throws for a brush
-		 * the canvas can't paint. Resolves with the brush chosen.
+		 * (resolved for the colour scheme) the stroke colour unless `keepColour` or `colorLocked`.
+		 * Throws for a brush the canvas can't paint. Resolves with the brush chosen.
 		 */
 		async selectBrush(id: string | null, choice: { keepColour?: boolean } = {}): Promise<CanvasBrushPreset | null> {
 			if (id === null) {
@@ -369,13 +382,38 @@ export function createCanvasDrawController<TNode extends CanvasNode = CanvasNode
 				await validateCanvasBrush(id);
 				throw new Error(`Brush '${id}' is not one the canvas can paint; listBrushes lists them.`);
 			}
-			const hex = !choice.keepColour && preset.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
+			const keep = choice.keepColour ?? colorLocked;
+			const hex = !keep && preset.defaultColor !== undefined ? brushColourHex(preset.defaultColor, colorScheme) : null;
 			setStyle({ brush: id, brushSize: preset.size, brushSpec: preset.spec, ...(hex ? { color: hex } : {}) });
+			if (hex) brushColour = preset.defaultColor!;
 			return preset;
 		},
-		/** The host's colour scheme, for brushes' light / dark default colours. */
+		get colorScheme() {
+			return colorScheme;
+		},
+		/**
+		 * The host's colour scheme: a stroke colour that came from a brush's light / dark default
+		 * resolves to the new side.
+		 */
 		setColorScheme(scheme: 'light' | 'dark') {
-			colorScheme = scheme === 'dark' ? 'dark' : 'light';
+			const next: 'light' | 'dark' = scheme === 'dark' ? 'dark' : 'light';
+			if (next === colorScheme) return;
+			colorScheme = next;
+			const hex = brushColour !== null ? brushColourHex(brushColour, next) : null;
+			if (hex && hex !== currentStyle.color) {
+				currentStyle = { ...currentStyle, color: hex };
+				options.onStyleChange?.(currentStyle);
+			}
+		},
+		get colorLocked() {
+			return colorLocked;
+		},
+		/** Locks the stroke colour: choosing a brush with a default colour keeps it. */
+		setColorLocked(locked: boolean) {
+			const next = !!locked;
+			if (colorLocked === next) return;
+			colorLocked = next;
+			options.onColorLockedChange?.(colorLocked);
 		},
 		/** The saved brush to embed for a brush id (undefined for presets and tip settings); for a brush picker. */
 		brushSpec: (brush: CanvasBrush) => resolveCanvasBrushSpec(brush, options.brushLibrary)

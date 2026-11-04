@@ -194,7 +194,7 @@ describe('image editor brush presets', () => {
 });
 
 describe('default colours in canvas and vector', () => {
-	it('lists default colours, takes them when a brush is picked or drawn with, and keeps a colour when asked', async () => {
+	it('lists default colours, takes them when a brush is picked or drawn with, follows the colour scheme, and honours keepColour and colorLocked', async () => {
 		const { draw } = canvas();
 		const list = await listCanvasBrushes();
 		expect(list.find((b) => b.id === 'ballpoint')!.defaultColor).toEqual({ light: '#1e3a8a', dark: '#93c5fd' });
@@ -202,14 +202,34 @@ describe('default colours in canvas and vector', () => {
 		expect(list.find((b) => b.id === 'pencil-hb')!.defaultColor).toBeUndefined();
 		expect(await draw.selectBrush('ballpoint')).toMatchObject({ id: 'ballpoint' });
 		expect(draw.style).toMatchObject({ brush: 'ballpoint', brushSize: 3, color: '#1e3a8a' });
+		// Switching the colour scheme re-resolves a colour that came from a brush's light / dark default.
 		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#93c5fd');
 		await draw.selectBrush('chalk');
 		expect(draw.style.color).toBe('#f8fafc');
+		draw.setColorScheme('light');
+		expect(draw.style.color).toBe('#475569');
+		draw.setColorScheme('dark');
+		expect(draw.style.color).toBe('#f8fafc');
+		// Once the user picks a colour, scheme flips no longer touch it.
 		draw.setStyle({ color: '#ff0000' });
+		draw.setColorScheme('light');
+		expect(draw.style.color).toBe('#ff0000');
+		draw.setColorScheme('dark');
 		await draw.selectBrush('crayon', { keepColour: true });
 		expect(draw.style).toMatchObject({ brush: 'crayon', color: '#ff0000' });
+		// Standing colour lock keeps the colour across brush picks and drawStroke, unless keepColour: false.
+		draw.setColorLocked(true);
+		expect(draw.colorLocked).toBe(true);
+		await draw.selectBrush('ballpoint');
+		expect(draw.style).toMatchObject({ brush: 'ballpoint', color: '#ff0000' });
+		const lockedStroke = await draw.drawStroke({ points: [[0, 0], [30, 5]], style: { brush: 'gel-pen' } });
+		expect((lockedStroke.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#ff0000');
+		await draw.selectBrush('ballpoint', { keepColour: false });
+		expect(draw.style.color).toBe('#93c5fd');
+		draw.setColorLocked(false);
 		await draw.selectBrush('pencil-hb');
-		expect(draw.style.color).toBe('#ff0000');
+		expect(draw.style.color).toBe('#93c5fd');
 		await draw.selectBrush(null);
 		expect(draw.style.brush).toBeUndefined();
 		await expect(draw.selectBrush('watercolor-wash')).rejects.toThrow(/can't brush a canvas stroke/);
@@ -221,7 +241,7 @@ describe('default colours in canvas and vector', () => {
 		expect((own.node.data as { shape: { stroke: string } }).shape.stroke).toBe('#16a34a');
 	});
 
-	it('gives a vector brushstroke its brush\'s default colour, unless one is given or kept', () => {
+	it('gives a vector brushstroke its brush\'s default colour, unless one is given, kept, or locked', () => {
 		const path = { id: 'a', type: 'path', subpaths: [{ closed: false, anchors: [{ x: 10, y: 50 }, { x: 190, y: 50 }] }], fill: null, stroke: '#1d4ed8', strokeWidth: 2 } as unknown as VectorPathNode;
 		const c = new VectorEditorController({ document: { width: 200, height: 100, nodes: [path] }, colorScheme: 'dark' });
 		const top = () => (c.getNode('a') as VectorPathNode).strokes!.at(-1)!;
@@ -237,5 +257,15 @@ describe('default colours in canvas and vector', () => {
 		expect(top().paint).toBe('#f8fafc');
 		expect(c.addBrushstroke({ brushId: 'fineliner' }, { ids: ['a'], keepColour: true }).ok).toBe(true);
 		expect(top().paint).toBe('#1d4ed8');
+		// Standing colour lock on VectorEditorController keeps the colour when adding or changing a brushstroke.
+		c.setColorLocked(true);
+		expect(c.getState().colorLocked).toBe(true);
+		const topIdx = (c.getNode('a') as VectorPathNode).strokes!.length - 1;
+		expect(c.setBrushstroke(topIdx, { brushId: 'ballpoint' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#1d4ed8');
+		expect(c.addBrushstroke({ brushId: 'chalk' }, { ids: ['a'] }).ok).toBe(true);
+		expect(top().paint).toBe('#1d4ed8');
+		expect(c.addBrushstroke({ brushId: 'chalk' }, { ids: ['a'], keepColour: false }).ok).toBe(true);
+		expect(top().paint).toBe('#f8fafc');
 	});
 });

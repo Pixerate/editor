@@ -67,7 +67,7 @@ describe('brushed freehand strokes (react)', () => {
 		expect((await ref.draw!.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 
-	it('selectBrush takes the brush\'s default colour for the colorScheme prop, unless keepColour', async () => {
+	it('selectBrush takes the brush\'s default colour for the colorScheme prop, follows scheme changes, and honours keepColour and colorLocked', async () => {
 		const ref: { draw: CanvasDraw | null; setScheme: ((s: 'light' | 'dark') => void) | null } = { draw: null, setScheme: null };
 		function Test() {
 			const [nodes, setNodes] = useState<CanvasNode[]>([]);
@@ -80,10 +80,13 @@ describe('brushed freehand strokes (react)', () => {
 		await act(async () => void (await ref.draw!.selectBrush('chalk')));
 		expect(ref.draw!.style).toMatchObject({ brush: 'chalk', color: '#475569' });
 		await act(async () => ref.setScheme!('dark'));
-		await act(async () => void (await ref.draw!.selectBrush('chalk')));
 		expect(ref.draw!.style.color).toBe('#f8fafc');
 		await act(async () => void (await ref.draw!.selectBrush('ballpoint', { keepColour: true })));
 		expect(ref.draw!.style).toMatchObject({ brush: 'ballpoint', color: '#f8fafc' });
+		await act(async () => ref.draw!.setColorLocked(true));
+		expect(ref.draw!.colorLocked).toBe(true);
+		await act(async () => void (await ref.draw!.selectBrush('crayon')));
+		expect(ref.draw!.style).toMatchObject({ brush: 'crayon', color: '#f8fafc' });
 	});
 
 	it('exposes nodeBounds, so gesture commands can circle a node by id', async () => {

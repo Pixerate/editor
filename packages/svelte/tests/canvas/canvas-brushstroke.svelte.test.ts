@@ -30,16 +30,19 @@ describe('brushed freehand strokes (Svelte)', () => {
 		expect((await draw.listBrushes()).some((b) => b.id === 'pencil-hb')).toBe(true);
 	});
 
-	it('selectBrush takes the brush\'s default colour for the colour scheme, unless keepColour', async () => {
+	it('selectBrush takes the brush\'s default colour for the colour scheme, follows scheme changes, and honours keepColour and colorLocked', async () => {
 		let nodes: CanvasNode[] = [];
 		const draw = createCanvasDraw({ getNodes: () => nodes, setNodes: (n) => (nodes = n), tool: 'pen' });
 		await draw.selectBrush('chalk');
 		expect(draw.style).toMatchObject({ brush: 'chalk', color: '#475569' });
 		draw.setColorScheme('dark');
-		await draw.selectBrush('chalk');
 		expect(draw.style.color).toBe('#f8fafc');
 		await draw.selectBrush('ballpoint', { keepColour: true });
 		expect(draw.style).toMatchObject({ brush: 'ballpoint', color: '#f8fafc' });
+		draw.setColorLocked(true);
+		expect(draw.colorLocked).toBe(true);
+		await draw.selectBrush('crayon');
+		expect(draw.style).toMatchObject({ brush: 'crayon', color: '#f8fafc' });
 		await expect(draw.selectBrush('watercolor-round')).rejects.toThrow(/can't brush a canvas stroke/);
 	});
 

@@ -3561,8 +3561,8 @@ All contributors and AI assistants should check this file before starting work a
   - `colour.own` brushes paint their default at every stroke, resolved when the stroke starts. The stroke records the hex, so replays in another scheme stay exact.
   - Gradient defaults were already the brush's own paint. Effect defaults stay a suggestion.
   - The image editor's `setBrushPreset` takes the default as the foreground unless `keepColour`.
-  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme`; `drawStroke` with a brush and no `style.color` paints in it, so agents get the ballpoint's blue without asking.
-  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour`; an explicit `color` always wins. Existing strokes keep their colour when the scheme changes.
+  - Canvas: `selectBrush(id, { keepColour })` takes the default (`CanvasBrushPreset.defaultColor`) for the controller's `colorScheme` unless `keepColour ?? colorLocked` (`setColorLocked(true)`), and remembers it so `setColorScheme` re-resolves a light / dark default until `setStyle` changes `color` or `setTool` resets default styles; `drawStroke` (`canvas.drawFreehand`) with a brush and no `style.color` paints in it unless `keepColour ?? colorLocked`.
+  - Vector: `addBrushstroke` and `setBrushstroke` with another brush take its default unless `keepColour ?? colorLocked` (`setColorLocked(true)`); an explicit `color` always wins. Existing strokes keep their colour when the scheme changes.
 
 ### [core/paint-editor] Stamp Tips and Spray Run in Both Dab Engines
 

@@ -94,6 +94,16 @@ export function VectorAppearancePanel({ controller, renderBrushPreview, classNam
               />
               Grain
             </label>
+            <label className="flex items-center gap-0.5 text-[11px]" title="Keep the stroke colour when choosing a brush">
+              <input
+                type="checkbox"
+                aria-label={`${name} keep colour`}
+                data-vector-brushstroke-color-lock=""
+                checked={state.colorLocked}
+                onChange={(e) => controller.setColorLocked(e.target.checked)}
+              />
+              Keep colour
+            </label>
             <button type="button" className={buttonClass} title="Remove" aria-label={`Remove ${name}`} onClick={() => controller.removePaintLayer('stroke', l.index, { ids })}>
               ×
             </button>

@@ -26,6 +26,8 @@ export interface UseCanvasDrawOptions<TNode extends CanvasNode = CanvasNode> {
 	brushLibrary?: CanvasDrawControllerOptions<TNode>['brushLibrary'];
 	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */
 	colorScheme?: 'light' | 'dark';
+	/** Locks the stroke colour: choosing a brush with a default colour keeps it. */
+	colorLocked?: boolean;
 	onStrokeComplete?: (node: TNode) => void;
 	onNodesErase?: (erasedNodes: TNode[]) => void;
 }
@@ -33,6 +35,7 @@ export interface UseCanvasDrawOptions<TNode extends CanvasNode = CanvasNode> {
 export interface CanvasDrawState {
 	tool: FreehandTool;
 	style: FreehandStrokeStyle;
+	colorLocked: boolean;
 	activeStroke: FreehandStroke | null;
 	isDrawing: boolean;
 }
@@ -53,10 +56,14 @@ export interface CanvasDrawActions<TNode extends CanvasNode = CanvasNode> {
 	/** The presets and saved brushes `style.brush` accepts (loads the paint engine). */
 	listBrushes: () => Promise<CanvasBrushPreset[]>;
 	/**
-	 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour`.
+	 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour` or `colorLocked`.
 	 * Resolves to the preset; rejects for a brush the canvas can't paint.
 	 */
 	selectBrush: (id: string | null, choice?: { keepColour?: boolean }) => Promise<CanvasBrushPreset | null>;
+	/** Locks the stroke colour: choosing a brush with a default colour keeps it. */
+	setColorLocked: (locked: boolean) => void;
+	/** Sets the colour scheme that picks the side of a brush's light / dark default colour. */
+	setColorScheme: (scheme: 'light' | 'dark') => void;
 }
 
 export type CanvasDraw<TNode extends CanvasNode = CanvasNode> = CanvasDrawState &
@@ -74,6 +81,7 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 	optionsRef.current = options;
 
 	const [tool, setToolState] = useState<FreehandTool>(options.initialTool ?? 'select');
+	const [colorLocked, setColorLockedState] = useState<boolean>(!!options.colorLocked);
 	const [activeStroke, setActiveStroke] = useState<FreehandStroke | null>(null);
 
 	const controller = useMemo(
@@ -93,8 +101,10 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 				generateNodeId: options.generateNodeId,
 				brushLibrary: options.brushLibrary,
 				colorScheme: options.colorScheme,
+				colorLocked: options.colorLocked,
 				onToolChange: setToolState,
 				onStyleChange: (s) => setStyleState(s),
+				onColorLockedChange: setColorLockedState,
 				onActiveStrokeChange: setActiveStroke,
 				onStrokeComplete: (n) => optionsRef.current.onStrokeComplete?.(n),
 				onNodesErase: (erased) => optionsRef.current.onNodesErase?.(erased)
@@ -115,10 +125,17 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		controller.setColorScheme(options.colorScheme ?? 'light');
 	}, [options.colorScheme, controller]);
 
+	useEffect(() => {
+		if (options.colorLocked !== undefined) {
+			controller.setColorLocked(options.colorLocked);
+		}
+	}, [options.colorLocked, controller]);
+
 	return useMemo(
 		() => ({
 			tool,
 			style,
+			colorLocked,
 			activeStroke,
 			isDrawing: activeStroke !== null,
 			setTool: controller.setTool,
@@ -131,8 +148,10 @@ export function useCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 			drawStroke: controller.drawStroke,
 			nodeBounds: controller.nodeBounds,
 			listBrushes: controller.listBrushes,
-			selectBrush: controller.selectBrush
+			selectBrush: controller.selectBrush,
+			setColorLocked: controller.setColorLocked,
+			setColorScheme: controller.setColorScheme
 		}),
-		[tool, style, activeStroke, controller]
+		[tool, style, colorLocked, activeStroke, controller]
 	);
 }

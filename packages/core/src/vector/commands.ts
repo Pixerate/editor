@@ -1595,7 +1595,7 @@ export function createVectorCommands(controller: VectorEditorController, options
 							...(params.seed !== undefined ? { seed: params.seed } : {}),
 							...(params.paper !== undefined ? { paper: params.paper } : {})
 						},
-						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.keepColour ? { keepColour: true } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
+						{ ...(params.ids ? { ids: params.ids } : {}), ...(params.index !== undefined ? { index: params.index } : {}), ...(params.color ? { color: params.color } : {}), ...(params.keepColour !== undefined ? { keepColour: params.keepColour } : {}), ...(params.opacity !== undefined ? { opacity: params.opacity } : {}) }
 					)
 				);
 				const paths: unknown[] = [];

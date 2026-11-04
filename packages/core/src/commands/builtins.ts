@@ -527,7 +527,8 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 						description: 'Stroke points as [x, y] pairs in canvas (flow) units, in drawing order. Use a point every few units along curves.'
 					},
 					tool: { type: 'string', enum: ['pen', 'highlighter'], description: 'Pen (default: blue, width 3) or highlighter (yellow, width 24, opacity 0.35); sets the defaults below.' },
-					color: { type: 'string', description: 'Stroke colour, any CSS colour (default: the brush\'s default colour, such as the ballpoint\'s blue, else the tool\'s).' },
+					color: { type: 'string', description: 'Stroke colour, any CSS colour (default: the brush\'s default colour, such as the ballpoint\'s blue, unless keepColour; else the tool\'s).' },
+					keepColour: { type: 'boolean', description: 'Ignore the brush\'s default colour and use the tool\'s colour (default: the draw controller\'s colorLocked).' },
 					width: { type: 'number', exclusiveMinimum: 0, maximum: 2500, description: 'Stroke width in canvas units (default from the tool). For brushed strokes it is the brush diameter; leave it out to use the preset\'s own size (canvas.listBrushes gives it).' },
 					opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Stroke opacity 0..1 (default from the tool).' },
 					brush: {
@@ -549,6 +550,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 					points: [number, number][];
 					tool?: 'pen' | 'highlighter';
 					color?: string;
+					keepColour?: boolean;
 					width?: number;
 					opacity?: number;
 					brush?: CanvasBrush;
@@ -562,6 +564,7 @@ export function createDrawCommands(target: DrawCommandTarget, options: DrawComma
 				target.drawStroke({
 					points: params.points,
 					...(params.tool ? { tool: params.tool } : {}),
+					...(params.keepColour !== undefined ? { keepColour: params.keepColour } : {}),
 					style: {
 						...(params.color !== undefined ? { color: params.color } : {}),
 						...(params.width !== undefined ? { width: params.width } : {}),

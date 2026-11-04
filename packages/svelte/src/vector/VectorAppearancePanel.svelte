@@ -97,6 +97,10 @@
           <input type="checkbox" aria-label="{name} grain" data-vector-brushstroke-grain="" checked={bs.grain} onchange={(e) => controller.setBrushstroke(l.index, e.currentTarget.checked ? { paper: {}, ...(bs.seed === undefined ? { seed: randomVectorBrushstrokeSeed() } : {}) } : { paper: null }, { ids })} />
           Grain
         </label>
+        <label class="flex items-center gap-0.5 text-[11px]" title="Keep the stroke colour when choosing a brush">
+          <input type="checkbox" aria-label="{name} keep colour" data-vector-brushstroke-color-lock="" checked={view.colorLocked} onchange={(e) => controller.setColorLocked(e.currentTarget.checked)} />
+          Keep colour
+        </label>
         <button type="button" class={buttonClass} title="Remove" aria-label="Remove {name}" onclick={() => controller.removePaintLayer('stroke', l.index, { ids })}>×</button>
       </div>
       {#if library}

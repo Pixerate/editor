@@ -426,6 +426,8 @@ export interface VectorEditorOptions {
 	brushPreview?: BrushPreviewRenderer;
 	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */
 	colorScheme?: 'light' | 'dark';
+	/** Locks the stroke colour: adding or changing a brushstroke keeps the path's colour instead of taking the brush's default colour. */
+	colorLocked?: boolean;
 	/** History to record into, e.g. one shared with the rest of the app (default: a new one). */
 	history?: HistoryManager;
 	/** Starting tool (default `select`). */
@@ -673,6 +675,8 @@ export interface VectorEditorState {
 	perspectivePlane: VectorPerspectivePlane | null;
 	/** The selected point of a mesh or freeform fill (Gradient tool), or null. */
 	shadingPoint: { nodeId: string; index: number; kind: 'mesh' | 'freeform' } | null;
+	/** Whether brushstroke additions and brush changes keep the path's stroke colour instead of taking the brush's default colour. */
+	colorLocked: boolean;
 	canUndo: boolean;
 	canRedo: boolean;
 	undoLabel: string;
@@ -1588,9 +1592,11 @@ export class VectorEditorController {
 	private revision = 0;
 	private state!: VectorEditorState;
 	private colorScheme: 'light' | 'dark';
+	private colorLocked: boolean;
 
 	constructor(options: VectorEditorOptions = {}) {
 		this.colorScheme = options.colorScheme ?? 'light';
+		this.colorLocked = !!options.colorLocked;
 		this.brushLibrary = options.brushLibrary ?? null;
 		this.brushPreview = options.brushPreview ?? null;
 		this.brushes = options.brushLibrary ? snapshotBrushLibrary(options.brushLibrary, () => this.notify()) : null;
@@ -1726,6 +1732,7 @@ export class VectorEditorController {
 			shadingPoint: this.getShadingSelection(),
 			symmetryTarget: this.symmetryTarget && this.doc.nodes.some((n) => n.id === this.symmetryTarget) ? this.symmetryTarget : null,
 			perspectivePlane: this.perspectivePlane && this.doc.perspective && vectorPerspectivePlanes(this.doc.perspective).includes(this.perspectivePlane) ? this.perspectivePlane : null,
+			colorLocked: this.colorLocked,
 			canUndo: h.canUndo,
 			canRedo: h.canRedo,
 			undoLabel: h.undoName,
@@ -3129,7 +3136,8 @@ export class VectorEditorController {
 		if (characterError) return { ok: false, message: characterError };
 		if (options.color !== undefined && !parseVectorColor(options.color)) return { ok: false, message: `"${options.color}" is not a colour.` };
 		if (options.opacity !== undefined && !(options.opacity >= 0 && options.opacity <= 1)) return { ok: false, message: 'opacity must be from 0 to 1.' };
-		const own = options.keepColour ? null : vectorBrushstrokeDefaultColour(clean.brushId, user, this.colorScheme);
+		const keep = options.keepColour ?? this.colorLocked;
+		const own = keep ? null : vectorBrushstrokeDefaultColour(clean.brushId, user, this.colorScheme);
 		return this.editStacks('stroke', options.ids, 'Add Brushstroke', (stack, path) => {
 			const top = [...stack].reverse().find((l) => (l.kind ?? 'paint') === 'paint');
 			const paint = options.color ?? own ?? (typeof top?.paint === 'string' && top.paint !== 'none' ? top.paint : typeof path.stroke === 'string' && path.stroke !== 'none' ? path.stroke : '#000000');
@@ -3178,7 +3186,8 @@ export class VectorEditorController {
 				if (patch.seed === null) delete brush.seed;
 				else if (patch.seed !== undefined) brush.seed = patch.seed;
 				if (patch.paper !== undefined) brush.paper = patch.paper;
-				const own = patch.brushId && patch.brushId !== layer.brush.brushId && !patch.keepColour ? vectorBrushstrokeDefaultColour(patch.brushId, user, this.colorScheme) : null;
+				const keep = patch.keepColour ?? this.colorLocked;
+				const own = patch.brushId && patch.brushId !== layer.brush.brushId && !keep ? vectorBrushstrokeDefaultColour(patch.brushId, user, this.colorScheme) : null;
 				const colour = patch.color ?? own;
 				const next: VectorStrokeLayer = { ...layer, brush: sanitizeVectorBrushstroke(brush, user) ?? layer.brush, ...(colour ? { paint: colour } : {}), ...(patch.opacity !== undefined ? { opacity: patch.opacity } : {}) };
 				return stack.map((l, i) => (i === index ? next : l));
@@ -3190,6 +3199,14 @@ export class VectorEditorController {
 	/** Sets the colour scheme that picks the side of a brush's light / dark default colour. Existing strokes keep their colour. */
 	setColorScheme(scheme: 'light' | 'dark'): void {
 		this.colorScheme = scheme;
+	}
+
+	/** Locks the stroke colour: adding or changing a brushstroke keeps the path's colour instead of taking the brush's default colour. Editor state, not an undo step. */
+	setColorLocked(locked: boolean): void {
+		const next = !!locked;
+		if (this.colorLocked === next) return;
+		this.colorLocked = next;
+		this.notify();
 	}
 
 	/** Removes layer `index` of the fill or stroke stack of the selected (or given) paths. */

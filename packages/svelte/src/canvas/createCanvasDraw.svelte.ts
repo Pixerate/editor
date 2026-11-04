@@ -12,12 +12,13 @@ type CoreOptions = CanvasDrawControllerOptions<any>;
 export interface CreateCanvasDrawOptions<TNode extends CanvasNode = CanvasNode>
 	extends Omit<
 		CoreOptions,
-		'getNodes' | 'setNodes' | 'onToolChange' | 'onStyleChange' | 'onActiveStrokeChange'
+		'getNodes' | 'setNodes' | 'onToolChange' | 'onStyleChange' | 'onColorLockedChange' | 'onActiveStrokeChange'
 	> {
 	getNodes: () => TNode[];
 	setNodes: (nodes: TNode[]) => void;
 	onToolChange?: (tool: FreehandTool) => void;
 	onStyleChange?: (style: FreehandStrokeStyle) => void;
+	onColorLockedChange?: (locked: boolean) => void;
 	onActiveStrokeChange?: (stroke: FreehandStroke | null) => void;
 }
 
@@ -28,6 +29,7 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 	options: CreateCanvasDrawOptions<TNode>
 ) {
 	let tool = $state.raw<FreehandTool>(options.tool ?? 'select');
+	let colorLocked = $state.raw<boolean>(!!options.colorLocked);
 	let activeStroke = $state.raw<FreehandStroke | null>(null);
 
 	const controller = createCanvasDrawController<any>({
@@ -40,6 +42,10 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		onStyleChange: (nextStyle) => {
 			style = nextStyle;
 			options.onStyleChange?.(nextStyle);
+		},
+		onColorLockedChange: (nextLocked) => {
+			colorLocked = nextLocked;
+			options.onColorLockedChange?.(nextLocked);
 		},
 		onActiveStrokeChange: (nextStroke) => {
 			activeStroke = nextStroke;
@@ -58,6 +64,11 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 			return style;
 		},
 		setStyle: controller.setStyle,
+		get colorLocked() {
+			return colorLocked;
+		},
+		/** Locks the stroke colour: choosing a brush with a default colour keeps it. */
+		setColorLocked: controller.setColorLocked,
 		get activeStroke() {
 			return activeStroke;
 		},
@@ -76,7 +87,7 @@ export function createCanvasDraw<TNode extends CanvasNode = CanvasNode>(
 		/** The dry paint presets `style.brush` accepts (loads the paint engine). */
 		listBrushes: controller.listBrushes,
 		/**
-		 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour`.
+		 * Picks a brush (`null`: plain pen) with its size, and its default colour unless `keepColour` or `colorLocked`.
 		 * Resolves to the preset; rejects for a brush the canvas can't paint.
 		 */
 		selectBrush: controller.selectBrush,
