@@ -22,6 +22,9 @@ const HOSTS: Array<{ id: Host; label: string; hint: string }> = [
 const paintPreview = paintBrushPreviewRenderer();
 const PREVIEWS: Record<Host, BrushPreviewRenderer> = { paint: paintPreview, image: paintPreview, canvas: renderCanvasBrushPreview, vector: renderCanvasBrushPreview };
 
+/** What the transparent canvas / vector previews are shown on: the panel's colour (the paint engine brings its paper). */
+const TRANSPARENT_BEHIND = "#0f172a";
+
 const chip = (on: boolean) => `rounded px-2 py-1 text-xs ${on ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300 hover:text-white"}`;
 const button = "rounded bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700";
 
@@ -153,7 +156,7 @@ function BrushesView() {
             </div>
           )}
           <div className="max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-            <BrushLibraryEditor key={host} library={demoBrushLibrary} brushId={brushId} profile={profile} renderPreview={PREVIEWS[host]} previewColor="#e2e8f0" onSaved={(b) => setBrushId(b.id)} />
+            <BrushLibraryEditor key={host} library={demoBrushLibrary} brushId={brushId} profile={profile} renderPreview={PREVIEWS[host]} previewPaper={TRANSPARENT_BEHIND} onSaved={(b) => setBrushId(b.id)} />
           </div>
         </div>
       </div>
