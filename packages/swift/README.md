@@ -148,7 +148,9 @@ For long wet runs (extra scenarios through `PIXERATE_PAINT_PROBE_FILES`), use it
 `--filter PaintScenarioProbeTests`.
 
 The Swift workflow runs three jobs in parallel: macOS (the generated-code check and the tests),
-the iOS simulator (`xcodebuild test`, also optimised) and the demo app's build.
+the iOS simulator (`xcodebuild test`, also optimised) and the demo app's build. When an iOS test
+fails, the job prints each failure's message (and annotates the run) from the result bundle,
+which it also keeps as the `ios-xcresult` artifact for a week.
 
 `Tests/PixerateCoreTests/Fixtures/core-vectors.json` is written by the TS core
 (`packages/core/tests/swift-vectors.test.ts`): RNG outputs, number formatting, `JSON.stringify`

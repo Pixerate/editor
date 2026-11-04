@@ -3826,6 +3826,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Nothing needed it: within a step each tile reads only its own slot (its halo holds the neighbours' last values) and writes only its own next set and deposits, and halos are refilled from the neighbours' interiors after every tile has stepped.
 - **Solution / Workaround**: `runHere` steps the tiles with `DispatchQueue.concurrentPerform`, then fills the halos the same way, and merges the flags in tile order. `WetWorld.threads` (default: every core) changes only the speed; `WetKernelTests` compares 1 and 8 threads bit for bit. Edits and the display still run between batches on the calling thread.
 
+### [swift] `xcodebuild -quiet` Hides Why an iOS Test Failed
+- **Issue / Symptom**: A failing iOS simulator job only listed `Failing tests: MarkdownSpecTests.testParseTimeGrowth()`, with no assertion message, so a flaky timing check could not be told from a real slowdown.
+- **Root Cause**: `-quiet` drops the test output, assertion messages included, and leaves only the summary.
+- **Solution / Workaround**: The job passes `-resultBundlePath`, and on failure prints each failure's test and message with `xcrun xcresulttool get test-results summary` (also as `::error` annotations) and uploads the bundle as the `ios-xcresult` artifact. Keep `-quiet`; read the failure step or the artifact.
+
 ### [core/vector] Listed Command Shortcuts Depend on the Platform; Contracts Take the Spec's
 - **Issue / Symptom**: `vector/commands.json` would have changed between a Mac and a Linux CI runner had it used `CommandRegistry.list()`.
 - **Root Cause**: A listed command's `shortcuts` are "canonical chord text bound on the registry's platform", so `Mod+G` comes out as the Mac or the Ctrl chord depending on where the export runs.
