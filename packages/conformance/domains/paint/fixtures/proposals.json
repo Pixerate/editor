@@ -1,0 +1,184 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "proposals",
+  "description": "An agent proposes paint as a ghost; the user accepts or rejects it.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "propose_paint",
+      "arguments": {
+        "title": "Warm ground",
+        "ops": [
+          {
+            "kind": "wash",
+            "color": "#e0a060",
+            "opacity": 0.4
+          }
+        ],
+        "place": "bottom"
+      },
+      "expect": {
+        "result": {
+          "anchors": [],
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "ops": [
+            "wash"
+          ],
+          "origin": "agent:anonymous",
+          "placement": {
+            "place": "bottom"
+          },
+          "proposalId": "paint-proposal-1",
+          "title": "Warm ground"
+        }
+      }
+    },
+    {
+      "tool": "list_paint_proposals",
+      "expect": {
+        "result": {
+          "proposals": [
+            {
+              "anchors": [],
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "createdAt": "<time>",
+              "id": "paint-proposal-1",
+              "missing": [],
+              "ops": [
+                "wash"
+              ],
+              "origin": "agent:anonymous",
+              "placement": {
+                "place": "bottom"
+              },
+              "title": "Warm ground"
+            }
+          ],
+          "readOnly": null
+        }
+      }
+    },
+    {
+      "tool": "accept_paint_proposal",
+      "arguments": {
+        "proposalId": "paint-proposal-1"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "label": "Warm ground",
+          "layerId": "@1",
+          "proposalId": "paint-proposal-1",
+          "strokeIds": []
+        },
+        "pixels": {
+          "file": "png/proposals.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "fe0822c8a6cb791917847a0913d2fad28c0da6aa280f0abc3feae026da7236e7",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "propose_paint",
+      "arguments": {
+        "title": "Line",
+        "ops": [
+          {
+            "kind": "stroke",
+            "points": [
+              {
+                "x": 4,
+                "y": 6,
+                "pressure": 0.3
+              },
+              {
+                "x": 20,
+                "y": 12,
+                "pressure": 0.8
+              },
+              {
+                "x": 42,
+                "y": 26,
+                "pressure": 0.5
+              }
+            ],
+            "color": "#222222"
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "anchors": [],
+          "bounds": {
+            "height": 29,
+            "width": 47,
+            "x": 0,
+            "y": 2
+          },
+          "ops": [
+            "stroke"
+          ],
+          "origin": "agent:anonymous",
+          "placement": {
+            "place": "top"
+          },
+          "proposalId": "paint-proposal-2",
+          "title": "Line"
+        }
+      }
+    },
+    {
+      "tool": "reject_paint_proposal",
+      "arguments": {
+        "proposalId": "paint-proposal-2"
+      },
+      "expect": {
+        "result": {
+          "proposalId": "paint-proposal-2",
+          "rejected": true,
+          "title": "Line"
+        }
+      }
+    },
+    {
+      "tool": "list_paint_proposals",
+      "expect": {
+        "result": {
+          "proposals": [],
+          "readOnly": null
+        }
+      }
+    },
+    {
+      "tool": "accept_paint_proposal",
+      "arguments": {
+        "proposalId": "paint-proposal-9"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No pending paint proposal \"paint-proposal-9\". Call list_paint_proposals for the ids."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

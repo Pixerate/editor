@@ -1,0 +1,428 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "guides-and-stencils",
+  "description": "Symmetry, perspective and stencils shape where strokes land.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "get_guides",
+      "expect": {
+        "result": {
+          "perspective": {
+            "enabled": false,
+            "points": [],
+            "snap": true
+          },
+          "references": [],
+          "stencils": [],
+          "symmetry": {
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "copies": 0,
+            "mirror": true,
+            "mode": "off",
+            "rotation": 0,
+            "segments": 6
+          },
+          "tracing": null
+        }
+      }
+    },
+    {
+      "tool": "set_symmetry",
+      "arguments": {
+        "mode": "vertical",
+        "center": {
+          "x": 24,
+          "y": 16
+        }
+      },
+      "expect": {
+        "result": {
+          "center": {
+            "x": 24,
+            "y": 16
+          },
+          "copies": 1,
+          "mirror": true,
+          "mode": "vertical",
+          "rotation": 0,
+          "segments": 6
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 6,
+            "y": 6
+          },
+          {
+            "x": 18,
+            "y": 26
+          }
+        ],
+        "seed": 51,
+        "color": "#663399"
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 34,
+            "width": 50,
+            "x": -1,
+            "y": -1
+          },
+          "dabs": 94,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/guides-and-stencils.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "b28abb401904292740e501a359654a58b12d9ae860f6c370da60433c49ee6de7",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_symmetry",
+      "arguments": {
+        "mode": "kaleidoscope",
+        "segments": 6,
+        "center": {
+          "x": 24,
+          "y": 16
+        }
+      },
+      "expect": {
+        "result": {
+          "center": {
+            "x": 24,
+            "y": 16
+          },
+          "copies": 11,
+          "mirror": true,
+          "mode": "kaleidoscope",
+          "rotation": 0,
+          "segments": 6
+        }
+      }
+    },
+    {
+      "tool": "set_symmetry",
+      "arguments": {
+        "mode": "off"
+      },
+      "expect": {
+        "result": {
+          "center": {
+            "x": 24,
+            "y": 16
+          },
+          "copies": 0,
+          "mirror": true,
+          "mode": "off",
+          "rotation": 0,
+          "segments": 6
+        }
+      }
+    },
+    {
+      "tool": "set_perspective_guide",
+      "arguments": {
+        "enabled": true,
+        "points": [
+          {
+            "x": 24,
+            "y": 4
+          }
+        ],
+        "snap": false
+      },
+      "expect": {
+        "result": {
+          "enabled": true,
+          "points": [
+            {
+              "x": 24,
+              "y": 4
+            }
+          ],
+          "snap": false
+        }
+      }
+    },
+    {
+      "tool": "add_stencil",
+      "arguments": {
+        "kind": "shape",
+        "mode": "mask",
+        "shape": "ellipse",
+        "rect": {
+          "x": 8,
+          "y": 6,
+          "width": 32,
+          "height": 20
+        }
+      },
+      "expect": {
+        "result": {
+          "enabled": true,
+          "feather": 1,
+          "id": "stencil1",
+          "invert": false,
+          "kind": "shape",
+          "mode": "mask",
+          "rect": {
+            "height": 20,
+            "width": 32,
+            "x": 8,
+            "y": 6
+          },
+          "shape": "ellipse",
+          "snap": 40
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 0,
+            "y": 16
+          },
+          {
+            "x": 48,
+            "y": 16
+          }
+        ],
+        "seed": 52,
+        "color": "#116611"
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 14,
+            "width": 62,
+            "x": -7,
+            "y": 9
+          },
+          "dabs": 97,
+          "layerId": "@1",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/guides-and-stencils.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0502d303726b6328de68635027d1d14590c42b6d67f20bcc6d12ed72cdafc93f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "add_stencil",
+      "arguments": {
+        "kind": "ruler",
+        "from": {
+          "x": 4,
+          "y": 30
+        },
+        "to": {
+          "x": 44,
+          "y": 30
+        }
+      },
+      "expect": {
+        "result": {
+          "enabled": true,
+          "feather": 1,
+          "from": {
+            "x": 4,
+            "y": 30
+          },
+          "id": "stencil2",
+          "invert": false,
+          "kind": "ruler",
+          "mode": "guide",
+          "snap": 40,
+          "to": {
+            "x": 44,
+            "y": 30
+          }
+        }
+      }
+    },
+    {
+      "tool": "get_guides",
+      "expect": {
+        "result": {
+          "perspective": {
+            "enabled": true,
+            "points": [
+              {
+                "x": 24,
+                "y": 4
+              }
+            ],
+            "snap": false
+          },
+          "references": [],
+          "stencils": [
+            {
+              "enabled": true,
+              "feather": 1,
+              "id": "stencil1",
+              "invert": false,
+              "kind": "shape",
+              "mode": "mask",
+              "rect": {
+                "height": 20,
+                "width": 32,
+                "x": 8,
+                "y": 6
+              },
+              "shape": "ellipse",
+              "snap": 40
+            },
+            {
+              "enabled": true,
+              "feather": 1,
+              "from": {
+                "x": 4,
+                "y": 30
+              },
+              "id": "stencil2",
+              "invert": false,
+              "kind": "ruler",
+              "mode": "guide",
+              "snap": 40,
+              "to": {
+                "x": 44,
+                "y": 30
+              }
+            }
+          ],
+          "symmetry": {
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "copies": 0,
+            "mirror": true,
+            "mode": "off",
+            "rotation": 0,
+            "segments": 6
+          },
+          "tracing": null
+        }
+      }
+    },
+    {
+      "tool": "update_stencil",
+      "arguments": {
+        "id": "stencil1",
+        "enabled": false
+      },
+      "expect": {
+        "result": {
+          "enabled": false,
+          "feather": 1,
+          "id": "stencil1",
+          "invert": false,
+          "kind": "shape",
+          "mode": "mask",
+          "rect": {
+            "height": 20,
+            "width": 32,
+            "x": 8,
+            "y": 6
+          },
+          "shape": "ellipse",
+          "snap": 40
+        }
+      }
+    },
+    {
+      "tool": "remove_stencils",
+      "expect": {
+        "result": {
+          "removed": [
+            "stencil1",
+            "stencil2"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_guides",
+      "expect": {
+        "result": {
+          "perspective": {
+            "enabled": true,
+            "points": [
+              {
+                "x": 24,
+                "y": 4
+              }
+            ],
+            "snap": false
+          },
+          "references": [],
+          "stencils": [],
+          "symmetry": {
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "copies": 0,
+            "mirror": true,
+            "mode": "off",
+            "rotation": 0,
+            "segments": 6
+          },
+          "tracing": null
+        }
+      }
+    },
+    {
+      "tool": "set_symmetry",
+      "arguments": {
+        "mode": "radial"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Expected one of \"off\", \"vertical\", \"horizontal\", \"dual\", \"diagonal\", \"kaleidoscope\", got \"radial\".",
+                "path": "/mode"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__set_symmetry\"."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

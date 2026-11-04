@@ -1,0 +1,355 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "procedural-brushes",
+  "description": "Particle, ribbon and bristle brushes draw procedural marks from their seed.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 44,
+            "y": 6,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "hair-strands",
+        "color": "#335577",
+        "seed": 130
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 38,
+            "width": 44,
+            "x": -17,
+            "y": -14
+          },
+          "dabs": 1010,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.1.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ccdf2716184c65ae13985fa0ed384d9ed2775bd9b85b35f89d3887a38daee1fc",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 7
+          },
+          {
+            "x": 44,
+            "y": 9,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "spring-ink",
+        "color": "#335577",
+        "seed": 131
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 14,
+            "width": 52,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 448,
+          "layerId": "@1",
+          "strokeId": "s2"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0b320e4b84777aefbf81e200ab68af257484d5d849d18cb0da780690d5fdce17",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 10
+          },
+          {
+            "x": 44,
+            "y": 12,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "bead-trail",
+        "color": "#335577",
+        "seed": 132
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 14,
+            "width": 36,
+            "x": 12,
+            "y": 4
+          },
+          "dabs": 9,
+          "layerId": "@1",
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "e78410a5e9763830d3d27afdf1cad0f0d9fd54529574b2a0cdf10f8bd75d4f7f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 13
+          },
+          {
+            "x": 44,
+            "y": 15,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "sparkle-dust",
+        "color": "#335577",
+        "seed": 133
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 122,
+            "width": 167,
+            "x": -57,
+            "y": -11
+          },
+          "dabs": 360,
+          "layerId": "@1",
+          "strokeId": "s4"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "727ad57e175d0ae03534adf60bd39cf5285e346dfd64b9a2f75ef5fc5c6f6912",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 16
+          },
+          {
+            "x": 44,
+            "y": 18,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "bristle-round",
+        "color": "#335577",
+        "seed": 134
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 33,
+            "width": 68,
+            "x": -16,
+            "y": -2
+          },
+          "dabs": 3530,
+          "layerId": "@1",
+          "strokeId": "s5"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.5.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3b2151216e1f7d7c2bac7b9f47bb6472dc7d6cc6c392a52ad8fe1840690e75c9",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 19
+          },
+          {
+            "x": 44,
+            "y": 21,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "bristle-flat",
+        "color": "#335577",
+        "seed": 135
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 43,
+            "width": 52,
+            "x": -9,
+            "y": -4
+          },
+          "dabs": 5280,
+          "layerId": "@1",
+          "strokeId": "s6"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.6.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "a05fd80afd5832af861d7be882e9e69519cbec5d296ef847839145c21679279c",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 22
+          },
+          {
+            "x": 44,
+            "y": 24,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "dry-brush",
+        "color": "#335577",
+        "seed": 136
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 56,
+            "width": 58,
+            "x": -16,
+            "y": -8
+          },
+          "dabs": 5251,
+          "layerId": "@1",
+          "strokeId": "s7"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "78db2b32ee342c32aa60e46cfa851d5dbc10b848132a8bbdeb45e10dc76377c3",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 25
+          },
+          {
+            "x": 44,
+            "y": 27,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "light-ribbon",
+        "color": "#335577",
+        "seed": 137
+      },
+      "pixels": {
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 74,
+            "x": -35,
+            "y": 14
+          },
+          "dabs": 369,
+          "layerId": "@1",
+          "strokeId": "s8"
+        },
+        "pixels": {
+          "file": "png/procedural-brushes.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "38e4ab65073e98bec4086e473aad22477a67c4ff885f4e6633b8f260b29ed9f4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

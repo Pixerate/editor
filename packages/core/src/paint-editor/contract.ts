@@ -11,15 +11,16 @@
 
 import type { EffectProvider } from '../effects/types';
 import { BRUSH_OPTION_CONTROLS } from '../image-editor/layers/paint-ui';
-import { EDITOR_DOCUMENT_FORMAT } from '../persistence/editorDocument';
+import { EDITOR_DOCUMENT_FORMAT, toEditorDocumentFile } from '../persistence/editorDocument';
 import { defaultLayerEffect, LAYER_EFFECT_KINDS } from '../raster/effects/model';
 import { LAYER_EFFECT_MENU, layerEffectControls } from '../raster/effects/ui';
-import type { AgentToolProvider } from '../tools/registry';
+import type { ConformanceHost } from '../tools/conformance';
+import { ToolRegistry, type AgentToolProvider } from '../tools/registry';
 import type { JsonSchema } from '../tools/schema';
 import { createPaintBrushLibraryToolProvider } from './brush-library-tools';
 import { createPaintProposalToolProvider } from './collaboration-tools';
 import { createPaintProposals } from './collaboration';
-import { PaintEditorController } from './controller';
+import { PaintEditorController, type PaintEditorOptions } from './controller';
 import { createPaintEditorDocument } from './editorDocument';
 import { createPaintEffectsToolProvider } from './effect-tools';
 import { PAINT_FORMAT, PAINT_SCHEMA_VERSION } from './serialize';
@@ -186,4 +187,35 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
     files: Object.keys(files).sort(),
   };
   return files;
+}
+
+/**
+ * Ids this core makes from the clock, which another implementation makes its own way: layers
+ * (`pl…`), layer styles (`fx_…_…`) and image editor layers (`<prefix>_…_…`). Ids from counters
+ * (`s1`, `st1`, `ref1`, `pad1`, `paint-proposal-1`) are part of the contract.
+ */
+const GENERATED_ID = /^(pl[0-9a-z]{9,}|[a-z]+_[0-9a-z]{8,}_[0-9a-z]+)$/;
+
+/**
+ * A fresh paint editor for replaying a conformance scenario (`domains/paint/fixtures`): every paint
+ * tool provider in one registry that validates arguments, the saved document (the
+ * `pixerate.editor-document` envelope) and the composited pixels. `setup` is the scenario's
+ * editor options, such as `{ width, height }`; `effects` is the effect provider the effect tools use.
+ */
+export function createPaintConformanceHost(setup: PaintEditorOptions, options: { effects: EffectProvider }): ConformanceHost {
+  // The TypeScript wet kernel on one thread is the reference; WebAssembly and the GPU load late.
+  const controller = new PaintEditorController({ ...setup, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
+  controller.setEffectsProvider(options.effects);
+  const registry = new ToolRegistry({ validateArguments: true });
+  registry.register(createPaintEditorToolProvider(controller));
+  registry.register(createPaintEffectsToolProvider(controller));
+  registry.register(createPaintBrushLibraryToolProvider(controller));
+  registry.register(createPaintProposalToolProvider(createPaintProposals({ controller })));
+  return {
+    callTool: (name, args) => registry.callTool(name, args),
+    document: () => toEditorDocumentFile(createPaintEditorDocument(controller)),
+    pixels: ({ paper }) => controller.compositePixels({ paper }),
+    isGeneratedId: (value) => GENERATED_ID.test(value),
+    dispose: () => controller.dispose(),
+  };
 }

@@ -1,0 +1,151 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "exports",
+  "description": "Time-lapse and high-resolution exports repaint the recorded strokes.",
+  "setup": {
+    "width": 24,
+    "height": 16
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "seed": 99,
+        "color": "#204060"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 49,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 87,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 2,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 924,
+          "data": "<binary>",
+          "height": 32,
+          "mimeType": "image/png",
+          "width": 48
+        }
+      }
+    },
+    {
+      "tool": "export_time_lapse",
+      "arguments": {
+        "frames": 2,
+        "maxSide": 32,
+        "includeFrames": false
+      },
+      "expect": {
+        "result": {
+          "durationMs": 1666.6663333333333,
+          "ffmpeg": "ffmpeg -y -loop 1 -framerate 12 -t 0.083 -i frame-0001.png -loop 1 -framerate 12 -t 1.583 -i frame-0002.png -filter_complex 'color=c=0x000000:s=24x16:r=12:d=1.667,format=yuva420p[base];[0:v]setpts=PTS-STARTPTS,fps=12,scale=24:16,format=yuva420p,setpts=PTS+0/TB[lv0];[base][lv0]overlay=x='\\''12-w/2'\\'':y='\\''8-h/2'\\'':eof_action=pass:enable='\\''between(t,0,0.083)'\\''[v0];[1:v]setpts=PTS-STARTPTS,fps=12,scale=24:16,format=yuva420p,setpts=PTS+0.083/TB[lv1];[v0][lv1]overlay=x='\\''12-w/2'\\'':y='\\''8-h/2'\\'':eof_action=pass:enable='\\''between(t,0.083,1.667)'\\''[v1];[v1]format=yuv420p[vout]' -map '[vout]' -an -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -r 12 -t 1.667 timelapse.mp4",
+          "fps": 12,
+          "frames": 2,
+          "height": 16,
+          "video": {
+            "assets": [
+              {
+                "height": 16,
+                "id": "frame-0001",
+                "kind": "image",
+                "name": "frame-0001.png",
+                "src": "frame-0001.png",
+                "width": 24
+              },
+              {
+                "height": 16,
+                "id": "frame-0002",
+                "kind": "image",
+                "name": "frame-0002.png",
+                "src": "frame-0002.png",
+                "width": 24
+              }
+            ],
+            "background": "#000000",
+            "fps": 12,
+            "height": 16,
+            "name": "Time-lapse",
+            "tracks": [
+              {
+                "clips": [
+                  {
+                    "asset": "frame-0001",
+                    "duration": 83.333,
+                    "id": "clip-1",
+                    "start": 0,
+                    "type": "media"
+                  },
+                  {
+                    "asset": "frame-0002",
+                    "duration": 1583.3333333333333,
+                    "id": "clip-2",
+                    "start": 83.333,
+                    "type": "media"
+                  }
+                ],
+                "id": "v1",
+                "kind": "video"
+              }
+            ],
+            "version": 1,
+            "width": 24
+          },
+          "width": 24
+        }
+      }
+    },
+    {
+      "tool": "export_time_lapse",
+      "arguments": {
+        "maxSide": 8
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must be >= 32.",
+                "path": "/maxSide"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__export_time_lapse\"."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

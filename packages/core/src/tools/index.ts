@@ -25,3 +25,4 @@ export * from './script.js';
 export * from './style.js';
 export * from './style-tools.js';
 export * from './origin.js';
+export * from './conformance.js';

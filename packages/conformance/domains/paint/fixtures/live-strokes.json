@@ -1,0 +1,1832 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "live-strokes",
+  "description": "A stroke layer keeps editable strokes: list, find, change, reorder, remove, convert and rasterize.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Lines",
+        "type": "strokes"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "liveStrokes": 0,
+          "locks": {},
+          "name": "Lines",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "seed": 21,
+        "color": "#aa2222"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 49,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 87,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 6,
+            "y": 26
+          },
+          {
+            "x": 16,
+            "y": 8,
+            "pressure": 0.9
+          },
+          {
+            "x": 30,
+            "y": 20
+          },
+          {
+            "x": 44,
+            "y": 6,
+            "pressure": 0.4
+          }
+        ],
+        "seed": 22,
+        "color": "#2222aa",
+        "brushId": "ink-pen"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 29,
+            "width": 47,
+            "x": 1,
+            "y": 2
+          },
+          "dabs": 94,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "live": true
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 27,
+                "width": 45,
+                "x": 0,
+                "y": 2
+              },
+              "brushId": "pencil-6b",
+              "brushName": "6B pencil",
+              "color": "#aa2222",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "@1",
+              "live": true,
+              "points": 3,
+              "seed": 21
+            },
+            {
+              "bounds": {
+                "height": 24,
+                "width": 42,
+                "x": 4,
+                "y": 4
+              },
+              "brushId": "ink-pen",
+              "brushName": "Ink pen",
+              "color": "#2222aa",
+              "copies": 0,
+              "id": "s2",
+              "layerId": "@1",
+              "live": true,
+              "points": 4,
+              "seed": 22
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    {
+      "tool": "get_live_stroke",
+      "arguments": {
+        "limit": 2
+      },
+      "expect": {
+        "result": {
+          "live": false
+        }
+      }
+    },
+    {
+      "tool": "stroke_at",
+      "arguments": {
+        "x": 20,
+        "y": 12
+      },
+      "expect": {
+        "result": {
+          "stroke": {
+            "bounds": {
+              "height": 27,
+              "width": 45,
+              "x": 0,
+              "y": 2
+            },
+            "brushId": "pencil-6b",
+            "brushName": "6B pencil",
+            "color": "#aa2222",
+            "copies": 0,
+            "id": "s1",
+            "layerId": "@1",
+            "live": true,
+            "points": 3,
+            "seed": 21
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_stroke",
+      "arguments": {
+        "id": "s1",
+        "color": "#22aa22",
+        "seed": 5
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 49,
+            "x": -1,
+            "y": 1
+          },
+          "stroke": {
+            "bounds": {
+              "height": 27,
+              "width": 45,
+              "x": 0,
+              "y": 2
+            },
+            "brushId": "pencil-6b",
+            "brushName": "6B pencil",
+            "color": "#22aa22",
+            "copies": 0,
+            "id": "s1",
+            "layerId": "@1",
+            "live": true,
+            "points": 3,
+            "seed": 5
+          }
+        }
+      }
+    },
+    {
+      "tool": "edit_stroke_points",
+      "arguments": {
+        "id": "s2",
+        "transform": {
+          "dx": 2,
+          "dy": -1
+        }
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 30,
+            "width": 49,
+            "x": 1,
+            "y": 1
+          },
+          "stroke": {
+            "bounds": {
+              "height": 24,
+              "width": 42,
+              "x": 6,
+              "y": 3
+            },
+            "brushId": "ink-pen",
+            "brushName": "Ink pen",
+            "color": "#2222aa",
+            "copies": 0,
+            "id": "s2",
+            "layerId": "@1",
+            "live": true,
+            "points": [
+              {
+                "x": 8,
+                "y": 25
+              },
+              {
+                "pressure": 0.9,
+                "x": 18,
+                "y": 7
+              },
+              {
+                "x": 32,
+                "y": 19
+              },
+              {
+                "pressure": 0.4,
+                "x": 46,
+                "y": 5
+              }
+            ],
+            "seed": 22
+          }
+        }
+      }
+    },
+    {
+      "tool": "reorder_stroke",
+      "arguments": {
+        "id": "s1",
+        "index": 1
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "order": [
+            "s2",
+            "s1"
+          ]
+        },
+        "pixels": {
+          "file": "png/live-strokes.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "204d89202e898087e2a00c305ec119cdf1fe75311054a30b844920228d0024bb",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_strokes",
+      "arguments": {
+        "ids": [
+          "s2"
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 29,
+            "width": 47,
+            "x": 3,
+            "y": 1
+          },
+          "removed": [
+            "s2"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "rasterize_stroke_layer",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 29,
+            "width": 47,
+            "x": 0,
+            "y": 2
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Lines",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:w2-1mpj7q2fk57"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Lines",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 2
+              }
+            ],
+            "paintEvents": [
+              {
+                "at": 2,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "pencil",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.5,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0.35,
+                          "tiltRoundness": 0.75,
+                          "tiltSize": 1,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "grain": 0.7,
+                        "id": "pencil-6b",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "6B pencil",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.3,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.75,
+                          "hardness": 0.55,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 7,
+                          "smoothing": 0.2,
+                          "spacing": 0.07
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22aa22",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.3,
+                          "x": 4,
+                          "y": 6
+                        },
+                        {
+                          "pressure": 0.8,
+                          "x": 20,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.5,
+                          "x": 42,
+                          "y": 26
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "ink",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.25,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": -0.45
+                        },
+                        "engine": "dab",
+                        "grain": 0,
+                        "id": "ink-pen",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Ink pen",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.4,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 1,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 4,
+                          "smoothing": 0.5,
+                          "spacing": 0.05
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#2222aa",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "x": 6,
+                          "y": 26
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 16,
+                          "y": 8
+                        },
+                        {
+                          "x": 30,
+                          "y": 20
+                        },
+                        {
+                          "pressure": 0.4,
+                          "x": 44,
+                          "y": 6
+                        }
+                      ],
+                      "seed": 22
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 2,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "pencil",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.5,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0.35,
+                          "tiltRoundness": 0.75,
+                          "tiltSize": 1,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "grain": 0.7,
+                        "id": "pencil-6b",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "6B pencil",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.3,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.75,
+                          "hardness": 0.55,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 7,
+                          "smoothing": 0.2,
+                          "spacing": 0.07
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22aa22",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.3,
+                          "x": 4,
+                          "y": 6
+                        },
+                        {
+                          "pressure": 0.8,
+                          "x": 20,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.5,
+                          "x": 42,
+                          "y": 26
+                        }
+                      ],
+                      "seed": 5
+                    },
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "ink",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.25,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": -0.45
+                        },
+                        "engine": "dab",
+                        "grain": 0,
+                        "id": "ink-pen",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Ink pen",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.4,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 1,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 4,
+                          "smoothing": 0.5,
+                          "spacing": 0.05
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#2222aa",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "x": 8,
+                          "y": 25
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 18,
+                          "y": 7
+                        },
+                        {
+                          "x": 32,
+                          "y": 19
+                        },
+                        {
+                          "pressure": 0.4,
+                          "x": 46,
+                          "y": 5
+                        }
+                      ],
+                      "seed": 22
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 2,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "ink",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.25,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0,
+                          "tiltRoundness": 0,
+                          "tiltSize": 0,
+                          "velocityOpacity": 0,
+                          "velocitySize": -0.45
+                        },
+                        "engine": "dab",
+                        "grain": 0,
+                        "id": "ink-pen",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "Ink pen",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.4,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 1,
+                          "hardness": 1,
+                          "opacity": 1,
+                          "pressureOpacity": false,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 4,
+                          "smoothing": 0.5,
+                          "spacing": 0.05
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#2222aa",
+                      "id": "s2",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "x": 8,
+                          "y": 25
+                        },
+                        {
+                          "pressure": 0.9,
+                          "x": 18,
+                          "y": 7
+                        },
+                        {
+                          "x": 32,
+                          "y": 19
+                        },
+                        {
+                          "pressure": 0.4,
+                          "x": 46,
+                          "y": 5
+                        }
+                      ],
+                      "seed": 22
+                    },
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "pencil",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.5,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0.35,
+                          "tiltRoundness": 0.75,
+                          "tiltSize": 1,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "grain": 0.7,
+                        "id": "pencil-6b",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "6B pencil",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.3,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.75,
+                          "hardness": 0.55,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 7,
+                          "smoothing": 0.2,
+                          "spacing": 0.07
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22aa22",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.3,
+                          "x": 4,
+                          "y": 6
+                        },
+                        {
+                          "pressure": 0.8,
+                          "x": 20,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.5,
+                          "x": 42,
+                          "y": 26
+                        }
+                      ],
+                      "seed": 5
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 2,
+                "data": {
+                  "strokes": [
+                    {
+                      "brush": {
+                        "behavior": {
+                          "dirty": false,
+                          "mix": 0.5,
+                          "mixing": "pigment",
+                          "multicolor": {
+                            "colors": [],
+                            "length": 12,
+                            "mode": "off",
+                            "order": "sequence",
+                            "softness": 1
+                          },
+                          "pickup": 0
+                        },
+                        "blender": {
+                          "distance": 0.35,
+                          "mixing": "pigment",
+                          "strength": 0.5
+                        },
+                        "bristle": {
+                          "count": 32,
+                          "jitter": 0.4,
+                          "load": 0.6,
+                          "splay": 0.5,
+                          "stiffness": 0.5,
+                          "thickness": 0.06
+                        },
+                        "category": "pencil",
+                        "dynamics": {
+                          "angleJitter": 0,
+                          "minSize": 0.5,
+                          "opacityJitter": 0,
+                          "pressureFlow": 0,
+                          "scatter": 0,
+                          "sizeJitter": 0,
+                          "tiltOpacity": 0.35,
+                          "tiltRoundness": 0.75,
+                          "tiltSize": 1,
+                          "velocityOpacity": 0,
+                          "velocitySize": 0
+                        },
+                        "engine": "dab",
+                        "grain": 0.7,
+                        "id": "pencil-6b",
+                        "impasto": {
+                          "clarity": 0,
+                          "drag": 0.4,
+                          "gloss": 0.4,
+                          "load": 0.9,
+                          "metallic": 0,
+                          "rim": 0,
+                          "thickness": 0.6,
+                          "thinner": 0,
+                          "tool": "brush"
+                        },
+                        "light": {
+                          "amount": 0,
+                          "pressure": false
+                        },
+                        "loadsColor": true,
+                        "mixer": {
+                          "cleanEachStroke": true,
+                          "load": 0.5,
+                          "loadEachStroke": true,
+                          "mix": 0.5,
+                          "mixing": "rgb",
+                          "wet": 0.5
+                        },
+                        "name": "6B pencil",
+                        "paint": null,
+                        "particle": {
+                          "count": 12,
+                          "damping": 0.25,
+                          "dotRotation": "random",
+                          "dotTextureOrder": "sequence",
+                          "dotTextures": [],
+                          "gravity": 0,
+                          "interval": 0.3,
+                          "kind": "spring",
+                          "life": 0.5,
+                          "render": "line",
+                          "ribbonFill": 0.5,
+                          "ribbonPairs": "adjacent",
+                          "size": 0.08,
+                          "speed": 0.5,
+                          "spread": 0.5,
+                          "stiffness": 0.4,
+                          "waveAmplitude": 0,
+                          "waveLength": 60,
+                          "wavePhaseJitter": 0,
+                          "waveSpeed": 0
+                        },
+                        "pressureSmoothing": 0.3,
+                        "rotation": "fixed",
+                        "smudge": {
+                          "length": 0.85,
+                          "mixing": "rgb",
+                          "strength": 0.7
+                        },
+                        "spray": null,
+                        "stamp": null,
+                        "sticker": {
+                          "colorJitter": 0.2,
+                          "density": 0.4,
+                          "rotationJitter": 1,
+                          "scatter": 0.5,
+                          "sizeJitter": 0.4,
+                          "stamps": [
+                            "editor:star"
+                          ]
+                        },
+                        "tip": {
+                          "angle": 0,
+                          "blend": "normal",
+                          "flow": 0.75,
+                          "hardness": 0.55,
+                          "opacity": 1,
+                          "pressureOpacity": true,
+                          "pressureSize": true,
+                          "roundness": 1,
+                          "size": 7,
+                          "smoothing": 0.2,
+                          "spacing": 0.07
+                        },
+                        "wet": {
+                          "body": 0,
+                          "load": 1,
+                          "medium": "watercolor",
+                          "pigment": 0.5,
+                          "rewet": 0,
+                          "strength": 0.5,
+                          "thinner": 0,
+                          "tool": "paint",
+                          "water": 0.5
+                        }
+                      },
+                      "color": "#22aa22",
+                      "id": "s1",
+                      "layerId": "@1",
+                      "points": [
+                        {
+                          "pressure": 0.3,
+                          "x": 4,
+                          "y": 6
+                        },
+                        {
+                          "pressure": 0.8,
+                          "x": 20,
+                          "y": 12
+                        },
+                        {
+                          "pressure": 0.5,
+                          "x": 42,
+                          "y": 26
+                        }
+                      ],
+                      "seed": 5
+                    }
+                  ]
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              },
+              {
+                "at": 2,
+                "data": {
+                  "rasterized": true
+                },
+                "kind": "live-strokes",
+                "layerId": "@1"
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#aa2222",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.3,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 42,
+                    "y": 26
+                  }
+                ],
+                "seed": 21
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#2222aa",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "x": 6,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 16,
+                    "y": 8
+                  },
+                  {
+                    "x": 30,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.4,
+                    "x": 44,
+                    "y": 6
+                  }
+                ],
+                "seed": 22
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "convert_to_stroke_layer",
+      "arguments": {
+        "layerId": "@1"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Layer \"Lines\" already has paint, which isn't kept as strokes; convert an empty layer or add a stroke layer (add_layer {type: \"strokes\"})."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_strokes",
+      "arguments": {
+        "last": 5
+      },
+      "expect": {
+        "result": {
+          "strokes": [
+            {
+              "bounds": {
+                "height": 27,
+                "width": 45,
+                "x": 0,
+                "y": 2
+              },
+              "brushId": "pencil-6b",
+              "brushName": "6B pencil",
+              "color": "#aa2222",
+              "copies": 0,
+              "id": "s1",
+              "layerId": "@1",
+              "live": false,
+              "points": 3,
+              "seed": 21
+            },
+            {
+              "bounds": {
+                "height": 24,
+                "width": 42,
+                "x": 4,
+                "y": 4
+              },
+              "brushId": "ink-pen",
+              "brushName": "Ink pen",
+              "color": "#2222aa",
+              "copies": 0,
+              "id": "s2",
+              "layerId": "@1",
+              "live": false,
+              "points": 4,
+              "seed": 22
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    {
+      "tool": "update_stroke",
+      "arguments": {
+        "id": "s99"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "Pass at least one change: brushId, brush, color, paint or seed."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

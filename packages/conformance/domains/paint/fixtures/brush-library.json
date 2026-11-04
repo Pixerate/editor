@@ -1,0 +1,487 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "brush-library",
+  "description": "The brush library: listing, describing, checking, creating, changing, duplicating, importing, exporting and removing brushes.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_brush_presets",
+      "arguments": {
+        "medium": "ink",
+        "limit": 5
+      },
+      "expect": {
+        "result": {
+          "brushes": [
+            {
+              "builtin": true,
+              "category": "marker",
+              "engine": "dab",
+              "id": "marker",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Chisel marker",
+              "size": 24,
+              "surface": "dry",
+              "tip": "chisel",
+              "variety": "marker"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "ink-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Ink pen",
+              "size": 4,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "pen"
+            },
+            {
+              "builtin": true,
+              "category": "ink",
+              "engine": "dab",
+              "id": "brush-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Brush pen",
+              "size": 14,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "brush-pen"
+            },
+            {
+              "builtin": true,
+              "category": "marker",
+              "engine": "dab",
+              "id": "rainbow-marker",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Rainbow marker",
+              "size": 18,
+              "surface": "dry",
+              "tip": "flat",
+              "variety": "marker"
+            },
+            {
+              "builtin": true,
+              "category": "procedural",
+              "engine": "particle",
+              "id": "hair-strands",
+              "kind": "mark",
+              "marks": "particles",
+              "medium": "ink",
+              "name": "Hair strands",
+              "size": 40,
+              "surface": "dry",
+              "tip": "round",
+              "variety": "hair"
+            }
+          ],
+          "host": "paint",
+          "total": 14
+        }
+      }
+    },
+    {
+      "tool": "describe_brush",
+      "arguments": {
+        "id": "ink-pen"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "ink-pen",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "Ink pen",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "builtin": true,
+          "category": "ink",
+          "check": {
+            "issues": [],
+            "ok": true
+          },
+          "engine": "dab"
+        }
+      }
+    },
+    {
+      "tool": "check_brush",
+      "arguments": {
+        "id": "ink-pen",
+        "host": "vector"
+      },
+      "expect": {
+        "result": {
+          "host": "vector",
+          "issues": [
+            {
+              "facet": "dynamics.velocity",
+              "fix": "Nothing to do; or set dynamics.velocitySize and velocityOpacity to 0.",
+              "reason": "Vector editor paints this brush without velocity dynamics (its strokes carry no timing).",
+              "severity": "warning"
+            }
+          ],
+          "ok": true
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "my-pen",
+        "name": "My pen",
+        "basedOn": "ink-pen",
+        "tags": [
+          "test"
+        ]
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "my-pen",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "My pen",
+            "tags": [
+              "test"
+            ],
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "engine": "dab",
+          "id": "my-pen",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "update_brush",
+      "arguments": {
+        "id": "my-pen",
+        "description": "Thin and quick"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "description": "Thin and quick",
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "my-pen",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "My pen",
+            "tags": [
+              "test"
+            ],
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "changed": [
+            "description"
+          ],
+          "id": "my-pen",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "duplicate_brush",
+      "arguments": {
+        "id": "my-pen",
+        "newId": "my-pen-2",
+        "name": "My pen 2"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "description": "Thin and quick",
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "my-pen-2",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "My pen 2",
+            "tags": [
+              "test"
+            ],
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "id": "my-pen-2"
+        }
+      }
+    },
+    {
+      "tool": "export_brushes",
+      "arguments": {
+        "ids": [
+          "my-pen",
+          "my-pen-2"
+        ]
+      },
+      "expect": {
+        "result": {
+          "file": {
+            "brushes": [
+              {
+                "description": "Thin and quick",
+                "dynamics": {
+                  "minSize": 0.25,
+                  "pressureSmoothing": 0.4,
+                  "smoothing": 0.5,
+                  "velocitySize": -0.45
+                },
+                "id": "my-pen",
+                "kind": "mark",
+                "medium": "ink",
+                "name": "My pen",
+                "tags": [
+                  "test"
+                ],
+                "tip": {
+                  "shape": "round",
+                  "size": 4,
+                  "spacing": 0.05
+                },
+                "variety": "pen"
+              },
+              {
+                "description": "Thin and quick",
+                "dynamics": {
+                  "minSize": 0.25,
+                  "pressureSmoothing": 0.4,
+                  "smoothing": 0.5,
+                  "velocitySize": -0.45
+                },
+                "id": "my-pen-2",
+                "kind": "mark",
+                "medium": "ink",
+                "name": "My pen 2",
+                "tags": [
+                  "test"
+                ],
+                "tip": {
+                  "shape": "round",
+                  "size": 4,
+                  "spacing": 0.05
+                },
+                "variety": "pen"
+              }
+            ],
+            "format": "pixerate-brushes",
+            "version": 2
+          }
+        }
+      }
+    },
+    {
+      "tool": "preview_brush",
+      "arguments": {
+        "id": "my-pen",
+        "width": 64,
+        "height": 24
+      },
+      "expect": {
+        "result": {
+          "height": 24,
+          "id": "my-pen",
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "my-pen-2"
+      },
+      "expect": {
+        "result": {
+          "removed": "my-pen-2"
+        }
+      }
+    },
+    {
+      "tool": "import_brushes",
+      "arguments": {
+        "file": [
+          {
+            "id": "imported",
+            "name": "Imported",
+            "kind": "mark",
+            "medium": "ink",
+            "tip": {
+              "shape": "round",
+              "size": 4
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "added": [
+            "imported"
+          ],
+          "problems": [],
+          "replaced": [],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "list_brush_presets",
+      "arguments": {
+        "source": "user"
+      },
+      "expect": {
+        "result": {
+          "brushes": [
+            {
+              "builtin": false,
+              "category": "ink",
+              "engine": "dab",
+              "id": "my-pen",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "My pen",
+              "size": 4,
+              "surface": "dry",
+              "tags": [
+                "test"
+              ],
+              "tip": "round",
+              "variety": "pen"
+            },
+            {
+              "builtin": false,
+              "category": "ink",
+              "engine": "dab",
+              "id": "imported",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "ink",
+              "name": "Imported",
+              "size": 4,
+              "surface": "dry",
+              "tip": "round"
+            }
+          ],
+          "host": "paint",
+          "total": 2
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "brushId": "my-pen",
+        "seed": 95
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 27,
+            "width": 45,
+            "x": 1,
+            "y": 3
+          },
+          "dabs": 87,
+          "layerId": "@1",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/brush-library.12.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "0f61aeb875b68014c6a686332fe0260b6299ffad8691396b95bdbde8f898672f",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "ink-pen"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "\"ink-pen\" is a built-in brush and can't be removed; duplicate it first (duplicate_brush) and change the copy."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

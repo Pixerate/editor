@@ -1,7 +1,9 @@
 # @pixerate/conformance
 
 Language-neutral contracts generated from `@pixerate/editor`, so another implementation (the Swift
-port in `packages/swift`, #533) can ship the same behaviour and check itself against it.
+port in `packages/swift`, #533) can ship the same behaviour and check itself against it: what each
+domain offers (tools, commands, UI tables, document schemas) and recorded scenarios of what its
+tools do (see [Scenarios](#scenarios)).
 
 This data-only package is generated: never edit its files by hand. `scripts/export-contracts.mjs`
 writes them from the built core, and the files are committed. Core tests
@@ -80,3 +82,67 @@ The paint editor of `@pixerate/editor/paint-editor` (`paintContracts()`).
 
 Every file is JSON, written with two-space indents and a final newline, so a change shows up as
 a small diff. Objects keep the key order of the code. Lists are in library order.
+
+## Scenarios
+
+`domains/<domain>/fixtures/*.json` are recorded tool calls: each scenario starts a fresh editor
+(`setup`, such as the canvas size), calls tools in order, and records what every call returned. An
+implementation passes when it replays every scenario and gets the same results. The format is
+`schema/fixture.schema.json`.
+
+A step is `{ tool, arguments?, document?, pixels?, ignore?, expect }`:
+
+- `tool` is the unprefixed tool name, called with `arguments` through a registry that validates
+  them against the tool's `inputSchema`.
+- `expect.result` is the call's `structuredContent`, or `{ "error": { "code", "message", "details"? } }`
+  with `expect.isError: true` when it failed. Error messages and validation details are part of the
+  contract: agents act on them.
+- With `document: true`, `expect.document` is the saved document after the call (for paint, the
+  `pixerate.editor-document` envelope).
+- With `pixels`, `expect.pixels` is the composited canvas after the call (`paper: false` leaves the
+  paper out): a PNG under `fixtures/png/`, its size, the SHA-256 of its RGBA bytes, and the most
+  another implementation may differ by: `maxDelta` in any channel of any pixel and `meanDelta` over
+  all channels (0–255). This core matches the hash exactly.
+- `ignore` lists JSON pointers left out of the result because they describe one implementation (the
+  wet engine's backend); a `*` segment is every element or member.
+
+A scenario with `skip: { "swift": "reason" }` is reported as skipped by that implementation.
+
+### Normalization
+
+Results and documents are compared after these rules, which every implementation applies the same
+way (`normalizeConformanceValue` in `@pixerate/editor/tools`):
+
+1. **Generated ids.** Ids an implementation makes in its own format (in this core: layers `pl…`,
+   layer styles `fx_…_…`, image editor layers `<prefix>_…_…`, all from the clock) are numbered `@1`,
+   `@2`, … in the order first seen. The walk is depth first, object keys sorted by UTF-16 code
+   units, each key before its value, and the numbering carries across the scenario's steps. Ids
+   from counters or names (`s1`, `st1`, `ref1`, `pad1`, `stencil1`, `paint-proposal-1`, brush ids)
+   are not generated ids: they must match as they are.
+2. **Placeholders.** Every known generated id becomes its placeholder wherever it appears: as a
+   whole string, an object key, or inside a longer string (an error message), longest ids first.
+   In `arguments`, a string `@n` is replaced by the real id it stands for before the call.
+3. **Binary.** A string starting with `data:`, or at least 200 characters of base64, becomes
+   `"<binary>"`: the PNG encoder is not part of the contract (pixels are compared separately).
+4. **Clock times.** An ISO 8601 date-time string becomes `"<time>"`.
+5. **Keys.** Object keys are sorted; numbers compare as numbers.
+
+### Recording
+
+```bash
+pnpm --filter @pixerate/editor build
+```
+
+```bash
+pnpm conformance:record
+```
+
+`scripts/record-conformance.mjs` replays each scenario twice on fresh editors and refuses a step
+whose output differs between the runs (pass a `seed` to anything random). It writes `expect` into
+each step and the PNGs, and removes PNGs no step records. `--check` writes nothing and exits 1 when
+a recording is out of date. `packages/core/tests/paint-conformance.test.ts` replays every scenario
+against the source, and fails when a paint tool is not used by any scenario: a new tool needs a
+scenario in the same change.
+
+To add a scenario, write `{ "$schema", "id", "description", "setup", "steps": [{ "tool", "arguments" }] }`
+with the steps you want compared (`document`, `pixels`), then record it.
