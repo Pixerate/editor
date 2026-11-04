@@ -1,6 +1,6 @@
 ---
 name: pixerate-image-editor
-description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation, smart object; masks, clipping, blend modes, filters), 16/32-bit depth, colour management (profiles, soft proofing, CMYK, Lab), smart objects and smart filters, provider effects (smart filters and generator / overlay layers), layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and Mixer Brush, retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen, History Brush), undo, PSD, histogram and previews. Use when editing, grading, cropping, masking or retouching an image, adding effects, converting profiles or bit depth, transforming layers, or when list_layers, set_adjustments, add_layer_effect, apply_effect, transform_layer, paint_stroke, clone_stamp, spot_heal, blur_stroke, sharpen_stroke, history_brush, set_bit_depth, convert_to_profile or import_psd are available.
+description: How to colour-correct, composite and retouch a photo in the Pixerate image editor through its agent tools - layers (pixel, adjustment, group, shape, type, annotation, smart object; masks, clipping, blend modes, filters), 16/32-bit depth, colour management (profiles, proofing, CMYK, Lab), smart objects and smart filters, provider effects, layer effects, adjustments, selections and masks, Free Transform, crop, rotate, flip, painting and Mixer Brush, retouching (Clone Stamp, Healing, Spot Healing, Smudge, Dodge, Burn, Sponge, Blur, Sharpen, History Brush), undo, PSD, histogram and previews. Use when editing, grading, cropping, masking or retouching an image, adding effects, shapes or text, converting profiles or bit depth, transforming layers, or when list_layers, set_adjustments, add_layer_effect, apply_effect, transform_layer, add_text_layer, paint_stroke, clone_stamp, spot_heal, blur_stroke, sharpen_stroke, history_brush, set_bit_depth, convert_to_profile or import_psd are available.
 ---
 
 # Image editor
@@ -114,11 +114,13 @@ selection or locked transparency. Read [references/painting.md](references/paint
 
 ### Bit depth and colour management
 
-Switch between 8-, 16- and 32-bit linear-light float with `set_bit_depth` (`references/photoshop-files.md`). For working space profiles (`assign_profile`, `convert_to_profile`), soft proofing (`set_proof_setup`) and CMYK / Lab print modes (`set_color_mode`, `convert_colors`), read [references/color-management.md](references/color-management.md).
+Switch between 8-, 16- and 32-bit (float, linear light) with `set_bit_depth` (`references/photoshop-files.md`). For working space profiles (`assign_profile`, `convert_to_profile`), soft proofing (`set_proof_setup`) and CMYK / Lab print modes (`set_color_mode`, `convert_colors`), read [references/color-management.md](references/color-management.md).
 
 ### Retouching
 
-Heal, clone, dodge, burn, sponge, blur (`blur_stroke`), sharpen (`sharpen_stroke`) and restore (`history_brush`) on layers above the photo (`sample: "current-below"`): load
+Heal and clone on layers above the photo (`sample: "current-below"`); dodge, burn, sponge, blur
+(`blur_stroke`), sharpen (`sharpen_stroke`) and History Brush (`history_brush`) change the pixels
+they touch, so run them on a duplicate. Load
 `pixerate-image-portrait-retouch`, and read [references/retouching.md](references/retouching.md) first.
 
 ### Photoshop files
@@ -176,7 +178,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `measure_region` | Measure a rectangle of the composited image (`x`, `y`, `width`, `height` in natural pixels; default the crop, else the whole image) without a render: the `get_histogram` summary plus `meanColor` (hex) and `cast` (`redBlue`, `greenMagenta` in levels; within about ±4 is neutral). Check a neutral reference, skin, a background or clipping after each correction. |
 | `render_preview` | See the edited image (crop, adjustments, layers, annotations) as a PNG, or with `layerId` one layer alone. `maxSide` 16..2048 px, default 512. Images cost tokens: render after a group of edits, use 512 for overall look and 1024+ to judge clipping, edges and masks. Fails in environments without rendering. |
 | `inspect_psd` | Read a PSD / PSB (`data` base64) without opening it: size, `depth`, `colorMode`, `resolution`, every layer bottom first with `psdKind`, the `type` it would become (`smart`, `shape` and `type` for Photoshop smart objects, shapes and text) and `status` (`mapped`, `approximated`, `dropped`) with `notes`, and the import `warnings`. Call before `import_psd`. |
-| `export_psd` | Save the document as a PSD at its colour mode (RGB, CMYK or Lab from `set_color_mode`), profile and bit depth (8, 16 or 32; PSB above 30000 px) with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment and painterly blends written as Normal). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
+| `export_psd` | Save the document as a PSD in its colour mode (RGB, or CMYK / Lab channels after `set_color_mode`) with its profile, at its bit depth (RGB 8, 16 or 32; CMYK and Lab 8 or 16, so a 32-bit CMYK / Lab document is written at 16 with a warning; PSB above 30000 px), with layers, groups, adjustment layers and masks. Returns `data` (base64), `size` in bytes, `psb` and `warnings` (crop or rotation not applied, filters and depth masks baked, annotations rasterized or left out, Pigment blends written as Normal; painterly blends are written as Normal too, without a warning). Shape and type layers are written as real Photoshop shape and type layers. Changes nothing. |
 | `get_transform_frame` | Before a transform: what it would move (`content`, `moved`: pixels, mask, selection), its `frame` (document bounds of the content), `corners` (top-left, top-right, bottom-right, bottom-left) and `center`. `meshColumns` / `meshRows` also return an identity warp `mesh` over the frame to edit for `warp_layer`. Changes nothing. |
 | `get_smart_object` | Read a smart object: `contents` (`id` shared by linked instances, `name`, `kind` raster or document, `width` / `height`, `decoded`, `fileType`, `linkedPath`, `instances`), `placement` (`corners`, `warp` in contents px, `interpolation`, and when `affine` the `scaleX` / `scaleY` in percent of the contents, `rotate`, `skewX`, `center`, `bounds`) and `smartFilters` (`enabled`, `filters` bottom to top with ids, settings, `blend`, `opacity`; kind `psd` is a Photoshop filter kept but not drawn; the filter `mask`). Call before changing a smart object. |
 | `list_fonts` | Read the font families type layers can use here (generic families always work) and which shaper draws them. Call before choosing a font. |
@@ -391,7 +393,7 @@ The host may add the shared document tools (see `pixerate-agent-tools`). An imag
   `locks` only when the user wants that layer changed.
 - `merge_down`, `merge_visible` and `flatten_image` merge annotation layers only in a browser
   (they need a canvas); elsewhere they fail and say so.
-- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the composited look; `pigment` warns naming the layers). `import_psd` never produces them.
+- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the composited look; only `pigment` adds a warning, naming the layers). `import_psd` never produces them.
 - `export_psd` is in the source frame: a crop or rotation is not in the file (the warnings say
   so). Crop with `set_crop` only for PNG / JPEG output, or flatten the look you need first.
 - PSD opacity, fill and mask density come in as whole percents (Photoshop stores bytes), so a

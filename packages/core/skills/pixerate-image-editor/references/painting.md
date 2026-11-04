@@ -53,7 +53,7 @@ Read this before `mix_colors`, a `paint_stroke` with `tool: "mixer"`, or gradien
   `locks.pixels` refuses paint.
 - `mix_colors` predicts a mix; it does not paint. To paint the mix, pass `blend: "pigment"` to
   `paint_stroke` (in `brush`) or `fill_pixels`, or set it on a layer.
-- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the look; `pigment` warns naming the layers). `import_psd` never produces them. Over transparent pixels there is nothing for `pigment` to mix with, so it lays the colour down as Normal.
+- `pigment` and the painterly blend modes (`watercolor`, `tint`, `highlight`, `shadow`) have no Photoshop mode in the image editor's PSD exporter: `export_psd` writes those layers as Normal (the merged image keeps the look; only `pigment` adds a warning, naming the layers). `import_psd` never produces them. Over transparent pixels there is nothing for `pigment` to mix with, so it lays the colour down as Normal.
 - The Mixer Brush ignores `brush.blend` (including `pigment`; use its own `mixer.mixing` instead) and the opacity ceiling: each dab lays paint at
   `flow × opacity` over the pixels as they are now, so overlapping dabs build up. At `flow` 1
   each dab covers what is under it, the pickup then sees mostly the brush's own paint, and the

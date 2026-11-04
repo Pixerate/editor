@@ -19,7 +19,7 @@ Detail for `SKILL.md`'s best practices, by topic.
   `outside` for outlines around artwork; open paths always stroke centred. Use round caps and
   joins for friendly line icons, miter for geometric ones. Keep one stroke width across an icon
   set (for example 1.5 or 2 units on a 24-unit grid).
-- **Brushstrokes and brush character.** Use `vector.addBrushstroke` (after `vector.listBrushes`) when a path should look hand-drawn (pencil, charcoal, pastel, chalk, marker, ink) while staying an editable Bezier path. Always pass a `seed` (different integers on neighbouring paths so strokes do not repeat) and a `pressure` taper such as `[0.2, 1, 0.2]` so grainy media catch the `paper` texture (`paper: null` for smooth ink or marker lines). Remove a brushstroke layer with `vector.removeStroke`.
+- **Brushstrokes and brush character.** Use `vector.addBrushstroke` (after `vector.listBrushes`) when a path should look hand-drawn (pencil, charcoal, pastel, chalk, marker, ink) while staying an editable Bezier path. Pass a `seed` for pencil, pastel, charcoal and chalk (without one the brush paints plain, even dabs with no jitter or grain), and a different seed on neighbouring paths so their strokes do not repeat. Use a `pressure` taper such as `[0.2, 1, 0.2]` for strokes that start and end lightly. For clean ink or marker lines leave out the seed, or pass `paper: null` to keep the jitter without grain. Remove a brushstroke layer with `vector.removeStroke`.
 - **Icon grid.** Use a square artboard (24, 32 or 48 units), keep a padding margin, place
   coordinates on whole or half units so strokes render crisp, and align optical centres.
 - **Gradients.** Two to four stops are usually enough. Use `interpolation: "oklab"` for
