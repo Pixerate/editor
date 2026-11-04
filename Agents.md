@@ -79,7 +79,7 @@ Our core value proposition is **parity across JavaScript, React, and Svelte**:
 3. **Consumer Parity Check**:
    - Ensure the React package (`@pixerate/editor-react`) maintains full backwards compatibility with `usePromptEditor` options, milestone tracking, and clipboard handling.
    - Ensure the Svelte package (`@pixerate/editor-svelte`) maintains full backwards compatibility with `EditableTextNodeEditor` props, bubble menus, and reactive store behaviors.
-4. **The Parity Test**: Before opening a PR or completing a refactor, review the feature matrix in `README.md` and ensure no cell in the React or Svelte column is left behind, and that the feature has an agent path (see section 4).
+4. **The Parity Test**: The feature matrix lives in `parity/features.json`; the README "Feature parity" section and the demo's parity tab are generated from it (`node scripts/parity.mjs`). When you add or change a feature, add or update its row there, run the script, and make sure no cell in the React, Svelte or Swift column is left behind, and that the feature has an agent path (see section 4). `tests/parity-manifest.test.ts` fails when the generated files are stale or a cell names a component, hook, factory or type its package does not export.
 
 ---
 
