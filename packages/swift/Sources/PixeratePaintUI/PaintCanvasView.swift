@@ -41,6 +41,7 @@ public struct PaintCanvasView: View {
         let predicted = model.predicted
         let color = model.color
         let tipSize = model.brush.tip.size
+        let water = waterImages(model.waterOverlayTiles)
         GeometryReader { geo in
             ZStack {
                 Canvas { ctx, size in
@@ -55,6 +56,12 @@ public struct PaintCanvasView: View {
                         c.concatenate(t)
                         let img = Image(decorative: image, scale: 1).interpolation(view.zoom >= 2 ? .none : .medium)
                         c.draw(img, in: frame)
+                    }
+                    // The water overlay (view only): blue where the surface is wet, fainter where the paper is damp.
+                    if !water.isEmpty {
+                        var c = ctx
+                        c.concatenate(t)
+                        for (rect, img) in water { c.draw(Image(decorative: img, scale: 1).interpolation(.none), in: rect) }
                     }
                     for line in lines {
                         var p = Path()
@@ -79,6 +86,21 @@ public struct PaintCanvasView: View {
         }
         .background(Color(white: 0.17))
         .clipped()
+    }
+
+    /// The water overlay tiles as images, in document rectangles.
+    private func waterImages(_ tiles: [(tx: Int, ty: Int, data: [UInt8])]) -> [(CGRect, CGImage)] {
+        tiles.compactMap { t in
+            var px = t.data
+            for i in stride(from: 0, to: px.count, by: 4) {
+                let a = UInt16(px[i + 3])
+                for c in 0..<3 { px[i + c] = UInt8((UInt16(px[i + c]) * a + 127) / 255) }
+            }
+            guard let provider = CGDataProvider(data: Data(px) as CFData),
+                  let img = CGImage(width: TILE, height: TILE, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: TILE * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+            else { return nil }
+            return (CGRect(x: t.tx * TILE, y: t.ty * TILE, width: TILE, height: TILE), img)
+        }
     }
 
     private func layout(_ size: CGSize) {

@@ -34,6 +34,8 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
     public let blend: GroupBlendMode
     public let clipped: Bool
     public let edge: LayerEdgeColor?
+    /// The paper: where the light comes from, for metallic paper (nil otherwise).
+    public private(set) var paperLight: (azimuth: Double, elevation: Double)?
     private let kids: [ViewLayer]?
 
     public init(_ layer: RasterLayer) {
@@ -60,9 +62,11 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
         kids = nil
     }
 
-    /// The paper as a compositor layer.
-    public static func paper(_ paper: PaperSettings) -> ViewLayer {
-        ViewLayer(kind: .paper(paper), id: PAPER_NODE_ID, name: "Paper")
+    /// The paper as a compositor layer; `light` relights metallic paper (`paperNode`).
+    public static func paper(_ paper: PaperSettings, light: PaintLighting? = nil) -> ViewLayer {
+        let node = ViewLayer(kind: .paper(paper), id: PAPER_NODE_ID, name: "Paper")
+        if (paper.metallic ?? 0) > 0, let light { node.paperLight = (light.azimuth, light.elevation) }
+        return node
     }
 
     private var raster: RasterLayer? {
@@ -100,10 +104,11 @@ public final class ViewLayer: CompositorLayer, @unchecked Sendable {
 /// A paper tile (cached by the paper settings and the rect).
 private let paperTiles = Locked(OrderedMap<String, [UInt8]>())
 
-func paperTile(_ paper: PaperSettings, _ r: RasterRect) -> [UInt8] {
-    let key = "\(JSONValue.object(paper.json).stringified())|\(r.x),\(r.y),\(r.width),\(r.height)"
+func paperTile(_ paper: PaperSettings, _ r: RasterRect, light: (azimuth: Double, elevation: Double)? = nil) -> [UInt8] {
+    let lightKey = light.map { "|\($0.azimuth),\($0.elevation)" } ?? ""
+    let key = "\(JSONValue.object(paper.json).stringified())|\(r.x),\(r.y),\(r.width),\(r.height)\(lightKey)"
     if let t = paperTiles.with({ $0.get(key) }) { return t }
-    let t = renderPaper(paper, r, paperGrain(paper))
+    let t = renderPaper(paper, r, paperGrain(paper), light: light)
     paperTiles.with { cache in
         if cache.count > 512, let first = cache.first { _ = cache.delete(first.key) }
         cache.set(key, t)
@@ -116,7 +121,7 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
     var p = CompositorProfile<ViewLayer, BasicRasterSources>()
     p.contentTile = { layer, r, _ in
         switch layer.kind {
-        case .paper(let paper): return paperTile(paper, r)
+        case .paper(let paper): return paperTile(paper, r, light: layer.paperLight)
         case .image(let image, _):
             var out = [UInt8](repeating: 0, count: r.width * r.height * 4)
             let x0 = Swift.max(0, r.x), y0 = Swift.max(0, r.y)
@@ -134,7 +139,7 @@ func paintCompositorProfile() -> CompositorProfile<ViewLayer, BasicRasterSources
     }
     p.layerKey = { layer in
         switch layer.kind {
-        case .paper(let paper): return .object(paper.json)
+        case .paper(let paper): return layer.paperLight.map { .array([.object(paper.json), .number($0.azimuth), .number($0.elevation)]) } ?? .object(paper.json)
         case .image(_, let version): return .number(version)
         case .layer: return nil
         }

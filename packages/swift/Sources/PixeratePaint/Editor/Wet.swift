@@ -413,7 +413,7 @@ public final class PaintWetLayers {
         return engineInfo()
     }
 
-    func engineInfo() -> WetEngineInfo {
+    public func engineInfo() -> WetEngineInfo {
         let base = WetEngineInfo(mode: gpuMode, state: "off", reason: nil, adapter: nil, maxTiles: 0, minTiles: gpuMinTiles, activeTiles: world?.activeTiles() ?? 0, cpu: backend())
         var out = base
         if gpuMode == "off" {

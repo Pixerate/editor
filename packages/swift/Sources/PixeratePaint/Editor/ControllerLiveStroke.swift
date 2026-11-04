@@ -154,13 +154,13 @@ extension PaintEditorController {
     public var brushes: [PaintBrush] { brushEntries.map(\.brush) }
 
     /**
-     * Whether this port paints with `brush`: the dab engine (with no stamp tip), the eraser, the
-     * Mixer Brush, blenders and smudge. Wet, thick, particle, bristle and sticker brushes are not
-     * ported yet, so a brush picker leaves them out.
+     * Whether this port paints with `brush`: every engine (dab, eraser, Mixer Brush, blender,
+     * smudge, wet, impasto, particle, bristle) except stamp tips, and sticker brushes whose stamps
+     * are the editor's own. A brush picker leaves the others out.
      */
     public func canPaint(_ brush: PaintBrush) -> Bool {
         if brush.engine == "sticker" { return (brush.sticker["stamps"]?.arrayValue ?? []).allSatisfy { $0.stringValue.flatMap(editorStampOf) != nil } }
-        return brush.stamp == nil && ["dab", "eraser", "mixer", "blender", "smudge", "particle", "bristle"].contains(brush.engine)
+        return brush.stamp == nil && ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle"].contains(brush.engine)
     }
 
     // MARK: - Colour

@@ -301,8 +301,8 @@ final class PaintEditorModelTests: XCTestCase {
         model.setBrushOption(size, 42)
         XCTAssertEqual(model.brushOption(size), 42)
         XCTAssertEqual(model.controller.brush.tip.size, 42)
-        // Paper: the dry rows this port draws, in the table's order.
-        XCTAssertEqual(model.paperSliders.map(\.path), ["depth", "scale", "shading", "dry.contrast"])
+        // Paper: every row of the table, in its order (wet media read absorption, permeability and roughness).
+        XCTAssertEqual(model.paperSliders.map(\.path), t.sliders.paper.map(\.path))
         XCTAssertEqual(model.paperSliders.map(\.label), t.sliders.paper.filter { PAINT_PAPER_SLIDER_PATHS.contains($0.path) }.map(\.label))
         model.setPaperValue("dry.contrast", 2)
         XCTAssertEqual(model.paperValue("dry.contrast"), 2)
@@ -321,12 +321,14 @@ final class PaintEditorModelTests: XCTestCase {
             XCTAssertEqual(controls.map(\.key), row.controls.map(\.key), row.kind)
             XCTAssertEqual(controls.map { $0.json["label"]?.stringValue }, row.controls.map(\.label), row.kind)
         }
-        // Brushes the engine can't paint (wet, thick) are left out of the picker; particle, bristle and sticker brushes are in it.
+        // Brushes the engine can't paint (stamp tips) are left out of the picker; wet, impasto, particle, bristle and sticker brushes are in it.
         XCTAssertFalse(model.brushes.isEmpty)
-        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "particle", "bristle", "sticker"].contains($0.engine) && $0.stamp == nil })
+        XCTAssertTrue(model.brushes.allSatisfy { ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impasto", "particle", "bristle", "sticker"].contains($0.engine) && $0.stamp == nil })
+        XCTAssertTrue(model.brushes.contains { $0.engine == "wet" })
+        XCTAssertTrue(model.brushes.contains { $0.engine == "impasto" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "particle" })
         XCTAssertTrue(model.brushes.contains { $0.engine == "bristle" })
-        XCTAssertLessThan(model.brushes.count, model.controller.brushes.count)
+        XCTAssertLessThanOrEqual(model.brushes.count, model.controller.brushes.count)
     }
 
     func testReadPathAndPatchPath() {
@@ -336,5 +338,66 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(readPath(o, "missing.x"), 0)
         XCTAssertEqual(patchPath(o, "depth", 0.7), ["depth": 0.7])
         XCTAssertEqual(patchPath(o, "dry.contrast", 2), ["dry": ["contrast": 2, "bias": 0.2]])
+    }
+
+    // MARK: - Wet paint, thick paint and light
+
+    func testWetLightAndSpillPanelsListTheirTableRows() throws {
+        let model = try makeModel()
+        let t = model.tables
+        XCTAssertTrue(PaintPanelTab.allCases.contains(.wet))
+        // Wet settings: every row is a wet parameter, in the table's order.
+        XCTAssertEqual(model.wetSliders.map(\.path), t.sliders.wet.map(\.path))
+        XCTAssertEqual(Set(model.wetSliders.map(\.path)), Set(WET_PARAM_KEYS))
+        for c in model.wetSliders { XCTAssertEqual(model.wetParam(c.path), DEFAULT_WET_PARAMS[c.path], c.path) }
+        XCTAssertEqual(model.wetTiltSliders.map(\.path), ["angle", "direction"])
+        XCTAssertEqual(model.wetSpeedSlider.path, "speed")
+        XCTAssertEqual(model.wetGpuOptions.map(\.value), ["auto", "off"])
+        XCTAssertEqual(model.lightSliders.map(\.path), ["azimuth", "elevation", "relief"])
+        XCTAssertEqual(model.lightSliders.map(\.label), t.sliders.light.map(\.label))
+        // Each row sets what it shows, through the same controller calls as the agent tools.
+        model.setWetParam("bloom", 0.9)
+        XCTAssertEqual(model.wetParam("bloom"), 0.9)
+        model.setTilt("angle", 30)
+        XCTAssertEqual(model.tiltValue("angle"), 30)
+        model.setWetSpeed(240)
+        XCTAssertEqual(model.wet.speed, 240)
+        model.setLighting("elevation", 60)
+        XCTAssertEqual(model.lightingValue("elevation"), 60)
+        model.setFlowKind("swirl")
+        XCTAssertEqual(model.wetLayer?.flow.kind, "swirl")
+        model.setWetEngine("off")
+        XCTAssertEqual(model.wet.gpuMode, "off")
+        // Light spill shows for a layer with light paint.
+        XCTAssertEqual(model.activeLight?.hasLight, false)
+    }
+
+    func testTickingAdvancesTheWetClockAndRedrawsOnlyChangedTiles() async throws {
+        let model = try makeModel(width: 600, height: 300)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        _ = try await call(model.registry, "paint_stroke", ["points": [["x": 20, "y": 30], ["x": 90, "y": 60, "pressure": 0.8]], "brushId": "watercolor-round", "color": "#2255aa", "seed": 3])
+        XCTAssertTrue(model.wet.isWet())
+        XCTAssertEqual(presenter.render(), 6)
+        // The first tick only starts the clock; then the speed (120 steps a second) sets the steps.
+        XCTAssertEqual(model.tick(now: 1000), 0)
+        XCTAssertEqual(model.tick(now: 1050), 6)
+        XCTAssertEqual(model.wetClock, 6)
+        // Only the tile with wet paint is drawn again.
+        XCTAssertEqual(presenter.render(), 1)
+        XCTAssertEqual(model.tick(now: 1100), 6)
+        XCTAssertEqual(model.wetClock, 12)
+        // Paused: time stops.
+        model.toggleWetPaused()
+        XCTAssertEqual(model.tick(now: 2000), 0)
+        XCTAssertEqual(model.wetClock, 12)
+        model.toggleWetPaused()
+        // The water overlay is drawn over the wet tile only.
+        XCTAssertTrue(model.waterOverlayTiles.isEmpty)
+        model.toggleWaterOverlay()
+        XCTAssertEqual(model.waterOverlayTiles.map { [$0.tx, $0.ty] }, [[0, 0]])
+        // Drying ends the flow.
+        model.dryNow()
+        XCTAssertFalse(model.wet.isWet())
+        XCTAssertEqual(model.tick(now: 3000), 0)
     }
 }

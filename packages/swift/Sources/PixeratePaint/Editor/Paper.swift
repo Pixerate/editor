@@ -156,7 +156,7 @@ public func renderPaper(_ paper: PaperSettings, _ rect: RasterRect, _ grain: Pap
         let lx = JS.cos(el) * JS.sin(az)
         let ly = -JS.cos(el) * JS.cos(az)
         let lz = JS.sin(el) + 1
-        let n = (lx * lx + ly * ly + lz * lz).squareRoot()
+        let n = JS.hypot(lx, ly, lz)
         hx = lx / n
         hy = ly / n
         hz = lz / n
@@ -171,7 +171,7 @@ public func renderPaper(_ paper: PaperSettings, _ rect: RasterRect, _ grain: Pap
             if metal > 0 {
                 let gx = (grain.at(px + 1, py) - grain.at(px - 1, py)) * 4
                 let gy = (grain.at(px, py + 1) - grain.at(px, py - 1)) * 4
-                let nl = (gx * gx + gy * gy + 1).squareRoot()
+                let nl = JS.hypot(gx, gy, 1)
                 let nh = Swift.max(0, (-gx * hx - gy * hy + hz) / nl)
                 spec = metal * JS.pow(nh, 24) * 0.9
             }

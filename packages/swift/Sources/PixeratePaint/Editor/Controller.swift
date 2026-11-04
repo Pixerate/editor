@@ -252,6 +252,9 @@ public final class PaintEditorController {
     var pendingWetEvents: [WetEvent] = []
     /// The wet options this editor was made with (replay targets get the same).
     var wetOptions = PaintWetOptions()
+    /// Backlit paper: the light through the paint as drawn, and through the committed painting (for the spill).
+    let backlightView = BacklightCache()
+    let backlightCommitted = BacklightCache()
     /// Lit tiles of thick layers, per layer.
     var litCaches: [String: LitCache] = [:]
 
@@ -1323,10 +1326,13 @@ public final class PaintEditorController {
         let base = wetMode == "dried" ? driedLayers(currentLayers()) : currentLayers()
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in l.open ? l.session.thickChannels().map { (l.layerId, $0) } : nil }
         var layers = lightLayers(litLayers(base, liveThick: live), liveThick: live)
+        // Backlit paper shines through everything: its light goes on top.
+        let baseIsCommitted = (liveStroke?.open != true || liveStroke!.isWet) && (wetMode != "dried" || wet.wetLayerIds().isEmpty)
+        if paper != false && layerIds == nil, let backlight = backlightLayer(base, baseIsCommitted: baseIsCommitted, liveThick: live) { layers.append(backlight) }
         if let layerIds {
             layers = layerIds.compactMap { id in findLayer(layers, id)?.layer ?? getLayer(id) }.map { $0.copy(visible: true) }
         }
-        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper)]
+        var under: [ViewLayer] = paper == false ? [] : [ViewLayer.paper(doc.paper, light: lighting)]
         if paper != false, let p = doc.paperEffect { under.append(paperEffectNode(p)) }
         return under + layers.map(ViewLayer.init)
     }
