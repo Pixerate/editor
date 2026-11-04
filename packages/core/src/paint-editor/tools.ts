@@ -9,6 +9,7 @@ import { withPaintPlayback } from './playback';
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import { fromDocument, hostedSchema, hostedText, lazyController, toDocument, type PaintAgentTool, type PaintOrigin } from './hosted';
 import { createPigmentTools } from '../paint/pigment-tools';
+import { bezierPathToSvg } from '../canvas/pathops/bezier';
 import type { MixerLoad } from '../paint/mixer';
 import { PAINT_SOURCE_JSON_SCHEMA } from '../paint/gradient-paint';
 import { BLEND_MODES, standardBlendMode, type BlendMode } from '../raster/blend';
@@ -616,6 +617,44 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       }
       const stroke = { points: a.points as PenPoint[], layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed, snapToPerspective: a.snapToPerspective };
       const r = await act({ kind: 'stroke', stroke }, () => c.paintStroke(stroke));
+      return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
+    },
+  });
+
+  add({
+    name: 'stroke_path',
+    title: 'Brush along a path',
+    description:
+      'Brushes vector path data (SVG path d in document pixels: M, L, H, V, C, S, Q, T, A and Z) on a pixel layer with a library brush or the active one, as if drawn by hand along it: the outline of a shape, a lettering guide, a curve from a vector tool. Each subpath becomes one recorded stroke, sampled every spacing px, with an optional pressure profile spread along each subpath (a taper such as [0.2, 1, 0.2]); closed subpaths end where they start. Brushes behave as in paint_stroke (grain, pick-up, wet and thick paint, guides off). One undo step for the whole path. Returns the layer id, changed bounds, dab count and the recorded strokeIds (for replay_strokes, update_stroke).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', minLength: 1, description: 'SVG path data in document pixels, e.g. "M 40 200 C 120 40 280 40 360 200". Several subpaths paint several strokes.' },
+        spacing: { type: 'number', minimum: 0.25, maximum: 100, description: 'Distance between samples along the path in document pixels (default 2); the brush spaces its own dabs, so this only sets how closely curves are followed.' },
+        pressure: { type: 'array', minItems: 1, maxItems: 64, items: { type: 'number', minimum: 0, maximum: 1 }, description: 'Pen pressure along each subpath, spread evenly from start to end (default full pressure); [0.2, 1, 0.2] tapers both ends.' },
+        layerId: LAYER_ID,
+        brushId: { type: 'string', description: 'Brush id from list_brush_presets (default the active brush).' },
+        brush: { type: 'object', description: 'Facets to change for this stroke only, laid over brushId or the active brush (as set_brush takes them).', properties: BRUSH_PATCH_PROPERTIES, additionalProperties: false },
+        color: { ...COLOR, description: 'Paint colour #rrggbb (default the paint colour).' },
+        paint: { ...PAINT_SOURCE_JSON_SCHEMA, description: "What the strokes paint with instead of the editor's paint: a colour, or gradient paint that changes colour as each stroke goes." },
+        seed: { type: 'integer', minimum: 0, description: 'Jitter seed of the first subpath, the next ones take the following seeds (default new ones); the same seed and path give the same marks.' },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Brush along a path', ...WRITE },
+    coordinates: { out: ['bounds'] },
+    handler: async (a) => {
+      await c.wetIdle();
+      const base = a.brushId ? c.getBrush(a.brushId as string) : c.getState().brush;
+      const brush = a.brush ? c.brushChanges(a.brush as BrushPatch, a.brushId as string | undefined) : undefined;
+      if (base) {
+        const refs = brushStickerRefs(normalizePaintBrush({ ...(brush ?? {}), id: base.id }, base));
+        if (refs.length) await c.prepareStickers(refs);
+      }
+      // A hosted layer takes canvas coordinates: move the path into document pixels.
+      const path = options.origin && typeof a.path === 'string' && a.path.trim() ? bezierPathToSvg(a.path, { offset: { x: -options.origin.x, y: -options.origin.y } }) : (a.path as string);
+      const r = c.strokePath({ path, spacing: a.spacing, pressure: a.pressure, layerId: a.layerId, brushId: a.brushId, brush, color: a.color, paint: a.paint, seed: a.seed });
       return r.mixerLoad ? { ...r, mixerLoad: loadResult(r.mixerLoad) } : r;
     },
   });

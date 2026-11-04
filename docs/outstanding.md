@@ -49,7 +49,6 @@ Shipped behaviour with a documented gap.
 
 ### Paint editor
 
-- **`stroke_path` tool:** the design planned one to paint a vector path onto a layer. `paintPathStroke` exists in `@pixerate/editor/paint`, but no paint-editor tool or UI uses it. S–M, `paint-editor/tools.ts`.
 - **Wet engine performance:** shading in the wasm Workers for machines without WebGPU (display shading is TypeScript today, about 1.5 ms per tile); f16 storage for wet state; a slimmer GPU layout (drop the ping-ponged velocity, edge and paper water) to approach the spike's 1.7 G cell-steps/s. M each, `src/paint/wet`.
 - **Stale comments:** `paint-editor/paper.ts:3` and `:38` and `document.ts:44` call wet media and time-lapse "later", and `serialize.ts:8` and `:34–36` plan `layerChannels`, though thick paint is saved under `thick`. S.
 - **Unbuilt ideas** from the products studied (RYB mixing, soft shadows on thick paint, deckled borders): see [paint-editor.md](./paint-editor.md#influences).

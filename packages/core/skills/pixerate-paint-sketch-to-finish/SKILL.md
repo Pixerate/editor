@@ -39,7 +39,9 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
    reference.
    **Check:** `list_strokes` shows pencil strokes on the Sketch layer.
 3. **Ink.** `add_layer` "Ink" above it; `ink-pen` or `brush-pen`, dark colour, long strokes with
-   points that carry `pressure` (lighter at the ends) and `t` for speed dynamics.
+   points that carry `pressure` (lighter at the ends) and `t` for speed dynamics. For clean
+   geometric lines (curves, circles, panel borders) use `stroke_path` with SVG path data and a
+   `pressure` taper such as `[0.3, 1, 0.3]`.
    **Check:** `pick_color` on a line is dark.
 4. **Hide the sketch.** `update_layer` the Sketch layer `visible: false` (or lower its `opacity`
    while inking, then hide it).
@@ -61,6 +63,7 @@ This skill is the method. `pixerate-paint-editor` has the full tool reference.
 | --- | --- |
 | Sketch | `pencil-hb`, light colour, own layer, hidden at the end |
 | Line art | `ink-pen` (even), `brush-pen` (swelling); own layer on top |
+| Clean geometric lines (curves, circles, borders) | `stroke_path` with SVG path data and a `pressure` taper, on the Ink layer |
 | Flats | `marker` or a flat brush on a layer under the ink |
 | Patterned or textured flats (sky, gradient, galaxy) | `set_effect_paint` with a provider generator, then a flat dry brush on the Flats layer; `set_color` after |
 | Shadows | Clipped layer, `multiply` or `shadow`, a cool colour |
@@ -98,6 +101,7 @@ clipped: true }` → `set_brush` `airbrush` → paint the shadow side.
 - `set_paper`, `fill_layer`: the ground and backgrounds
 - `add_layer`, `update_layer`, `move_layer`, `remove_layer`: one layer per pass; hide, clip, blend
 - `set_brush`, `set_color`, `paint_stroke`, `replay_strokes`: sketch, ink, flats and shading
+- `stroke_path`: clean geometric line art from SVG path data
 - `search_effects`, `describe_effect`, `set_effect_paint`: flats painted with a provider effect
 - `set_symmetry`, `set_perspective_guide`, `set_tracing_image`: construction guides
 - `undo_paint`: take back a step

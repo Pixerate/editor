@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { createBrushLibrary } from '@pixerate/editor/brushes';
-import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, StickerPanel, StrokePanel, PathStrokePanel, WetPanel, usePaintDirector, usePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let container: HTMLDivElement;
@@ -750,5 +750,31 @@ describe('wet light paint and backlit paper', () => {
     expect(c.document.paper.backlight).toBe(0.4);
     setValue(container.querySelector('input[aria-label="Backlight colour"]') as HTMLInputElement, '#ffccaa', true);
     expect(c.document.paper.backlightColor).toBe('#ffccaa');
+  });
+});
+
+describe('React PathStrokePanel', () => {
+  it('brushes pasted SVG path data with a taper, one undo step, and shows errors', () => {
+    const c = new PaintEditorController({ width: 120, height: 80 });
+    render(<PathStrokePanel controller={c} />);
+    const area = container.querySelector('textarea[aria-label="SVG path data"]') as HTMLTextAreaElement;
+    const brushButton = byText('Brush path');
+    expect(brushButton.disabled).toBe(true);
+    act(() => {
+      Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'M 10 40 L 110 40');
+      area.dispatchEvent(new win.Event('input', { bubbles: true }));
+    });
+    setValue(container.querySelector('select[aria-label="Pressure along the path"]') as HTMLSelectElement, 'both');
+    click(byText('Brush path'));
+    expect(c.getStrokes().length).toBe(1);
+    expect(c.getStrokes()[0].points[0].pressure).toBeCloseTo(0.2, 2);
+    expect(c.getState().undoLabel).toMatch(/path stroke/);
+    act(() => {
+      Object.getOwnPropertyDescriptor(win.HTMLTextAreaElement.prototype, 'value')!.set!.call(area, 'M 5 5');
+      area.dispatchEvent(new win.Event('input', { bubbles: true }));
+    });
+    click(byText('Brush path'));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('no segments to brush');
+    expect(c.getStrokes().length).toBe(1);
   });
 });

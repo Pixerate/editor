@@ -3621,3 +3621,10 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Under StrictMode, the change feed stopped reporting anything after mount.
 - **Root Cause**: A feed made in `useMemo` subscribes to the controller once. StrictMode runs the unmount cleanup (`dispose`) and remounts, which reuses the disposed feed.
 - **Solution / Workaround**: Create the feed inside the effect, dispose it in that effect's cleanup, and keep it in state, so each mount has a live one. `feed` is `null` until mounted.
+
+### [core/paint-editor] `stroke_path` Paints Through the Paint Editor's Engine, Not `paintPathStroke`
+
+- **Issue / Symptom**: `paintPathStroke` in `@pixerate/editor/paint` looks like the obvious way to brush a vector path in the paint editor, but its strokes were not recorded, ignored the paper grain, pick-up, wet and thick paint, and could not be replayed or edited.
+- **Root Cause**: `paintPathStroke` is the image editor's raster brush (the older `paint` module). The paint editor paints through its own engines (`runStroke`), which record every stroke as data.
+- **Solution / Workaround**: `strokePath` samples the SVG path into pen points (`samplePath`: flatten, then resample every `spacing` px, with a pressure profile spread along each subpath) and runs each subpath through `runStroke`, committing once, so the whole path is one undo step and every subpath is a recorded stroke. It does not go through an agent director, so there's no live cursor playback; the path is painted at once. On a hosted layer the tool moves the path by `-origin` (`bezierPathToSvg` `offset`), because the coordinate mapping only rewrites point fields.
+

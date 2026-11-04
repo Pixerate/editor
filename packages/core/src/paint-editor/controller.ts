@@ -74,6 +74,7 @@ import {
 } from './document';
 import { defaultImageEncoder, type ImageEncoder, type ImageFormat } from './encode';
 import type { PenPoint } from './engine';
+import { samplePath, type PathSampleOptions } from './path-samples';
 import type { Hand } from './input';
 import { mix32 } from './noise';
 import { clonePaper, grainCatch, hexToRgb8, normalizePaper, paperPreset, type PaperSettings } from './paper';
@@ -2711,6 +2712,48 @@ export class PaintEditorController {
     if (doc !== before || this.wetOp) this.commit(`${brush.name} stroke`, this.withWetEvents(doc), before);
     else this.emit([]);
     return result;
+  }
+
+  /**
+   * Brushes vector path data (SVG `d`, document pixels) with the active brush, or `brushId` /
+   * `brush`, as if drawn by hand: one recorded stroke per subpath, sampled every `spacing` px
+   * with an optional `pressure` profile along each. All of it is one undo step. A given `seed`
+   * seeds the first subpath; the next ones take the following seeds.
+   */
+  strokePath(init: Omit<PaintStrokeInit, 'start' | 'copies' | 'load'> & PathSampleOptions & { path: string }): { layerId: string; bounds: RasterRect | null; dabs: number; strokeIds: string[]; mixerLoad?: MixerLoad; wet?: boolean } {
+    this.requireIdle('painting');
+    if (typeof init.path !== 'string' || !init.path.trim()) throw new PaintEditorError('path is empty; give SVG path data in document pixels, e.g. "M 10 10 C 40 0 80 60 120 30".');
+    let subpaths: PenPoint[][];
+    try {
+      subpaths = samplePath(init.path, init);
+    } catch (e) {
+      throw new PaintEditorError(e instanceof Error ? e.message : String(e));
+    }
+    const { path: _path, spacing: _spacing, pressure: _pressure, ...stroke } = init;
+    const before = this.doc;
+    let doc = this.doc;
+    let bounds: RasterRect | null = null;
+    let dabs = 0;
+    const strokeIds: string[] = [];
+    let last: ReturnType<PaintEditorController['runStroke']> | null = null;
+    try {
+      subpaths.forEach((points, i) => {
+        last = this.runStroke(doc, { ...stroke, ...(stroke.seed !== undefined ? { seed: stroke.seed + i } : {}), start: points[0] }, points);
+        doc = last.doc;
+        bounds = unionRect(bounds, last.result.bounds);
+        dabs += last.result.dabs;
+        if (last.result.strokeId) strokeIds.push(last.result.strokeId);
+      });
+    } catch (e) {
+      this.wetOp = null;
+      throw e;
+    }
+    const run = last as ReturnType<PaintEditorController['runStroke']> | null;
+    if (run?.result.mixerLoad) this.keepLoad(run.brush, run.result.mixerLoad);
+    if (doc !== before || this.wetOp) this.commit(`${run?.brush.name ?? 'Brush'} path stroke`, this.withWetEvents(doc), before);
+    else this.emit([]);
+    const layerId = run?.result.layerId ?? stroke.layerId ?? this.doc.activeLayerId ?? '';
+    return { layerId, bounds, dabs, strokeIds, ...(run?.result.mixerLoad ? { mixerLoad: run.result.mixerLoad } : {}), ...(run?.result.wet !== undefined ? { wet: run.result.wet } : {}) };
   }
 
   /** Checks stroke samples (finite x and y, pressure 0..1) and returns them; throws a sentence naming the bad point. */

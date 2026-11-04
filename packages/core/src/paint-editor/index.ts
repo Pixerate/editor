@@ -59,3 +59,4 @@ export type { StickerProvider, StickerRef, StickerSummary } from '../stickers/ty
 export * from './sticker-art';
 export * from './collaboration';
 export * from './collaboration-tools';
+export { samplePath, MAX_PATH_SAMPLES, type PathSampleOptions } from './path-samples';
