@@ -3840,3 +3840,8 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: The vector scenario recorder refused `effects-and-generation`: the document after `regenerate_vector_art` differed between its two runs, in the generation provenance's `seed`.
 - **Root Cause**: Without a `seed`, generation and regeneration draw a fresh random seed (so a new take looks different), and record it in the provenance.
 - **Solution / Workaround**: Scenarios pass a `seed` to both `generate_vector_art` and `regenerate_vector_art`. The provenance's `createdAt` is normalised to `"<time>"` by the runner, so it needs nothing.
+
+### [core] Trig Results Differ in the Last Bits Between Mac and Linux, So Recordings Compare Numbers Within 1e-9
+- **Issue / Symptom**: The vector `blends-and-envelopes` scenario, recorded on an M-series Mac, failed on the Linux CI runner: a blend step's rotation matrix read `0.6595295122134215` where the recording had `0.6595295122134217`.
+- **Root Cause**: V8's `Math.sin` / `Math.cos` are fdlibm ports compiled per CPU, and clang fuses multiply-adds on arm64 but not on x64, so results can differ in the last bits. Anything stored straight from trig (orient-to-spine transforms, rotations) is then machine-dependent.
+- **Solution / Workaround**: The TS replay tests compare with `conformanceValuesMatch` (numbers equal within a relative `CONFORMANCE_NUMBER_TOLERANCE`, 1e-9), as the Swift runner always has; on a mismatch they fall back to `toEqual` to show the diff. Recordings stay exact. Strings are still compared exactly, so text that formats such a number (SVG path data, messages) should round it, as `exportSvg`'s `precision` does.

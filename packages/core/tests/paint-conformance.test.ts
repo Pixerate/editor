@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
 import { createPaintConformanceHost } from '../src/paint-editor';
 import { decodePng } from '../src/raster';
-import { ConformanceIds, normalizeConformanceValue, omitConformancePaths, runConformanceScenario, type ConformanceScenario } from '../src/tools/conformance';
+import { ConformanceIds, conformanceValuesMatch, normalizeConformanceValue, omitConformancePaths, runConformanceScenario, type ConformanceScenario } from '../src/tools/conformance';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 
 /**
@@ -40,9 +40,10 @@ describe('the paint conformance scenarios', () => {
     scenario.steps.forEach((step, i) => {
       const label = `step ${i + 1} (${step.tool})`;
       const out = outputs[i]!;
-      expect(out.result, label).toEqual(step.expect!.result);
+      // Numbers within CONFORMANCE_NUMBER_TOLERANCE match (trig may differ in the last bits across CPUs); toEqual shows the diff.
+      if (!conformanceValuesMatch(out.result, step.expect!.result)) expect(out.result, label).toEqual(step.expect!.result);
       expect(out.isError, label).toBe(step.expect!.isError === true);
-      if (step.document) expect(out.document, `${label} document`).toEqual(step.expect!.document);
+      if (step.document && !conformanceValuesMatch(out.document, step.expect!.document)) expect(out.document, `${label} document`).toEqual(step.expect!.document);
       if (step.pixels) {
         const recorded = step.expect!.pixels!;
         expect(sha256(out.pixels!.data), `${label} pixels`).toBe(recorded.sha256);
@@ -75,5 +76,16 @@ describe('conformance normalization', () => {
   it('leaves out ignored paths, with * for every element or member', () => {
     expect(omitConformancePaths({ a: 1, backend: { x: 1 }, layers: [{ engine: 1, id: 'x' }, { engine: 2, id: 'y' }] }, ['/backend', '/layers/*/engine'])).toEqual({ a: 1, layers: [{ id: 'x' }, { id: 'y' }] });
     expect(omitConformancePaths({ m: { a: { k: 1, j: 2 }, b: { k: 3 } } }, ['/m/*/k'])).toEqual({ m: { a: { j: 2 }, b: {} } });
+  });
+});
+
+describe('conformance value matching', () => {
+  it('matches numbers within a relative 1e-9, like the Swift runner, and nothing else loosely', () => {
+    expect(conformanceValuesMatch({ m: [0.6595295122134217, 173.18813153712776] }, { m: [0.6595295122134215, 173.18813153712782] })).toBe(true);
+    expect(conformanceValuesMatch({ a: 1 }, { a: 1.000001 })).toBe(false);
+    expect(conformanceValuesMatch({ a: 'x' }, { a: 'y' })).toBe(false);
+    expect(conformanceValuesMatch({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+    expect(conformanceValuesMatch([1, 2], [1, 2, 3])).toBe(false);
+    expect(conformanceValuesMatch({ a: null }, { a: 0 })).toBe(false);
   });
 });

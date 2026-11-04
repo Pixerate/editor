@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
-import { runConformanceScenario, type ConformanceScenario } from '../src/tools/conformance';
+import { conformanceValuesMatch, runConformanceScenario, type ConformanceScenario } from '../src/tools/conformance';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 import { createVectorConformanceHost } from '../src/vector';
 
@@ -59,9 +59,10 @@ describe('the vector conformance scenarios', () => {
 			const command = (step.arguments as { id?: string } | undefined)?.id;
 			const label = `step ${i + 1} (${step.tool}${step.tool === 'run_command' && command ? ` ${command}` : ''})`;
 			const out = outputs[i]!;
-			expect(out.result, label).toEqual(step.expect!.result);
+			// Numbers within CONFORMANCE_NUMBER_TOLERANCE match (trig may differ in the last bits across CPUs); toEqual shows the diff.
+			if (!conformanceValuesMatch(out.result, step.expect!.result)) expect(out.result, label).toEqual(step.expect!.result);
 			expect(out.isError, label).toBe(step.expect!.isError === true);
-			if (step.document) expect(out.document, `${label} document`).toEqual(step.expect!.document);
+			if (step.document && !conformanceValuesMatch(out.document, step.expect!.document)) expect(out.document, `${label} document`).toEqual(step.expect!.document);
 		});
 	}, 60_000);
 });

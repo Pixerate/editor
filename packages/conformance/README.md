@@ -153,7 +153,9 @@ way (`normalizeConformanceValue` in `@pixerate/editor/tools`):
 3. **Binary.** A string starting with `data:`, or at least 200 characters of base64, becomes
    `"<binary>"`: the PNG encoder is not part of the contract (pixels are compared separately).
 4. **Clock times.** An ISO 8601 date-time string becomes `"<time>"`.
-5. **Keys.** Object keys are sorted; numbers compare as numbers.
+5. **Keys.** Object keys are sorted; numbers compare as numbers, equal within a relative
+   `1e-9` (`conformanceValuesMatch`, `CONFORMANCE_NUMBER_TOLERANCE`): maths functions such as
+   `Math.sin` may differ in their last bits between CPUs, and recordings are replayed on others.
 
 ### Recording
 
